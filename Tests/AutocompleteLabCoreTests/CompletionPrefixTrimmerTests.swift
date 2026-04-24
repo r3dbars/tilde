@@ -64,6 +64,16 @@ struct CompletionPrefixTrimmerTests {
         #expect(longerTrimmed == "")
     }
 
+    @Test("Suppresses model echoes from the beginning of the current text")
+    func suppressesBeginningContextEchoes() {
+        let trimmed = CompletionPrefixTrimmer.trim(
+            "Hey. How are",
+            after: "Hey. How are we going to do the"
+        )
+
+        #expect(trimmed == "")
+    }
+
     @Test("Keeps suggestions after common short complete words")
     func keepsSuggestionAfterCommonShortCompleteWord() {
         let trimmed = CompletionPrefixTrimmer.trim(" make this feel instant", after: "can we")

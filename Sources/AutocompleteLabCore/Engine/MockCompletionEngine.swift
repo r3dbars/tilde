@@ -13,7 +13,9 @@ public final class MockCompletionEngine: CompletionEngine, @unchecked Sendable {
         let lowercased = trimmed.lowercased()
         let text: String
 
-        if lowercased.hasSuffix("i think") {
+        if let partialWordCompletion = Self.partialWordCompletion(after: trimmed) {
+            text = partialWordCompletion
+        } else if lowercased.hasSuffix("i think") {
             text = " we should ship this"
         } else if lowercased.hasSuffix("can we") {
             text = " make this feel instant"
@@ -27,5 +29,31 @@ public final class MockCompletionEngine: CompletionEngine, @unchecked Sendable {
             text: CompletionPrefixTrimmer.trim(text, after: trimmed),
             maxVisibleWords: request.maxVisibleWords
         )
+    }
+
+    private static func partialWordCompletion(after text: String) -> String? {
+        guard text.last?.isWhitespace != true,
+              let fragment = text.split(whereSeparator: { $0.isWhitespace }).last?.lowercased(),
+              fragment.count >= 2 else {
+            return nil
+        }
+
+        let candidates = [
+            "hello",
+            "this project",
+            "that sounds good",
+            "sounds good",
+            "thanks for asking",
+            "there is a better way",
+            "would be great",
+            "works well",
+            "instant",
+            "project",
+            "because"
+        ]
+
+        return candidates.first { candidate in
+            candidate.hasPrefix(fragment)
+        }.map { " " + $0 }
     }
 }

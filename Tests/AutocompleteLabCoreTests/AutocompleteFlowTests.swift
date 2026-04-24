@@ -47,4 +47,18 @@ struct AutocompleteFlowTests {
 
         #expect(suggestion?.visibleText == "nd keep moving")
     }
+
+    @Test("Mock engine completes active partial words")
+    func mockSuggestionCompletesActivePartialWords() async throws {
+        let engine = MockCompletionEngine()
+        let thisSuggestion = try await engine.suggestion(
+            for: CompletionRequest(textBeforeCursor: "Hey how are we going to do th", maxVisibleWords: 8)
+        )
+        let soundSuggestion = try await engine.suggestion(
+            for: CompletionRequest(textBeforeCursor: "Hey that soun", maxVisibleWords: 8)
+        )
+
+        #expect(thisSuggestion?.visibleText == "is project")
+        #expect(soundSuggestion?.visibleText == "ds good")
+    }
 }

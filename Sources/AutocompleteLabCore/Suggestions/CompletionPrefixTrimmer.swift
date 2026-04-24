@@ -20,6 +20,10 @@ public enum CompletionPrefixTrimmer {
         }
 
         let suggestionBody = suggestion.drop(while: { $0.isWhitespace })
+        if repeatsBeginningOfContext(suggestionBody, textBeforeCursor: textBeforeCursor) {
+            return ""
+        }
+
         let suggestedWords = wordRanges(in: suggestionBody)
         guard let firstSuggestedWord = suggestedWords.first else {
             return suggestion
@@ -97,6 +101,22 @@ public enum CompletionPrefixTrimmer {
         return !commonCompleteShortWords.contains(normalizedFragment)
     }
 
+    private static func repeatsBeginningOfContext(
+        _ suggestionBody: Substring,
+        textBeforeCursor: String
+    ) -> Bool {
+        let normalizedSuggestion = normalizedPhrase(String(suggestionBody))
+        let normalizedContext = normalizedPhrase(textBeforeCursor)
+
+        guard normalizedSuggestion.count >= 6,
+              normalizedContext.count > normalizedSuggestion.count,
+              normalizedContext.hasPrefix(normalizedSuggestion) else {
+            return false
+        }
+
+        return !normalizedContext.hasSuffix(normalizedSuggestion)
+    }
+
     private static func wordRanges(in text: Substring) -> [(word: Substring, range: Range<String.Index>)] {
         var ranges: [(word: Substring, range: Range<String.Index>)] = []
         var index = text.startIndex
@@ -141,5 +161,17 @@ public enum CompletionPrefixTrimmer {
         word
             .trimmingCharacters(in: .punctuationCharacters)
             .lowercased()
+    }
+
+    private static func normalizedPhrase(_ text: String) -> String {
+        var normalized = ""
+        for character in text.lowercased() {
+            normalized.append(character.isLetter || character.isNumber ? character : " ")
+        }
+
+        return normalized
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+            .joined(separator: " ")
     }
 }

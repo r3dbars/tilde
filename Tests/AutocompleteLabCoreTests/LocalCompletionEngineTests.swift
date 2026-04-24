@@ -58,6 +58,18 @@ struct LocalCompletionEngineTests {
         #expect(suggestion?.visibleText == " make this feel instant")
     }
 
+    @Test("Falls back to mock when runtime echoes earlier context")
+    func fallsBackToMockWhenRuntimeEchoesEarlierContext() async throws {
+        let runner = FakeLocalRunner(result: .success("Hey. How are"))
+        let engine = LocalCompletionEngine(runner: runner)
+
+        let suggestion = try await engine.suggestion(
+            for: CompletionRequest(textBeforeCursor: "Hey. How are we going to do th", maxVisibleWords: 8)
+        )
+
+        #expect(suggestion?.visibleText == "is project")
+    }
+
     @Test("Factory selects mock when app-owned runtime is missing")
     func factorySelectsMockForMissingRuntime() {
         let factory = CompletionEngineFactory(
