@@ -11,7 +11,7 @@ struct ModelPolicyTests {
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)
         #expect(policy.maxGeneratedTokens == 16)
-        #expect(policy.maxVisibleWords == 8)
+        #expect(policy.maxVisibleWords == 3)
     }
 
     @Test("M1 with 16 GB is supported")

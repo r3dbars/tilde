@@ -55,7 +55,7 @@ public struct CompletionModelPolicy: Equatable, Sendable {
         runtimeOwnership: .appOwnedEmbedded,
         minimumMemoryGB: 16,
         maxGeneratedTokens: 16,
-        maxVisibleWords: 8,
+        maxVisibleWords: 3,
         debounceMilliseconds: 200,
         targetLatencyMilliseconds: 700,
         reasoningEnabled: false

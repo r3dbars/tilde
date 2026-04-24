@@ -14,6 +14,7 @@ struct FocusedTextContext: Equatable {
     let textAfterCursor: String
     let caretRect: CGRect?
     let textLineRect: CGRect?
+    let textElementRect: CGRect?
     let textStyle: FocusedTextStyle?
     let isSecure: Bool
 }
@@ -132,6 +133,7 @@ final class AccessibilityClient {
         let textLineRect = selectedRange.flatMap {
             textLineBounds(for: focusedElement, textLength: text.utf16.count, textBeforeCursor: textSlice.textBeforeCursor, range: $0)
         }
+        let textElementRect = frameBounds(for: focusedElement)
         let textStyle = selectedRange.flatMap {
             focusedTextStyle(in: focusedElement, textLength: text.utf16.count, range: $0)
         }
@@ -141,6 +143,7 @@ final class AccessibilityClient {
             textAfterCursor: textSlice.textAfterCursor,
             caretRect: caretRect,
             textLineRect: textLineRect,
+            textElementRect: textElementRect,
             textStyle: textStyle,
             isSecure: isSecure
         )
@@ -363,6 +366,19 @@ final class AccessibilityClient {
 
         var rect = CGRect.zero
         guard AXValueGetValue(boundsValue as! AXValue, .cgRect, &rect) else {
+            return nil
+        }
+
+        return rect
+    }
+
+    private func frameBounds(for element: AXUIElement) -> CGRect? {
+        guard let frameValue = copyAttribute(element, attribute: "AXFrame") else {
+            return nil
+        }
+
+        var rect = CGRect.zero
+        guard AXValueGetValue(frameValue as! AXValue, .cgRect, &rect) else {
             return nil
         }
 

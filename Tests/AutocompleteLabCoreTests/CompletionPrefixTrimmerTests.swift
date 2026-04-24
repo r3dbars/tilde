@@ -37,4 +37,32 @@ struct CompletionPrefixTrimmerTests {
 
         #expect(trimmed == "feel a sense of wonder")
     }
+
+    @Test("Completes a later matching word when the model repeats nearby context")
+    func completesLaterMatchingWord() {
+        let trimmed = CompletionPrefixTrimmer.trim(
+            " to do this project",
+            after: "Hey how we going to do the th"
+        )
+
+        #expect(trimmed == "is project")
+    }
+
+    @Test("Suppresses partial word suggestions that do not complete the typed fragment")
+    func suppressesBadPartialWordSuggestion() {
+        let trimmed = CompletionPrefixTrimmer.trim(" and keep moving", after: "Hey th")
+
+        #expect(trimmed == "")
+    }
+
+    @Test("Keeps suggestions after common short complete words")
+    func keepsSuggestionAfterCommonShortCompleteWord() {
+        let trimmed = CompletionPrefixTrimmer.trim(" make this feel instant", after: "can we")
+        let trimmedAfterThe = CompletionPrefixTrimmer.trim(" next step is clear", after: "what is the")
+        let trimmedAfterAnd = CompletionPrefixTrimmer.trim(" keep moving", after: "Hey and")
+
+        #expect(trimmed == " make this feel instant")
+        #expect(trimmedAfterThe == " next step is clear")
+        #expect(trimmedAfterAnd == " keep moving")
+    }
 }

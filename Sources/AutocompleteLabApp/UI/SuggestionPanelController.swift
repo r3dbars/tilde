@@ -41,7 +41,13 @@ final class SuggestionPanelController {
         panel.contentView = container
     }
 
-    func show(text: String, near caretRect: CGRect, alignedTo textLineRect: CGRect?, style: FocusedTextStyle?) {
+    func show(
+        text: String,
+        near caretRect: CGRect,
+        alignedTo textLineRect: CGRect?,
+        boundedBy textElementRect: CGRect?,
+        style: FocusedTextStyle?
+    ) {
         let fontSize = min(max(caretRect.height * 1.02, 12), 32)
         let font = style?.font ?? NSFont.systemFont(ofSize: fontSize, weight: .regular)
         let color = ghostColor(matching: style?.foregroundColor)
@@ -61,12 +67,24 @@ final class SuggestionPanelController {
                 screenHeight: screenHeight
             )
         }
+        let appKitTextElementRect = textElementRect.map {
+            AccessibilityCoordinateConverter.appKitRect(
+                fromAccessibilityRect: $0,
+                screenHeight: screenHeight
+            )
+        }
         let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
             caretRect: appKitCaretRect,
             textLineRect: appKitTextLineRect,
+            boundaryFrame: appKitTextElementRect,
             textSize: size,
             screenFrame: screenFrame
         )
+
+        guard frame.width >= 8 else {
+            hide()
+            return
+        }
 
         panel.setFrame(frame, display: true)
         ghostTextView.needsDisplay = true

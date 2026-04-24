@@ -20,19 +20,36 @@ public enum CompletionPrefixTrimmer {
         }
 
         let suggestionBody = suggestion.drop(while: { $0.isWhitespace })
-        let firstSuggestedWord = suggestionBody.prefix(while: { !$0.isWhitespace })
-
-        guard !firstSuggestedWord.isEmpty,
-              normalized(String(firstSuggestedWord)).hasPrefix(normalized(typedFragment)) else {
+        let suggestedWords = wordRanges(in: suggestionBody)
+        guard let firstSuggestedWord = suggestedWords.first else {
             return suggestion
         }
+        let normalizedTypedFragment = normalized(typedFragment)
 
-        let overlapCount = typedFragment.count
-        if overlapCount >= firstSuggestedWord.count {
-            return String(suggestionBody.dropFirst(firstSuggestedWord.count))
+        if normalized(String(firstSuggestedWord.word)).hasPrefix(normalizedTypedFragment) {
+            return completionSuffix(
+                in: suggestionBody,
+                wordRange: firstSuggestedWord.range,
+                typedFragment: typedFragment
+            )
         }
 
-        return String(suggestionBody.dropFirst(overlapCount))
+        if looksLikeUnfinishedFragment(typedFragment),
+           let laterMatchingWord = suggestedWords.prefix(4).first(where: {
+               normalized(String($0.word)).hasPrefix(normalizedTypedFragment)
+           }) {
+            return completionSuffix(
+                in: suggestionBody,
+                wordRange: laterMatchingWord.range,
+                typedFragment: typedFragment
+            )
+        }
+
+        if looksLikeUnfinishedFragment(typedFragment) {
+            return ""
+        }
+
+        return suggestion
     }
 
     private static func trimFullPrefix(_ suggestion: String, after textBeforeCursor: String) -> String? {
@@ -58,6 +75,64 @@ public enum CompletionPrefixTrimmer {
 
     private static func trailingWordFragment(in text: String) -> String? {
         text.split(whereSeparator: { $0.isWhitespace }).last.map(String.init)
+    }
+
+    private static func looksLikeUnfinishedFragment(_ fragment: String) -> Bool {
+        let normalizedFragment = normalized(fragment)
+        guard normalizedFragment.count >= 2, normalizedFragment.count <= 3 else {
+            return false
+        }
+
+        let commonCompleteShortWords: Set<String> = [
+            "a", "all", "an", "and", "any", "are", "as", "at", "be", "but",
+            "by", "can", "did", "do", "for", "get", "go", "had", "has", "he",
+            "her", "hey", "hi", "his", "how", "i", "if", "in", "is", "it",
+            "me", "my", "new", "no", "not", "now", "of", "on", "one", "or",
+            "our", "out", "see", "she", "so", "the", "to", "too", "up", "us",
+            "was", "we", "who", "why", "yes", "yet", "you"
+        ]
+
+        return !commonCompleteShortWords.contains(normalizedFragment)
+    }
+
+    private static func wordRanges(in text: Substring) -> [(word: Substring, range: Range<String.Index>)] {
+        var ranges: [(word: Substring, range: Range<String.Index>)] = []
+        var index = text.startIndex
+
+        while index < text.endIndex {
+            while index < text.endIndex, text[index].isWhitespace {
+                index = text.index(after: index)
+            }
+
+            guard index < text.endIndex else {
+                break
+            }
+
+            let wordStart = index
+            while index < text.endIndex, !text[index].isWhitespace {
+                index = text.index(after: index)
+            }
+
+            let range = wordStart..<index
+            ranges.append((word: text[range], range: range))
+        }
+
+        return ranges
+    }
+
+    private static func completionSuffix(
+        in text: Substring,
+        wordRange: Range<String.Index>,
+        typedFragment: String
+    ) -> String {
+        let overlapCount = typedFragment.count
+        if overlapCount >= text[wordRange].count {
+            return String(text[wordRange.upperBound...])
+        }
+
+        let suffixStart = text.index(wordRange.lowerBound, offsetBy: overlapCount, limitedBy: wordRange.upperBound)
+            ?? wordRange.upperBound
+        return String(text[suffixStart...])
     }
 
     private static func normalized(_ word: String) -> String {

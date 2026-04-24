@@ -29,4 +29,18 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(frame.maxX <= 1192)
         #expect(frame.minY >= 4)
     }
+
+    @Test("Keeps ghost text inside the focused text boundary")
+    func keepsGhostTextInsideFocusedTextBoundary() {
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            caretRect: CGRect(x: 900, y: 800, width: 0, height: 28),
+            textLineRect: CGRect(x: 80, y: 790, width: 840, height: 28),
+            boundaryFrame: CGRect(x: 80, y: 100, width: 940, height: 760),
+            textSize: CGSize(width: 300, height: 28),
+            screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 900)
+        )
+
+        #expect(frame.minX == 900)
+        #expect(frame.maxX <= 1016)
+    }
 }

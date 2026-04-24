@@ -8,7 +8,9 @@ struct CompletionPromptBuilderTests {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
 
+        #expect(prompt.system.contains("finish that word first"))
         #expect(prompt.system.contains("next 5 words or fewer"))
+        #expect(prompt.system.contains("Do not repeat already typed text"))
         #expect(prompt.system.contains("No explanation"))
         #expect(prompt.system.contains("No reasoning"))
         #expect(prompt.user == "I think we should")

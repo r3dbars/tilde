@@ -26,7 +26,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let context = String(request.textBeforeCursor.suffix(maxContextCharacters))
 
         return CompletionPrompt(
-            system: "Complete the user's writing. Return only the next \(maxVisibleWords) words or fewer. No quotes. No explanation. No reasoning.",
+            system: "Complete the user's writing. If the final word is unfinished, finish that word first. Return only the completion plus the next \(maxVisibleWords) words or fewer. Do not repeat already typed text. No quotes. No explanation. No reasoning.",
             user: context
         )
     }

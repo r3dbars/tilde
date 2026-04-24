@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionSession = SuggestionSession()
     private var lastCaretRect: CGRect?
     private var lastTextLineRect: CGRect?
+    private var lastTextElementRect: CGRect?
     private var lastTextStyle: FocusedTextStyle?
     private var lastTextBeforeCursor = ""
     private var lastStatusSummary = ""
@@ -220,11 +221,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.suggestionSession.present(suggestion)
                     self.lastCaretRect = caretRect
                     self.lastTextLineRect = context.textLineRect
+                    self.lastTextElementRect = context.textElementRect
                     self.lastTextStyle = context.textStyle
                     suggestionPanel.show(
                         text: suggestion.visibleText,
                         near: caretRect,
                         alignedTo: context.textLineRect,
+                        boundedBy: context.textElementRect,
                         style: context.textStyle
                     )
                 }
@@ -351,6 +354,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             text: suggestion.visibleText,
             near: caretRect,
             alignedTo: lastTextLineRect,
+            boundedBy: lastTextElementRect,
             style: lastTextStyle
         )
     }
@@ -359,6 +363,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionSession.dismiss()
         lastCaretRect = nil
         lastTextLineRect = nil
+        lastTextElementRect = nil
         lastTextStyle = nil
         suggestionPanel.hide()
     }
