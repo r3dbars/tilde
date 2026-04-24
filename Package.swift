@@ -26,7 +26,8 @@ let package = Package(
                 "Engine/AGENTS.md",
                 "Runtime/AGENTS.md",
                 "Session/AGENTS.md",
-                "Suggestions/AGENTS.md"
+                "Suggestions/AGENTS.md",
+                "Text/AGENTS.md"
             ]
         ),
         .executableTarget(

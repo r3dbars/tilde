@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import AutocompleteLabCore
 import CoreGraphics
 
 struct RunningApplicationInfo: Equatable {
@@ -61,15 +62,15 @@ final class AccessibilityClient {
         }
 
         let selectedRange = selectedTextRange(in: focusedElement)
-        let cursorLocation = max(0, min(selectedRange?.location ?? text.count, text.count))
-        let beforeIndex = text.index(text.startIndex, offsetBy: cursorLocation)
-        let textBeforeCursor = String(text[..<beforeIndex])
-        let textAfterCursor = String(text[beforeIndex...])
+        let textSlice = CursorTextSplitter.split(
+            text,
+            utf16Offset: selectedRange?.location ?? text.utf16.count
+        )
         let caretRect = selectedRange.flatMap { caretBounds(for: focusedElement, range: $0) }
 
         return FocusedTextContext(
-            textBeforeCursor: textBeforeCursor,
-            textAfterCursor: textAfterCursor,
+            textBeforeCursor: textSlice.textBeforeCursor,
+            textAfterCursor: textSlice.textAfterCursor,
             caretRect: caretRect,
             isSecure: isSecure
         )
