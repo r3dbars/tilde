@@ -16,6 +16,8 @@ struct FocusedTextContext: Equatable {
     let textLineRect: CGRect?
     let textElementRect: CGRect?
     let textStyle: FocusedTextStyle?
+    let elementRole: String?
+    let elementSubrole: String?
     let isSecure: Bool
 }
 
@@ -137,6 +139,8 @@ final class AccessibilityClient {
         let textStyle = selectedRange.flatMap {
             focusedTextStyle(in: focusedElement, textLength: text.utf16.count, range: $0)
         }
+        let elementRole = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
+        let elementSubrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
 
         return FocusedTextContext(
             textBeforeCursor: textSlice.textBeforeCursor,
@@ -145,6 +149,8 @@ final class AccessibilityClient {
             textLineRect: textLineRect,
             textElementRect: textElementRect,
             textStyle: textStyle,
+            elementRole: elementRole,
+            elementSubrole: elementSubrole,
             isSecure: isSecure
         )
     }

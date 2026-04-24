@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var gemmaRuntimeItem: NSMenuItem?
     private var mockRuntimeItem: NSMenuItem?
     private var runtimeStatusItem: NSMenuItem?
+    private var copyDiagnosticsItem: NSMenuItem?
     private var pollTimer: Timer?
     private var keyboardEventTap: KeyboardEventTap?
     private var suggestionSession = SuggestionSession()
@@ -33,8 +34,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastTextLineRect: CGRect?
     private var lastTextElementRect: CGRect?
     private var lastTextStyle: FocusedTextStyle?
+    private var lastAppBundleIdentifier: String?
+    private var lastAppProcessIdentifier: pid_t?
     private var lastTextBeforeCursor = ""
     private var lastStatusSummary = ""
+    private var lastPlacementDiagnostics = "No geometry diagnostics yet."
     private var suggestionTask: Task<Void, Never>?
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
 
@@ -130,6 +134,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runtimeItem.submenu = runtimeMenu
         menu.addItem(runtimeItem)
 
+        let copyDiagnosticsItem = NSMenuItem(
+            title: "Copy Last Geometry Diagnostics",
+            action: #selector(copyLastGeometryDiagnostics),
+            keyEquivalent: ""
+        )
+        menu.addItem(copyDiagnosticsItem)
+        self.copyDiagnosticsItem = copyDiagnosticsItem
+
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Request Accessibility Permission", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
@@ -193,6 +205,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard context.textBeforeCursor != lastTextBeforeCursor else {
+            if suggestionSession.hasVisibleSuggestion, context.caretRect != nil {
+                cachePlacementContext(context, app: frontmostApp)
+                refreshVisibleSuggestion()
+            }
             return
         }
 
@@ -220,15 +236,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.updateStatus("showing suggestion")
                     self.suggestionSession.present(suggestion)
                     self.lastCaretRect = caretRect
-                    self.lastTextLineRect = context.textLineRect
-                    self.lastTextElementRect = context.textElementRect
-                    self.lastTextStyle = context.textStyle
-                    suggestionPanel.show(
+                    self.cachePlacementContext(context, app: frontmostApp)
+                    let decision = suggestionPanel.show(
                         text: suggestion.visibleText,
+                        appBundleIdentifier: frontmostApp.bundleIdentifier,
                         near: caretRect,
                         alignedTo: context.textLineRect,
                         boundedBy: context.textElementRect,
                         style: context.textStyle
+                    )
+                    self.recordPlacementDiagnostics(
+                        decision,
+                        app: frontmostApp,
+                        context: context
                     )
                 }
             } catch {
@@ -285,6 +305,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch action {
         case .acceptNextWord:
+            guard isCurrentAppStillSuggestionTarget() else {
+                hideSuggestion()
+                suppressKey(key)
+                logger.info("Autocomplete accept blocked: focus changed")
+                return true
+            }
+
             guard let acceptedText = suggestionSession.acceptNextWord() else {
                 logger.info("Autocomplete accept failed: no next word")
                 return false
@@ -301,6 +328,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
 
         case .acceptAllVisible:
+            guard isCurrentAppStillSuggestionTarget() else {
+                hideSuggestion()
+                suppressKey(key)
+                logger.info("Autocomplete accept blocked: focus changed")
+                return true
+            }
+
             guard let acceptedText = suggestionSession.acceptAllVisible() else {
                 logger.info("Autocomplete accept failed: no visible text")
                 return false
@@ -352,6 +386,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         suggestionPanel.show(
             text: suggestion.visibleText,
+            appBundleIdentifier: lastAppBundleIdentifier,
             near: caretRect,
             alignedTo: lastTextLineRect,
             boundedBy: lastTextElementRect,
@@ -365,7 +400,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextLineRect = nil
         lastTextElementRect = nil
         lastTextStyle = nil
+        lastAppBundleIdentifier = nil
+        lastAppProcessIdentifier = nil
         suggestionPanel.hide()
+    }
+
+    private func cachePlacementContext(
+        _ context: FocusedTextContext,
+        app: RunningApplicationInfo
+    ) {
+        lastCaretRect = context.caretRect
+        lastTextLineRect = context.textLineRect
+        lastTextElementRect = context.textElementRect
+        lastTextStyle = context.textStyle
+        lastAppBundleIdentifier = app.bundleIdentifier
+        lastAppProcessIdentifier = app.processIdentifier
+    }
+
+    private func isCurrentAppStillSuggestionTarget() -> Bool {
+        guard let expectedProcessIdentifier = lastAppProcessIdentifier,
+              let currentApp = accessibilityClient.frontmostApplication() else {
+            return false
+        }
+
+        return currentApp.processIdentifier == expectedProcessIdentifier
+    }
+
+    private func recordPlacementDiagnostics(
+        _ decision: InlineGhostPlacementDecision?,
+        app: RunningApplicationInfo,
+        context: FocusedTextContext
+    ) {
+        guard let decision else {
+            lastPlacementDiagnostics = diagnosticReport(
+                app: app,
+                context: context,
+                placementSummary: "hidden before placement"
+            )
+            return
+        }
+
+        lastPlacementDiagnostics = diagnosticReport(
+            app: app,
+            context: context,
+            placementSummary: decision.debugSummary
+        )
+        logger.info("Autocomplete placement: \(decision.debugSummary, privacy: .public)")
+    }
+
+    private func diagnosticReport(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        placementSummary: String
+    ) -> String {
+        """
+        Autocomplete geometry diagnostics
+        time: \(ISO8601DateFormatter().string(from: Date()))
+        app: \(app.localizedName)
+        bundleIdentifier: \(app.bundleIdentifier)
+        pid: \(app.processIdentifier)
+        role: \(context.elementRole ?? "unknown")
+        subrole: \(context.elementSubrole ?? "unknown")
+        secureTextEntry: \(context.isSecure)
+        textBeforeCursorUTF16Length: \(context.textBeforeCursor.utf16.count)
+        textAfterCursorUTF16Length: \(context.textAfterCursor.utf16.count)
+        caretAX: \(context.caretRect?.diagnosticDescription ?? "nil")
+        textLineAX: \(context.textLineRect?.diagnosticDescription ?? "nil")
+        textElementAX: \(context.textElementRect?.diagnosticDescription ?? "nil")
+        font: \(context.textStyle?.fontName ?? "unknown")
+        fontSize: \(context.textStyle.map { String(format: "%.1f", Double($0.fontSize)) } ?? "unknown")
+        placement: \(placementSummary)
+        """
     }
 
     private func updateStatus(_ summary: String) {
@@ -385,6 +490,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         afterNewlineItem?.state = settings.suppressAfterNewline ? .on : .off
         gemmaRuntimeItem?.state = settings.runtimeMode == .gemmaLocalWithMockFallback ? .on : .off
         mockRuntimeItem?.state = settings.runtimeMode == .mockOnly ? .on : .off
+        copyDiagnosticsItem?.isEnabled = !lastPlacementDiagnostics.isEmpty
 
         if settings.runtimeMode == .mockOnly {
             runtimeStatusItem?.title = "Runtime: Mock only"
@@ -478,6 +584,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     private func requestAccessibilityPermission() {
         accessibilityClient.requestPermissionIfNeeded()
+    }
+
+    @objc
+    private func copyLastGeometryDiagnostics() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(lastPlacementDiagnostics, forType: .string)
+        updateStatus("copied geometry diagnostics")
     }
 
     @objc

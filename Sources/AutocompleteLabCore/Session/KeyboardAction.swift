@@ -24,7 +24,7 @@ public struct KeyboardActionRouter: Equatable, Sendable {
 
         switch key {
         case .tab:
-            return .acceptAllVisible
+            return .acceptNextWord
         case .backtick:
             return .acceptAllVisible
         case .escape:

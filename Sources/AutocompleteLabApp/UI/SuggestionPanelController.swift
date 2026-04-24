@@ -41,13 +41,15 @@ final class SuggestionPanelController {
         panel.contentView = container
     }
 
+    @discardableResult
     func show(
         text: String,
+        appBundleIdentifier: String?,
         near caretRect: CGRect,
         alignedTo textLineRect: CGRect?,
         boundedBy textElementRect: CGRect?,
         style: FocusedTextStyle?
-    ) {
+    ) -> InlineGhostPlacementDecision? {
         let fontSize = min(max(caretRect.height * 1.02, 12), 32)
         let font = style?.font ?? NSFont.systemFont(ofSize: fontSize, weight: .regular)
         let color = ghostColor(matching: style?.foregroundColor)
@@ -56,24 +58,24 @@ final class SuggestionPanelController {
         let size = text.size(withAttributes: [.font: font])
         let screen = screen(containing: caretRect) ?? NSScreen.main
         let screenFrame = screen?.frame ?? .zero
-        let screenHeight = screenFrame.height > 0 ? screenFrame.height : caretRect.maxY
         let appKitCaretRect = AccessibilityCoordinateConverter.appKitRect(
             fromAccessibilityRect: caretRect,
-            screenHeight: screenHeight
+            screenFrame: screenFrame
         )
         let appKitTextLineRect = textLineRect.map {
             AccessibilityCoordinateConverter.appKitRect(
                 fromAccessibilityRect: $0,
-                screenHeight: screenHeight
+                screenFrame: screenFrame
             )
         }
         let appKitTextElementRect = textElementRect.map {
             AccessibilityCoordinateConverter.appKitRect(
                 fromAccessibilityRect: $0,
-                screenHeight: screenHeight
+                screenFrame: screenFrame
             )
         }
-        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+        let decision = SuggestionPanelFrameCalculator.inlineGhostPlacement(
+            appBundleIdentifier: appBundleIdentifier,
             caretRect: appKitCaretRect,
             textLineRect: appKitTextLineRect,
             boundaryFrame: appKitTextElementRect,
@@ -81,14 +83,15 @@ final class SuggestionPanelController {
             screenFrame: screenFrame
         )
 
-        guard frame.width >= 8 else {
+        guard decision.frame.width >= 8 else {
             hide()
-            return
+            return decision
         }
 
-        panel.setFrame(frame, display: true)
+        panel.setFrame(decision.frame, display: true)
         ghostTextView.needsDisplay = true
         panel.orderFrontRegardless()
+        return decision
     }
 
     func hide() {
@@ -99,7 +102,7 @@ final class SuggestionPanelController {
         NSScreen.screens.first { screen in
             let convertedRect = AccessibilityCoordinateConverter.appKitRect(
                 fromAccessibilityRect: accessibilityRect,
-                screenHeight: screen.frame.height
+                screenFrame: screen.frame
             )
 
             return screen.frame.intersects(convertedRect)
