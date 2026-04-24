@@ -18,6 +18,24 @@ cd "$ROOT_DIR"
 
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 
+find_signing_identity() {
+  if [[ -n "${SIGN_IDENTITY:-}" ]]; then
+    echo "$SIGN_IDENTITY"
+    return 0
+  fi
+
+  local identity
+  identity="$(security find-identity -p codesigning -v 2>/dev/null \
+    | awk -F '"' '/Apple Development/ { print $2; exit }')"
+
+  if [[ -z "$identity" ]]; then
+    identity="$(security find-identity -p codesigning -v 2>/dev/null \
+      | awk -F '"' '/Developer ID Application/ { print $2; exit }')"
+  fi
+
+  echo "$identity"
+}
+
 swift build -c debug --product "$APP_NAME"
 BUILD_BINARY="$(swift build -c debug --show-bin-path)/$APP_NAME"
 
@@ -50,6 +68,14 @@ cat >"$INFO_PLIST" <<PLIST
 </dict>
 </plist>
 PLIST
+
+SIGNING_IDENTITY="$(find_signing_identity)"
+if [[ -n "$SIGNING_IDENTITY" ]]; then
+  codesign --force --sign "$SIGNING_IDENTITY" "$APP_BUNDLE" >/dev/null
+else
+  codesign --force --sign - "$APP_BUNDLE" >/dev/null
+  echo "warning: no stable code signing identity found; Accessibility may ask again after rebuilds" >&2
+fi
 
 open_app() {
   /usr/bin/open -n "$APP_BUNDLE"
