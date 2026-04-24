@@ -20,8 +20,10 @@ The magic feeling we are testing:
 - reads the active text field through Accessibility
 - shows a small floating suggestion near the cursor
 - `Tab` accepts one word
+- backtick/tilde accepts the whole visible suggestion
 - `Esc` dismisses
 - local-only by default
+- default model target: Gemma 4 E2B on M1 / 16 GB
 - starts with a small app allowlist
 
 Target apps for the first pass:
@@ -30,6 +32,12 @@ Target apps for the first pass:
 - Notes
 - Obsidian
 - Mail
+
+## Model Decision
+
+Run the MVP on Gemma 4 E2B.
+
+The first supported hardware target is Apple Silicon M1 with 16 GB RAM. The app should not expose a broad model picker yet. The product question is whether the typing experience feels useful, so the model layer should stay boring: local, warm, short completions, and tuned for speed.
 
 ## What We Are Not Building Yet
 
@@ -51,4 +59,3 @@ Give it to 3-5 people for a week and ask:
 - Would you miss it if it disappeared?
 
 If the answer is yes, then we can decide whether it graduates into Transcripted.
-
