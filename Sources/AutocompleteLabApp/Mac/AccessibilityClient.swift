@@ -28,6 +28,56 @@ struct FocusedTextStyle: Equatable {
     }
 }
 
+private struct PasteboardSnapshot: Sendable {
+    struct Item: Sendable {
+        let values: [Value]
+    }
+
+    struct Value: Sendable {
+        let type: String
+        let data: Data
+    }
+
+    let items: [Item]
+
+    static func capture(from pasteboard: NSPasteboard) -> PasteboardSnapshot {
+        let items = pasteboard.pasteboardItems?.compactMap { item -> Item? in
+            let values = item.types.compactMap { type -> Value? in
+                guard let data = item.data(forType: type) else {
+                    return nil
+                }
+
+                return Value(type: type.rawValue, data: data)
+            }
+
+            guard !values.isEmpty else {
+                return nil
+            }
+
+            return Item(values: values)
+        } ?? []
+
+        return PasteboardSnapshot(items: items)
+    }
+
+    func restore(to pasteboard: NSPasteboard) {
+        pasteboard.clearContents()
+
+        let pasteboardItems = items.map { item in
+            let pasteboardItem = NSPasteboardItem()
+            for value in item.values {
+                pasteboardItem.setData(value.data, forType: NSPasteboard.PasteboardType(value.type))
+            }
+
+            return pasteboardItem
+        }
+
+        if !pasteboardItems.isEmpty {
+            pasteboard.writeObjects(pasteboardItems)
+        }
+    }
+}
+
 final class AccessibilityClient {
     var isTrusted: Bool {
         AXIsProcessTrusted()
@@ -97,10 +147,26 @@ final class AccessibilityClient {
     }
 
     func insertText(_ text: String) -> Bool {
+        guard !text.isEmpty else {
+            return true
+        }
+
         guard let app = NSWorkspace.shared.frontmostApplication,
               let focusedElement = focusedElement(for: app.processIdentifier) else {
             return false
         }
+
+        guard !isSecureTextElement(focusedElement) else {
+            return false
+        }
+
+        let originalValue = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String
+        let originalRange = selectedTextRange(in: focusedElement)
+        let expectedValue = expectedTextValue(
+            afterInserting: text,
+            into: originalValue,
+            selectedRange: originalRange
+        )
 
         let result = AXUIElementSetAttributeValue(
             focusedElement,
@@ -108,7 +174,116 @@ final class AccessibilityClient {
             text as CFTypeRef
         )
 
-        return result == .success
+        if result == .success {
+            if directInsertionChangedValue(
+                in: focusedElement,
+                originalValue: originalValue,
+                expectedValue: expectedValue
+            ) {
+                return true
+            }
+
+            return pasteTextThroughClipboard(text)
+        }
+
+        return pasteTextThroughClipboard(text)
+    }
+
+    private func expectedTextValue(
+        afterInserting text: String,
+        into originalValue: String?,
+        selectedRange: CFRange?
+    ) -> String? {
+        guard let originalValue,
+              let selectedRange,
+              selectedRange.location >= 0,
+              selectedRange.length >= 0 else {
+            return nil
+        }
+
+        let startOffset = min(selectedRange.location, originalValue.utf16.count)
+        let endOffset = min(startOffset + selectedRange.length, originalValue.utf16.count)
+        let prefix = CursorTextSplitter.split(originalValue, utf16Offset: startOffset).textBeforeCursor
+        let suffix = CursorTextSplitter.split(originalValue, utf16Offset: endOffset).textAfterCursor
+
+        return prefix + text + suffix
+    }
+
+    private func directInsertionChangedValue(
+        in focusedElement: AXUIElement,
+        originalValue: String?,
+        expectedValue: String?
+    ) -> Bool {
+        guard let expectedValue else {
+            return true
+        }
+
+        if copiedTextValue(in: focusedElement) == expectedValue {
+            return true
+        }
+
+        Thread.sleep(forTimeInterval: 0.02)
+        let updatedValue = copiedTextValue(in: focusedElement)
+        if updatedValue == expectedValue {
+            return true
+        }
+
+        guard let updatedValue else {
+            return false
+        }
+
+        return updatedValue != originalValue
+    }
+
+    private func copiedTextValue(in focusedElement: AXUIElement) -> String? {
+        copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String
+    }
+
+    private func pasteTextThroughClipboard(_ text: String) -> Bool {
+        let pasteboard = NSPasteboard.general
+        let snapshot = PasteboardSnapshot.capture(from: pasteboard)
+
+        pasteboard.clearContents()
+        guard pasteboard.setString(text, forType: .string) else {
+            snapshot.restore(to: pasteboard)
+            return false
+        }
+
+        let temporaryChangeCount = pasteboard.changeCount
+        guard postCommandV() else {
+            snapshot.restore(to: pasteboard)
+            return false
+        }
+
+        restorePasteboard(snapshot, ifChangeCountIs: temporaryChangeCount)
+        return true
+    }
+
+    private func postCommandV() -> Bool {
+        guard let eventSource = CGEventSource(stateID: .hidSystemState),
+              let keyDown = CGEvent(keyboardEventSource: eventSource, virtualKey: CGKeyCode(9), keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: eventSource, virtualKey: CGKeyCode(9), keyDown: false) else {
+            return false
+        }
+
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+        return true
+    }
+
+    private func restorePasteboard(_ snapshot: PasteboardSnapshot, ifChangeCountIs temporaryChangeCount: Int) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+
+            let pasteboard = NSPasteboard.general
+            guard pasteboard.changeCount == temporaryChangeCount else {
+                return
+            }
+
+            snapshot.restore(to: pasteboard)
+        }
     }
 
     private func focusedElement(for processIdentifier: pid_t) -> AXUIElement? {

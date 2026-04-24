@@ -269,30 +269,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
 
+        let hasVisibleSuggestion = suggestionSession.hasVisibleSuggestion
         let action = keyboardRouter.action(
             for: key,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+            hasVisibleSuggestion: hasVisibleSuggestion
         )
+
+        if key != .other {
+            let visibleLabel = hasVisibleSuggestion ? "yes" : "no"
+            logger.info("Autocomplete key: \(key.debugLabel, privacy: .public), visible: \(visibleLabel, privacy: .public), action: \(action.debugLabel, privacy: .public)")
+        }
 
         switch action {
         case .acceptNextWord:
-            guard let acceptedText = suggestionSession.acceptNextWord(),
-                  accessibilityClient.insertText(acceptedText) else {
+            guard let acceptedText = suggestionSession.acceptNextWord() else {
+                logger.info("Autocomplete accept failed: no next word")
+                return false
+            }
+
+            guard accessibilityClient.insertText(acceptedText) else {
+                logger.info("Autocomplete accept failed: insertion unavailable")
                 return false
             }
 
             refreshVisibleSuggestion()
             suppressKey(key)
+            logger.info("Autocomplete accept succeeded: next word")
             return true
 
         case .acceptAllVisible:
-            guard let acceptedText = suggestionSession.acceptAllVisible(),
-                  accessibilityClient.insertText(acceptedText) else {
+            guard let acceptedText = suggestionSession.acceptAllVisible() else {
+                logger.info("Autocomplete accept failed: no visible text")
+                return false
+            }
+
+            guard accessibilityClient.insertText(acceptedText) else {
+                logger.info("Autocomplete accept failed: insertion unavailable")
                 return false
             }
 
             hideSuggestion()
             suppressKey(key)
+            logger.info("Autocomplete accept succeeded: all visible")
             return true
 
         case .dismiss:
@@ -460,6 +478,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     private func quit() {
         NSApp.terminate(nil)
+    }
+}
+
+private extension AutocompleteKey {
+    var debugLabel: String {
+        switch self {
+        case .tab:
+            return "tab"
+        case .backtick:
+            return "backtick"
+        case .escape:
+            return "escape"
+        case .other:
+            return "other"
+        }
+    }
+}
+
+private extension KeyboardAction {
+    var debugLabel: String {
+        switch self {
+        case .acceptNextWord:
+            return "accept next word"
+        case .acceptAllVisible:
+            return "accept all visible"
+        case .dismiss:
+            return "dismiss"
+        case .passThrough:
+            return "pass through"
+        }
     }
 }
 
