@@ -12,8 +12,13 @@ struct AppCompatibilityProfileTests {
         #expect(registry.profile(for: "com.apple.mail").id == "mail")
         #expect(registry.profile(for: "md.obsidian").id == "obsidian")
         #expect(registry.profile(for: "com.openai.codex").id == "openai-composer")
+        #expect(registry.profile(for: "com.anthropic.claudefordesktop").id == "claude-desktop")
         #expect(registry.profile(for: "com.google.Chrome").id == "browser-composer")
+        #expect(registry.profile(for: "com.apple.finder").id == "apple-search-fields")
+        #expect(registry.profile(for: "com.apple.MobileSMS").id == "apple-messaging")
+        #expect(registry.profile(for: "ru.keepcoder.Telegram").id == "chat-app")
         #expect(registry.profile(for: "com.microsoft.VSCode").id == "electron-editor")
+        #expect(registry.profile(for: "com.googlecode.iterm2").id == "terminal")
     }
 
     @Test("Falls back for unknown apps")

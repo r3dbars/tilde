@@ -26,7 +26,7 @@ public final class MockCompletionEngine: CompletionEngine, @unchecked Sendable {
         }
 
         return CompletionSuggestion(
-            text: CompletionPrefixTrimmer.trim(text, after: trimmed),
+            text: CompletionPrefixTrimmer.trim(text, after: request.textBeforeCursor),
             maxVisibleWords: request.maxVisibleWords
         ).nonEmpty
     }

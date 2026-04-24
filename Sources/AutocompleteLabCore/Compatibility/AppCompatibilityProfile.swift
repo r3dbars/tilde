@@ -157,6 +157,18 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
         ),
         AppCompatibilityProfile(
+            id: "claude-desktop",
+            displayName: "Claude Desktop",
+            bundleIdentifierPrefixes: ["com.anthropic.claudefordesktop"],
+            defaultRung: .detect,
+            textPath: .editorPlugin,
+            acceptMode: .none,
+            lineRectPolicy: .caretOnly,
+            boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
+            maximumLineHeightMultiplier: 1.45,
+            verticalToleranceMultiplier: 0.65
+        ),
+        AppCompatibilityProfile(
             id: "browser-composer",
             displayName: "Browser Composer",
             bundleIdentifierPrefixes: [
@@ -168,6 +180,45 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             ],
             defaultRung: .detect,
             textPath: .webExtension,
+            acceptMode: .none,
+            lineRectPolicy: .caretOnly,
+            boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
+            maximumLineHeightMultiplier: 1.45,
+            verticalToleranceMultiplier: 0.65
+        ),
+        AppCompatibilityProfile(
+            id: "apple-search-fields",
+            displayName: "Apple Search Fields",
+            bundleIdentifierPrefixes: [
+                "com.apple.finder",
+                "com.apple.systempreferences",
+                "com.apple.ActivityMonitor"
+            ],
+            defaultRung: .detect,
+            textPath: .nativeAccessibility,
+            acceptMode: .none,
+            lineRectPolicy: .caretOnly,
+            boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
+        ),
+        AppCompatibilityProfile(
+            id: "apple-messaging",
+            displayName: "Apple Messaging",
+            bundleIdentifierPrefixes: ["com.apple.MobileSMS"],
+            defaultRung: .detect,
+            textPath: .nativeAccessibility,
+            acceptMode: .none,
+            lineRectPolicy: .caretOnly,
+            boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
+        ),
+        AppCompatibilityProfile(
+            id: "chat-app",
+            displayName: "Chat App",
+            bundleIdentifierPrefixes: [
+                "ru.keepcoder.Telegram",
+                "com.tinyspeck.slackmacgap"
+            ],
+            defaultRung: .detect,
+            textPath: .editorPlugin,
             acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
@@ -188,6 +239,19 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             maximumLineHeightMultiplier: 1.45,
             verticalToleranceMultiplier: 0.65
+        ),
+        AppCompatibilityProfile(
+            id: "terminal",
+            displayName: "Terminal",
+            bundleIdentifierPrefixes: [
+                "com.apple.Terminal",
+                "com.googlecode.iterm2"
+            ],
+            defaultRung: .blocked,
+            textPath: .blocked,
+            acceptMode: .none,
+            lineRectPolicy: .caretOnly,
+            boundaryClipPolicy: .ignoreFocusedTextElement
         )
     ]
 }

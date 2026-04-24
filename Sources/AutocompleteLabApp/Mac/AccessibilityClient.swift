@@ -140,7 +140,14 @@ final class AccessibilityClient {
             text,
             utf16Offset: selectedRange?.location ?? text.utf16.count
         )
-        let caretRect = selectedRange.flatMap { caretBounds(for: focusedElement, range: $0) }
+        let caretRect = selectedRange.flatMap {
+            resolvedCaretBounds(
+                for: focusedElement,
+                textLength: text.utf16.count,
+                textBeforeCursor: textSlice.textBeforeCursor,
+                range: $0
+            )
+        }
         let textLineRect = selectedRange.flatMap {
             textLineBounds(for: focusedElement, textLength: text.utf16.count, textBeforeCursor: textSlice.textBeforeCursor, range: $0)
         }
@@ -374,6 +381,40 @@ final class AccessibilityClient {
     private func caretBounds(for element: AXUIElement, range: CFRange) -> CGRect? {
         let caretRange = CFRange(location: range.location, length: 0)
         return bounds(for: element, range: caretRange)
+    }
+
+    private func resolvedCaretBounds(
+        for element: AXUIElement,
+        textLength: Int,
+        textBeforeCursor: String,
+        range: CFRange
+    ) -> CGRect? {
+        let reportedCaretRect = caretBounds(for: element, range: range)
+        guard range.length == 0 else {
+            return reportedCaretRect
+        }
+
+        let isAfterNewline = textBeforeCursor.last?.isNewline == true
+        let previousGlyphRect: CGRect?
+        if !isAfterNewline, range.location > 0 {
+            previousGlyphRect = bounds(for: element, range: CFRange(location: range.location - 1, length: 1))
+        } else {
+            previousGlyphRect = nil
+        }
+
+        let nextGlyphRect: CGRect?
+        if isAfterNewline, range.location < textLength {
+            nextGlyphRect = bounds(for: element, range: CFRange(location: range.location, length: 1))
+        } else {
+            nextGlyphRect = nil
+        }
+
+        return CaretRectResolver.resolve(
+            reportedCaretRect: reportedCaretRect,
+            previousGlyphRect: previousGlyphRect,
+            nextGlyphRect: nextGlyphRect,
+            isAfterNewline: isAfterNewline
+        )
     }
 
     private func textLineBounds(

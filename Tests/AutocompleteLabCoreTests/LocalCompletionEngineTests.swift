@@ -58,6 +58,18 @@ struct LocalCompletionEngineTests {
         #expect(suggestion?.visibleText == " make this feel instant")
     }
 
+    @Test("Mock fallback keeps suggestions after a completed unmatched word")
+    func mockFallbackSuggestsAfterTrailingWhitespace() async throws {
+        let runner = FakeLocalRunner(result: .success("   "))
+        let engine = LocalCompletionEngine(runner: runner)
+
+        let suggestion = try await engine.suggestion(
+            for: CompletionRequest(textBeforeCursor: "I wrote test ", maxVisibleWords: 8)
+        )
+
+        #expect(suggestion?.visibleText == "and keep moving")
+    }
+
     @Test("Falls back to mock when runtime echoes earlier context")
     func fallsBackToMockWhenRuntimeEchoesEarlierContext() async throws {
         let runner = FakeLocalRunner(result: .success("Hey. How are"))
