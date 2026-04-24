@@ -38,6 +38,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastAppProcessIdentifier: pid_t?
     private var lastPlacementContextUpdatedAt: Date?
     private var lastTextBeforeCursor = ""
+    private var lastSuggestionRequestSignature: SuggestionRequestSignature?
+    private var suggestionRequestGeneration = 0
     private var lastStatusSummary = ""
     private var lastPlacementDiagnostics = "No geometry diagnostics yet."
     private var suggestionTask: Task<Void, Never>?
@@ -213,7 +215,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        guard context.textBeforeCursor != lastTextBeforeCursor else {
+        let requestSignature = SuggestionRequestSignature(context: context, app: frontmostApp)
+        guard requestSignature != lastSuggestionRequestSignature else {
             if suggestionSession.hasVisibleSuggestion, context.caretRect != nil {
                 cachePlacementContext(context, app: frontmostApp)
                 refreshVisibleSuggestion()
@@ -223,6 +226,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         lastTextBeforeCursor = context.textBeforeCursor
         suggestionTask?.cancel()
+        suggestionRequestGeneration += 1
+        lastSuggestionRequestSignature = requestSignature
+        let requestGeneration = suggestionRequestGeneration
+        hideSuggestion(clearLastTextBeforeCursor: false)
         updateStatus("requesting suggestion via \(settings.runtimeMode.menuTitle)")
 
         let request = CompletionRequest(
@@ -235,8 +242,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionTask = Task { [activeEngine, suggestionPanel] in
             do {
                 let suggestion = try await activeEngine.suggestion(for: request)
+                guard !Task.isCancelled else {
+                    return
+                }
+
                 await MainActor.run {
-                    guard let suggestion, !suggestion.isEmpty, let caretRect = context.caretRect else {
+                    guard let currentContext = self.currentFocusedContext(
+                        for: requestSignature,
+                        generation: requestGeneration
+                    ) else {
+                        self.updateStatus("dropped stale suggestion")
+                        return
+                    }
+
+                    guard let suggestion, !suggestion.isEmpty, let caretRect = currentContext.caretRect else {
                         self.updateStatus("engine returned no visible suggestion")
                         self.hideSuggestion(clearLastTextBeforeCursor: false)
                         return
@@ -245,14 +264,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.updateStatus("showing suggestion")
                     self.suggestionSession.present(suggestion)
                     self.lastCaretRect = caretRect
-                    self.cachePlacementContext(context, app: frontmostApp)
+                    self.cachePlacementContext(currentContext, app: frontmostApp)
                     let decision = suggestionPanel.show(
                         text: suggestion.visibleText,
                         appBundleIdentifier: frontmostApp.bundleIdentifier,
                         near: caretRect,
-                        alignedTo: context.textLineRect,
-                        boundedBy: context.textElementRect,
-                        style: context.textStyle
+                        alignedTo: currentContext.textLineRect,
+                        boundedBy: currentContext.textElementRect,
+                        style: currentContext.textStyle
                     )
                     if decision?.strategy == .hiddenNoRoom {
                         self.suggestionSession.dismiss()
@@ -260,11 +279,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.recordPlacementDiagnostics(
                         decision,
                         app: frontmostApp,
-                        context: context
+                        context: currentContext
                     )
                 }
             } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+
                 await MainActor.run {
+                    guard self.suggestionRequestGeneration == requestGeneration else {
+                        return
+                    }
+
                     self.hideSuggestion()
                 }
             }
@@ -411,6 +438,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func hideSuggestion(clearLastTextBeforeCursor: Bool = true) {
+        if clearLastTextBeforeCursor {
+            suggestionTask?.cancel()
+            suggestionRequestGeneration += 1
+            lastSuggestionRequestSignature = nil
+        }
+
         suggestionSession.dismiss()
         lastCaretRect = nil
         lastTextLineRect = nil
@@ -423,6 +456,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastTextBeforeCursor = ""
         }
         suggestionPanel.hide()
+    }
+
+    private func currentFocusedContext(
+        for signature: SuggestionRequestSignature,
+        generation: Int
+    ) -> FocusedTextContext? {
+        guard generation == suggestionRequestGeneration,
+              lastSuggestionRequestSignature == signature,
+              let currentApp = accessibilityClient.frontmostApplication(),
+              currentApp.processIdentifier == signature.processIdentifier,
+              let currentContext = accessibilityClient.focusedTextContext(),
+              SuggestionRequestSignature(context: currentContext, app: currentApp) == signature else {
+            return nil
+        }
+
+        return currentContext
     }
 
     private func cachePlacementContext(
@@ -650,6 +699,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     private func quit() {
         NSApp.terminate(nil)
+    }
+}
+
+private struct SuggestionRequestSignature: Equatable {
+    let processIdentifier: pid_t
+    let textBeforeCursor: String
+    let textAfterCursor: String
+
+    init(context: FocusedTextContext, app: RunningApplicationInfo) {
+        processIdentifier = app.processIdentifier
+        textBeforeCursor = context.textBeforeCursor
+        textAfterCursor = context.textAfterCursor
     }
 }
 

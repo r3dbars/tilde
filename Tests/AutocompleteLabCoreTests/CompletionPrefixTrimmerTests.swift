@@ -48,11 +48,20 @@ struct CompletionPrefixTrimmerTests {
         #expect(trimmed == "is project")
     }
 
+    @Test("Completes a repeated partial word from full context output")
+    func completesRepeatedPartialWordFromFullContextOutput() {
+        let trimmed = CompletionPrefixTrimmer.trim("Hey that sounds", after: "Hey that soun")
+
+        #expect(trimmed == "ds")
+    }
+
     @Test("Suppresses partial word suggestions that do not complete the typed fragment")
     func suppressesBadPartialWordSuggestion() {
         let trimmed = CompletionPrefixTrimmer.trim(" and keep moving", after: "Hey th")
+        let longerTrimmed = CompletionPrefixTrimmer.trim(" and keep moving", after: "Hey that soun")
 
         #expect(trimmed == "")
+        #expect(longerTrimmed == "")
     }
 
     @Test("Keeps suggestions after common short complete words")

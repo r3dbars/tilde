@@ -79,7 +79,7 @@ public enum CompletionPrefixTrimmer {
 
     private static func looksLikeUnfinishedFragment(_ fragment: String) -> Bool {
         let normalizedFragment = normalized(fragment)
-        guard normalizedFragment.count >= 2, normalizedFragment.count <= 3 else {
+        guard normalizedFragment.count >= 2, normalizedFragment.count <= 4 else {
             return false
         }
 
@@ -87,9 +87,11 @@ public enum CompletionPrefixTrimmer {
             "a", "all", "an", "and", "any", "are", "as", "at", "be", "but",
             "by", "can", "did", "do", "for", "get", "go", "had", "has", "he",
             "her", "hey", "hi", "his", "how", "i", "if", "in", "is", "it",
-            "me", "my", "new", "no", "not", "now", "of", "on", "one", "or",
-            "our", "out", "see", "she", "so", "the", "to", "too", "up", "us",
-            "was", "we", "who", "why", "yes", "yet", "you"
+            "like", "make", "me", "my", "need", "new", "no", "not", "now",
+            "of", "on", "one", "or", "our", "out", "plan", "see", "she",
+            "so", "that", "the", "then", "this", "to", "too", "up", "us",
+            "want", "was", "we", "what", "when", "who", "why", "will",
+            "with", "work", "yes", "yet", "you"
         ]
 
         return !commonCompleteShortWords.contains(normalizedFragment)
