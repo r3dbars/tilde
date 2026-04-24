@@ -41,6 +41,14 @@ The first supported hardware target is Apple Silicon M1 with 16 GB RAM. The app 
 
 Users should never need to start a model server. The model runtime is owned by the app. If a local server is used during development, it is only a private benchmark tool, not part of the product experience.
 
+Current lab build:
+
+- defaults to a bundled local-runtime helper
+- tries LiteRT-LM Gemma 4 E2B first
+- falls back to mock suggestions if the runtime is missing or too broken
+- exposes privacy/runtime toggles from the menu bar
+- keeps typed text local
+
 ## What We Are Not Building Yet
 
 - not a Transcripted feature yet

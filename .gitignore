@@ -1,10 +1,12 @@
 .DS_Store
 .build/
+.venv/
 DerivedData/
 dist/
 *.xcuserstate
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
+*.profraw
 
 # Local model/data files stay off git.
 Models/
@@ -13,4 +15,3 @@ Data/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
-

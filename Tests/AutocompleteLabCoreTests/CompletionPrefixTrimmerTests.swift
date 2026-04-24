@@ -23,4 +23,18 @@ struct CompletionPrefixTrimmerTests {
 
         #expect(trimmed == "and keep moving")
     }
+
+    @Test("Removes a full repeated context from model output")
+    func removesFullRepeatedContext() {
+        let trimmed = CompletionPrefixTrimmer.trim("I think and feel a sense of wonder", after: "I think and")
+
+        #expect(trimmed == " feel a sense of wonder")
+    }
+
+    @Test("Removes a full repeated context after existing whitespace")
+    func removesFullRepeatedContextAfterWhitespace() {
+        let trimmed = CompletionPrefixTrimmer.trim("I think and feel a sense of wonder", after: "I think and ")
+
+        #expect(trimmed == "feel a sense of wonder")
+    }
 }
