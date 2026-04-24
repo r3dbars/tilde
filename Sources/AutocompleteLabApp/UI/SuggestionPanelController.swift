@@ -4,15 +4,10 @@ import AutocompleteLabCore
 @MainActor
 final class SuggestionPanelController {
     private let panel: NSPanel
-    private let textField: NSTextField
+    private let ghostTextView: GhostTextView
 
     init() {
-        textField = NSTextField(labelWithString: "")
-        textField.font = NSFont.systemFont(ofSize: 15, weight: .regular)
-        textField.textColor = NSColor.labelColor.withAlphaComponent(0.36)
-        textField.backgroundColor = .clear
-        textField.lineBreakMode = .byTruncatingTail
-        textField.maximumNumberOfLines = 1
+        ghostTextView = GhostTextView(frame: .zero)
 
         panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 280, height: 32),
@@ -33,24 +28,24 @@ final class SuggestionPanelController {
         container.wantsLayer = true
         container.layer?.backgroundColor = NSColor.clear.cgColor
 
-        textField.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(textField)
+        ghostTextView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(ghostTextView)
 
         NSLayoutConstraint.activate([
-            textField.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            textField.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            textField.centerYAnchor.constraint(equalTo: container.centerYAnchor)
+            ghostTextView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            ghostTextView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            ghostTextView.topAnchor.constraint(equalTo: container.topAnchor),
+            ghostTextView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
         ])
 
         panel.contentView = container
     }
 
     func show(text: String, near caretRect: CGRect) {
-        let fontSize = min(max(caretRect.height * 0.95, 12), 28)
-        textField.font = NSFont.systemFont(ofSize: fontSize, weight: .regular)
-        textField.textColor = NSColor.labelColor.withAlphaComponent(0.36)
-        textField.stringValue = text
-        let size = text.size(withAttributes: [.font: textField.font as Any])
+        let fontSize = min(max(caretRect.height * 1.02, 12), 32)
+        let font = NSFont.systemFont(ofSize: fontSize, weight: .regular)
+        ghostTextView.update(text: text, font: font, color: NSColor.labelColor.withAlphaComponent(0.34))
+        let size = text.size(withAttributes: [.font: font])
         let screen = screen(containing: caretRect) ?? NSScreen.main
         let screenFrame = screen?.frame ?? .zero
         let screenHeight = screenFrame.height > 0 ? screenFrame.height : caretRect.maxY
@@ -65,6 +60,7 @@ final class SuggestionPanelController {
         )
 
         panel.setFrame(frame, display: true)
+        ghostTextView.needsDisplay = true
         panel.orderFrontRegardless()
     }
 
@@ -81,5 +77,39 @@ final class SuggestionPanelController {
 
             return screen.frame.intersects(convertedRect)
         }
+    }
+}
+
+private final class GhostTextView: NSView {
+    private var text = ""
+    private var font = NSFont.systemFont(ofSize: 15)
+    private var color = NSColor.labelColor.withAlphaComponent(0.34)
+
+    override var isFlipped: Bool {
+        true
+    }
+
+    func update(text: String, font: NSFont, color: NSColor) {
+        self.text = text
+        self.font = font
+        self.color = color
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        guard !text.isEmpty else {
+            return
+        }
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: color
+        ]
+        let textSize = text.size(withAttributes: attributes)
+        let point = NSPoint(x: 0, y: max(0, (bounds.height - textSize.height) / 2))
+
+        text.draw(at: point, withAttributes: attributes)
     }
 }

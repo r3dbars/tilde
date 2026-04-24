@@ -10,9 +10,9 @@ public enum SuggestionPanelFrameCalculator {
         maximumWidth: CGFloat = 420
     ) -> CGRect {
         let width = min(max(textSize.width + 6, minimumWidth), maximumWidth)
-        let height = max(caretRect.height + 8, textSize.height + 4)
+        let height = max(caretRect.height, textSize.height)
         let preferredX = caretRect.maxX + 2
-        let preferredY = caretRect.midY - (height / 2)
+        let preferredY = caretRect.minY - (height * 0.08)
 
         let maxX = screenFrame.maxX - width - 8
         let maxY = screenFrame.maxY - height - 4

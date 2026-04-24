@@ -13,7 +13,7 @@ struct SuggestionPanelFrameCalculatorTests {
         )
 
         #expect(frame.minX == 102)
-        #expect(frame.midY == 810)
+        #expect(frame.minY == 798.4)
         #expect(frame.width == 166)
     }
 
