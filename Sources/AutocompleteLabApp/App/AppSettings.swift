@@ -105,6 +105,16 @@ final class AppSettings {
         )
     }
 
+    func compatibilityRoutingSettings() -> CompatibilityRoutingSettings {
+        CompatibilityRoutingSettings(
+            enforceKnownApps: enforceAllowlist,
+            suppressSecureFields: suppressSecureFields,
+            minimumCharactersBeforeSuggestion: suppressShortText ? minimumCharacters : 1,
+            suppressEmptyText: suppressShortText,
+            suppressImmediatelyAfterNewline: suppressAfterNewline
+        )
+    }
+
     private func registerDefaults() {
         defaults.register(defaults: [
             Key.suggestionsEnabled: true,

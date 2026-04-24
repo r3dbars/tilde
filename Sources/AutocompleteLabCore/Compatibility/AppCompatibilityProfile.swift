@@ -16,6 +16,9 @@ public struct AppCompatibilityProfile: Equatable, Sendable {
     public let id: String
     public let displayName: String
     public let bundleIdentifierPrefixes: [String]
+    public let defaultRung: CompatibilityRung
+    public let textPath: TextIntegrationPath
+    public let acceptMode: SuggestionAcceptMode
     public let lineRectPolicy: LineRectPolicy
     public let boundaryClipPolicy: BoundaryClipPolicy
     public let maximumLineHeightMultiplier: CGFloat
@@ -29,6 +32,9 @@ public struct AppCompatibilityProfile: Equatable, Sendable {
         id: String,
         displayName: String,
         bundleIdentifierPrefixes: [String],
+        defaultRung: CompatibilityRung = .detect,
+        textPath: TextIntegrationPath = .nativeAccessibility,
+        acceptMode: SuggestionAcceptMode = .none,
         lineRectPolicy: LineRectPolicy = .caretOnly,
         boundaryClipPolicy: BoundaryClipPolicy = .clipToFocusedTextElementWhenCaretInside,
         maximumLineHeightMultiplier: CGFloat = 1.8,
@@ -41,6 +47,9 @@ public struct AppCompatibilityProfile: Equatable, Sendable {
         self.id = id
         self.displayName = displayName
         self.bundleIdentifierPrefixes = bundleIdentifierPrefixes
+        self.defaultRung = defaultRung
+        self.textPath = textPath
+        self.acceptMode = acceptMode
         self.lineRectPolicy = lineRectPolicy
         self.boundaryClipPolicy = boundaryClipPolicy
         self.maximumLineHeightMultiplier = maximumLineHeightMultiplier
@@ -63,8 +72,11 @@ public struct AppCompatibilityProfile: Equatable, Sendable {
 
     public static let fallback = AppCompatibilityProfile(
         id: "fallback",
-        displayName: "Default Accessibility Editor",
-        bundleIdentifierPrefixes: []
+        displayName: "Unsupported App",
+        bundleIdentifierPrefixes: [],
+        defaultRung: .blocked,
+        textPath: .blocked,
+        acceptMode: .none
     )
 }
 
@@ -91,6 +103,9 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             id: "textedit",
             displayName: "TextEdit",
             bundleIdentifierPrefixes: ["com.apple.TextEdit"],
+            defaultRung: .stableBeta,
+            textPath: .nativeAccessibility,
+            acceptMode: .clipboardFallback,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
         ),
@@ -98,9 +113,34 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             id: "notes",
             displayName: "Apple Notes",
             bundleIdentifierPrefixes: ["com.apple.Notes"],
+            defaultRung: .accept,
+            textPath: .nativeAccessibility,
+            acceptMode: .clipboardFallback,
             lineRectPolicy: .trustAfterValidation,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             verticalToleranceMultiplier: 1.2
+        ),
+        AppCompatibilityProfile(
+            id: "mail",
+            displayName: "Apple Mail",
+            bundleIdentifierPrefixes: ["com.apple.mail"],
+            defaultRung: .detect,
+            textPath: .nativeAccessibility,
+            acceptMode: .none,
+            lineRectPolicy: .trustAfterValidation,
+            boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
+        ),
+        AppCompatibilityProfile(
+            id: "obsidian",
+            displayName: "Obsidian",
+            bundleIdentifierPrefixes: ["md.obsidian"],
+            defaultRung: .detect,
+            textPath: .editorPlugin,
+            acceptMode: .none,
+            lineRectPolicy: .caretOnly,
+            boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
+            maximumLineHeightMultiplier: 1.45,
+            verticalToleranceMultiplier: 0.65
         ),
         AppCompatibilityProfile(
             id: "openai-composer",
@@ -110,6 +150,9 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
                 "com.openai.chat",
                 "com.openai.codex"
             ],
+            defaultRung: .detect,
+            textPath: .nativeAccessibility,
+            acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
         ),
@@ -123,6 +166,9 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
                 "company.thebrowser.Browser",
                 "org.mozilla.firefox"
             ],
+            defaultRung: .detect,
+            textPath: .webExtension,
+            acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             maximumLineHeightMultiplier: 1.45,
@@ -132,10 +178,12 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             id: "electron-editor",
             displayName: "Electron Editor",
             bundleIdentifierPrefixes: [
-                "md.obsidian",
                 "com.microsoft.VSCode",
                 "com.todesktop"
             ],
+            defaultRung: .detect,
+            textPath: .editorPlugin,
+            acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             maximumLineHeightMultiplier: 1.45,

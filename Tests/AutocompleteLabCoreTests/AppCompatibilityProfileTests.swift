@@ -9,9 +9,11 @@ struct AppCompatibilityProfileTests {
 
         #expect(registry.profile(for: "com.apple.TextEdit").id == "textedit")
         #expect(registry.profile(for: "com.apple.Notes").id == "notes")
+        #expect(registry.profile(for: "com.apple.mail").id == "mail")
+        #expect(registry.profile(for: "md.obsidian").id == "obsidian")
         #expect(registry.profile(for: "com.openai.codex").id == "openai-composer")
         #expect(registry.profile(for: "com.google.Chrome").id == "browser-composer")
-        #expect(registry.profile(for: "md.obsidian").id == "electron-editor")
+        #expect(registry.profile(for: "com.microsoft.VSCode").id == "electron-editor")
     }
 
     @Test("Falls back for unknown apps")

@@ -10,7 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
 
     private let accessibilityClient = AccessibilityClient()
-    private let allowlist = AppAllowlist.default
+    private let compatibilityRouter = CompatibilityRouter()
     private let settings = AppSettings()
     private let keyboardRouter = KeyboardActionRouter()
     private let suggestionPanel = SuggestionPanelController()
@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastPlacementContextUpdatedAt: Date?
     private var lastTextBeforeCursor = ""
     private var lastSuggestionRequestSignature: SuggestionRequestSignature?
+    private var lastCompatibilityDecision: CompatibilityDecision?
     private var suggestionRequestGeneration = 0
     private var lastStatusSummary = ""
     private var lastPlacementDiagnostics = "No geometry diagnostics yet."
@@ -199,18 +200,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let privacyPolicy = SuggestionPrivacyPolicy(
-            settings: settings.privacySettings(allowedBundleIdentifiers: allowlist.bundleIdentifiers)
-        )
-        let privacyDecision = privacyPolicy.decision(
-            for: FocusedSuggestionPrivacyContext(
-                bundleIdentifier: frontmostApp.bundleIdentifier,
-                textBeforeCursor: context.textBeforeCursor,
-                isSecureTextEntry: context.isSecure
-            )
-        )
-        guard privacyDecision.shouldRequestSuggestion else {
-            updateStatus("suppressed: \(privacyDecision.suppressionReason?.debugLabel ?? "unknown")")
+        let compatibilityDecision = compatibilityDecision(for: context, app: frontmostApp)
+        guard compatibilityDecision.shouldRequestSuggestion else {
+            updateStatus("suppressed: \(compatibilityDecision.suppressionReason?.debugLabel ?? "unknown")")
             hideSuggestion()
             return
         }
@@ -228,9 +220,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionTask?.cancel()
         suggestionRequestGeneration += 1
         lastSuggestionRequestSignature = requestSignature
+        lastCompatibilityDecision = compatibilityDecision
         let requestGeneration = suggestionRequestGeneration
         hideSuggestion(clearLastTextBeforeCursor: false)
-        updateStatus("requesting suggestion via \(settings.runtimeMode.menuTitle)")
+        updateStatus("requesting suggestion via \(settings.runtimeMode.menuTitle) \(compatibilityDecision.profile.id)")
 
         let request = CompletionRequest(
             textBeforeCursor: context.textBeforeCursor,
@@ -255,6 +248,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
 
+                    let currentCompatibilityDecision = self.compatibilityDecision(
+                        for: currentContext,
+                        app: frontmostApp
+                    )
+                    guard currentCompatibilityDecision.shouldRequestSuggestion else {
+                        self.updateStatus("dropped unsupported suggestion: \(currentCompatibilityDecision.suppressionReason?.debugLabel ?? "unknown")")
+                        self.hideSuggestion(clearLastTextBeforeCursor: false)
+                        return
+                    }
+
                     guard let suggestion, !suggestion.isEmpty, let caretRect = currentContext.caretRect else {
                         self.updateStatus("engine returned no visible suggestion")
                         self.hideSuggestion(clearLastTextBeforeCursor: false)
@@ -262,6 +265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
 
                     self.updateStatus("showing suggestion")
+                    self.lastCompatibilityDecision = currentCompatibilityDecision
                     self.suggestionSession.present(suggestion)
                     self.lastCaretRect = caretRect
                     self.cachePlacementContext(currentContext, app: frontmostApp)
@@ -344,6 +348,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch action {
         case .acceptNextWord:
+            guard let compatibilityDecision = lastCompatibilityDecision,
+                  compatibilityDecision.canAcceptSuggestion else {
+                hideSuggestion(clearLastTextBeforeCursor: false)
+                logger.info("Autocomplete accept unavailable for current compatibility rung")
+                return false
+            }
+
             guard isCurrentAppStillSuggestionTarget() else {
                 hideSuggestion()
                 suppressKey(key)
@@ -351,16 +362,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return true
             }
 
-            guard let acceptedText = suggestionSession.acceptNextWord() else {
+            guard let suggestion = suggestionSession.visibleSuggestion else {
                 logger.info("Autocomplete accept failed: no next word")
                 return false
             }
 
-            guard accessibilityClient.insertText(acceptedText) else {
-                logger.info("Autocomplete accept failed: insertion unavailable")
+            let acceptedText = suggestion.acceptedPrefix(wordLimit: 1)
+            guard !acceptedText.isEmpty else {
+                logger.info("Autocomplete accept failed: empty next word")
                 return false
             }
 
+            guard accessibilityClient.insertText(
+                acceptedText,
+                allowClipboardFallback: compatibilityDecision.allowsClipboardFallback
+            ) else {
+                logger.info("Autocomplete accept failed: insertion unavailable")
+                hideSuggestion(clearLastTextBeforeCursor: false)
+                suppressKey(key)
+                return true
+            }
+
+            _ = suggestionSession.acceptNextWord()
             refreshCachedPlacementContextFromFocusedText()
             refreshVisibleSuggestion()
             suppressKey(key)
@@ -368,6 +391,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
 
         case .acceptAllVisible:
+            guard let compatibilityDecision = lastCompatibilityDecision,
+                  compatibilityDecision.canAcceptSuggestion else {
+                hideSuggestion(clearLastTextBeforeCursor: false)
+                logger.info("Autocomplete accept unavailable for current compatibility rung")
+                return false
+            }
+
             guard isCurrentAppStillSuggestionTarget() else {
                 hideSuggestion()
                 suppressKey(key)
@@ -375,16 +405,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return true
             }
 
-            guard let acceptedText = suggestionSession.acceptAllVisible() else {
+            guard let suggestion = suggestionSession.visibleSuggestion else {
                 logger.info("Autocomplete accept failed: no visible text")
                 return false
             }
 
-            guard accessibilityClient.insertText(acceptedText) else {
-                logger.info("Autocomplete accept failed: insertion unavailable")
+            let acceptedText = suggestion.visibleText
+            guard !acceptedText.isEmpty else {
+                logger.info("Autocomplete accept failed: empty visible text")
                 return false
             }
 
+            guard accessibilityClient.insertText(
+                acceptedText,
+                allowClipboardFallback: compatibilityDecision.allowsClipboardFallback
+            ) else {
+                logger.info("Autocomplete accept failed: insertion unavailable")
+                hideSuggestion(clearLastTextBeforeCursor: false)
+                suppressKey(key)
+                return true
+            }
+
+            _ = suggestionSession.acceptAllVisible()
             hideSuggestion()
             suppressKey(key)
             logger.info("Autocomplete accept succeeded: all visible")
@@ -442,6 +484,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionTask?.cancel()
             suggestionRequestGeneration += 1
             lastSuggestionRequestSignature = nil
+            lastCompatibilityDecision = nil
         }
 
         suggestionSession.dismiss()
@@ -456,6 +499,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastTextBeforeCursor = ""
         }
         suggestionPanel.hide()
+    }
+
+    private func compatibilityDecision(
+        for context: FocusedTextContext,
+        app: RunningApplicationInfo
+    ) -> CompatibilityDecision {
+        compatibilityRouter.decision(
+            for: CompatibilityEvaluationContext(
+                bundleIdentifier: app.bundleIdentifier,
+                elementRole: context.elementRole,
+                elementSubrole: context.elementSubrole,
+                isSecureTextEntry: context.isSecure,
+                textBeforeCursor: context.textBeforeCursor,
+                hasCaretRect: context.caretRect != nil
+            ),
+            settings: settings.compatibilityRoutingSettings()
+        )
     }
 
     private func currentFocusedContext(
@@ -566,12 +626,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         secureTextEntry: \(context.isSecure)
         textBeforeCursorUTF16Length: \(context.textBeforeCursor.utf16.count)
         textAfterCursorUTF16Length: \(context.textAfterCursor.utf16.count)
+        selectedRange: \(context.diagnostics.selectedRangeLocation.map(String.init) ?? "nil"):\(context.diagnostics.selectedRangeLength.map(String.init) ?? "nil")
+        textLengthUTF16: \(context.diagnostics.textLengthUTF16)
         caretAX: \(context.caretRect?.diagnosticDescription ?? "nil")
         textLineAX: \(context.textLineRect?.diagnosticDescription ?? "nil")
         textElementAX: \(context.textElementRect?.diagnosticDescription ?? "nil")
         font: \(context.textStyle?.fontName ?? "unknown")
         fontSize: \(context.textStyle.map { String(format: "%.1f", Double($0.fontSize)) } ?? "unknown")
+        compatibility: \(lastCompatibilityDecision?.debugLabel ?? "unknown")
         placement: \(placementSummary)
+        supportedAttributes: \(context.diagnostics.supportedAttributes.joined(separator: ", "))
+        supportedParameterizedAttributes: \(context.diagnostics.supportedParameterizedAttributes.joined(separator: ", "))
         """
     }
 

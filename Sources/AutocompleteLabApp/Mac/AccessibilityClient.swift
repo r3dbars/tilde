@@ -19,6 +19,15 @@ struct FocusedTextContext: Equatable {
     let elementRole: String?
     let elementSubrole: String?
     let isSecure: Bool
+    let diagnostics: FocusedTextDiagnostics
+}
+
+struct FocusedTextDiagnostics: Equatable {
+    let supportedAttributes: [String]
+    let supportedParameterizedAttributes: [String]
+    let selectedRangeLocation: Int?
+    let selectedRangeLength: Int?
+    let textLengthUTF16: Int
 }
 
 struct FocusedTextStyle: Equatable {
@@ -151,11 +160,18 @@ final class AccessibilityClient {
             textStyle: textStyle,
             elementRole: elementRole,
             elementSubrole: elementSubrole,
-            isSecure: isSecure
+            isSecure: isSecure,
+            diagnostics: FocusedTextDiagnostics(
+                supportedAttributes: supportedAttributeNames(in: focusedElement),
+                supportedParameterizedAttributes: supportedParameterizedAttributeNames(in: focusedElement),
+                selectedRangeLocation: selectedRange?.location,
+                selectedRangeLength: selectedRange?.length,
+                textLengthUTF16: text.utf16.count
+            )
         )
     }
 
-    func insertText(_ text: String) -> Bool {
+    func insertText(_ text: String, allowClipboardFallback: Bool = true) -> Bool {
         guard !text.isEmpty else {
             return true
         }
@@ -192,7 +208,15 @@ final class AccessibilityClient {
                 return true
             }
 
+            guard allowClipboardFallback else {
+                return false
+            }
+
             return pasteTextThroughClipboard(text)
+        }
+
+        guard allowClipboardFallback else {
+            return false
         }
 
         return pasteTextThroughClipboard(text)
@@ -312,6 +336,26 @@ final class AccessibilityClient {
         }
 
         return value
+    }
+
+    private func supportedAttributeNames(in element: AXUIElement) -> [String] {
+        var names: CFArray?
+        let result = AXUIElementCopyAttributeNames(element, &names)
+        guard result == .success, let names else {
+            return []
+        }
+
+        return (names as? [String] ?? []).sorted()
+    }
+
+    private func supportedParameterizedAttributeNames(in element: AXUIElement) -> [String] {
+        var names: CFArray?
+        let result = AXUIElementCopyParameterizedAttributeNames(element, &names)
+        guard result == .success, let names else {
+            return []
+        }
+
+        return (names as? [String] ?? []).sorted()
     }
 
     private func selectedTextRange(in element: AXUIElement) -> CFRange? {
