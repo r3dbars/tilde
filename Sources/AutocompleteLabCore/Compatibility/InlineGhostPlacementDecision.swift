@@ -16,6 +16,7 @@ public enum LineRectValidationStatus: String, Equatable, Sendable {
     case invalidGeometry
     case tooTall
     case verticallyDetached
+    case horizontallyDetached
 }
 
 public enum BoundaryValidationStatus: String, Equatable, Sendable {

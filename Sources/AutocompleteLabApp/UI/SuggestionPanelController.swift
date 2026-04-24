@@ -83,7 +83,7 @@ final class SuggestionPanelController {
             screenFrame: screenFrame
         )
 
-        guard decision.frame.width >= 8 else {
+        guard decision.strategy != .hiddenNoRoom else {
             hide()
             return decision
         }

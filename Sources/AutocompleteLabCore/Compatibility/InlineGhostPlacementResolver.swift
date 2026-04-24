@@ -51,17 +51,18 @@ public enum InlineGhostPlacementResolver {
             profile: profile
         )
 
-        let lineRect = line.rect ?? request.caretRect
-        let height = max(lineRect.height, request.textSize.height)
+        let verticalAnchorRect = line.rect ?? request.caretRect
+        let height = max(verticalAnchorRect.height, request.caretRect.height, request.textSize.height)
         let boundsFrame = boundary.rect ?? request.screenFrame
         let preferredX = max(
             request.caretRect.maxX,
             boundsFrame.minX + profile.edgePadding,
             request.screenFrame.minX + 8
         )
-        let preferredY = lineRect.maxY - height
+        let preferredY = verticalAnchorRect.maxY - height
         let rightEdge = min(boundsFrame.maxX - profile.edgePadding, request.screenFrame.maxX - 8)
         let availableWidth = max(0, rightEdge - preferredX)
+        let requiredVisibleTextWidth = min(request.textSize.width + 1, request.maximumWidth)
         let desiredWidth = min(
             max(request.textSize.width + 6, request.minimumWidth),
             request.maximumWidth
@@ -89,6 +90,7 @@ public enum InlineGhostPlacementResolver {
                 lineStatus: line.status,
                 boundaryStatus: boundary.status,
                 width: width,
+                requiredVisibleTextWidth: requiredVisibleTextWidth,
                 minimumVisibleWidth: profile.minimumVisibleWidth
             ),
             lineRectStatus: line.status,
@@ -133,6 +135,11 @@ public enum InlineGhostPlacementResolver {
             return (nil, .verticallyDetached)
         }
 
+        let horizontalTolerance = max(2, expectedLineHeight * 0.35)
+        guard textLineRect.maxX <= caretRect.maxX + horizontalTolerance else {
+            return (nil, .horizontallyDetached)
+        }
+
         return (textLineRect, .used)
     }
 
@@ -175,9 +182,12 @@ public enum InlineGhostPlacementResolver {
         lineStatus: LineRectValidationStatus,
         boundaryStatus: BoundaryValidationStatus,
         width: CGFloat,
+        requiredVisibleTextWidth: CGFloat,
         minimumVisibleWidth: CGFloat
     ) -> InlineGhostPlacementStrategy {
-        guard width >= minimumVisibleWidth else {
+        guard width >= minimumVisibleWidth,
+              width >= requiredVisibleTextWidth,
+              boundaryStatus != .caretOutside else {
             return .hiddenNoRoom
         }
 

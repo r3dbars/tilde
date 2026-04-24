@@ -29,7 +29,7 @@ public struct AppCompatibilityProfile: Equatable, Sendable {
         id: String,
         displayName: String,
         bundleIdentifierPrefixes: [String],
-        lineRectPolicy: LineRectPolicy = .trustAfterValidation,
+        lineRectPolicy: LineRectPolicy = .caretOnly,
         boundaryClipPolicy: BoundaryClipPolicy = .clipToFocusedTextElementWhenCaretInside,
         maximumLineHeightMultiplier: CGFloat = 1.8,
         minimumLineHeightAllowance: CGFloat = 8,
@@ -91,7 +91,7 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             id: "textedit",
             displayName: "TextEdit",
             bundleIdentifierPrefixes: ["com.apple.TextEdit"],
-            lineRectPolicy: .trustAfterValidation,
+            lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
         ),
         AppCompatibilityProfile(
@@ -99,7 +99,8 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             displayName: "Apple Notes",
             bundleIdentifierPrefixes: ["com.apple.Notes"],
             lineRectPolicy: .trustAfterValidation,
-            boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
+            boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
+            verticalToleranceMultiplier: 1.2
         ),
         AppCompatibilityProfile(
             id: "openai-composer",
@@ -122,7 +123,7 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
                 "company.thebrowser.Browser",
                 "org.mozilla.firefox"
             ],
-            lineRectPolicy: .trustAfterValidation,
+            lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             maximumLineHeightMultiplier: 1.45,
             verticalToleranceMultiplier: 0.65
@@ -135,7 +136,7 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
                 "com.microsoft.VSCode",
                 "com.todesktop"
             ],
-            lineRectPolicy: .trustAfterValidation,
+            lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             maximumLineHeightMultiplier: 1.45,
             verticalToleranceMultiplier: 0.65

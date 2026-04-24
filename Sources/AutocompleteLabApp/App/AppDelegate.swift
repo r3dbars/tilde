@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastTextStyle: FocusedTextStyle?
     private var lastAppBundleIdentifier: String?
     private var lastAppProcessIdentifier: pid_t?
+    private var lastPlacementContextUpdatedAt: Date?
     private var lastTextBeforeCursor = ""
     private var lastStatusSummary = ""
     private var lastPlacementDiagnostics = "No geometry diagnostics yet."
@@ -177,12 +178,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startKeyboardEventTapIfPossible()
 
         guard let frontmostApp = accessibilityClient.frontmostApplication() else {
+            if preserveVisibleSuggestionDuringTransientFocusLoss(summary: "no frontmost app", frontmostApp: nil) {
+                return
+            }
+
             updateStatus("no frontmost app")
             hideSuggestion()
             return
         }
 
         guard let context = accessibilityClient.focusedTextContext() else {
+            if preserveVisibleSuggestionDuringTransientFocusLoss(summary: "no focused text context", frontmostApp: frontmostApp) {
+                return
+            }
+
             updateStatus("no focused text context")
             hideSuggestion()
             return
@@ -229,7 +238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await MainActor.run {
                     guard let suggestion, !suggestion.isEmpty, let caretRect = context.caretRect else {
                         self.updateStatus("engine returned no visible suggestion")
-                        self.hideSuggestion()
+                        self.hideSuggestion(clearLastTextBeforeCursor: false)
                         return
                     }
 
@@ -245,6 +254,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         boundedBy: context.textElementRect,
                         style: context.textStyle
                     )
+                    if decision?.strategy == .hiddenNoRoom {
+                        self.suggestionSession.dismiss()
+                    }
                     self.recordPlacementDiagnostics(
                         decision,
                         app: frontmostApp,
@@ -322,6 +334,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            refreshCachedPlacementContextFromFocusedText()
             refreshVisibleSuggestion()
             suppressKey(key)
             logger.info("Autocomplete accept succeeded: next word")
@@ -351,7 +364,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
 
         case .dismiss:
-            hideSuggestion()
+            hideSuggestion(clearLastTextBeforeCursor: false)
             suppressKey(key)
             return true
 
@@ -384,7 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        suggestionPanel.show(
+        let decision = suggestionPanel.show(
             text: suggestion.visibleText,
             appBundleIdentifier: lastAppBundleIdentifier,
             near: caretRect,
@@ -392,9 +405,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             boundedBy: lastTextElementRect,
             style: lastTextStyle
         )
+        if decision?.strategy == .hiddenNoRoom {
+            suggestionSession.dismiss()
+        }
     }
 
-    private func hideSuggestion() {
+    private func hideSuggestion(clearLastTextBeforeCursor: Bool = true) {
         suggestionSession.dismiss()
         lastCaretRect = nil
         lastTextLineRect = nil
@@ -402,6 +418,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextStyle = nil
         lastAppBundleIdentifier = nil
         lastAppProcessIdentifier = nil
+        lastPlacementContextUpdatedAt = nil
+        if clearLastTextBeforeCursor {
+            lastTextBeforeCursor = ""
+        }
         suggestionPanel.hide()
     }
 
@@ -415,6 +435,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextStyle = context.textStyle
         lastAppBundleIdentifier = app.bundleIdentifier
         lastAppProcessIdentifier = app.processIdentifier
+        lastPlacementContextUpdatedAt = Date()
     }
 
     private func isCurrentAppStillSuggestionTarget() -> Bool {
@@ -424,6 +445,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return currentApp.processIdentifier == expectedProcessIdentifier
+    }
+
+    private func refreshCachedPlacementContextFromFocusedText() {
+        guard let expectedProcessIdentifier = lastAppProcessIdentifier,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.processIdentifier == expectedProcessIdentifier,
+              let context = accessibilityClient.focusedTextContext() else {
+            return
+        }
+
+        cachePlacementContext(context, app: frontmostApp)
+        lastTextBeforeCursor = context.textBeforeCursor
+    }
+
+    private func preserveVisibleSuggestionDuringTransientFocusLoss(
+        summary: String,
+        frontmostApp: RunningApplicationInfo?
+    ) -> Bool {
+        guard suggestionSession.hasVisibleSuggestion,
+              let updatedAt = lastPlacementContextUpdatedAt,
+              Date().timeIntervalSince(updatedAt) <= 1.5 else {
+            return false
+        }
+
+        if let expectedProcessIdentifier = lastAppProcessIdentifier,
+           let frontmostApp,
+           frontmostApp.processIdentifier != expectedProcessIdentifier {
+            return false
+        }
+
+        updateStatus("\(summary) (holding visible suggestion)")
+        return true
     }
 
     private func recordPlacementDiagnostics(
