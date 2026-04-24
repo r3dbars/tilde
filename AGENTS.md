@@ -38,3 +38,9 @@ Avoid early:
 - Use public Co-Typist docs and local bundle metadata only as behavior/architecture clues.
 - Keep experiments small and easy to throw away.
 
+## Repo structure
+
+- Every source, test, script, or docs folder should have an `AGENTS.md` file that explains what belongs there.
+- Keep the model runtime app-owned. Do not require users to start Ollama, llama.cpp, or any other separate server.
+- Mock engines are fine for development and tests, but production UX should feel like one Mac app.
+- Add tests with each meaningful behavior change.

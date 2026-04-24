@@ -41,7 +41,8 @@ The first prototype should feel like a quiet writing assist, not a chatbot.
 - start with a mock/static completion engine
 - then use Gemma 4 E2B for real continuations
 - target M1 / 16 GB as the first supported hardware profile
-- run the model locally through Ollama, llama.cpp, or MLX depending on which path gives the lowest latency
+- ship an app-owned local runtime so users do not start a separate model server
+- benchmark embedded runtime options before choosing the final engine
 - keep the model warm while the app is active
 - disable thinking/reasoning
 - keep output to 2-8 words

@@ -39,6 +39,8 @@ Run the MVP on Gemma 4 E2B.
 
 The first supported hardware target is Apple Silicon M1 with 16 GB RAM. The app should not expose a broad model picker yet. The product question is whether the typing experience feels useful, so the model layer should stay boring: local, warm, short completions, and tuned for speed.
 
+Users should never need to start a model server. The model runtime is owned by the app. If a local server is used during development, it is only a private benchmark tool, not part of the product experience.
+
 ## What We Are Not Building Yet
 
 - not a Transcripted feature yet
