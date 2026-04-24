@@ -1,4 +1,5 @@
 import AppKit
+import AutocompleteLabCore
 
 @MainActor
 final class SuggestionPanelController {
@@ -51,7 +52,17 @@ final class SuggestionPanelController {
         textField.stringValue = text
         let size = text.size(withAttributes: [.font: textField.font as Any])
         let width = min(max(size.width + 24, 80), 360)
-        let frame = NSRect(x: caretRect.minX, y: caretRect.minY - 38, width: width, height: 32)
+        let screenHeight = NSScreen.main?.frame.height ?? caretRect.maxY
+        let appKitCaretRect = AccessibilityCoordinateConverter.appKitRect(
+            fromAccessibilityRect: caretRect,
+            screenHeight: screenHeight
+        )
+        let frame = NSRect(
+            x: appKitCaretRect.minX,
+            y: appKitCaretRect.minY - 38,
+            width: width,
+            height: 32
+        )
 
         panel.setFrame(frame, display: true)
         panel.orderFrontRegardless()
