@@ -50,11 +50,9 @@ final class AccessibilityClient {
             return nil
         }
 
-        let appElement = AXUIElementCreateApplication(app.processIdentifier)
-        guard let focusedElementValue = copyAttribute(appElement, attribute: kAXFocusedUIElementAttribute) else {
+        guard let focusedElement = focusedElement(for: app.processIdentifier) else {
             return nil
         }
-        let focusedElement = focusedElementValue as! AXUIElement
 
         let isSecure = isSecureTextElement(focusedElement)
 
@@ -75,6 +73,30 @@ final class AccessibilityClient {
             caretRect: caretRect,
             isSecure: isSecure
         )
+    }
+
+    func insertText(_ text: String) -> Bool {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              let focusedElement = focusedElement(for: app.processIdentifier) else {
+            return false
+        }
+
+        let result = AXUIElementSetAttributeValue(
+            focusedElement,
+            kAXSelectedTextAttribute as CFString,
+            text as CFTypeRef
+        )
+
+        return result == .success
+    }
+
+    private func focusedElement(for processIdentifier: pid_t) -> AXUIElement? {
+        let appElement = AXUIElementCreateApplication(processIdentifier)
+        guard let focusedElementValue = copyAttribute(appElement, attribute: kAXFocusedUIElementAttribute) else {
+            return nil
+        }
+
+        return (focusedElementValue as! AXUIElement)
     }
 
     private func copyAttribute(_ element: AXUIElement, attribute: String) -> CFTypeRef? {

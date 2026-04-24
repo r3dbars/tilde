@@ -12,9 +12,10 @@ The user should not start Ollama, llama.cpp, or any model server. Gemma 4 E2B is
 2. Add a tested core suggestion model.
 3. Show mock suggestions near the caret.
 4. Add tested accept/dismiss behavior.
-5. Add Accessibility insertion.
-6. Benchmark embedded Gemma 4 E2B runtime options.
-7. Swap the mock engine for the real local engine.
+5. Add event-tap key capture for `Tab`, backtick, and `Esc`.
+6. Add Accessibility insertion.
+7. Benchmark embedded Gemma 4 E2B runtime options.
+8. Swap the mock engine for the real local engine.
 
 ## Latency Target
 
