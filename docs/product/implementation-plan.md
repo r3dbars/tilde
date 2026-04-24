@@ -32,3 +32,5 @@ The user should not start Ollama, llama.cpp, or any model server. Gemma 4 E2B is
 Every slice should have at least one automated test or a build/run verification.
 
 Core behavior gets Swift unit tests. Mac plumbing gets build verification first, then targeted integration checks where possible.
+
+Use `./script/smoke_test.sh` as the fast local loop.
