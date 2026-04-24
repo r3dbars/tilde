@@ -61,4 +61,14 @@ struct AutocompleteFlowTests {
         #expect(thisSuggestion?.visibleText == "is project")
         #expect(soundSuggestion?.visibleText == "ds good")
     }
+
+    @Test("Mock engine suppresses unmatched typo fragments")
+    func mockSuggestionSuppressesUnmatchedTypoFragments() async throws {
+        let engine = MockCompletionEngine()
+        let suggestion = try await engine.suggestion(
+            for: CompletionRequest(textBeforeCursor: "Hey\nHry", maxVisibleWords: 8)
+        )
+
+        #expect(suggestion == nil)
+    }
 }

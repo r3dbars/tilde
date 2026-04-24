@@ -141,8 +141,10 @@ public final class LocalCompletionEngine: CompletionEngine, @unchecked Sendable 
         }
 
         let trimmed = CompletionPrefixTrimmer.trim(suggestion.text, after: request.textBeforeCursor)
-        let finalSuggestion = CompletionSuggestion(text: trimmed, maxVisibleWords: request.maxVisibleWords)
-        return finalSuggestion.isEmpty ? nil : finalSuggestion
+        return CompletionSuggestion(
+            text: trimmed,
+            maxVisibleWords: request.maxVisibleWords
+        ).nonEmpty
     }
 }
 

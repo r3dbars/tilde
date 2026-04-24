@@ -28,7 +28,7 @@ public final class MockCompletionEngine: CompletionEngine, @unchecked Sendable {
         return CompletionSuggestion(
             text: CompletionPrefixTrimmer.trim(text, after: trimmed),
             maxVisibleWords: request.maxVisibleWords
-        )
+        ).nonEmpty
     }
 
     private static func partialWordCompletion(after text: String) -> String? {

@@ -70,6 +70,18 @@ struct LocalCompletionEngineTests {
         #expect(suggestion?.visibleText == "is project")
     }
 
+    @Test("Suppresses runtime echoes for unmatched typo fragments")
+    func suppressesRuntimeEchoesForUnmatchedTypoFragments() async throws {
+        let runner = FakeLocalRunner(result: .success("Hey that sounds"))
+        let engine = LocalCompletionEngine(runner: runner)
+
+        let suggestion = try await engine.suggestion(
+            for: CompletionRequest(textBeforeCursor: "Hey\nHry", maxVisibleWords: 8)
+        )
+
+        #expect(suggestion == nil)
+    }
+
     @Test("Factory selects mock when app-owned runtime is missing")
     func factorySelectsMockForMissingRuntime() {
         let factory = CompletionEngineFactory(

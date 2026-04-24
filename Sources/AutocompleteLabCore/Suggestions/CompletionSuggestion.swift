@@ -16,4 +16,8 @@ public struct CompletionSuggestion: Equatable, Sendable {
     public var isEmpty: Bool {
         visibleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    public var nonEmpty: CompletionSuggestion? {
+        isEmpty ? nil : self
+    }
 }

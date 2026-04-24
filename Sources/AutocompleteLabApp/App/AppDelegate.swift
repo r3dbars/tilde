@@ -438,6 +438,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
 
         case .passThrough:
+            if key == .other, suggestionSession.hasVisibleSuggestion || suggestionTask != nil {
+                hideSuggestion()
+            }
+
             return false
         }
     }
@@ -695,7 +699,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .deletingLastPathComponent()
 
         return [
-            "AUTOCOMPLETE_LAB_REPO_ROOT": repoRoot.path
+            "AUTOCOMPLETE_LAB_REPO_ROOT": repoRoot.path,
+            "AUTOCOMPLETE_LAB_RUNTIME_TIMEOUT": String(
+                format: "%.2f",
+                Double(CompletionModelPolicy.mvp.targetLatencyMilliseconds) / 1_000
+            )
         ]
     }
 

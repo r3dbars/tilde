@@ -24,4 +24,14 @@ struct CompletionPromptBuilderTests {
 
         #expect(prompt.user.count == 120)
     }
+
+    @Test("Prompt uses only the current line")
+    func promptUsesOnlyCurrentLine() {
+        let builder = CompletionPromptBuilder()
+        let prompt = builder.prompt(
+            for: CompletionRequest(textBeforeCursor: "Hey a\nHey that soun\nHry")
+        )
+
+        #expect(prompt.user == "Hry")
+    }
 }

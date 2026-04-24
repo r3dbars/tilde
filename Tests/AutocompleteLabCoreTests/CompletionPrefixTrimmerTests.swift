@@ -59,9 +59,11 @@ struct CompletionPrefixTrimmerTests {
     func suppressesBadPartialWordSuggestion() {
         let trimmed = CompletionPrefixTrimmer.trim(" and keep moving", after: "Hey th")
         let longerTrimmed = CompletionPrefixTrimmer.trim(" and keep moving", after: "Hey that soun")
+        let typoTrimmed = CompletionPrefixTrimmer.trim("Hey that sounds", after: "Hey\nHry")
 
         #expect(trimmed == "")
         #expect(longerTrimmed == "")
+        #expect(typoTrimmed == "")
     }
 
     @Test("Suppresses model echoes from the beginning of the current text")
