@@ -43,4 +43,33 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(frame.minX == 900)
         #expect(frame.maxX <= 1016)
     }
+
+    @Test("Falls back to the caret when an app reports the whole editor as the line")
+    func ignoresOversizedLineRect() {
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            caretRect: CGRect(x: 536, y: 204, width: 0, height: 28),
+            textLineRect: CGRect(x: 468, y: 78, width: 1328, height: 172),
+            boundaryFrame: CGRect(x: 468, y: 78, width: 1328, height: 172),
+            textSize: CGSize(width: 110, height: 24),
+            screenFrame: CGRect(x: 0, y: 0, width: 2048, height: 1152)
+        )
+
+        #expect(frame.minX == 536)
+        #expect(frame.minY == 204)
+        #expect(frame.height == 28)
+    }
+
+    @Test("Falls back to the caret when the reported line is vertically detached")
+    func ignoresDetachedLineRect() {
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            caretRect: CGRect(x: 520, y: 612, width: 0, height: 22),
+            textLineRect: CGRect(x: 490, y: 562, width: 360, height: 22),
+            textSize: CGSize(width: 120, height: 20),
+            screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 900)
+        )
+
+        #expect(frame.minX == 520)
+        #expect(frame.minY == 612)
+        #expect(frame.height == 22)
+    }
 }

@@ -11,7 +11,11 @@ public enum SuggestionPanelFrameCalculator {
         minimumWidth: CGFloat = 40,
         maximumWidth: CGFloat = 420
     ) -> CGRect {
-        let lineRect = textLineRect ?? caretRect
+        let lineRect = trustedLineRect(
+            textLineRect,
+            caretRect: caretRect,
+            textHeight: textSize.height
+        )
         let height = max(lineRect.height, textSize.height)
         let boundaryIntersection = boundaryFrame?.intersection(screenFrame)
         let boundsFrame = boundaryIntersection?.isNull == false ? boundaryIntersection! : screenFrame
@@ -32,5 +36,40 @@ public enum SuggestionPanelFrameCalculator {
             width: width,
             height: height
         )
+    }
+
+    private static func trustedLineRect(
+        _ textLineRect: CGRect?,
+        caretRect: CGRect,
+        textHeight: CGFloat
+    ) -> CGRect {
+        guard let textLineRect,
+              textLineRect.isFinite,
+              textLineRect.width >= 0,
+              textLineRect.height > 0 else {
+            return caretRect
+        }
+
+        let expectedLineHeight = max(caretRect.height, textHeight, 1)
+        let maximumReasonableHeight = max(expectedLineHeight * 1.8, expectedLineHeight + 8)
+        guard textLineRect.height <= maximumReasonableHeight else {
+            return caretRect
+        }
+
+        let verticalTolerance = max(expectedLineHeight * 0.75, 6)
+        guard abs(textLineRect.midY - caretRect.midY) <= verticalTolerance else {
+            return caretRect
+        }
+
+        return textLineRect
+    }
+}
+
+private extension CGRect {
+    var isFinite: Bool {
+        origin.x.isFinite &&
+            origin.y.isFinite &&
+            size.width.isFinite &&
+            size.height.isFinite
     }
 }
