@@ -14,8 +14,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyboardEventTap: KeyboardEventTap?
     private var suggestionSession = SuggestionSession()
     private var lastCaretRect: CGRect?
+    private var lastTextLineRect: CGRect?
+    private var lastTextStyle: FocusedTextStyle?
     private var lastTextBeforeCursor = ""
     private var suggestionTask: Task<Void, Never>?
+    private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -95,7 +98,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
                     self.suggestionSession.present(suggestion)
                     self.lastCaretRect = caretRect
-                    suggestionPanel.show(text: suggestion.visibleText, near: caretRect)
+                    self.lastTextLineRect = context.textLineRect
+                    self.lastTextStyle = context.textStyle
+                    suggestionPanel.show(
+                        text: suggestion.visibleText,
+                        near: caretRect,
+                        alignedTo: context.textLineRect,
+                        style: context.textStyle
+                    )
                 }
             } catch {
                 await MainActor.run {
@@ -134,6 +144,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleAutocompleteKey(_ key: AutocompleteKey) -> Bool {
+        if shouldSuppressKey(key) {
+            return true
+        }
+
         let action = keyboardRouter.action(
             for: key,
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
@@ -147,6 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             refreshVisibleSuggestion()
+            suppressKey(key)
             return true
 
         case .acceptAllVisible:
@@ -156,15 +171,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             hideSuggestion()
+            suppressKey(key)
             return true
 
         case .dismiss:
             hideSuggestion()
+            suppressKey(key)
             return true
 
         case .passThrough:
             return false
         }
+    }
+
+    private func shouldSuppressKey(_ key: AutocompleteKey) -> Bool {
+        guard let until = suppressKeyUntil[key] else {
+            return false
+        }
+
+        if until > Date() {
+            return true
+        }
+
+        suppressKeyUntil[key] = nil
+        return false
+    }
+
+    private func suppressKey(_ key: AutocompleteKey) {
+        suppressKeyUntil[key] = Date().addingTimeInterval(0.25)
     }
 
     private func refreshVisibleSuggestion() {
@@ -174,12 +208,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        suggestionPanel.show(text: suggestion.visibleText, near: caretRect)
+        suggestionPanel.show(
+            text: suggestion.visibleText,
+            near: caretRect,
+            alignedTo: lastTextLineRect,
+            style: lastTextStyle
+        )
     }
 
     private func hideSuggestion() {
         suggestionSession.dismiss()
         lastCaretRect = nil
+        lastTextLineRect = nil
+        lastTextStyle = nil
         suggestionPanel.hide()
     }
 

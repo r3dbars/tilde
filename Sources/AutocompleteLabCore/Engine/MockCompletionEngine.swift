@@ -23,6 +23,9 @@ public final class MockCompletionEngine: CompletionEngine, @unchecked Sendable {
             text = " and keep moving"
         }
 
-        return CompletionSuggestion(text: text, maxVisibleWords: request.maxVisibleWords)
+        return CompletionSuggestion(
+            text: CompletionPrefixTrimmer.trim(text, after: trimmed),
+            maxVisibleWords: request.maxVisibleWords
+        )
     }
 }

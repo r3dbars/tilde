@@ -13,7 +13,19 @@ struct FocusedTextContext: Equatable {
     let textBeforeCursor: String
     let textAfterCursor: String
     let caretRect: CGRect?
+    let textLineRect: CGRect?
+    let textStyle: FocusedTextStyle?
     let isSecure: Bool
+}
+
+struct FocusedTextStyle: Equatable {
+    let fontName: String
+    let fontSize: CGFloat
+    let foregroundColor: NSColor?
+
+    var font: NSFont {
+        NSFont(name: fontName, size: fontSize) ?? NSFont.systemFont(ofSize: fontSize)
+    }
 }
 
 final class AccessibilityClient {
@@ -67,11 +79,19 @@ final class AccessibilityClient {
             utf16Offset: selectedRange?.location ?? text.utf16.count
         )
         let caretRect = selectedRange.flatMap { caretBounds(for: focusedElement, range: $0) }
+        let textLineRect = selectedRange.flatMap {
+            textLineBounds(for: focusedElement, textLength: text.utf16.count, textBeforeCursor: textSlice.textBeforeCursor, range: $0)
+        }
+        let textStyle = selectedRange.flatMap {
+            focusedTextStyle(in: focusedElement, textLength: text.utf16.count, range: $0)
+        }
 
         return FocusedTextContext(
             textBeforeCursor: textSlice.textBeforeCursor,
             textAfterCursor: textSlice.textAfterCursor,
             caretRect: caretRect,
+            textLineRect: textLineRect,
+            textStyle: textStyle,
             isSecure: isSecure
         )
     }
@@ -124,8 +144,33 @@ final class AccessibilityClient {
     }
 
     private func caretBounds(for element: AXUIElement, range: CFRange) -> CGRect? {
-        var caretRange = CFRange(location: range.location, length: 0)
-        guard let rangeValue = AXValueCreate(.cfRange, &caretRange) else {
+        let caretRange = CFRange(location: range.location, length: 0)
+        return bounds(for: element, range: caretRange)
+    }
+
+    private func textLineBounds(
+        for element: AXUIElement,
+        textLength: Int,
+        textBeforeCursor: String,
+        range: CFRange
+    ) -> CGRect? {
+        if let lastCharacter = textBeforeCursor.last, !lastCharacter.isNewline, range.location > 0 {
+            let previousCharacterRange = CFRange(location: range.location - 1, length: 1)
+            return bounds(for: element, range: previousCharacterRange)
+        }
+
+        if range.location < textLength {
+            let nextCharacterRange = CFRange(location: range.location, length: 1)
+            return bounds(for: element, range: nextCharacterRange)
+        }
+
+        let caretRange = CFRange(location: range.location, length: 0)
+        return bounds(for: element, range: caretRange)
+    }
+
+    private func bounds(for element: AXUIElement, range: CFRange) -> CGRect? {
+        var range = range
+        guard let rangeValue = AXValueCreate(.cfRange, &range) else {
             return nil
         }
 
@@ -147,6 +192,92 @@ final class AccessibilityClient {
         }
 
         return rect
+    }
+
+    private func focusedTextStyle(in element: AXUIElement, textLength: Int, range: CFRange) -> FocusedTextStyle? {
+        let location: Int
+        let length: Int
+
+        if range.location > 0 {
+            location = range.location - 1
+            length = 1
+        } else if textLength > 0 {
+            location = 0
+            length = 1
+        } else {
+            return nil
+        }
+
+        var sampleRange = CFRange(location: location, length: length)
+        guard let rangeValue = AXValueCreate(.cfRange, &sampleRange) else {
+            return nil
+        }
+
+        var attributedValue: CFTypeRef?
+        let result = AXUIElementCopyParameterizedAttributeValue(
+            element,
+            kAXAttributedStringForRangeParameterizedAttribute as CFString,
+            rangeValue,
+            &attributedValue
+        )
+
+        guard result == .success,
+              let attributedString = attributedValue as? NSAttributedString,
+              attributedString.length > 0 else {
+            return nil
+        }
+
+        let attributes = attributedString.attributes(at: 0, effectiveRange: nil)
+        let font = accessibilityFont(from: attributes) ?? NSFont.systemFont(ofSize: 13)
+
+        return FocusedTextStyle(
+            fontName: font.fontName,
+            fontSize: font.pointSize,
+            foregroundColor: accessibilityForegroundColor(from: attributes)
+        )
+    }
+
+    private func accessibilityFont(from attributes: [NSAttributedString.Key: Any]) -> NSFont? {
+        if let font = attributes[.font] as? NSFont {
+            return font
+        }
+
+        let fontKey = NSAttributedString.Key("AXFont")
+        guard let fontDictionary = attributes[fontKey] as? [String: Any] else {
+            return nil
+        }
+
+        let fontSize = (fontDictionary["AXFontSize"] as? NSNumber)?.doubleValue ?? 13
+        let fontName = fontDictionary["AXFontName"] as? String
+            ?? fontDictionary["AXVisibleName"] as? String
+            ?? fontDictionary["AXFontFamily"] as? String
+
+        guard let fontName else {
+            return NSFont.systemFont(ofSize: CGFloat(fontSize))
+        }
+
+        return NSFont(name: fontName, size: CGFloat(fontSize))
+            ?? NSFont.systemFont(ofSize: CGFloat(fontSize))
+    }
+
+    private func accessibilityForegroundColor(from attributes: [NSAttributedString.Key: Any]) -> NSColor? {
+        if let color = attributes[.foregroundColor] as? NSColor {
+            return color
+        }
+
+        let colorKey = NSAttributedString.Key("AXForegroundColor")
+        if let color = attributes[colorKey] as? NSColor {
+            return color
+        }
+
+        if let value = attributes[colorKey] {
+            let cfValue = value as CFTypeRef
+            if CFGetTypeID(cfValue) == CGColor.typeID {
+                return NSColor(cgColor: value as! CGColor)
+            }
+        }
+
+        return nil
     }
 
     private func isSecureTextElement(_ element: AXUIElement) -> Bool {

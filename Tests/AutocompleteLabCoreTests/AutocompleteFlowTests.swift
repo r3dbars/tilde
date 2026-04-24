@@ -27,4 +27,24 @@ struct AutocompleteFlowTests {
         #expect(session.acceptAllVisible() == " make it feel instant")
         #expect(!session.hasVisibleSuggestion)
     }
+
+    @Test("Mock engine avoids repeating the word the user just typed")
+    func mockSuggestionAvoidsRepeatingLastTypedWord() async throws {
+        let engine = MockCompletionEngine()
+        let suggestion = try await engine.suggestion(
+            for: CompletionRequest(textBeforeCursor: "Hey and", maxVisibleWords: 8)
+        )
+
+        #expect(suggestion?.visibleText == " keep moving")
+    }
+
+    @Test("Mock engine completes only the missing part of a typed word")
+    func mockSuggestionCompletesMissingWordSuffix() async throws {
+        let engine = MockCompletionEngine()
+        let suggestion = try await engine.suggestion(
+            for: CompletionRequest(textBeforeCursor: "Hey a", maxVisibleWords: 8)
+        )
+
+        #expect(suggestion?.visibleText == "nd keep moving")
+    }
 }

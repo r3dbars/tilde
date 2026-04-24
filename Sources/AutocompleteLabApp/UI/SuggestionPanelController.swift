@@ -41,10 +41,12 @@ final class SuggestionPanelController {
         panel.contentView = container
     }
 
-    func show(text: String, near caretRect: CGRect) {
+    func show(text: String, near caretRect: CGRect, alignedTo textLineRect: CGRect?, style: FocusedTextStyle?) {
         let fontSize = min(max(caretRect.height * 1.02, 12), 32)
-        let font = NSFont.systemFont(ofSize: fontSize, weight: .regular)
-        ghostTextView.update(text: text, font: font, color: NSColor.labelColor.withAlphaComponent(0.34))
+        let font = style?.font ?? NSFont.systemFont(ofSize: fontSize, weight: .regular)
+        let color = ghostColor(matching: style?.foregroundColor)
+
+        ghostTextView.update(text: text, font: font, color: color)
         let size = text.size(withAttributes: [.font: font])
         let screen = screen(containing: caretRect) ?? NSScreen.main
         let screenFrame = screen?.frame ?? .zero
@@ -53,8 +55,15 @@ final class SuggestionPanelController {
             fromAccessibilityRect: caretRect,
             screenHeight: screenHeight
         )
+        let appKitTextLineRect = textLineRect.map {
+            AccessibilityCoordinateConverter.appKitRect(
+                fromAccessibilityRect: $0,
+                screenHeight: screenHeight
+            )
+        }
         let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
             caretRect: appKitCaretRect,
+            textLineRect: appKitTextLineRect,
             textSize: size,
             screenFrame: screenFrame
         )
@@ -78,12 +87,21 @@ final class SuggestionPanelController {
             return screen.frame.intersects(convertedRect)
         }
     }
+
+    private func ghostColor(matching foregroundColor: NSColor?) -> NSColor {
+        guard let foregroundColor else {
+            return NSColor.labelColor.withAlphaComponent(0.42)
+        }
+
+        let color = foregroundColor.usingColorSpace(.deviceRGB) ?? foregroundColor
+        return color.withAlphaComponent(0.42)
+    }
 }
 
 private final class GhostTextView: NSView {
     private var text = ""
     private var font = NSFont.systemFont(ofSize: 15)
-    private var color = NSColor.labelColor.withAlphaComponent(0.34)
+    private var color = NSColor.labelColor.withAlphaComponent(0.42)
 
     override var isFlipped: Bool {
         true

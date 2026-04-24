@@ -8,12 +8,13 @@ struct SuggestionPanelFrameCalculatorTests {
     func placesGhostTextAfterCaret() {
         let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
             caretRect: CGRect(x: 100, y: 800, width: 0, height: 20),
+            textLineRect: CGRect(x: 80, y: 790, width: 20, height: 20),
             textSize: CGSize(width: 160, height: 20),
             screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 900)
         )
 
-        #expect(frame.minX == 102)
-        #expect(frame.minY == 798.4)
+        #expect(frame.minX == 100)
+        #expect(frame.minY == 790)
         #expect(frame.width == 166)
     }
 

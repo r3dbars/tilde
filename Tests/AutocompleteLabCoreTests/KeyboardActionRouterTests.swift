@@ -3,11 +3,11 @@ import Testing
 
 @Suite("Keyboard action router")
 struct KeyboardActionRouterTests {
-    @Test("Tab accepts next word when a suggestion is visible")
-    func tabAcceptsNextWord() {
+    @Test("Tab accepts visible text when a suggestion is visible")
+    func tabAcceptsVisibleText() {
         let router = KeyboardActionRouter()
 
-        #expect(router.action(for: .tab, hasVisibleSuggestion: true) == .acceptNextWord)
+        #expect(router.action(for: .tab, hasVisibleSuggestion: true) == .acceptAllVisible)
     }
 
     @Test("Backtick accepts all visible text when a suggestion is visible")
