@@ -190,6 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            recordAcceptedText(acceptedText)
             refreshVisibleSuggestion()
             suppressKey(key)
             return true
@@ -200,6 +201,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            recordAcceptedText(acceptedText)
             hideSuggestion()
             suppressKey(key)
             return true
@@ -244,6 +246,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             near: caretRect,
             alignedTo: lastTextLineRect,
             style: lastTextStyle
+        )
+    }
+
+    private func recordAcceptedText(_ acceptedText: String) {
+        guard let currentFieldIdentity,
+              let lastTextSnapshot,
+              lastTextSnapshot.fieldIdentity == currentFieldIdentity else {
+            return
+        }
+
+        self.lastTextSnapshot = FocusedTextSnapshot(
+            fieldIdentity: currentFieldIdentity,
+            textBeforeCursor: lastTextSnapshot.textBeforeCursor + acceptedText,
+            textAfterCursor: lastTextSnapshot.textAfterCursor
         )
     }
 

@@ -6,6 +6,7 @@ final class KeyboardEventTap {
     typealias Handler = (AutocompleteKey) -> Bool
 
     private let handler: Handler
+    private let keyMapper = AutocompleteKeyMapper()
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
@@ -74,7 +75,10 @@ final class KeyboardEventTap {
         }
 
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        let key = AutocompleteKey(keyCode: keyCode, flags: event.flags)
+        let key = keyMapper.key(
+            physicalKey: AutocompletePhysicalKey(keyCode: keyCode),
+            modifiers: AutocompleteKeyModifiers(flags: event.flags)
+        )
 
         guard handler(key) else {
             return Unmanaged.passUnretained(event)
@@ -98,11 +102,11 @@ private func keyboardEventTapCallback(
     return eventTap.handle(type: type, event: event)
 }
 
-private extension AutocompleteKey {
-    init(keyCode: Int64, flags: CGEventFlags) {
+private extension AutocompletePhysicalKey {
+    init(keyCode: Int64) {
         switch keyCode {
         case 48:
-            self = flags.contains(.maskAlternate) ? .optionTab : .tab
+            self = .tab
         case 50:
             self = .backtick
         case 53:
@@ -110,5 +114,33 @@ private extension AutocompleteKey {
         default:
             self = .other
         }
+    }
+}
+
+private extension AutocompleteKeyModifiers {
+    init(flags: CGEventFlags) {
+        var modifiers: AutocompleteKeyModifiers = []
+
+        if flags.contains(.maskShift) {
+            modifiers.insert(.shift)
+        }
+
+        if flags.contains(.maskControl) {
+            modifiers.insert(.control)
+        }
+
+        if flags.contains(.maskAlternate) {
+            modifiers.insert(.option)
+        }
+
+        if flags.contains(.maskCommand) {
+            modifiers.insert(.command)
+        }
+
+        if flags.contains(.maskSecondaryFn) {
+            modifiers.insert(.function)
+        }
+
+        self = modifiers
     }
 }
