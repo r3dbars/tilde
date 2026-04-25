@@ -3,11 +3,18 @@ import Testing
 
 @Suite("Keyboard action router")
 struct KeyboardActionRouterTests {
-    @Test("Tab accepts visible text when a suggestion is visible")
-    func tabAcceptsVisibleText() {
+    @Test("Tab accepts the next word when a suggestion is visible")
+    func tabAcceptsNextWord() {
         let router = KeyboardActionRouter()
 
-        #expect(router.action(for: .tab, hasVisibleSuggestion: true) == .acceptAllVisible)
+        #expect(router.action(for: .tab, hasVisibleSuggestion: true) == .acceptNextWord)
+    }
+
+    @Test("Option Tab passes through even when a suggestion is visible")
+    func optionTabPassesThrough() {
+        let router = KeyboardActionRouter()
+
+        #expect(router.action(for: .optionTab, hasVisibleSuggestion: true) == .passThrough)
     }
 
     @Test("Backtick accepts all visible text when a suggestion is visible")
@@ -22,6 +29,7 @@ struct KeyboardActionRouterTests {
         let router = KeyboardActionRouter()
 
         #expect(router.action(for: .tab, hasVisibleSuggestion: false) == .passThrough)
+        #expect(router.action(for: .optionTab, hasVisibleSuggestion: false) == .passThrough)
         #expect(router.action(for: .backtick, hasVisibleSuggestion: false) == .passThrough)
         #expect(router.action(for: .escape, hasVisibleSuggestion: false) == .passThrough)
     }

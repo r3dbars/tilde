@@ -9,6 +9,7 @@ public enum KeyboardAction: Equatable, Sendable {
 
 public enum AutocompleteKey: Equatable, Sendable {
     case tab
+    case optionTab
     case backtick
     case escape
     case other
@@ -24,7 +25,9 @@ public struct KeyboardActionRouter: Equatable, Sendable {
 
         switch key {
         case .tab:
-            return .acceptAllVisible
+            return .acceptNextWord
+        case .optionTab:
+            return .passThrough
         case .backtick:
             return .acceptAllVisible
         case .escape:

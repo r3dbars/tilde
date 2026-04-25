@@ -10,6 +10,7 @@ struct RunningApplicationInfo: Equatable {
 }
 
 struct FocusedTextContext: Equatable {
+    let elementIdentifier: Int
     let textBeforeCursor: String
     let textAfterCursor: String
     let caretRect: CGRect?
@@ -87,6 +88,7 @@ final class AccessibilityClient {
         }
 
         return FocusedTextContext(
+            elementIdentifier: Int(CFHash(focusedElement)),
             textBeforeCursor: textSlice.textBeforeCursor,
             textAfterCursor: textSlice.textAfterCursor,
             caretRect: caretRect,

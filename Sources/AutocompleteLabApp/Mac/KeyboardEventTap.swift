@@ -74,7 +74,7 @@ final class KeyboardEventTap {
         }
 
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        let key = AutocompleteKey(keyCode: keyCode)
+        let key = AutocompleteKey(keyCode: keyCode, flags: event.flags)
 
         guard handler(key) else {
             return Unmanaged.passUnretained(event)
@@ -99,10 +99,10 @@ private func keyboardEventTapCallback(
 }
 
 private extension AutocompleteKey {
-    init(keyCode: Int64) {
+    init(keyCode: Int64, flags: CGEventFlags) {
         switch keyCode {
         case 48:
-            self = .tab
+            self = flags.contains(.maskAlternate) ? .optionTab : .tab
         case 50:
             self = .backtick
         case 53:

@@ -5,6 +5,7 @@ import AutocompleteLabCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let accessibilityClient = AccessibilityClient()
     private let allowlist = AppAllowlist.default
+    private let activationPolicy = CompletionActivationPolicy()
     private let engine = MockCompletionEngine()
     private let keyboardRouter = KeyboardActionRouter()
     private let suggestionPanel = SuggestionPanelController()
@@ -16,7 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastCaretRect: CGRect?
     private var lastTextLineRect: CGRect?
     private var lastTextStyle: FocusedTextStyle?
-    private var lastTextBeforeCursor = ""
+    private var currentFieldIdentity: FocusedFieldIdentity?
+    private var lastTextSnapshot: FocusedTextSnapshot?
+    private var suppressedFieldIdentities: Set<FocusedFieldIdentity> = []
     private var suggestionTask: Task<Void, Never>?
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
 
@@ -65,21 +68,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let frontmostApp = accessibilityClient.frontmostApplication(),
               allowlist.allows(bundleIdentifier: frontmostApp.bundleIdentifier) else {
+            currentFieldIdentity = nil
+            lastTextSnapshot = nil
             hideSuggestion()
             return
         }
 
         guard let context = accessibilityClient.focusedTextContext(), !context.isSecure else {
+            currentFieldIdentity = nil
+            lastTextSnapshot = nil
             hideSuggestion()
             return
         }
 
-        guard context.textBeforeCursor != lastTextBeforeCursor else {
+        let fieldIdentity = FocusedFieldIdentity(
+            bundleIdentifier: frontmostApp.bundleIdentifier,
+            processIdentifier: frontmostApp.processIdentifier,
+            elementIdentifier: context.elementIdentifier
+        )
+        currentFieldIdentity = fieldIdentity
+
+        let snapshot = FocusedTextSnapshot(
+            fieldIdentity: fieldIdentity,
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor
+        )
+
+        guard snapshot != lastTextSnapshot else {
             return
         }
 
-        lastTextBeforeCursor = context.textBeforeCursor
+        lastTextSnapshot = snapshot
         suggestionTask?.cancel()
+
+        guard activationPolicy.canSuggest(
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            isSecure: context.isSecure,
+            isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity)
+        ) else {
+            hideSuggestion()
+            return
+        }
 
         let request = CompletionRequest(
             textBeforeCursor: context.textBeforeCursor,
@@ -175,6 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
 
         case .dismiss:
+            suppressCurrentField()
             hideSuggestion()
             suppressKey(key)
             return true
@@ -224,6 +255,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionPanel.hide()
     }
 
+    private func suppressCurrentField() {
+        guard let currentFieldIdentity else {
+            return
+        }
+
+        suppressedFieldIdentities.insert(currentFieldIdentity)
+    }
+
     @objc
     private func requestAccessibilityPermission() {
         accessibilityClient.requestPermissionIfNeeded()
@@ -233,4 +272,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func quit() {
         NSApp.terminate(nil)
     }
+}
+
+private struct FocusedFieldIdentity: Equatable, Hashable {
+    let bundleIdentifier: String
+    let processIdentifier: pid_t
+    let elementIdentifier: Int
+}
+
+private struct FocusedTextSnapshot: Equatable {
+    let fieldIdentity: FocusedFieldIdentity
+    let textBeforeCursor: String
+    let textAfterCursor: String
 }
