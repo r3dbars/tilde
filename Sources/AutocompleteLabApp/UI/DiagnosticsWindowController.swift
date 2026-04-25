@@ -31,11 +31,13 @@ final class DiagnosticsWindowController {
         diagnostics: FocusedTextDiagnostics?,
         profile: CompatibilityProfile?,
         appEnabled: Bool,
-        appTrusted: Bool
+        appTrusted: Bool,
+        runtimeState: LocalRuntimeState
     ) {
         var sections: [String] = []
 
         sections.append("Permission: Accessibility \(appTrusted ? "granted" : "missing")")
+        sections.append("Local model: \(runtimeState.statusSummary)")
         sections.append("Current app enabled: \(appEnabled)")
 
         if let profile {
@@ -45,6 +47,7 @@ final class DiagnosticsWindowController {
                   app: \(profile.displayName) (\(profile.bundleIdentifier))
                   render mode: \(profile.renderMode.rawValue)
                   insertion mode: \(profile.insertionMode.rawValue)
+                  field identity: \(profile.fieldIdentityMode.rawValue)
                   one-word accept: \(profile.supportsOneWordAcceptance)
                   full accept: \(profile.supportsFullAcceptance)
                   Esc suppression: \(profile.suppressesUntilBlurAfterEscape)

@@ -12,6 +12,15 @@ struct RuntimePolicyTests {
         #expect(decision.allowsUserManagedServer == false)
     }
 
+    @Test("Runtime states have short status summaries")
+    func runtimeStatesHaveShortStatusSummaries() {
+        #expect(CompletionRuntimeCandidate.mlx.displayName == "MLX")
+        #expect(LocalRuntimeState.warming(candidate: .mlx).statusSummary == "warming MLX")
+        #expect(LocalRuntimeState.ready(candidate: .mock).statusSummary == "ready (mock)")
+        #expect(LocalRuntimeState.ready(candidate: .mock).isReady)
+        #expect(!LocalRuntimeState.unavailable(reason: "not downloaded").isReady)
+    }
+
     @Test("Benchmark passes when average latency is under target")
     func benchmarkPassesUnderTarget() {
         let benchmark = CompletionRuntimeBenchmark(

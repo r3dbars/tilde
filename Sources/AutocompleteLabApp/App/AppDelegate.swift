@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: NSStatusItem?
     private var statusMenuItem: NSMenuItem?
+    private var runtimeMenuItem: NSMenuItem?
     private var toggleAppMenuItem: NSMenuItem?
     private var pollTimer: Timer?
     private var keyboardEventTap: KeyboardEventTap?
@@ -38,17 +39,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debounceTask: Task<Void, Never>?
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var lastStatusLine: String?
+    private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         configureStatusItem()
         DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
         accessibilityClient.requestPermissionIfNeeded()
-        Task { [modelRuntime] in
-            try? await modelRuntime.warm()
-        }
+        warmModelRuntime()
         if !accessibilityClient.isTrusted {
-            settingsWindow.show(isTrusted: false)
+            settingsWindow.show(isTrusted: false, runtimeState: currentRuntimeState)
         }
         startPolling()
     }
@@ -67,10 +67,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         let statusMenu = NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: "")
+        let runtimeMenu = NSMenuItem(title: "Model: starting", action: nil, keyEquivalent: "")
         let toggleItem = NSMenuItem(title: "Toggle Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
 
         menu.addItem(NSMenuItem(title: "Transcripted Autocomplete Lab", action: nil, keyEquivalent: ""))
         menu.addItem(statusMenu)
+        menu.addItem(runtimeMenu)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Settings", action: #selector(showSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "Show Diagnostics", action: #selector(showDiagnostics), keyEquivalent: "d"))
@@ -81,7 +83,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.menu = menu
         statusItem = item
         statusMenuItem = statusMenu
+        runtimeMenuItem = runtimeMenu
         toggleAppMenuItem = toggleItem
+        refreshRuntimeChrome()
     }
 
     private func startPolling() {
@@ -90,6 +94,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.pollFocusedText()
             }
         }
+    }
+
+    private func warmModelRuntime() {
+        applyRuntimeState(.warming(candidate: .mock))
+
+        Task { [weak self, modelRuntime] in
+            do {
+                try await modelRuntime.warm()
+            } catch {
+                await MainActor.run {
+                    self?.applyRuntimeState(.failed(candidate: .mock, reason: error.localizedDescription))
+                }
+                return
+            }
+
+            let state = await modelRuntime.state
+            await MainActor.run {
+                self?.applyRuntimeState(state)
+            }
+        }
+    }
+
+    private func applyRuntimeState(_ state: LocalRuntimeState) {
+        currentRuntimeState = state
+        refreshRuntimeChrome()
+        DiagnosticsLog.shared.record("runtime", metadata: ["state": state.statusSummary])
+    }
+
+    private func refreshRuntimeChrome() {
+        runtimeMenuItem?.title = "Model: \(currentRuntimeState.statusSummary)"
+        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted, runtimeState: currentRuntimeState)
     }
 
     private func pollFocusedText() {
@@ -537,7 +572,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusMenuItem?.title = statusLine
         toggleAppMenuItem?.title = app.map { appEnabled ? "Disable \($0.localizedName)" : "Enable \($0.localizedName)" } ?? "Toggle Current App"
-        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted)
+        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted, runtimeState: currentRuntimeState)
 
         guard lastStatusLine != statusLine else {
             return
@@ -591,13 +626,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     private func requestAccessibilityPermission() {
         accessibilityClient.requestPermissionIfNeeded()
-        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted)
+        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted, runtimeState: currentRuntimeState)
         DiagnosticsLog.shared.record("request-accessibility")
     }
 
     @objc
     private func showSettings() {
-        settingsWindow.show(isTrusted: accessibilityClient.isTrusted)
+        settingsWindow.show(isTrusted: accessibilityClient.isTrusted, runtimeState: currentRuntimeState)
     }
 
     @objc
@@ -612,7 +647,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ),
             profile: profile,
             appEnabled: appEnabled,
-            appTrusted: accessibilityClient.isTrusted
+            appTrusted: accessibilityClient.isTrusted,
+            runtimeState: currentRuntimeState
         )
     }
 
