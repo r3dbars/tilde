@@ -4,10 +4,10 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 
 ## Now
 
-- [ ] Verify insertion after every accept.
+- [x] Verify insertion after every accept.
   - Detect whether the target text actually changed.
   - Keep the remaining suggestion only when the accepted text landed.
-  - Suppress the field after repeated failed accepts.
+  - Suppress the field after failed accepts.
 
 - [ ] Finish safe compatibility passes.
   - TextEdit: keep as the green reference app.

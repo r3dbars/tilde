@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
     private let keyboardRouter = KeyboardActionRouter()
     private let keyboardCapturePolicy = KeyboardCapturePolicy()
+    private let insertionVerification = InsertionVerification()
     private let suggestionPanel = SuggestionPanelController()
     private let diagnosticsWindow = DiagnosticsWindowController()
     private lazy var settingsWindow = SettingsWindowController { [weak self] in
@@ -37,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var disabledBundleIdentifiers: Set<String> = []
     private var suggestionTask: Task<Void, Never>?
     private var debounceTask: Task<Void, Never>?
+    private var insertionVerificationTask: Task<Void, Never>?
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var lastStatusLine: String?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
@@ -56,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         debounceTask?.cancel()
         suggestionTask?.cancel()
+        insertionVerificationTask?.cancel()
         modelRuntime.cancel()
         pollTimer?.invalidate()
         stopKeyboardEventTapIfActive()
@@ -299,6 +302,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            let verificationBaseline = insertionVerificationBaseline()
             guard let acceptedText = suggestionSession.acceptNextWord(),
                   insertAcceptedText(acceptedText) else {
                 return false
@@ -306,6 +310,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             recordAcceptedText(acceptedText)
             refreshVisibleSuggestion()
+            scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
             return true
 
@@ -314,6 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            let verificationBaseline = insertionVerificationBaseline()
             guard let acceptedText = suggestionSession.acceptAllVisible(),
                   insertAcceptedText(acceptedText) else {
                 return false
@@ -321,6 +327,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             recordAcceptedText(acceptedText)
             hideSuggestion()
+            scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
             return true
 
@@ -350,6 +357,86 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func suppressKey(_ key: AutocompleteKey) {
         suppressKeyUntil[key] = Date().addingTimeInterval(0.25)
+    }
+
+    private func insertionVerificationBaseline() -> InsertionVerificationBaseline? {
+        guard let currentFieldIdentity,
+              let lastTextSnapshot,
+              lastTextSnapshot.fieldIdentity == currentFieldIdentity,
+              let profile = currentProfile else {
+            return nil
+        }
+
+        return InsertionVerificationBaseline(
+            fieldIdentity: currentFieldIdentity,
+            previousTextBeforeCursor: lastTextSnapshot.textBeforeCursor,
+            profile: profile
+        )
+    }
+
+    private func scheduleInsertionVerification(
+        acceptedText: String,
+        baseline: InsertionVerificationBaseline?
+    ) {
+        guard let baseline else {
+            return
+        }
+
+        insertionVerificationTask?.cancel()
+        insertionVerificationTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(140))
+            guard !Task.isCancelled else {
+                return
+            }
+
+            guard let frontmostApp = accessibilityClient.frontmostApplication(),
+                  let context = accessibilityClient.focusedTextContext(
+                      allowDescendantTextFallback: baseline.profile.allowsDescendantTextFallback
+                  ) else {
+                DiagnosticsLog.shared.record(
+                    "insert-verification",
+                    metadata: [
+                        "app": baseline.profile.bundleIdentifier,
+                        "result": "missing-context"
+                    ]
+                )
+                hideSuggestion()
+                return
+            }
+
+            let currentIdentity = fieldIdentity(
+                app: frontmostApp,
+                context: context,
+                profile: baseline.profile
+            )
+
+            guard currentIdentity == baseline.fieldIdentity else {
+                return
+            }
+
+            let result = insertionVerification.verify(
+                previousTextBeforeCursor: baseline.previousTextBeforeCursor,
+                acceptedText: acceptedText,
+                currentTextBeforeCursor: context.textBeforeCursor
+            )
+
+            DiagnosticsLog.shared.record(
+                "insert-verification",
+                metadata: [
+                    "app": baseline.profile.bundleIdentifier,
+                    "result": String(describing: result),
+                    "acceptedChars": String(acceptedText.count),
+                    "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                    "currentBeforeChars": String(context.textBeforeCursor.count)
+                ]
+            )
+
+            guard result.isVerified else {
+                suppressCurrentField()
+                hideSuggestion()
+                return
+            }
+        }
     }
 
     private func scheduleSuggestion(
@@ -689,6 +776,12 @@ private struct FocusedTextSnapshot: Equatable {
     let fieldIdentity: FocusedFieldIdentity
     let textBeforeCursor: String
     let textAfterCursor: String
+}
+
+private struct InsertionVerificationBaseline: Equatable {
+    let fieldIdentity: FocusedFieldIdentity
+    let previousTextBeforeCursor: String
+    let profile: CompatibilityProfile
 }
 
 private extension CompletionActivationDecision {
