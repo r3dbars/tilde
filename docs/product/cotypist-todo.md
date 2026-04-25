@@ -17,7 +17,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - Browser fields: add Chrome and Atlas profiles only after live field checks.
 
 - [ ] Persist user control.
-  - Persist per-app disable across launches.
+  - [x] Persist per-app disable across launches.
   - Keep Esc suppression until blur.
   - Make the current app state obvious in the menu and diagnostics.
 

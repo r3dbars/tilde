@@ -49,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         configureStatusItem()
+        loadDisabledApps()
         DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
         accessibilityClient.requestPermissionIfNeeded()
@@ -762,6 +763,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion()
         }
 
+        persistDisabledApps()
         updateStatusMenu(
             app: app,
             profile: profileStore.profile(for: app.bundleIdentifier),
@@ -772,6 +774,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     private func quit() {
         NSApp.terminate(nil)
+    }
+}
+
+private extension AppDelegate {
+    static var disabledAppsDefaultsKey: String {
+        "DisabledBundleIdentifiers"
+    }
+
+    func loadDisabledApps() {
+        let persisted = UserDefaults.standard.stringArray(forKey: Self.disabledAppsDefaultsKey) ?? []
+        disabledBundleIdentifiers = DisabledAppSelection(
+            persistedBundleIdentifiers: persisted
+        ).bundleIdentifiers
+    }
+
+    func persistDisabledApps() {
+        let selection = DisabledAppSelection(bundleIdentifiers: disabledBundleIdentifiers)
+        UserDefaults.standard.set(
+            selection.persistedBundleIdentifiers,
+            forKey: Self.disabledAppsDefaultsKey
+        )
     }
 }
 
