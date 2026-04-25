@@ -19,9 +19,30 @@ struct SuggestionTriggerPolicyTests {
 
     @Test("Typing and deletion request refreshed suggestions")
     func typingAndDeletionRequestRefreshes() {
-        let policy = SuggestionTriggerPolicy()
+        let policy = SuggestionTriggerPolicy(charactersBeforePauseRequest: 4)
 
-        #expect(policy.shouldRequestSuggestion(previousTextBeforeCursor: "I thin", currentTextBeforeCursor: "I think"))
+        #expect(!policy.shouldRequestSuggestion(previousTextBeforeCursor: "I thin", currentTextBeforeCursor: "I think"))
+        #expect(policy.shouldRequestSuggestion(previousTextBeforeCursor: "I", currentTextBeforeCursor: "I think"))
         #expect(policy.shouldRequestSuggestion(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I thin"))
+    }
+
+    @Test("Natural boundaries trigger quickly")
+    func naturalBoundariesTriggerQuickly() {
+        let policy = SuggestionTriggerPolicy(
+            charactersBeforePauseRequest: 4,
+            wordBoundaryDelayMilliseconds: 80,
+            pauseDelayMilliseconds: 180
+        )
+
+        #expect(policy.decision(previousTextBeforeCursor: "Can", currentTextBeforeCursor: "Can ") == .request(delayMilliseconds: 80))
+        #expect(policy.decision(previousTextBeforeCursor: "Can we", currentTextBeforeCursor: "Can we,") == .request(delayMilliseconds: 80))
+    }
+
+    @Test("Short in-word typing waits for the pause threshold")
+    func shortInWordTypingWaits() {
+        let policy = SuggestionTriggerPolicy(charactersBeforePauseRequest: 4)
+
+        #expect(policy.decision(previousTextBeforeCursor: "I thi", currentTextBeforeCursor: "I thin") == .skip)
+        #expect(policy.decision(previousTextBeforeCursor: "I ", currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 180))
     }
 }

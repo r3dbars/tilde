@@ -158,17 +158,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        guard triggerPolicy.shouldRequestSuggestion(
+        let triggerDecision = triggerPolicy.decision(
             previousTextBeforeCursor: lastRequestedTextBeforeCursor,
             currentTextBeforeCursor: context.textBeforeCursor
-        ) else {
+        )
+
+        guard case let .request(delayMilliseconds) = triggerDecision else {
             return
         }
 
         scheduleSuggestion(
             context: context,
             profile: profile,
-            appBundleIdentifier: frontmostApp.bundleIdentifier
+            appBundleIdentifier: frontmostApp.bundleIdentifier,
+            delayMilliseconds: delayMilliseconds
         )
     }
 
@@ -286,7 +289,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func scheduleSuggestion(
         context: FocusedTextContext,
         profile: CompatibilityProfile,
-        appBundleIdentifier: String
+        appBundleIdentifier: String,
+        delayMilliseconds: Int
     ) {
         lastRequestedTextBeforeCursor = context.textBeforeCursor
 
@@ -297,7 +301,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         debounceTask = Task { [engine] in
-            try? await Task.sleep(for: .milliseconds(profile.renderMode == .inlineAdjacent ? 80 : 120))
+            let renderDelay = profile.renderMode == .inlineAdjacent ? delayMilliseconds : max(delayMilliseconds, 120)
+            try? await Task.sleep(for: .milliseconds(renderDelay))
             guard !Task.isCancelled else {
                 return
             }
