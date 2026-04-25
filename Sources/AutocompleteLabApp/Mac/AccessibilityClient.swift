@@ -54,6 +54,7 @@ struct FocusedTextDiagnostics: Equatable {
     let windowRect: CGRect?
     let textLineRect: CGRect?
     let capabilities: FocusedTextCapabilities
+    let attributeDump: FocusedElementAttributeDump
 
     var summary: String {
         """
@@ -74,8 +75,45 @@ struct FocusedTextDiagnostics: Equatable {
           bounds for range: \(capabilities.canReadBoundsForRange)
           attributed text: \(capabilities.canReadAttributedText)
           selected text insertion: \(capabilities.canSetSelectedText)
+
+        Attributes:
+        \(attributeDump.attributeSummary)
+
+        Parameterized attributes:
+        \(attributeDump.parameterizedAttributeSummary)
         """
     }
+}
+
+struct FocusedElementAttributeDump: Equatable {
+    let attributes: [FocusedElementAttributeSummary]
+    let parameterizedAttributes: [String]
+
+    var attributeSummary: String {
+        guard !attributes.isEmpty else {
+            return "  unavailable"
+        }
+
+        return attributes
+            .map { "  \($0.name): \($0.valueSummary) | settable=\($0.isSettable)" }
+            .joined(separator: "\n")
+    }
+
+    var parameterizedAttributeSummary: String {
+        guard !parameterizedAttributes.isEmpty else {
+            return "  none"
+        }
+
+        return parameterizedAttributes
+            .map { "  \($0)" }
+            .joined(separator: "\n")
+    }
+}
+
+struct FocusedElementAttributeSummary: Equatable {
+    let name: String
+    let valueSummary: String
+    let isSettable: Bool
 }
 
 struct FocusedTextStyle: Equatable {
@@ -244,6 +282,7 @@ final class AccessibilityClient {
             caretRect: caretRect,
             textStyle: textStyle
         )
+        let attributeDump = focusedElementAttributeDump(for: focusedElement)
 
         return FocusedTextDiagnostics(
             bundleIdentifier: app.bundleIdentifier,
@@ -258,7 +297,8 @@ final class AccessibilityClient {
             elementRect: elementRect,
             windowRect: windowRect,
             textLineRect: textLineRect,
-            capabilities: capabilities
+            capabilities: capabilities,
+            attributeDump: attributeDump
         )
     }
 
@@ -280,6 +320,123 @@ final class AccessibilityClient {
         }
 
         return value
+    }
+
+    private func focusedElementAttributeDump(for element: AXUIElement) -> FocusedElementAttributeDump {
+        let attributes = attributeNames(for: element).map { attribute in
+            FocusedElementAttributeSummary(
+                name: attribute,
+                valueSummary: diagnosticValueSummary(copyAttribute(element, attribute: attribute)),
+                isSettable: canSetAttribute(element, attribute: attribute)
+            )
+        }
+
+        return FocusedElementAttributeDump(
+            attributes: attributes,
+            parameterizedAttributes: parameterizedAttributeNames(for: element)
+        )
+    }
+
+    private func attributeNames(for element: AXUIElement) -> [String] {
+        var names: CFArray?
+        let result = AXUIElementCopyAttributeNames(element, &names)
+
+        guard result == .success,
+              let names = names as? [String] else {
+            return []
+        }
+
+        return names.sorted()
+    }
+
+    private func parameterizedAttributeNames(for element: AXUIElement) -> [String] {
+        var names: CFArray?
+        let result = AXUIElementCopyParameterizedAttributeNames(element, &names)
+
+        guard result == .success,
+              let names = names as? [String] else {
+            return []
+        }
+
+        return names.sorted()
+    }
+
+    private func diagnosticValueSummary(_ value: CFTypeRef?) -> String {
+        guard let value else {
+            return "unavailable"
+        }
+
+        if let string = value as? String {
+            return DiagnosticValueRedactor.stringSummary(length: string.count)
+        }
+
+        if let attributedString = value as? NSAttributedString {
+            return DiagnosticValueRedactor.attributedStringSummary(length: attributedString.length)
+        }
+
+        if let array = value as? [Any] {
+            return DiagnosticValueRedactor.arraySummary(count: array.count)
+        }
+
+        if let bool = value as? Bool {
+            return String(bool)
+        }
+
+        if let number = value as? NSNumber {
+            return number.stringValue
+        }
+
+        let cfTypeID = CFGetTypeID(value)
+
+        if cfTypeID == AXUIElementGetTypeID() {
+            return "AXUIElement"
+        }
+
+        if cfTypeID == AXValueGetTypeID(),
+           let summary = axValueSummary(value as! AXValue) {
+            return summary
+        }
+
+        return DiagnosticValueRedactor.unknownSummary(typeName: String(describing: type(of: value)))
+    }
+
+    private func axValueSummary(_ value: AXValue) -> String? {
+        switch AXValueGetType(value) {
+        case .cfRange:
+            var range = CFRange()
+            guard AXValueGetValue(value, .cfRange, &range) else {
+                return nil
+            }
+
+            return "Range(location=\(range.location), length=\(range.length))"
+
+        case .cgPoint:
+            var point = CGPoint.zero
+            guard AXValueGetValue(value, .cgPoint, &point) else {
+                return nil
+            }
+
+            return "Point(x=\(Int(point.x)), y=\(Int(point.y)))"
+
+        case .cgSize:
+            var size = CGSize.zero
+            guard AXValueGetValue(value, .cgSize, &size) else {
+                return nil
+            }
+
+            return "Size(width=\(Int(size.width)), height=\(Int(size.height)))"
+
+        case .cgRect:
+            var rect = CGRect.zero
+            guard AXValueGetValue(value, .cgRect, &rect) else {
+                return nil
+            }
+
+            return "Rect(x=\(Int(rect.origin.x)), y=\(Int(rect.origin.y)), width=\(Int(rect.width)), height=\(Int(rect.height)))"
+
+        default:
+            return "AXValue(\(AXValueGetType(value).rawValue))"
+        }
     }
 
     private func editableText(
