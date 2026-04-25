@@ -38,6 +38,7 @@ let package = Package(
                 "AGENTS.md",
                 "App/AGENTS.md",
                 "Mac/AGENTS.md",
+                "Runtime/AGENTS.md",
                 "UI/AGENTS.md"
             ]
         ),

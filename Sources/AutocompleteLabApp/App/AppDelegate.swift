@@ -7,7 +7,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let profileStore = CompatibilityProfileStore.mvp
     private let activationPolicy = CompletionActivationPolicy()
     private let triggerPolicy = SuggestionTriggerPolicy()
-    private let modelRuntime = MockModelRuntime()
+    private let modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
+    private var modelRuntime: any ModelRuntime {
+        modelRuntimeBundle.runtime
+    }
     private lazy var engine: any CompletionEngine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
     private let keyboardRouter = KeyboardActionRouter()
@@ -47,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         configureStatusItem()
         DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
+        DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
         accessibilityClient.requestPermissionIfNeeded()
         warmModelRuntime()
         if !accessibilityClient.isTrusted {
@@ -100,19 +104,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func warmModelRuntime() {
-        applyRuntimeState(.warming(candidate: .mock))
+        let candidate = modelRuntimeBundle.activeCandidate
+        let runtime = modelRuntime
 
-        Task { [weak self, modelRuntime] in
+        applyRuntimeState(.warming(candidate: candidate))
+
+        Task { [weak self, runtime, candidate] in
             do {
-                try await modelRuntime.warm()
+                try await runtime.warm()
             } catch {
                 await MainActor.run {
-                    self?.applyRuntimeState(.failed(candidate: .mock, reason: error.localizedDescription))
+                    self?.applyRuntimeState(.failed(candidate: candidate, reason: error.localizedDescription))
                 }
                 return
             }
 
-            let state = await modelRuntime.state
+            let state = await runtime.state
             await MainActor.run {
                 self?.applyRuntimeState(state)
             }

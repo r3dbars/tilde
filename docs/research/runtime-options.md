@@ -8,7 +8,7 @@ The product should own the model runtime. The user launches one Mac app and auto
 
 ## First Candidate: LiteRT-LM
 
-LiteRT-LM is the first runtime candidate because it is Google's app/runtime path for Gemma edge models. Google says LiteRT-LM supports desktop and has Gemma 4 support, including a `gemma-4-E2B-it-litert-lm` package path. It also exposes stable C++ APIs, while Swift support is still marked as in development.
+MLX is the first practical runtime candidate for this Mac prototype because it is Apple Silicon native and can live behind the app-owned `ModelRuntime` boundary. LiteRT-LM stays tracked as the fallback candidate because it is Google's app/runtime path for Gemma edge models and has Gemma 4 support, including a `gemma-4-E2B-it-litert-lm` package path.
 
 Sources:
 
@@ -17,7 +17,7 @@ Sources:
 
 ## Fallback Candidate: MLX
 
-MLX is the fallback to benchmark because Google lists MLX as a day-one Gemma 4 ecosystem option, and it is Apple Silicon native. If the LiteRT-LM Swift/macOS path is not ready enough, MLX may be the more practical embedded route.
+LiteRT-LM should be revisited once the Swift/macOS path is ready enough. If MLX binding work gets too heavy, LiteRT-LM may still become the better packaged embedded route.
 
 Source:
 

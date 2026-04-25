@@ -21,6 +21,42 @@ struct RuntimePolicyTests {
         #expect(!LocalRuntimeState.unavailable(reason: "not downloaded").isReady)
     }
 
+    @Test("Runtime bootstrap falls back to mock until native MLX and asset are ready")
+    func runtimeBootstrapFallsBackToMockUntilNativeReady() {
+        let missingPlan = RuntimeBootstrapPlan(
+            assetState: .missing(expectedPath: "/tmp/gemma"),
+            nativeRuntimeAvailable: true
+        )
+
+        #expect(missingPlan.activeCandidate == .mock)
+        #expect(missingPlan.fallbackReason == "missing model asset at /tmp/gemma")
+
+        let unlinkedPlan = RuntimeBootstrapPlan(
+            assetState: .available(path: "/tmp/gemma"),
+            nativeRuntimeAvailable: false
+        )
+
+        #expect(unlinkedPlan.activeCandidate == .mock)
+        #expect(unlinkedPlan.fallbackReason == "MLX runtime is not linked yet")
+
+        let readyPlan = RuntimeBootstrapPlan(
+            assetState: .available(path: "/tmp/gemma"),
+            nativeRuntimeAvailable: true
+        )
+
+        #expect(readyPlan.activeCandidate == .mlx)
+        #expect(readyPlan.fallbackReason == nil)
+    }
+
+    @Test("Gemma asset manifest is MLX first")
+    func gemmaAssetManifestIsMLXFirst() {
+        let manifest = LocalModelAssetManifest.gemma4E2BMLX
+
+        #expect(manifest.model == .gemma4E2B)
+        #expect(manifest.runtimeCandidate == .mlx)
+        #expect(manifest.cacheDirectoryName.contains("Gemma4E2B"))
+    }
+
     @Test("Benchmark passes when average latency is under target")
     func benchmarkPassesUnderTarget() {
         let benchmark = CompletionRuntimeBenchmark(
