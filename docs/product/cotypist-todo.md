@@ -1,0 +1,74 @@
+# Co-Typist-Style Todo
+
+This is the working list for making the lab feel like a real Mac autocomplete app.
+
+## Now
+
+- [ ] Verify insertion after every accept.
+  - Detect whether the target text actually changed.
+  - Keep the remaining suggestion only when the accepted text landed.
+  - Suppress the field after repeated failed accepts.
+
+- [ ] Finish safe compatibility passes.
+  - TextEdit: keep as the green reference app.
+  - Notes: verify title/body/list behavior.
+  - Obsidian: keep CodeMirror behavior stable across AX element churn.
+  - Mail: inspect diagnostics safely; do not create or edit real third-party messages without explicit confirmation.
+  - Browser fields: add Chrome and Atlas profiles only after live field checks.
+
+- [ ] Persist user control.
+  - Persist per-app disable across launches.
+  - Keep Esc suppression until blur.
+  - Make the current app state obvious in the menu and diagnostics.
+
+## Local Runtime
+
+- [ ] Replace the mock runtime with a real app-owned local runtime path.
+  - Keep `ModelRuntime` as the boundary.
+  - Prefer MLX first for practical Apple Silicon integration.
+  - Keep LiteRT-LM as a tracked fallback.
+  - Add download/warm/ready/failed states before exposing it to the user.
+  - Never require Ollama, llama.cpp, or any separate user-started server.
+
+- [ ] Keep inference tiny.
+  - Prompt from a small context window.
+  - Generate 2-8 visible words.
+  - Keep reasoning off.
+  - Cancel stale requests when typing continues.
+
+## UX Polish
+
+- [ ] Make the panel calmer.
+  - Reduce flicker while typing quickly.
+  - Reposition on caret changes without stealing focus.
+  - Use floating mirror mode when inline bounds are unstable.
+
+- [ ] Make failure states understandable.
+  - Show local model readiness.
+  - Log only privacy-safe shape data.
+  - Explain blocked suggestions by reason in diagnostics.
+
+## QA
+
+- [ ] Build repeatable smoke checks.
+  - TextEdit one-word accept and full accept.
+  - Notes one-word accept and full accept.
+  - Obsidian one-word accept and full accept.
+  - Browser text field checks once profiles exist.
+
+- [ ] Keep every meaningful behavior covered by tests.
+  - Core routing and activation tests.
+  - Runtime state tests.
+  - Compatibility profile tests.
+  - Privacy/redaction tests.
+
+## Later
+
+- [ ] Package the app properly.
+  - App icon.
+  - Signing and notarization.
+  - Cleaner first-run onboarding.
+
+- [ ] Run a tiny private beta.
+  - 3-5 people for one week.
+  - Ask whether it helped, interrupted, or broke trust.
