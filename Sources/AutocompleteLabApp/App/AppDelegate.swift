@@ -4,11 +4,14 @@ import AutocompleteLabCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let accessibilityClient = AccessibilityClient()
-    private let allowlist = AppAllowlist.default
+    private let profileStore = CompatibilityProfileStore.mvp
     private let activationPolicy = CompletionActivationPolicy()
+    private let triggerPolicy = SuggestionTriggerPolicy()
     private let engine = MockCompletionEngine()
+    private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
     private let keyboardRouter = KeyboardActionRouter()
     private let suggestionPanel = SuggestionPanelController()
+    private let diagnosticsWindow = DiagnosticsWindowController()
 
     private var statusItem: NSStatusItem?
     private var pollTimer: Timer?
@@ -17,10 +20,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastCaretRect: CGRect?
     private var lastTextLineRect: CGRect?
     private var lastTextStyle: FocusedTextStyle?
+    private var lastRenderMode: SuggestionRenderMode?
     private var currentFieldIdentity: FocusedFieldIdentity?
+    private var currentProfile: CompatibilityProfile?
     private var lastTextSnapshot: FocusedTextSnapshot?
+    private var lastRequestedTextBeforeCursor: String?
     private var suppressedFieldIdentities: Set<FocusedFieldIdentity> = []
+    private var disabledBundleIdentifiers: Set<String> = []
     private var suggestionTask: Task<Void, Never>?
+    private var debounceTask: Task<Void, Never>?
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -32,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        debounceTask?.cancel()
         suggestionTask?.cancel()
         pollTimer?.invalidate()
     }
@@ -42,7 +51,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Transcripted Autocomplete Lab", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Show Diagnostics", action: #selector(showDiagnostics), keyEquivalent: "d"))
+        menu.addItem(NSMenuItem(title: "Toggle Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t"))
         menu.addItem(NSMenuItem(title: "Request Accessibility Permission", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
 
@@ -60,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func pollFocusedText() {
         guard accessibilityClient.isTrusted else {
+            updateStatusMenu(app: nil, profile: nil, appEnabled: false)
             hideSuggestion()
             return
         }
@@ -67,16 +80,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startKeyboardEventTapIfPossible()
 
         guard let frontmostApp = accessibilityClient.frontmostApplication(),
-              allowlist.allows(bundleIdentifier: frontmostApp.bundleIdentifier) else {
-            currentFieldIdentity = nil
-            lastTextSnapshot = nil
+              let profile = profileStore.profile(for: frontmostApp.bundleIdentifier) else {
+            clearFocusedFieldState()
+            currentProfile = nil
+            updateStatusMenu(app: accessibilityClient.frontmostApplication(), profile: nil, appEnabled: false)
             hideSuggestion()
             return
         }
 
-        guard let context = accessibilityClient.focusedTextContext(), !context.isSecure else {
-            currentFieldIdentity = nil
-            lastTextSnapshot = nil
+        let appEnabled = !disabledBundleIdentifiers.contains(frontmostApp.bundleIdentifier)
+        currentProfile = profile
+        updateStatusMenu(app: frontmostApp, profile: profile, appEnabled: appEnabled)
+
+        guard appEnabled else {
+            clearFocusedFieldState()
+            hideSuggestion()
+            return
+        }
+
+        guard let context = accessibilityClient.focusedTextContext(
+            allowDescendantTextFallback: profile.allowsDescendantTextFallback
+        ), !context.isSecure else {
+            clearFocusedFieldState()
+            currentProfile = profile
             hideSuggestion()
             return
         }
@@ -86,7 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             processIdentifier: frontmostApp.processIdentifier,
             elementIdentifier: context.elementIdentifier
         )
-        currentFieldIdentity = fieldIdentity
+        transitionToField(fieldIdentity)
 
         let snapshot = FocusedTextSnapshot(
             fieldIdentity: fieldIdentity,
@@ -99,6 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         lastTextSnapshot = snapshot
+        debounceTask?.cancel()
         suggestionTask?.cancel()
 
         guard activationPolicy.canSuggest(
@@ -111,38 +138,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let request = CompletionRequest(
-            textBeforeCursor: context.textBeforeCursor,
-            textAfterCursor: context.textAfterCursor,
+        guard context.capabilities.supportsInlineSuggestions || profile.renderMode == .floatingMirror else {
+            hideSuggestion()
+            return
+        }
+
+        guard triggerPolicy.shouldRequestSuggestion(
+            previousTextBeforeCursor: lastRequestedTextBeforeCursor,
+            currentTextBeforeCursor: context.textBeforeCursor
+        ) else {
+            return
+        }
+
+        scheduleSuggestion(
+            context: context,
+            profile: profile,
             appBundleIdentifier: frontmostApp.bundleIdentifier
         )
-
-        suggestionTask = Task { [engine, suggestionPanel] in
-            do {
-                let suggestion = try await engine.suggestion(for: request)
-                await MainActor.run {
-                    guard let suggestion, !suggestion.isEmpty, let caretRect = context.caretRect else {
-                        self.hideSuggestion()
-                        return
-                    }
-
-                    self.suggestionSession.present(suggestion)
-                    self.lastCaretRect = caretRect
-                    self.lastTextLineRect = context.textLineRect
-                    self.lastTextStyle = context.textStyle
-                    suggestionPanel.show(
-                        text: suggestion.visibleText,
-                        near: caretRect,
-                        alignedTo: context.textLineRect,
-                        style: context.textStyle
-                    )
-                }
-            } catch {
-                await MainActor.run {
-                    self.hideSuggestion()
-                }
-            }
-        }
     }
 
     private func startKeyboardEventTapIfPossible() {
@@ -185,8 +197,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch action {
         case .acceptNextWord:
+            guard currentProfile?.supportsOneWordAcceptance == true else {
+                return false
+            }
+
             guard let acceptedText = suggestionSession.acceptNextWord(),
-                  accessibilityClient.insertText(acceptedText) else {
+                  insertAcceptedText(acceptedText) else {
                 return false
             }
 
@@ -196,8 +212,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
 
         case .acceptAllVisible:
+            guard currentProfile?.supportsFullAcceptance == true else {
+                return false
+            }
+
             guard let acceptedText = suggestionSession.acceptAllVisible(),
-                  accessibilityClient.insertText(acceptedText) else {
+                  insertAcceptedText(acceptedText) else {
                 return false
             }
 
@@ -234,6 +254,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suppressKeyUntil[key] = Date().addingTimeInterval(0.25)
     }
 
+    private func scheduleSuggestion(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        appBundleIdentifier: String
+    ) {
+        lastRequestedTextBeforeCursor = context.textBeforeCursor
+
+        let request = CompletionRequest(
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            appBundleIdentifier: appBundleIdentifier
+        )
+
+        debounceTask = Task { [engine] in
+            try? await Task.sleep(for: .milliseconds(profile.renderMode == .inlineAdjacent ? 80 : 120))
+            guard !Task.isCancelled else {
+                return
+            }
+
+            do {
+                let suggestion = try await engine.suggestion(for: request)
+                await MainActor.run {
+                    let anchorRect = context.caretRect ?? (profile.renderMode == .floatingMirror ? context.elementRect ?? context.windowRect : nil)
+                    guard let suggestion, !suggestion.isEmpty, let anchorRect else {
+                        self.hideSuggestion()
+                        return
+                    }
+
+                    self.suggestionSession.present(suggestion)
+                    self.lastCaretRect = anchorRect
+                    self.lastTextLineRect = context.textLineRect
+                    self.lastTextStyle = context.textStyle
+                    self.lastRenderMode = profile.renderMode
+                    self.suggestionPanel.show(
+                        text: suggestion.visibleText,
+                        near: anchorRect,
+                        alignedTo: profile.renderMode == .inlineAdjacent ? context.textLineRect : nil,
+                        style: context.textStyle,
+                        renderMode: profile.renderMode
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    self.hideSuggestion()
+                }
+            }
+        }
+    }
+
+    private func insertAcceptedText(_ acceptedText: String) -> Bool {
+        guard let profile = currentProfile else {
+            return accessibilityClient.insertText(acceptedText)
+        }
+
+        return insertionEngine.insert(acceptedText, profile: profile).succeeded
+    }
+
     private func refreshVisibleSuggestion() {
         guard let suggestion = suggestionSession.visibleSuggestion,
               let caretRect = lastCaretRect else {
@@ -245,7 +322,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             text: suggestion.visibleText,
             near: caretRect,
             alignedTo: lastTextLineRect,
-            style: lastTextStyle
+            style: lastTextStyle,
+            renderMode: lastRenderMode ?? .inlineAdjacent
         )
     }
 
@@ -268,20 +346,100 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastCaretRect = nil
         lastTextLineRect = nil
         lastTextStyle = nil
+        lastRenderMode = nil
         suggestionPanel.hide()
     }
 
+    private func updateStatusMenu(
+        app: RunningApplicationInfo?,
+        profile: CompatibilityProfile?,
+        appEnabled: Bool
+    ) {
+        guard let menu = statusItem?.menu else {
+            return
+        }
+
+        let permission = accessibilityClient.isTrusted ? "AX ok" : "AX missing"
+        let appName = app?.localizedName ?? "No app"
+        let profileName = profile?.displayName ?? "unsupported"
+        let enabled = appEnabled ? "on" : "off"
+        menu.item(at: 1)?.title = "Status: \(permission) | \(appName) | \(profileName) | \(enabled)"
+        menu.item(at: 4)?.title = app.map { appEnabled ? "Disable \($0.localizedName)" : "Enable \($0.localizedName)" } ?? "Toggle Current App"
+    }
+
     private func suppressCurrentField() {
-        guard let currentFieldIdentity else {
+        guard currentProfile?.suppressesUntilBlurAfterEscape == true,
+              let currentFieldIdentity else {
             return
         }
 
         suppressedFieldIdentities.insert(currentFieldIdentity)
     }
 
+    private func transitionToField(_ fieldIdentity: FocusedFieldIdentity) {
+        guard currentFieldIdentity != fieldIdentity else {
+            return
+        }
+
+        if let currentFieldIdentity {
+            suppressedFieldIdentities.remove(currentFieldIdentity)
+        }
+
+        currentFieldIdentity = fieldIdentity
+        lastTextSnapshot = nil
+        lastRequestedTextBeforeCursor = nil
+    }
+
+    private func clearFocusedFieldState() {
+        if let currentFieldIdentity {
+            suppressedFieldIdentities.remove(currentFieldIdentity)
+        }
+
+        currentFieldIdentity = nil
+        lastTextSnapshot = nil
+        lastRequestedTextBeforeCursor = nil
+    }
+
     @objc
     private func requestAccessibilityPermission() {
         accessibilityClient.requestPermissionIfNeeded()
+    }
+
+    @objc
+    private func showDiagnostics() {
+        let app = accessibilityClient.frontmostApplication()
+        let profile = app.flatMap { profileStore.profile(for: $0.bundleIdentifier) }
+        let appEnabled = app.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
+
+        diagnosticsWindow.show(
+            diagnostics: accessibilityClient.focusedTextDiagnostics(
+                allowDescendantTextFallback: profile?.allowsDescendantTextFallback == true
+            ),
+            profile: profile,
+            appEnabled: appEnabled,
+            appTrusted: accessibilityClient.isTrusted
+        )
+    }
+
+    @objc
+    private func toggleCurrentApp() {
+        guard let app = accessibilityClient.frontmostApplication(),
+              profileStore.allows(bundleIdentifier: app.bundleIdentifier) else {
+            return
+        }
+
+        if disabledBundleIdentifiers.contains(app.bundleIdentifier) {
+            disabledBundleIdentifiers.remove(app.bundleIdentifier)
+        } else {
+            disabledBundleIdentifiers.insert(app.bundleIdentifier)
+            hideSuggestion()
+        }
+
+        updateStatusMenu(
+            app: app,
+            profile: profileStore.profile(for: app.bundleIdentifier),
+            appEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier)
+        )
     }
 
     @objc

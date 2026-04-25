@@ -29,4 +29,17 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(frame.maxX <= 1192)
         #expect(frame.minY >= 4)
     }
+
+    @Test("Mirror fallback anchors inside the focused element")
+    func mirrorFallbackAnchorsInsideFocusedElement() {
+        let frame = SuggestionPanelFrameCalculator.floatingMirrorFrame(
+            anchorRect: CGRect(x: 80, y: 600, width: 500, height: 220),
+            textSize: CGSize(width: 180, height: 18),
+            screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 900)
+        )
+
+        #expect(frame.minX == 88)
+        #expect(frame.maxY == 816)
+        #expect(frame.width == 190)
+    }
 }

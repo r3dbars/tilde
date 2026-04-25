@@ -61,8 +61,22 @@ public struct EmbeddedRuntimeDecision: Equatable, Sendable {
     }
 
     public static let mvp = EmbeddedRuntimeDecision(
-        preferredCandidate: .liteRTLM,
-        fallbackCandidate: .mlx,
+        preferredCandidate: .mlx,
+        fallbackCandidate: .liteRTLM,
         allowsUserManagedServer: false
     )
+}
+
+public enum LocalRuntimeState: Equatable, Sendable {
+    case unavailable(reason: String)
+    case warming(candidate: CompletionRuntimeCandidate)
+    case ready(candidate: CompletionRuntimeCandidate)
+    case failed(candidate: CompletionRuntimeCandidate, reason: String)
+}
+
+public protocol ModelRuntime: Sendable {
+    var state: LocalRuntimeState { get async }
+    func warm() async throws
+    func cancel()
+    func complete(_ request: CompletionRequest) async throws -> CompletionSuggestion?
 }

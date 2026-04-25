@@ -11,12 +11,71 @@ struct RunningApplicationInfo: Equatable {
 
 struct FocusedTextContext: Equatable {
     let elementIdentifier: Int
+    let role: String?
+    let subrole: String?
     let textBeforeCursor: String
     let textAfterCursor: String
     let caretRect: CGRect?
+    let elementRect: CGRect?
+    let windowRect: CGRect?
     let textLineRect: CGRect?
     let textStyle: FocusedTextStyle?
     let isSecure: Bool
+    let capabilities: FocusedTextCapabilities
+}
+
+struct FocusedTextCapabilities: Equatable {
+    let canReadValue: Bool
+    let canReadSelectedTextRange: Bool
+    let canReadBoundsForRange: Bool
+    let canReadAttributedText: Bool
+    let canSetSelectedText: Bool
+
+    var supportsInlineSuggestions: Bool {
+        canReadValue && canReadSelectedTextRange && canReadBoundsForRange
+    }
+
+    var supportsAXInsertion: Bool {
+        canSetSelectedText
+    }
+}
+
+struct FocusedTextDiagnostics: Equatable {
+    let bundleIdentifier: String?
+    let localizedAppName: String?
+    let role: String?
+    let subrole: String?
+    let isSecure: Bool
+    let textBeforeCursorLength: Int
+    let textAfterCursorLength: Int
+    let selectedRangeDescription: String
+    let caretRect: CGRect?
+    let elementRect: CGRect?
+    let windowRect: CGRect?
+    let textLineRect: CGRect?
+    let capabilities: FocusedTextCapabilities
+
+    var summary: String {
+        """
+        App: \(localizedAppName ?? "Unknown") (\(bundleIdentifier ?? "unknown bundle"))
+        Role: \(role ?? "unknown")
+        Subrole: \(subrole ?? "none")
+        Secure: \(isSecure)
+        Selected range: \(selectedRangeDescription)
+        Text before cursor: \(textBeforeCursorLength) chars
+        Text after cursor: \(textAfterCursorLength) chars
+        Caret rect: \(caretRect.map(String.init(describing:)) ?? "missing")
+        Element rect: \(elementRect.map(String.init(describing:)) ?? "missing")
+        Window rect: \(windowRect.map(String.init(describing:)) ?? "missing")
+        Text line rect: \(textLineRect.map(String.init(describing:)) ?? "missing")
+        Capabilities:
+          value: \(capabilities.canReadValue)
+          selected range: \(capabilities.canReadSelectedTextRange)
+          bounds for range: \(capabilities.canReadBoundsForRange)
+          attributed text: \(capabilities.canReadAttributedText)
+          selected text insertion: \(capabilities.canSetSelectedText)
+        """
+    }
 }
 
 struct FocusedTextStyle: Equatable {
@@ -59,7 +118,7 @@ final class AccessibilityClient {
         )
     }
 
-    func focusedTextContext() -> FocusedTextContext? {
+    func focusedTextContext(allowDescendantTextFallback: Bool = false) -> FocusedTextContext? {
         guard let app = NSWorkspace.shared.frontmostApplication else {
             return nil
         }
@@ -68,9 +127,18 @@ final class AccessibilityClient {
             return nil
         }
 
-        let isSecure = isSecureTextElement(focusedElement)
+        configureMessagingTimeout(for: focusedElement)
 
-        guard let text = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String else {
+        let isSecure = isSecureTextElement(focusedElement)
+        let role = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
+        let subrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
+
+        guard let text = editableText(
+            in: focusedElement,
+            role: role,
+            processIdentifier: app.processIdentifier,
+            allowDescendantTextFallback: allowDescendantTextFallback
+        ) else {
             return nil
         }
 
@@ -80,21 +148,34 @@ final class AccessibilityClient {
             utf16Offset: selectedRange?.location ?? text.utf16.count
         )
         let caretRect = selectedRange.flatMap { caretBounds(for: focusedElement, range: $0) }
+        let elementRect = elementBounds(for: focusedElement)
+        let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
         let textLineRect = selectedRange.flatMap {
             textLineBounds(for: focusedElement, textLength: text.utf16.count, textBeforeCursor: textSlice.textBeforeCursor, range: $0)
         }
         let textStyle = selectedRange.flatMap {
             focusedTextStyle(in: focusedElement, textLength: text.utf16.count, range: $0)
         }
+        let capabilities = textCapabilities(
+            for: focusedElement,
+            selectedRange: selectedRange,
+            caretRect: caretRect,
+            textStyle: textStyle
+        )
 
         return FocusedTextContext(
             elementIdentifier: Int(CFHash(focusedElement)),
+            role: role,
+            subrole: subrole,
             textBeforeCursor: textSlice.textBeforeCursor,
             textAfterCursor: textSlice.textAfterCursor,
             caretRect: caretRect,
+            elementRect: elementRect,
+            windowRect: windowRect,
             textLineRect: textLineRect,
             textStyle: textStyle,
-            isSecure: isSecure
+            isSecure: isSecure,
+            capabilities: capabilities
         )
     }
 
@@ -104,17 +185,86 @@ final class AccessibilityClient {
             return false
         }
 
+        let textBeforeInsert = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String
         let result = AXUIElementSetAttributeValue(
             focusedElement,
             kAXSelectedTextAttribute as CFString,
             text as CFTypeRef
         )
 
-        return result == .success
+        guard result == .success else {
+            return false
+        }
+
+        guard let textBeforeInsert else {
+            return true
+        }
+
+        let textAfterInsert = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String
+        return textAfterInsert != textBeforeInsert
+    }
+
+    func focusedTextDiagnostics(allowDescendantTextFallback: Bool = false) -> FocusedTextDiagnostics? {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              let focusedElement = focusedElement(for: app.processIdentifier) else {
+            return nil
+        }
+
+        configureMessagingTimeout(for: focusedElement)
+
+        let role = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
+        let subrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
+        let text = editableText(
+            in: focusedElement,
+            role: role,
+            processIdentifier: app.processIdentifier,
+            allowDescendantTextFallback: allowDescendantTextFallback
+        )
+        let selectedRange = selectedTextRange(in: focusedElement)
+        let textSlice = text.map {
+            CursorTextSplitter.split($0, utf16Offset: selectedRange?.location ?? $0.utf16.count)
+        }
+        let caretRect = selectedRange.flatMap { caretBounds(for: focusedElement, range: $0) }
+        let elementRect = elementBounds(for: focusedElement)
+        let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
+        let textLineRect = selectedRange.flatMap {
+            textLineBounds(
+                for: focusedElement,
+                textLength: text?.utf16.count ?? 0,
+                textBeforeCursor: textSlice?.textBeforeCursor ?? "",
+                range: $0
+            )
+        }
+        let textStyle = selectedRange.flatMap {
+            focusedTextStyle(in: focusedElement, textLength: text?.utf16.count ?? 0, range: $0)
+        }
+        let capabilities = textCapabilities(
+            for: focusedElement,
+            selectedRange: selectedRange,
+            caretRect: caretRect,
+            textStyle: textStyle
+        )
+
+        return FocusedTextDiagnostics(
+            bundleIdentifier: app.bundleIdentifier,
+            localizedAppName: app.localizedName,
+            role: role,
+            subrole: subrole,
+            isSecure: isSecureTextElement(focusedElement),
+            textBeforeCursorLength: textSlice?.textBeforeCursor.count ?? 0,
+            textAfterCursorLength: textSlice?.textAfterCursor.count ?? 0,
+            selectedRangeDescription: selectedRange.map { "location=\($0.location), length=\($0.length)" } ?? "missing",
+            caretRect: caretRect,
+            elementRect: elementRect,
+            windowRect: windowRect,
+            textLineRect: textLineRect,
+            capabilities: capabilities
+        )
     }
 
     private func focusedElement(for processIdentifier: pid_t) -> AXUIElement? {
         let appElement = AXUIElementCreateApplication(processIdentifier)
+        configureMessagingTimeout(for: appElement)
         guard let focusedElementValue = copyAttribute(appElement, attribute: kAXFocusedUIElementAttribute) else {
             return nil
         }
@@ -130,6 +280,75 @@ final class AccessibilityClient {
         }
 
         return value
+    }
+
+    private func editableText(
+        in element: AXUIElement,
+        role: String?,
+        processIdentifier: pid_t,
+        allowDescendantTextFallback: Bool
+    ) -> String? {
+        let directText = copyAttribute(element, attribute: kAXValueAttribute) as? String
+        guard allowDescendantTextFallback,
+              role == "AXWebArea",
+              directText?.isEmpty != false,
+              containingWindowTitle(for: element, processIdentifier: processIdentifier) == "New Message" else {
+            return directText
+        }
+
+        let descendantText = descendantText(in: element)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !descendantText.isEmpty else {
+            return directText
+        }
+
+        return descendantText
+    }
+
+    private func containingWindowTitle(for element: AXUIElement, processIdentifier: pid_t) -> String? {
+        if let windowValue = copyAttribute(element, attribute: kAXWindowAttribute),
+           let title = copyAttribute((windowValue as! AXUIElement), attribute: kAXTitleAttribute) as? String {
+            return title
+        }
+
+        let appElement = AXUIElementCreateApplication(processIdentifier)
+        configureMessagingTimeout(for: appElement)
+
+        guard let windowValue = copyAttribute(appElement, attribute: kAXFocusedWindowAttribute) else {
+            return nil
+        }
+
+        return copyAttribute((windowValue as! AXUIElement), attribute: kAXTitleAttribute) as? String
+    }
+
+    private func descendantText(in element: AXUIElement, depth: Int = 0) -> String {
+        guard depth < 6 else {
+            return ""
+        }
+
+        let children = copyAttribute(element, attribute: kAXChildrenAttribute) as? [AXUIElement] ?? []
+        var parts: [String] = []
+
+        for child in children {
+            configureMessagingTimeout(for: child)
+
+            if let value = copyAttribute(child, attribute: kAXValueAttribute) as? String,
+               !value.isEmpty {
+                parts.append(value)
+            }
+
+            let nestedText = descendantText(in: child, depth: depth + 1)
+            if !nestedText.isEmpty {
+                parts.append(nestedText)
+            }
+        }
+
+        return parts.joined(separator: "\n")
+    }
+
+    private func configureMessagingTimeout(for element: AXUIElement) {
+        AXUIElementSetMessagingTimeout(element, 0.12)
     }
 
     private func selectedTextRange(in element: AXUIElement) -> CFRange? {
@@ -196,6 +415,38 @@ final class AccessibilityClient {
         return rect
     }
 
+    private func elementBounds(for element: AXUIElement) -> CGRect? {
+        guard let positionValue = copyAttribute(element, attribute: kAXPositionAttribute),
+              let sizeValue = copyAttribute(element, attribute: kAXSizeAttribute) else {
+            return nil
+        }
+
+        var position = CGPoint.zero
+        var size = CGSize.zero
+
+        guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+              AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else {
+            return nil
+        }
+
+        return CGRect(origin: position, size: size)
+    }
+
+    private func containingWindowBounds(for element: AXUIElement, processIdentifier: pid_t) -> CGRect? {
+        if let windowValue = copyAttribute(element, attribute: kAXWindowAttribute) {
+            return elementBounds(for: (windowValue as! AXUIElement))
+        }
+
+        let appElement = AXUIElementCreateApplication(processIdentifier)
+        configureMessagingTimeout(for: appElement)
+
+        guard let windowValue = copyAttribute(appElement, attribute: kAXFocusedWindowAttribute) else {
+            return nil
+        }
+
+        return elementBounds(for: (windowValue as! AXUIElement))
+    }
+
     private func focusedTextStyle(in element: AXUIElement, textLength: Int, range: CFRange) -> FocusedTextStyle? {
         let location: Int
         let length: Int
@@ -236,6 +487,27 @@ final class AccessibilityClient {
             fontName: font.fontName,
             fontSize: font.pointSize,
             foregroundColor: accessibilityForegroundColor(from: attributes)
+        )
+    }
+
+    private func canSetAttribute(_ element: AXUIElement, attribute: String) -> Bool {
+        var settable = DarwinBoolean(false)
+        let result = AXUIElementIsAttributeSettable(element, attribute as CFString, &settable)
+        return result == .success && settable.boolValue
+    }
+
+    private func textCapabilities(
+        for element: AXUIElement,
+        selectedRange: CFRange?,
+        caretRect: CGRect?,
+        textStyle: FocusedTextStyle?
+    ) -> FocusedTextCapabilities {
+        FocusedTextCapabilities(
+            canReadValue: copyAttribute(element, attribute: kAXValueAttribute) is String,
+            canReadSelectedTextRange: selectedRange != nil,
+            canReadBoundsForRange: caretRect != nil,
+            canReadAttributedText: textStyle != nil,
+            canSetSelectedText: canSetAttribute(element, attribute: kAXSelectedTextAttribute)
         )
     }
 

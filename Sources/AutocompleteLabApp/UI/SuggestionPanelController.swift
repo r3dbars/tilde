@@ -41,18 +41,24 @@ final class SuggestionPanelController {
         panel.contentView = container
     }
 
-    func show(text: String, near caretRect: CGRect, alignedTo textLineRect: CGRect?, style: FocusedTextStyle?) {
-        let fontSize = min(max(caretRect.height * 1.02, 12), 32)
+    func show(
+        text: String,
+        near anchorRect: CGRect,
+        alignedTo textLineRect: CGRect?,
+        style: FocusedTextStyle?,
+        renderMode: SuggestionRenderMode
+    ) {
+        let fontSize = min(max(anchorRect.height * 1.02, 12), 32)
         let font = style?.font ?? NSFont.systemFont(ofSize: fontSize, weight: .regular)
         let color = ghostColor(matching: style?.foregroundColor)
 
         ghostTextView.update(text: text, font: font, color: color)
         let size = text.size(withAttributes: [.font: font])
-        let screen = screen(containing: caretRect) ?? NSScreen.main
+        let screen = screen(containing: anchorRect) ?? NSScreen.main
         let screenFrame = screen?.frame ?? .zero
-        let screenHeight = screenFrame.height > 0 ? screenFrame.height : caretRect.maxY
-        let appKitCaretRect = AccessibilityCoordinateConverter.appKitRect(
-            fromAccessibilityRect: caretRect,
+        let screenHeight = screenFrame.height > 0 ? screenFrame.height : anchorRect.maxY
+        let appKitAnchorRect = AccessibilityCoordinateConverter.appKitRect(
+            fromAccessibilityRect: anchorRect,
             screenHeight: screenHeight
         )
         let appKitTextLineRect = textLineRect.map {
@@ -61,12 +67,27 @@ final class SuggestionPanelController {
                 screenHeight: screenHeight
             )
         }
-        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
-            caretRect: appKitCaretRect,
-            textLineRect: appKitTextLineRect,
-            textSize: size,
-            screenFrame: screenFrame
-        )
+        let frame: CGRect
+
+        switch renderMode {
+        case .inlineAdjacent:
+            frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+                caretRect: appKitAnchorRect,
+                textLineRect: appKitTextLineRect,
+                textSize: size,
+                screenFrame: screenFrame
+            )
+
+        case .floatingMirror:
+            frame = SuggestionPanelFrameCalculator.floatingMirrorFrame(
+                anchorRect: appKitAnchorRect,
+                textSize: size,
+                screenFrame: screenFrame
+            )
+
+        case .disabled:
+            return
+        }
 
         panel.setFrame(frame, display: true)
         ghostTextView.needsDisplay = true
