@@ -1,5 +1,21 @@
 import Foundation
 
+public enum CompletionActivationDecision: Equatable, Sendable {
+    case allow
+    case block(CompletionActivationBlockReason)
+
+    public var canSuggest: Bool {
+        self == .allow
+    }
+}
+
+public enum CompletionActivationBlockReason: String, Equatable, Sendable {
+    case secureField
+    case suppressedField
+    case tooLittleContext
+    case middleOfLine
+}
+
 public struct CompletionActivationPolicy: Equatable, Sendable {
     public let minimumContextCharacters: Int
 
@@ -13,15 +29,37 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         isSecure: Bool,
         isFieldSuppressed: Bool
     ) -> Bool {
-        guard !isSecure, !isFieldSuppressed else {
-            return false
+        decision(
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: textAfterCursor,
+            isSecure: isSecure,
+            isFieldSuppressed: isFieldSuppressed
+        ).canSuggest
+    }
+
+    public func decision(
+        textBeforeCursor: String,
+        textAfterCursor: String,
+        isSecure: Bool,
+        isFieldSuppressed: Bool
+    ) -> CompletionActivationDecision {
+        if isSecure {
+            return .block(.secureField)
+        }
+
+        if isFieldSuppressed {
+            return .block(.suppressedField)
         }
 
         guard textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines).count >= minimumContextCharacters else {
-            return false
+            return .block(.tooLittleContext)
         }
 
-        return isAtEndOfCurrentLine(textAfterCursor: textAfterCursor)
+        guard isAtEndOfCurrentLine(textAfterCursor: textAfterCursor) else {
+            return .block(.middleOfLine)
+        }
+
+        return .allow
     }
 
     private func isAtEndOfCurrentLine(textAfterCursor: String) -> Bool {

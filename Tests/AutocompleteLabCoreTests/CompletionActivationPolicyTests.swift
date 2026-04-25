@@ -13,6 +13,12 @@ struct CompletionActivationPolicyTests {
             isSecure: false,
             isFieldSuppressed: false
         ))
+        #expect(policy.decision(
+            textBeforeCursor: "I think this",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow)
     }
 
     @Test("Allows suggestions before trailing whitespace on the current line")
@@ -37,6 +43,12 @@ struct CompletionActivationPolicyTests {
             isSecure: false,
             isFieldSuppressed: false
         ))
+        #expect(policy.decision(
+            textBeforeCursor: "I think",
+            textAfterCursor: " this should stay",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.middleOfLine))
     }
 
     @Test("Blocks secure or suppressed fields")
@@ -49,6 +61,12 @@ struct CompletionActivationPolicyTests {
             isSecure: true,
             isFieldSuppressed: false
         ))
+        #expect(policy.decision(
+            textBeforeCursor: "I think this",
+            textAfterCursor: "",
+            isSecure: true,
+            isFieldSuppressed: false
+        ) == .block(.secureField))
 
         #expect(!policy.canSuggest(
             textBeforeCursor: "I think this",
@@ -56,6 +74,12 @@ struct CompletionActivationPolicyTests {
             isSecure: false,
             isFieldSuppressed: true
         ))
+        #expect(policy.decision(
+            textBeforeCursor: "I think this",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: true
+        ) == .block(.suppressedField))
     }
 
     @Test("Blocks very short context")
@@ -68,5 +92,11 @@ struct CompletionActivationPolicyTests {
             isSecure: false,
             isFieldSuppressed: false
         ))
+        #expect(policy.decision(
+            textBeforeCursor: "hi",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.tooLittleContext))
     }
 }

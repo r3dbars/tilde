@@ -14,11 +14,17 @@ public enum InsertionMode: String, Equatable, Sendable {
     case disabled
 }
 
+public enum FocusedFieldIdentityMode: String, Equatable, Sendable {
+    case accessibilityElement
+    case stableBounds
+}
+
 public struct CompatibilityProfile: Equatable, Sendable {
     public let bundleIdentifier: String
     public let displayName: String
     public let renderMode: SuggestionRenderMode
     public let insertionMode: InsertionMode
+    public let fieldIdentityMode: FocusedFieldIdentityMode
     public let supportsOneWordAcceptance: Bool
     public let supportsFullAcceptance: Bool
     public let suppressesUntilBlurAfterEscape: Bool
@@ -31,6 +37,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         displayName: String,
         renderMode: SuggestionRenderMode,
         insertionMode: InsertionMode,
+        fieldIdentityMode: FocusedFieldIdentityMode = .accessibilityElement,
         supportsOneWordAcceptance: Bool = true,
         supportsFullAcceptance: Bool = true,
         suppressesUntilBlurAfterEscape: Bool = true,
@@ -42,6 +49,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         self.displayName = displayName
         self.renderMode = renderMode
         self.insertionMode = insertionMode
+        self.fieldIdentityMode = fieldIdentityMode
         self.supportsOneWordAcceptance = supportsOneWordAcceptance
         self.supportsFullAcceptance = supportsFullAcceptance
         self.suppressesUntilBlurAfterEscape = suppressesUntilBlurAfterEscape
@@ -95,6 +103,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Obsidian",
             renderMode: .floatingMirror,
             insertionMode: .axThenKeyEvents,
+            fieldIdentityMode: .stableBounds,
             notes: "Yellow Electron target. Prefer capability probing, mirror-style placement, and verified AX before synthetic key insertion."
         ),
         CompatibilityProfile(
@@ -102,6 +111,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Mail",
             renderMode: .floatingMirror,
             insertionMode: .axThenKeyEvents,
+            fieldIdentityMode: .stableBounds,
             allowsDescendantTextFallback: true,
             notes: "Yellow rich-text compose target. Keep insertion conservative, verify AX writes, and avoid full value replacement."
         )

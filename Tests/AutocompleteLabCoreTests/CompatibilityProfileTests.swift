@@ -11,8 +11,10 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.Notes")?.insertionMode == .axSelectedText)
         #expect(store.profile(for: "md.obsidian")?.renderMode == .floatingMirror)
         #expect(store.profile(for: "md.obsidian")?.insertionMode == .axThenKeyEvents)
+        #expect(store.profile(for: "md.obsidian")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "com.apple.mail")?.displayName == "Mail")
         #expect(store.profile(for: "com.apple.mail")?.insertionMode == .axThenKeyEvents)
+        #expect(store.profile(for: "com.apple.mail")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "com.apple.mail")?.allowsDescendantTextFallback == true)
     }
 

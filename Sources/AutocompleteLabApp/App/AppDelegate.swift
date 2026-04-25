@@ -127,10 +127,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let fieldIdentity = FocusedFieldIdentity(
-            bundleIdentifier: frontmostApp.bundleIdentifier,
-            processIdentifier: frontmostApp.processIdentifier,
-            elementIdentifier: context.elementIdentifier
+        let fieldIdentity = fieldIdentity(
+            app: frontmostApp,
+            context: context,
+            profile: profile
         )
         transitionToField(fieldIdentity)
 
@@ -148,17 +148,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debounceTask?.cancel()
         suggestionTask?.cancel()
 
-        guard activationPolicy.canSuggest(
+        let activationDecision = activationPolicy.decision(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             isSecure: context.isSecure,
             isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity)
-        ) else {
+        )
+
+        guard activationDecision.canSuggest else {
+            recordSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                metadata: [
+                    "reason": activationDecision.blockReasonDescription
+                ]
+            )
             hideSuggestion()
             return
         }
 
         guard context.capabilities.supportsInlineSuggestions || profile.renderMode == .floatingMirror else {
+            recordSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                metadata: [
+                    "reason": "missing-inline-capabilities"
+                ]
+            )
             hideSuggestion()
             return
         }
@@ -169,6 +187,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard case let .request(delayMilliseconds) = triggerDecision else {
+            recordSuggestionEvent(
+                "suggestion-trigger-skipped",
+                context: context,
+                profile: profile,
+                metadata: [
+                    "reason": "cadence-policy"
+                ]
+            )
             return
         }
 
@@ -316,7 +342,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let suggestion = try await engine.suggestion(for: request)
                 await MainActor.run {
                     let anchorRect = context.caretRect ?? (profile.renderMode == .floatingMirror ? context.elementRect ?? context.windowRect : nil)
-                    guard let suggestion, !suggestion.isEmpty, let anchorRect else {
+                    guard let suggestion, !suggestion.isEmpty else {
+                        self.recordSuggestionEvent(
+                            "suggestion-blocked",
+                            context: context,
+                            profile: profile,
+                            metadata: [
+                                "reason": "empty-suggestion"
+                            ]
+                        )
+                        self.hideSuggestion()
+                        return
+                    }
+
+                    guard let anchorRect else {
+                        self.recordSuggestionEvent(
+                            "suggestion-blocked",
+                            context: context,
+                            profile: profile,
+                            metadata: [
+                                "reason": "missing-anchor"
+                            ]
+                        )
                         self.hideSuggestion()
                         return
                     }
@@ -333,6 +380,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         style: context.textStyle,
                         renderMode: profile.renderMode
                     )
+                    self.recordSuggestionEvent(
+                        "suggestion-presented",
+                        context: context,
+                        profile: profile,
+                        metadata: [
+                            "visibleChars": String(suggestion.visibleText.count)
+                        ]
+                    )
                     self.startKeyboardEventTapIfPossible()
                 }
             } catch {
@@ -341,6 +396,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+    }
+
+    private func recordSuggestionEvent(
+        _ event: String,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        metadata: [String: String] = [:]
+    ) {
+        var safeMetadata = metadata
+        safeMetadata["app"] = profile.bundleIdentifier
+        safeMetadata["renderMode"] = profile.renderMode.rawValue
+        safeMetadata["insertionMode"] = profile.insertionMode.rawValue
+        safeMetadata["fieldIdentityMode"] = profile.fieldIdentityMode.rawValue
+        safeMetadata["role"] = context.role ?? "unknown"
+        safeMetadata["subrole"] = context.subrole ?? "none"
+        safeMetadata["beforeChars"] = String(context.textBeforeCursor.count)
+        safeMetadata["afterChars"] = String(context.textAfterCursor.count)
+        safeMetadata["hasCaretRect"] = String(context.caretRect != nil)
+        safeMetadata["hasElementRect"] = String(context.elementRect != nil)
+        safeMetadata["hasWindowRect"] = String(context.windowRect != nil)
+        safeMetadata["canReadValue"] = String(context.capabilities.canReadValue)
+        safeMetadata["canReadRange"] = String(context.capabilities.canReadSelectedTextRange)
+        safeMetadata["canReadBounds"] = String(context.capabilities.canReadBoundsForRange)
+        safeMetadata["canSetSelectedText"] = String(context.capabilities.canSetSelectedText)
+
+        DiagnosticsLog.shared.record(event, metadata: safeMetadata)
+    }
+
+    private func fieldIdentity(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) -> FocusedFieldIdentity {
+        let elementIdentifier: Int
+
+        switch profile.fieldIdentityMode {
+        case .accessibilityElement:
+            elementIdentifier = context.elementIdentifier
+        case .stableBounds:
+            elementIdentifier = stableBoundsIdentifier(context: context)
+        }
+
+        return FocusedFieldIdentity(
+            bundleIdentifier: app.bundleIdentifier,
+            processIdentifier: app.processIdentifier,
+            elementIdentifier: elementIdentifier
+        )
+    }
+
+    private func stableBoundsIdentifier(context: FocusedTextContext) -> Int {
+        var hasher = Hasher()
+        hasher.combine(context.role ?? "unknown")
+        hasher.combine(context.subrole ?? "none")
+        combineRoundedRect(context.elementRect, into: &hasher)
+        combineRoundedRect(context.windowRect, into: &hasher)
+        return hasher.finalize()
+    }
+
+    private func combineRoundedRect(_ rect: CGRect?, into hasher: inout Hasher) {
+        guard let rect else {
+            hasher.combine("missing")
+            return
+        }
+
+        hasher.combine(Int(rect.origin.x.rounded()))
+        hasher.combine(Int(rect.origin.y.rounded()))
+        hasher.combine(Int(rect.width.rounded()))
+        hasher.combine(Int(rect.height.rounded()))
     }
 
     private func insertAcceptedText(_ acceptedText: String) -> Bool {
@@ -530,4 +653,15 @@ private struct FocusedTextSnapshot: Equatable {
     let fieldIdentity: FocusedFieldIdentity
     let textBeforeCursor: String
     let textAfterCursor: String
+}
+
+private extension CompletionActivationDecision {
+    var blockReasonDescription: String {
+        switch self {
+        case .allow:
+            return "allowed"
+        case let .block(reason):
+            return reason.rawValue
+        }
+    }
 }
