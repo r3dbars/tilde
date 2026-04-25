@@ -7,7 +7,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let profileStore = CompatibilityProfileStore.mvp
     private let activationPolicy = CompletionActivationPolicy()
     private let triggerPolicy = SuggestionTriggerPolicy()
-    private let engine = MockCompletionEngine()
+    private let modelRuntime = MockModelRuntime()
+    private lazy var engine: any CompletionEngine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
     private let keyboardRouter = KeyboardActionRouter()
     private let keyboardCapturePolicy = KeyboardCapturePolicy()
@@ -43,6 +44,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureStatusItem()
         DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
         accessibilityClient.requestPermissionIfNeeded()
+        Task { [modelRuntime] in
+            try? await modelRuntime.warm()
+        }
         if !accessibilityClient.isTrusted {
             settingsWindow.show(isTrusted: false)
         }
@@ -52,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         debounceTask?.cancel()
         suggestionTask?.cancel()
+        modelRuntime.cancel()
         pollTimer?.invalidate()
         stopKeyboardEventTapIfActive()
     }
