@@ -303,11 +303,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             let verificationBaseline = insertionVerificationBaseline()
-            guard let acceptedText = suggestionSession.acceptNextWord(),
+            guard let acceptedText = suggestionSession.nextWordAcceptance(),
                   insertAcceptedText(acceptedText) else {
                 return false
             }
 
+            suggestionSession.commitNextWordAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
             refreshVisibleSuggestion()
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
@@ -320,11 +321,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             let verificationBaseline = insertionVerificationBaseline()
-            guard let acceptedText = suggestionSession.acceptAllVisible(),
+            guard let acceptedText = suggestionSession.allVisibleAcceptance(),
                   insertAcceptedText(acceptedText) else {
                 return false
             }
 
+            suggestionSession.commitAllVisibleAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
             hideSuggestion()
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)

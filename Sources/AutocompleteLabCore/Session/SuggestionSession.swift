@@ -19,12 +19,31 @@ public struct SuggestionSession: Equatable, Sendable {
         visibleSuggestion = nil
     }
 
-    public mutating func acceptNextWord() -> String? {
+    public func nextWordAcceptance() -> String? {
         guard let suggestion = visibleSuggestion else {
             return nil
         }
 
         let acceptedText = suggestion.acceptedPrefix(wordLimit: 1)
+        return acceptedText.isEmpty ? nil : acceptedText
+    }
+
+    public func allVisibleAcceptance() -> String? {
+        guard let suggestion = visibleSuggestion else {
+            return nil
+        }
+
+        let acceptedText = suggestion.visibleText
+        return acceptedText.isEmpty ? nil : acceptedText
+    }
+
+    public mutating func commitNextWordAcceptance(_ acceptedText: String) {
+        guard let suggestion = visibleSuggestion,
+              !acceptedText.isEmpty,
+              suggestion.text.hasPrefix(acceptedText) else {
+            return
+        }
+
         let remainingText = suggestion.text.dropFirst(acceptedText.count)
 
         if remainingText.isEmpty {
@@ -35,18 +54,35 @@ public struct SuggestionSession: Equatable, Sendable {
                 maxVisibleWords: suggestion.maxVisibleWords
             )
         }
-
-        return acceptedText.isEmpty ? nil : acceptedText
     }
 
-    public mutating func acceptAllVisible() -> String? {
-        guard let suggestion = visibleSuggestion else {
+    public mutating func commitAllVisibleAcceptance(_ acceptedText: String) {
+        guard let suggestion = visibleSuggestion,
+              !acceptedText.isEmpty,
+              suggestion.visibleText == acceptedText else {
+            return
+        }
+
+        visibleSuggestion = nil
+    }
+
+    public mutating func acceptNextWord() -> String? {
+        guard let acceptedText = nextWordAcceptance() else {
             return nil
         }
 
-        let acceptedText = suggestion.visibleText
-        visibleSuggestion = nil
+        commitNextWordAcceptance(acceptedText)
 
-        return acceptedText.isEmpty ? nil : acceptedText
+        return acceptedText
+    }
+
+    public mutating func acceptAllVisible() -> String? {
+        guard let acceptedText = allVisibleAcceptance() else {
+            return nil
+        }
+
+        commitAllVisibleAcceptance(acceptedText)
+
+        return acceptedText
     }
 }
