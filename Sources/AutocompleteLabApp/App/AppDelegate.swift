@@ -12,8 +12,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keyboardRouter = KeyboardActionRouter()
     private let suggestionPanel = SuggestionPanelController()
     private let diagnosticsWindow = DiagnosticsWindowController()
+    private lazy var settingsWindow = SettingsWindowController { [weak self] in
+        self?.requestAccessibilityPermission()
+    }
 
     private var statusItem: NSStatusItem?
+    private var statusMenuItem: NSMenuItem?
+    private var toggleAppMenuItem: NSMenuItem?
     private var pollTimer: Timer?
     private var keyboardEventTap: KeyboardEventTap?
     private var suggestionSession = SuggestionSession()
@@ -30,11 +35,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionTask: Task<Void, Never>?
     private var debounceTask: Task<Void, Never>?
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
+    private var lastStatusLine: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         configureStatusItem()
+        DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
         accessibilityClient.requestPermissionIfNeeded()
+        if !accessibilityClient.isTrusted {
+            settingsWindow.show(isTrusted: false)
+        }
         startKeyboardEventTapIfPossible()
         startPolling()
     }
@@ -50,16 +60,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.title = "Autocomplete"
 
         let menu = NSMenu()
+        let statusMenu = NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: "")
+        let toggleItem = NSMenuItem(title: "Toggle Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
+
         menu.addItem(NSMenuItem(title: "Transcripted Autocomplete Lab", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: ""))
+        menu.addItem(statusMenu)
         menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Settings", action: #selector(showSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "Show Diagnostics", action: #selector(showDiagnostics), keyEquivalent: "d"))
-        menu.addItem(NSMenuItem(title: "Toggle Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t"))
+        menu.addItem(toggleItem)
         menu.addItem(NSMenuItem(title: "Request Accessibility Permission", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
 
         item.menu = menu
         statusItem = item
+        statusMenuItem = statusMenu
+        toggleAppMenuItem = toggleItem
     }
 
     private func startPolling() {
@@ -308,7 +324,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return accessibilityClient.insertText(acceptedText)
         }
 
-        return insertionEngine.insert(acceptedText, profile: profile).succeeded
+        let result = insertionEngine.insert(acceptedText, profile: profile)
+        DiagnosticsLog.shared.record(
+            "insert",
+            metadata: [
+                "app": profile.bundleIdentifier,
+                "mode": result.mode.rawValue,
+                "success": String(result.succeeded)
+            ]
+        )
+
+        return result.succeeded
     }
 
     private func refreshVisibleSuggestion() {
@@ -355,16 +381,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile?,
         appEnabled: Bool
     ) {
-        guard let menu = statusItem?.menu else {
-            return
-        }
-
         let permission = accessibilityClient.isTrusted ? "AX ok" : "AX missing"
         let appName = app?.localizedName ?? "No app"
         let profileName = profile?.displayName ?? "unsupported"
         let enabled = appEnabled ? "on" : "off"
-        menu.item(at: 1)?.title = "Status: \(permission) | \(appName) | \(profileName) | \(enabled)"
-        menu.item(at: 4)?.title = app.map { appEnabled ? "Disable \($0.localizedName)" : "Enable \($0.localizedName)" } ?? "Toggle Current App"
+        let statusLine = "Status: \(permission) | \(appName) | \(profileName) | \(enabled)"
+
+        statusMenuItem?.title = statusLine
+        toggleAppMenuItem?.title = app.map { appEnabled ? "Disable \($0.localizedName)" : "Enable \($0.localizedName)" } ?? "Toggle Current App"
+        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted)
+
+        guard lastStatusLine != statusLine else {
+            return
+        }
+
+        lastStatusLine = statusLine
+        DiagnosticsLog.shared.record(
+            "status",
+            metadata: [
+                "accessibility": permission,
+                "app": appName,
+                "profile": profileName,
+                "enabled": enabled
+            ]
+        )
     }
 
     private func suppressCurrentField() {
@@ -403,6 +443,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     private func requestAccessibilityPermission() {
         accessibilityClient.requestPermissionIfNeeded()
+        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted)
+        DiagnosticsLog.shared.record("request-accessibility")
+    }
+
+    @objc
+    private func showSettings() {
+        settingsWindow.show(isTrusted: accessibilityClient.isTrusted)
     }
 
     @objc
