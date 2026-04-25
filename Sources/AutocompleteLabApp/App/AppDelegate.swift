@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let engine = MockCompletionEngine()
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
     private let keyboardRouter = KeyboardActionRouter()
+    private let keyboardCapturePolicy = KeyboardCapturePolicy()
     private let suggestionPanel = SuggestionPanelController()
     private let diagnosticsWindow = DiagnosticsWindowController()
     private lazy var settingsWindow = SettingsWindowController { [weak self] in
@@ -45,7 +46,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !accessibilityClient.isTrusted {
             settingsWindow.show(isTrusted: false)
         }
-        startKeyboardEventTapIfPossible()
         startPolling()
     }
 
@@ -53,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debounceTask?.cancel()
         suggestionTask?.cancel()
         pollTimer?.invalidate()
+        stopKeyboardEventTapIfActive()
     }
 
     private func configureStatusItem() {
@@ -92,8 +93,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion()
             return
         }
-
-        startKeyboardEventTapIfPossible()
 
         guard let frontmostApp = accessibilityClient.frontmostApplication(),
               let profile = profileStore.profile(for: frontmostApp.bundleIdentifier) else {
@@ -174,7 +173,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startKeyboardEventTapIfPossible() {
-        guard keyboardEventTap == nil, accessibilityClient.isTrusted else {
+        guard keyboardCapturePolicy.shouldCaptureKeys(
+            isTrustedForAccessibility: accessibilityClient.isTrusted,
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+        ), keyboardEventTap == nil else {
             return
         }
 
@@ -198,7 +200,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if eventTap.start() {
             keyboardEventTap = eventTap
+            DiagnosticsLog.shared.record("keyboard-event-tap-started")
         }
+    }
+
+    private func stopKeyboardEventTapIfActive() {
+        guard let keyboardEventTap else {
+            return
+        }
+
+        keyboardEventTap.stop()
+        self.keyboardEventTap = nil
+        DiagnosticsLog.shared.record("keyboard-event-tap-stopped")
     }
 
     private func handleAutocompleteKey(_ key: AutocompleteKey) -> Bool {
@@ -310,6 +323,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         style: context.textStyle,
                         renderMode: profile.renderMode
                     )
+                    self.startKeyboardEventTapIfPossible()
                 }
             } catch {
                 await MainActor.run {
@@ -374,6 +388,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextStyle = nil
         lastRenderMode = nil
         suggestionPanel.hide()
+        stopKeyboardEventTapIfActive()
     }
 
     private func updateStatusMenu(
