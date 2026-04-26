@@ -33,14 +33,21 @@ final class DiagnosticsWindowController {
         compatibilityStatus: CompatibilitySupportStatus,
         appEnabled: Bool,
         appTrusted: Bool,
-        runtimeReadiness: String,
+        runtimeReport: RuntimeReadinessReport,
         modelDirectoryPath: String,
         recentEvents: [String]
     ) {
         var sections: [String] = []
 
         sections.append("Permission: Accessibility \(appTrusted ? "granted" : "missing")")
-        sections.append("Local model: \(runtimeReadiness)")
+        sections.append(
+            """
+            Local model: \(runtimeReport.summary)
+              stage: \(runtimeReport.stage.rawValue)
+              action: \(runtimeReport.action.displayName)
+              detail: \(runtimeReport.detail ?? "none")
+            """
+        )
         sections.append("Model folder: \(modelDirectoryPath)")
         sections.append("Compatibility: \(compatibilityStatus.summary)")
         sections.append("Current app enabled: \(appEnabled)")

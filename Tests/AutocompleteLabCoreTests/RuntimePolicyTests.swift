@@ -55,7 +55,53 @@ struct RuntimePolicyTests {
             nativeRuntimeAvailable: false
         )
 
-        #expect(plan.readinessSummary(for: .ready(candidate: .mock)) == "ready (mock); fallback: MLX runtime is not linked yet")
+        let report = plan.readinessReport(for: .ready(candidate: .mock))
+
+        #expect(report.stage == .runtimeUnavailable)
+        #expect(report.summary == "runtime unavailable (MLX); fallback: ready (mock)")
+        #expect(report.detail == "MLX runtime is not linked yet")
+        #expect(report.action == .none)
+        #expect(!report.isReady)
+        #expect(plan.readinessSummary(for: .ready(candidate: .mock)) == report.summary)
+    }
+
+    @Test("Runtime readiness report separates download and repair states")
+    func runtimeReadinessReportSeparatesAssetStates() {
+        let missingPlan = RuntimeBootstrapPlan(
+            assetState: .missing(expectedPath: "/tmp/gemma"),
+            nativeRuntimeAvailable: false
+        )
+        let missingReport = missingPlan.readinessReport(for: .ready(candidate: .mock))
+
+        #expect(missingReport.stage == .downloadNeeded)
+        #expect(missingReport.summary == "download needed (Gemma 4 E2B); fallback: ready (mock)")
+        #expect(missingReport.detail == "Expected MLX model folder at /tmp/gemma")
+        #expect(missingReport.action == .revealModelFolder)
+
+        let invalidPlan = RuntimeBootstrapPlan(
+            assetState: .invalid(path: "/tmp/gemma", reason: "missing config.json"),
+            nativeRuntimeAvailable: false
+        )
+        let invalidReport = invalidPlan.readinessReport(for: .ready(candidate: .mock))
+
+        #expect(invalidReport.stage == .repairNeeded)
+        #expect(invalidReport.summary == "model folder needs repair; fallback: ready (mock)")
+        #expect(invalidReport.detail == "/tmp/gemma: missing config.json")
+        #expect(invalidReport.action == .revealModelFolder)
+    }
+
+    @Test("Runtime readiness report marks native runtime ready")
+    func runtimeReadinessReportMarksNativeReady() {
+        let plan = RuntimeBootstrapPlan(
+            assetState: .available(path: "/tmp/gemma"),
+            nativeRuntimeAvailable: true
+        )
+        let report = plan.readinessReport(for: .ready(candidate: .mlx))
+
+        #expect(report.stage == .ready)
+        #expect(report.summary == "ready (MLX)")
+        #expect(report.action == .none)
+        #expect(report.isReady)
     }
 
     @Test("Gemma asset manifest is MLX first")

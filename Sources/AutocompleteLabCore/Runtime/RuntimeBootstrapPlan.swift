@@ -25,6 +25,57 @@ public enum LocalModelAssetState: Equatable, Sendable {
     }
 }
 
+public enum RuntimeReadinessStage: String, Equatable, Sendable {
+    case downloadNeeded
+    case repairNeeded
+    case runtimeUnavailable
+    case warming
+    case ready
+    case failed
+}
+
+public enum RuntimeReadinessAction: String, Equatable, Sendable {
+    case revealModelFolder
+    case wait
+    case retry
+    case none
+
+    public var displayName: String {
+        switch self {
+        case .revealModelFolder:
+            return "Reveal Model Folder"
+        case .wait:
+            return "Wait"
+        case .retry:
+            return "Retry"
+        case .none:
+            return "None"
+        }
+    }
+}
+
+public struct RuntimeReadinessReport: Equatable, Sendable {
+    public let stage: RuntimeReadinessStage
+    public let summary: String
+    public let detail: String?
+    public let action: RuntimeReadinessAction
+    public let isReady: Bool
+
+    public init(
+        stage: RuntimeReadinessStage,
+        summary: String,
+        detail: String? = nil,
+        action: RuntimeReadinessAction,
+        isReady: Bool = false
+    ) {
+        self.stage = stage
+        self.summary = summary
+        self.detail = detail
+        self.action = action
+        self.isReady = isReady
+    }
+}
+
 public struct LocalModelAssetManifest: Equatable, Sendable {
     public let model: LocalModelID
     public let runtimeCandidate: CompletionRuntimeCandidate
@@ -136,12 +187,79 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
         return nil
     }
 
-    public func readinessSummary(for runtimeState: LocalRuntimeState) -> String {
-        guard let fallbackReason,
-              activeCandidate == .mock else {
-            return runtimeState.statusSummary
+    public func readinessReport(for runtimeState: LocalRuntimeState) -> RuntimeReadinessReport {
+        switch assetState {
+        case let .missing(expectedPath):
+            return RuntimeReadinessReport(
+                stage: .downloadNeeded,
+                summary: fallbackSummary("download needed (\(preferredAsset.model.rawValue))", runtimeState: runtimeState),
+                detail: "Expected MLX model folder at \(expectedPath)",
+                action: .revealModelFolder
+            )
+
+        case let .invalid(path, reason):
+            return RuntimeReadinessReport(
+                stage: .repairNeeded,
+                summary: fallbackSummary("model folder needs repair", runtimeState: runtimeState),
+                detail: "\(path): \(reason)",
+                action: .revealModelFolder
+            )
+
+        case .available:
+            break
         }
 
-        return "\(runtimeState.statusSummary); fallback: \(fallbackReason)"
+        guard nativeRuntimeAvailable else {
+            return RuntimeReadinessReport(
+                stage: .runtimeUnavailable,
+                summary: fallbackSummary("runtime unavailable (\(decision.preferredCandidate.displayName))", runtimeState: runtimeState),
+                detail: "\(decision.preferredCandidate.displayName) runtime is not linked yet",
+                action: .none
+            )
+        }
+
+        switch runtimeState {
+        case let .unavailable(reason):
+            return RuntimeReadinessReport(
+                stage: .warming,
+                summary: "warming \(decision.preferredCandidate.displayName)",
+                detail: reason,
+                action: .wait
+            )
+        case .warming:
+            return RuntimeReadinessReport(
+                stage: .warming,
+                summary: runtimeState.statusSummary,
+                detail: nil,
+                action: .wait
+            )
+        case let .ready(candidate):
+            return RuntimeReadinessReport(
+                stage: .ready,
+                summary: runtimeState.statusSummary,
+                detail: nil,
+                action: .none,
+                isReady: candidate == decision.preferredCandidate
+            )
+        case let .failed(_, reason):
+            return RuntimeReadinessReport(
+                stage: .failed,
+                summary: runtimeState.statusSummary,
+                detail: reason,
+                action: .retry
+            )
+        }
+    }
+
+    public func readinessSummary(for runtimeState: LocalRuntimeState) -> String {
+        readinessReport(for: runtimeState).summary
+    }
+
+    private func fallbackSummary(_ primary: String, runtimeState: LocalRuntimeState) -> String {
+        guard activeCandidate == .mock else {
+            return primary
+        }
+
+        return "\(primary); fallback: \(runtimeState.statusSummary)"
     }
 }

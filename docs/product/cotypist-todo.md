@@ -30,7 +30,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - Keep LiteRT-LM as a tracked fallback.
   - [x] Validate the MLX/Hugging Face model directory shape before exposing it to the user.
   - [x] Show and reveal the expected MLX model folder from the menu and diagnostics.
-  - Add download/warm/ready/failed states before exposing it to the user.
+  - [x] Add download/warm/ready/failed states before exposing it to the user.
   - Never require Ollama, llama.cpp, or any separate user-started server.
 
 - [ ] Keep inference tiny.

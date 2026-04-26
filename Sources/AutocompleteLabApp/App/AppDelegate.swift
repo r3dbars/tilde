@@ -57,7 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !accessibilityClient.isTrusted {
             settingsWindow.show(
                 isTrusted: false,
-                runtimeReadiness: runtimeReadinessSummary,
+                runtimeReport: runtimeReadinessReport,
                 modelDirectoryPath: modelDirectoryPath
             )
         }
@@ -135,20 +135,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func applyRuntimeState(_ state: LocalRuntimeState) {
         currentRuntimeState = state
         refreshRuntimeChrome()
-        DiagnosticsLog.shared.record("runtime", metadata: ["state": state.statusSummary])
+        let report = runtimeReadinessReport
+        DiagnosticsLog.shared.record(
+            "runtime",
+            metadata: [
+                "state": state.statusSummary,
+                "readinessStage": report.stage.rawValue,
+                "readinessAction": report.action.rawValue
+            ]
+        )
     }
 
     private func refreshRuntimeChrome() {
-        runtimeMenuItem?.title = "Model: \(currentRuntimeState.statusSummary)"
+        runtimeMenuItem?.title = "Model: \(runtimeReadinessReport.summary)"
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
-            runtimeReadiness: runtimeReadinessSummary,
+            runtimeReport: runtimeReadinessReport,
             modelDirectoryPath: modelDirectoryPath
         )
     }
 
-    private var runtimeReadinessSummary: String {
-        modelRuntimeBundle.bootstrapPlan.readinessSummary(for: currentRuntimeState)
+    private var runtimeReadinessReport: RuntimeReadinessReport {
+        modelRuntimeBundle.bootstrapPlan.readinessReport(for: currentRuntimeState)
     }
 
     private var modelDirectoryPath: String {
@@ -688,7 +696,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleAppMenuItem?.title = app.map { appEnabled ? "Disable \($0.localizedName)" : "Enable \($0.localizedName)" } ?? "Toggle Current App"
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
-            runtimeReadiness: runtimeReadinessSummary,
+            runtimeReport: runtimeReadinessReport,
             modelDirectoryPath: modelDirectoryPath
         )
 
@@ -754,7 +762,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         accessibilityClient.requestPermissionIfNeeded()
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
-            runtimeReadiness: runtimeReadinessSummary,
+            runtimeReport: runtimeReadinessReport,
             modelDirectoryPath: modelDirectoryPath
         )
         DiagnosticsLog.shared.record("request-accessibility")
@@ -764,7 +772,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showSettings() {
         settingsWindow.show(
             isTrusted: accessibilityClient.isTrusted,
-            runtimeReadiness: runtimeReadinessSummary,
+            runtimeReport: runtimeReadinessReport,
             modelDirectoryPath: modelDirectoryPath
         )
     }
@@ -806,7 +814,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             compatibilityStatus: compatibilityStatus,
             appEnabled: appEnabled,
             appTrusted: accessibilityClient.isTrusted,
-            runtimeReadiness: runtimeReadinessSummary,
+            runtimeReport: runtimeReadinessReport,
             modelDirectoryPath: modelDirectoryPath,
             recentEvents: DiagnosticsLog.shared.recentLines(limit: 24)
         )
