@@ -80,7 +80,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - App-specific checks below should only be marked done after `docs/product/manual-smoke-runs.md` has a matching pass.
   - [x] TextEdit one-word accept and full accept.
   - [x] Notes one-word accept and full accept.
-  - Obsidian one-word accept and full accept.
+  - [x] Obsidian one-word accept and full accept.
   - Chrome text field one-word and full accept.
 
 - [ ] Build the local eval loop.
