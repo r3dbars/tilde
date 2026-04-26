@@ -460,7 +460,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let font = context.textStyle?.font ?? NSFont.systemFont(ofSize: 18)
         let lineHeight = max(font.ascender - font.descender + font.leading, 20)
         let horizontalPadding: CGFloat = 18
-        let verticalPadding: CGFloat = 10
+        let verticalPadding: CGFloat = 4
         let maxLineWidth = max(40, elementRect.width - (horizontalPadding * 2))
         let visualLines = wrappedVisualLines(
             for: context.textBeforeCursor,
@@ -474,11 +474,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let maxY = elementRect.maxY - verticalPadding - caretHeight
         let preferredY = elementRect.minY + verticalPadding + (CGFloat(lineIndex) * lineHeight)
         let y = min(max(preferredY, elementRect.minY + verticalPadding), maxY)
-        let codexHorizontalCorrection: CGFloat = -36
 
         return CGRect(
             x: min(
-                elementRect.minX + horizontalPadding + currentLineWidth + codexHorizontalCorrection,
+                elementRect.minX + horizontalPadding + currentLineWidth,
                 elementRect.maxX - horizontalPadding
             ),
             y: y,
