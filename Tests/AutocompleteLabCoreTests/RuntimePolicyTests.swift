@@ -106,6 +106,27 @@ struct RuntimePolicyTests {
         #expect(report.allowsSuggestions)
     }
 
+    @Test("Runtime production readiness requires native preferred runtime")
+    func runtimeProductionReadinessRequiresNativePreferredRuntime() {
+        let readyPlan = RuntimeBootstrapPlan(
+            assetState: .available(path: "/tmp/gemma"),
+            nativeRuntimeAvailable: true
+        )
+        #expect(readyPlan.isProductionReady(runtimeState: .ready(candidate: .mlx)))
+
+        let mockFallbackPlan = RuntimeBootstrapPlan(
+            assetState: .missing(expectedPath: "/tmp/gemma"),
+            nativeRuntimeAvailable: true
+        )
+        #expect(!mockFallbackPlan.isProductionReady(runtimeState: .ready(candidate: .mock)))
+
+        let warmingPlan = RuntimeBootstrapPlan(
+            assetState: .available(path: "/tmp/gemma"),
+            nativeRuntimeAvailable: true
+        )
+        #expect(!warmingPlan.isProductionReady(runtimeState: .warming(candidate: .mlx)))
+    }
+
     @Test("Runtime readiness blocks suggestions while warming or failed")
     func runtimeReadinessBlocksSuggestionsUntilReady() {
         let plan = RuntimeBootstrapPlan(

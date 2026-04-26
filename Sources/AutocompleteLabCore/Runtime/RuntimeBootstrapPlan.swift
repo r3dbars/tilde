@@ -220,6 +220,13 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
         return nil
     }
 
+    public func isProductionReady(runtimeState: LocalRuntimeState) -> Bool {
+        activeCandidate == decision.preferredCandidate
+            && assetState.isUsable
+            && nativeRuntimeAvailable
+            && runtimeState == .ready(candidate: decision.preferredCandidate)
+    }
+
     public func readinessReport(for runtimeState: LocalRuntimeState) -> RuntimeReadinessReport {
         switch assetState {
         case let .missing(expectedPath):

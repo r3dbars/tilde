@@ -27,7 +27,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 
 ## Local Runtime
 
-- [ ] Replace the mock runtime with a real app-owned local runtime path.
+- [x] Replace the mock runtime with a real app-owned local runtime path.
   - Keep `ModelRuntime` as the boundary.
   - Prefer MLX first for practical Apple Silicon integration.
   - Keep LiteRT-LM as a tracked fallback.
@@ -41,7 +41,8 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Switch the playable default to Qwen3 0.6B after Gemma 4 E2B failed current `mlx-swift-lm` weight loading.
   - [x] Upgrade the playable default to Qwen3 1.7B for better autocomplete quality.
   - [x] Upgrade the playable default to Gemma 4 26B A4B through the MLX VLM loader.
-  - Never require Ollama, llama.cpp, or any separate user-started server.
+  - [x] Prove production readiness only when the app is using the native preferred runtime, not mock fallback.
+  - [x] Never require Ollama, llama.cpp, or any separate user-started server.
 
 - [ ] Keep inference tiny.
   - [x] Prompt from a small current sentence/paragraph context window.
