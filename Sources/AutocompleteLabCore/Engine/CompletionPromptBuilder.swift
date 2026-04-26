@@ -31,6 +31,18 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
     public func prompt(for request: CompletionRequest) -> CompletionPrompt {
         let context = promptContext(from: request.textBeforeCursor)
 
+        if request.mode == .wordCompletion {
+            return CompletionPrompt(
+                system: """
+                You are an inline word-completion engine, not a chat assistant.
+                Finish only the current unfinished word before the cursor.
+                Return only the missing suffix or the finished current word.
+                Do not add a space, a new word, punctuation, explanation, quotes, or reasoning.
+                """,
+                user: "Text before cursor:\n\(context)\n\nWord completion:"
+            )
+        }
+
         return CompletionPrompt(
             system: """
             You are an inline autocomplete engine, not a chat assistant.

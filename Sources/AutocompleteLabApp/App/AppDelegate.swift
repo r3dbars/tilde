@@ -347,7 +347,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appBundleIdentifier: frontmostApp.bundleIdentifier,
             fieldIdentity: fieldIdentity,
             renderMode: renderMode,
-            delayMilliseconds: delayMilliseconds
+            delayMilliseconds: delayMilliseconds,
+            requestMode: activationDecision.requestMode ?? .phraseContinuation
         )
     }
 
@@ -420,6 +421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             suggestionSession.commitNextWordAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
+            recordRawAcceptance(action: action, acceptedText: acceptedText)
             refreshVisibleSuggestion()
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
@@ -441,6 +443,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             suggestionSession.commitAllVisibleAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
+            recordRawAcceptance(action: action, acceptedText: acceptedText)
             hideSuggestion()
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
@@ -581,14 +584,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appBundleIdentifier: String,
         fieldIdentity: FocusedFieldIdentity,
         renderMode: SuggestionRenderMode,
-        delayMilliseconds: Int
+        delayMilliseconds: Int,
+        requestMode: CompletionRequestMode
     ) {
         lastRequestedTextBeforeCursor = context.textBeforeCursor
 
         let request = CompletionRequest(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
-            appBundleIdentifier: appBundleIdentifier
+            appBundleIdentifier: appBundleIdentifier,
+            mode: requestMode
         )
         currentCompletionRequest = request
         let requestTicket = suggestionRequestGate.issue(request: request)
@@ -795,6 +800,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         return result.succeeded
+    }
+
+    private func recordRawAcceptance(action: KeyboardAction, acceptedText: String) {
+        guard let profile = currentProfile else {
+            return
+        }
+
+        RawAutocompleteTraceLog.shared.recordAcceptance(
+            action: action.diagnosticName,
+            appBundleIdentifier: profile.bundleIdentifier,
+            acceptedText: acceptedText,
+            remainingVisibleText: suggestionSession.visibleSuggestion?.visibleText
+        )
     }
 
     private func refreshVisibleSuggestion() {

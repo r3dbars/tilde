@@ -17,6 +17,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
     }
 
     public func clean(_ rawOutput: String, after textBeforeCursor: String?) -> CompletionSuggestion? {
+        clean(rawOutput, after: textBeforeCursor, mode: .phraseContinuation)
+    }
+
+    public func clean(_ rawOutput: String, after textBeforeCursor: String?, mode: CompletionRequestMode) -> CompletionSuggestion? {
         let withoutThinking = rawOutput
             .replacingOccurrences(
                 of: #"<think>[\s\S]*?</think>"#,
@@ -52,7 +56,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
-        let normalizedSuggestion = ensureLeadingSpace(singleLine)
+        let normalizedSuggestion = mode == .wordCompletion ? singleLine : ensureLeadingSpace(singleLine)
         let trimmedSuggestion: String
         if let textBeforeCursor {
             trimmedSuggestion = CompletionPrefixTrimmer.trim(normalizedSuggestion, after: textBeforeCursor)
@@ -70,7 +74,12 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         let suggestion = CompletionSuggestion(text: trimmedSuggestion, maxVisibleWords: maxVisibleWords)
-        guard suggestion.visibleWordCount >= minimumVisibleWords else {
+        guard mode == .wordCompletion || suggestion.visibleWordCount >= minimumVisibleWords else {
+            return nil
+        }
+
+        if mode == .wordCompletion,
+           !isValidWordCompletion(suggestion.visibleText) {
             return nil
         }
 
@@ -110,6 +119,16 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         return " " + text
+    }
+
+    private func isValidWordCompletion(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !trimmed.contains(where: { $0.isWhitespace }) else {
+            return false
+        }
+
+        return trimmed.contains(where: { $0.isLetter })
     }
 
     private func repeatsEarlierContext(_ suggestion: String, after textBeforeCursor: String) -> Bool {

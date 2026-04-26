@@ -67,6 +67,15 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("ready.", after: "I know you are") == nil)
     }
 
+    @Test("Allows single token word completion suffixes")
+    func allowsSingleTokenWordCompletionSuffixes() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("dictation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
+        #expect(cleaner.clean("tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
+        #expect(cleaner.clean("tation next", after: "dic", mode: .wordCompletion) == nil)
+    }
+
     @Test("Suppresses suggestions that parrot earlier field text")
     func suppressesSuggestionsThatParrotEarlierFieldText() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)

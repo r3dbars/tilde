@@ -7,15 +7,18 @@ public enum SuggestionTriggerDecision: Equatable, Sendable {
 
 public struct SuggestionTriggerPolicy: Equatable, Sendable {
     public let charactersBeforePauseRequest: Int
+    public let wordCompletionDelayMilliseconds: Int
     public let wordBoundaryDelayMilliseconds: Int
     public let pauseDelayMilliseconds: Int
 
     public init(
         charactersBeforePauseRequest: Int = 4,
+        wordCompletionDelayMilliseconds: Int = 60,
         wordBoundaryDelayMilliseconds: Int = 80,
         pauseDelayMilliseconds: Int = 180
     ) {
         self.charactersBeforePauseRequest = max(1, charactersBeforePauseRequest)
+        self.wordCompletionDelayMilliseconds = max(0, wordCompletionDelayMilliseconds)
         self.wordBoundaryDelayMilliseconds = max(0, wordBoundaryDelayMilliseconds)
         self.pauseDelayMilliseconds = max(0, pauseDelayMilliseconds)
     }
@@ -56,11 +59,35 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
             return .request(delayMilliseconds: wordBoundaryDelayMilliseconds)
         }
 
+        if shouldRequestWordCompletion(previousTextBeforeCursor: previousTextBeforeCursor, currentTextBeforeCursor: currentTextBeforeCursor) {
+            return .request(delayMilliseconds: wordCompletionDelayMilliseconds)
+        }
+
         if changedCount >= charactersBeforePauseRequest {
             return .request(delayMilliseconds: pauseDelayMilliseconds)
         }
 
         return .skip
+    }
+
+    private func shouldRequestWordCompletion(previousTextBeforeCursor: String, currentTextBeforeCursor: String) -> Bool {
+        guard let currentFragment = trailingWordFragment(in: currentTextBeforeCursor),
+              currentFragment.count >= 2,
+              currentFragment.allSatisfy({ $0.isLetter }),
+              let previousFragment = trailingWordFragment(in: previousTextBeforeCursor),
+              currentFragment.hasPrefix(previousFragment) || previousFragment.hasPrefix(currentFragment) else {
+            return false
+        }
+
+        return currentFragment != previousFragment
+    }
+
+    private func trailingWordFragment(in text: String) -> String? {
+        guard let last = text.last, !last.isWhitespace else {
+            return nil
+        }
+
+        return text.split(whereSeparator: { $0.isWhitespace }).last.map(String.init)
     }
 }
 

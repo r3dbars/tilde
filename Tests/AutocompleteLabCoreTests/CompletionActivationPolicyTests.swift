@@ -18,7 +18,7 @@ struct CompletionActivationPolicyTests {
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: false
-        ) == .allow)
+        ) == .allow(.wordCompletion))
     }
 
     @Test("Allows suggestions before trailing whitespace on the current line")
@@ -100,8 +100,20 @@ struct CompletionActivationPolicyTests {
         ) == .block(.tooLittleContext))
     }
 
-    @Test("Blocks one word context even when it is long enough")
-    func blocksOneWordContext() {
+    @Test("Allows likely unfinished one word context")
+    func allowsLikelyUnfinishedOneWordContext() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "dic",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.wordCompletion))
+    }
+
+    @Test("Blocks common complete one word context")
+    func blocksCommonCompleteOneWordContext() {
         let policy = CompletionActivationPolicy()
 
         #expect(policy.decision(

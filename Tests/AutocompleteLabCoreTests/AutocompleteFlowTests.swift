@@ -53,4 +53,14 @@ struct AutocompleteFlowTests {
 
         #expect(suggestion?.visibleText == "nd keep moving")
     }
+
+    @Test("Word completion mode completes only the current word")
+    func wordCompletionModeCompletesOnlyCurrentWord() async throws {
+        let engine = MockCompletionEngine()
+        let suggestion = try await engine.suggestion(
+            for: CompletionRequest(textBeforeCursor: "dic", maxVisibleWords: 8, mode: .wordCompletion)
+        )
+
+        #expect(suggestion?.visibleText == "tation")
+    }
 }

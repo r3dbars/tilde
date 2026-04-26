@@ -162,6 +162,12 @@ else
 fi
 
 open_app() {
+  if [[ "${AUTOCOMPLETE_LAB_RAW_TRACE:-}" =~ ^(1|true|yes|on)$ ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_RAW_TRACE "$AUTOCOMPLETE_LAB_RAW_TRACE"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_RAW_TRACE >/dev/null 2>&1 || true
+  fi
+
   /usr/bin/open -n "$APP_BUNDLE"
 }
 

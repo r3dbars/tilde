@@ -21,7 +21,7 @@ struct SuggestionTriggerPolicyTests {
     func typingAndDeletionRequestRefreshes() {
         let policy = SuggestionTriggerPolicy(charactersBeforePauseRequest: 4)
 
-        #expect(!policy.shouldRequestSuggestion(previousTextBeforeCursor: "I thin", currentTextBeforeCursor: "I think"))
+        #expect(policy.shouldRequestSuggestion(previousTextBeforeCursor: "I thin", currentTextBeforeCursor: "I think"))
         #expect(policy.shouldRequestSuggestion(previousTextBeforeCursor: "I", currentTextBeforeCursor: "I think"))
         #expect(policy.shouldRequestSuggestion(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I thin"))
     }
@@ -42,7 +42,15 @@ struct SuggestionTriggerPolicyTests {
     func shortInWordTypingWaits() {
         let policy = SuggestionTriggerPolicy(charactersBeforePauseRequest: 4)
 
-        #expect(policy.decision(previousTextBeforeCursor: "I thi", currentTextBeforeCursor: "I thin") == .skip)
+        #expect(policy.decision(previousTextBeforeCursor: "I thi", currentTextBeforeCursor: "I thin") == .request(delayMilliseconds: 60))
         #expect(policy.decision(previousTextBeforeCursor: "I ", currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 180))
+    }
+
+    @Test("Word fragments trigger quickly for completion")
+    func wordFragmentsTriggerQuickly() {
+        let policy = SuggestionTriggerPolicy(wordCompletionDelayMilliseconds: 50)
+
+        #expect(policy.decision(previousTextBeforeCursor: "d", currentTextBeforeCursor: "di") == .request(delayMilliseconds: 50))
+        #expect(policy.decision(previousTextBeforeCursor: "di", currentTextBeforeCursor: "dic") == .request(delayMilliseconds: 50))
     }
 }

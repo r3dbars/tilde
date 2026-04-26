@@ -51,6 +51,7 @@ require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift
 
 require_file "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Suppresses one word twitch completions" "model-output cleanup coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Allows single token word completion suffixes" "word-completion cleanup coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Removes thinking tags" "thinking-tag cleanup coverage"
 
 echo "Test coverage manifest verified."

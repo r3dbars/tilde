@@ -104,7 +104,15 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let rawOutput = try await session.respond(to: prompt.user)
         try Task.checkCancellation()
 
-        return cleaner.clean(rawOutput, after: request.textBeforeCursor)
+        let cleanedSuggestion = cleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode)
+        RawAutocompleteTraceLog.shared.recordModelResult(
+            request: request,
+            prompt: prompt,
+            rawOutput: rawOutput,
+            cleanedSuggestion: cleanedSuggestion
+        )
+
+        return cleanedSuggestion
     }
 
     private func readyContainer() async throws -> ModelContainer {

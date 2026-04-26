@@ -17,6 +17,17 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.user.hasSuffix("Autocomplete continuation:"))
     }
 
+    @Test("Word completion prompt asks for only the current word suffix")
+    func wordCompletionPromptAsksForSuffixOnly() {
+        let builder = CompletionPromptBuilder()
+        let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "dic", mode: .wordCompletion))
+
+        #expect(prompt.system.contains("word-completion engine"))
+        #expect(prompt.system.contains("Finish only the current unfinished word"))
+        #expect(prompt.system.contains("Do not add a space"))
+        #expect(prompt.user.hasSuffix("Word completion:"))
+    }
+
     @Test("Prompt trims long context from the left")
     func promptTrimsLongContext() {
         let builder = CompletionPromptBuilder(
