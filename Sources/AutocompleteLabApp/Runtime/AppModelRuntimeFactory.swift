@@ -4,6 +4,7 @@ import AutocompleteLabCore
 struct AppModelRuntimeBundle {
     let runtime: any ModelRuntime
     let bootstrapPlan: RuntimeBootstrapPlan
+    let modelDirectoryURL: URL
 
     var activeCandidate: CompletionRuntimeCandidate {
         bootstrapPlan.activeCandidate
@@ -15,6 +16,7 @@ struct AppModelRuntimeBundle {
             "fallbackCandidate": bootstrapPlan.decision.fallbackCandidate.rawValue,
             "activeCandidate": bootstrapPlan.activeCandidate.rawValue,
             "asset": bootstrapPlan.preferredAsset.fileName,
+            "assetDirectory": modelDirectoryURL.path,
             "assetState": bootstrapPlan.assetState.statusSummary,
             "nativeRuntimeAvailable": String(bootstrapPlan.nativeRuntimeAvailable),
             "allowsUserManagedServer": String(bootstrapPlan.decision.allowsUserManagedServer)
@@ -34,7 +36,12 @@ enum AppModelRuntimeFactory {
         nativeRuntimeAvailable: Bool = false
     ) -> AppModelRuntimeBundle {
         let manifest = LocalModelAssetManifest.gemma4E2BMLX
-        let assetState = modelAssetState(for: manifest, fileManager: fileManager)
+        let modelDirectoryURL = modelAssetURL(for: manifest, fileManager: fileManager)
+        let assetState = modelAssetState(
+            for: manifest,
+            at: modelDirectoryURL,
+            fileManager: fileManager
+        )
         let plan = RuntimeBootstrapPlan(
             preferredAsset: manifest,
             assetState: assetState,
@@ -45,15 +52,17 @@ enum AppModelRuntimeFactory {
         // deterministic runtime while reporting the real bootstrap state.
         return AppModelRuntimeBundle(
             runtime: MockModelRuntime(candidate: plan.activeCandidate),
-            bootstrapPlan: plan
+            bootstrapPlan: plan,
+            modelDirectoryURL: modelDirectoryURL
         )
     }
 
     private static func modelAssetState(
         for manifest: LocalModelAssetManifest,
+        at modelDirectoryURL: URL,
         fileManager: FileManager
     ) -> LocalModelAssetState {
-        let path = modelAssetPath(for: manifest, fileManager: fileManager)
+        let path = modelDirectoryURL.path
         var isDirectory = ObjCBool(false)
         guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory) else {
             return .missing(expectedPath: path)
@@ -82,10 +91,10 @@ enum AppModelRuntimeFactory {
         )
     }
 
-    private static func modelAssetPath(
+    private static func modelAssetURL(
         for manifest: LocalModelAssetManifest,
         fileManager: FileManager
-    ) -> String {
+    ) -> URL {
         let baseDirectory = fileManager.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
@@ -94,7 +103,6 @@ enum AppModelRuntimeFactory {
         return baseDirectory
             .appendingPathComponent("AutocompleteLab", isDirectory: true)
             .appendingPathComponent(manifest.cacheDirectoryName, isDirectory: true)
-            .appendingPathComponent(manifest.fileName, isDirectory: false)
-            .path
+            .appendingPathComponent(manifest.fileName, isDirectory: true)
     }
 }

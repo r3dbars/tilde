@@ -55,7 +55,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         accessibilityClient.requestPermissionIfNeeded()
         warmModelRuntime()
         if !accessibilityClient.isTrusted {
-            settingsWindow.show(isTrusted: false, runtimeReadiness: runtimeReadinessSummary)
+            settingsWindow.show(
+                isTrusted: false,
+                runtimeReadiness: runtimeReadinessSummary,
+                modelDirectoryPath: modelDirectoryPath
+            )
         }
         startPolling()
     }
@@ -84,6 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Settings", action: #selector(showSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "Show Diagnostics", action: #selector(showDiagnostics), keyEquivalent: "d"))
+        menu.addItem(NSMenuItem(title: "Reveal Model Folder", action: #selector(revealModelFolder), keyEquivalent: "m"))
         menu.addItem(toggleItem)
         menu.addItem(NSMenuItem(title: "Request Accessibility Permission", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
@@ -135,11 +140,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshRuntimeChrome() {
         runtimeMenuItem?.title = "Model: \(currentRuntimeState.statusSummary)"
-        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted, runtimeReadiness: runtimeReadinessSummary)
+        settingsWindow.refresh(
+            isTrusted: accessibilityClient.isTrusted,
+            runtimeReadiness: runtimeReadinessSummary,
+            modelDirectoryPath: modelDirectoryPath
+        )
     }
 
     private var runtimeReadinessSummary: String {
         modelRuntimeBundle.bootstrapPlan.readinessSummary(for: currentRuntimeState)
+    }
+
+    private var modelDirectoryPath: String {
+        modelRuntimeBundle.modelDirectoryURL.path
     }
 
     private func pollFocusedText() {
@@ -673,7 +686,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusMenuItem?.title = statusLine
         toggleAppMenuItem?.title = app.map { appEnabled ? "Disable \($0.localizedName)" : "Enable \($0.localizedName)" } ?? "Toggle Current App"
-        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted, runtimeReadiness: runtimeReadinessSummary)
+        settingsWindow.refresh(
+            isTrusted: accessibilityClient.isTrusted,
+            runtimeReadiness: runtimeReadinessSummary,
+            modelDirectoryPath: modelDirectoryPath
+        )
 
         guard lastStatusLine != statusLine else {
             return
@@ -727,13 +744,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     private func requestAccessibilityPermission() {
         accessibilityClient.requestPermissionIfNeeded()
-        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted, runtimeReadiness: runtimeReadinessSummary)
+        settingsWindow.refresh(
+            isTrusted: accessibilityClient.isTrusted,
+            runtimeReadiness: runtimeReadinessSummary,
+            modelDirectoryPath: modelDirectoryPath
+        )
         DiagnosticsLog.shared.record("request-accessibility")
     }
 
     @objc
     private func showSettings() {
-        settingsWindow.show(isTrusted: accessibilityClient.isTrusted, runtimeReadiness: runtimeReadinessSummary)
+        settingsWindow.show(
+            isTrusted: accessibilityClient.isTrusted,
+            runtimeReadiness: runtimeReadinessSummary,
+            modelDirectoryPath: modelDirectoryPath
+        )
+    }
+
+    @objc
+    private func revealModelFolder() {
+        do {
+            try FileManager.default.createDirectory(
+                at: modelRuntimeBundle.modelDirectoryURL,
+                withIntermediateDirectories: true
+            )
+            NSWorkspace.shared.activateFileViewerSelecting([modelRuntimeBundle.modelDirectoryURL])
+            DiagnosticsLog.shared.record(
+                "reveal-model-folder",
+                metadata: ["path": modelDirectoryPath]
+            )
+        } catch {
+            DiagnosticsLog.shared.record(
+                "reveal-model-folder-failed",
+                metadata: ["reason": error.localizedDescription]
+            )
+        }
     }
 
     @objc
@@ -754,6 +799,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appEnabled: appEnabled,
             appTrusted: accessibilityClient.isTrusted,
             runtimeReadiness: runtimeReadinessSummary,
+            modelDirectoryPath: modelDirectoryPath,
             recentEvents: DiagnosticsLog.shared.recentLines(limit: 24)
         )
     }

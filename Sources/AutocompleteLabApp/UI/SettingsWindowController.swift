@@ -6,6 +6,7 @@ final class SettingsWindowController: NSObject {
     private let window: NSWindow
     private let permissionLabel = NSTextField(labelWithString: "")
     private let runtimeLabel = NSTextField(labelWithString: "")
+    private let modelDirectoryLabel = NSTextField(labelWithString: "")
     private let requestPermission: () -> Void
 
     init(requestPermission: @escaping () -> Void) {
@@ -27,16 +28,21 @@ final class SettingsWindowController: NSObject {
         buildContent(in: contentView)
     }
 
-    func show(isTrusted: Bool, runtimeReadiness: String) {
-        refresh(isTrusted: isTrusted, runtimeReadiness: runtimeReadiness)
+    func show(isTrusted: Bool, runtimeReadiness: String, modelDirectoryPath: String) {
+        refresh(
+            isTrusted: isTrusted,
+            runtimeReadiness: runtimeReadiness,
+            modelDirectoryPath: modelDirectoryPath
+        )
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    func refresh(isTrusted: Bool, runtimeReadiness: String) {
+    func refresh(isTrusted: Bool, runtimeReadiness: String, modelDirectoryPath: String) {
         permissionLabel.stringValue = isTrusted ? "Accessibility: granted" : "Accessibility: needed"
         runtimeLabel.stringValue = "Local model: \(runtimeReadiness)"
+        modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
     }
 
     private func buildContent(in contentView: NSView) {
@@ -51,6 +57,9 @@ final class SettingsWindowController: NSObject {
         runtimeLabel.lineBreakMode = .byWordWrapping
         runtimeLabel.maximumNumberOfLines = 0
         runtimeLabel.preferredMaxLayoutWidth = 360
+        modelDirectoryLabel.lineBreakMode = .byTruncatingMiddle
+        modelDirectoryLabel.maximumNumberOfLines = 1
+        modelDirectoryLabel.preferredMaxLayoutWidth = 360
 
         let requestButton = NSButton(title: "Request Accessibility", target: self, action: #selector(requestAccessibility))
         requestButton.bezelStyle = .rounded
@@ -74,6 +83,7 @@ final class SettingsWindowController: NSObject {
             requestButton,
             runtimeLabel,
             runtimeTarget,
+            modelDirectoryLabel,
             screenRecording,
             clipboardFallback,
             note
