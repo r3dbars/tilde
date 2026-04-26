@@ -54,17 +54,32 @@ enum AppModelRuntimeFactory {
         fileManager: FileManager
     ) -> LocalModelAssetState {
         let path = modelAssetPath(for: manifest, fileManager: fileManager)
-        guard fileManager.fileExists(atPath: path) else {
+        var isDirectory = ObjCBool(false)
+        guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory) else {
             return .missing(expectedPath: path)
         }
 
-        guard let attributes = try? fileManager.attributesOfItem(atPath: path),
-              let size = attributes[.size] as? NSNumber,
-              size.int64Value >= manifest.expectedMinimumBytes else {
-            return .invalid(path: path, reason: "file is too small")
+        let childFileNames = Set((try? fileManager.contentsOfDirectory(atPath: path)) ?? [])
+        let modelBytes = childFileNames.reduce(Int64(0)) { total, childFileName in
+            guard childFileName.lowercased().hasSuffix(".\(manifest.requiredModelFileExtension.lowercased())") else {
+                return total
+            }
+
+            let childPath = URL(fileURLWithPath: path)
+                .appendingPathComponent(childFileName, isDirectory: false)
+                .path
+            let size = (try? fileManager.attributesOfItem(atPath: childPath)[.size] as? NSNumber)?
+                .int64Value ?? 0
+
+            return total + size
         }
 
-        return .available(path: path)
+        return manifest.validatedDirectoryState(
+            path: path,
+            isDirectory: isDirectory.boolValue,
+            childFileNames: childFileNames,
+            modelBytes: modelBytes
+        )
     }
 
     private static func modelAssetPath(

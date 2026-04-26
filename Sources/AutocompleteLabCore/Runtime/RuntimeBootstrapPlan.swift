@@ -31,19 +31,25 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
     public let cacheDirectoryName: String
     public let fileName: String
     public let expectedMinimumBytes: Int64
+    public let requiredFileNames: Set<String>
+    public let requiredModelFileExtension: String
 
     public init(
         model: LocalModelID,
         runtimeCandidate: CompletionRuntimeCandidate,
         cacheDirectoryName: String,
         fileName: String,
-        expectedMinimumBytes: Int64
+        expectedMinimumBytes: Int64,
+        requiredFileNames: Set<String> = ["config.json"],
+        requiredModelFileExtension: String = "safetensors"
     ) {
         self.model = model
         self.runtimeCandidate = runtimeCandidate
         self.cacheDirectoryName = cacheDirectoryName
         self.fileName = fileName
         self.expectedMinimumBytes = max(1, expectedMinimumBytes)
+        self.requiredFileNames = requiredFileNames
+        self.requiredModelFileExtension = requiredModelFileExtension
     }
 
     public static let gemma4E2BMLX = LocalModelAssetManifest(
@@ -53,6 +59,39 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         fileName: "gemma-4-e2b-mlx",
         expectedMinimumBytes: 1024 * 1024
     )
+
+    public func validatedDirectoryState(
+        path: String,
+        isDirectory: Bool,
+        childFileNames: Set<String>,
+        modelBytes: Int64
+    ) -> LocalModelAssetState {
+        guard isDirectory else {
+            return .invalid(path: path, reason: "expected a model directory")
+        }
+
+        let missingRequiredFile = requiredFileNames
+            .sorted()
+            .first { !childFileNames.contains($0) }
+
+        if let missingRequiredFile {
+            return .invalid(path: path, reason: "missing \(missingRequiredFile)")
+        }
+
+        let hasModelWeights = childFileNames.contains { fileName in
+            fileName.lowercased().hasSuffix(".\(requiredModelFileExtension.lowercased())")
+        }
+
+        guard hasModelWeights else {
+            return .invalid(path: path, reason: "missing .\(requiredModelFileExtension) weights")
+        }
+
+        guard modelBytes >= expectedMinimumBytes else {
+            return .invalid(path: path, reason: "model weights are too small")
+        }
+
+        return .available(path: path)
+    }
 }
 
 public struct RuntimeBootstrapPlan: Equatable, Sendable {
