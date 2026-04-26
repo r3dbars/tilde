@@ -71,6 +71,10 @@ public struct CompletionModelPolicy: Equatable, Sendable {
         hardware.isAppleSilicon && hardware.memoryGB >= minimumMemoryGB
     }
 
+    public func allowsVisibleWordCount(_ wordCount: Int) -> Bool {
+        wordCount >= Self.minimumVisibleWords && wordCount <= maxVisibleWords
+    }
+
     private static func clampedVisibleWords(_ value: Int) -> Int {
         min(maximumVisibleWords, max(minimumVisibleWords, value))
     }

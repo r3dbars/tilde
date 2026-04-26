@@ -44,10 +44,11 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Prove production readiness only when the app is using the native preferred runtime, not mock fallback.
   - [x] Never require Ollama, llama.cpp, or any separate user-started server.
 
-- [ ] Keep inference tiny.
+- [x] Keep inference tiny.
   - [x] Prompt from a small current sentence/paragraph context window.
   - [x] Cap retained model text to the visible word window.
   - [x] Generate 2-8 visible words.
+  - [x] Suppress one-word twitch completions before they reach the UI.
   - [x] Keep reasoning off.
   - [x] Cancel stale requests when typing continues.
 

@@ -55,8 +55,16 @@ struct CompletionOutputCleanerTests {
     func trimsRepeatedTypedPrefix() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
-        #expect(cleaner.clean("Hey there.", after: "Hey")?.visibleText == " there.")
+        #expect(cleaner.clean("Hey there friend.", after: "Hey")?.visibleText == " there friend.")
         #expect(cleaner.clean("Know you are", after: "I know you are") == nil)
+    }
+
+    @Test("Suppresses one word twitch completions")
+    func suppressesOneWordTwitchCompletions() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("there.", after: "Hey") == nil)
+        #expect(cleaner.clean("ready.", after: "I know you are") == nil)
     }
 
     @Test("Suppresses suggestions that parrot earlier field text")

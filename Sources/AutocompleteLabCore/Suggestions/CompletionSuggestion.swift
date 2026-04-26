@@ -13,6 +13,10 @@ public struct CompletionSuggestion: Equatable, Sendable {
         acceptedPrefix(wordLimit: maxVisibleWords)
     }
 
+    public var visibleWordCount: Int {
+        visibleText.split(whereSeparator: { $0.isWhitespace }).count
+    }
+
     public var isEmpty: Bool {
         visibleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }

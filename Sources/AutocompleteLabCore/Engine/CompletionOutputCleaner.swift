@@ -1,9 +1,14 @@
 import Foundation
 
 public struct CompletionOutputCleaner: Equatable, Sendable {
+    public let minimumVisibleWords: Int
     public let maxVisibleWords: Int
 
-    public init(maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords) {
+    public init(
+        minimumVisibleWords: Int = CompletionModelPolicy.minimumVisibleWords,
+        maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords
+    ) {
+        self.minimumVisibleWords = max(1, minimumVisibleWords)
         self.maxVisibleWords = max(1, maxVisibleWords)
     }
 
@@ -64,7 +69,12 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
-        return CompletionSuggestion(text: trimmedSuggestion, maxVisibleWords: maxVisibleWords)
+        let suggestion = CompletionSuggestion(text: trimmedSuggestion, maxVisibleWords: maxVisibleWords)
+        guard suggestion.visibleWordCount >= minimumVisibleWords else {
+            return nil
+        }
+
+        return suggestion
     }
 
     private func looksLikeAssistantMeta(_ text: String) -> Bool {

@@ -8,6 +8,7 @@ struct SuggestionSessionTests {
         let suggestion = CompletionSuggestion(text: " we should ship this today", maxVisibleWords: 3)
 
         #expect(suggestion.visibleText == " we should ship")
+        #expect(suggestion.visibleWordCount == 3)
         #expect(suggestion.text == " we should ship")
     }
 

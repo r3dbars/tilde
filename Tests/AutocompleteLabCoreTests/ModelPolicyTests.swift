@@ -43,6 +43,16 @@ struct ModelPolicyTests {
         #expect(huge.maxVisibleWords == 8)
     }
 
+    @Test("Model policy accepts only tiny autocomplete-sized visible output")
+    func modelPolicyAcceptsOnlyTinyVisibleOutput() {
+        let policy = CompletionModelPolicy.mvp
+
+        #expect(!policy.allowsVisibleWordCount(1))
+        #expect(policy.allowsVisibleWordCount(2))
+        #expect(policy.allowsVisibleWordCount(6))
+        #expect(!policy.allowsVisibleWordCount(7))
+    }
+
     @Test("M5 with 128 GB is supported")
     func m5With128GBIsSupported() {
         let hardware = HardwareProfile(chipName: "M5 Max", memoryGB: 128, isAppleSilicon: true)
