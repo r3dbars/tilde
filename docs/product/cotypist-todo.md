@@ -36,6 +36,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Package MLX Metal kernels into the standalone app bundle.
   - [x] Switch the playable default to Qwen3 0.6B after Gemma 4 E2B failed current `mlx-swift-lm` weight loading.
   - [x] Upgrade the playable default to Qwen3 1.7B for better autocomplete quality.
+  - [x] Upgrade the playable default to Gemma 4 26B A4B through the MLX VLM loader.
   - Never require Ollama, llama.cpp, or any separate user-started server.
 
 - [ ] Keep inference tiny.
@@ -61,6 +62,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 - [ ] Build repeatable smoke checks.
   - [x] Add a manual smoke checklist for TextEdit, Notes, Obsidian, and Chrome.
   - [x] Verify launch/runtime/status diagnostics in the smoke script.
+  - [x] Wait for Gemma 4 MLX readiness in the smoke script.
   - TextEdit one-word accept and full accept.
   - Notes one-word accept and full accept.
   - Obsidian one-word accept and full accept.

@@ -4,9 +4,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
+LOG_START_LINE=0
+if [[ -f "$LOG_PATH" ]]; then
+  LOG_START_LINE="$(wc -l <"$LOG_PATH" | tr -d ' ')"
+fi
+
 swift test
 ./script/build_and_run.sh --verify
-./script/check_diagnostics_log.sh
+AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
+  AUTOCOMPLETE_LAB_EXPECTED_ASSET="gemma-4-26b-a4b-it-4bit" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$LOG_START_LINE" \
+  ./script/check_diagnostics_log.sh
 
 echo
 echo "Manual app smoke checklist: docs/product/manual-smoke-checklist.md"
