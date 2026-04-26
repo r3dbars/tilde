@@ -34,9 +34,9 @@ struct AutocompleteTraceAnalyzerTests {
     @Test("typed-over hides do not count as ignored")
     func typedOverHidesDoNotCountAsIgnored() {
         let events = [
-            event(.suggestionPresented, suggestionID: "one", displayedText: "this"),
-            event(.suggestionTypedOver, suggestionID: "one", displayedText: "this"),
-            event(.suggestionHidden, suggestionID: "one", displayedText: "this", outcome: "typed-over"),
+            event(.suggestionPresented, suggestionID: "one", displayedText: "s"),
+            event(.suggestionTypedOver, suggestionID: "one", displayedText: "s", metadata: ["typedSuffix": "ng"]),
+            event(.suggestionHidden, suggestionID: "one", displayedText: "s", outcome: "typed-over"),
             event(.suggestionPresented, suggestionID: "two", displayedText: "maybe"),
             event(.suggestionHidden, suggestionID: "two", displayedText: "maybe", outcome: "ignored")
         ]
@@ -45,6 +45,10 @@ struct AutocompleteTraceAnalyzerTests {
 
         #expect(summary.typedOverCount == 1)
         #expect(summary.ignoredCount == 1)
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Typed over: s -> ng"
+                && miss.suggestedCause.contains("ng")
+        })
     }
 
     @Test("flags thinking text and word completion phrases")

@@ -134,10 +134,21 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
         for event in events {
             if event.type == .suggestionTypedOver {
+                let typedSuffix = event.metadata["typedSuffix"]?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let title: String
+                if typedSuffix.isEmpty {
+                    title = "Typed over: \(event.displayedText)"
+                } else {
+                    title = "Typed over: \(event.displayedText) -> \(typedSuffix)"
+                }
+
                 add(
-                    key: "Typed over: \(event.displayedText)",
+                    key: title,
                     event: event,
-                    cause: "The visible suggestion did not match what the user typed next.",
+                    cause: typedSuffix.isEmpty
+                        ? "The visible suggestion did not match what the user typed next."
+                        : "The visible suggestion did not match the next typed text: \(typedSuffix).",
                     category: "word-completion issue",
                     buckets: &buckets
                 )
