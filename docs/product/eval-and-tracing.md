@@ -2,37 +2,43 @@
 
 This is the local tuning loop for making autocomplete better before it becomes customer-facing.
 
-## Local Raw Tracing
+## Local Tracing
 
-Raw tracing is off by default.
+Tracing is local-only and enabled for the lab by default.
 
-Enable it only for private local tuning:
+Disable it for a run with:
 
 ```bash
-AUTOCOMPLETE_LAB_RAW_TRACE=1 ./script/build_and_run.sh
+AUTOCOMPLETE_LAB_TRACE=0 ./script/build_and_run.sh
 ```
 
 The app writes JSONL to:
 
 ```text
-~/Library/Logs/AutocompleteLab/raw-traces.jsonl
+~/Library/Logs/AutocompleteLab/traces.jsonl
 ```
 
-Each `model-result` row records:
+Enable optional local screenshot traces with:
 
-- request mode: `phraseContinuation` or `wordCompletion`
-- app bundle id
-- raw `textBeforeCursor` and `textAfterCursor`
-- system prompt and user prompt
-- raw model output
-- cleaned visible suggestion
+```bash
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/build_and_run.sh
+```
 
-Each `acceptance` row records:
+## Trace Events
 
-- accepted action: `acceptNextWord` or `acceptAllVisible`
-- app bundle id
-- accepted text
-- remaining visible suggestion
+Each suggestion gets a `suggestionID` and emits lifecycle events:
+
+- `suggestionRequested`
+- `modelResult`
+- `suggestionPresented`
+- `suggestionAccepted`
+- `suggestionTypedOver`
+- `suggestionHidden`
+- `suggestionSuppressed`
+- `insertionVerified`
+- `insertionFailed`
+
+Events include app bundle id, request mode, field identity, prompt/output when available, displayed text, accepted text, outcome, reason, and latency.
 
 ## What To Evaluate
 
@@ -45,8 +51,26 @@ Track these rates per app and request mode:
 - suppressed as empty, meta, repeated context, or invalid word completion
 - insertion verification failures
 
+Use the in-app Diagnostics window for the quickest read. It shows recent trace events, top misses, accept rates by app/mode, pause/delete controls, and an HTML export.
+
+Use the command-line checker for repeatable proof:
+
+```bash
+./script/check_trace_eval.sh
+```
+
+For a clean app-specific slice:
+
+```bash
+START_LINE=$(wc -l < "$HOME/Library/Logs/AutocompleteLab/traces.jsonl" | tr -d ' ')
+# do the manual app pass
+AUTOCOMPLETE_LAB_TRACE_START_LINE=$START_LINE \
+AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP=com.apple.TextEdit \
+  ./script/check_trace_eval.sh
+```
+
 ## Current Product Boundary
 
-For the lab, raw traces are useful because the user is tuning their own local model behavior.
+For the lab, raw local traces are useful because the user is tuning their own local model behavior.
 
 For a customer-facing app, keep raw tracing disabled by default and require a clear local-only debug toggle. Do not upload typed text, prompts, outputs, or accepted text without explicit user consent.

@@ -13,8 +13,8 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 - [ ] Finish safe compatibility passes.
   - [x] Encode known primary/fallback paths and a visible debug summary per profile.
   - TextEdit: keep as the green reference app.
-  - Notes: title, body line, and checklist/list accepts verified with AX selected text.
-  - Obsidian: keep CodeMirror behavior stable across AX element churn.
+  - Notes: title/body/list fields use key-event insertion because AX selected-text insertion can report success without moving the caret.
+  - Obsidian: keep CodeMirror behavior stable across AX element churn; do not suppress the whole field after one flaky key-event verification miss.
   - Mail: safe diagnostics pass shows compose body as AXWebArea with empty direct value, no selected range, and no selected-text insertion; profile is diagnostics-only until a safe adapter is verified.
   - Chrome: local textarea passed AX capability checks; live one-word and full accept verified with mirror anchoring and AX value replacement because Chrome's selected-text insert is a no-op.
   - Atlas: keep unsupported until the focused AX element is reliably available.
@@ -83,11 +83,12 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - Chrome text field one-word and full accept.
 
 - [ ] Build the local eval loop.
-  - [x] Add opt-in raw prompt/output tracing for private local tuning.
+  - [x] Add local prompt/output tracing for private local tuning.
   - [x] Trace accepted Tab and full-visible completions when raw tracing is enabled.
   - [x] Document the local eval metrics to track.
-  - Aggregate accept / ignore / reject rates by app and request mode.
-  - Add a small trace summarizer.
+  - [x] Aggregate accept / ignore / reject rates by app and request mode.
+  - [x] Add a small trace summarizer.
+  - [x] Add a trace eval checker with app-specific proof gates.
 
 - [x] Keep every meaningful behavior covered by tests.
   - [x] Core routing and activation tests.

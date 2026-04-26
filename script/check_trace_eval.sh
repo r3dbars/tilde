@@ -2,21 +2,27 @@
 set -euo pipefail
 
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
+START_LINE="${AUTOCOMPLETE_LAB_TRACE_START_LINE:-0}"
+REQUIRE_APP="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP:-}"
 
 if [[ ! -f "$TRACE_PATH" ]]; then
   echo "trace log missing: $TRACE_PATH" >&2
   exit 1
 fi
 
-python3 - "$TRACE_PATH" <<'PY'
+python3 - "$TRACE_PATH" "$START_LINE" "$REQUIRE_APP" <<'PY'
 import json
 import sys
 from collections import Counter, defaultdict
 
 path = sys.argv[1]
+start_line = int(sys.argv[2] or "0")
+require_app = sys.argv[3]
 events = []
 with open(path, "r", encoding="utf-8") as handle:
-    for line in handle:
+    for line_number, line in enumerate(handle, start=1):
+        if line_number <= start_line:
+            continue
         line = line.strip()
         if not line:
             continue
@@ -26,7 +32,7 @@ with open(path, "r", encoding="utf-8") as handle:
             raise SystemExit(f"invalid JSONL: {error}") from error
 
 if not events:
-    raise SystemExit("trace log is empty")
+    raise SystemExit("trace slice is empty")
 
 types = Counter(event.get("type", "") for event in events)
 presented = [event for event in events if event.get("type") == "suggestionPresented"]
@@ -52,14 +58,18 @@ if not latencies:
     missing.append("latencyMilliseconds")
 
 accept_by_mode = defaultdict(lambda: [0, 0])
+accept_by_app = defaultdict(lambda: [0, 0])
 for event in presented_by_id.values():
     accept_by_mode[event.get("requestMode") or "unknown"][1] += 1
+    accept_by_app[event.get("appBundleIdentifier") or "unknown"][1] += 1
 for suggestion_id in accepted_ids:
     event = presented_by_id.get(suggestion_id)
     if event:
         accept_by_mode[event.get("requestMode") or "unknown"][0] += 1
+        accept_by_app[event.get("appBundleIdentifier") or "unknown"][0] += 1
 
 print(f"Trace: {path}")
+print(f"Start line: {start_line}")
 print(f"Events: {len(events)}")
 print(f"Presented: {len(presented)}")
 print(f"Accepted keypresses: {len(accepted)}")
@@ -73,6 +83,41 @@ print("Accept rate by mode:")
 for mode, (accepted_count, shown_count) in sorted(accept_by_mode.items()):
     rate = 0 if shown_count == 0 else round((accepted_count / shown_count) * 100)
     print(f"  {mode}: {rate}% ({accepted_count}/{shown_count})")
+print("Accept rate by app:")
+for app, (accepted_count, shown_count) in sorted(accept_by_app.items()):
+    rate = 0 if shown_count == 0 else round((accepted_count / shown_count) * 100)
+    print(f"  {app}: {rate}% ({accepted_count}/{shown_count})")
+
+if require_app:
+    app_events = [event for event in events if event.get("appBundleIdentifier") == require_app]
+    app_presented = [event for event in presented if event.get("appBundleIdentifier") == require_app]
+    app_accepted_ids = {
+        event.get("suggestionID")
+        for event in accepted
+        if event.get("appBundleIdentifier") == require_app and event.get("suggestionID")
+    }
+    app_presented_ids = {
+        event.get("suggestionID")
+        for event in app_presented
+        if event.get("suggestionID")
+    }
+    app_verified = [
+        event for event in app_events
+        if event.get("type") == "insertionVerified"
+    ]
+    app_failed = [
+        event for event in app_events
+        if event.get("type") == "insertionFailed"
+    ]
+
+    if not app_presented:
+        missing.append(f"{require_app}: suggestionPresented")
+    if not app_accepted_ids.intersection(app_presented_ids):
+        missing.append(f"{require_app}: accepted suggestion")
+    if not app_verified:
+        missing.append(f"{require_app}: insertionVerified")
+    if app_failed:
+        missing.append(f"{require_app}: no insertionFailed")
 
 if missing:
     raise SystemExit("missing required trace coverage: " + ", ".join(missing))
