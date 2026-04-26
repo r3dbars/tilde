@@ -6,7 +6,8 @@ For a repeatable local record, run `script/manual_smoke_session.sh <app>` before
 each app pass. It prints the steps, waits while you test, then validates the
 new diagnostics for suggestion presentation, insert, and insertion verification.
 Successful runs are recorded in `docs/product/manual-smoke-runs.md`.
-Run `script/manual_smoke_status.sh` to see which target apps still need proof.
+Run `script/manual_smoke_status.sh` to see which target apps still need proof,
+or `script/manual_smoke_status.sh --require-all` when compatibility proof should block release/beta work.
 
 ## Setup
 

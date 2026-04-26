@@ -63,6 +63,9 @@ for app_name in TextEdit Notes Obsidian Chrome; do
   fi
 done
 
+AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_status.sh --require-all >/dev/null
+
 EMPTY_REPORT="$TMP_DIR/empty-manual-smoke-runs.md"
 cat >"$EMPTY_REPORT" <<'EOF'
 # Manual Smoke Runs
@@ -76,6 +79,12 @@ AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$EMPTY_REPORT" \
 
 if ! grep -F -- "- TextEdit: pending" "$STATUS_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not report missing app proof as pending" >&2
+  exit 1
+fi
+
+if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$EMPTY_REPORT" \
+  script/manual_smoke_status.sh --require-all >/dev/null 2>&1; then
+  echo "manual smoke self-test expected --require-all to fail without app proof" >&2
   exit 1
 fi
 

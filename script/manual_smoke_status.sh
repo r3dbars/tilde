@@ -2,6 +2,25 @@
 set -euo pipefail
 
 REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-runs.md}"
+MODE="${1:-}"
+
+if [[ "$MODE" == "-h" || "$MODE" == "--help" ]]; then
+  cat <<'EOF'
+Usage: script/manual_smoke_status.sh [--require-all]
+
+Shows which target apps have real manual smoke proof in
+docs/product/manual-smoke-runs.md.
+
+Use --require-all when you want the command to fail until every target app has
+at least one recorded pass with two or more verified accepts.
+EOF
+  exit 0
+fi
+
+if [[ -n "$MODE" && "$MODE" != "--require-all" ]]; then
+  echo "unknown option: $MODE" >&2
+  exit 2
+fi
 
 declare -a APPS=(
   "TextEdit|com.apple.TextEdit"
@@ -34,5 +53,8 @@ done
 if (( missing > 0 )); then
   echo
   echo "$missing target app pass(es) still need real manual smoke proof."
-fi
 
+  if [[ "$MODE" == "--require-all" ]]; then
+    exit 1
+  fi
+fi
