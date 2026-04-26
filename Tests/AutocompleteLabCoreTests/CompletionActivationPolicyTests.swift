@@ -18,7 +18,7 @@ struct CompletionActivationPolicyTests {
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: false
-        ) == .allow(.wordCompletion))
+        ) == .allow(.phraseContinuation))
     }
 
     @Test("Allows suggestions before trailing whitespace on the current line")
@@ -110,6 +110,18 @@ struct CompletionActivationPolicyTests {
             isSecure: false,
             isFieldSuppressed: false
         ) == .allow(.wordCompletion))
+    }
+
+    @Test("Does not treat punctuation as word completion")
+    func doesNotTreatPunctuationAsWordCompletion() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "the thing.",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.phraseContinuation))
     }
 
     @Test("Blocks common complete one word context")

@@ -102,7 +102,7 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
     private func isWordCompletionEligible(textBeforeCursor: String, textAfterCursor: String) -> Bool {
         guard isAtEndOfCurrentLine(textAfterCursor: textAfterCursor),
               let last = textBeforeCursor.last,
-              !last.isWhitespace,
+              last.isLetter,
               let fragment = textBeforeCursor.split(whereSeparator: { $0.isWhitespace }).last else {
             return false
         }
@@ -126,10 +126,10 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         "for", "from",
         "hey", "hi", "hello",
         "i", "if", "in", "is", "it",
-        "no", "not",
+        "need", "no", "not",
         "of", "on", "or",
         "so",
-        "the", "then", "to",
-        "we", "yes", "you"
+        "the", "then", "thing", "this", "to",
+        "want", "we", "yes", "you"
     ]
 }

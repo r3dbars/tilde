@@ -43,7 +43,7 @@ struct SuggestionTriggerPolicyTests {
         let policy = SuggestionTriggerPolicy(charactersBeforePauseRequest: 4)
 
         #expect(policy.decision(previousTextBeforeCursor: "I thi", currentTextBeforeCursor: "I thin") == .request(delayMilliseconds: 60))
-        #expect(policy.decision(previousTextBeforeCursor: "I ", currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 180))
+        #expect(policy.decision(previousTextBeforeCursor: "I ", currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 60))
     }
 
     @Test("Word fragments trigger quickly for completion")
@@ -52,5 +52,15 @@ struct SuggestionTriggerPolicyTests {
 
         #expect(policy.decision(previousTextBeforeCursor: "d", currentTextBeforeCursor: "di") == .request(delayMilliseconds: 50))
         #expect(policy.decision(previousTextBeforeCursor: "di", currentTextBeforeCursor: "dic") == .request(delayMilliseconds: 50))
+    }
+
+    @Test("Word fragments after a space trigger quickly for completion")
+    func wordFragmentsAfterSpaceTriggerQuickly() {
+        let policy = SuggestionTriggerPolicy(wordCompletionDelayMilliseconds: 50)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I need the ",
+            currentTextBeforeCursor: "I need the tr"
+        ) == .request(delayMilliseconds: 50))
     }
 }

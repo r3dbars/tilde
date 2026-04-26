@@ -338,6 +338,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "reason": "cadence-policy"
                 ]
             )
+            hideSuggestion()
             return
         }
 
@@ -665,6 +666,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         profile: profile,
                         metadata: [
                             "effectiveRenderMode": renderMode.rawValue,
+                            "requestMode": request.mode.rawValue,
                             "visibleChars": String(suggestion.visibleText.count)
                         ]
                     )

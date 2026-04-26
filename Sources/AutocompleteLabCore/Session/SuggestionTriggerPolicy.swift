@@ -73,9 +73,15 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
     private func shouldRequestWordCompletion(previousTextBeforeCursor: String, currentTextBeforeCursor: String) -> Bool {
         guard let currentFragment = trailingWordFragment(in: currentTextBeforeCursor),
               currentFragment.count >= 2,
-              currentFragment.allSatisfy({ $0.isLetter }),
-              let previousFragment = trailingWordFragment(in: previousTextBeforeCursor),
-              currentFragment.hasPrefix(previousFragment) || previousFragment.hasPrefix(currentFragment) else {
+              currentFragment.allSatisfy({ $0.isLetter }) else {
+            return false
+        }
+
+        guard let previousFragment = trailingWordFragment(in: previousTextBeforeCursor) else {
+            return previousTextBeforeCursor.last?.isNaturalBoundary == true
+        }
+
+        guard currentFragment.hasPrefix(previousFragment) || previousFragment.hasPrefix(currentFragment) else {
             return false
         }
 
