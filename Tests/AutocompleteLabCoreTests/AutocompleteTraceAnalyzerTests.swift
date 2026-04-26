@@ -49,30 +49,61 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.topMisses.contains { $0.title == "Model leaked thinking text" })
     }
 
+    @Test("flags detached suggestion renderer misses")
+    func flagsDetachedSuggestionMisses() {
+        let events = [
+            event(
+                .suggestionSuppressed,
+                suggestionID: "one",
+                appBundleIdentifier: "md.obsidian",
+                reason: "detached-suggestion-disabled"
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "two",
+                appBundleIdentifier: "md.obsidian",
+                displayedText: "thanks for asking",
+                metadata: [
+                    "effectiveRenderMode": "floatingMirror",
+                    "hasCaretRect": "false"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.topMisses.contains { $0.title == "Detached suggestions suppressed in md.obsidian" })
+        #expect(summary.topMisses.contains { $0.title == "Detached suggestion shown in md.obsidian" })
+        #expect(summary.topMisses.allSatisfy { $0.fixCategory == "renderer/caret bug" })
+    }
+
     private func event(
         _ type: AutocompleteTraceEventType,
         suggestionID: String,
+        appBundleIdentifier: String = "com.apple.TextEdit",
         requestMode: String = "wordCompletion",
         rawOutput: String = "",
         cleanedVisibleText: String = "",
         displayedText: String = "",
         acceptedText: String = "",
         latency: Int? = nil,
-        reason: String = ""
+        reason: String = "",
+        metadata: [String: String] = [:]
     ) -> AutocompleteTraceEvent {
         AutocompleteTraceEvent(
             timestamp: "2026-04-26T00:00:00Z",
             sessionID: "session",
             suggestionID: suggestionID,
             type: type,
-            appBundleIdentifier: "com.apple.TextEdit",
+            appBundleIdentifier: appBundleIdentifier,
             requestMode: requestMode,
             rawOutput: rawOutput,
             cleanedVisibleText: cleanedVisibleText,
             displayedText: displayedText,
             acceptedText: acceptedText,
             latencyMilliseconds: latency,
-            reason: reason
+            reason: reason,
+            metadata: metadata
         )
     }
 }

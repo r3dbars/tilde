@@ -346,6 +346,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: context,
             renderMode: renderMode
         ) {
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: UUID().uuidString,
+                appBundleIdentifier: profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity.traceDescription,
+                requestMode: (activationDecision.requestMode ?? .phraseContinuation).rawValue,
+                triggerReason: "policy",
+                textBeforeCursor: context.textBeforeCursor,
+                textAfterCursor: context.textAfterCursor,
+                reason: "detached-suggestion-disabled",
+                metadata: traceGeometryMetadata(context: context, renderMode: renderMode)
+            )
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
@@ -903,7 +915,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "effectiveRenderMode": renderMode.rawValue,
                 "visibleChars": String(suggestion.visibleText.count)
-            ]
+            ].merging(traceGeometryMetadata(context: context, renderMode: renderMode)) { current, _ in current }
         )
         recordSuggestionEvent(
             "suggestion-presented",
@@ -949,6 +961,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             return ""
         }
+    }
+
+    private func traceGeometryMetadata(
+        context: FocusedTextContext,
+        renderMode: SuggestionRenderMode
+    ) -> [String: String] {
+        [
+            "effectiveRenderMode": renderMode.rawValue,
+            "hasCaretRect": String(context.caretRect != nil),
+            "hasElementRect": String(context.elementRect != nil),
+            "hasWindowRect": String(context.windowRect != nil),
+            "canReadBounds": String(context.capabilities.canReadBoundsForRange)
+        ]
     }
 
     private func recordSuggestionEvent(

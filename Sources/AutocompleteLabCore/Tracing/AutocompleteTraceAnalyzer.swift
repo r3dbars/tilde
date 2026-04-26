@@ -185,6 +185,29 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                     buckets: &buckets
                 )
             }
+
+            if event.type == .suggestionSuppressed,
+               event.reason == "detached-suggestion-disabled" {
+                add(
+                    key: "Detached suggestions suppressed in \(event.appBundleIdentifier)",
+                    event: event,
+                    cause: "The target app did not expose reliable caret bounds, so the app refused to show a detached suggestion.",
+                    category: "renderer/caret bug",
+                    buckets: &buckets
+                )
+            }
+
+            if event.type == .suggestionPresented,
+               event.metadata["effectiveRenderMode"] == "floatingMirror",
+               event.metadata["hasCaretRect"] == "false" {
+                add(
+                    key: "Detached suggestion shown in \(event.appBundleIdentifier)",
+                    event: event,
+                    cause: "A floating suggestion was shown from a whole-field or window anchor instead of a caret anchor.",
+                    category: "renderer/caret bug",
+                    buckets: &buckets
+                )
+            }
         }
 
         return buckets
