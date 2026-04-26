@@ -12,6 +12,35 @@ struct ModelPolicyTests {
         #expect(policy.reasoningEnabled == false)
         #expect(policy.maxGeneratedTokens == 12)
         #expect(policy.maxVisibleWords == 6)
+        #expect(policy.maxVisibleWords >= CompletionModelPolicy.minimumVisibleWords)
+        #expect(policy.maxVisibleWords <= CompletionModelPolicy.maximumVisibleWords)
+    }
+
+    @Test("Model policy clamps visible completions to autocomplete size")
+    func modelPolicyClampsVisibleCompletions() {
+        let tiny = CompletionModelPolicy(
+            model: .gemma4A4B,
+            runtimeOwnership: .appOwnedEmbedded,
+            minimumMemoryGB: 64,
+            maxGeneratedTokens: 12,
+            maxVisibleWords: 1,
+            debounceMilliseconds: 240,
+            targetLatencyMilliseconds: 900,
+            reasoningEnabled: false
+        )
+        let huge = CompletionModelPolicy(
+            model: .gemma4A4B,
+            runtimeOwnership: .appOwnedEmbedded,
+            minimumMemoryGB: 64,
+            maxGeneratedTokens: 12,
+            maxVisibleWords: 20,
+            debounceMilliseconds: 240,
+            targetLatencyMilliseconds: 900,
+            reasoningEnabled: false
+        )
+
+        #expect(tiny.maxVisibleWords == 2)
+        #expect(huge.maxVisibleWords == 8)
     }
 
     @Test("M5 with 128 GB is supported")

@@ -24,6 +24,9 @@ public enum ModelRuntimeOwnership: String, Equatable, Sendable {
 }
 
 public struct CompletionModelPolicy: Equatable, Sendable {
+    public static let minimumVisibleWords = 2
+    public static let maximumVisibleWords = 8
+
     public let model: LocalModelID
     public let runtimeOwnership: ModelRuntimeOwnership
     public let minimumMemoryGB: Int
@@ -47,7 +50,7 @@ public struct CompletionModelPolicy: Equatable, Sendable {
         self.runtimeOwnership = runtimeOwnership
         self.minimumMemoryGB = minimumMemoryGB
         self.maxGeneratedTokens = maxGeneratedTokens
-        self.maxVisibleWords = maxVisibleWords
+        self.maxVisibleWords = Self.clampedVisibleWords(maxVisibleWords)
         self.debounceMilliseconds = debounceMilliseconds
         self.targetLatencyMilliseconds = targetLatencyMilliseconds
         self.reasoningEnabled = reasoningEnabled
@@ -66,5 +69,9 @@ public struct CompletionModelPolicy: Equatable, Sendable {
 
     public func supports(_ hardware: HardwareProfile) -> Bool {
         hardware.isAppleSilicon && hardware.memoryGB >= minimumMemoryGB
+    }
+
+    private static func clampedVisibleWords(_ value: Int) -> Int {
+        min(maximumVisibleWords, max(minimumVisibleWords, value))
     }
 }

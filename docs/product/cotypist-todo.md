@@ -45,8 +45,8 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 - [ ] Keep inference tiny.
   - [x] Prompt from a small current sentence/paragraph context window.
   - [x] Cap retained model text to the visible word window.
-  - Generate 2-8 visible words.
-  - Keep reasoning off.
+  - [x] Generate 2-8 visible words.
+  - [x] Keep reasoning off.
   - [x] Cancel stale requests when typing continues.
 
 ## UX Polish
