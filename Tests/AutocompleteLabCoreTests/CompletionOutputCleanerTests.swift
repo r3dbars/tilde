@@ -35,6 +35,14 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("The user is trying to write a sentence") == nil)
     }
 
+    @Test("Suppresses generic chat filler")
+    func suppressesGenericChatFiller() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("That makes a lot of sense I would") == nil)
+        #expect(cleaner.clean("I would like to help with that") == nil)
+    }
+
     @Test("Uses only first line")
     func usesOnlyFirstLine() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)

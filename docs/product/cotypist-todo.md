@@ -35,6 +35,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Add a local MLX download helper.
   - [x] Package MLX Metal kernels into the standalone app bundle.
   - [x] Switch the playable default to Qwen3 0.6B after Gemma 4 E2B failed current `mlx-swift-lm` weight loading.
+  - [x] Upgrade the playable default to Qwen3 1.7B for better autocomplete quality.
   - Never require Ollama, llama.cpp, or any separate user-started server.
 
 - [ ] Keep inference tiny.

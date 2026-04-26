@@ -119,6 +119,14 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         expectedMinimumBytes: 256 * 1024 * 1024
     )
 
+    public static let qwen3MediumMLX = LocalModelAssetManifest(
+        model: .qwen3Medium,
+        runtimeCandidate: .mlx,
+        cacheDirectoryName: "Models/Qwen3Medium/MLX",
+        fileName: "qwen3-1.7b-4bit",
+        expectedMinimumBytes: 768 * 1024 * 1024
+    )
+
     public func validatedDirectoryState(
         path: String,
         isDirectory: Bool,
@@ -161,7 +169,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
 
     public init(
         decision: EmbeddedRuntimeDecision = .mvp,
-        preferredAsset: LocalModelAssetManifest = .qwen3SmallMLX,
+        preferredAsset: LocalModelAssetManifest = .qwen3MediumMLX,
         assetState: LocalModelAssetState,
         nativeRuntimeAvailable: Bool
     ) {

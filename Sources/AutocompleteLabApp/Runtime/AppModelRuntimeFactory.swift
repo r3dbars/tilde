@@ -34,7 +34,7 @@ enum AppModelRuntimeFactory {
     static func makeRuntime(
         fileManager: FileManager = .default
     ) -> AppModelRuntimeBundle {
-        let manifest = LocalModelAssetManifest.qwen3SmallMLX
+        let manifest = LocalModelAssetManifest.qwen3MediumMLX
         let modelDirectoryURL = modelAssetURL(for: manifest, fileManager: fileManager)
         let assetState = modelAssetState(
             for: manifest,

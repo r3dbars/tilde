@@ -7,11 +7,11 @@ struct ModelPolicyTests {
     func mvpPolicy() {
         let policy = CompletionModelPolicy.mvp
 
-        #expect(policy.model == .qwen3Small)
+        #expect(policy.model == .qwen3Medium)
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)
-        #expect(policy.maxGeneratedTokens == 16)
-        #expect(policy.maxVisibleWords == 8)
+        #expect(policy.maxGeneratedTokens == 12)
+        #expect(policy.maxVisibleWords == 6)
     }
 
     @Test("M1 with 16 GB is supported")

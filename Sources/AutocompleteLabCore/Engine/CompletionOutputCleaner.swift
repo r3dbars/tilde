@@ -39,6 +39,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        guard !looksLikeGenericChatFiller(singleLine) else {
+            return nil
+        }
+
         return CompletionSuggestion(text: ensureLeadingSpace(singleLine), maxVisibleWords: maxVisibleWords)
     }
 
@@ -54,6 +58,19 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("user is ")
             || normalized.hasPrefix("assistant:")
             || normalized.hasPrefix("system:")
+    }
+
+    private func looksLikeGenericChatFiller(_ text: String) -> Bool {
+        let normalized = text
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return normalized.hasPrefix("that makes a lot of sense")
+            || normalized.hasPrefix("i would like to")
+            || normalized.hasPrefix("okay, i would")
+            || normalized.hasPrefix("okay, would")
+            || normalized.hasPrefix("sure,")
+            || normalized.hasPrefix("certainly,")
     }
 
     private func ensureLeadingSpace(_ text: String) -> String {

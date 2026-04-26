@@ -3,10 +3,10 @@ import os
 import sys
 from pathlib import Path
 
-REPO_ID = "mlx-community/Qwen3-0.6B-4bit"
+REPO_ID = "mlx-community/Qwen3-1.7B-4bit"
 TARGET = (
     Path.home()
-    / "Library/Application Support/AutocompleteLab/Models/Qwen3Small/MLX/qwen3-0.6b-4bit"
+    / "Library/Application Support/AutocompleteLab/Models/Qwen3Medium/MLX/qwen3-1.7b-4bit"
 )
 ALLOW_PATTERNS = [
     "chat_template.jinja",

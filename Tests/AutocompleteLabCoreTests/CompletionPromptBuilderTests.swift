@@ -9,9 +9,11 @@ struct CompletionPromptBuilderTests {
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
 
         #expect(prompt.system.contains("next 5 words or fewer"))
+        #expect(prompt.system.contains("inline autocomplete engine"))
         #expect(prompt.system.contains("No explanation"))
         #expect(prompt.system.contains("No reasoning"))
-        #expect(prompt.user == "I think we should")
+        #expect(prompt.user.contains("Text before cursor:\nI think we should"))
+        #expect(prompt.user.hasSuffix("Autocomplete continuation:"))
     }
 
     @Test("Prompt trims long context from the left")
@@ -20,6 +22,7 @@ struct CompletionPromptBuilderTests {
         let longText = String(repeating: "a", count: 200)
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: longText))
 
-        #expect(prompt.user.count == 120)
+        #expect(prompt.user.contains(String(repeating: "a", count: 120)))
+        #expect(!prompt.user.contains(String(repeating: "a", count: 121)))
     }
 }

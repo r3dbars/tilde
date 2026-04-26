@@ -26,8 +26,15 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let context = String(request.textBeforeCursor.suffix(maxContextCharacters))
 
         return CompletionPrompt(
-            system: "Complete the user's writing. Return only the next \(maxVisibleWords) words or fewer. No quotes. No explanation. No reasoning.",
-            user: context
+            system: """
+            You are an inline autocomplete engine, not a chat assistant.
+            Continue only the exact writing before the cursor.
+            Return only the next \(maxVisibleWords) words or fewer.
+            Do not answer, explain, summarize, greet, restart the sentence, or mention the user.
+            No explanation.
+            No quotes. No reasoning.
+            """,
+            user: "Text before cursor:\n\(context)\n\nAutocomplete continuation:"
         )
     }
 }
