@@ -262,6 +262,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: fieldIdentity,
             profile: profile
         )
+        hideStaleSuggestionIfNeeded(
+            newTextBeforeCursor: context.textBeforeCursor,
+            fieldIdentity: fieldIdentity
+        )
 
         lastTextSnapshot = snapshot
         invalidatePendingSuggestionRequest()
@@ -436,7 +440,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionSession.commitNextWordAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
             recordRawAcceptance(action: action, acceptedText: acceptedText)
-            refreshVisibleSuggestion()
+            if suggestionSession.hasVisibleSuggestion {
+                refreshVisibleSuggestion()
+            } else {
+                hideSuggestion(reason: "accepted-next-word-final")
+            }
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
@@ -1177,9 +1185,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private func hideStaleSuggestionIfNeeded(
+        newTextBeforeCursor: String,
+        fieldIdentity: FocusedFieldIdentity
+    ) {
+        guard suggestionSession.hasVisibleSuggestion,
+              fieldIdentity == currentFieldIdentity,
+              let originalTextBeforeCursor = currentSuggestionTextBeforeCursor,
+              let displayedText = currentSuggestionDisplayedText,
+              newTextBeforeCursor.hasPrefix(originalTextBeforeCursor),
+              newTextBeforeCursor != originalTextBeforeCursor else {
+            return
+        }
+
+        let typedSuffix = String(newTextBeforeCursor.dropFirst(originalTextBeforeCursor.count))
+        let normalizedDisplayed = displayedText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedTyped = typedSuffix.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        if normalizedDisplayed.hasPrefix(normalizedTyped), !normalizedTyped.isEmpty {
+            hideSuggestion(reason: "typed-through-visible-prefix")
+        } else {
+            hideSuggestion(reason: "stale-text-changed")
+        }
+    }
+
     private func hideSuggestion(reason: String = "hidden") {
         if suggestionSession.hasVisibleSuggestion,
            let suggestionID = currentSuggestionID {
+            let outcome: String
+            if reason.hasPrefix("accepted") {
+                outcome = "accepted"
+            } else if reason == "typed-through-visible-prefix" {
+                outcome = "typed-through"
+            } else {
+                outcome = "ignored"
+            }
+
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionHidden,
                 suggestionID: suggestionID,
@@ -1187,7 +1228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 fieldIdentity: currentFieldIdentity?.traceDescription ?? "",
                 requestMode: currentSuggestionRequestMode?.rawValue ?? "",
                 displayedText: currentSuggestionDisplayedText ?? suggestionSession.visibleSuggestion?.visibleText ?? "",
-                outcome: reason == "accepted-all" ? "accepted" : "ignored",
+                outcome: outcome,
                 reason: reason
             )
         }
