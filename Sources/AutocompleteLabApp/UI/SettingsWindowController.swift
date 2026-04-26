@@ -76,7 +76,7 @@ final class SettingsWindowController: NSObject {
         let requestButton = NSButton(title: "Request Accessibility", target: self, action: #selector(requestAccessibility))
         requestButton.bezelStyle = .rounded
 
-        let runtimeTarget = NSTextField(labelWithString: "Runtime target: app-owned Qwen3 1.7B MLX")
+        let runtimeTarget = NSTextField(labelWithString: "Runtime target: app-owned Gemma 4 26B A4B MLX")
         runtimeTarget.textColor = .secondaryLabelColor
 
         let screenRecording = NSButton(checkboxWithTitle: "Screen Recording", target: nil, action: nil)

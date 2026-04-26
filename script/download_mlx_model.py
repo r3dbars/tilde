@@ -3,10 +3,10 @@ import os
 import sys
 from pathlib import Path
 
-REPO_ID = "mlx-community/Qwen3-1.7B-4bit"
+REPO_ID = "mlx-community/gemma-4-26b-a4b-it-4bit"
 TARGET = (
     Path.home()
-    / "Library/Application Support/AutocompleteLab/Models/Qwen3Medium/MLX/qwen3-1.7b-4bit"
+    / "Library/Application Support/AutocompleteLab/Models/Gemma4A4B/MLX/gemma-4-26b-a4b-it-4bit"
 )
 ALLOW_PATTERNS = [
     "chat_template.jinja",
@@ -15,8 +15,10 @@ ALLOW_PATTERNS = [
     "*.safetensors",
     "*.safetensors.index.json",
     "merges.txt",
+    "preprocessor_config.json",
     "processor_config.json",
     "special_tokens_map.json",
+    "tokenizer.model",
     "tokenizer.json",
     "tokenizer_config.json",
     "vocab.json",

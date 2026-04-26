@@ -74,7 +74,7 @@ struct RuntimePolicyTests {
         let missingReport = missingPlan.readinessReport(for: .ready(candidate: .mock))
 
         #expect(missingReport.stage == .downloadNeeded)
-        #expect(missingReport.summary == "download needed (Qwen3 1.7B); fallback: ready (mock)")
+        #expect(missingReport.summary == "download needed (Gemma 4 26B A4B); fallback: ready (mock)")
         #expect(missingReport.detail == "Expected MLX model folder at /tmp/gemma")
         #expect(missingReport.action == .revealModelFolder)
 
@@ -104,20 +104,21 @@ struct RuntimePolicyTests {
         #expect(report.isReady)
     }
 
-    @Test("Qwen asset manifest is MLX first")
-    func qwenAssetManifestIsMLXFirst() {
-        let manifest = LocalModelAssetManifest.qwen3MediumMLX
+    @Test("Gemma 4 asset manifest is MLX first")
+    func gemma4AssetManifestIsMLXFirst() {
+        let manifest = LocalModelAssetManifest.gemma4A4BMLX
 
-        #expect(manifest.model == .qwen3Medium)
+        #expect(manifest.model == .gemma4A4B)
         #expect(manifest.runtimeCandidate == .mlx)
-        #expect(manifest.cacheDirectoryName.contains("Qwen3Medium"))
+        #expect(manifest.cacheDirectoryName.contains("Gemma4A4B"))
         #expect(manifest.requiredFileNames.contains("config.json"))
         #expect(manifest.requiredModelFileExtension == "safetensors")
+        #expect(manifest.requiresVisionLanguageFactory)
     }
 
     @Test("MLX model asset validation expects a Hugging Face directory")
     func mlxAssetValidationExpectsDirectory() {
-        let manifest = LocalModelAssetManifest.qwen3MediumMLX
+        let manifest = LocalModelAssetManifest.gemma4A4BMLX
 
         #expect(manifest.validatedDirectoryState(
             path: "/tmp/gemma",
@@ -138,13 +139,20 @@ struct RuntimePolicyTests {
             isDirectory: true,
             childFileNames: ["config.json", "tokenizer.json"],
             modelBytes: 2_000_000
+        ) == .invalid(path: "/tmp/gemma", reason: "missing tokenizer_config.json"))
+
+        #expect(manifest.validatedDirectoryState(
+            path: "/tmp/gemma",
+            isDirectory: true,
+            childFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"],
+            modelBytes: 2_000_000
         ) == .invalid(path: "/tmp/gemma", reason: "missing .safetensors weights"))
 
         #expect(manifest.validatedDirectoryState(
             path: "/tmp/gemma",
             isDirectory: true,
-            childFileNames: ["config.json", "tokenizer.json", "model.safetensors"],
-            modelBytes: 1024 * 1024 * 1024
+            childFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json", "model.safetensors"],
+            modelBytes: 16 * 1024 * 1024 * 1024
         ) == .available(path: "/tmp/gemma"))
     }
 
@@ -167,8 +175,8 @@ struct RuntimePolicyTests {
         let benchmark = CompletionRuntimeBenchmark(
             candidate: .mlx,
             samples: [
-                CompletionLatencySample(candidate: .mlx, milliseconds: 900, tokenCount: 8),
-                CompletionLatencySample(candidate: .mlx, milliseconds: 800, tokenCount: 8)
+                CompletionLatencySample(candidate: .mlx, milliseconds: 1_100, tokenCount: 8),
+                CompletionLatencySample(candidate: .mlx, milliseconds: 1_000, tokenCount: 8)
             ]
         )
 

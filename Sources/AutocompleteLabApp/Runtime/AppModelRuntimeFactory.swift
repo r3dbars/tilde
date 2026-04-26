@@ -34,7 +34,7 @@ enum AppModelRuntimeFactory {
     static func makeRuntime(
         fileManager: FileManager = .default
     ) -> AppModelRuntimeBundle {
-        let manifest = LocalModelAssetManifest.qwen3MediumMLX
+        let manifest = LocalModelAssetManifest.gemma4A4BMLX
         let modelDirectoryURL = modelAssetURL(for: manifest, fileManager: fileManager)
         let assetState = modelAssetState(
             for: manifest,
@@ -49,7 +49,10 @@ enum AppModelRuntimeFactory {
         let runtime: any ModelRuntime
 
         if plan.activeCandidate == .mlx {
-            runtime = MLXModelRuntime(modelDirectoryURL: modelDirectoryURL)
+            runtime = MLXModelRuntime(
+                modelDirectoryURL: modelDirectoryURL,
+                usesVisionLanguageFactory: manifest.requiresVisionLanguageFactory
+            )
         } else {
             runtime = MockModelRuntime(candidate: plan.activeCandidate)
         }

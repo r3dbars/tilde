@@ -3,10 +3,12 @@ import AutocompleteLabCore
 import MLXHuggingFace
 import MLXLLM
 import MLXLMCommon
+import MLXVLM
 import Tokenizers
 
 public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private let modelDirectoryURL: URL
+    private let usesVisionLanguageFactory: Bool
     private let promptBuilder: CompletionPromptBuilder
     private let cleaner: CompletionOutputCleaner
     private let stateQueue = DispatchQueue(label: "app.transcripted.autocomplete.mlx-model-runtime")
@@ -17,10 +19,12 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     public init(
         modelDirectoryURL: URL,
+        usesVisionLanguageFactory: Bool = false,
         promptBuilder: CompletionPromptBuilder = CompletionPromptBuilder(),
         cleaner: CompletionOutputCleaner = CompletionOutputCleaner()
     ) {
         self.modelDirectoryURL = modelDirectoryURL
+        self.usesVisionLanguageFactory = usesVisionLanguageFactory
         self.promptBuilder = promptBuilder
         self.cleaner = cleaner
         self.storedState = .unavailable(reason: "MLX runtime has not been warmed.")
@@ -46,10 +50,18 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             return generation
         }
 
-        let loadedContainer = try await LLMModelFactory.shared.loadContainer(
-            from: modelDirectoryURL,
-            using: #huggingFaceTokenizerLoader()
-        )
+        let loadedContainer: ModelContainer
+        if usesVisionLanguageFactory {
+            loadedContainer = try await VLMModelFactory.shared.loadContainer(
+                from: modelDirectoryURL,
+                using: #huggingFaceTokenizerLoader()
+            )
+        } else {
+            loadedContainer = try await LLMModelFactory.shared.loadContainer(
+                from: modelDirectoryURL,
+                using: #huggingFaceTokenizerLoader()
+            )
+        }
 
         try Task.checkCancellation()
 

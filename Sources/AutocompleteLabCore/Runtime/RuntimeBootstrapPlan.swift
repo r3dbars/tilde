@@ -84,6 +84,7 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
     public let expectedMinimumBytes: Int64
     public let requiredFileNames: Set<String>
     public let requiredModelFileExtension: String
+    public let requiresVisionLanguageFactory: Bool
 
     public init(
         model: LocalModelID,
@@ -92,7 +93,8 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         fileName: String,
         expectedMinimumBytes: Int64,
         requiredFileNames: Set<String> = ["config.json"],
-        requiredModelFileExtension: String = "safetensors"
+        requiredModelFileExtension: String = "safetensors",
+        requiresVisionLanguageFactory: Bool = false
     ) {
         self.model = model
         self.runtimeCandidate = runtimeCandidate
@@ -101,6 +103,7 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         self.expectedMinimumBytes = max(1, expectedMinimumBytes)
         self.requiredFileNames = requiredFileNames
         self.requiredModelFileExtension = requiredModelFileExtension
+        self.requiresVisionLanguageFactory = requiresVisionLanguageFactory
     }
 
     public static let gemma4E2BMLX = LocalModelAssetManifest(
@@ -109,6 +112,16 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         cacheDirectoryName: "Models/Gemma4E2B/MLX",
         fileName: "gemma-4-e2b-mlx",
         expectedMinimumBytes: 1024 * 1024
+    )
+
+    public static let gemma4A4BMLX = LocalModelAssetManifest(
+        model: .gemma4A4B,
+        runtimeCandidate: .mlx,
+        cacheDirectoryName: "Models/Gemma4A4B/MLX",
+        fileName: "gemma-4-26b-a4b-it-4bit",
+        expectedMinimumBytes: 14 * 1024 * 1024 * 1024,
+        requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"],
+        requiresVisionLanguageFactory: true
     )
 
     public static let qwen3SmallMLX = LocalModelAssetManifest(
@@ -169,7 +182,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
 
     public init(
         decision: EmbeddedRuntimeDecision = .mvp,
-        preferredAsset: LocalModelAssetManifest = .qwen3MediumMLX,
+        preferredAsset: LocalModelAssetManifest = .gemma4A4BMLX,
         assetState: LocalModelAssetState,
         nativeRuntimeAvailable: Bool
     ) {
