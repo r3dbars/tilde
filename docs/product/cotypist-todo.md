@@ -114,5 +114,6 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 
 - [ ] Run a tiny private beta.
   - [x] Add one local beta-readiness gate that runs smoke, app proof, and release archive packaging.
+  - [x] Add a local private-beta packet with install steps, checksum, and feedback log.
   - 3-5 people for one week.
   - Ask whether it helped, interrupted, or broke trust.
