@@ -14,7 +14,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - Notes: title, body line, and checklist/list accepts verified with AX selected text.
   - Obsidian: keep CodeMirror behavior stable across AX element churn.
   - Mail: inspect diagnostics safely; do not create or edit real third-party messages without explicit confirmation.
-  - Chrome: local textarea passed AX capability checks; live one-word accept verified with mirror anchoring and AX value replacement because Chrome's selected-text insert is a no-op.
+  - Chrome: local textarea passed AX capability checks; live one-word and full accept verified with mirror anchoring and AX value replacement because Chrome's selected-text insert is a no-op.
   - Atlas: keep unsupported until the focused AX element is reliably available.
 
 - [ ] Persist user control.
@@ -56,7 +56,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - TextEdit one-word accept and full accept.
   - Notes one-word accept and full accept.
   - Obsidian one-word accept and full accept.
-  - Chrome text field one-word accept.
+  - Chrome text field one-word and full accept.
 
 - [ ] Keep every meaningful behavior covered by tests.
   - Core routing and activation tests.
