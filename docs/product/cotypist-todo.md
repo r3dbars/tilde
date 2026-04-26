@@ -82,11 +82,12 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - Obsidian one-word accept and full accept.
   - Chrome text field one-word and full accept.
 
-- [ ] Keep every meaningful behavior covered by tests.
-  - Core routing and activation tests.
-  - Runtime state tests.
-  - Compatibility profile tests.
-  - Privacy/redaction tests.
+- [x] Keep every meaningful behavior covered by tests.
+  - [x] Core routing and activation tests.
+  - [x] Runtime state tests.
+  - [x] Compatibility profile tests.
+  - [x] Privacy/redaction tests.
+  - [x] Smoke fails if the core test coverage manifest regresses.
 
 ## Later
 
