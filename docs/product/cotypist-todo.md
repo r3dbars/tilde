@@ -31,6 +31,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Validate the MLX/Hugging Face model directory shape before exposing it to the user.
   - [x] Show and reveal the expected MLX model folder from the menu and diagnostics.
   - [x] Add download/warm/ready/failed states before exposing it to the user.
+  - [x] Suppress suggestions until the local runtime is ready.
   - [x] Link `mlx-swift-lm` and add the first real `MLXModelRuntime`.
   - [x] Add a local MLX download helper.
   - [x] Package MLX Metal kernels into the standalone app bundle.

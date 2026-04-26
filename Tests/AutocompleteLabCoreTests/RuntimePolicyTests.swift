@@ -62,6 +62,7 @@ struct RuntimePolicyTests {
         #expect(report.detail == "MLX runtime is not linked yet")
         #expect(report.action == .none)
         #expect(!report.isReady)
+        #expect(!report.allowsSuggestions)
         #expect(plan.readinessSummary(for: .ready(candidate: .mock)) == report.summary)
     }
 
@@ -102,6 +103,19 @@ struct RuntimePolicyTests {
         #expect(report.summary == "ready (MLX)")
         #expect(report.action == .none)
         #expect(report.isReady)
+        #expect(report.allowsSuggestions)
+    }
+
+    @Test("Runtime readiness blocks suggestions while warming or failed")
+    func runtimeReadinessBlocksSuggestionsUntilReady() {
+        let plan = RuntimeBootstrapPlan(
+            assetState: .available(path: "/tmp/gemma"),
+            nativeRuntimeAvailable: true
+        )
+
+        #expect(!plan.readinessReport(for: .warming(candidate: .mlx)).allowsSuggestions)
+        #expect(!plan.readinessReport(for: .failed(candidate: .mlx, reason: "boom")).allowsSuggestions)
+        #expect(plan.readinessReport(for: .ready(candidate: .mlx)).allowsSuggestions)
     }
 
     @Test("Gemma 4 asset manifest is MLX first")

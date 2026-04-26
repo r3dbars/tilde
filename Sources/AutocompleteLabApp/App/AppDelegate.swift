@@ -258,6 +258,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let runtimeReport = runtimeReadinessReport
+        guard runtimeReport.allowsSuggestions else {
+            recordSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                metadata: [
+                    "reason": "runtime-not-ready",
+                    "readinessStage": runtimeReport.stage.rawValue
+                ]
+            )
+            hideSuggestion()
+            return
+        }
+
         let activationDecision = activationPolicy.decision(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,

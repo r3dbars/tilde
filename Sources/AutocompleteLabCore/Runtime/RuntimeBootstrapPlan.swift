@@ -74,6 +74,10 @@ public struct RuntimeReadinessReport: Equatable, Sendable {
         self.action = action
         self.isReady = isReady
     }
+
+    public var allowsSuggestions: Bool {
+        isReady
+    }
 }
 
 public struct LocalModelAssetManifest: Equatable, Sendable {
