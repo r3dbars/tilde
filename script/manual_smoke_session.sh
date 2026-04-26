@@ -4,13 +4,15 @@ set -euo pipefail
 APP="${1:-}"
 MODE="${2:-run}"
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
+REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-runs.md}"
 
 usage() {
   cat <<'EOF'
 Usage: script/manual_smoke_session.sh <textedit|notes|obsidian|chrome> [--print|--check]
 
 Default mode prints the local manual steps, records the current diagnostics log
-line, waits for Enter, then validates the new diagnostics for that app.
+line, waits for Enter, validates the new diagnostics for that app, then appends
+a pass row to docs/product/manual-smoke-runs.md.
 
 Set AUTOCOMPLETE_LAB_LOG_START_LINE when using --check against a known log slice.
 EOF
@@ -63,6 +65,7 @@ echo
 echo "$STEPS"
 echo
 echo "Diagnostics log: $LOG_PATH"
+echo "Smoke report: $REPORT_PATH"
 
 if [[ "$MODE" == "--print" ]]; then
   exit 0
@@ -122,4 +125,35 @@ reject_pattern "insert-verification .*app=$BUNDLE_ID .*result=(unchanged|partial
 reject_pattern "field-suppressed .*app=$BUNDLE_ID" "field suppression"
 reject_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=(insert-verification-failed|missing-anchor|runtime-not-ready)" "blocking failure"
 
+append_report_row() {
+  local timestamp
+  timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  if [[ ! -f "$REPORT_PATH" ]]; then
+    mkdir -p "$(dirname "$REPORT_PATH")"
+    cat >"$REPORT_PATH" <<'EOF'
+# Manual Smoke Runs
+
+This file is append-only proof for real app passes.
+
+Only mark app-specific TODO items green after a run is recorded here.
+
+| Time UTC | App | Bundle | Verified accepts | Render expectation | Diagnostics slice |
+| --- | --- | --- | ---: | --- | --- |
+EOF
+  fi
+
+  printf '| %s | %s | `%s` | %s | `%s` | lines %s+ in `%s` |\n' \
+    "$timestamp" \
+    "$DISPLAY_NAME" \
+    "$BUNDLE_ID" \
+    "$VERIFIED_COUNT" \
+    "$EXPECTED_RENDER" \
+    "$((START_LINE + 1))" \
+    "$LOG_PATH" >>"$REPORT_PATH"
+}
+
+append_report_row
+
 echo "$DISPLAY_NAME manual smoke verified with $VERIFIED_COUNT accepted insertions."
+echo "Recorded pass in $REPORT_PATH."

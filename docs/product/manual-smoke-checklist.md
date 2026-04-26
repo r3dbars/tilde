@@ -5,6 +5,7 @@ Use this after `./script/smoke_test.sh` when checking real app behavior.
 For a repeatable local record, run `script/manual_smoke_session.sh <app>` before
 each app pass. It prints the steps, waits while you test, then validates the
 new diagnostics for suggestion presentation, insert, and insertion verification.
+Successful runs are recorded in `docs/product/manual-smoke-runs.md`.
 
 ## Setup
 
