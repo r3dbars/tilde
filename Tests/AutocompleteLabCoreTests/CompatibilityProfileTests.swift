@@ -36,4 +36,13 @@ struct CompatibilityProfileTests {
         #expect(!store.allows(bundleIdentifier: "com.example.UnknownEditor"))
         #expect(!store.allows(bundleIdentifier: "com.openai.atlas"))
     }
+
+    @Test("Support status explains unsupported and denylisted apps")
+    func supportStatusExplainsBlockedApps() {
+        let store = CompatibilityProfileStore.mvp
+
+        #expect(store.supportStatus(for: "com.apple.Terminal") == .denylisted)
+        #expect(store.supportStatus(for: "com.openai.atlas") == .unsupported)
+        #expect(store.supportStatus(for: "com.apple.TextEdit").summary == "supported: TextEdit")
+    }
 }

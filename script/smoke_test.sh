@@ -6,3 +6,7 @@ cd "$ROOT_DIR"
 
 swift test
 ./script/build_and_run.sh --verify
+
+echo
+echo "Manual app smoke checklist: docs/product/manual-smoke-checklist.md"
+echo "Diagnostics log: $HOME/Library/Logs/AutocompleteLab/diagnostics.log"

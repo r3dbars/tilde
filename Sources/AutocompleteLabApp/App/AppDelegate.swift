@@ -735,6 +735,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     private func showDiagnostics() {
         let app = accessibilityClient.frontmostApplication()
+        let compatibilityStatus = app
+            .map { profileStore.supportStatus(for: $0.bundleIdentifier) }
+            ?? .unsupported
         let profile = app.flatMap { profileStore.profile(for: $0.bundleIdentifier) }
         let appEnabled = app.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
 
@@ -743,9 +746,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 allowDescendantTextFallback: profile?.allowsDescendantTextFallback == true
             ),
             profile: profile,
+            compatibilityStatus: compatibilityStatus,
             appEnabled: appEnabled,
             appTrusted: accessibilityClient.isTrusted,
-            runtimeState: currentRuntimeState
+            runtimeState: currentRuntimeState,
+            recentEvents: DiagnosticsLog.shared.recentLines(limit: 24)
         )
     }
 

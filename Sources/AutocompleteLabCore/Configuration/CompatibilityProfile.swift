@@ -73,15 +73,27 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
     }
 
     public func profile(for bundleIdentifier: String) -> CompatibilityProfile? {
-        guard !denylistedBundleIdentifiers.contains(bundleIdentifier) else {
+        guard case let .supported(profile) = supportStatus(for: bundleIdentifier) else {
             return nil
         }
 
-        return profiles[bundleIdentifier]
+        return profile
     }
 
     public func allows(bundleIdentifier: String) -> Bool {
         profile(for: bundleIdentifier) != nil
+    }
+
+    public func supportStatus(for bundleIdentifier: String) -> CompatibilitySupportStatus {
+        if denylistedBundleIdentifiers.contains(bundleIdentifier) {
+            return .denylisted
+        }
+
+        if let profile = profiles[bundleIdentifier] {
+            return .supported(profile)
+        }
+
+        return .unsupported
     }
 
     public static let mvp = CompatibilityProfileStore(profiles: [
@@ -132,4 +144,21 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         "com.1password.1password",
         "com.agilebits.onepassword7"
     ]
+}
+
+public enum CompatibilitySupportStatus: Equatable, Sendable {
+    case supported(CompatibilityProfile)
+    case denylisted
+    case unsupported
+
+    public var summary: String {
+        switch self {
+        case let .supported(profile):
+            return "supported: \(profile.displayName)"
+        case .denylisted:
+            return "blocked: denylisted app"
+        case .unsupported:
+            return "blocked: no MVP compatibility profile"
+        }
+    }
 }

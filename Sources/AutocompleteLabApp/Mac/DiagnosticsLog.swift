@@ -37,6 +37,20 @@ final class DiagnosticsLog: @unchecked Sendable {
         }
     }
 
+    func recentLines(limit: Int) -> [String] {
+        queue.sync { [logURL] in
+            guard limit > 0,
+                  let contents = try? String(contentsOf: logURL, encoding: .utf8) else {
+                return []
+            }
+
+            return contents
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .suffix(limit)
+                .map(String.init)
+        }
+    }
+
     private func format(event: String, metadata: [String: String]) -> String {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let fields = metadata

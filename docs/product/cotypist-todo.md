@@ -20,7 +20,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 - [ ] Persist user control.
   - [x] Persist per-app disable across launches.
   - Keep Esc suppression until blur.
-  - Make the current app state obvious in the menu and diagnostics.
+  - [x] Make the current app state obvious in the menu and diagnostics.
 
 ## Local Runtime
 
@@ -47,15 +47,16 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 - [ ] Make failure states understandable.
   - Show local model readiness.
   - Log only privacy-safe shape data.
-  - Explain blocked suggestions by reason in diagnostics.
+  - [x] Explain blocked suggestions by reason in diagnostics.
 
 ## QA
 
 - [ ] Build repeatable smoke checks.
+  - [x] Add a manual smoke checklist for TextEdit, Notes, Obsidian, and Chrome.
   - TextEdit one-word accept and full accept.
   - Notes one-word accept and full accept.
   - Obsidian one-word accept and full accept.
-  - Browser text field checks once profiles exist.
+  - Chrome text field one-word accept.
 
 - [ ] Keep every meaningful behavior covered by tests.
   - Core routing and activation tests.

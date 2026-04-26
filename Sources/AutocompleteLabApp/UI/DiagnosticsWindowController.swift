@@ -30,14 +30,17 @@ final class DiagnosticsWindowController {
     func show(
         diagnostics: FocusedTextDiagnostics?,
         profile: CompatibilityProfile?,
+        compatibilityStatus: CompatibilitySupportStatus,
         appEnabled: Bool,
         appTrusted: Bool,
-        runtimeState: LocalRuntimeState
+        runtimeState: LocalRuntimeState,
+        recentEvents: [String]
     ) {
         var sections: [String] = []
 
         sections.append("Permission: Accessibility \(appTrusted ? "granted" : "missing")")
         sections.append("Local model: \(runtimeState.statusSummary)")
+        sections.append("Compatibility: \(compatibilityStatus.summary)")
         sections.append("Current app enabled: \(appEnabled)")
 
         if let profile {
@@ -60,6 +63,17 @@ final class DiagnosticsWindowController {
         }
 
         sections.append(diagnostics?.summary ?? "Focused text diagnostics: unavailable")
+
+        if recentEvents.isEmpty {
+            sections.append("Recent events: unavailable")
+        } else {
+            sections.append(
+                """
+                Recent events:
+                \(recentEvents.map { "  \($0)" }.joined(separator: "\n"))
+                """
+            )
+        }
 
         textView.string = sections.joined(separator: "\n\n")
         window.makeKeyAndOrderFront(nil)
