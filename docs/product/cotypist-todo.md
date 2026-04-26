@@ -37,7 +37,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - Prompt from a small context window.
   - Generate 2-8 visible words.
   - Keep reasoning off.
-  - Cancel stale requests when typing continues.
+  - [x] Cancel stale requests when typing continues.
 
 ## UX Polish
 

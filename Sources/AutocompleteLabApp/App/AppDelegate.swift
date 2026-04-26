@@ -39,9 +39,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastRequestedTextBeforeCursor: String?
     private var suppressedFieldIdentities: Set<FocusedFieldIdentity> = []
     private var disabledBundleIdentifiers: Set<String> = []
-    private var suggestionTask: Task<Void, Never>?
     private var debounceTask: Task<Void, Never>?
     private var insertionVerificationTask: Task<Void, Never>?
+    private var suggestionRequestGate = SuggestionRequestGate()
+    private var currentCompletionRequest: CompletionRequest?
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var lastStatusLine: String?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
@@ -66,8 +67,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         debounceTask?.cancel()
-        suggestionTask?.cancel()
         insertionVerificationTask?.cancel()
+        invalidatePendingSuggestionRequest()
         modelRuntime.cancel()
         pollTimer?.invalidate()
         stopKeyboardEventTapIfActive()
@@ -216,6 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         lastTextSnapshot = snapshot
+        invalidatePendingSuggestionRequest()
 
         guard profile.canPresentSuggestions else {
             recordSuggestionEvent(
@@ -229,9 +231,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion()
             return
         }
-
-        debounceTask?.cancel()
-        suggestionTask?.cancel()
 
         let activationDecision = activationPolicy.decision(
             textBeforeCursor: context.textBeforeCursor,
@@ -287,6 +286,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: context,
             profile: profile,
             appBundleIdentifier: frontmostApp.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
             delayMilliseconds: delayMilliseconds
         )
     }
@@ -492,6 +492,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         context: FocusedTextContext,
         profile: CompatibilityProfile,
         appBundleIdentifier: String,
+        fieldIdentity: FocusedFieldIdentity,
         delayMilliseconds: Int
     ) {
         lastRequestedTextBeforeCursor = context.textBeforeCursor
@@ -501,8 +502,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textAfterCursor: context.textAfterCursor,
             appBundleIdentifier: appBundleIdentifier
         )
+        currentCompletionRequest = request
+        let requestTicket = suggestionRequestGate.issue(request: request)
 
-        debounceTask = Task { [engine] in
+        debounceTask = Task { [engine, requestTicket, fieldIdentity] in
             let renderDelay = profile.renderMode == .inlineAdjacent ? delayMilliseconds : max(delayMilliseconds, 120)
             try? await Task.sleep(for: .milliseconds(renderDelay))
             guard !Task.isCancelled else {
@@ -512,6 +515,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             do {
                 let suggestion = try await engine.suggestion(for: request)
                 await MainActor.run {
+                    guard self.suggestionRequestGate.allows(
+                        requestTicket,
+                        currentRequest: self.currentCompletionRequest
+                    ), self.currentFieldIdentity == fieldIdentity else {
+                        return
+                    }
+
                     let anchorRect = context.caretRect ?? (profile.renderMode == .floatingMirror ? context.elementRect ?? context.windowRect : nil)
                     guard let suggestion, !suggestion.isEmpty else {
                         self.recordSuggestionEvent(
@@ -752,6 +762,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        invalidatePendingSuggestionRequest()
+
         if let currentFieldIdentity {
             suppressedFieldIdentities.remove(currentFieldIdentity)
         }
@@ -762,6 +774,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func clearFocusedFieldState() {
+        invalidatePendingSuggestionRequest()
+
         if let currentFieldIdentity {
             suppressedFieldIdentities.remove(currentFieldIdentity)
         }
@@ -769,6 +783,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentFieldIdentity = nil
         lastTextSnapshot = nil
         lastRequestedTextBeforeCursor = nil
+    }
+
+    private func invalidatePendingSuggestionRequest() {
+        debounceTask?.cancel()
+        debounceTask = nil
+        currentCompletionRequest = nil
+        suggestionRequestGate.invalidate()
     }
 
     @objc
