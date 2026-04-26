@@ -2,7 +2,8 @@
 set -euo pipefail
 
 LOG_FILE="$(mktemp)"
-trap 'rm -f "$LOG_FILE"' EXIT
+EMPTY_LOG_FILE="$(mktemp)"
+trap 'rm -f "$LOG_FILE" "$EMPTY_LOG_FILE"' EXIT
 
 cat >"$LOG_FILE" <<'LOG'
 2026-04-26T18:00:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-9B-MLX-4bit
@@ -37,6 +38,24 @@ fi
 if ! grep -F "shown latency: n=1 min=0ms avg=0ms p50=0ms p90=0ms max=0ms" <<<"$REPORT" >/dev/null; then
   echo "latency report self-test did not summarize word-completion latency" >&2
   echo "$REPORT" >&2
+  exit 1
+fi
+
+cat >"$EMPTY_LOG_FILE" <<'LOG'
+2026-04-26T18:10:00Z runtime-bootstrap activeCandidate=mlx asset=gemma-4-e4b-4bit
+LOG
+
+EMPTY_REPORT="$(script/model_latency_report.py --log "$EMPTY_LOG_FILE" --latest)"
+
+if ! grep -F "try: type one short sentence in TextEdit or Codex" <<<"$EMPTY_REPORT" >/dev/null; then
+  echo "latency report self-test did not explain how to collect first samples" >&2
+  echo "$EMPTY_REPORT" >&2
+  exit 1
+fi
+
+if ! grep -F "instant word-completion may bypass the model" <<<"$EMPTY_REPORT" >/dev/null; then
+  echo "latency report self-test did not explain fast-path timing" >&2
+  echo "$EMPTY_REPORT" >&2
   exit 1
 fi
 

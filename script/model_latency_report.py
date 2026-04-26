@@ -119,6 +119,8 @@ def print_launch(launch):
     presented = launch["presented"]
     if not timings and not presented:
         print("  no timing samples yet")
+        print("  try: type one short sentence in TextEdit or Codex, wait for a phrase suggestion, then rerun this report")
+        print("  note: instant word-completion may bypass the model and only appear as shown latency")
         return
 
     modes = sorted({item["mode"] for item in timings} | {item["mode"] for item in presented})
