@@ -97,7 +97,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             container,
             instructions: prompt.system,
             generateParameters: GenerateParameters(
-                maxTokens: CompletionModelPolicy.mvp.maxGeneratedTokens,
+                maxTokens: Self.maxGeneratedTokens(for: request.mode),
                 temperature: 0
             ),
             additionalContext: ["enable_thinking": false]
@@ -134,6 +134,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                 "generationMilliseconds": String(Self.milliseconds(from: sessionBuiltAt, to: generatedAt)),
                 "cleanupMilliseconds": String(Self.milliseconds(from: generatedAt, to: cleanedAt)),
                 "totalMilliseconds": String(Self.milliseconds(from: startedAt, to: cleanedAt)),
+                "maxTokens": String(Self.maxGeneratedTokens(for: request.mode)),
                 "rawChars": String(rawOutput.count),
                 "cleanedChars": String(cleanedSuggestion?.visibleText.count ?? 0)
             ]
@@ -165,6 +166,15 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     private static func milliseconds(from start: Date, to end: Date) -> Int {
         max(0, Int(end.timeIntervalSince(start) * 1000))
+    }
+
+    private static func maxGeneratedTokens(for mode: CompletionRequestMode) -> Int {
+        switch mode {
+        case .wordCompletion:
+            return 3
+        case .phraseContinuation:
+            return min(6, CompletionModelPolicy.mvp.maxGeneratedTokens)
+        }
     }
 
     private func readyContainer() async throws -> ModelContainer {

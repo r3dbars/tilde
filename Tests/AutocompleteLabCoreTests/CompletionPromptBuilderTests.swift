@@ -9,12 +9,11 @@ struct CompletionPromptBuilderTests {
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
 
         #expect(prompt.system.contains("next 5 words or fewer"))
-        #expect(prompt.system.contains("inline autocomplete engine"))
-        #expect(prompt.system.contains("No explanation"))
-        #expect(prompt.system.contains("No reasoning"))
-        #expect(prompt.system.contains("Do not reuse old lines"))
-        #expect(prompt.user.contains("Text before cursor:\nI think we should"))
-        #expect(prompt.user.hasSuffix("Autocomplete continuation:"))
+        #expect(prompt.system.contains("Inline autocomplete"))
+        #expect(prompt.system.contains("Do not answer, explain"))
+        #expect(prompt.system.contains("reason"))
+        #expect(prompt.user.contains("Before cursor:\nI think we should"))
+        #expect(prompt.user.hasSuffix("Next words:"))
     }
 
     @Test("Codex prompt avoids generic product filler")
@@ -48,10 +47,10 @@ struct CompletionPromptBuilderTests {
         let builder = CompletionPromptBuilder()
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "dic", mode: .wordCompletion))
 
-        #expect(prompt.system.contains("word-completion engine"))
-        #expect(prompt.system.contains("Finish only the current unfinished word"))
-        #expect(prompt.system.contains("Do not add a space"))
-        #expect(prompt.user.hasSuffix("Word completion:"))
+        #expect(prompt.system.contains("Inline word completion"))
+        #expect(prompt.system.contains("missing suffix"))
+        #expect(prompt.system.contains("No spaces"))
+        #expect(prompt.user.hasSuffix("Suffix:"))
     }
 
     @Test("Prompt trims long context from the left")

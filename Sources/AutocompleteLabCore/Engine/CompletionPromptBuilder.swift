@@ -34,29 +34,25 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         if request.mode == .wordCompletion {
             return CompletionPrompt(
                 system: """
-                You are an inline word-completion engine, not a chat assistant.
-                Finish only the current unfinished word before the cursor.
-                Return only the missing suffix or the finished current word.
-                Do not add a space, a new word, punctuation, explanation, quotes, or reasoning.
+                Inline word completion.
+                Return only the missing suffix for the current word.
+                No spaces, punctuation, quotes, reasoning, or extra words.
                 """,
-                user: "Text before cursor:\n\(context)\n\nWord completion:"
+                user: "Before cursor:\n\(context)\n\nSuffix:"
             )
         }
 
         return CompletionPrompt(
             system: phraseContinuationSystemPrompt(for: request),
-            user: "Text before cursor:\n\(context)\n\nAutocomplete continuation:"
+            user: "Before cursor:\n\(context)\n\nNext words:"
         )
     }
 
     private func phraseContinuationSystemPrompt(for request: CompletionRequest) -> String {
         let base = """
-        You are an inline autocomplete engine, not a chat assistant.
-        Continue only the current sentence or phrase before the cursor.
+        Inline autocomplete.
         Return only the next \(maxVisibleWords) words or fewer.
-        Do not reuse old lines, answer, explain, summarize, greet, restart the sentence, or mention the user.
-        No explanation.
-        No quotes. No reasoning.
+        Continue the current sentence. Do not answer, explain, greet, quote, reason, or restart.
         """
 
         guard request.appBundleIdentifier == "com.openai.codex" else {
@@ -67,7 +63,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
             return base + """
 
             The active app is Codex. Continue the user's actual sentence naturally.
-            Do not force software, testing, latency, placement, or debugging topics unless the current sentence is already about them.
+            Do not force software, testing, latency, placement, or debugging topics unless the sentence is already about them.
             Avoid vague product phrases like "integrate it seamlessly", "enhance the experience", or "leverage the system".
             """
         }
