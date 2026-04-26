@@ -148,7 +148,7 @@ struct RuntimePolicyTests {
         #expect(manifest.cacheDirectoryName.contains("Qwen35NineB"))
         #expect(manifest.requiredFileNames.contains("config.json"))
         #expect(manifest.requiredModelFileExtension == "safetensors")
-        #expect(manifest.requiresVisionLanguageFactory)
+        #expect(!manifest.requiresVisionLanguageFactory)
     }
 
     @Test("MLX model asset validation expects a Hugging Face directory")

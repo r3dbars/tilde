@@ -150,8 +150,7 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         cacheDirectoryName: "Models/Qwen35NineB/MLX",
         fileName: "Qwen3.5-9B-MLX-4bit",
         expectedMinimumBytes: 5 * 1024 * 1024 * 1024,
-        requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"],
-        requiresVisionLanguageFactory: true
+        requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"]
     )
 
     public static let preferredMLX = qwen35NineBMLX
