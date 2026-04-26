@@ -837,27 +837,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
 
-        if requestMode == .wordCompletion,
-           let fastSuggestion = wordCompletionRanker.suggestion(
-               for: context.textBeforeCursor,
-               recentWords: recentAcceptedWords
-           ) {
-            let screenshotPath = captureTraceScreenshot(
-                near: context.elementRect ?? context.windowRect ?? context.caretRect,
-                suggestionID: suggestionID
-            )
-            presentSuggestion(
-                fastSuggestion,
+        if requestMode == .wordCompletion {
+            if let fastSuggestion = wordCompletionRanker.suggestion(
+                for: context.textBeforeCursor,
+                recentWords: recentAcceptedWords
+            ) {
+                let screenshotPath = captureTraceScreenshot(
+                    near: context.elementRect ?? context.windowRect ?? context.caretRect,
+                    suggestionID: suggestionID
+                )
+                presentSuggestion(
+                    fastSuggestion,
+                    suggestionID: suggestionID,
+                    request: request,
+                    context: context,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity,
+                    renderMode: renderMode,
+                    latencyMilliseconds: 0,
+                    triggerReason: "fast-word-completion",
+                    screenshotPath: screenshotPath
+                )
+                return
+            }
+
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
                 suggestionID: suggestionID,
-                request: request,
-                context: context,
-                profile: profile,
-                fieldIdentity: fieldIdentity,
-                renderMode: renderMode,
-                latencyMilliseconds: 0,
+                appBundleIdentifier: appBundleIdentifier,
+                fieldIdentity: fieldIdentityDescription,
+                requestMode: request.mode.rawValue,
                 triggerReason: "fast-word-completion",
-                screenshotPath: screenshotPath
+                textBeforeCursor: request.textBeforeCursor,
+                textAfterCursor: request.textAfterCursor,
+                reason: "no-fast-word-candidate",
+                metadata: [
+                    "renderMode": renderMode.rawValue
+                ]
             )
+            hideSuggestion()
             return
         }
 
