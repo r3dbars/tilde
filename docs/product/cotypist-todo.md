@@ -11,7 +11,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 
 - [ ] Finish safe compatibility passes.
   - TextEdit: keep as the green reference app.
-  - Notes: verify title/body/list behavior.
+  - Notes: title, body line, and checklist/list accepts verified with AX selected text.
   - Obsidian: keep CodeMirror behavior stable across AX element churn.
   - Mail: inspect diagnostics safely; do not create or edit real third-party messages without explicit confirmation.
   - Chrome: local textarea passed AX capability checks; live one-word accept verified with mirror anchoring and AX value replacement because Chrome's selected-text insert is a no-op.
