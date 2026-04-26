@@ -59,6 +59,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        if let textBeforeCursor,
+           repeatsEarlierContext(trimmedSuggestion, after: textBeforeCursor) {
+            return nil
+        }
+
         return CompletionSuggestion(text: trimmedSuggestion, maxVisibleWords: maxVisibleWords)
     }
 
@@ -95,5 +100,45 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         return " " + text
+    }
+
+    private func repeatsEarlierContext(_ suggestion: String, after textBeforeCursor: String) -> Bool {
+        let suggestionWords = normalizedWords(in: suggestion)
+        guard suggestionWords.count >= 3 else {
+            return false
+        }
+
+        let contextWords = normalizedWords(in: textBeforeCursor)
+        guard contextWords.count >= 4 else {
+            return false
+        }
+
+        let leadPhrase = Array(suggestionWords.prefix(3))
+        if Array(contextWords.suffix(min(leadPhrase.count, contextWords.count))) == leadPhrase {
+            return false
+        }
+
+        return contextWords.windows(ofCount: leadPhrase.count).contains(leadPhrase)
+    }
+
+    private func normalizedWords(in text: String) -> [String] {
+        text
+            .split(whereSeparator: { $0.isWhitespace })
+            .map {
+                $0.trimmingCharacters(in: .punctuationCharacters).lowercased()
+            }
+            .filter { !$0.isEmpty }
+    }
+}
+
+private extension Array where Element: Equatable {
+    func windows(ofCount count: Int) -> [[Element]] {
+        guard count > 0, self.count >= count else {
+            return []
+        }
+
+        return indices.dropLast(count - 1).map { index in
+            Array(self[index..<self.index(index, offsetBy: count)])
+        }
     }
 }

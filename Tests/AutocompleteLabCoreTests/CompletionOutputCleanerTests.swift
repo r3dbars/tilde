@@ -59,6 +59,30 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("Know you are", after: "I know you are") == nil)
     }
 
+    @Test("Suppresses suggestions that parrot earlier field text")
+    func suppressesSuggestionsThatParrotEarlierFieldText() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+        let context = """
+        I know you are
+
+        Hey how are you
+        """
+
+        #expect(cleaner.clean("know you are ready", after: context) == nil)
+    }
+
+    @Test("Allows normal continuations even when earlier context exists")
+    func allowsNormalContinuationsWithEarlierContext() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+        let context = """
+        I know you are
+
+        Can we make this feel
+        """
+
+        #expect(cleaner.clean("instant and calm", after: context)?.visibleText == " instant and calm")
+    }
+
     @Test("Returns nil for empty output")
     func nilForEmptyOutput() {
         let cleaner = CompletionOutputCleaner()
