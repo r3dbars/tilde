@@ -151,9 +151,9 @@ PLIST
 
 SIGNING_IDENTITY="$(find_signing_identity)"
 if [[ -n "$SIGNING_IDENTITY" ]]; then
-  codesign --force --sign "$SIGNING_IDENTITY" "$APP_BUNDLE" >/dev/null
+  codesign --force --options runtime --sign "$SIGNING_IDENTITY" "$APP_BUNDLE" >/dev/null
 else
-  codesign --force --sign - "$APP_BUNDLE" >/dev/null
+  codesign --force --options runtime --sign - "$APP_BUNDLE" >/dev/null
   echo "warning: no stable code signing identity found; Accessibility may ask again after rebuilds" >&2
 fi
 

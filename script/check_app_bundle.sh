@@ -31,4 +31,7 @@ ACCESSIBILITY_REASON="$(plist_value NSAccessibilityUsageDescription)"
 
 codesign --verify --deep --strict "$APP_BUNDLE" >/dev/null 2>&1 || fail "codesign verification failed"
 
+SIGNATURE_DETAILS="$(codesign --display --verbose=4 "$APP_BUNDLE" 2>&1 || true)"
+grep -F "runtime" <<<"$SIGNATURE_DETAILS" >/dev/null || fail "hardened runtime flag is missing"
+
 echo "App bundle verified: $APP_BUNDLE"

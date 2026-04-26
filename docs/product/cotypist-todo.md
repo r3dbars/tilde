@@ -84,6 +84,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 - [ ] Package the app properly.
   - App icon.
   - [x] Validate bundle structure, menu-bar plist, packaged MLX metallib, and signature in smoke.
+  - [x] Sign debug bundles with hardened runtime.
   - Signing and notarization.
   - [x] Add a direct Accessibility settings link for first-run setup.
   - Cleaner first-run onboarding.
