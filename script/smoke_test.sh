@@ -11,6 +11,7 @@ if [[ -f "$LOG_PATH" ]]; then
 fi
 
 swift test
+./script/manual_smoke_self_test.sh
 ./script/build_and_run.sh --verify
 ./script/check_app_bundle.sh
 AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
