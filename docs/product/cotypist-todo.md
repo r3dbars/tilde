@@ -55,6 +55,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 
 - [ ] Build repeatable smoke checks.
   - [x] Add a manual smoke checklist for TextEdit, Notes, Obsidian, and Chrome.
+  - [x] Verify launch/runtime/status diagnostics in the smoke script.
   - TextEdit one-word accept and full accept.
   - Notes one-word accept and full accept.
   - Obsidian one-word accept and full accept.

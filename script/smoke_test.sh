@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 swift test
 ./script/build_and_run.sh --verify
+./script/check_diagnostics_log.sh
 
 echo
 echo "Manual app smoke checklist: docs/product/manual-smoke-checklist.md"
