@@ -85,7 +85,7 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         "application", "around", "autocomplete", "available", "because",
         "before", "being", "better", "between", "bring", "build", "change",
         "codex", "completion", "computer", "context", "conversation", "could",
-        "debugging", "definitely", "diagnostics", "dictation", "different",
+        "decent", "decently", "debugging", "definitely", "diagnostics", "dictation", "different",
         "document", "dogfooding", "everything", "evaluation", "fantastic",
         "fast",
         "first", "going", "great", "hello", "help", "hey", "important", "inference", "insert",
@@ -95,7 +95,7 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         "relaunch", "reliable", "retry", "right", "should", "slow", "something", "super",
         "suggestion", "system", "test", "testing", "their", "there", "these", "thing",
         "think", "this", "trying", "typing", "trace", "tracing",
-        "transcripted", "understand", "version",
+        "transcripted", "understand", "version", "want",
         "verification", "what", "when", "where", "which", "while", "window",
         "without", "working", "would", "writing"
     ]

@@ -33,6 +33,8 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "why is it so slo")?.visibleText == "w")
         #expect(ranker.suggestion(for: "This sh")?.visibleText == "ould")
         #expect(ranker.suggestion(for: "he")?.visibleText == "llo")
+        #expect(ranker.suggestion(for: "It seems to be de")?.visibleText == "cent")
+        #expect(ranker.suggestion(for: "I wa")?.visibleText == "nt")
         #expect(ranker.suggestion(for: "I see thi")?.visibleText == "ng")
         #expect(ranker.suggestion(for: "This should be su")?.visibleText == "per")
         #expect(ranker.suggestion(for: "This should be super fas")?.visibleText == "t")
