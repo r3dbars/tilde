@@ -175,6 +175,12 @@ open_app() {
     launchctl unsetenv AUTOCOMPLETE_LAB_SCREENSHOT_TRACE >/dev/null 2>&1 || true
   fi
 
+  if [[ -n "${AUTOCOMPLETE_LAB_MODEL:-}" ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_MODEL "$AUTOCOMPLETE_LAB_MODEL"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_MODEL >/dev/null 2>&1 || true
+  fi
+
   /usr/bin/open -n "$APP_BUNDLE"
 }
 

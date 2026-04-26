@@ -151,6 +151,16 @@ struct RuntimePolicyTests {
         #expect(!manifest.requiresVisionLanguageFactory)
     }
 
+    @Test("Named MLX manifests support local model trials")
+    func namedMLXManifestsSupportLocalModelTrials() {
+        #expect(LocalModelAssetManifest.mlxManifest(named: nil) == .qwen35FourBMLX)
+        #expect(LocalModelAssetManifest.mlxManifest(named: "") == .qwen35FourBMLX)
+        #expect(LocalModelAssetManifest.mlxManifest(named: "qwen35-4b") == .qwen35FourBMLX)
+        #expect(LocalModelAssetManifest.mlxManifest(named: " Qwen3.5-9B ") == .qwen35NineBMLX)
+        #expect(LocalModelAssetManifest.mlxManifest(named: "gemma-4-26b") == .gemma4A4BMLX)
+        #expect(LocalModelAssetManifest.mlxManifest(named: "unknown") == .qwen35FourBMLX)
+    }
+
     @Test("MLX model asset validation expects a Hugging Face directory")
     func mlxAssetValidationExpectsDirectory() {
         let manifest = LocalModelAssetManifest.preferredMLX

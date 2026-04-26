@@ -164,6 +164,33 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
 
     public static let preferredMLX = qwen35FourBMLX
 
+    public static let selectableMLXManifests: [String: LocalModelAssetManifest] = [
+        "gemma-4-e2b": .gemma4E2BMLX,
+        "gemma-4-26b": .gemma4A4BMLX,
+        "qwen3-0.6b": .qwen3SmallMLX,
+        "qwen3-1.7b": .qwen3MediumMLX,
+        "qwen35-4b": .qwen35FourBMLX,
+        "qwen3.5-4b": .qwen35FourBMLX,
+        "qwen35-9b": .qwen35NineBMLX,
+        "qwen3.5-9b": .qwen35NineBMLX
+    ]
+
+    public static func mlxManifest(named rawName: String?) -> LocalModelAssetManifest {
+        guard let rawName else {
+            return preferredMLX
+        }
+
+        let name = rawName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        guard !name.isEmpty else {
+            return preferredMLX
+        }
+
+        return selectableMLXManifests[name] ?? preferredMLX
+    }
+
     public func validatedDirectoryState(
         path: String,
         isDirectory: Bool,

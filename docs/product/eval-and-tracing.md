@@ -76,6 +76,15 @@ Use the command-line checker for repeatable proof:
 ./script/check_trace_eval.sh
 ```
 
+Compare local model latency after a trial launch:
+
+```bash
+script/model_latency_report.py --latest
+AUTOCOMPLETE_LAB_MODEL=qwen35-9b ./script/build_and_run.sh --verify
+```
+
+Supported override names include `qwen35-4b`, `qwen35-9b`, `qwen3-1.7b`, `qwen3-0.6b`, and `gemma-4-26b`.
+
 For a clean app-specific slice:
 
 ```bash

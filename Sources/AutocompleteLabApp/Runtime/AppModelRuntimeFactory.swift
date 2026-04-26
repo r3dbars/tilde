@@ -5,6 +5,7 @@ struct AppModelRuntimeBundle {
     let runtime: any ModelRuntime
     let bootstrapPlan: RuntimeBootstrapPlan
     let modelDirectoryURL: URL
+    let modelOverrideName: String?
 
     var activeCandidate: CompletionRuntimeCandidate {
         bootstrapPlan.activeCandidate
@@ -18,6 +19,7 @@ struct AppModelRuntimeBundle {
             "asset": bootstrapPlan.preferredAsset.fileName,
             "assetDirectory": modelDirectoryURL.path,
             "assetState": bootstrapPlan.assetState.statusSummary,
+            "modelOverride": modelOverrideName ?? "",
             "nativeRuntimeAvailable": String(bootstrapPlan.nativeRuntimeAvailable),
             "allowsUserManagedServer": String(bootstrapPlan.decision.allowsUserManagedServer)
         ]
@@ -32,9 +34,11 @@ struct AppModelRuntimeBundle {
 
 enum AppModelRuntimeFactory {
     static func makeRuntime(
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> AppModelRuntimeBundle {
-        let manifest = LocalModelAssetManifest.preferredMLX
+        let modelOverrideName = environment["AUTOCOMPLETE_LAB_MODEL"]
+        let manifest = LocalModelAssetManifest.mlxManifest(named: modelOverrideName)
         let modelDirectoryURL = modelAssetURL(for: manifest, fileManager: fileManager)
         let assetState = modelAssetState(
             for: manifest,
@@ -60,7 +64,8 @@ enum AppModelRuntimeFactory {
         return AppModelRuntimeBundle(
             runtime: runtime,
             bootstrapPlan: plan,
-            modelDirectoryURL: modelDirectoryURL
+            modelDirectoryURL: modelDirectoryURL,
+            modelOverrideName: modelOverrideName
         )
     }
 
