@@ -60,10 +60,10 @@ public struct CompletionModelPolicy: Equatable, Sendable {
         model: .gemma4A4B,
         runtimeOwnership: .appOwnedEmbedded,
         minimumMemoryGB: 64,
-        maxGeneratedTokens: 12,
-        maxVisibleWords: 6,
+        maxGeneratedTokens: 8,
+        maxVisibleWords: 4,
         debounceMilliseconds: 240,
-        targetLatencyMilliseconds: 900,
+        targetLatencyMilliseconds: 250,
         reasoningEnabled: false
     )
 

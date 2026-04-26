@@ -13,8 +13,8 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
 
     public init(
         charactersBeforePauseRequest: Int = 4,
-        wordCompletionDelayMilliseconds: Int = 60,
-        wordBoundaryDelayMilliseconds: Int = 80,
+        wordCompletionDelayMilliseconds: Int = 20,
+        wordBoundaryDelayMilliseconds: Int = 120,
         pauseDelayMilliseconds: Int = 180
     ) {
         self.charactersBeforePauseRequest = max(1, charactersBeforePauseRequest)

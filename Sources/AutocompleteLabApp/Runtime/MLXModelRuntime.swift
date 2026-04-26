@@ -90,7 +90,9 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let container = try await readyContainer()
         try Task.checkCancellation()
 
+        let startedAt = Date()
         let prompt = promptBuilder.prompt(for: request)
+        let promptBuiltAt = Date()
         let session = ChatSession(
             container,
             instructions: prompt.system,
@@ -101,10 +103,41 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             additionalContext: ["enable_thinking": false]
         )
 
-        let rawOutput = try await session.respond(to: prompt.user)
+        let sessionBuiltAt = Date()
+        var rawOutput = ""
+        var firstChunkMilliseconds: Int?
+        let stream = session.streamResponse(to: prompt.user)
+        for try await chunk in stream {
+            if firstChunkMilliseconds == nil {
+                firstChunkMilliseconds = Self.milliseconds(from: sessionBuiltAt, to: Date())
+            }
+
+            rawOutput += chunk
+
+            if shouldStopEarly(rawOutput, request: request) {
+                break
+            }
+        }
+        let generatedAt = Date()
         try Task.checkCancellation()
 
         let cleanedSuggestion = cleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode)
+        let cleanedAt = Date()
+        DiagnosticsLog.shared.record(
+            "mlx-completion-timing",
+            metadata: [
+                "app": request.appBundleIdentifier ?? "unknown",
+                "mode": request.mode.rawValue,
+                "promptMilliseconds": String(Self.milliseconds(from: startedAt, to: promptBuiltAt)),
+                "sessionMilliseconds": String(Self.milliseconds(from: promptBuiltAt, to: sessionBuiltAt)),
+                "firstChunkMilliseconds": firstChunkMilliseconds.map(String.init) ?? "none",
+                "generationMilliseconds": String(Self.milliseconds(from: sessionBuiltAt, to: generatedAt)),
+                "cleanupMilliseconds": String(Self.milliseconds(from: generatedAt, to: cleanedAt)),
+                "totalMilliseconds": String(Self.milliseconds(from: startedAt, to: cleanedAt)),
+                "rawChars": String(rawOutput.count),
+                "cleanedChars": String(cleanedSuggestion?.visibleText.count ?? 0)
+            ]
+        )
         RawAutocompleteTraceLog.shared.recordModelResult(
             request: request,
             prompt: prompt,
@@ -114,6 +147,24 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         )
 
         return cleanedSuggestion
+    }
+
+    private func shouldStopEarly(_ rawOutput: String, request: CompletionRequest) -> Bool {
+        guard let suggestion = cleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode) else {
+            return false
+        }
+
+        if request.mode == .wordCompletion {
+            return true
+        }
+
+        return suggestion.visibleWordCount >= CompletionModelPolicy.minimumVisibleWords
+            && (suggestion.visibleWordCount >= CompletionModelPolicy.mvp.maxVisibleWords
+                || rawOutput.contains(where: { [".", "!", "?", "\n"].contains($0) }))
+    }
+
+    private static func milliseconds(from start: Date, to end: Date) -> Int {
+        max(0, Int(end.timeIntervalSince(start) * 1000))
     }
 
     private func readyContainer() async throws -> ModelContainer {

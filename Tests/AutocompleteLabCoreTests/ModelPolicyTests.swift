@@ -10,8 +10,8 @@ struct ModelPolicyTests {
         #expect(policy.model == .gemma4A4B)
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)
-        #expect(policy.maxGeneratedTokens == 12)
-        #expect(policy.maxVisibleWords == 6)
+        #expect(policy.maxGeneratedTokens == 8)
+        #expect(policy.maxVisibleWords == 4)
         #expect(policy.maxVisibleWords >= CompletionModelPolicy.minimumVisibleWords)
         #expect(policy.maxVisibleWords <= CompletionModelPolicy.maximumVisibleWords)
     }
@@ -49,8 +49,8 @@ struct ModelPolicyTests {
 
         #expect(!policy.allowsVisibleWordCount(1))
         #expect(policy.allowsVisibleWordCount(2))
-        #expect(policy.allowsVisibleWordCount(6))
-        #expect(!policy.allowsVisibleWordCount(7))
+        #expect(policy.allowsVisibleWordCount(4))
+        #expect(!policy.allowsVisibleWordCount(5))
     }
 
     @Test("M5 with 128 GB is supported")

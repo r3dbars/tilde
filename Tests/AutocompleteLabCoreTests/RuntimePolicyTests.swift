@@ -196,12 +196,12 @@ struct RuntimePolicyTests {
         let benchmark = CompletionRuntimeBenchmark(
             candidate: .liteRTLM,
             samples: [
-                CompletionLatencySample(candidate: .liteRTLM, milliseconds: 240, tokenCount: 5),
-                CompletionLatencySample(candidate: .liteRTLM, milliseconds: 320, tokenCount: 7)
+                CompletionLatencySample(candidate: .liteRTLM, milliseconds: 180, tokenCount: 5),
+                CompletionLatencySample(candidate: .liteRTLM, milliseconds: 220, tokenCount: 7)
             ]
         )
 
-        #expect(benchmark.averageLatencyMilliseconds == 280)
+        #expect(benchmark.averageLatencyMilliseconds == 200)
         #expect(benchmark.passesAutocompleteTarget())
     }
 
