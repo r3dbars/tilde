@@ -16,6 +16,9 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.mail")?.insertionMode == .axThenKeyEvents)
         #expect(store.profile(for: "com.apple.mail")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "com.apple.mail")?.allowsDescendantTextFallback == true)
+        #expect(store.profile(for: "com.google.Chrome")?.displayName == "Chrome")
+        #expect(store.profile(for: "com.google.Chrome")?.renderMode == .floatingMirror)
+        #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .axValueReplacement)
     }
 
     @Test("Denylisted apps are never allowed")
@@ -31,5 +34,6 @@ struct CompatibilityProfileTests {
         let store = CompatibilityProfileStore.mvp
 
         #expect(!store.allows(bundleIdentifier: "com.example.UnknownEditor"))
+        #expect(!store.allows(bundleIdentifier: "com.openai.atlas"))
     }
 }

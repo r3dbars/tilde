@@ -185,11 +185,20 @@ final class AccessibilityClient {
             text,
             utf16Offset: selectedRange?.location ?? text.utf16.count
         )
-        let caretRect = selectedRange.flatMap { caretBounds(for: focusedElement, range: $0) }
+        let caretRect = selectedRange.flatMap {
+            AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
+        }
         let elementRect = elementBounds(for: focusedElement)
         let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
         let textLineRect = selectedRange.flatMap {
-            textLineBounds(for: focusedElement, textLength: text.utf16.count, textBeforeCursor: textSlice.textBeforeCursor, range: $0)
+            AccessibilityTextBoundsPolicy.usableTextBounds(
+                textLineBounds(
+                    for: focusedElement,
+                    textLength: text.utf16.count,
+                    textBeforeCursor: textSlice.textBeforeCursor,
+                    range: $0
+                )
+            )
         }
         let textStyle = selectedRange.flatMap {
             focusedTextStyle(in: focusedElement, textLength: text.utf16.count, range: $0)
@@ -242,6 +251,42 @@ final class AccessibilityClient {
         return textAfterInsert != textBeforeInsert
     }
 
+    func replaceSelectedTextBySettingValue(_ text: String) -> Bool {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              let focusedElement = focusedElement(for: app.processIdentifier),
+              let textBeforeInsert = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String,
+              let selectedRange = selectedTextRange(in: focusedElement),
+              let replacement = SelectedTextRangeReplacer.replacingSelectedRange(
+                  in: textBeforeInsert,
+                  utf16Location: selectedRange.location,
+                  utf16Length: selectedRange.length,
+                  with: text
+              ) else {
+            return false
+        }
+
+        let result = AXUIElementSetAttributeValue(
+            focusedElement,
+            kAXValueAttribute as CFString,
+            replacement.text as CFTypeRef
+        )
+
+        guard result == .success else {
+            return false
+        }
+
+        var cursorRange = CFRange(location: replacement.cursorUTF16Offset, length: 0)
+        if let rangeValue = AXValueCreate(.cfRange, &cursorRange) {
+            AXUIElementSetAttributeValue(
+                focusedElement,
+                kAXSelectedTextRangeAttribute as CFString,
+                rangeValue
+            )
+        }
+
+        return replacement.text != textBeforeInsert
+    }
+
     func focusedTextDiagnostics(allowDescendantTextFallback: Bool = false) -> FocusedTextDiagnostics? {
         guard let app = NSWorkspace.shared.frontmostApplication,
               let focusedElement = focusedElement(for: app.processIdentifier) else {
@@ -262,15 +307,19 @@ final class AccessibilityClient {
         let textSlice = text.map {
             CursorTextSplitter.split($0, utf16Offset: selectedRange?.location ?? $0.utf16.count)
         }
-        let caretRect = selectedRange.flatMap { caretBounds(for: focusedElement, range: $0) }
+        let caretRect = selectedRange.flatMap {
+            AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
+        }
         let elementRect = elementBounds(for: focusedElement)
         let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
         let textLineRect = selectedRange.flatMap {
-            textLineBounds(
-                for: focusedElement,
-                textLength: text?.utf16.count ?? 0,
-                textBeforeCursor: textSlice?.textBeforeCursor ?? "",
-                range: $0
+            AccessibilityTextBoundsPolicy.usableTextBounds(
+                textLineBounds(
+                    for: focusedElement,
+                    textLength: text?.utf16.count ?? 0,
+                    textBeforeCursor: textSlice?.textBeforeCursor ?? "",
+                    range: $0
+                )
             )
         }
         let textStyle = selectedRange.flatMap {

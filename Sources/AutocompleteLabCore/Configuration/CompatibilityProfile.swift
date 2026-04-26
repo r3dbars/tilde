@@ -8,6 +8,7 @@ public enum SuggestionRenderMode: String, Equatable, Sendable {
 
 public enum InsertionMode: String, Equatable, Sendable {
     case axSelectedText
+    case axValueReplacement
     case axThenKeyEvents
     case keyEvents
     case clipboardFallbackOptIn
@@ -114,6 +115,13 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             fieldIdentityMode: .stableBounds,
             allowsDescendantTextFallback: true,
             notes: "Yellow rich-text compose target. Keep insertion conservative, verify AX writes, and avoid full value replacement."
+        ),
+        CompatibilityProfile(
+            bundleIdentifier: "com.google.Chrome",
+            displayName: "Chrome",
+            renderMode: .floatingMirror,
+            insertionMode: .axValueReplacement,
+            notes: "Yellow browser target. Verified on a local textarea with AXTextArea, selected range, and settable selected text. Chrome can report zero-height caret bounds, so use mirror anchoring."
         )
     ])
 

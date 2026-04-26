@@ -33,6 +33,13 @@ final class InsertionEngine {
 
             return clipboardFallback(text, profile: profile)
 
+        case .axValueReplacement:
+            if accessibilityClient.replaceSelectedTextBySettingValue(text) {
+                return InsertionResult(succeeded: true, mode: .axValueReplacement, message: "Inserted via AX value replacement.")
+            }
+
+            return clipboardFallback(text, profile: profile)
+
         case .axThenKeyEvents:
             if accessibilityClient.insertText(text) {
                 return InsertionResult(succeeded: true, mode: .axSelectedText, message: "Inserted via verified AX selected text.")

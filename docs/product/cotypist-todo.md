@@ -14,7 +14,8 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - Notes: verify title/body/list behavior.
   - Obsidian: keep CodeMirror behavior stable across AX element churn.
   - Mail: inspect diagnostics safely; do not create or edit real third-party messages without explicit confirmation.
-  - Browser fields: add Chrome and Atlas profiles only after live field checks.
+  - Chrome: local textarea passed AX capability checks; live one-word accept verified with mirror anchoring and AX value replacement because Chrome's selected-text insert is a no-op.
+  - Atlas: keep unsupported until the focused AX element is reliably available.
 
 - [ ] Persist user control.
   - [x] Persist per-app disable across launches.
