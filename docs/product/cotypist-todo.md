@@ -55,7 +55,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 
 - [ ] Make failure states understandable.
   - [x] Show local model readiness and mock fallback reason.
-  - Log only privacy-safe shape data.
+  - [x] Log only privacy-safe shape data.
   - [x] Explain blocked suggestions by reason in diagnostics.
 
 ## QA

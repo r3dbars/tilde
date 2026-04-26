@@ -16,4 +16,36 @@ struct DiagnosticValueRedactorTests {
         #expect(DiagnosticValueRedactor.arraySummary(count: 3) == "Array(3 items)")
         #expect(DiagnosticValueRedactor.attributedStringSummary(length: 12) == "AttributedString(12 chars)")
     }
+
+    @Test("Diagnostics metadata redacts likely raw text keys")
+    func diagnosticsMetadataRedactsLikelyRawTextKeys() {
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "selectedText",
+                value: "private draft"
+            ) == "String(13 chars)"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "rawOutput",
+                value: "model leaked this"
+            ) == "String(17 chars)"
+        )
+    }
+
+    @Test("Diagnostics metadata keeps shape keys and flattens whitespace")
+    func diagnosticsMetadataKeepsShapeKeys() {
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "visibleChars",
+                value: "12\n"
+            ) == "12 "
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "hasCaretRect",
+                value: "true"
+            ) == "true"
+        )
+    }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import AutocompleteLabCore
 
 final class DiagnosticsLog: @unchecked Sendable {
     static let shared = DiagnosticsLog()
@@ -55,7 +56,7 @@ final class DiagnosticsLog: @unchecked Sendable {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let fields = metadata
             .sorted { $0.key < $1.key }
-            .map { "\($0.key)=\(sanitize($0.value))" }
+            .map { "\($0.key)=\(DiagnosticsMetadataRedactor.logSafeValue(forKey: $0.key, value: $0.value))" }
             .joined(separator: " ")
 
         if fields.isEmpty {
