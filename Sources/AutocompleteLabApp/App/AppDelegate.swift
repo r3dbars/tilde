@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let insertionVerification = InsertionVerification()
     private let insertionRetryPolicy = InsertionRetryPolicy()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
+    private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private let suggestionPanel = SuggestionPanelController()
     private let diagnosticsWindow = DiagnosticsWindowController()
@@ -272,6 +273,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             newTextBeforeCursor: context.textBeforeCursor,
             fieldIdentity: fieldIdentity,
             profile: profile
+        )
+        rememberTypedWordsIfNeeded(
+            previousSnapshot: lastTextSnapshot,
+            currentSnapshot: snapshot
         )
         hideStaleSuggestionIfNeeded(
             newTextBeforeCursor: context.textBeforeCursor,
@@ -1436,11 +1441,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func rememberAcceptedWords(in text: String) {
-        let words = text
-            .split(whereSeparator: { !$0.isLetter })
-            .map { String($0).lowercased() }
-            .filter { $0.count >= 3 }
+        rememberRecentWords(recentWordExtractor.words(in: text))
+    }
 
+    private func rememberTypedWordsIfNeeded(
+        previousSnapshot: FocusedTextSnapshot?,
+        currentSnapshot: FocusedTextSnapshot
+    ) {
+        guard let previousSnapshot,
+              previousSnapshot.fieldIdentity == currentSnapshot.fieldIdentity else {
+            return
+        }
+
+        rememberRecentWords(recentWordExtractor.completedWords(
+            previousTextBeforeCursor: previousSnapshot.textBeforeCursor,
+            currentTextBeforeCursor: currentSnapshot.textBeforeCursor
+        ))
+    }
+
+    private func rememberRecentWords(_ words: [String]) {
         guard !words.isEmpty else {
             return
         }
