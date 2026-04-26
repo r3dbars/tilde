@@ -609,7 +609,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "currentBeforeChars": String(context.textBeforeCursor.count)
                     ]
                 )
-                suppressCurrentField(reason: "insert-verification-failed")
+                if baseline.profile.suppressesAfterInsertionFailure {
+                    suppressCurrentField(reason: "insert-verification-failed")
+                }
                 hideSuggestion()
                 return
             }

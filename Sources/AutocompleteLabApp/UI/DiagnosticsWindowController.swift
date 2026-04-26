@@ -129,6 +129,7 @@ final class DiagnosticsWindowController {
                   one-word accept: \(profile.supportsOneWordAcceptance)
                   full accept: \(profile.supportsFullAcceptance)
                   Esc suppression: \(profile.suppressesUntilBlurAfterEscape)
+                  suppress after failed insert: \(profile.suppressesAfterInsertionFailure)
                   sensitive: \(profile.isSensitive)
                   debug summary: \(profile.debugSummary)
                   notes: \(profile.notes)

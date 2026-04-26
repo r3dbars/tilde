@@ -31,6 +31,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
     public let supportsOneWordAcceptance: Bool
     public let supportsFullAcceptance: Bool
     public let suppressesUntilBlurAfterEscape: Bool
+    public let suppressesAfterInsertionFailure: Bool
     public let allowsDescendantTextFallback: Bool
     public let isSensitive: Bool
     public let notes: String
@@ -46,6 +47,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         supportsOneWordAcceptance: Bool = true,
         supportsFullAcceptance: Bool = true,
         suppressesUntilBlurAfterEscape: Bool = true,
+        suppressesAfterInsertionFailure: Bool = true,
         allowsDescendantTextFallback: Bool = false,
         isSensitive: Bool = false,
         notes: String
@@ -60,6 +62,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         self.supportsOneWordAcceptance = supportsOneWordAcceptance
         self.supportsFullAcceptance = supportsFullAcceptance
         self.suppressesUntilBlurAfterEscape = suppressesUntilBlurAfterEscape
+        self.suppressesAfterInsertionFailure = suppressesAfterInsertionFailure
         self.allowsDescendantTextFallback = allowsDescendantTextFallback
         self.isSensitive = isSensitive
         self.notes = notes
@@ -142,7 +145,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .keyEvents,
             fieldIdentityMode: .stableBounds,
-            notes: "Yellow Electron target. Prefer capability probing, mirror-style placement, and verified AX before synthetic key insertion."
+            suppressesAfterInsertionFailure: false,
+            notes: "Yellow Electron target. Prefer capability probing, mirror-style placement, and verified AX before synthetic key insertion. Do not suppress the whole field after one flaky key-event verification miss."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.apple.mail",
