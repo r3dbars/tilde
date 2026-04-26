@@ -73,6 +73,7 @@ run_passing_case textedit TextEdit com.apple.TextEdit 'inlineAdjacent|floatingMi
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror
 run_passing_case obsidian Obsidian md.obsidian floatingMirror floatingMirror
 run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror
+run_passing_case codex Codex com.openai.codex 'inlineAdjacent|floatingMirror' inlineAdjacent
 
 cat >"$LOG_PATH" <<'EOF'
 2026-04-26T08:00:00Z suggestion-blocked app=md.obsidian reason=detached-suggestion-disabled hasCaretRect=false
@@ -97,7 +98,7 @@ STATUS_OUTPUT="$TMP_DIR/status-output.txt"
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   script/manual_smoke_status.sh >"$STATUS_OUTPUT"
 
-for app_name in TextEdit Notes Chrome; do
+for app_name in TextEdit Notes Chrome Codex; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
     exit 1

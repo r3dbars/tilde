@@ -69,6 +69,16 @@ AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP=com.apple.TextEdit \
   ./script/check_trace_eval.sh
 ```
 
+For Codex dogfooding, use:
+
+```bash
+START_LINE=$(wc -l < "$HOME/Library/Logs/AutocompleteLab/traces.jsonl" | tr -d ' ')
+# type in the Codex message box, accept with Tab/backtick, but do not submit
+AUTOCOMPLETE_LAB_TRACE_START_LINE=$START_LINE \
+AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP=com.openai.codex \
+  ./script/check_trace_eval.sh
+```
+
 ## Current Product Boundary
 
 For the lab, raw local traces are useful because the user is tuning their own local model behavior.

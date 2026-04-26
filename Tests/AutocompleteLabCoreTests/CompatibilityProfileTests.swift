@@ -30,6 +30,12 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.google.Chrome")?.renderMode == .floatingMirror)
         #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .keyEvents)
+        #expect(store.profile(for: "com.openai.codex")?.displayName == "Codex")
+        #expect(store.profile(for: "com.openai.codex")?.renderMode == .inlineAdjacent)
+        #expect(store.profile(for: "com.openai.codex")?.fallbackRenderMode == .floatingMirror)
+        #expect(store.profile(for: "com.openai.codex")?.insertionMode == .keyEvents)
+        #expect(store.profile(for: "com.openai.codex")?.fallbackInsertionMode == .axThenKeyEvents)
+        #expect(store.profile(for: "com.openai.codex")?.fieldIdentityMode == .stableBounds)
     }
 
     @Test("Denylisted apps are never allowed")
@@ -73,10 +79,12 @@ struct CompatibilityProfileTests {
     func insertionModePlansTryPrimaryThenFallback() throws {
         let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
         let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
         let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
 
         #expect(InsertionModePlan.modes(for: textEdit) == [.axSelectedText, .axValueReplacement])
         #expect(InsertionModePlan.modes(for: chrome) == [.axValueReplacement, .keyEvents])
+        #expect(InsertionModePlan.modes(for: codex) == [.keyEvents, .axThenKeyEvents])
         #expect(InsertionModePlan.modes(for: mail) == [])
     }
 
@@ -84,6 +92,7 @@ struct CompatibilityProfileTests {
     func renderModePlansFallbackToMirrorWhenInlineBoundsAreUnavailable() throws {
         let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
         let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
         let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
 
         #expect(RenderModePlan.effectiveMode(
@@ -98,6 +107,16 @@ struct CompatibilityProfileTests {
         ) == .floatingMirror)
         #expect(RenderModePlan.effectiveMode(
             for: chrome,
+            supportsInlineSuggestions: false,
+            hasMirrorAnchor: true
+        ) == .floatingMirror)
+        #expect(RenderModePlan.effectiveMode(
+            for: codex,
+            supportsInlineSuggestions: true,
+            hasMirrorAnchor: true
+        ) == .inlineAdjacent)
+        #expect(RenderModePlan.effectiveMode(
+            for: codex,
             supportsInlineSuggestions: false,
             hasMirrorAnchor: true
         ) == .floatingMirror)

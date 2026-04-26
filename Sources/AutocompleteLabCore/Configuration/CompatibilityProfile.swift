@@ -174,6 +174,17 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .keyEvents,
             notes: "Yellow browser target. Verified on a local textarea with AXTextArea, selected range, and settable selected text. Chrome can report zero-height caret bounds, so use mirror anchoring."
+        ),
+        CompatibilityProfile(
+            bundleIdentifier: "com.openai.codex",
+            displayName: "Codex",
+            renderMode: .inlineAdjacent,
+            insertionMode: .keyEvents,
+            fallbackRenderMode: .floatingMirror,
+            fallbackInsertionMode: .axThenKeyEvents,
+            fieldIdentityMode: .stableBounds,
+            suppressesAfterInsertionFailure: false,
+            notes: "Dogfood target. Prefer caret-bound inline suggestions when the prompt editor exposes bounds; fall back to mirror rendering and key-event insertion so the user can tune autocomplete while building it."
         )
     ])
 

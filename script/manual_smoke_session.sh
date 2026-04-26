@@ -9,7 +9,7 @@ REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-r
 
 usage() {
   cat <<'EOF'
-Usage: script/manual_smoke_session.sh <textedit|notes|obsidian|chrome> [--print|--check]
+Usage: script/manual_smoke_session.sh <textedit|notes|obsidian|chrome|codex> [--print|--check]
 
 Default mode prints the local manual steps, records the current diagnostics log
 line, waits for Enter, validates the new diagnostics for that app, then appends
@@ -54,6 +54,12 @@ case "$APP" in
     DISPLAY_NAME="Chrome"
     EXPECTED_RENDER="floatingMirror"
     STEPS=$'- Open a local data: page with a textarea.\n- Type `Can we` in the textarea.\n- Confirm focus stays in the textarea.\n- Use Tab once, then the key above Tab for full visible accept.'
+    ;;
+  codex)
+    BUNDLE_ID="com.openai.codex"
+    DISPLAY_NAME="Codex"
+    EXPECTED_RENDER="inlineAdjacent|floatingMirror"
+    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once, then the key above Tab for full visible accept.\n- Do not press Enter as part of the smoke pass.'
     ;;
   *)
     usage >&2

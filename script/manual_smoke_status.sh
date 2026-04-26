@@ -27,6 +27,7 @@ declare -a APPS=(
   "Notes|com.apple.Notes|full"
   "Obsidian|md.obsidian|limited"
   "Chrome|com.google.Chrome|full"
+  "Codex|com.openai.codex|full"
 )
 
 if [[ ! -f "$REPORT_PATH" ]]; then
