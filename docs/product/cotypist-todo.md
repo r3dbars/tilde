@@ -92,6 +92,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Document the local eval metrics to track.
   - [x] Aggregate accept / ignore / reject rates by app and request mode.
   - [x] Add a small trace summarizer.
+  - [x] Add a local model latency report for comparing MLX model trials.
   - [x] Add a trace eval checker with app-specific proof gates.
   - [x] Run the trace eval checker self-test from the main smoke script.
 
