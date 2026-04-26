@@ -75,7 +75,7 @@ struct RuntimePolicyTests {
         let missingReport = missingPlan.readinessReport(for: .ready(candidate: .mock))
 
         #expect(missingReport.stage == .downloadNeeded)
-        #expect(missingReport.summary == "download needed (Qwen3.5 9B); fallback: ready (mock)")
+        #expect(missingReport.summary == "download needed (Qwen3.5 4B); fallback: ready (mock)")
         #expect(missingReport.detail == "Expected MLX model folder at /tmp/gemma")
         #expect(missingReport.action == .revealModelFolder)
 
@@ -139,13 +139,13 @@ struct RuntimePolicyTests {
         #expect(plan.readinessReport(for: .ready(candidate: .mlx)).allowsSuggestions)
     }
 
-    @Test("Qwen3.5 9B asset manifest is MLX first")
-    func qwen35NineBAssetManifestIsMLXFirst() {
+    @Test("Qwen3.5 4B asset manifest is MLX first")
+    func qwen35FourBAssetManifestIsMLXFirst() {
         let manifest = LocalModelAssetManifest.preferredMLX
 
-        #expect(manifest.model == .qwen35NineB)
+        #expect(manifest.model == .qwen35FourB)
         #expect(manifest.runtimeCandidate == .mlx)
-        #expect(manifest.cacheDirectoryName.contains("Qwen35NineB"))
+        #expect(manifest.cacheDirectoryName.contains("Qwen35FourB"))
         #expect(manifest.requiredFileNames.contains("config.json"))
         #expect(manifest.requiredModelFileExtension == "safetensors")
         #expect(!manifest.requiresVisionLanguageFactory)
@@ -187,7 +187,7 @@ struct RuntimePolicyTests {
             path: "/tmp/gemma",
             isDirectory: true,
             childFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json", "model.safetensors"],
-            modelBytes: 6 * 1024 * 1024 * 1024
+            modelBytes: 3 * 1024 * 1024 * 1024
         ) == .available(path: "/tmp/gemma"))
     }
 

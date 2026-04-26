@@ -7,7 +7,7 @@ struct ModelPolicyTests {
     func mvpPolicy() {
         let policy = CompletionModelPolicy.mvp
 
-        #expect(policy.model == .qwen35NineB)
+        #expect(policy.model == .qwen35FourB)
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)
         #expect(policy.maxGeneratedTokens == 8)
@@ -19,9 +19,9 @@ struct ModelPolicyTests {
     @Test("Model policy clamps visible completions to autocomplete size")
     func modelPolicyClampsVisibleCompletions() {
         let tiny = CompletionModelPolicy(
-            model: .qwen35NineB,
+            model: .qwen35FourB,
             runtimeOwnership: .appOwnedEmbedded,
-            minimumMemoryGB: 32,
+            minimumMemoryGB: 16,
             maxGeneratedTokens: 12,
             maxVisibleWords: 1,
             debounceMilliseconds: 240,
@@ -29,9 +29,9 @@ struct ModelPolicyTests {
             reasoningEnabled: false
         )
         let huge = CompletionModelPolicy(
-            model: .qwen35NineB,
+            model: .qwen35FourB,
             runtimeOwnership: .appOwnedEmbedded,
-            minimumMemoryGB: 32,
+            minimumMemoryGB: 16,
             maxGeneratedTokens: 12,
             maxVisibleWords: 20,
             debounceMilliseconds: 240,
@@ -60,10 +60,10 @@ struct ModelPolicyTests {
         #expect(CompletionModelPolicy.mvp.supports(hardware))
     }
 
-    @Test("16 GB profile is not the 9B MVP target")
-    func sixteenGBIsNotTheNineBMVPTarget() {
+    @Test("16 GB Apple Silicon profile supports the 4B MVP target")
+    func sixteenGBSupportsTheFourBMVPTarget() {
         let hardware = HardwareProfile(chipName: "M1", memoryGB: 16, isAppleSilicon: true)
 
-        #expect(!CompletionModelPolicy.mvp.supports(hardware))
+        #expect(CompletionModelPolicy.mvp.supports(hardware))
     }
 }

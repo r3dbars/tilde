@@ -43,6 +43,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Upgrade the playable default to Qwen3 1.7B for better autocomplete quality.
   - [x] Upgrade the playable default to Gemma 4 26B A4B through the MLX VLM loader.
   - [x] Switch the live autocomplete default to Qwen3.5 9B 4-bit for a faster quality/latency tradeoff.
+  - [x] Add a Qwen3.5 4B 4-bit live-model trial for lower-latency phrase completion.
   - [x] Prove production readiness only when the app is using the native preferred runtime, not mock fallback.
   - [x] Never require Ollama, llama.cpp, or any separate user-started server.
 

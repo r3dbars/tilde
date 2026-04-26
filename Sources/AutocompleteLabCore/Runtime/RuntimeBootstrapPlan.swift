@@ -153,7 +153,16 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"]
     )
 
-    public static let preferredMLX = qwen35NineBMLX
+    public static let qwen35FourBMLX = LocalModelAssetManifest(
+        model: .qwen35FourB,
+        runtimeCandidate: .mlx,
+        cacheDirectoryName: "Models/Qwen35FourB/MLX",
+        fileName: "Qwen3.5-4B-4bit",
+        expectedMinimumBytes: 2 * 1024 * 1024 * 1024,
+        requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"]
+    )
+
+    public static let preferredMLX = qwen35FourBMLX
 
     public func validatedDirectoryState(
         path: String,
