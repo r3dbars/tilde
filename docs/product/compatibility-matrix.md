@@ -17,4 +17,6 @@ Run:
 ./script/manual_smoke_status.sh --require-all
 ```
 
-The four supported apps must stay green before beta work.
+TextEdit, Notes, and Chrome must have full accept proof. Obsidian may pass as
+limited proof when CodeMirror does not expose caret bounds and detached
+suggestions are suppressed instead of shown.

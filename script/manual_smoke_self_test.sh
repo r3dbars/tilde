@@ -74,16 +74,41 @@ run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' flo
 run_passing_case obsidian Obsidian md.obsidian floatingMirror floatingMirror
 run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror
 
+cat >"$LOG_PATH" <<'EOF'
+2026-04-26T08:00:00Z suggestion-blocked app=md.obsidian reason=detached-suggestion-disabled hasCaretRect=false
+EOF
+cat >"$TRACE_PATH" <<'EOF'
+{"type":"suggestionSuppressed","suggestionID":"suppressed-one","appBundleIdentifier":"md.obsidian","requestMode":"wordCompletion","reason":"detached-suggestion-disabled","metadata":{"hasCaretRect":"false"}}
+EOF
+
+AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh obsidian --check >/dev/null
+
+if ! grep -F "| Obsidian | \`md.obsidian\` | 0 | \`detached-suppressed\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
+  echo "manual smoke self-test did not record the successful Obsidian detached-suppression proof" >&2
+  exit 1
+fi
+
 STATUS_OUTPUT="$TMP_DIR/status-output.txt"
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   script/manual_smoke_status.sh >"$STATUS_OUTPUT"
 
-for app_name in TextEdit Notes Obsidian Chrome; do
+for app_name in TextEdit Notes Chrome; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
     exit 1
   fi
 done
+
+if ! grep -F -- "- Obsidian: limited pass" "$STATUS_OUTPUT" >/dev/null &&
+  ! grep -F -- "- Obsidian: passed" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not report Obsidian as covered" >&2
+  exit 1
+fi
 
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   script/manual_smoke_status.sh --require-all >/dev/null

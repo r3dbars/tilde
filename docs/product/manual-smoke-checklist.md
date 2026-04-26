@@ -45,10 +45,10 @@ Recorder: `script/manual_smoke_session.sh notes`
 Recorder: `script/manual_smoke_session.sh obsidian`
 
 - Use a disposable note.
-- Type `Can we`.
-- Confirm mirror rendering stays stable across CodeMirror focus churn.
-- Accept one word, then full visible text.
-- Confirm verification succeeds or the field suppresses itself after failure.
+- Type a partial word like `dicta`.
+- If CodeMirror does not expose caret bounds, confirm no detached floating bubble appears.
+- If a real caret-bound suggestion appears, accept one word, then full visible text.
+- Confirm either insertion verification succeeds or detached suggestion suppression is logged.
 
 ## Chrome
 

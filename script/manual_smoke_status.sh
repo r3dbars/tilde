@@ -23,10 +23,10 @@ if [[ -n "$MODE" && "$MODE" != "--require-all" ]]; then
 fi
 
 declare -a APPS=(
-  "TextEdit|com.apple.TextEdit"
-  "Notes|com.apple.Notes"
-  "Obsidian|md.obsidian"
-  "Chrome|com.google.Chrome"
+  "TextEdit|com.apple.TextEdit|full"
+  "Notes|com.apple.Notes|full"
+  "Obsidian|md.obsidian|limited"
+  "Chrome|com.google.Chrome|full"
 )
 
 if [[ ! -f "$REPORT_PATH" ]]; then
@@ -39,9 +39,15 @@ missing=0
 
 for app_entry in "${APPS[@]}"; do
   display_name="${app_entry%%|*}"
-  bundle_id="${app_entry##*|}"
+  rest="${app_entry#*|}"
+  bundle_id="${rest%%|*}"
+  proof_mode="${app_entry##*|}"
 
-  if [[ -f "$REPORT_PATH" ]] &&
+  if [[ "$proof_mode" == "limited" ]] &&
+    [[ -f "$REPORT_PATH" ]] &&
+    grep -E "\\| $display_name \\| \`$bundle_id\` \\| 0 \\| \`detached-suppressed\` \\|" "$REPORT_PATH" >/dev/null; then
+    echo "- $display_name: limited pass"
+  elif [[ -f "$REPORT_PATH" ]] &&
     grep -E "\\| $display_name \\| \`$bundle_id\` \\| [2-9][0-9]* \\|" "$REPORT_PATH" >/dev/null; then
     echo "- $display_name: passed"
   else

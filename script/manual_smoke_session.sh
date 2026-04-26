@@ -47,7 +47,7 @@ case "$APP" in
     BUNDLE_ID="md.obsidian"
     DISPLAY_NAME="Obsidian"
     EXPECTED_RENDER="floatingMirror"
-    STEPS=$'- Open a disposable Obsidian note.\n- Type `Can we`.\n- Confirm mirror rendering does not jump during CodeMirror focus churn.\n- Use Tab once, then the key above Tab for full visible accept.'
+    STEPS=$'- Open a disposable Obsidian note.\n- Type a partial word like `dicta`.\n- If CodeMirror does not expose caret bounds, confirm no detached floating bubble appears.\n- If a real caret-bound suggestion appears, use Tab once, then the key above Tab for full visible accept.'
     ;;
   chrome)
     BUNDLE_ID="com.google.Chrome"
@@ -174,6 +174,65 @@ reject_pattern() {
   fi
 }
 
+append_report_row() {
+  local verified_count="$1"
+  local render_expectation="${2:-$EXPECTED_RENDER}"
+  local timestamp
+  timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  if [[ ! -f "$REPORT_PATH" ]]; then
+    mkdir -p "$(dirname "$REPORT_PATH")"
+    cat >"$REPORT_PATH" <<'EOF'
+# Manual Smoke Runs
+
+This file is append-only proof for real app passes.
+
+Only mark app-specific TODO items green after a run is recorded here.
+
+| Time UTC | App | Bundle | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
+| --- | --- | --- | ---: | --- | --- | --- |
+EOF
+  fi
+
+  printf '| %s | %s | `%s` | %s | `%s` | lines %s+ in `%s` | lines %s+ in `%s` |\n' \
+    "$timestamp" \
+    "$DISPLAY_NAME" \
+    "$BUNDLE_ID" \
+    "$verified_count" \
+    "$render_expectation" \
+    "$((START_LINE + 1))" \
+    "$LOG_PATH" \
+    "$((TRACE_START_LINE + 1))" \
+    "$TRACE_PATH" >>"$REPORT_PATH"
+}
+
+if [[ "$APP" == "obsidian" ]] &&
+  grep -E "suggestion-blocked .*app=$BUNDLE_ID .*reason=detached-suggestion-disabled" <<<"$SCAN_LINES" >/dev/null; then
+  TRACE_SUPPRESSION_COUNT=0
+  if [[ -f "$TRACE_PATH" ]]; then
+    TRACE_SUPPRESSION_COUNT="$(
+      tail -n +"$((TRACE_START_LINE + 1))" "$TRACE_PATH" |
+        grep -F '"type":"suggestionSuppressed"' |
+        grep -F "\"appBundleIdentifier\":\"$BUNDLE_ID\"" |
+        grep -F '"reason":"detached-suggestion-disabled"' |
+        wc -l |
+        tr -d ' '
+    )"
+  fi
+
+  if (( TRACE_SUPPRESSION_COUNT == 0 )); then
+    echo "missing $DISPLAY_NAME trace coverage: detached suggestion suppression" >&2
+    echo "trace: $TRACE_PATH" >&2
+    print_failure_summary
+    exit 1
+  fi
+
+  append_report_row 0 "detached-suppressed"
+  echo "$DISPLAY_NAME manual smoke verified detached suggestion suppression."
+  echo "Recorded pass in $REPORT_PATH."
+  exit 0
+fi
+
 require_pattern "suggestion-presented .*app=$BUNDLE_ID .*effectiveRenderMode=($EXPECTED_RENDER)" "suggestion presented with expected render mode"
 require_line_with_fields "Tab handled by autocomplete" "keyboard-action" "app=$BUNDLE_ID" "key=tab" "action=acceptNextWord" "handled=true"
 require_line_with_fields "full accept key handled by autocomplete" "keyboard-action" "app=$BUNDLE_ID" "key=backtick" "action=acceptAllVisible" "handled=true"
@@ -205,37 +264,7 @@ if ! AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
   exit 1
 fi
 
-append_report_row() {
-  local timestamp
-  timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-
-  if [[ ! -f "$REPORT_PATH" ]]; then
-    mkdir -p "$(dirname "$REPORT_PATH")"
-    cat >"$REPORT_PATH" <<'EOF'
-# Manual Smoke Runs
-
-This file is append-only proof for real app passes.
-
-Only mark app-specific TODO items green after a run is recorded here.
-
-| Time UTC | App | Bundle | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
-| --- | --- | --- | ---: | --- | --- | --- |
-EOF
-  fi
-
-  printf '| %s | %s | `%s` | %s | `%s` | lines %s+ in `%s` | lines %s+ in `%s` |\n' \
-    "$timestamp" \
-    "$DISPLAY_NAME" \
-    "$BUNDLE_ID" \
-    "$VERIFIED_COUNT" \
-    "$EXPECTED_RENDER" \
-    "$((START_LINE + 1))" \
-    "$LOG_PATH" \
-    "$((TRACE_START_LINE + 1))" \
-    "$TRACE_PATH" >>"$REPORT_PATH"
-}
-
-append_report_row
+append_report_row "$VERIFIED_COUNT"
 
 echo "$DISPLAY_NAME manual smoke verified with $VERIFIED_COUNT accepted insertions."
 echo "Recorded pass in $REPORT_PATH."
