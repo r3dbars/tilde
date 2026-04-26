@@ -4,6 +4,7 @@ set -euo pipefail
 APP="${1:-}"
 MODE="${2:-run}"
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
+TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
 REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-runs.md}"
 
 usage() {
@@ -15,6 +16,7 @@ line, waits for Enter, validates the new diagnostics for that app, then appends
 a pass row to docs/product/manual-smoke-runs.md.
 
 Set AUTOCOMPLETE_LAB_LOG_START_LINE when using --check against a known log slice.
+Set AUTOCOMPLETE_LAB_TRACE_START_LINE to validate a matching trace slice.
 EOF
 }
 
@@ -65,6 +67,7 @@ echo
 echo "$STEPS"
 echo
 echo "Diagnostics log: $LOG_PATH"
+echo "Trace log: $TRACE_PATH"
 echo "Smoke report: $REPORT_PATH"
 
 if [[ "$MODE" == "--print" ]]; then
@@ -77,9 +80,16 @@ if [[ ! -f "$LOG_PATH" ]]; then
 fi
 
 START_LINE="${AUTOCOMPLETE_LAB_LOG_START_LINE:-$(wc -l <"$LOG_PATH" | tr -d ' ')}"
+TRACE_START_LINE=0
+if [[ -f "$TRACE_PATH" ]]; then
+  TRACE_START_LINE="${AUTOCOMPLETE_LAB_TRACE_START_LINE:-$(wc -l <"$TRACE_PATH" | tr -d ' ')}"
+elif [[ -n "${AUTOCOMPLETE_LAB_TRACE_START_LINE:-}" ]]; then
+  TRACE_START_LINE="$AUTOCOMPLETE_LAB_TRACE_START_LINE"
+fi
 
 if [[ "$MODE" == "run" ]]; then
   echo "Starting at diagnostics line $START_LINE."
+  echo "Starting at trace line $TRACE_START_LINE."
   read -r -p "Run the steps above, then press Enter to validate this app pass. " _
 elif [[ "$MODE" != "--check" ]]; then
   usage >&2
@@ -152,6 +162,19 @@ reject_pattern "insert-verification .*app=$BUNDLE_ID .*result=(unchanged|partial
 reject_pattern "field-suppressed .*app=$BUNDLE_ID" "field suppression"
 reject_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=(insert-verification-failed|missing-anchor|runtime-not-ready)" "blocking failure"
 
+TRACE_EVAL_OUTPUT="$(mktemp)"
+trap 'rm -f "$TRACE_EVAL_OUTPUT"' EXIT
+
+if ! AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE="$TRACE_START_LINE" \
+  AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP="$BUNDLE_ID" \
+  script/check_trace_eval.sh >"$TRACE_EVAL_OUTPUT" 2>&1; then
+  echo "failed $DISPLAY_NAME trace eval coverage" >&2
+  echo "trace: $TRACE_PATH" >&2
+  cat "$TRACE_EVAL_OUTPUT" >&2
+  exit 1
+fi
+
 append_report_row() {
   local timestamp
   timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -165,19 +188,21 @@ This file is append-only proof for real app passes.
 
 Only mark app-specific TODO items green after a run is recorded here.
 
-| Time UTC | App | Bundle | Verified accepts | Render expectation | Diagnostics slice |
-| --- | --- | --- | ---: | --- | --- |
+| Time UTC | App | Bundle | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
+| --- | --- | --- | ---: | --- | --- | --- |
 EOF
   fi
 
-  printf '| %s | %s | `%s` | %s | `%s` | lines %s+ in `%s` |\n' \
+  printf '| %s | %s | `%s` | %s | `%s` | lines %s+ in `%s` | lines %s+ in `%s` |\n' \
     "$timestamp" \
     "$DISPLAY_NAME" \
     "$BUNDLE_ID" \
     "$VERIFIED_COUNT" \
     "$EXPECTED_RENDER" \
     "$((START_LINE + 1))" \
-    "$LOG_PATH" >>"$REPORT_PATH"
+    "$LOG_PATH" \
+    "$((TRACE_START_LINE + 1))" \
+    "$TRACE_PATH" >>"$REPORT_PATH"
 }
 
 append_report_row

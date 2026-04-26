@@ -4,7 +4,8 @@ Use this after `./script/smoke_test.sh` when checking real app behavior.
 
 For a repeatable local record, run `script/manual_smoke_session.sh <app>` before
 each app pass. It prints the steps, waits while you test, then validates the
-new diagnostics for suggestion presentation, insert, and insertion verification.
+new diagnostics and matching JSONL trace coverage for suggestion presentation,
+acceptance, and insertion verification.
 Successful runs are recorded in `docs/product/manual-smoke-runs.md`.
 Run `script/manual_smoke_status.sh` to see which target apps still need proof,
 or `script/manual_smoke_status.sh --require-all` when compatibility proof should block release/beta work.
@@ -15,6 +16,7 @@ or `script/manual_smoke_status.sh --require-all` when compatibility proof should
 - Confirm the menu says `AX ok`.
 - Keep test text local and disposable.
 - Watch `~/Library/Logs/AutocompleteLab/diagnostics.log` for `suggestion-presented`, `keyboard-action`, `insert`, and `insert-verification`.
+- Watch `~/Library/Logs/AutocompleteLab/traces.jsonl` for matching `suggestionPresented`, `suggestionAccepted`, and `insertionVerified` events.
 - Prefer a real hardware key press for Tab/backtick acceptance. Some automation paths can set text or insert a literal tab without going through the app's event tap, which is useful to catch but does not count as an accept pass.
 - If a recorder fails, read its layer summary. `suggestion-presented` with `Tab autocomplete action: 0` means rendering worked but key routing did not.
 
