@@ -19,4 +19,5 @@ AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
 
 echo
 echo "Manual app smoke checklist: docs/product/manual-smoke-checklist.md"
+echo "Manual app smoke recorder: script/manual_smoke_session.sh <textedit|notes|obsidian|chrome>"
 echo "Diagnostics log: $HOME/Library/Logs/AutocompleteLab/diagnostics.log"

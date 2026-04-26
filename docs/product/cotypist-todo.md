@@ -65,6 +65,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 
 - [ ] Build repeatable smoke checks.
   - [x] Add a manual smoke checklist for TextEdit, Notes, Obsidian, and Chrome.
+  - [x] Add a manual smoke recorder that validates per-app diagnostics.
   - [x] Verify launch/runtime/status diagnostics in the smoke script.
   - [x] Wait for Gemma 4 MLX readiness in the smoke script.
   - TextEdit one-word accept and full accept.

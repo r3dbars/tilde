@@ -2,6 +2,10 @@
 
 Use this after `./script/smoke_test.sh` when checking real app behavior.
 
+For a repeatable local record, run `script/manual_smoke_session.sh <app>` before
+each app pass. It prints the steps, waits while you test, then validates the
+new diagnostics for suggestion presentation, insert, and insertion verification.
+
 ## Setup
 
 - Launch `dist/AutocompleteLab.app`.
@@ -11,6 +15,8 @@ Use this after `./script/smoke_test.sh` when checking real app behavior.
 
 ## TextEdit
 
+Recorder: `script/manual_smoke_session.sh textedit`
+
 - Type `Can we`.
 - Confirm a suggestion appears.
 - Press Tab and expect `Can we make`.
@@ -18,6 +24,8 @@ Use this after `./script/smoke_test.sh` when checking real app behavior.
 - Confirm `insert-verification result=verified`.
 
 ## Notes
+
+Recorder: `script/manual_smoke_session.sh notes`
 
 - Use the existing autocomplete smoke note.
 - Test title-only text with `Can we`.
@@ -27,6 +35,8 @@ Use this after `./script/smoke_test.sh` when checking real app behavior.
 
 ## Obsidian
 
+Recorder: `script/manual_smoke_session.sh obsidian`
+
 - Use a disposable note.
 - Type `Can we`.
 - Confirm mirror rendering stays stable across CodeMirror focus churn.
@@ -34,6 +44,8 @@ Use this after `./script/smoke_test.sh` when checking real app behavior.
 - Confirm verification succeeds or the field suppresses itself after failure.
 
 ## Chrome
+
+Recorder: `script/manual_smoke_session.sh chrome`
 
 - Use a local `data:` page with a textarea.
 - Type `Can we`.
