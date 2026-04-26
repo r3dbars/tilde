@@ -30,8 +30,17 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "This is kin")?.visibleText == "d")
         #expect(ranker.suggestion(for: "I nee")?.visibleText == "d")
         #expect(ranker.suggestion(for: "Can you tes")?.visibleText == "t")
-        #expect(ranker.suggestion(for: "I see thi")?.visibleText == "s")
+        #expect(ranker.suggestion(for: "I see thi")?.visibleText == "ng")
         #expect(ranker.suggestion(for: "It is worki")?.visibleText == "ng")
+    }
+
+    @Test("uses newest recent words before older learned words")
+    func usesNewestRecentWordsFirst() {
+        let ranker = WordCompletionCandidateRanker(staticWords: ["document"])
+
+        let suggestion = ranker.suggestion(for: "Open doc", recentWords: ["documentary", "documentation"])
+
+        #expect(suggestion?.visibleText == "umentation")
     }
 
     @Test("does not suggest phrases or completed words")

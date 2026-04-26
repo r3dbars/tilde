@@ -38,6 +38,7 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
 
     private func rankedCandidates(fragment: String, recentWords: [String]) -> [String] {
         let recent = recentWords
+            .reversed()
             .map { normalize($0) }
             .filter { $0.hasPrefix(fragment) && $0.count > fragment.count }
 
@@ -46,12 +47,13 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
             .filter { $0.hasPrefix(fragment) && $0.count > fragment.count }
 
         var seen: Set<String> = []
-        return (recent.map { (word: $0, priority: 0) } + staticMatches.map { (word: $0, priority: 1) })
-            .filter { word in
-                guard !seen.contains(word.word) else {
+        return (recent.enumerated().map { (index, word) in (word: word, priority: 0, index: index) }
+            + staticMatches.enumerated().map { (index, word) in (word: word, priority: 1, index: index) })
+            .filter { candidate in
+                guard !seen.contains(candidate.word) else {
                     return false
                 }
-                seen.insert(word.word)
+                seen.insert(candidate.word)
                 return true
             }
             .sorted { lhs, rhs in
@@ -59,11 +61,7 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
                     return lhs.priority < rhs.priority
                 }
 
-                if lhs.word.count == rhs.word.count {
-                    return lhs.word < rhs.word
-                }
-
-                return lhs.word.count < rhs.word.count
+                return lhs.index < rhs.index
             }
             .map(\.word)
     }
