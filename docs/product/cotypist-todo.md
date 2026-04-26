@@ -10,6 +10,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - Suppress the field after failed accepts.
 
 - [ ] Finish safe compatibility passes.
+  - [x] Encode known primary/fallback paths and a visible debug summary per profile.
   - TextEdit: keep as the green reference app.
   - Notes: title, body line, and checklist/list accepts verified with AX selected text.
   - Obsidian: keep CodeMirror behavior stable across AX element churn.

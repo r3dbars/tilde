@@ -25,6 +25,8 @@ public struct CompatibilityProfile: Equatable, Sendable {
     public let displayName: String
     public let renderMode: SuggestionRenderMode
     public let insertionMode: InsertionMode
+    public let fallbackRenderMode: SuggestionRenderMode?
+    public let fallbackInsertionMode: InsertionMode?
     public let fieldIdentityMode: FocusedFieldIdentityMode
     public let supportsOneWordAcceptance: Bool
     public let supportsFullAcceptance: Bool
@@ -38,6 +40,8 @@ public struct CompatibilityProfile: Equatable, Sendable {
         displayName: String,
         renderMode: SuggestionRenderMode,
         insertionMode: InsertionMode,
+        fallbackRenderMode: SuggestionRenderMode? = nil,
+        fallbackInsertionMode: InsertionMode? = nil,
         fieldIdentityMode: FocusedFieldIdentityMode = .accessibilityElement,
         supportsOneWordAcceptance: Bool = true,
         supportsFullAcceptance: Bool = true,
@@ -50,6 +54,8 @@ public struct CompatibilityProfile: Equatable, Sendable {
         self.displayName = displayName
         self.renderMode = renderMode
         self.insertionMode = insertionMode
+        self.fallbackRenderMode = fallbackRenderMode
+        self.fallbackInsertionMode = fallbackInsertionMode
         self.fieldIdentityMode = fieldIdentityMode
         self.supportsOneWordAcceptance = supportsOneWordAcceptance
         self.supportsFullAcceptance = supportsFullAcceptance
@@ -63,6 +69,13 @@ public struct CompatibilityProfile: Equatable, Sendable {
         renderMode != .disabled
             && insertionMode != .disabled
             && (supportsOneWordAcceptance || supportsFullAcceptance)
+    }
+
+    public var debugSummary: String {
+        let fallbackRender = fallbackRenderMode?.rawValue ?? "none"
+        let fallbackInsertion = fallbackInsertionMode?.rawValue ?? "none"
+
+        return "primary render=\(renderMode.rawValue), insert=\(insertionMode.rawValue); fallback render=\(fallbackRender), insert=\(fallbackInsertion); field=\(fieldIdentityMode.rawValue)"
     }
 }
 
@@ -108,6 +121,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "TextEdit",
             renderMode: .inlineAdjacent,
             insertionMode: .axSelectedText,
+            fallbackRenderMode: .floatingMirror,
+            fallbackInsertionMode: .axValueReplacement,
             notes: "Green reference target. Use for caret geometry, one-word acceptance, and full-accept regression tests."
         ),
         CompatibilityProfile(
@@ -115,6 +130,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Notes",
             renderMode: .inlineAdjacent,
             insertionMode: .axSelectedText,
+            fallbackRenderMode: .floatingMirror,
+            fallbackInsertionMode: .axValueReplacement,
             notes: "Green/yellow rich-text target. Re-probe each focused field because title, note body, and lists can differ."
         ),
         CompatibilityProfile(
@@ -122,6 +139,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Obsidian",
             renderMode: .floatingMirror,
             insertionMode: .axThenKeyEvents,
+            fallbackRenderMode: .floatingMirror,
+            fallbackInsertionMode: .keyEvents,
             fieldIdentityMode: .stableBounds,
             notes: "Yellow Electron target. Prefer capability probing, mirror-style placement, and verified AX before synthetic key insertion."
         ),
@@ -130,6 +149,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Mail",
             renderMode: .disabled,
             insertionMode: .disabled,
+            fallbackRenderMode: .disabled,
+            fallbackInsertionMode: .disabled,
             fieldIdentityMode: .stableBounds,
             supportsOneWordAcceptance: false,
             supportsFullAcceptance: false,
@@ -142,6 +163,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Chrome",
             renderMode: .floatingMirror,
             insertionMode: .axValueReplacement,
+            fallbackRenderMode: .floatingMirror,
+            fallbackInsertionMode: .keyEvents,
             notes: "Yellow browser target. Verified on a local textarea with AXTextArea, selected range, and settable selected text. Chrome can report zero-height caret bounds, so use mirror anchoring."
         )
     ])
