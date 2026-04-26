@@ -46,21 +46,26 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
             .filter { $0.hasPrefix(fragment) && $0.count > fragment.count }
 
         var seen: Set<String> = []
-        return (recent + staticMatches)
+        return (recent.map { (word: $0, priority: 0) } + staticMatches.map { (word: $0, priority: 1) })
             .filter { word in
-                guard !seen.contains(word) else {
+                guard !seen.contains(word.word) else {
                     return false
                 }
-                seen.insert(word)
+                seen.insert(word.word)
                 return true
             }
             .sorted { lhs, rhs in
-                if lhs.count == rhs.count {
-                    return lhs < rhs
+                if lhs.priority != rhs.priority {
+                    return lhs.priority < rhs.priority
                 }
 
-                return lhs.count < rhs.count
+                if lhs.word.count == rhs.word.count {
+                    return lhs.word < rhs.word
+                }
+
+                return lhs.word.count < rhs.word.count
             }
+            .map(\.word)
     }
 
     private func trailingFragment(in text: String) -> String? {
@@ -78,11 +83,17 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
     }
 
     public static let defaultWords = [
-        "autocomplete", "available", "because", "completion", "computer", "context",
-        "conversation", "diagnostics", "dictation", "different", "document",
-        "evaluation", "fantastic", "important", "inference", "instant",
-        "interesting", "language", "meaning", "model", "obsidian", "option",
-        "prediction", "prompt", "reliable", "suggestion", "transcripted",
-        "tracing", "typing", "understand", "verification", "window", "writing"
+        "about", "actually", "again", "also", "always", "around", "available",
+        "because", "before", "being", "better", "between", "bring", "build",
+        "change", "completion", "computer", "context", "conversation", "could",
+        "definitely", "diagnostics", "dictation", "different", "document",
+        "everything", "evaluation", "fantastic", "first", "going", "great",
+        "important", "inference", "instant", "interesting", "language", "make",
+        "meaning", "model", "notes", "obsidian", "option", "people",
+        "prediction", "prompt", "really", "reliable", "right", "something",
+        "suggestion", "system", "their", "there", "these", "thing", "think",
+        "transcripted", "tracing", "trying", "typing", "understand",
+        "verification", "what", "when", "where", "which", "while", "window",
+        "without", "would", "writing"
     ]
 }

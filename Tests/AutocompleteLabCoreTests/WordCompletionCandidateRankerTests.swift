@@ -16,9 +16,17 @@ struct WordCompletionCandidateRankerTests {
     func usesRecentWords() {
         let ranker = WordCompletionCandidateRanker(staticWords: ["document"])
 
-        let suggestion = ranker.suggestion(for: "Open doc", recentWords: ["docker"])
+        let suggestion = ranker.suggestion(for: "Open doc", recentWords: ["documentary"])
 
-        #expect(suggestion?.visibleText == "ker")
+        #expect(suggestion?.visibleText == "umentary")
+    }
+
+    @Test("common fragments complete without waiting for the model")
+    func commonFragmentsComplete() {
+        let ranker = WordCompletionCandidateRanker()
+
+        #expect(ranker.suggestion(for: "Hey wh")?.visibleText == "at")
+        #expect(ranker.suggestion(for: "Can we ma")?.visibleText == "ke")
     }
 
     @Test("does not suggest phrases or completed words")
@@ -30,4 +38,3 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "I use dic ") == nil)
     }
 }
-
