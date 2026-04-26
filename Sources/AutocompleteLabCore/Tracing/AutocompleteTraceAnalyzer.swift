@@ -74,6 +74,8 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     public func summary(for events: [AutocompleteTraceEvent]) -> AutocompleteTraceSummary {
         let presented = events.filter { $0.type == .suggestionPresented }
         let accepted = events.filter { $0.type == .suggestionAccepted }
+        let presentedIDs = Set(presented.map(\.suggestionID))
+        let acceptedIDs = Set(accepted.map(\.suggestionID)).intersection(presentedIDs)
         let typedOver = events.filter { $0.type == .suggestionTypedOver }
         let hiddenIgnored = events.filter { $0.type == .suggestionHidden && $0.outcome == "ignored" }
         let insertionFailures = events.filter { $0.type == .insertionFailed }
@@ -86,7 +88,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             typedOverCount: typedOver.count,
             ignoredCount: hiddenIgnored.count,
             insertionFailureCount: insertionFailures.count,
-            acceptRate: presented.isEmpty ? 0 : Double(accepted.count) / Double(presented.count),
+            acceptRate: presentedIDs.isEmpty ? 0 : Double(acceptedIDs.count) / Double(presentedIDs.count),
             p50LatencyMilliseconds: percentile(0.50, in: latencies),
             p90LatencyMilliseconds: percentile(0.90, in: latencies),
             p95LatencyMilliseconds: percentile(0.95, in: latencies),
@@ -109,9 +111,14 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         accepted: [AutocompleteTraceEvent],
         key: (AutocompleteTraceEvent) -> String
     ) -> [String: Double] {
-        let presentedCounts = Dictionary(grouping: presented, by: key)
+        let presentedByID = Dictionary(uniqueKeysWithValues: presented.map { ($0.suggestionID, $0) })
+        let acceptedIDs = Set(accepted.map(\.suggestionID))
+        let acceptedPresented = presentedByID
+            .filter { acceptedIDs.contains($0.key) }
+            .map(\.value)
+        let presentedCounts = Dictionary(grouping: Array(presentedByID.values), by: key)
             .mapValues(\.count)
-        let acceptedCounts = Dictionary(grouping: accepted, by: key)
+        let acceptedCounts = Dictionary(grouping: acceptedPresented, by: key)
             .mapValues(\.count)
 
         var rates: [String: Double] = [:]

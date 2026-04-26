@@ -9,6 +9,7 @@ struct AutocompleteTraceAnalyzerTests {
         let events = [
             event(.suggestionPresented, suggestionID: "one", displayedText: "tation", latency: 12),
             event(.suggestionAccepted, suggestionID: "one", acceptedText: "tation"),
+            event(.suggestionAccepted, suggestionID: "one", acceptedText: " again"),
             event(.suggestionPresented, suggestionID: "two", displayedText: "best option available", latency: 80),
             event(.suggestionTypedOver, suggestionID: "two", displayedText: "best option available"),
             event(.insertionFailed, suggestionID: "three", reason: "insert-verification-failed")
@@ -16,9 +17,9 @@ struct AutocompleteTraceAnalyzerTests {
 
         let summary = AutocompleteTraceAnalyzer().summary(for: events)
 
-        #expect(summary.totalEvents == 5)
+        #expect(summary.totalEvents == 6)
         #expect(summary.presentedCount == 2)
-        #expect(summary.acceptedCount == 1)
+        #expect(summary.acceptedCount == 2)
         #expect(summary.typedOverCount == 1)
         #expect(summary.insertionFailureCount == 1)
         #expect(summary.acceptRate == 0.5)
