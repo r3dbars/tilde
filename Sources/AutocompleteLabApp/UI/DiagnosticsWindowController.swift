@@ -7,11 +7,13 @@ final class DiagnosticsWindowController {
     private let textView: NSTextView
     private let refreshButton: NSButton
     private let pauseTracingButton: NSButton
+    private let screenshotTracingButton: NSButton
     private let openTraceFolderButton: NSButton
     private let exportReportButton: NSButton
     private let deleteTracesButton: NSButton
     private var refreshAction: (() -> Void)?
     private var toggleTracingAction: (() -> Void)?
+    private var toggleScreenshotTracingAction: (() -> Void)?
     private var openTraceFolderAction: (() -> Void)?
     private var exportReportAction: (() -> Void)?
     private var deleteTracesAction: (() -> Void)?
@@ -25,6 +27,7 @@ final class DiagnosticsWindowController {
 
         refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
         pauseTracingButton = NSButton(title: "Pause Tracing", target: nil, action: nil)
+        screenshotTracingButton = NSButton(title: "Screenshot Trace", target: nil, action: nil)
         openTraceFolderButton = NSButton(title: "Open Trace Folder", target: nil, action: nil)
         exportReportButton = NSButton(title: "Export Report", target: nil, action: nil)
         deleteTracesButton = NSButton(title: "Delete Traces", target: nil, action: nil)
@@ -36,6 +39,7 @@ final class DiagnosticsWindowController {
         let buttonStack = NSStackView(views: [
             refreshButton,
             pauseTracingButton,
+            screenshotTracingButton,
             openTraceFolderButton,
             exportReportButton,
             deleteTracesButton
@@ -63,6 +67,8 @@ final class DiagnosticsWindowController {
         refreshButton.action = #selector(refresh)
         pauseTracingButton.target = self
         pauseTracingButton.action = #selector(toggleTracing)
+        screenshotTracingButton.target = self
+        screenshotTracingButton.action = #selector(toggleScreenshotTracing)
         openTraceFolderButton.target = self
         openTraceFolderButton.action = #selector(openTraceFolder)
         exportReportButton.target = self
@@ -84,18 +90,24 @@ final class DiagnosticsWindowController {
         recentTraceEvents: [AutocompleteTraceEvent],
         tracePath: String,
         tracingPaused: Bool,
+        screenshotTracingEnabled: Bool,
+        compatibilityLearningPath: String,
+        compatibilityLearningProfile: CompatibilityLearningProfile?,
         refreshAction: @escaping () -> Void,
         toggleTracingAction: @escaping () -> Void,
+        toggleScreenshotTracingAction: @escaping () -> Void,
         openTraceFolderAction: @escaping () -> Void,
         exportReportAction: @escaping () -> Void,
         deleteTracesAction: @escaping () -> Void
     ) {
         self.refreshAction = refreshAction
         self.toggleTracingAction = toggleTracingAction
+        self.toggleScreenshotTracingAction = toggleScreenshotTracingAction
         self.openTraceFolderAction = openTraceFolderAction
         self.exportReportAction = exportReportAction
         self.deleteTracesAction = deleteTracesAction
         pauseTracingButton.title = tracingPaused ? "Resume Tracing" : "Pause Tracing"
+        screenshotTracingButton.title = screenshotTracingEnabled ? "Screenshots On" : "Screenshots Off"
 
         var sections: [String] = []
 
@@ -111,7 +123,14 @@ final class DiagnosticsWindowController {
         sections.append("Model folder: \(modelDirectoryPath)")
         sections.append("Compatibility: \(compatibilityStatus.summary)")
         sections.append("Current app enabled: \(appEnabled)")
-        sections.append(traceSummaryText(traceSummary, tracePath: tracePath, tracingPaused: tracingPaused))
+        sections.append(traceSummaryText(
+            traceSummary,
+            tracePath: tracePath,
+            tracingPaused: tracingPaused,
+            screenshotTracingEnabled: screenshotTracingEnabled,
+            compatibilityLearningPath: compatibilityLearningPath,
+            compatibilityLearningProfile: compatibilityLearningProfile
+        ))
         sections.append(acceptRateBucketsText(title: "Accept rate by app", buckets: traceSummary.acceptRateByApp))
         sections.append(acceptRateBucketsText(title: "Accept rate by mode", buckets: traceSummary.acceptRateByMode))
         sections.append(topMissesText(traceSummary.topMisses))
@@ -151,12 +170,18 @@ final class DiagnosticsWindowController {
     private func traceSummaryText(
         _ summary: AutocompleteTraceSummary,
         tracePath: String,
-        tracingPaused: Bool
+        tracingPaused: Bool,
+        screenshotTracingEnabled: Bool,
+        compatibilityLearningPath: String,
+        compatibilityLearningProfile: CompatibilityLearningProfile?
     ) -> String {
         """
         Trace eval:
           path: \(tracePath)
           tracing: \(tracingPaused ? "paused" : "on")
+          screenshot tracing: \(screenshotTracingEnabled ? "on" : "off")
+          compatibility learning: \(compatibilityLearningPath)
+          current learned adapter: \(compatibilityLearningProfile?.debugSummary ?? "none")
           events: \(summary.totalEvents)
           presented: \(summary.presentedCount)
           accepted: \(summary.acceptedCount)
@@ -236,6 +261,11 @@ final class DiagnosticsWindowController {
     @objc
     private func toggleTracing() {
         toggleTracingAction?()
+    }
+
+    @objc
+    private func toggleScreenshotTracing() {
+        toggleScreenshotTracingAction?()
     }
 
     @objc

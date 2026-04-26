@@ -24,6 +24,23 @@ Enable optional local screenshot traces with:
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/build_and_run.sh
 ```
 
+Or turn screenshots on for only the current app from Diagnostics. Screenshot traces are stored beside the JSONL log and linked from the exported report.
+
+The app also keeps local compatibility learning here:
+
+```text
+~/Library/Application Support/AutocompleteLab/compatibility-learning.json
+```
+
+That file can hold per-app visual offsets, render-mode overrides, screenshot-tracing state, observation counts, and confidence. This is the first self-healing layer: small learned adjustments can apply at runtime, while bigger repeated misses become adapter patches.
+
+For quick visual calibration, use the menu bar nudge actions while the target app is focused:
+
+- `Nudge Suggestion Up/Down/Left/Right`
+- `Reset Current App Learning`
+
+Nudges are local, per app, and take effect on the next suggestion.
+
 ## Trace Events
 
 Each suggestion gets a `suggestionID` and emits lifecycle events:
@@ -38,7 +55,7 @@ Each suggestion gets a `suggestionID` and emits lifecycle events:
 - `insertionVerified`
 - `insertionFailed`
 
-Events include app bundle id, request mode, field identity, prompt/output when available, displayed text, accepted text, outcome, reason, and latency.
+Events include app bundle id, request mode, field identity, prompt/output when available, displayed text, accepted text, outcome, reason, latency, screenshot path, caret/panel geometry, and compatibility-learning metadata.
 
 ## What To Evaluate
 
@@ -51,7 +68,7 @@ Track these rates per app and request mode:
 - suppressed as empty, meta, repeated context, or invalid word completion
 - insertion verification failures
 
-Use the in-app Diagnostics window for the quickest read. It shows recent trace events, top misses, accept rates by app/mode, pause/delete controls, and an HTML export.
+Use the in-app Diagnostics window for the quickest read. It shows recent trace events, top misses, accept rates by app/mode, pause/delete controls, screenshot tracing, current learned adapter state, and an HTML export.
 
 Use the command-line checker for repeatable proof:
 

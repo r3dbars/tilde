@@ -11,6 +11,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let pauseDefaultsKey = "AutocompleteLabTracePaused"
+    private let screenshotDefaultsKey = "AutocompleteLabScreenshotTraceEnabled"
 
     private init() {
         logURL = FileManager.default
@@ -66,8 +67,16 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     }
 
     var screenshotTracingEnabled: Bool {
+        if UserDefaults.standard.bool(forKey: screenshotDefaultsKey) {
+            return true
+        }
+
         let value = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_SCREENSHOT_TRACE"] ?? ""
         return ["1", "true", "yes", "on"].contains(value.lowercased())
+    }
+
+    func setScreenshotTracingEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: screenshotDefaultsKey)
     }
 
     func recordModelResult(
@@ -266,6 +275,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
               <td>\(escape(event.displayedText))</td>
               <td>\(escape(event.acceptedText))</td>
               <td>\(escape(event.reason))</td>
+              <td>\(screenshotLink(event.screenshotPath))</td>
               <td>\(event.latencyMilliseconds.map(String.init) ?? "")</td>
             </tr>
             """
@@ -319,7 +329,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           <ol>\(misses)</ol>
           <h2>Recent events</h2>
           <table>
-            <thead><tr><th>Time</th><th>Type</th><th>Mode</th><th>App</th><th>Shown</th><th>Accepted</th><th>Reason</th><th>Latency ms</th></tr></thead>
+            <thead><tr><th>Time</th><th>Type</th><th>Mode</th><th>App</th><th>Shown</th><th>Accepted</th><th>Reason</th><th>Screenshot</th><th>Latency ms</th></tr></thead>
             <tbody>\(rows)</tbody>
           </table>
         </body>
@@ -333,5 +343,13 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
             .replacingOccurrences(of: "\"", with: "&quot;")
+    }
+
+    private static func screenshotLink(_ path: String) -> String {
+        guard !path.isEmpty else {
+            return ""
+        }
+
+        return "<a href=\"file://\(escape(path))\">open</a>"
     }
 }

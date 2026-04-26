@@ -1,6 +1,6 @@
 import Foundation
 
-public enum SuggestionRenderMode: String, Equatable, Sendable {
+public enum SuggestionRenderMode: String, Codable, Equatable, Sendable {
     case inlineAdjacent
     case floatingMirror
     case disabled

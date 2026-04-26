@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let insertionVerification = InsertionVerification()
     private let insertionRetryPolicy = InsertionRetryPolicy()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
+    private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private let suggestionPanel = SuggestionPanelController()
     private let diagnosticsWindow = DiagnosticsWindowController()
     private lazy var settingsWindow = SettingsWindowController(
@@ -110,6 +111,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Show Diagnostics", action: #selector(showDiagnostics), keyEquivalent: "d"))
         menu.addItem(NSMenuItem(title: "Reveal Model Folder", action: #selector(revealModelFolder), keyEquivalent: "m"))
         menu.addItem(toggleItem)
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Nudge Suggestion Up", action: #selector(nudgeCurrentAppSuggestionUp), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Nudge Suggestion Down", action: #selector(nudgeCurrentAppSuggestionDown), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Nudge Suggestion Left", action: #selector(nudgeCurrentAppSuggestionLeft), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Nudge Suggestion Right", action: #selector(nudgeCurrentAppSuggestionRight), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Reset Current App Learning", action: #selector(resetCurrentAppLearning), keyEquivalent: ""))
+        menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Request Accessibility Permission", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Open Accessibility Settings", action: #selector(openAccessibilitySettings), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
@@ -324,13 +332,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let renderMode = RenderModePlan.effectiveMode(
+        let baseRenderMode = RenderModePlan.effectiveMode(
             for: profile,
             supportsInlineSuggestions: context.capabilities.supportsInlineSuggestions,
             hasMirrorAnchor: context.elementRect != nil || context.windowRect != nil
         )
 
-        guard let renderMode else {
+        guard let baseRenderMode else {
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
@@ -343,6 +351,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion()
             return
         }
+        let renderMode = compatibilityLearningStore.engine()
+            .adjustment(for: profile.bundleIdentifier, profileRenderMode: baseRenderMode)
+            .effectiveRenderMode
 
         if shouldSuppressDetachedSuggestion(
             profile: profile,
@@ -904,7 +915,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ) {
                 let screenshotPath = captureTraceScreenshot(
                     near: context.elementRect ?? context.windowRect ?? context.caretRect,
-                    suggestionID: suggestionID
+                    suggestionID: suggestionID,
+                    bundleIdentifier: appBundleIdentifier
                 )
                 presentSuggestion(
                     fastSuggestion,
@@ -1030,7 +1042,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     )
                     let screenshotPath = self.captureTraceScreenshot(
                         near: context.elementRect ?? context.windowRect ?? context.caretRect,
-                        suggestionID: suggestionID
+                        suggestionID: suggestionID,
+                        bundleIdentifier: appBundleIdentifier
                     )
                     self.presentSuggestion(
                         suggestion,
@@ -1065,12 +1078,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         triggerReason: String,
         screenshotPath: String
     ) {
-        let anchorRect = RenderModePlan.anchorRect(
-            for: renderMode,
+        let learningAdjustment = compatibilityLearningStore.engine().adjustment(
+            for: profile.bundleIdentifier,
+            profileRenderMode: renderMode
+        )
+        let effectiveRenderMode = learningAdjustment.effectiveRenderMode
+        let anchorRect = learningAdjustment.adjusted(RenderModePlan.anchorRect(
+            for: effectiveRenderMode,
             caretRect: context.caretRect,
             elementRect: context.elementRect,
             windowRect: context.windowRect
-        )
+        ))
+        let adjustedTextLineRect = learningAdjustment.adjusted(context.textLineRect)
+        let adjustedClippingRect = context.elementRect ?? context.windowRect
 
         guard let anchorRect else {
             RawAutocompleteTraceLog.shared.record(
@@ -1095,17 +1115,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionTextBeforeCursor = request.textBeforeCursor
         currentSuggestionDisplayedText = suggestion.visibleText
         lastCaretRect = anchorRect
-        lastTextLineRect = context.textLineRect
-        lastClippingRect = context.elementRect ?? context.windowRect
+        lastTextLineRect = adjustedTextLineRect
+        lastClippingRect = adjustedClippingRect
         lastTextStyle = context.textStyle
-        lastRenderMode = renderMode
+        lastRenderMode = effectiveRenderMode
         suggestionPanel.show(
             text: suggestion.visibleText,
             near: anchorRect,
-            alignedTo: renderMode == .inlineAdjacent ? context.textLineRect : nil,
-            boundedBy: context.elementRect ?? context.windowRect,
+            alignedTo: effectiveRenderMode == .inlineAdjacent ? adjustedTextLineRect : nil,
+            boundedBy: adjustedClippingRect,
             style: context.textStyle,
-            renderMode: renderMode
+            renderMode: effectiveRenderMode
+        )
+        compatibilityLearningStore.recordObservation(
+            for: profile.bundleIdentifier,
+            reason: "suggestion-presented"
         )
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionPresented,
@@ -1121,27 +1145,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             latencyMilliseconds: latencyMilliseconds,
             screenshotPath: screenshotPath,
             metadata: [
-                "effectiveRenderMode": renderMode.rawValue,
-                "visibleChars": String(suggestion.visibleText.count)
-            ].merging(traceGeometryMetadata(context: context, renderMode: renderMode)) { current, _ in current }
+                "effectiveRenderMode": effectiveRenderMode.rawValue,
+                "visibleChars": String(suggestion.visibleText.count),
+                "anchorRect": compactRectDescription(anchorRect),
+                "textLineRect": adjustedTextLineRect.map(compactRectDescription) ?? "none",
+                "clippingRect": adjustedClippingRect.map(compactRectDescription) ?? "none"
+            ]
+            .merging(traceGeometryMetadata(context: context, renderMode: effectiveRenderMode)) { current, _ in current }
+            .merging(learningAdjustment.metadata) { current, _ in current }
         )
         recordSuggestionEvent(
             "suggestion-presented",
             context: context,
             profile: profile,
             metadata: [
-                "effectiveRenderMode": renderMode.rawValue,
+                "effectiveRenderMode": effectiveRenderMode.rawValue,
                 "requestMode": request.mode.rawValue,
                 "visibleChars": String(suggestion.visibleText.count),
                 "suggestionID": suggestionID,
                 "latencyMilliseconds": String(latencyMilliseconds)
-            ]
+            ].merging(learningAdjustment.metadata) { current, _ in current }
         )
         startKeyboardEventTapIfPossible()
     }
 
-    private func captureTraceScreenshot(near rect: CGRect?, suggestionID: String) -> String {
-        guard RawAutocompleteTraceLog.shared.screenshotTracingEnabled,
+    private func captureTraceScreenshot(
+        near rect: CGRect?,
+        suggestionID: String,
+        bundleIdentifier: String
+    ) -> String {
+        let appScreenshotTracingEnabled = compatibilityLearningStore
+            .profile(for: bundleIdentifier)?
+            .screenshotTracingEnabled == true
+        guard (RawAutocompleteTraceLog.shared.screenshotTracingEnabled || appScreenshotTracingEnabled),
               let rect else {
             return ""
         }
@@ -1165,6 +1201,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   FileManager.default.fileExists(atPath: screenshotURL.path) else {
                 return ""
             }
+            compatibilityLearningStore.recordObservation(
+                for: bundleIdentifier,
+                reason: "screenshot-captured"
+            )
             return screenshotURL.path
         } catch {
             return ""
@@ -1355,22 +1395,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let anchorRect = RenderModePlan.anchorRect(
-            for: renderMode,
+        let learningAdjustment = compatibilityLearningStore.engine().adjustment(
+            for: profile.bundleIdentifier,
+            profileRenderMode: renderMode
+        )
+        let effectiveRenderMode = learningAdjustment.effectiveRenderMode
+        let anchorRect = learningAdjustment.adjusted(RenderModePlan.anchorRect(
+            for: effectiveRenderMode,
             caretRect: context.caretRect,
             elementRect: context.elementRect,
             windowRect: context.windowRect
-        )
+        ))
 
         guard let anchorRect else {
             return
         }
 
         lastCaretRect = anchorRect
-        lastTextLineRect = context.textLineRect
+        lastTextLineRect = learningAdjustment.adjusted(context.textLineRect)
         lastClippingRect = context.elementRect ?? context.windowRect
         lastTextStyle = context.textStyle
-        lastRenderMode = renderMode
+        lastRenderMode = effectiveRenderMode
         refreshVisibleSuggestion()
     }
 
@@ -1657,6 +1702,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ?? .unsupported
         let profile = app.flatMap { profileStore.profile(for: $0.bundleIdentifier) }
         let appEnabled = app.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
+        let bundleIdentifier = app?.bundleIdentifier ?? ""
 
         diagnosticsWindow.show(
             diagnostics: accessibilityClient.focusedTextDiagnostics(
@@ -1673,11 +1719,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recentTraceEvents: RawAutocompleteTraceLog.shared.recentEvents(limit: 48),
             tracePath: RawAutocompleteTraceLog.shared.path,
             tracingPaused: RawAutocompleteTraceLog.shared.isPaused,
+            screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled
+                || compatibilityLearningStore.profile(for: bundleIdentifier)?.screenshotTracingEnabled == true,
+            compatibilityLearningPath: compatibilityLearningStore.path,
+            compatibilityLearningProfile: compatibilityLearningStore.profile(for: bundleIdentifier),
             refreshAction: { [weak self] in
                 self?.showDiagnostics()
             },
             toggleTracingAction: { [weak self] in
                 self?.toggleTracing()
+            },
+            toggleScreenshotTracingAction: { [weak self] in
+                self?.toggleScreenshotTracing(for: bundleIdentifier)
             },
             openTraceFolderAction: {
                 self.openTraceFolder()
@@ -1700,6 +1753,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: ["paused": String(nextPaused)]
         )
         showDiagnostics()
+    }
+
+    private func toggleScreenshotTracing(for bundleIdentifier: String) {
+        guard !bundleIdentifier.isEmpty else {
+            RawAutocompleteTraceLog.shared.setScreenshotTracingEnabled(!RawAutocompleteTraceLog.shared.screenshotTracingEnabled)
+            showDiagnostics()
+            return
+        }
+
+        let current = compatibilityLearningStore.profile(for: bundleIdentifier)?.screenshotTracingEnabled == true
+        compatibilityLearningStore.setScreenshotTracing(!current, for: bundleIdentifier)
+        DiagnosticsLog.shared.record(
+            "screenshot-trace-control",
+            metadata: [
+                "app": bundleIdentifier,
+                "enabled": String(!current)
+            ]
+        )
+        showDiagnostics()
+    }
+
+    @objc
+    private func nudgeCurrentAppSuggestionUp() {
+        nudgeCurrentAppSuggestion(dx: 0, dy: -2)
+    }
+
+    @objc
+    private func nudgeCurrentAppSuggestionDown() {
+        nudgeCurrentAppSuggestion(dx: 0, dy: 2)
+    }
+
+    @objc
+    private func nudgeCurrentAppSuggestionLeft() {
+        nudgeCurrentAppSuggestion(dx: -2, dy: 0)
+    }
+
+    @objc
+    private func nudgeCurrentAppSuggestionRight() {
+        nudgeCurrentAppSuggestion(dx: 2, dy: 0)
+    }
+
+    private func nudgeCurrentAppSuggestion(dx: Double, dy: Double) {
+        guard let bundleIdentifier = accessibilityClient.frontmostApplication()?.bundleIdentifier,
+              profileStore.allows(bundleIdentifier: bundleIdentifier) else {
+            DiagnosticsLog.shared.record("compatibility-learning-nudge-skipped")
+            return
+        }
+
+        compatibilityLearningStore.nudgeOffset(dx: dx, dy: dy, for: bundleIdentifier)
+        DiagnosticsLog.shared.record(
+            "compatibility-learning-nudge",
+            metadata: [
+                "app": bundleIdentifier,
+                "dx": String(dx),
+                "dy": String(dy)
+            ]
+        )
+    }
+
+    @objc
+    private func resetCurrentAppLearning() {
+        guard let bundleIdentifier = accessibilityClient.frontmostApplication()?.bundleIdentifier else {
+            return
+        }
+
+        compatibilityLearningStore.reset(bundleIdentifier: bundleIdentifier)
+        DiagnosticsLog.shared.record(
+            "compatibility-learning-reset",
+            metadata: ["app": bundleIdentifier]
+        )
     }
 
     private func openTraceFolder() {
