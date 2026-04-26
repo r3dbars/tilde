@@ -88,6 +88,28 @@ fi
 
 SCAN_LINES="$(tail -n +"$((START_LINE + 1))" "$LOG_PATH" 2>/dev/null || true)"
 
+count_pattern() {
+  local pattern="$1"
+  grep -E "$pattern" <<<"$SCAN_LINES" | wc -l | tr -d ' '
+}
+
+print_failure_summary() {
+  {
+    echo
+    echo "$DISPLAY_NAME smoke layer summary:"
+    echo "- suggestion-presented: $(count_pattern "suggestion-presented .*app=$BUNDLE_ID")"
+    echo "- expected render: $(count_pattern "suggestion-presented .*app=$BUNDLE_ID .*effectiveRenderMode=($EXPECTED_RENDER)")"
+    echo "- Tab autocomplete action: $(count_pattern "keyboard-action .*app=$BUNDLE_ID .*key=tab .*action=acceptNextWord .*handled=true")"
+    echo "- full autocomplete action: $(count_pattern "keyboard-action .*app=$BUNDLE_ID .*key=backtick .*action=acceptAllVisible .*handled=true")"
+    echo "- successful insert: $(count_pattern "insert .*app=$BUNDLE_ID .*success=true")"
+    echo "- verified insertions: $(count_pattern "insert-verification .*app=$BUNDLE_ID .*result=verified")"
+    echo "- failed verification: $(count_pattern "insert-verification .*app=$BUNDLE_ID .*result=(unchanged|partial|changedUnexpectedly|missing-context)")"
+    echo "- field suppression: $(count_pattern "field-suppressed .*app=$BUNDLE_ID")"
+    echo
+    echo "If suggestions appeared but Tab action is 0, the key probably bypassed the app event tap."
+  } >&2
+}
+
 require_pattern() {
   local pattern="$1"
   local label="$2"
@@ -95,6 +117,7 @@ require_pattern() {
   if ! grep -E "$pattern" <<<"$SCAN_LINES" >/dev/null; then
     echo "missing $DISPLAY_NAME diagnostics: $label" >&2
     echo "log: $LOG_PATH" >&2
+    print_failure_summary
     exit 1
   fi
 }
@@ -106,6 +129,7 @@ reject_pattern() {
   if grep -E "$pattern" <<<"$SCAN_LINES" >/dev/null; then
     echo "failed $DISPLAY_NAME diagnostics: $label" >&2
     echo "log: $LOG_PATH" >&2
+    print_failure_summary
     exit 1
   fi
 }
@@ -120,6 +144,7 @@ VERIFIED_COUNT="$(grep -E "insert-verification .*app=$BUNDLE_ID .*result=verifie
 if (( VERIFIED_COUNT < 2 )); then
   echo "expected at least two verified accepts for $DISPLAY_NAME, saw $VERIFIED_COUNT" >&2
   echo "log: $LOG_PATH" >&2
+  print_failure_summary
   exit 1
 fi
 
