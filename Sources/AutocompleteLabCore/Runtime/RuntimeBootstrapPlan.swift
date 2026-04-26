@@ -118,6 +118,16 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         expectedMinimumBytes: 1024 * 1024
     )
 
+    public static let gemma4E4BMLX = LocalModelAssetManifest(
+        model: .gemma4E4B,
+        runtimeCandidate: .mlx,
+        cacheDirectoryName: "Models/Gemma4E4B/MLX",
+        fileName: "gemma-4-e4b-4bit",
+        expectedMinimumBytes: 4 * 1024 * 1024 * 1024,
+        requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"],
+        requiresVisionLanguageFactory: true
+    )
+
     public static let gemma4A4BMLX = LocalModelAssetManifest(
         model: .gemma4A4B,
         runtimeCandidate: .mlx,
@@ -166,6 +176,9 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
 
     public static let selectableMLXManifests: [String: LocalModelAssetManifest] = [
         "gemma-4-e2b": .gemma4E2BMLX,
+        "gemma-4-e4b": .gemma4E4BMLX,
+        "gemma4-e4b": .gemma4E4BMLX,
+        "gemma-4-e4b-4bit": .gemma4E4BMLX,
         "gemma-4-26b": .gemma4A4BMLX,
         "qwen3-0.6b": .qwen3SmallMLX,
         "qwen3-1.7b": .qwen3MediumMLX,

@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
+import argparse
 import os
 import sys
 from pathlib import Path
 
-REPO_ID = "mlx-community/Qwen3.5-4B-4bit"
-TARGET = (
-    Path.home()
-    / "Library/Application Support/AutocompleteLab/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit"
-)
+MODELS = {
+    "qwen35-4b": {
+        "repo_id": "mlx-community/Qwen3.5-4B-4bit",
+        "target": "Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit",
+    },
+    "gemma-4-e4b": {
+        "repo_id": "mlx-community/gemma-4-e4b-4bit",
+        "target": "Models/Gemma4E4B/MLX/gemma-4-e4b-4bit",
+    },
+}
+
 ALLOW_PATTERNS = [
     "chat_template.jinja",
     "config.json",
@@ -26,7 +33,27 @@ ALLOW_PATTERNS = [
 ]
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Download an Autocomplete Lab MLX model.")
+    parser.add_argument(
+        "--model",
+        choices=sorted(MODELS),
+        default="qwen35-4b",
+        help="Model alias to download.",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = parse_args()
+    model = MODELS[args.model]
+    repo_id = model["repo_id"]
+    target = (
+        Path.home()
+        / "Library/Application Support/AutocompleteLab"
+        / model["target"]
+    )
+
     try:
         from huggingface_hub import snapshot_download
     except ImportError:
@@ -36,13 +63,13 @@ def main() -> int:
         )
         return 1
 
-    TARGET.mkdir(parents=True, exist_ok=True)
-    print(f"Downloading {REPO_ID}")
-    print(f"Target: {TARGET}")
+    target.mkdir(parents=True, exist_ok=True)
+    print(f"Downloading {repo_id}")
+    print(f"Target: {target}")
 
     snapshot_download(
-        repo_id=REPO_ID,
-        local_dir=str(TARGET),
+        repo_id=repo_id,
+        local_dir=str(target),
         allow_patterns=ALLOW_PATTERNS,
         token=os.environ.get("HF_TOKEN"),
     )
