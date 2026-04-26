@@ -474,9 +474,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let maxY = elementRect.maxY - verticalPadding - caretHeight
         let preferredY = elementRect.minY + verticalPadding + (CGFloat(lineIndex) * lineHeight)
         let y = min(max(preferredY, elementRect.minY + verticalPadding), maxY)
+        let codexHorizontalCorrection: CGFloat = -36
 
         return CGRect(
-            x: min(elementRect.minX + horizontalPadding + currentLineWidth, elementRect.maxX - horizontalPadding),
+            x: min(
+                elementRect.minX + horizontalPadding + currentLineWidth + codexHorizontalCorrection,
+                elementRect.maxX - horizontalPadding
+            ),
             y: y,
             width: 0,
             height: caretHeight
