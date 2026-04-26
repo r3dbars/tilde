@@ -11,19 +11,22 @@ public struct CompletionRequest: Equatable, Sendable {
     public let appBundleIdentifier: String?
     public let maxVisibleWords: Int
     public let mode: CompletionRequestMode
+    public let suggestionID: String
 
     public init(
         textBeforeCursor: String,
         textAfterCursor: String = "",
         appBundleIdentifier: String? = nil,
         maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords,
-        mode: CompletionRequestMode = .phraseContinuation
+        mode: CompletionRequestMode = .phraseContinuation,
+        suggestionID: String = ""
     ) {
         self.textBeforeCursor = textBeforeCursor
         self.textAfterCursor = textAfterCursor
         self.appBundleIdentifier = appBundleIdentifier
         self.maxVisibleWords = maxVisibleWords
         self.mode = mode
+        self.suggestionID = suggestionID
     }
 }
 

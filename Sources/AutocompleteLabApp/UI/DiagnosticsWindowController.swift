@@ -8,10 +8,12 @@ final class DiagnosticsWindowController {
     private let refreshButton: NSButton
     private let pauseTracingButton: NSButton
     private let openTraceFolderButton: NSButton
+    private let exportReportButton: NSButton
     private let deleteTracesButton: NSButton
     private var refreshAction: (() -> Void)?
     private var toggleTracingAction: (() -> Void)?
     private var openTraceFolderAction: (() -> Void)?
+    private var exportReportAction: (() -> Void)?
     private var deleteTracesAction: (() -> Void)?
 
     init() {
@@ -24,6 +26,7 @@ final class DiagnosticsWindowController {
         refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
         pauseTracingButton = NSButton(title: "Pause Tracing", target: nil, action: nil)
         openTraceFolderButton = NSButton(title: "Open Trace Folder", target: nil, action: nil)
+        exportReportButton = NSButton(title: "Export Report", target: nil, action: nil)
         deleteTracesButton = NSButton(title: "Delete Traces", target: nil, action: nil)
 
         let scrollView = NSScrollView(frame: .zero)
@@ -34,6 +37,7 @@ final class DiagnosticsWindowController {
             refreshButton,
             pauseTracingButton,
             openTraceFolderButton,
+            exportReportButton,
             deleteTracesButton
         ])
         buttonStack.orientation = .horizontal
@@ -61,6 +65,8 @@ final class DiagnosticsWindowController {
         pauseTracingButton.action = #selector(toggleTracing)
         openTraceFolderButton.target = self
         openTraceFolderButton.action = #selector(openTraceFolder)
+        exportReportButton.target = self
+        exportReportButton.action = #selector(exportReport)
         deleteTracesButton.target = self
         deleteTracesButton.action = #selector(deleteTraces)
     }
@@ -81,11 +87,13 @@ final class DiagnosticsWindowController {
         refreshAction: @escaping () -> Void,
         toggleTracingAction: @escaping () -> Void,
         openTraceFolderAction: @escaping () -> Void,
+        exportReportAction: @escaping () -> Void,
         deleteTracesAction: @escaping () -> Void
     ) {
         self.refreshAction = refreshAction
         self.toggleTracingAction = toggleTracingAction
         self.openTraceFolderAction = openTraceFolderAction
+        self.exportReportAction = exportReportAction
         self.deleteTracesAction = deleteTracesAction
         pauseTracingButton.title = tracingPaused ? "Resume Tracing" : "Pause Tracing"
 
@@ -217,6 +225,11 @@ final class DiagnosticsWindowController {
     @objc
     private func openTraceFolder() {
         openTraceFolderAction?()
+    }
+
+    @objc
+    private func exportReport() {
+        exportReportAction?()
     }
 
     @objc

@@ -65,6 +65,11 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         }
     }
 
+    var screenshotTracingEnabled: Bool {
+        let value = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_SCREENSHOT_TRACE"] ?? ""
+        return ["1", "true", "yes", "on"].contains(value.lowercased())
+    }
+
     func recordModelResult(
         request: CompletionRequest,
         prompt: CompletionPrompt,
@@ -217,5 +222,104 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
 
     func summary(limit: Int = 2_000) -> AutocompleteTraceSummary {
         AutocompleteTraceAnalyzer().summary(for: recentEvents(limit: limit))
+    }
+
+    func exportHTMLReport(limit: Int = 2_000) -> URL? {
+        queue.sync { [folderURL, decoder] in
+            let logURL = folderURL.appendingPathComponent("traces.jsonl")
+            guard let contents = try? String(contentsOf: logURL, encoding: .utf8) else {
+                return nil
+            }
+
+            let events = contents
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .suffix(limit)
+                .compactMap { line in
+                    try? decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
+                }
+
+            let summary = AutocompleteTraceAnalyzer().summary(for: events)
+            let html = Self.htmlReport(summary: summary, events: events)
+            let reportURL = folderURL.appendingPathComponent("trace-report.html")
+
+            do {
+                try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+                try html.write(to: reportURL, atomically: true, encoding: .utf8)
+                return reportURL
+            } catch {
+                return nil
+            }
+        }
+    }
+
+    private static func htmlReport(
+        summary: AutocompleteTraceSummary,
+        events: [AutocompleteTraceEvent]
+    ) -> String {
+        let rows = events.suffix(200).reversed().map { event in
+            """
+            <tr>
+              <td>\(escape(event.timestamp))</td>
+              <td>\(escape(event.type.rawValue))</td>
+              <td>\(escape(event.requestMode))</td>
+              <td>\(escape(event.appBundleIdentifier))</td>
+              <td>\(escape(event.displayedText))</td>
+              <td>\(escape(event.acceptedText))</td>
+              <td>\(escape(event.reason))</td>
+              <td>\(event.latencyMilliseconds.map(String.init) ?? "")</td>
+            </tr>
+            """
+        }.joined(separator: "\n")
+
+        let misses = summary.topMisses.map { miss in
+            "<li><strong>\(escape(miss.title))</strong> count=\(miss.count) fix=\(escape(miss.fixCategory)) example=\(escape(miss.exampleSuggestionID))</li>"
+        }.joined(separator: "\n")
+
+        return """
+        <!doctype html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Autocomplete Lab Trace Report</title>
+          <style>
+            body { font: 14px -apple-system, BlinkMacSystemFont, sans-serif; margin: 28px; color: #1d1d1f; }
+            h1 { font-size: 24px; }
+            .grid { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 10px; margin: 18px 0; }
+            .metric { border: 1px solid #ddd; border-radius: 6px; padding: 10px; }
+            .metric b { display: block; font-size: 22px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+            th, td { border-bottom: 1px solid #e5e5e5; text-align: left; padding: 7px; vertical-align: top; }
+            th { background: #f7f7f7; position: sticky; top: 0; }
+            code { background: #f5f5f5; padding: 1px 4px; border-radius: 4px; }
+          </style>
+        </head>
+        <body>
+          <h1>Autocomplete Lab Trace Report</h1>
+          <p>Generated locally. Nothing was uploaded.</p>
+          <div class="grid">
+            <div class="metric"><b>\(summary.totalEvents)</b>events</div>
+            <div class="metric"><b>\(summary.presentedCount)</b>shown</div>
+            <div class="metric"><b>\(summary.acceptedCount)</b>accepted</div>
+            <div class="metric"><b>\(summary.typedOverCount)</b>typed over</div>
+            <div class="metric"><b>\(Int((summary.acceptRate * 100).rounded()))%</b>accept rate</div>
+          </div>
+          <h2>Top 5 misses</h2>
+          <ol>\(misses)</ol>
+          <h2>Recent events</h2>
+          <table>
+            <thead><tr><th>Time</th><th>Type</th><th>Mode</th><th>App</th><th>Shown</th><th>Accepted</th><th>Reason</th><th>Latency ms</th></tr></thead>
+            <tbody>\(rows)</tbody>
+          </table>
+        </body>
+        </html>
+        """
+    }
+
+    private static func escape(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
     }
 }

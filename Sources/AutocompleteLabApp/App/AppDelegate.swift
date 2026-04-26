@@ -629,15 +629,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) {
         lastRequestedTextBeforeCursor = context.textBeforeCursor
 
+        let suggestionID = UUID().uuidString
         let request = CompletionRequest(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             appBundleIdentifier: appBundleIdentifier,
-            mode: requestMode
+            mode: requestMode,
+            suggestionID: suggestionID
         )
         currentCompletionRequest = request
         let requestTicket = suggestionRequestGate.issue(request: request)
-        let suggestionID = UUID().uuidString
         let requestStartedAt = Date()
         let fieldIdentityDescription = fieldIdentity.traceDescription
 
@@ -661,6 +662,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                for: context.textBeforeCursor,
                recentWords: recentAcceptedWords
            ) {
+            let screenshotPath = captureTraceScreenshot(
+                near: context.elementRect ?? context.windowRect ?? context.caretRect,
+                suggestionID: suggestionID
+            )
             presentSuggestion(
                 fastSuggestion,
                 suggestionID: suggestionID,
@@ -671,7 +676,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 renderMode: renderMode,
                 latencyMilliseconds: 0,
                 triggerReason: "fast-word-completion",
-                screenshotPath: ""
+                screenshotPath: screenshotPath
             )
             return
         }
@@ -765,6 +770,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         displayedText: suggestion.visibleText,
                         latencyMilliseconds: latencyMilliseconds
                     )
+                    let screenshotPath = self.captureTraceScreenshot(
+                        near: context.elementRect ?? context.windowRect ?? context.caretRect,
+                        suggestionID: suggestionID
+                    )
                     self.presentSuggestion(
                         suggestion,
                         suggestionID: suggestionID,
@@ -775,7 +784,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         renderMode: renderMode,
                         latencyMilliseconds: latencyMilliseconds,
                         triggerReason: "model-result",
-                        screenshotPath: ""
+                        screenshotPath: screenshotPath
                     )
                 }
             } catch {
@@ -871,6 +880,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         startKeyboardEventTapIfPossible()
+    }
+
+    private func captureTraceScreenshot(near rect: CGRect?, suggestionID: String) -> String {
+        guard RawAutocompleteTraceLog.shared.screenshotTracingEnabled,
+              let rect else {
+            return ""
+        }
+
+        let folderURL = RawAutocompleteTraceLog.shared.screenshotFolderURL
+        let screenshotURL = folderURL.appendingPathComponent("\(suggestionID).png")
+
+        do {
+            try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+            let paddedRect = rect.insetBy(dx: -24, dy: -24)
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            process.arguments = [
+                "-x",
+                "-R\(Int(paddedRect.origin.x)),\(Int(paddedRect.origin.y)),\(Int(paddedRect.width)),\(Int(paddedRect.height))",
+                screenshotURL.path
+            ]
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0,
+                  FileManager.default.fileExists(atPath: screenshotURL.path) else {
+                return ""
+            }
+            return screenshotURL.path
+        } catch {
+            return ""
+        }
     }
 
     private func recordSuggestionEvent(
@@ -1336,7 +1376,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.toggleTracing()
             },
             openTraceFolderAction: {
-                NSWorkspace.shared.activateFileViewerSelecting([RawAutocompleteTraceLog.shared.folderURL])
+                self.openTraceFolder()
+            },
+            exportReportAction: {
+                self.exportTraceReport()
             },
             deleteTracesAction: { [weak self] in
                 RawAutocompleteTraceLog.shared.deleteAll()
@@ -1351,6 +1394,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.record(
             "trace-control",
             metadata: ["paused": String(nextPaused)]
+        )
+        showDiagnostics()
+    }
+
+    private func openTraceFolder() {
+        do {
+            try FileManager.default.createDirectory(
+                at: RawAutocompleteTraceLog.shared.folderURL,
+                withIntermediateDirectories: true
+            )
+            NSWorkspace.shared.activateFileViewerSelecting([RawAutocompleteTraceLog.shared.folderURL])
+        } catch {
+            DiagnosticsLog.shared.record(
+                "trace-folder-open-failed",
+                metadata: ["reason": error.localizedDescription]
+            )
+        }
+    }
+
+    private func exportTraceReport() {
+        guard let reportURL = RawAutocompleteTraceLog.shared.exportHTMLReport() else {
+            DiagnosticsLog.shared.record("trace-report-export-failed")
+            showDiagnostics()
+            return
+        }
+
+        NSWorkspace.shared.open(reportURL)
+        DiagnosticsLog.shared.record(
+            "trace-report-exported",
+            metadata: ["path": reportURL.path]
         )
         showDiagnostics()
     }

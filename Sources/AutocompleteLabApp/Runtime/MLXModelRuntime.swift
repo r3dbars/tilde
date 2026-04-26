@@ -109,7 +109,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             request: request,
             prompt: prompt,
             rawOutput: rawOutput,
-            cleanedSuggestion: cleanedSuggestion
+            cleanedSuggestion: cleanedSuggestion,
+            suggestionID: request.suggestionID
         )
 
         return cleanedSuggestion
