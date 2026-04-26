@@ -81,7 +81,10 @@ public enum SuggestionPanelFrameCalculator {
         )
         let height = max(textSize.height, min(max(anchorRect.height, 20), 30))
         let preferredX = anchorRect.minX + 8
-        let preferredY = anchorRect.maxY - height - 4
+        let isWholeEditorAnchor = anchorRect.height > 80
+        let preferredY = isWholeEditorAnchor
+            ? anchorRect.midY - (height / 2)
+            : anchorRect.maxY - height - 4
 
         return CGRect(
             x: clampedOrigin(

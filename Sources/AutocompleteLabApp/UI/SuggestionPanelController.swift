@@ -52,11 +52,13 @@ final class SuggestionPanelController {
         style: FocusedTextStyle?,
         renderMode: SuggestionRenderMode
     ) {
-        let fontSize = min(max(anchorRect.height * 1.02, 12), 32)
+        let fontSize = defaultFontSize(anchorRect: anchorRect, renderMode: renderMode)
         let font = style?.font ?? NSFont.systemFont(ofSize: fontSize, weight: .regular)
-        let color = ghostColor(matching: style?.foregroundColor)
+        let color = textColor(matching: style?.foregroundColor, renderMode: renderMode)
 
-        let size = text.size(withAttributes: [.font: font])
+        let textPadding = renderMode == .floatingMirror ? CGSize(width: 18, height: 10) : .zero
+        let rawSize = text.size(withAttributes: [.font: font])
+        let size = CGSize(width: rawSize.width + textPadding.width, height: rawSize.height + textPadding.height)
         let screen = screen(containing: anchorRect) ?? NSScreen.main
         let screenFrame = screen?.frame ?? .zero
         let screenHeight = screenFrame.height > 0 ? screenFrame.height : anchorRect.maxY
@@ -113,8 +115,17 @@ final class SuggestionPanelController {
             return
         }
 
-        ghostTextView.update(text: text, font: font, color: color)
+        ghostTextView.update(text: text, font: font, color: color, renderMode: renderMode)
         panel.setFrame(frame, display: true)
+        DiagnosticsLog.shared.record(
+            "suggestion-panel-frame",
+            metadata: [
+                "renderMode": renderMode.rawValue,
+                "anchor": compactFrameDescription(anchorRect),
+                "frame": compactFrameDescription(frame),
+                "clipping": clippingRect.map(compactFrameDescription) ?? "none"
+            ]
+        )
         lastText = text
         lastFrame = frame
         lastRenderMode = renderMode
@@ -139,7 +150,11 @@ final class SuggestionPanelController {
         }
     }
 
-    private func ghostColor(matching foregroundColor: NSColor?) -> NSColor {
+    private func textColor(matching foregroundColor: NSColor?, renderMode: SuggestionRenderMode) -> NSColor {
+        if renderMode == .floatingMirror {
+            return NSColor.white.withAlphaComponent(0.86)
+        }
+
         guard let foregroundColor else {
             return NSColor.labelColor.withAlphaComponent(0.42)
         }
@@ -147,21 +162,38 @@ final class SuggestionPanelController {
         let color = foregroundColor.usingColorSpace(.deviceRGB) ?? foregroundColor
         return color.withAlphaComponent(0.42)
     }
+
+    private func defaultFontSize(anchorRect: CGRect, renderMode: SuggestionRenderMode) -> CGFloat {
+        switch renderMode {
+        case .inlineAdjacent:
+            return min(max(anchorRect.height * 1.02, 12), 32)
+        case .floatingMirror:
+            return 15
+        case .disabled:
+            return 15
+        }
+    }
+
+    private func compactFrameDescription(_ rect: CGRect) -> String {
+        "x=\(Int(rect.origin.x.rounded())),y=\(Int(rect.origin.y.rounded())),w=\(Int(rect.width.rounded())),h=\(Int(rect.height.rounded()))"
+    }
 }
 
 private final class GhostTextView: NSView {
     private var text = ""
     private var font = NSFont.systemFont(ofSize: 15)
     private var color = NSColor.labelColor.withAlphaComponent(0.42)
+    private var renderMode = SuggestionRenderMode.inlineAdjacent
 
     override var isFlipped: Bool {
         true
     }
 
-    func update(text: String, font: NSFont, color: NSColor) {
+    func update(text: String, font: NSFont, color: NSColor, renderMode: SuggestionRenderMode) {
         self.text = text
         self.font = font
         self.color = color
+        self.renderMode = renderMode
         needsDisplay = true
     }
 
@@ -172,19 +204,47 @@ private final class GhostTextView: NSView {
             return
         }
 
+        let textInset = textInsets
+        if renderMode == .floatingMirror {
+            let bubbleRect = bounds.insetBy(dx: 0.5, dy: 0.5)
+            let path = NSBezierPath(roundedRect: bubbleRect, xRadius: 6, yRadius: 6)
+            NSColor.black.withAlphaComponent(0.76).setFill()
+            path.fill()
+            NSColor.white.withAlphaComponent(0.18).setStroke()
+            path.lineWidth = 1
+            path.stroke()
+        }
+
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: color,
             .paragraphStyle: paragraphStyle
         ]
         let textSize = text.size(withAttributes: attributes)
-        let point = NSPoint(x: 0, y: max(0, (bounds.height - textSize.height) / 2))
+        let point = NSPoint(
+            x: textInset.left,
+            y: max(textInset.top, (bounds.height - textSize.height) / 2)
+        )
 
         text.draw(
-            with: NSRect(x: point.x, y: point.y, width: bounds.width, height: textSize.height),
+            with: NSRect(
+                x: point.x,
+                y: point.y,
+                width: max(1, bounds.width - textInset.left - textInset.right),
+                height: textSize.height
+            ),
             options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
             attributes: attributes
         )
+    }
+
+    private var textInsets: NSEdgeInsets {
+        switch renderMode {
+        case .floatingMirror:
+            return NSEdgeInsets(top: 5, left: 9, bottom: 5, right: 9)
+        case .inlineAdjacent, .disabled:
+            return NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        }
     }
 
     private var paragraphStyle: NSParagraphStyle {
