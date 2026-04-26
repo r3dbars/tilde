@@ -112,6 +112,8 @@ final class DiagnosticsWindowController {
         sections.append("Compatibility: \(compatibilityStatus.summary)")
         sections.append("Current app enabled: \(appEnabled)")
         sections.append(traceSummaryText(traceSummary, tracePath: tracePath, tracingPaused: tracingPaused))
+        sections.append(acceptRateBucketsText(title: "Accept rate by app", buckets: traceSummary.acceptRateByApp))
+        sections.append(acceptRateBucketsText(title: "Accept rate by mode", buckets: traceSummary.acceptRateByMode))
         sections.append(topMissesText(traceSummary.topMisses))
 
         if let profile {
@@ -176,6 +178,19 @@ final class DiagnosticsWindowController {
         Top 5 misses:
         \(misses.enumerated().map { index, miss in
             "  \(index + 1). \(miss.title) | count=\(miss.count) | fix=\(miss.fixCategory) | example=\(miss.exampleSuggestionID)"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func acceptRateBucketsText(title: String, buckets: [String: Double]) -> String {
+        guard !buckets.isEmpty else {
+            return "\(title): none yet"
+        }
+
+        return """
+        \(title):
+        \(buckets.sorted { $0.key < $1.key }.map { key, value in
+            "  \(key): \(Self.percent(value))"
         }.joined(separator: "\n"))
         """
     }

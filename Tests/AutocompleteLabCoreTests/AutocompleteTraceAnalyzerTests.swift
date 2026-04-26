@@ -22,6 +22,8 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.typedOverCount == 1)
         #expect(summary.insertionFailureCount == 1)
         #expect(summary.acceptRate == 0.5)
+        #expect(summary.acceptRateByApp["com.apple.TextEdit"] == 0.5)
+        #expect(summary.acceptRateByMode["wordCompletion"] == 0.5)
         #expect(summary.p50LatencyMilliseconds == 80)
         #expect(summary.topMisses.count == 2)
         #expect(summary.topMisses.contains { $0.fixCategory == "word-completion issue" })
@@ -73,4 +75,3 @@ struct AutocompleteTraceAnalyzerTests {
         )
     }
 }
-

@@ -274,6 +274,14 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         let misses = summary.topMisses.map { miss in
             "<li><strong>\(escape(miss.title))</strong> count=\(miss.count) fix=\(escape(miss.fixCategory)) example=\(escape(miss.exampleSuggestionID))</li>"
         }.joined(separator: "\n")
+        let appRates = summary.acceptRateByApp
+            .sorted { $0.key < $1.key }
+            .map { "<li><code>\(escape($0.key))</code>: \(Int(($0.value * 100).rounded()))%</li>" }
+            .joined(separator: "\n")
+        let modeRates = summary.acceptRateByMode
+            .sorted { $0.key < $1.key }
+            .map { "<li><code>\(escape($0.key))</code>: \(Int(($0.value * 100).rounded()))%</li>" }
+            .joined(separator: "\n")
 
         return """
         <!doctype html>
@@ -303,6 +311,10 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             <div class="metric"><b>\(summary.typedOverCount)</b>typed over</div>
             <div class="metric"><b>\(Int((summary.acceptRate * 100).rounded()))%</b>accept rate</div>
           </div>
+          <h2>Accept rate by app</h2>
+          <ul>\(appRates)</ul>
+          <h2>Accept rate by mode</h2>
+          <ul>\(modeRates)</ul>
           <h2>Top 5 misses</h2>
           <ol>\(misses)</ol>
           <h2>Recent events</h2>

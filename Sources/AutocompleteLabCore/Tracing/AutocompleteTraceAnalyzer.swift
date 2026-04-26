@@ -33,6 +33,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let p50LatencyMilliseconds: Int?
     public let p90LatencyMilliseconds: Int?
     public let p95LatencyMilliseconds: Int?
+    public let acceptRateByApp: [String: Double]
+    public let acceptRateByMode: [String: Double]
     public let topMisses: [AutocompleteTraceMiss]
 
     public init(
@@ -46,6 +48,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         p50LatencyMilliseconds: Int?,
         p90LatencyMilliseconds: Int?,
         p95LatencyMilliseconds: Int?,
+        acceptRateByApp: [String: Double] = [:],
+        acceptRateByMode: [String: Double] = [:],
         topMisses: [AutocompleteTraceMiss]
     ) {
         self.totalEvents = totalEvents
@@ -58,6 +62,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.p50LatencyMilliseconds = p50LatencyMilliseconds
         self.p90LatencyMilliseconds = p90LatencyMilliseconds
         self.p95LatencyMilliseconds = p95LatencyMilliseconds
+        self.acceptRateByApp = acceptRateByApp
+        self.acceptRateByMode = acceptRateByMode
         self.topMisses = topMisses
     }
 }
@@ -84,8 +90,36 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             p50LatencyMilliseconds: percentile(0.50, in: latencies),
             p90LatencyMilliseconds: percentile(0.90, in: latencies),
             p95LatencyMilliseconds: percentile(0.95, in: latencies),
+            acceptRateByApp: acceptRates(
+                presented: presented,
+                accepted: accepted,
+                key: \.appBundleIdentifier
+            ),
+            acceptRateByMode: acceptRates(
+                presented: presented,
+                accepted: accepted,
+                key: \.requestMode
+            ),
             topMisses: topMisses(from: events)
         )
+    }
+
+    private func acceptRates(
+        presented: [AutocompleteTraceEvent],
+        accepted: [AutocompleteTraceEvent],
+        key: (AutocompleteTraceEvent) -> String
+    ) -> [String: Double] {
+        let presentedCounts = Dictionary(grouping: presented, by: key)
+            .mapValues(\.count)
+        let acceptedCounts = Dictionary(grouping: accepted, by: key)
+            .mapValues(\.count)
+
+        var rates: [String: Double] = [:]
+        for (bucket, presentedCount) in presentedCounts where presentedCount > 0 {
+            let normalizedBucket = bucket.isEmpty ? "unknown" : bucket
+            rates[normalizedBucket] = Double(acceptedCounts[bucket] ?? 0) / Double(presentedCount)
+        }
+        return rates
     }
 
     private func topMisses(from events: [AutocompleteTraceEvent]) -> [AutocompleteTraceMiss] {
