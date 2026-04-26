@@ -25,20 +25,30 @@ final class InsertionEngine {
             return InsertionResult(succeeded: false, mode: profile.insertionMode, message: "No text to insert.")
         }
 
-        switch profile.insertionMode {
+        for mode in InsertionModePlan.modes(for: profile) {
+            if let result = attempt(text, mode: mode) {
+                return result
+            }
+        }
+
+        return clipboardFallback(text, profile: profile)
+    }
+
+    private func attempt(_ text: String, mode: InsertionMode) -> InsertionResult? {
+        switch mode {
         case .axSelectedText:
             if accessibilityClient.insertText(text) {
                 return InsertionResult(succeeded: true, mode: .axSelectedText, message: "Inserted via AX selected text.")
             }
 
-            return clipboardFallback(text, profile: profile)
+            return nil
 
         case .axValueReplacement:
             if accessibilityClient.replaceSelectedTextBySettingValue(text) {
                 return InsertionResult(succeeded: true, mode: .axValueReplacement, message: "Inserted via AX value replacement.")
             }
 
-            return clipboardFallback(text, profile: profile)
+            return nil
 
         case .axThenKeyEvents:
             if accessibilityClient.insertText(text) {
@@ -49,20 +59,20 @@ final class InsertionEngine {
                 return InsertionResult(succeeded: true, mode: .keyEvents, message: "Inserted via synthetic key events.")
             }
 
-            return clipboardFallback(text, profile: profile)
+            return nil
 
         case .keyEvents:
             if insertWithKeyEvents(text) {
                 return InsertionResult(succeeded: true, mode: .keyEvents, message: "Inserted via synthetic key events.")
             }
 
-            return clipboardFallback(text, profile: profile)
+            return nil
 
         case .clipboardFallbackOptIn:
-            return clipboardFallback(text, profile: profile)
+            return nil
 
         case .disabled:
-            return InsertionResult(succeeded: false, mode: .disabled, message: "Insertion is disabled for this app.")
+            return nil
         }
     }
 

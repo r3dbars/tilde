@@ -8,6 +8,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - Detect whether the target text actually changed.
   - Keep the remaining suggestion only when the accepted text landed.
   - Suppress the field after failed accepts.
+  - [x] Try known safe non-clipboard fallback insertion modes before giving up.
 
 - [ ] Finish safe compatibility passes.
   - [x] Encode known primary/fallback paths and a visible debug summary per profile.

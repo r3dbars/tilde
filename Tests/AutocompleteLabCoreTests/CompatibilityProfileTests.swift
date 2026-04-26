@@ -65,4 +65,15 @@ struct CompatibilityProfileTests {
         #expect(profile.debugSummary.contains("insert=keyEvents"))
         #expect(profile.debugSummary.contains("field=accessibilityElement"))
     }
+
+    @Test("Insertion mode plans try primary then safe fallback")
+    func insertionModePlansTryPrimaryThenFallback() throws {
+        let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+        let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
+
+        #expect(InsertionModePlan.modes(for: textEdit) == [.axSelectedText, .axValueReplacement])
+        #expect(InsertionModePlan.modes(for: chrome) == [.axValueReplacement, .keyEvents])
+        #expect(InsertionModePlan.modes(for: mail) == [])
+    }
 }
