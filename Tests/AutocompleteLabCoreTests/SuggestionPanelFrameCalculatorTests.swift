@@ -42,4 +42,36 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(frame.maxY == 816)
         #expect(frame.width == 190)
     }
+
+    @Test("Skips refreshing identical panel presentations")
+    func skipsIdenticalPanelPresentations() {
+        let frame = CGRect(x: 100, y: 600, width: 180, height: 22)
+
+        #expect(!SuggestionPanelFrameCalculator.shouldRefreshPresentation(
+            previousText: " make",
+            previousFrame: frame,
+            previousRenderMode: .inlineAdjacent,
+            nextText: " make",
+            nextFrame: frame.offsetBy(dx: 0.25, dy: -0.25),
+            nextRenderMode: .inlineAdjacent
+        ))
+
+        #expect(SuggestionPanelFrameCalculator.shouldRefreshPresentation(
+            previousText: " make",
+            previousFrame: frame,
+            previousRenderMode: .inlineAdjacent,
+            nextText: " make this",
+            nextFrame: frame,
+            nextRenderMode: .inlineAdjacent
+        ))
+
+        #expect(SuggestionPanelFrameCalculator.shouldRefreshPresentation(
+            previousText: " make",
+            previousFrame: frame,
+            previousRenderMode: .inlineAdjacent,
+            nextText: " make",
+            nextFrame: frame.offsetBy(dx: 2, dy: 0),
+            nextRenderMode: .inlineAdjacent
+        ))
+    }
 }

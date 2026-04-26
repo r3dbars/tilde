@@ -2,6 +2,27 @@ import CoreGraphics
 import Foundation
 
 public enum SuggestionPanelFrameCalculator {
+    public static func shouldRefreshPresentation(
+        previousText: String?,
+        previousFrame: CGRect?,
+        previousRenderMode: SuggestionRenderMode?,
+        nextText: String,
+        nextFrame: CGRect,
+        nextRenderMode: SuggestionRenderMode,
+        movementTolerance: CGFloat = 0.5
+    ) -> Bool {
+        guard previousText == nextText,
+              previousRenderMode == nextRenderMode,
+              let previousFrame else {
+            return true
+        }
+
+        return abs(previousFrame.minX - nextFrame.minX) > movementTolerance
+            || abs(previousFrame.minY - nextFrame.minY) > movementTolerance
+            || abs(previousFrame.width - nextFrame.width) > movementTolerance
+            || abs(previousFrame.height - nextFrame.height) > movementTolerance
+    }
+
     public static func inlineGhostFrame(
         caretRect: CGRect,
         textLineRect: CGRect? = nil,

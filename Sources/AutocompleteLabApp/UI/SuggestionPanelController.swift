@@ -5,6 +5,9 @@ import AutocompleteLabCore
 final class SuggestionPanelController {
     private let panel: NSPanel
     private let ghostTextView: GhostTextView
+    private var lastText: String?
+    private var lastFrame: CGRect?
+    private var lastRenderMode: SuggestionRenderMode?
 
     init() {
         ghostTextView = GhostTextView(frame: .zero)
@@ -52,7 +55,6 @@ final class SuggestionPanelController {
         let font = style?.font ?? NSFont.systemFont(ofSize: fontSize, weight: .regular)
         let color = ghostColor(matching: style?.foregroundColor)
 
-        ghostTextView.update(text: text, font: font, color: color)
         let size = text.size(withAttributes: [.font: font])
         let screen = screen(containing: anchorRect) ?? NSScreen.main
         let screenFrame = screen?.frame ?? .zero
@@ -89,12 +91,31 @@ final class SuggestionPanelController {
             return
         }
 
+        let shouldRefresh = !panel.isVisible || SuggestionPanelFrameCalculator.shouldRefreshPresentation(
+            previousText: lastText,
+            previousFrame: lastFrame,
+            previousRenderMode: lastRenderMode,
+            nextText: text,
+            nextFrame: frame,
+            nextRenderMode: renderMode
+        )
+
+        guard shouldRefresh else {
+            return
+        }
+
+        ghostTextView.update(text: text, font: font, color: color)
         panel.setFrame(frame, display: true)
-        ghostTextView.needsDisplay = true
+        lastText = text
+        lastFrame = frame
+        lastRenderMode = renderMode
         panel.orderFrontRegardless()
     }
 
     func hide() {
+        lastText = nil
+        lastFrame = nil
+        lastRenderMode = nil
         panel.orderOut(nil)
     }
 

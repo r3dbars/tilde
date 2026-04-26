@@ -42,7 +42,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 ## UX Polish
 
 - [ ] Make the panel calmer.
-  - Reduce flicker while typing quickly.
+  - [x] Reduce flicker while typing quickly.
   - Reposition on caret changes without stealing focus.
   - Use floating mirror mode when inline bounds are unstable.
 
