@@ -35,7 +35,25 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        guard !looksLikeAssistantMeta(singleLine) else {
+            return nil
+        }
+
         return CompletionSuggestion(text: ensureLeadingSpace(singleLine), maxVisibleWords: maxVisibleWords)
+    }
+
+    private func looksLikeAssistantMeta(_ text: String) -> Bool {
+        let normalized = text
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return normalized.hasPrefix("okay, let's see")
+            || normalized.hasPrefix("let's see")
+            || normalized.hasPrefix("the user ")
+            || normalized.hasPrefix("the user is ")
+            || normalized.hasPrefix("user is ")
+            || normalized.hasPrefix("assistant:")
+            || normalized.hasPrefix("system:")
     }
 
     private func ensureLeadingSpace(_ text: String) -> String {

@@ -27,6 +27,14 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("make sure <think>")?.visibleText == " make sure")
     }
 
+    @Test("Suppresses assistant meta text")
+    func suppressesAssistantMetaText() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("Okay, let's see. The user is trying to") == nil)
+        #expect(cleaner.clean("The user is trying to write a sentence") == nil)
+    }
+
     @Test("Uses only first line")
     func usesOnlyFirstLine() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)

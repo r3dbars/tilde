@@ -174,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshRuntimeChrome() {
-        runtimeMenuItem?.title = "Model: \(runtimeReadinessReport.summary)"
+        runtimeMenuItem?.title = "Model: \(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(runtimeReadinessReport.summary)"
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
             runtimeReport: runtimeReadinessReport,

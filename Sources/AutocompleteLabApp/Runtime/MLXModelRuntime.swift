@@ -85,7 +85,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             generateParameters: GenerateParameters(
                 maxTokens: CompletionModelPolicy.mvp.maxGeneratedTokens,
                 temperature: 0
-            )
+            ),
+            additionalContext: ["enable_thinking": false]
         )
 
         let rawOutput = try await session.respond(to: prompt.user)
