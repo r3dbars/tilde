@@ -129,10 +129,10 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             bundleIdentifier: "com.apple.Notes",
             displayName: "Notes",
             renderMode: .inlineAdjacent,
-            insertionMode: .axSelectedText,
+            insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
-            fallbackInsertionMode: .axValueReplacement,
-            notes: "Green/yellow rich-text target. Re-probe each focused field because title, note body, and lists can differ."
+            fallbackInsertionMode: .axSelectedText,
+            notes: "Green/yellow rich-text target. Notes can report AX selected-text insertion success without moving the caret, so prefer verified key-event insertion."
         ),
         CompatibilityProfile(
             bundleIdentifier: "md.obsidian",
