@@ -18,11 +18,11 @@ write_passing_log() {
 
   cat >"$LOG_PATH" <<EOF
 2026-04-26T08:00:00Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode
-2026-04-26T08:00:01Z keyboard-action app=$bundle_id key=tab action=acceptNextWord handled=true reason=accepted
+2026-04-26T08:00:01Z keyboard-action action=acceptNextWord app=$bundle_id handled=true key=tab reason=accepted
 2026-04-26T08:00:01Z insert app=$bundle_id success=true mode=axSelectedText
 2026-04-26T08:00:02Z insert-verification app=$bundle_id result=verified acceptedChars=5 previousBeforeChars=6 currentBeforeChars=11
 2026-04-26T08:00:03Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode
-2026-04-26T08:00:04Z keyboard-action app=$bundle_id key=backtick action=acceptAllVisible handled=true reason=accepted
+2026-04-26T08:00:04Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=backtick reason=accepted
 2026-04-26T08:00:04Z insert app=$bundle_id success=true mode=axSelectedText
 2026-04-26T08:00:05Z insert-verification app=$bundle_id result=verified acceptedChars=12 previousBeforeChars=11 currentBeforeChars=23
 EOF

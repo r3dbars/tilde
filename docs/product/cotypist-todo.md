@@ -78,7 +78,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Wait for Gemma 4 MLX readiness in the smoke script.
   - [x] Gate smoke on trace eval self-test coverage.
   - App-specific checks below should only be marked done after `docs/product/manual-smoke-runs.md` has a matching pass.
-  - TextEdit one-word accept and full accept.
+  - [x] TextEdit one-word accept and full accept.
   - Notes one-word accept and full accept.
   - Obsidian one-word accept and full accept.
   - Chrome text field one-word and full accept.

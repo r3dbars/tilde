@@ -103,14 +103,30 @@ count_pattern() {
   grep -E "$pattern" <<<"$SCAN_LINES" | wc -l | tr -d ' '
 }
 
+count_line_with_fields() {
+  local prefix="$1"
+  shift
+
+  local lines
+  lines="$(grep -F "$prefix" <<<"$SCAN_LINES" || true)"
+  for field in "$@"; do
+    lines="$(grep -F "$field" <<<"$lines" || true)"
+  done
+  if [[ -z "$lines" ]]; then
+    echo 0
+  else
+    printf '%s\n' "$lines" | wc -l | tr -d ' '
+  fi
+}
+
 print_failure_summary() {
   {
     echo
     echo "$DISPLAY_NAME smoke layer summary:"
     echo "- suggestion-presented: $(count_pattern "suggestion-presented .*app=$BUNDLE_ID")"
     echo "- expected render: $(count_pattern "suggestion-presented .*app=$BUNDLE_ID .*effectiveRenderMode=($EXPECTED_RENDER)")"
-    echo "- Tab autocomplete action: $(count_pattern "keyboard-action .*app=$BUNDLE_ID .*key=tab .*action=acceptNextWord .*handled=true")"
-    echo "- full autocomplete action: $(count_pattern "keyboard-action .*app=$BUNDLE_ID .*key=backtick .*action=acceptAllVisible .*handled=true")"
+    echo "- Tab autocomplete action: $(count_line_with_fields "keyboard-action" "app=$BUNDLE_ID" "key=tab" "action=acceptNextWord" "handled=true")"
+    echo "- full autocomplete action: $(count_line_with_fields "keyboard-action" "app=$BUNDLE_ID" "key=backtick" "action=acceptAllVisible" "handled=true")"
     echo "- successful insert: $(count_pattern "insert .*app=$BUNDLE_ID .*success=true")"
     echo "- verified insertions: $(count_pattern "insert-verification .*app=$BUNDLE_ID .*result=verified")"
     echo "- failed verification: $(count_pattern "insert-verification .*app=$BUNDLE_ID .*result=(unchanged|partial|changedUnexpectedly|missing-context)")"
@@ -118,6 +134,20 @@ print_failure_summary() {
     echo
     echo "If suggestions appeared but Tab action is 0, the key probably bypassed the app event tap."
   } >&2
+}
+
+require_line_with_fields() {
+  local label="$1"
+  shift
+
+  local count
+  count="$(count_line_with_fields "$@")"
+  if [[ "$count" == "0" ]]; then
+    echo "missing $DISPLAY_NAME diagnostics: $label" >&2
+    echo "log: $LOG_PATH" >&2
+    print_failure_summary
+    exit 1
+  fi
 }
 
 require_pattern() {
@@ -145,8 +175,8 @@ reject_pattern() {
 }
 
 require_pattern "suggestion-presented .*app=$BUNDLE_ID .*effectiveRenderMode=($EXPECTED_RENDER)" "suggestion presented with expected render mode"
-require_pattern "keyboard-action .*app=$BUNDLE_ID .*key=tab .*action=acceptNextWord .*handled=true" "Tab handled by autocomplete"
-require_pattern "keyboard-action .*app=$BUNDLE_ID .*key=backtick .*action=acceptAllVisible .*handled=true" "full accept key handled by autocomplete"
+require_line_with_fields "Tab handled by autocomplete" "keyboard-action" "app=$BUNDLE_ID" "key=tab" "action=acceptNextWord" "handled=true"
+require_line_with_fields "full accept key handled by autocomplete" "keyboard-action" "app=$BUNDLE_ID" "key=backtick" "action=acceptAllVisible" "handled=true"
 require_pattern "insert .*app=$BUNDLE_ID .*success=true" "successful insert"
 require_pattern "insert-verification .*app=$BUNDLE_ID .*result=verified" "verified insertion"
 
