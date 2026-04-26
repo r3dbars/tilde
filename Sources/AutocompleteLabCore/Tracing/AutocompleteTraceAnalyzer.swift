@@ -230,6 +230,18 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                     buckets: &buckets
                 )
             }
+
+            if event.type == .suggestionPresented,
+               let latencyMilliseconds = event.latencyMilliseconds,
+               latencyMilliseconds >= 1_000 {
+                add(
+                    key: "Slow suggestion: \(event.requestMode)",
+                    event: event,
+                    cause: "The suggestion arrived after \(latencyMilliseconds) ms, which is too late for fluid typing.",
+                    category: "model latency issue",
+                    buckets: &buckets
+                )
+            }
         }
 
         return buckets

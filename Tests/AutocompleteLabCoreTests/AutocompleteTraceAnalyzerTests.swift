@@ -113,6 +113,35 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.topMisses.allSatisfy { $0.fixCategory == "renderer/caret bug" })
     }
 
+    @Test("flags slow suggestions as latency misses")
+    func flagsSlowSuggestions() {
+        let events = [
+            event(
+                .suggestionPresented,
+                suggestionID: "one",
+                requestMode: "phraseContinuation",
+                displayedText: "wondering if it is",
+                latency: 2_023
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "two",
+                requestMode: "wordCompletion",
+                displayedText: "t",
+                latency: 42
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Slow suggestion: phraseContinuation"
+                && miss.fixCategory == "model latency issue"
+                && miss.suggestedCause.contains("2023")
+        })
+        #expect(!summary.topMisses.contains { $0.title == "Slow suggestion: wordCompletion" })
+    }
+
     private func event(
         _ type: AutocompleteTraceEventType,
         suggestionID: String,
