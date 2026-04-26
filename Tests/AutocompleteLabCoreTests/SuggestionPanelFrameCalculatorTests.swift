@@ -30,6 +30,19 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(frame.minY >= 4)
     }
 
+    @Test("Keeps panel valid on narrow screens")
+    func keepsPanelValidOnNarrowScreens() {
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            caretRect: CGRect(x: 88, y: 20, width: 0, height: 18),
+            textSize: CGSize(width: 500, height: 18),
+            screenFrame: CGRect(x: 0, y: 0, width: 96, height: 80)
+        )
+
+        #expect(frame.minX >= 8)
+        #expect(frame.maxX <= 88)
+        #expect(frame.width == 80)
+    }
+
     @Test("Mirror fallback anchors inside the focused element")
     func mirrorFallbackAnchorsInsideFocusedElement() {
         let frame = SuggestionPanelFrameCalculator.floatingMirrorFrame(

@@ -52,10 +52,11 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 
 ## UX Polish
 
-- [ ] Make the panel calmer.
+- [x] Make the panel calmer.
   - [x] Reduce flicker while typing quickly.
   - [x] Reposition on caret changes without stealing focus.
   - [x] Use floating mirror mode when inline bounds are unstable.
+  - [x] Keep panel frames valid on narrow or cramped screens.
 
 - [x] Make failure states understandable.
   - [x] Show local model readiness and mock fallback reason.

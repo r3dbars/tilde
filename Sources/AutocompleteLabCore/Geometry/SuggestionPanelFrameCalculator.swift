@@ -31,18 +31,30 @@ public enum SuggestionPanelFrameCalculator {
         minimumWidth: CGFloat = 40,
         maximumWidth: CGFloat = 420
     ) -> CGRect {
-        let width = min(max(textSize.width + 6, minimumWidth), maximumWidth)
+        let width = panelWidth(
+            preferredWidth: textSize.width + 6,
+            minimumWidth: minimumWidth,
+            maximumWidth: maximumWidth,
+            screenFrame: screenFrame
+        )
         let lineRect = textLineRect ?? caretRect
         let height = max(lineRect.height, textSize.height)
         let preferredX = caretRect.maxX
         let preferredY = lineRect.maxY - height
 
-        let maxX = screenFrame.maxX - width - 8
-        let maxY = screenFrame.maxY - height - 4
-
         return CGRect(
-            x: min(max(preferredX, screenFrame.minX + 8), maxX),
-            y: min(max(preferredY, screenFrame.minY + 4), maxY),
+            x: clampedOrigin(
+                preferred: preferredX,
+                length: width,
+                lowerBound: screenFrame.minX + 8,
+                upperBound: screenFrame.maxX - 8
+            ),
+            y: clampedOrigin(
+                preferred: preferredY,
+                length: height,
+                lowerBound: screenFrame.minY + 4,
+                upperBound: screenFrame.maxY - 4
+            ),
             width: width,
             height: height
         )
@@ -55,19 +67,52 @@ public enum SuggestionPanelFrameCalculator {
         minimumWidth: CGFloat = 72,
         maximumWidth: CGFloat = 420
     ) -> CGRect {
-        let width = min(max(textSize.width + 10, minimumWidth), maximumWidth)
+        let width = panelWidth(
+            preferredWidth: textSize.width + 10,
+            minimumWidth: minimumWidth,
+            maximumWidth: maximumWidth,
+            screenFrame: screenFrame
+        )
         let height = max(textSize.height, min(max(anchorRect.height, 20), 30))
         let preferredX = anchorRect.minX + 8
         let preferredY = anchorRect.maxY - height - 4
 
-        let maxX = screenFrame.maxX - width - 8
-        let maxY = screenFrame.maxY - height - 4
-
         return CGRect(
-            x: min(max(preferredX, screenFrame.minX + 8), maxX),
-            y: min(max(preferredY, screenFrame.minY + 4), maxY),
+            x: clampedOrigin(
+                preferred: preferredX,
+                length: width,
+                lowerBound: screenFrame.minX + 8,
+                upperBound: screenFrame.maxX - 8
+            ),
+            y: clampedOrigin(
+                preferred: preferredY,
+                length: height,
+                lowerBound: screenFrame.minY + 4,
+                upperBound: screenFrame.maxY - 4
+            ),
             width: width,
             height: height
         )
+    }
+
+    private static func panelWidth(
+        preferredWidth: CGFloat,
+        minimumWidth: CGFloat,
+        maximumWidth: CGFloat,
+        screenFrame: CGRect,
+        horizontalMargin: CGFloat = 8
+    ) -> CGFloat {
+        let availableWidth = max(1, screenFrame.width - (horizontalMargin * 2))
+        return min(max(preferredWidth, minimumWidth), maximumWidth, availableWidth)
+    }
+
+    private static func clampedOrigin(
+        preferred: CGFloat,
+        length: CGFloat,
+        lowerBound: CGFloat,
+        upperBound: CGFloat
+    ) -> CGFloat {
+        let maxOrigin = max(lowerBound, upperBound - length)
+        return min(max(preferred, lowerBound), maxOrigin)
     }
 }
