@@ -87,7 +87,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Sign debug bundles with hardened runtime.
   - Signing and notarization.
   - [x] Add a direct Accessibility settings link for first-run setup.
-  - Cleaner first-run onboarding.
+  - [x] Cleaner first-run onboarding.
 
 - [ ] Run a tiny private beta.
   - 3-5 people for one week.

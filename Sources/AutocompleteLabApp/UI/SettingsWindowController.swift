@@ -9,6 +9,7 @@ final class SettingsWindowController: NSObject {
     private let runtimeDetailLabel = NSTextField(labelWithString: "")
     private let runtimeActionLabel = NSTextField(labelWithString: "")
     private let modelDirectoryLabel = NSTextField(labelWithString: "")
+    private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
     private let requestPermission: () -> Void
     private let openAccessibilitySettings: () -> Void
 
@@ -19,7 +20,7 @@ final class SettingsWindowController: NSObject {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
 
-        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: 332))
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 392))
         window = NSWindow(
             contentRect: contentView.frame,
             styleMask: [.titled, .closable],
@@ -53,6 +54,7 @@ final class SettingsWindowController: NSObject {
         runtimeDetailLabel.isHidden = runtimeReport.detail == nil
         runtimeActionLabel.stringValue = "Next: \(runtimeReport.action.displayName)"
         modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
+        firstRunLabel.stringValue = onboardingText(isTrusted: isTrusted, runtimeReport: runtimeReport)
     }
 
     private func buildContent(in contentView: NSView) {
@@ -77,6 +79,11 @@ final class SettingsWindowController: NSObject {
         modelDirectoryLabel.lineBreakMode = .byTruncatingMiddle
         modelDirectoryLabel.maximumNumberOfLines = 1
         modelDirectoryLabel.preferredMaxLayoutWidth = 360
+        firstRunLabel.font = NSFont.systemFont(ofSize: 12)
+        firstRunLabel.textColor = .secondaryLabelColor
+        firstRunLabel.lineBreakMode = .byWordWrapping
+        firstRunLabel.maximumNumberOfLines = 0
+        firstRunLabel.preferredMaxLayoutWidth = 390
 
         let requestButton = NSButton(title: "Request Accessibility", target: self, action: #selector(requestAccessibility))
         requestButton.bezelStyle = .rounded
@@ -110,6 +117,7 @@ final class SettingsWindowController: NSObject {
             runtimeActionLabel,
             runtimeTarget,
             modelDirectoryLabel,
+            firstRunLabel,
             screenRecording,
             clipboardFallback,
             note
@@ -124,6 +132,18 @@ final class SettingsWindowController: NSObject {
             stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
             stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 24)
         ])
+    }
+
+    private func onboardingText(isTrusted: Bool, runtimeReport: RuntimeReadinessReport) -> String {
+        if !isTrusted {
+            return "First run: grant Accessibility, then return here. The app only reads the active text field locally."
+        }
+
+        if !runtimeReport.isReady {
+            return "First run: keep this app open while the local model warms. Suggestions stay off until the model is ready."
+        }
+
+        return "First run: open TextEdit, type a short sentence, press Tab for one word, Esc to dismiss, or disable the current app from the menu."
     }
 
     @objc
