@@ -19,10 +19,11 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - Chrome: local textarea passed AX capability checks; live one-word and full accept verified with mirror anchoring and AX value replacement because Chrome's selected-text insert is a no-op.
   - Atlas: keep unsupported until the focused AX element is reliably available.
 
-- [ ] Persist user control.
+- [x] Persist user control.
   - [x] Persist per-app disable across launches.
   - [x] Keep Esc suppression until blur and log the reason.
   - [x] Make the current app state obvious in the menu and diagnostics.
+  - [x] Cancel pending suggestions immediately when the current app is disabled.
 
 ## Local Runtime
 

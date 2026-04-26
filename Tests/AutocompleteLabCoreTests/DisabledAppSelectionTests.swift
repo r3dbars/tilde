@@ -27,4 +27,15 @@ struct DisabledAppSelectionTests {
         selection.toggle("com.apple.TextEdit")
         #expect(!selection.contains("com.apple.TextEdit"))
     }
+
+    @Test("Set directly enables and disables bundle IDs")
+    func setDirectlyEnablesAndDisablesBundleIDs() {
+        var selection = DisabledAppSelection()
+
+        selection.set("com.apple.TextEdit", disabled: true)
+        #expect(selection.contains("com.apple.TextEdit"))
+
+        selection.set("com.apple.TextEdit", disabled: false)
+        #expect(!selection.contains("com.apple.TextEdit"))
+    }
 }

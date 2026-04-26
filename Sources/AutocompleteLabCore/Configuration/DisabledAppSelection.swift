@@ -30,4 +30,16 @@ public struct DisabledAppSelection: Equatable, Sendable {
             bundleIdentifiers.insert(bundleIdentifier)
         }
     }
+
+    public mutating func set(_ bundleIdentifier: String, disabled: Bool) {
+        guard !bundleIdentifier.isEmpty else {
+            return
+        }
+
+        if disabled {
+            bundleIdentifiers.insert(bundleIdentifier)
+        } else {
+            bundleIdentifiers.remove(bundleIdentifier)
+        }
+    }
 }

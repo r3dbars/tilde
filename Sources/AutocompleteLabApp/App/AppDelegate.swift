@@ -992,14 +992,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if disabledBundleIdentifiers.contains(app.bundleIdentifier) {
-            disabledBundleIdentifiers.remove(app.bundleIdentifier)
-        } else {
-            disabledBundleIdentifiers.insert(app.bundleIdentifier)
+        let shouldDisable = !disabledBundleIdentifiers.contains(app.bundleIdentifier)
+        var selection = DisabledAppSelection(bundleIdentifiers: disabledBundleIdentifiers)
+        selection.set(app.bundleIdentifier, disabled: shouldDisable)
+        disabledBundleIdentifiers = selection.bundleIdentifiers
+
+        if shouldDisable {
+            clearFocusedFieldState()
             hideSuggestion()
         }
 
         persistDisabledApps()
+        DiagnosticsLog.shared.record(
+            "app-control",
+            metadata: [
+                "app": app.bundleIdentifier,
+                "enabled": String(!shouldDisable),
+                "disabledCount": String(disabledBundleIdentifiers.count)
+            ]
+        )
         updateStatusMenu(
             app: app,
             profile: profileStore.profile(for: app.bundleIdentifier),
