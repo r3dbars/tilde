@@ -111,6 +111,8 @@ reject_pattern() {
 }
 
 require_pattern "suggestion-presented .*app=$BUNDLE_ID .*effectiveRenderMode=($EXPECTED_RENDER)" "suggestion presented with expected render mode"
+require_pattern "keyboard-action .*app=$BUNDLE_ID .*key=tab .*action=acceptNextWord .*handled=true" "Tab handled by autocomplete"
+require_pattern "keyboard-action .*app=$BUNDLE_ID .*key=backtick .*action=acceptAllVisible .*handled=true" "full accept key handled by autocomplete"
 require_pattern "insert .*app=$BUNDLE_ID .*success=true" "successful insert"
 require_pattern "insert-verification .*app=$BUNDLE_ID .*result=verified" "verified insertion"
 

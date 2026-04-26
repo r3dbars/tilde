@@ -5,6 +5,19 @@ public enum KeyboardAction: Equatable, Sendable {
     case acceptAllVisible
     case dismiss
     case passThrough
+
+    public var diagnosticName: String {
+        switch self {
+        case .acceptNextWord:
+            "acceptNextWord"
+        case .acceptAllVisible:
+            "acceptAllVisible"
+        case .dismiss:
+            "dismiss"
+        case .passThrough:
+            "passThrough"
+        }
+    }
 }
 
 public enum AutocompleteKey: Equatable, Sendable {
@@ -13,6 +26,21 @@ public enum AutocompleteKey: Equatable, Sendable {
     case backtick
     case escape
     case other
+
+    public var diagnosticName: String {
+        switch self {
+        case .tab:
+            "tab"
+        case .optionTab:
+            "optionTab"
+        case .backtick:
+            "backtick"
+        case .escape:
+            "escape"
+        case .other:
+            "other"
+        }
+    }
 }
 
 public enum AutocompletePhysicalKey: Equatable, Sendable {

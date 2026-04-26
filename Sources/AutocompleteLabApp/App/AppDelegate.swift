@@ -390,6 +390,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleAutocompleteKey(_ key: AutocompleteKey) -> Bool {
         if shouldSuppressKey(key) {
+            recordKeyboardAction(key: key, action: .passThrough, handled: true, reason: "suppressed-repeat")
             return true
         }
 
@@ -401,12 +402,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch action {
         case .acceptNextWord:
             guard currentProfile?.supportsOneWordAcceptance == true else {
+                recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-one-word")
                 return false
             }
 
             let verificationBaseline = insertionVerificationBaseline()
             guard let acceptedText = suggestionSession.nextWordAcceptance(),
                   insertAcceptedText(acceptedText) else {
+                recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return false
             }
 
@@ -415,16 +418,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             refreshVisibleSuggestion()
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
+            recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
             return true
 
         case .acceptAllVisible:
             guard currentProfile?.supportsFullAcceptance == true else {
+                recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-full")
                 return false
             }
 
             let verificationBaseline = insertionVerificationBaseline()
             guard let acceptedText = suggestionSession.allVisibleAcceptance(),
                   insertAcceptedText(acceptedText) else {
+                recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return false
             }
 
@@ -433,17 +439,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion()
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
+            recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
             return true
 
         case .dismiss:
             suppressCurrentField(reason: "escape")
             hideSuggestion()
             suppressKey(key)
+            recordKeyboardAction(key: key, action: action, handled: true, reason: "dismissed")
             return true
 
         case .passThrough:
+            recordKeyboardAction(key: key, action: action, handled: false, reason: "pass-through")
             return false
         }
+    }
+
+    private func recordKeyboardAction(
+        key: AutocompleteKey,
+        action: KeyboardAction,
+        handled: Bool,
+        reason: String
+    ) {
+        DiagnosticsLog.shared.record(
+            "keyboard-action",
+            metadata: [
+                "app": currentProfile?.bundleIdentifier ?? "unknown",
+                "key": key.diagnosticName,
+                "action": action.diagnosticName,
+                "handled": String(handled),
+                "reason": reason
+            ]
+        )
     }
 
     private func shouldSuppressKey(_ key: AutocompleteKey) -> Bool {

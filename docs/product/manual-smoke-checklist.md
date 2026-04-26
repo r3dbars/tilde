@@ -12,7 +12,7 @@ Successful runs are recorded in `docs/product/manual-smoke-runs.md`.
 - Launch `dist/AutocompleteLab.app`.
 - Confirm the menu says `AX ok`.
 - Keep test text local and disposable.
-- Watch `~/Library/Logs/AutocompleteLab/diagnostics.log` for `suggestion-presented`, `insert`, and `insert-verification`.
+- Watch `~/Library/Logs/AutocompleteLab/diagnostics.log` for `suggestion-presented`, `keyboard-action`, `insert`, and `insert-verification`.
 - Prefer a real hardware key press for Tab/backtick acceptance. Some automation paths can set text or insert a literal tab without going through the app's event tap, which is useful to catch but does not count as an accept pass.
 
 ## TextEdit

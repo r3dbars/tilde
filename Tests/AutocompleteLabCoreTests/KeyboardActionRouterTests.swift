@@ -24,6 +24,14 @@ struct KeyboardActionRouterTests {
         #expect(router.action(for: .backtick, hasVisibleSuggestion: true) == .acceptAllVisible)
     }
 
+    @Test("Keyboard diagnostics use stable names")
+    func keyboardDiagnosticsUseStableNames() {
+        #expect(AutocompleteKey.tab.diagnosticName == "tab")
+        #expect(AutocompleteKey.backtick.diagnosticName == "backtick")
+        #expect(KeyboardAction.acceptNextWord.diagnosticName == "acceptNextWord")
+        #expect(KeyboardAction.acceptAllVisible.diagnosticName == "acceptAllVisible")
+    }
+
     @Test("Keys pass through when no suggestion is visible")
     func keysPassThroughWithoutVisibleSuggestion() {
         let router = KeyboardActionRouter()
