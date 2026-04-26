@@ -57,10 +57,11 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Reposition on caret changes without stealing focus.
   - [x] Use floating mirror mode when inline bounds are unstable.
 
-- [ ] Make failure states understandable.
+- [x] Make failure states understandable.
   - [x] Show local model readiness and mock fallback reason.
   - [x] Log only privacy-safe shape data.
   - [x] Explain blocked suggestions by reason in diagnostics.
+  - [x] Suppress repeated blocked-suggestion diagnostics for the same field state.
 
 ## QA
 

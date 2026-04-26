@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var insertionVerificationTask: Task<Void, Never>?
     private var runtimeWarmTask: Task<Void, Never>?
     private var suggestionRequestGate = SuggestionRequestGate()
+    private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private var currentCompletionRequest: CompletionRequest?
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var lastStatusLine: String?
@@ -253,10 +254,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         invalidatePendingSuggestionRequest()
 
         guard profile.canPresentSuggestions else {
-            recordSuggestionEvent(
+            recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
                 profile: profile,
+                fieldIdentity: fieldIdentity,
                 metadata: [
                     "reason": "profile-diagnostics-only"
                 ]
@@ -267,10 +269,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let runtimeReport = runtimeReadinessReport
         guard runtimeReport.allowsSuggestions else {
-            recordSuggestionEvent(
+            recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
                 profile: profile,
+                fieldIdentity: fieldIdentity,
                 metadata: [
                     "reason": "runtime-not-ready",
                     "readinessStage": runtimeReport.stage.rawValue
@@ -288,10 +291,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard activationDecision.canSuggest else {
-            recordSuggestionEvent(
+            recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
                 profile: profile,
+                fieldIdentity: fieldIdentity,
                 metadata: [
                     "reason": activationDecision.blockReasonDescription
                 ]
@@ -307,10 +311,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard let renderMode else {
-            recordSuggestionEvent(
+            recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
                 profile: profile,
+                fieldIdentity: fieldIdentity,
                 metadata: [
                     "reason": "missing-inline-capabilities"
                 ]
@@ -694,6 +699,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.record(event, metadata: safeMetadata)
     }
 
+    private func recordBlockedSuggestionEvent(
+        _ event: String,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        metadata: [String: String] = [:]
+    ) {
+        let signature = blockedSuggestionSignature(
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            metadata: metadata
+        )
+
+        guard suggestionBlockLogGate.shouldRecord(signature: signature) else {
+            return
+        }
+
+        recordSuggestionEvent(event, context: context, profile: profile, metadata: metadata)
+    }
+
+    private func blockedSuggestionSignature(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        metadata: [String: String]
+    ) -> String {
+        [
+            profile.bundleIdentifier,
+            String(fieldIdentity.processIdentifier),
+            String(fieldIdentity.elementIdentifier),
+            metadata["reason"] ?? "unknown",
+            metadata["readinessStage"] ?? "none",
+            String(context.textBeforeCursor.count),
+            String(context.textAfterCursor.count)
+        ].joined(separator: "|")
+    }
+
     private func fieldIdentity(
         app: RunningApplicationInfo,
         context: FocusedTextContext,
@@ -891,6 +934,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentFieldIdentity = fieldIdentity
         lastTextSnapshot = nil
         lastRequestedTextBeforeCursor = nil
+        suggestionBlockLogGate.reset()
     }
 
     private func clearFocusedFieldState() {
@@ -903,6 +947,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentFieldIdentity = nil
         lastTextSnapshot = nil
         lastRequestedTextBeforeCursor = nil
+        suggestionBlockLogGate.reset()
     }
 
     private func invalidatePendingSuggestionRequest() {
