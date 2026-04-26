@@ -1532,7 +1532,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if normalizedDisplayed.hasPrefix(normalizedTyped), !normalizedTyped.isEmpty {
             hideSuggestion(reason: "typed-through-visible-prefix")
         } else {
-            hideSuggestion(reason: "stale-text-changed")
+            hideSuggestion(reason: "typed-over")
         }
     }
 
@@ -1544,6 +1544,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 outcome = "accepted"
             } else if reason == "typed-through-visible-prefix" {
                 outcome = "typed-through"
+            } else if reason == "typed-over" {
+                outcome = "typed-over"
             } else {
                 outcome = "ignored"
             }

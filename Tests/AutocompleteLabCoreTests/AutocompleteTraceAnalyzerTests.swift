@@ -31,6 +31,22 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.topMisses.contains { $0.fixCategory == "insertion bug" })
     }
 
+    @Test("typed-over hides do not count as ignored")
+    func typedOverHidesDoNotCountAsIgnored() {
+        let events = [
+            event(.suggestionPresented, suggestionID: "one", displayedText: "this"),
+            event(.suggestionTypedOver, suggestionID: "one", displayedText: "this"),
+            event(.suggestionHidden, suggestionID: "one", displayedText: "this", outcome: "typed-over"),
+            event(.suggestionPresented, suggestionID: "two", displayedText: "maybe"),
+            event(.suggestionHidden, suggestionID: "two", displayedText: "maybe", outcome: "ignored")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.typedOverCount == 1)
+        #expect(summary.ignoredCount == 1)
+    }
+
     @Test("flags thinking text and word completion phrases")
     func flagsCleanerMisses() {
         let events = [
@@ -103,6 +119,7 @@ struct AutocompleteTraceAnalyzerTests {
         displayedText: String = "",
         acceptedText: String = "",
         latency: Int? = nil,
+        outcome: String = "",
         reason: String = "",
         metadata: [String: String] = [:]
     ) -> AutocompleteTraceEvent {
@@ -118,6 +135,7 @@ struct AutocompleteTraceAnalyzerTests {
             displayedText: displayedText,
             acceptedText: acceptedText,
             latencyMilliseconds: latency,
+            outcome: outcome,
             reason: reason,
             metadata: metadata
         )
