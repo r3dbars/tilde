@@ -83,7 +83,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Obsidian one-word accept and full accept.
   - [x] Chrome text field one-word and full accept.
 
-- [ ] Build the local eval loop.
+- [x] Build the local eval loop.
   - [x] Add local prompt/output tracing for private local tuning.
   - [x] Trace accepted Tab and full-visible completions when raw tracing is enabled.
   - [x] Document the local eval metrics to track.
