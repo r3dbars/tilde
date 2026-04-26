@@ -10,7 +10,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - Suppress the field after failed accepts.
   - [x] Try known safe non-clipboard fallback insertion modes before giving up.
 
-- [ ] Finish safe compatibility passes.
+- [x] Finish safe compatibility passes.
   - [x] Encode known primary/fallback paths and a visible debug summary per profile.
   - TextEdit: keep as the green reference app.
   - Notes: title/body/list fields use key-event insertion because AX selected-text insertion can report success without moving the caret.
@@ -18,6 +18,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - Mail: safe diagnostics pass shows compose body as AXWebArea with empty direct value, no selected range, and no selected-text insertion; profile is diagnostics-only until a safe adapter is verified.
   - Chrome: local textarea passed AX capability checks; live one-word and full accept verified with mirror anchoring and AX value replacement because Chrome's selected-text insert is a no-op.
   - Atlas: keep unsupported until the focused AX element is reliably available.
+  - [x] Capture the current app stance in `docs/product/compatibility-matrix.md`.
 
 - [x] Persist user control.
   - [x] Persist per-app disable across launches.
