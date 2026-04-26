@@ -176,6 +176,17 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 )
             }
 
+            if event.type == .modelResult,
+               looksLikeAssistantStyleCompletion(event.cleanedVisibleText.isEmpty ? event.rawOutput : event.cleanedVisibleText) {
+                add(
+                    key: "Assistant-style completion",
+                    event: event,
+                    cause: "The model returned a chat-assistant reply instead of text the user would type.",
+                    category: "output cleaning issue",
+                    buckets: &buckets
+                )
+            }
+
             if event.type == .insertionFailed {
                 add(
                     key: "Insertion failed: \(event.reason)",
@@ -229,6 +240,18 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             }
             .prefix(5)
             .map { $0 }
+    }
+
+    private func looksLikeAssistantStyleCompletion(_ text: String) -> Bool {
+        let normalized = text
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return normalized.hasPrefix("i will do that")
+            || normalized.hasPrefix("i'll do that")
+            || normalized.hasPrefix("let me know")
+            || normalized.hasPrefix("sure,")
+            || normalized.hasPrefix("certainly,")
     }
 
     private func add(

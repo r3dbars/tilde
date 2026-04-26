@@ -40,6 +40,20 @@ struct AutocompleteTraceAnalyzerTests {
                 requestMode: "wordCompletion",
                 rawOutput: "<think>hmm</think> best option",
                 cleanedVisibleText: "best option"
+            ),
+            event(
+                .modelResult,
+                suggestionID: "two",
+                requestMode: "phraseContinuation",
+                rawOutput: "I will do that now.",
+                cleanedVisibleText: "I will do that now."
+            ),
+            event(
+                .modelResult,
+                suggestionID: "three",
+                requestMode: "phraseContinuation",
+                rawOutput: "Let me know when it's done.",
+                cleanedVisibleText: "Let me know when it's done."
             )
         ]
 
@@ -47,6 +61,8 @@ struct AutocompleteTraceAnalyzerTests {
 
         #expect(summary.topMisses.contains { $0.title == "Word mode returned phrase" })
         #expect(summary.topMisses.contains { $0.title == "Model leaked thinking text" })
+        #expect(summary.topMisses.contains { $0.title == "Assistant-style completion" })
+        #expect(summary.topMisses.contains { $0.fixCategory == "output cleaning issue" })
     }
 
     @Test("flags detached suggestion renderer misses")
