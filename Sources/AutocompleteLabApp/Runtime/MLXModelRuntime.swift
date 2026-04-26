@@ -112,6 +112,27 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             return existing
         }
 
+        for _ in 0..<600 {
+            let isWarming = stateQueue.sync {
+                if case .warming = storedState {
+                    return true
+                }
+
+                return false
+            }
+
+            guard isWarming else {
+                break
+            }
+
+            try Task.checkCancellation()
+            try await Task.sleep(for: .milliseconds(50))
+
+            if let existing = stateQueue.sync(execute: { container }) {
+                return existing
+            }
+        }
+
         try await warm()
 
         guard let warmed = stateQueue.sync(execute: { container }) else {
