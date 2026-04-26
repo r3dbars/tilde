@@ -41,6 +41,8 @@ struct CompletionOutputCleanerTests {
 
         #expect(cleaner.clean("That makes a lot of sense I would") == nil)
         #expect(cleaner.clean("I would like to help with that") == nil)
+        #expect(cleaner.clean("I will do that now.") == nil)
+        #expect(cleaner.clean("Let me know when it's done.") == nil)
         #expect(cleaner.clean("integrate it seamlessly.") == nil)
         #expect(cleaner.clean("enhance the experience") == nil)
     }
