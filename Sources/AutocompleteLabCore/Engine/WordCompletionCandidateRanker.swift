@@ -93,8 +93,8 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         "option", "people", "placement", "prediction", "prompt", "really",
         "relaunch", "reliable", "retry", "right", "something", "suggestion",
         "system", "test", "testing", "their", "there", "these", "thing",
-        "think", "this", "trace", "transcripted", "tracing", "trying",
-        "typing", "understand", "version",
+        "think", "this", "trying", "typing", "trace", "tracing",
+        "transcripted", "understand", "version",
         "verification", "what", "when", "where", "which", "while", "window",
         "without", "working", "would", "writing"
     ]
