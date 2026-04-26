@@ -67,7 +67,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Add a manual smoke checklist for TextEdit, Notes, Obsidian, and Chrome.
   - [x] Add a manual smoke recorder that validates per-app diagnostics.
   - [x] Record successful manual app passes in an append-only smoke-run ledger.
-  - [x] Add a self-test for the manual smoke recorder.
+  - [x] Add a self-test for the manual smoke recorder across target app profiles.
   - [x] Verify launch/runtime/status diagnostics in the smoke script.
   - [x] Wait for Gemma 4 MLX readiness in the smoke script.
   - App-specific checks below should only be marked done after `docs/product/manual-smoke-runs.md` has a matching pass.
