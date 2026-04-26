@@ -30,6 +30,19 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("integrate it seamlessly"))
     }
 
+    @Test("Codex prompt does not force dogfood topics into normal writing")
+    func codexPromptDoesNotForceDogfoodTopicsIntoNormalWriting() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "hello does this work right?",
+            appBundleIdentifier: "com.openai.codex"
+        ))
+
+        #expect(prompt.system.contains("Continue the user's actual sentence naturally"))
+        #expect(prompt.system.contains("Do not force software, testing, latency, placement, or debugging topics"))
+        #expect(!prompt.system.contains("Prefer concrete continuations about testing"))
+    }
+
     @Test("Word completion prompt asks for only the current word suffix")
     func wordCompletionPromptAsksForSuffixOnly() {
         let builder = CompletionPromptBuilder()

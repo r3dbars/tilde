@@ -63,6 +63,15 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
             return base
         }
 
+        guard request.textBeforeCursor.isAutocompleteDogfoodContext else {
+            return base + """
+
+            The active app is Codex. Continue the user's actual sentence naturally.
+            Do not force software, testing, latency, placement, or debugging topics unless the current sentence is already about them.
+            Avoid vague product phrases like "integrate it seamlessly", "enhance the experience", or "leverage the system".
+            """
+        }
+
         return base + """
 
         The active app is Codex, where the user is dogfooding this autocomplete tool while building and debugging it.
@@ -95,6 +104,19 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         }
 
         return fragment
+    }
+}
+
+private extension String {
+    var isAutocompleteDogfoodContext: Bool {
+        let lowercasedText = lowercased()
+        let dogfoodTerms = [
+            "autocomplete", "completion", "codex app", "engine", "latency",
+            "placement", "trace", "traces", "debug", "debugging", "test",
+            "testing", "suggestion", "suggestions", "tab", "caret", "model"
+        ]
+
+        return dogfoodTerms.contains { lowercasedText.contains($0) }
     }
 }
 
