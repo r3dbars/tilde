@@ -14,6 +14,7 @@ APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
+APP_ICON="$APP_RESOURCES/AppIcon.icns"
 MLX_METALLIB="$ROOT_DIR/.build/mlx-metal/default.metallib"
 
 cd "$ROOT_DIR"
@@ -122,6 +123,7 @@ mkdir -p "$APP_MACOS"
 mkdir -p "$APP_RESOURCES/mlx-swift_Cmlx.bundle"
 cp "$BUILD_BINARY" "$APP_BINARY"
 cp "$MLX_METALLIB" "$APP_RESOURCES/mlx-swift_Cmlx.bundle/default.metallib"
+swift "$ROOT_DIR/script/generate_app_icon.swift" "$APP_ICON"
 chmod +x "$APP_BINARY"
 
 cat >"$INFO_PLIST" <<PLIST
@@ -135,6 +137,8 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$BUNDLE_ID</string>
   <key>CFBundleName</key>
   <string>$APP_NAME</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSMinimumSystemVersion</key>

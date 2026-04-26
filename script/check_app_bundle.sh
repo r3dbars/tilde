@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_BUNDLE="${1:-$ROOT_DIR/dist/AutocompleteLab.app}"
 INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
 EXECUTABLE="$APP_BUNDLE/Contents/MacOS/AutocompleteLab"
+APP_ICON="$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 MLX_METALLIB="$APP_BUNDLE/Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib"
 
 fail() {
@@ -19,10 +20,12 @@ plist_value() {
 [[ -d "$APP_BUNDLE" ]] || fail "missing app bundle: $APP_BUNDLE"
 [[ -f "$INFO_PLIST" ]] || fail "missing Info.plist"
 [[ -x "$EXECUTABLE" ]] || fail "missing executable: $EXECUTABLE"
+[[ -s "$APP_ICON" ]] || fail "missing app icon: $APP_ICON"
 [[ -s "$MLX_METALLIB" ]] || fail "missing packaged MLX Metal library"
 
 [[ "$(plist_value CFBundlePackageType)" == "APPL" ]] || fail "CFBundlePackageType is not APPL"
 [[ "$(plist_value CFBundleExecutable)" == "AutocompleteLab" ]] || fail "CFBundleExecutable mismatch"
+[[ "$(plist_value CFBundleIconFile)" == "AppIcon" ]] || fail "CFBundleIconFile mismatch"
 [[ "$(plist_value CFBundleIdentifier)" == "bar.r3d.autocomplete-lab" ]] || fail "CFBundleIdentifier mismatch"
 [[ "$(plist_value LSUIElement)" == "true" ]] || fail "LSUIElement must be true for menu bar agent"
 
