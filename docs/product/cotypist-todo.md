@@ -19,7 +19,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 
 - [ ] Persist user control.
   - [x] Persist per-app disable across launches.
-  - Keep Esc suppression until blur.
+  - [x] Keep Esc suppression until blur and log the reason.
   - [x] Make the current app state obvious in the menu and diagnostics.
 
 ## Local Runtime

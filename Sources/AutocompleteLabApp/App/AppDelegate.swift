@@ -359,7 +359,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
 
         case .dismiss:
-            suppressCurrentField()
+            suppressCurrentField(reason: "escape")
             hideSuggestion()
             suppressKey(key)
             return true
@@ -459,7 +459,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
 
             guard result.isVerified else {
-                suppressCurrentField()
+                suppressCurrentField(reason: "insert-verification-failed")
                 hideSuggestion()
                 return
             }
@@ -708,13 +708,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func suppressCurrentField() {
-        guard currentProfile?.suppressesUntilBlurAfterEscape == true,
+    private func suppressCurrentField(reason: String) {
+        guard let currentProfile,
+              currentProfile.suppressesUntilBlurAfterEscape,
               let currentFieldIdentity else {
             return
         }
 
         suppressedFieldIdentities.insert(currentFieldIdentity)
+        DiagnosticsLog.shared.record(
+            "field-suppressed",
+            metadata: [
+                "app": currentProfile.bundleIdentifier,
+                "reason": reason
+            ]
+        )
     }
 
     private func transitionToField(_ fieldIdentity: FocusedFieldIdentity) {
