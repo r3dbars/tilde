@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keyboardRouter = KeyboardActionRouter()
     private let keyboardCapturePolicy = KeyboardCapturePolicy()
     private let insertionVerification = InsertionVerification()
+    private let insertionRetryPolicy = InsertionRetryPolicy()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private let suggestionPanel = SuggestionPanelController()
     private let diagnosticsWindow = DiagnosticsWindowController()
@@ -706,7 +707,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             previousTextBeforeCursor: lastTextSnapshot.textBeforeCursor,
             profile: profile,
             suggestionID: currentSuggestionID,
-            requestMode: currentSuggestionRequestMode
+            requestMode: currentSuggestionRequestMode,
+            retryCount: 0
         )
     }
 
@@ -768,6 +770,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
 
             guard result.isVerified else {
+                if insertionRetryPolicy.shouldRetry(
+                    result: result,
+                    insertionMode: baseline.profile.insertionMode,
+                    retryCount: baseline.retryCount
+                ) {
+                    DiagnosticsLog.shared.record(
+                        "insert-verification-retry",
+                        metadata: [
+                            "app": baseline.profile.bundleIdentifier,
+                            "acceptedChars": String(acceptedText.count),
+                            "retryCount": String(baseline.retryCount + 1),
+                            "result": String(describing: result)
+                        ]
+                    )
+
+                    if insertAcceptedText(acceptedText) {
+                        let retryBaseline = InsertionVerificationBaseline(
+                            fieldIdentity: baseline.fieldIdentity,
+                            previousTextBeforeCursor: baseline.previousTextBeforeCursor,
+                            profile: baseline.profile,
+                            suggestionID: baseline.suggestionID,
+                            requestMode: baseline.requestMode,
+                            retryCount: baseline.retryCount + 1
+                        )
+                        scheduleInsertionVerification(acceptedText: acceptedText, baseline: retryBaseline)
+                        return
+                    }
+                }
+
                 RawAutocompleteTraceLog.shared.record(
                     type: .insertionFailed,
                     suggestionID: baseline.suggestionID ?? "",
@@ -1757,6 +1788,7 @@ private struct InsertionVerificationBaseline: Equatable {
     let profile: CompatibilityProfile
     let suggestionID: String?
     let requestMode: CompletionRequestMode?
+    let retryCount: Int
 }
 
 private extension CompletionActivationDecision {
