@@ -18,9 +18,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let insertionVerification = InsertionVerification()
     private let suggestionPanel = SuggestionPanelController()
     private let diagnosticsWindow = DiagnosticsWindowController()
-    private lazy var settingsWindow = SettingsWindowController { [weak self] in
-        self?.requestAccessibilityPermission()
-    }
+    private lazy var settingsWindow = SettingsWindowController(
+        requestPermission: { [weak self] in
+            self?.requestAccessibilityPermission()
+        },
+        openAccessibilitySettings: { [weak self] in
+            self?.openAccessibilitySettings()
+        }
+    )
 
     private var statusItem: NSStatusItem?
     private var statusMenuItem: NSMenuItem?
@@ -96,6 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Reveal Model Folder", action: #selector(revealModelFolder), keyEquivalent: "m"))
         menu.addItem(toggleItem)
         menu.addItem(NSMenuItem(title: "Request Accessibility Permission", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Open Accessibility Settings", action: #selector(openAccessibilitySettings), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
 
         item.menu = menu
@@ -888,6 +894,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             modelDirectoryPath: modelDirectoryPath
         )
         DiagnosticsLog.shared.record("request-accessibility")
+    }
+
+    @objc
+    private func openAccessibilitySettings() {
+        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        if let url, NSWorkspace.shared.open(url) {
+            DiagnosticsLog.shared.record("open-accessibility-settings")
+        } else {
+            DiagnosticsLog.shared.record("open-accessibility-settings-failed")
+        }
     }
 
     @objc

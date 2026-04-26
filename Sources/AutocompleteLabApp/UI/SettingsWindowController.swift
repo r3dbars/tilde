@@ -10,11 +10,16 @@ final class SettingsWindowController: NSObject {
     private let runtimeActionLabel = NSTextField(labelWithString: "")
     private let modelDirectoryLabel = NSTextField(labelWithString: "")
     private let requestPermission: () -> Void
+    private let openAccessibilitySettings: () -> Void
 
-    init(requestPermission: @escaping () -> Void) {
+    init(
+        requestPermission: @escaping () -> Void,
+        openAccessibilitySettings: @escaping () -> Void
+    ) {
         self.requestPermission = requestPermission
+        self.openAccessibilitySettings = openAccessibilitySettings
 
-        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: 300))
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: 332))
         window = NSWindow(
             contentRect: contentView.frame,
             styleMask: [.titled, .closable],
@@ -75,6 +80,12 @@ final class SettingsWindowController: NSObject {
 
         let requestButton = NSButton(title: "Request Accessibility", target: self, action: #selector(requestAccessibility))
         requestButton.bezelStyle = .rounded
+        let openSettingsButton = NSButton(
+            title: "Open Accessibility Settings",
+            target: self,
+            action: #selector(openAccessibilitySettingsPane)
+        )
+        openSettingsButton.bezelStyle = .rounded
 
         let runtimeTarget = NSTextField(labelWithString: "Runtime target: app-owned Gemma 4 26B A4B MLX")
         runtimeTarget.textColor = .secondaryLabelColor
@@ -93,6 +104,7 @@ final class SettingsWindowController: NSObject {
             title,
             permissionLabel,
             requestButton,
+            openSettingsButton,
             runtimeLabel,
             runtimeDetailLabel,
             runtimeActionLabel,
@@ -117,5 +129,10 @@ final class SettingsWindowController: NSObject {
     @objc
     private func requestAccessibility() {
         requestPermission()
+    }
+
+    @objc
+    private func openAccessibilitySettingsPane() {
+        openAccessibilitySettings()
     }
 }
