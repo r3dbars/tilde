@@ -11,11 +11,7 @@ BOOTSTRAP_RE = re.compile(
     r"^(?P<timestamp>\S+) runtime-bootstrap .*?\basset=(?P<asset>\S+)"
 )
 TIMING_RE = re.compile(
-    r"^(?P<timestamp>\S+) mlx-completion-timing .*?"
-    r"\bfirstChunkMilliseconds=(?P<first>\d+|none).*?"
-    r"\bgenerationMilliseconds=(?P<generation>\d+).*?"
-    r"\bmode=(?P<mode>\w+).*?"
-    r"\btotalMilliseconds=(?P<total>\d+)"
+    r"^(?P<timestamp>\S+) mlx-completion-timing (?P<fields>.*)$"
 )
 PRESENTED_RE = re.compile(
     r"^(?P<timestamp>\S+) suggestion-presented .*?"
@@ -46,6 +42,20 @@ def metric_line(label, values):
     )
 
 
+def field_value(fields, key):
+    match = re.search(rf"\b{re.escape(key)}=(?P<value>\S+)", fields)
+    if not match:
+        return None
+    return match.group("value")
+
+
+def int_field(fields, key):
+    value = field_value(fields, key)
+    if value is None or value == "none" or not value.isdigit():
+        return None
+    return int(value)
+
+
 def parse_launches(lines):
     launches = []
     current = None
@@ -67,14 +77,24 @@ def parse_launches(lines):
 
         timing = TIMING_RE.search(line)
         if timing:
-            first = timing.group("first")
+            fields = timing.group("fields")
+            mode = field_value(fields, "mode")
+            generation = int_field(fields, "generationMilliseconds")
+            total = int_field(fields, "totalMilliseconds")
+            if mode is None or generation is None or total is None:
+                continue
+
             current["timings"].append(
                 {
                     "timestamp": timing.group("timestamp"),
-                    "mode": timing.group("mode"),
-                    "first": None if first == "none" else int(first),
-                    "generation": int(timing.group("generation")),
-                    "total": int(timing.group("total")),
+                    "mode": mode,
+                    "first": int_field(fields, "firstChunkMilliseconds"),
+                    "generation": generation,
+                    "session": int_field(fields, "sessionMilliseconds"),
+                    "prompt": int_field(fields, "promptMilliseconds"),
+                    "cleanup": int_field(fields, "cleanupMilliseconds"),
+                    "total": total,
+                    "maxTokens": int_field(fields, "maxTokens"),
                 }
             )
             continue
@@ -106,11 +126,22 @@ def print_launch(launch):
         mode_timings = [item for item in timings if item["mode"] == mode]
         mode_presented = [item for item in presented if item["mode"] == mode]
         first = [item["first"] for item in mode_timings if item["first"] is not None]
+        prompt = [item["prompt"] for item in mode_timings if item["prompt"] is not None]
+        session = [item["session"] for item in mode_timings if item["session"] is not None]
+        generation = [item["generation"] for item in mode_timings]
+        cleanup = [item["cleanup"] for item in mode_timings if item["cleanup"] is not None]
         total = [item["total"] for item in mode_timings]
         shown = [item["latency"] for item in mode_presented]
+        token_budgets = sorted({item["maxTokens"] for item in mode_timings if item["maxTokens"] is not None})
 
         print(f"  {mode}")
+        if token_budgets:
+            print(f"    max tokens: {', '.join(map(str, token_budgets))}")
+        print(f"    {metric_line('prompt build', prompt)}")
+        print(f"    {metric_line('session build', session)}")
         print(f"    {metric_line('first token', first)}")
+        print(f"    {metric_line('generation', generation)}")
+        print(f"    {metric_line('cleanup', cleanup)}")
         print(f"    {metric_line('model total', total)}")
         print(f"    {metric_line('shown latency', shown)}")
 

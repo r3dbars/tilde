@@ -29,6 +29,7 @@ public enum DiagnosticsMetadataRedactor {
         return normalized.hasSuffix("chars")
             || normalized.hasSuffix("count")
             || normalized.hasSuffix("length")
+            || normalized.hasSuffix("milliseconds")
             || normalized.hasPrefix("has")
     }
 

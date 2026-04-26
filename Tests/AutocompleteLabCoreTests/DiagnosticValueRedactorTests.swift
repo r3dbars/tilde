@@ -47,5 +47,11 @@ struct DiagnosticValueRedactorTests {
                 value: "true"
             ) == "true"
         )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "promptMilliseconds",
+                value: "1"
+            ) == "1"
+        )
     }
 }
