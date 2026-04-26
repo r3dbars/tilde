@@ -8,6 +8,19 @@ struct SuggestionSessionTests {
         let suggestion = CompletionSuggestion(text: " we should ship this today", maxVisibleWords: 3)
 
         #expect(suggestion.visibleText == " we should ship")
+        #expect(suggestion.text == " we should ship")
+    }
+
+    @Test("Repeated word acceptance cannot reveal hidden overflow text")
+    func repeatedWordAcceptanceCannotRevealOverflowText() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: " we should ship this today", maxVisibleWords: 3)
+        )
+
+        #expect(session.acceptNextWord() == " we")
+        #expect(session.acceptNextWord() == " should")
+        #expect(session.acceptNextWord() == " ship")
+        #expect(session.acceptNextWord() == nil)
     }
 
     @Test("Tab accepts one word and keeps the rest visible")
