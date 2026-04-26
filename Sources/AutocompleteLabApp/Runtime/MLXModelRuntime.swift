@@ -92,7 +92,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let rawOutput = try await session.respond(to: prompt.user)
         try Task.checkCancellation()
 
-        return cleaner.clean(rawOutput)
+        return cleaner.clean(rawOutput, after: request.textBeforeCursor)
     }
 
     private func readyContainer() async throws -> ModelContainer {

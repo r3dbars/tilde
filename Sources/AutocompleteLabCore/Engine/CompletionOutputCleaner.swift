@@ -8,6 +8,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
     }
 
     public func clean(_ rawOutput: String) -> CompletionSuggestion? {
+        clean(rawOutput, after: nil)
+    }
+
+    public func clean(_ rawOutput: String, after textBeforeCursor: String?) -> CompletionSuggestion? {
         let withoutThinking = rawOutput
             .replacingOccurrences(
                 of: #"<think>[\s\S]*?</think>"#,
@@ -43,7 +47,19 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
-        return CompletionSuggestion(text: ensureLeadingSpace(singleLine), maxVisibleWords: maxVisibleWords)
+        let normalizedSuggestion = ensureLeadingSpace(singleLine)
+        let trimmedSuggestion: String
+        if let textBeforeCursor {
+            trimmedSuggestion = CompletionPrefixTrimmer.trim(normalizedSuggestion, after: textBeforeCursor)
+        } else {
+            trimmedSuggestion = normalizedSuggestion
+        }
+
+        guard !trimmedSuggestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+
+        return CompletionSuggestion(text: trimmedSuggestion, maxVisibleWords: maxVisibleWords)
     }
 
     private func looksLikeAssistantMeta(_ text: String) -> Bool {

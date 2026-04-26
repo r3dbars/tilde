@@ -18,9 +18,11 @@ public enum CompletionActivationBlockReason: String, Equatable, Sendable {
 
 public struct CompletionActivationPolicy: Equatable, Sendable {
     public let minimumContextCharacters: Int
+    public let minimumContextWords: Int
 
-    public init(minimumContextCharacters: Int = 3) {
+    public init(minimumContextCharacters: Int = 3, minimumContextWords: Int = 2) {
         self.minimumContextCharacters = max(1, minimumContextCharacters)
+        self.minimumContextWords = max(1, minimumContextWords)
     }
 
     public func canSuggest(
@@ -51,7 +53,9 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             return .block(.suppressedField)
         }
 
-        guard textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines).count >= minimumContextCharacters else {
+        let trimmedContext = textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedContext.count >= minimumContextCharacters,
+              trimmedContext.split(whereSeparator: { $0.isWhitespace }).count >= minimumContextWords else {
             return .block(.tooLittleContext)
         }
 

@@ -99,4 +99,16 @@ struct CompletionActivationPolicyTests {
             isFieldSuppressed: false
         ) == .block(.tooLittleContext))
     }
+
+    @Test("Blocks one word context even when it is long enough")
+    func blocksOneWordContext() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "Hey",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.tooLittleContext))
+    }
 }

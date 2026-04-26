@@ -51,6 +51,14 @@ struct CompletionOutputCleanerTests {
         #expect(suggestion?.visibleText == " ship this today")
     }
 
+    @Test("Trims repeated typed prefix from real model output")
+    func trimsRepeatedTypedPrefix() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("Hey there.", after: "Hey")?.visibleText == " there.")
+        #expect(cleaner.clean("Know you are", after: "I know you are") == nil)
+    }
+
     @Test("Returns nil for empty output")
     func nilForEmptyOutput() {
         let cleaner = CompletionOutputCleaner()

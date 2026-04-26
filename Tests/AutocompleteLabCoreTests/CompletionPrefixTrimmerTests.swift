@@ -23,4 +23,25 @@ struct CompletionPrefixTrimmerTests {
 
         #expect(trimmed == "and keep moving")
     }
+
+    @Test("Removes a duplicated phrase from model output")
+    func removesDuplicatedPhraseFromModelOutput() {
+        let trimmed = CompletionPrefixTrimmer.trim(" Know you are", after: "I know you are")
+
+        #expect(trimmed == "")
+    }
+
+    @Test("Removes overlapping phrase and keeps the new continuation")
+    func removesOverlappingPhraseAndKeepsContinuation() {
+        let trimmed = CompletionPrefixTrimmer.trim(" you are right", after: "I know you are")
+
+        #expect(trimmed == " right")
+    }
+
+    @Test("Removes duplicated greeting and keeps only new words")
+    func removesDuplicatedGreeting() {
+        let trimmed = CompletionPrefixTrimmer.trim(" Hey there.", after: "Hey")
+
+        #expect(trimmed == " there.")
+    }
 }
