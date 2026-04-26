@@ -14,6 +14,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
                 with: "",
                 options: .regularExpression
             )
+            .replacingOccurrences(
+                of: #"</?think>"#,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
 

@@ -19,6 +19,14 @@ struct CompletionOutputCleanerTests {
         #expect(suggestion?.visibleText == " keep it tiny")
     }
 
+    @Test("Removes stray thinking markers")
+    func removesStrayThinkingMarkers() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 6)
+
+        #expect(cleaner.clean("<think> and I would like to see")?.visibleText == " and I would like to see")
+        #expect(cleaner.clean("make sure <think>")?.visibleText == " make sure")
+    }
+
     @Test("Uses only first line")
     func usesOnlyFirstLine() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
