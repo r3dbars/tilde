@@ -43,6 +43,6 @@ Use this after `./script/smoke_test.sh` when checking real app behavior.
 
 ## Hold For Explicit Confirmation
 
-- Mail compose body insertion.
+- Mail compose body insertion. Mail is diagnostics-only until a safe adapter is verified.
 - Deleting temporary notes, drafts, or files.
 - Any field that could contain passwords, payment details, personal data, or real third-party messages.

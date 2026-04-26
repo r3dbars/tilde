@@ -13,7 +13,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - TextEdit: keep as the green reference app.
   - Notes: title, body line, and checklist/list accepts verified with AX selected text.
   - Obsidian: keep CodeMirror behavior stable across AX element churn.
-  - Mail: safe diagnostics pass shows compose body as AXWebArea with empty direct value, no selected range, and no selected-text insertion; do not create or edit real third-party messages without explicit confirmation.
+  - Mail: safe diagnostics pass shows compose body as AXWebArea with empty direct value, no selected range, and no selected-text insertion; profile is diagnostics-only until a safe adapter is verified.
   - Chrome: local textarea passed AX capability checks; live one-word and full accept verified with mirror anchoring and AX value replacement because Chrome's selected-text insert is a no-op.
   - Atlas: keep unsupported until the focused AX element is reliably available.
 

@@ -216,6 +216,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         lastTextSnapshot = snapshot
+
+        guard profile.canPresentSuggestions else {
+            recordSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                metadata: [
+                    "reason": "profile-diagnostics-only"
+                ]
+            )
+            hideSuggestion()
+            return
+        }
+
         debounceTask?.cancel()
         suggestionTask?.cancel()
 

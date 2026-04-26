@@ -58,6 +58,12 @@ public struct CompatibilityProfile: Equatable, Sendable {
         self.isSensitive = isSensitive
         self.notes = notes
     }
+
+    public var canPresentSuggestions: Bool {
+        renderMode != .disabled
+            && insertionMode != .disabled
+            && (supportsOneWordAcceptance || supportsFullAcceptance)
+    }
 }
 
 public struct CompatibilityProfileStore: Equatable, Sendable {
@@ -122,11 +128,14 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.apple.mail",
             displayName: "Mail",
-            renderMode: .floatingMirror,
-            insertionMode: .axThenKeyEvents,
+            renderMode: .disabled,
+            insertionMode: .disabled,
             fieldIdentityMode: .stableBounds,
+            supportsOneWordAcceptance: false,
+            supportsFullAcceptance: false,
             allowsDescendantTextFallback: true,
-            notes: "Yellow rich-text compose target. Keep insertion conservative, verify AX writes, and avoid full value replacement."
+            isSensitive: true,
+            notes: "Diagnostics-only rich-text compose target until Mail insertion has a verified safe adapter."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.google.Chrome",
@@ -154,7 +163,11 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
     public var summary: String {
         switch self {
         case let .supported(profile):
-            return "supported: \(profile.displayName)"
+            if profile.canPresentSuggestions {
+                return "supported: \(profile.displayName)"
+            }
+
+            return "diagnostics only: \(profile.displayName)"
         case .denylisted:
             return "blocked: denylisted app"
         case .unsupported:

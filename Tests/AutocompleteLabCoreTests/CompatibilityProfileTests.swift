@@ -13,9 +13,11 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "md.obsidian")?.insertionMode == .axThenKeyEvents)
         #expect(store.profile(for: "md.obsidian")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "com.apple.mail")?.displayName == "Mail")
-        #expect(store.profile(for: "com.apple.mail")?.insertionMode == .axThenKeyEvents)
+        #expect(store.profile(for: "com.apple.mail")?.renderMode == .disabled)
+        #expect(store.profile(for: "com.apple.mail")?.insertionMode == .disabled)
         #expect(store.profile(for: "com.apple.mail")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "com.apple.mail")?.allowsDescendantTextFallback == true)
+        #expect(store.profile(for: "com.apple.mail")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.google.Chrome")?.displayName == "Chrome")
         #expect(store.profile(for: "com.google.Chrome")?.renderMode == .floatingMirror)
         #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .axValueReplacement)
@@ -44,5 +46,6 @@ struct CompatibilityProfileTests {
         #expect(store.supportStatus(for: "com.apple.Terminal") == .denylisted)
         #expect(store.supportStatus(for: "com.openai.atlas") == .unsupported)
         #expect(store.supportStatus(for: "com.apple.TextEdit").summary == "supported: TextEdit")
+        #expect(store.supportStatus(for: "com.apple.mail").summary == "diagnostics only: Mail")
     }
 }
