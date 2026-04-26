@@ -76,6 +76,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Add a status command and proof gate for missing manual app passes.
   - [x] Verify launch/runtime/status diagnostics in the smoke script.
   - [x] Wait for Gemma 4 MLX readiness in the smoke script.
+  - [x] Gate smoke on trace eval self-test coverage.
   - App-specific checks below should only be marked done after `docs/product/manual-smoke-runs.md` has a matching pass.
   - TextEdit one-word accept and full accept.
   - Notes one-word accept and full accept.
@@ -89,6 +90,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Aggregate accept / ignore / reject rates by app and request mode.
   - [x] Add a small trace summarizer.
   - [x] Add a trace eval checker with app-specific proof gates.
+  - [x] Run the trace eval checker self-test from the main smoke script.
 
 - [x] Keep every meaningful behavior covered by tests.
   - [x] Core routing and activation tests.

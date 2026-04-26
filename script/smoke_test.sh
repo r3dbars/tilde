@@ -13,6 +13,7 @@ fi
 swift test
 ./script/check_test_coverage_manifest.sh
 ./script/manual_smoke_self_test.sh
+./script/check_trace_eval_self_test.sh
 ./script/build_and_run.sh --verify
 ./script/check_app_bundle.sh
 AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
