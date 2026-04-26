@@ -18,6 +18,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "md.obsidian")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "md.obsidian")?.suppressesAfterInsertionFailure == false)
         #expect(store.profile(for: "md.obsidian")?.fieldIdentityMode == .stableBounds)
+        #expect(store.profile(for: "md.obsidian")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.apple.mail")?.displayName == "Mail")
         #expect(store.profile(for: "com.apple.mail")?.renderMode == .disabled)
         #expect(store.profile(for: "com.apple.mail")?.insertionMode == .disabled)

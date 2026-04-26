@@ -33,6 +33,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
     public let suppressesUntilBlurAfterEscape: Bool
     public let suppressesAfterInsertionFailure: Bool
     public let allowsDescendantTextFallback: Bool
+    public let allowsDetachedSuggestions: Bool
     public let isSensitive: Bool
     public let notes: String
 
@@ -49,6 +50,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         suppressesUntilBlurAfterEscape: Bool = true,
         suppressesAfterInsertionFailure: Bool = true,
         allowsDescendantTextFallback: Bool = false,
+        allowsDetachedSuggestions: Bool = true,
         isSensitive: Bool = false,
         notes: String
     ) {
@@ -64,6 +66,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         self.suppressesUntilBlurAfterEscape = suppressesUntilBlurAfterEscape
         self.suppressesAfterInsertionFailure = suppressesAfterInsertionFailure
         self.allowsDescendantTextFallback = allowsDescendantTextFallback
+        self.allowsDetachedSuggestions = allowsDetachedSuggestions
         self.isSensitive = isSensitive
         self.notes = notes
     }
@@ -146,7 +149,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             fallbackInsertionMode: .keyEvents,
             fieldIdentityMode: .stableBounds,
             suppressesAfterInsertionFailure: false,
-            notes: "Yellow Electron target. Prefer capability probing, mirror-style placement, and verified AX before synthetic key insertion. Do not suppress the whole field after one flaky key-event verification miss."
+            allowsDetachedSuggestions: false,
+            notes: "Yellow Electron target. Prefer capability probing, mirror-style placement, and verified AX before synthetic key insertion. Do not show detached suggestions when CodeMirror hides caret bounds."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.apple.mail",

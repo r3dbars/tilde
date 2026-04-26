@@ -341,6 +341,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        if shouldSuppressDetachedSuggestion(
+            profile: profile,
+            context: context,
+            renderMode: renderMode
+        ) {
+            recordBlockedSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                metadata: [
+                    "reason": "detached-suggestion-disabled"
+                ]
+            )
+            hideSuggestion()
+            return
+        }
+
         let triggerDecision = triggerPolicy.decision(
             previousTextBeforeCursor: lastRequestedTextBeforeCursor,
             currentTextBeforeCursor: context.textBeforeCursor
@@ -368,6 +386,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             delayMilliseconds: delayMilliseconds,
             requestMode: activationDecision.requestMode ?? .phraseContinuation
         )
+    }
+
+    private func shouldSuppressDetachedSuggestion(
+        profile: CompatibilityProfile,
+        context: FocusedTextContext,
+        renderMode: SuggestionRenderMode
+    ) -> Bool {
+        renderMode == .floatingMirror
+            && context.caretRect == nil
+            && !profile.allowsDetachedSuggestions
     }
 
     private func startKeyboardEventTapIfPossible() {
