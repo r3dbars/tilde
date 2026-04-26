@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 public enum RenderModePlan {
@@ -21,6 +22,22 @@ public enum RenderModePlan {
         case .floatingMirror:
             return hasMirrorAnchor ? .floatingMirror : nil
 
+        case .disabled:
+            return nil
+        }
+    }
+
+    public static func anchorRect(
+        for renderMode: SuggestionRenderMode,
+        caretRect: CGRect?,
+        elementRect: CGRect?,
+        windowRect: CGRect?
+    ) -> CGRect? {
+        switch renderMode {
+        case .inlineAdjacent:
+            return caretRect
+        case .floatingMirror:
+            return elementRect ?? windowRect ?? caretRect
         case .disabled:
             return nil
         }

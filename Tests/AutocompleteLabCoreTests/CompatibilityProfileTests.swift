@@ -1,3 +1,4 @@
+import CoreGraphics
 import Testing
 @testable import AutocompleteLabCore
 
@@ -102,6 +103,38 @@ struct CompatibilityProfileTests {
             for: mail,
             supportsInlineSuggestions: true,
             hasMirrorAnchor: true
+        ) == nil)
+    }
+
+    @Test("Render mode plans choose stable anchors for inline and mirror modes")
+    func renderModePlansChooseStableAnchors() {
+        let caret = CGRect(x: 10, y: 20, width: 0, height: 18)
+        let element = CGRect(x: 8, y: 18, width: 240, height: 40)
+        let window = CGRect(x: 0, y: 0, width: 600, height: 420)
+
+        #expect(RenderModePlan.anchorRect(
+            for: .inlineAdjacent,
+            caretRect: caret,
+            elementRect: element,
+            windowRect: window
+        ) == caret)
+        #expect(RenderModePlan.anchorRect(
+            for: .floatingMirror,
+            caretRect: caret,
+            elementRect: element,
+            windowRect: window
+        ) == element)
+        #expect(RenderModePlan.anchorRect(
+            for: .floatingMirror,
+            caretRect: caret,
+            elementRect: nil,
+            windowRect: window
+        ) == window)
+        #expect(RenderModePlan.anchorRect(
+            for: .disabled,
+            caretRect: caret,
+            elementRect: element,
+            windowRect: window
         ) == nil)
     }
 }

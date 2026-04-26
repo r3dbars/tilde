@@ -239,6 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard snapshot != lastTextSnapshot else {
+            repositionVisibleSuggestion(context: context, profile: profile)
             return
         }
 
@@ -571,9 +572,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
 
-                    let anchorRect = renderMode == .floatingMirror
-                        ? context.elementRect ?? context.windowRect ?? context.caretRect
-                        : context.caretRect
+                    let anchorRect = RenderModePlan.anchorRect(
+                        for: renderMode,
+                        caretRect: context.caretRect,
+                        elementRect: context.elementRect,
+                        windowRect: context.windowRect
+                    )
                     guard let suggestion, !suggestion.isEmpty else {
                         self.recordSuggestionEvent(
                             "suggestion-blocked",
@@ -731,6 +735,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             style: lastTextStyle,
             renderMode: lastRenderMode ?? .inlineAdjacent
         )
+    }
+
+    private func repositionVisibleSuggestion(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) {
+        guard suggestionSession.hasVisibleSuggestion,
+              let renderMode = RenderModePlan.effectiveMode(
+                  for: profile,
+                  supportsInlineSuggestions: context.capabilities.supportsInlineSuggestions,
+                  hasMirrorAnchor: context.elementRect != nil || context.windowRect != nil
+              ) else {
+            return
+        }
+
+        let anchorRect = RenderModePlan.anchorRect(
+            for: renderMode,
+            caretRect: context.caretRect,
+            elementRect: context.elementRect,
+            windowRect: context.windowRect
+        )
+
+        guard let anchorRect else {
+            return
+        }
+
+        lastCaretRect = anchorRect
+        lastTextLineRect = context.textLineRect
+        lastTextStyle = context.textStyle
+        lastRenderMode = renderMode
+        refreshVisibleSuggestion()
     }
 
     private func recordAcceptedText(_ acceptedText: String) {
