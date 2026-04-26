@@ -3,11 +3,11 @@ import Testing
 
 @Suite("Model policy")
 struct ModelPolicyTests {
-    @Test("MVP uses app-owned Gemma 4 E2B with reasoning off")
+    @Test("MVP uses an app-owned small MLX model with reasoning off")
     func mvpPolicy() {
         let policy = CompletionModelPolicy.mvp
 
-        #expect(policy.model == .gemma4E2B)
+        #expect(policy.model == .qwen3Small)
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)
         #expect(policy.maxGeneratedTokens == 16)

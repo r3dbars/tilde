@@ -41,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var disabledBundleIdentifiers: Set<String> = []
     private var debounceTask: Task<Void, Never>?
     private var insertionVerificationTask: Task<Void, Never>?
+    private var runtimeWarmTask: Task<Void, Never>?
     private var suggestionRequestGate = SuggestionRequestGate()
     private var currentCompletionRequest: CompletionRequest?
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
@@ -48,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        ProcessInfo.processInfo.disableAutomaticTermination("AutocompleteLab runs as a persistent menu bar agent.")
         NSApp.setActivationPolicy(.accessory)
         configureStatusItem()
         loadDisabledApps()
@@ -66,8 +68,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        DiagnosticsLog.shared.record("terminate")
         debounceTask?.cancel()
         insertionVerificationTask?.cancel()
+        runtimeWarmTask?.cancel()
         invalidatePendingSuggestionRequest()
         modelRuntime.cancel()
         pollTimer?.invalidate()
@@ -115,12 +119,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let runtime = modelRuntime
 
         applyRuntimeState(.warming(candidate: candidate))
+        DiagnosticsLog.shared.record(
+            "runtime-warm-start",
+            metadata: [
+                "candidate": candidate.rawValue,
+                "modelDirectory": modelRuntimeBundle.modelDirectoryURL.path
+            ]
+        )
 
-        Task { [weak self, runtime, candidate] in
+        runtimeWarmTask?.cancel()
+        runtimeWarmTask = Task { [weak self, runtime, candidate] in
             do {
                 try await runtime.warm()
             } catch {
                 await MainActor.run {
+                    DiagnosticsLog.shared.record(
+                        "runtime-warm-failed",
+                        metadata: [
+                            "candidate": candidate.rawValue,
+                            "reason": error.localizedDescription
+                        ]
+                    )
                     self?.applyRuntimeState(.failed(candidate: candidate, reason: error.localizedDescription))
                 }
                 return
@@ -128,6 +147,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let state = await runtime.state
             await MainActor.run {
+                DiagnosticsLog.shared.record(
+                    "runtime-warm-succeeded",
+                    metadata: [
+                        "candidate": candidate.rawValue,
+                        "state": state.statusSummary
+                    ]
+                )
                 self?.applyRuntimeState(state)
             }
         }

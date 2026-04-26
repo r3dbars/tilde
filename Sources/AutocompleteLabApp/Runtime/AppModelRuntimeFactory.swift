@@ -32,10 +32,9 @@ struct AppModelRuntimeBundle {
 
 enum AppModelRuntimeFactory {
     static func makeRuntime(
-        fileManager: FileManager = .default,
-        nativeRuntimeAvailable: Bool = false
+        fileManager: FileManager = .default
     ) -> AppModelRuntimeBundle {
-        let manifest = LocalModelAssetManifest.gemma4E2BMLX
+        let manifest = LocalModelAssetManifest.qwen3SmallMLX
         let modelDirectoryURL = modelAssetURL(for: manifest, fileManager: fileManager)
         let assetState = modelAssetState(
             for: manifest,
@@ -45,13 +44,18 @@ enum AppModelRuntimeFactory {
         let plan = RuntimeBootstrapPlan(
             preferredAsset: manifest,
             assetState: assetState,
-            nativeRuntimeAvailable: nativeRuntimeAvailable
+            nativeRuntimeAvailable: true
         )
+        let runtime: any ModelRuntime
 
-        // Until the MLX bridge is linked, keep the app functional through the
-        // deterministic runtime while reporting the real bootstrap state.
+        if plan.activeCandidate == .mlx {
+            runtime = MLXModelRuntime(modelDirectoryURL: modelDirectoryURL)
+        } else {
+            runtime = MockModelRuntime(candidate: plan.activeCandidate)
+        }
+
         return AppModelRuntimeBundle(
-            runtime: MockModelRuntime(candidate: plan.activeCandidate),
+            runtime: runtime,
             bootstrapPlan: plan,
             modelDirectoryURL: modelDirectoryURL
         )

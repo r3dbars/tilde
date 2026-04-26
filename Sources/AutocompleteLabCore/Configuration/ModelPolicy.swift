@@ -14,6 +14,7 @@ public struct HardwareProfile: Equatable, Sendable {
 
 public enum LocalModelID: String, Equatable, Sendable {
     case gemma4E2B = "Gemma 4 E2B"
+    case qwen3Small = "Qwen3 0.6B"
 }
 
 public enum ModelRuntimeOwnership: String, Equatable, Sendable {
@@ -51,7 +52,7 @@ public struct CompletionModelPolicy: Equatable, Sendable {
     }
 
     public static let mvp = CompletionModelPolicy(
-        model: .gemma4E2B,
+        model: .qwen3Small,
         runtimeOwnership: .appOwnedEmbedded,
         minimumMemoryGB: 16,
         maxGeneratedTokens: 16,

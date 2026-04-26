@@ -31,6 +31,10 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Validate the MLX/Hugging Face model directory shape before exposing it to the user.
   - [x] Show and reveal the expected MLX model folder from the menu and diagnostics.
   - [x] Add download/warm/ready/failed states before exposing it to the user.
+  - [x] Link `mlx-swift-lm` and add the first real `MLXModelRuntime`.
+  - [x] Add a local MLX download helper.
+  - [x] Package MLX Metal kernels into the standalone app bundle.
+  - [x] Switch the playable default to Qwen3 0.6B after Gemma 4 E2B failed current `mlx-swift-lm` weight loading.
   - Never require Ollama, llama.cpp, or any separate user-started server.
 
 - [ ] Keep inference tiny.

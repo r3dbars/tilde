@@ -74,7 +74,7 @@ struct RuntimePolicyTests {
         let missingReport = missingPlan.readinessReport(for: .ready(candidate: .mock))
 
         #expect(missingReport.stage == .downloadNeeded)
-        #expect(missingReport.summary == "download needed (Gemma 4 E2B); fallback: ready (mock)")
+        #expect(missingReport.summary == "download needed (Qwen3 0.6B); fallback: ready (mock)")
         #expect(missingReport.detail == "Expected MLX model folder at /tmp/gemma")
         #expect(missingReport.action == .revealModelFolder)
 
@@ -104,20 +104,20 @@ struct RuntimePolicyTests {
         #expect(report.isReady)
     }
 
-    @Test("Gemma asset manifest is MLX first")
-    func gemmaAssetManifestIsMLXFirst() {
-        let manifest = LocalModelAssetManifest.gemma4E2BMLX
+    @Test("Qwen asset manifest is MLX first")
+    func qwenAssetManifestIsMLXFirst() {
+        let manifest = LocalModelAssetManifest.qwen3SmallMLX
 
-        #expect(manifest.model == .gemma4E2B)
+        #expect(manifest.model == .qwen3Small)
         #expect(manifest.runtimeCandidate == .mlx)
-        #expect(manifest.cacheDirectoryName.contains("Gemma4E2B"))
+        #expect(manifest.cacheDirectoryName.contains("Qwen3Small"))
         #expect(manifest.requiredFileNames.contains("config.json"))
         #expect(manifest.requiredModelFileExtension == "safetensors")
     }
 
     @Test("MLX model asset validation expects a Hugging Face directory")
     func mlxAssetValidationExpectsDirectory() {
-        let manifest = LocalModelAssetManifest.gemma4E2BMLX
+        let manifest = LocalModelAssetManifest.qwen3SmallMLX
 
         #expect(manifest.validatedDirectoryState(
             path: "/tmp/gemma",
@@ -144,7 +144,7 @@ struct RuntimePolicyTests {
             path: "/tmp/gemma",
             isDirectory: true,
             childFileNames: ["config.json", "tokenizer.json", "model.safetensors"],
-            modelBytes: 2_000_000
+            modelBytes: 512 * 1024 * 1024
         ) == .available(path: "/tmp/gemma"))
     }
 
