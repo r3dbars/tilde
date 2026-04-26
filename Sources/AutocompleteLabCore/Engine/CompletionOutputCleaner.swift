@@ -109,6 +109,9 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("i would like to")
             || normalized.hasPrefix("okay, i would")
             || normalized.hasPrefix("okay, would")
+            || normalized.hasPrefix("integrate it seamlessly")
+            || normalized.hasPrefix("enhance the experience")
+            || normalized.hasPrefix("leverage the system")
             || normalized.hasPrefix("sure,")
             || normalized.hasPrefix("certainly,")
     }

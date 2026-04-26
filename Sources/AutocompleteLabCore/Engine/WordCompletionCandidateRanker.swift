@@ -83,17 +83,19 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
     }
 
     public static let defaultWords = [
-        "about", "actually", "again", "also", "always", "around", "available",
-        "because", "before", "being", "better", "between", "bring", "build",
-        "change", "completion", "computer", "context", "conversation", "could",
-        "definitely", "diagnostics", "dictation", "different", "document",
-        "everything", "evaluation", "fantastic", "first", "going", "great",
-        "important", "inference", "instant", "interesting", "language", "make",
-        "meaning", "model", "notes", "obsidian", "option", "people",
-        "prediction", "prompt", "really", "reliable", "right", "something",
-        "suggestion", "system", "their", "there", "these", "thing", "think",
-        "transcripted", "tracing", "trying", "typing", "understand",
+        "about", "accurate", "actually", "again", "also", "always", "app",
+        "application", "around", "autocomplete", "available", "because",
+        "before", "being", "better", "between", "bring", "build", "change",
+        "codex", "completion", "computer", "context", "conversation", "could",
+        "debugging", "definitely", "diagnostics", "dictation", "different",
+        "document", "dogfooding", "everything", "evaluation", "fantastic",
+        "first", "going", "great", "important", "inference", "instant",
+        "interesting", "language", "make", "meaning", "model", "notes",
+        "obsidian", "option", "people", "prediction", "prompt", "really",
+        "reliable", "right", "something", "suggestion", "system", "their",
+        "there", "these", "thing", "think", "this", "transcripted", "tracing",
+        "trying", "typing", "understand",
         "verification", "what", "when", "where", "which", "while", "window",
-        "without", "would", "writing"
+        "without", "working", "would", "writing"
     ]
 }

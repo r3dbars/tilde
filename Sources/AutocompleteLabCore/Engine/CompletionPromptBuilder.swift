@@ -44,16 +44,31 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         }
 
         return CompletionPrompt(
-            system: """
-            You are an inline autocomplete engine, not a chat assistant.
-            Continue only the current sentence or phrase before the cursor.
-            Return only the next \(maxVisibleWords) words or fewer.
-            Do not reuse old lines, answer, explain, summarize, greet, restart the sentence, or mention the user.
-            No explanation.
-            No quotes. No reasoning.
-            """,
+            system: phraseContinuationSystemPrompt(for: request),
             user: "Text before cursor:\n\(context)\n\nAutocomplete continuation:"
         )
+    }
+
+    private func phraseContinuationSystemPrompt(for request: CompletionRequest) -> String {
+        let base = """
+        You are an inline autocomplete engine, not a chat assistant.
+        Continue only the current sentence or phrase before the cursor.
+        Return only the next \(maxVisibleWords) words or fewer.
+        Do not reuse old lines, answer, explain, summarize, greet, restart the sentence, or mention the user.
+        No explanation.
+        No quotes. No reasoning.
+        """
+
+        guard request.appBundleIdentifier == "com.openai.codex" else {
+            return base
+        }
+
+        return base + """
+
+        The active app is Codex, where the user is dogfooding this autocomplete tool while building and debugging it.
+        Prefer concrete continuations about testing, using, building, debugging, logs, traces, placement, or app behavior.
+        Avoid vague product phrases like "integrate it seamlessly", "enhance the experience", or "leverage the system".
+        """
     }
 
     private func promptContext(from textBeforeCursor: String) -> String {

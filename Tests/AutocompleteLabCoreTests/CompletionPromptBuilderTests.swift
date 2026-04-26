@@ -17,6 +17,19 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.user.hasSuffix("Autocomplete continuation:"))
     }
 
+    @Test("Codex prompt avoids generic product filler")
+    func codexPromptAvoidsGenericProductFiller() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "I need this to be more accurate in the codex app so I can",
+            appBundleIdentifier: "com.openai.codex"
+        ))
+
+        #expect(prompt.system.contains("dogfooding this autocomplete tool"))
+        #expect(prompt.system.contains("testing, using, building, debugging"))
+        #expect(prompt.system.contains("integrate it seamlessly"))
+    }
+
     @Test("Word completion prompt asks for only the current word suffix")
     func wordCompletionPromptAsksForSuffixOnly() {
         let builder = CompletionPromptBuilder()
