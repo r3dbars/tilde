@@ -48,6 +48,16 @@ struct RuntimePolicyTests {
         #expect(readyPlan.fallbackReason == nil)
     }
 
+    @Test("Runtime readiness summary explains mock fallback")
+    func runtimeReadinessSummaryExplainsFallback() {
+        let plan = RuntimeBootstrapPlan(
+            assetState: .available(path: "/tmp/gemma"),
+            nativeRuntimeAvailable: false
+        )
+
+        #expect(plan.readinessSummary(for: .ready(candidate: .mock)) == "ready (mock); fallback: MLX runtime is not linked yet")
+    }
+
     @Test("Gemma asset manifest is MLX first")
     func gemmaAssetManifestIsMLXFirst() {
         let manifest = LocalModelAssetManifest.gemma4E2BMLX

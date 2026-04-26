@@ -27,16 +27,16 @@ final class SettingsWindowController: NSObject {
         buildContent(in: contentView)
     }
 
-    func show(isTrusted: Bool, runtimeState: LocalRuntimeState) {
-        refresh(isTrusted: isTrusted, runtimeState: runtimeState)
+    func show(isTrusted: Bool, runtimeReadiness: String) {
+        refresh(isTrusted: isTrusted, runtimeReadiness: runtimeReadiness)
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    func refresh(isTrusted: Bool, runtimeState: LocalRuntimeState) {
+    func refresh(isTrusted: Bool, runtimeReadiness: String) {
         permissionLabel.stringValue = isTrusted ? "Accessibility: granted" : "Accessibility: needed"
-        runtimeLabel.stringValue = "Local model: \(runtimeState.statusSummary)"
+        runtimeLabel.stringValue = "Local model: \(runtimeReadiness)"
     }
 
     private func buildContent(in contentView: NSView) {
@@ -48,6 +48,9 @@ final class SettingsWindowController: NSObject {
 
         let title = NSTextField(labelWithString: "Transcripted Autocomplete Lab")
         title.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
+        runtimeLabel.lineBreakMode = .byWordWrapping
+        runtimeLabel.maximumNumberOfLines = 0
+        runtimeLabel.preferredMaxLayoutWidth = 360
 
         let requestButton = NSButton(title: "Request Accessibility", target: self, action: #selector(requestAccessibility))
         requestButton.bezelStyle = .rounded

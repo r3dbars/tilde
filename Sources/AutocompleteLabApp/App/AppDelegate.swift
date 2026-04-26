@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         accessibilityClient.requestPermissionIfNeeded()
         warmModelRuntime()
         if !accessibilityClient.isTrusted {
-            settingsWindow.show(isTrusted: false, runtimeState: currentRuntimeState)
+            settingsWindow.show(isTrusted: false, runtimeReadiness: runtimeReadinessSummary)
         }
         startPolling()
     }
@@ -135,7 +135,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshRuntimeChrome() {
         runtimeMenuItem?.title = "Model: \(currentRuntimeState.statusSummary)"
-        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted, runtimeState: currentRuntimeState)
+        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted, runtimeReadiness: runtimeReadinessSummary)
+    }
+
+    private var runtimeReadinessSummary: String {
+        modelRuntimeBundle.bootstrapPlan.readinessSummary(for: currentRuntimeState)
     }
 
     private func pollFocusedText() {
@@ -669,7 +673,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusMenuItem?.title = statusLine
         toggleAppMenuItem?.title = app.map { appEnabled ? "Disable \($0.localizedName)" : "Enable \($0.localizedName)" } ?? "Toggle Current App"
-        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted, runtimeState: currentRuntimeState)
+        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted, runtimeReadiness: runtimeReadinessSummary)
 
         guard lastStatusLine != statusLine else {
             return
@@ -723,13 +727,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     private func requestAccessibilityPermission() {
         accessibilityClient.requestPermissionIfNeeded()
-        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted, runtimeState: currentRuntimeState)
+        settingsWindow.refresh(isTrusted: accessibilityClient.isTrusted, runtimeReadiness: runtimeReadinessSummary)
         DiagnosticsLog.shared.record("request-accessibility")
     }
 
     @objc
     private func showSettings() {
-        settingsWindow.show(isTrusted: accessibilityClient.isTrusted, runtimeState: currentRuntimeState)
+        settingsWindow.show(isTrusted: accessibilityClient.isTrusted, runtimeReadiness: runtimeReadinessSummary)
     }
 
     @objc
@@ -749,7 +753,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             compatibilityStatus: compatibilityStatus,
             appEnabled: appEnabled,
             appTrusted: accessibilityClient.isTrusted,
-            runtimeState: currentRuntimeState,
+            runtimeReadiness: runtimeReadinessSummary,
             recentEvents: DiagnosticsLog.shared.recentLines(limit: 24)
         )
     }

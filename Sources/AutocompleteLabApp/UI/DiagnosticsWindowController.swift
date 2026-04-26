@@ -33,13 +33,13 @@ final class DiagnosticsWindowController {
         compatibilityStatus: CompatibilitySupportStatus,
         appEnabled: Bool,
         appTrusted: Bool,
-        runtimeState: LocalRuntimeState,
+        runtimeReadiness: String,
         recentEvents: [String]
     ) {
         var sections: [String] = []
 
         sections.append("Permission: Accessibility \(appTrusted ? "granted" : "missing")")
-        sections.append("Local model: \(runtimeState.statusSummary)")
+        sections.append("Local model: \(runtimeReadiness)")
         sections.append("Compatibility: \(compatibilityStatus.summary)")
         sections.append("Current app enabled: \(appEnabled)")
 

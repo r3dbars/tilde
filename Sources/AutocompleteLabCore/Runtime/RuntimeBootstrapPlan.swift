@@ -96,4 +96,13 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
 
         return nil
     }
+
+    public func readinessSummary(for runtimeState: LocalRuntimeState) -> String {
+        guard let fallbackReason,
+              activeCandidate == .mock else {
+            return runtimeState.statusSummary
+        }
+
+        return "\(runtimeState.statusSummary); fallback: \(fallbackReason)"
+    }
 }
