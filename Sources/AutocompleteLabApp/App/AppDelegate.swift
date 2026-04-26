@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionSession = SuggestionSession()
     private var lastCaretRect: CGRect?
     private var lastTextLineRect: CGRect?
+    private var lastClippingRect: CGRect?
     private var lastTextStyle: FocusedTextStyle?
     private var lastRenderMode: SuggestionRenderMode?
     private var currentFieldIdentity: FocusedFieldIdentity?
@@ -651,12 +652,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.suggestionSession.present(suggestion)
                     self.lastCaretRect = anchorRect
                     self.lastTextLineRect = context.textLineRect
+                    self.lastClippingRect = context.elementRect ?? context.windowRect
                     self.lastTextStyle = context.textStyle
                     self.lastRenderMode = renderMode
                     self.suggestionPanel.show(
                         text: suggestion.visibleText,
                         near: anchorRect,
                         alignedTo: renderMode == .inlineAdjacent ? context.textLineRect : nil,
+                        boundedBy: context.elementRect ?? context.windowRect,
                         style: context.textStyle,
                         renderMode: renderMode
                     )
@@ -828,6 +831,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             text: suggestion.visibleText,
             near: caretRect,
             alignedTo: lastTextLineRect,
+            boundedBy: lastClippingRect,
             style: lastTextStyle,
             renderMode: lastRenderMode ?? .inlineAdjacent
         )
@@ -859,6 +863,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         lastCaretRect = anchorRect
         lastTextLineRect = context.textLineRect
+        lastClippingRect = context.elementRect ?? context.windowRect
         lastTextStyle = context.textStyle
         lastRenderMode = renderMode
         refreshVisibleSuggestion()
@@ -882,6 +887,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionSession.dismiss()
         lastCaretRect = nil
         lastTextLineRect = nil
+        lastClippingRect = nil
         lastTextStyle = nil
         lastRenderMode = nil
         suggestionPanel.hide()

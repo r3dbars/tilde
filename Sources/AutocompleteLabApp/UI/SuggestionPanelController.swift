@@ -48,6 +48,7 @@ final class SuggestionPanelController {
         text: String,
         near anchorRect: CGRect,
         alignedTo textLineRect: CGRect?,
+        boundedBy clippingRect: CGRect?,
         style: FocusedTextStyle?,
         renderMode: SuggestionRenderMode
     ) {
@@ -69,6 +70,12 @@ final class SuggestionPanelController {
                 screenHeight: screenHeight
             )
         }
+        let appKitClippingRect = clippingRect.map {
+            AccessibilityCoordinateConverter.appKitRect(
+                fromAccessibilityRect: $0,
+                screenHeight: screenHeight
+            )
+        }
         let frame: CGRect
 
         switch renderMode {
@@ -77,14 +84,16 @@ final class SuggestionPanelController {
                 caretRect: appKitAnchorRect,
                 textLineRect: appKitTextLineRect,
                 textSize: size,
-                screenFrame: screenFrame
+                screenFrame: screenFrame,
+                clippingFrame: appKitClippingRect
             )
 
         case .floatingMirror:
             frame = SuggestionPanelFrameCalculator.floatingMirrorFrame(
                 anchorRect: appKitAnchorRect,
                 textSize: size,
-                screenFrame: screenFrame
+                screenFrame: screenFrame,
+                clippingFrame: appKitClippingRect
             )
 
         case .disabled:
@@ -165,11 +174,22 @@ private final class GhostTextView: NSView {
 
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
-            .foregroundColor: color
+            .foregroundColor: color,
+            .paragraphStyle: paragraphStyle
         ]
         let textSize = text.size(withAttributes: attributes)
         let point = NSPoint(x: 0, y: max(0, (bounds.height - textSize.height) / 2))
 
-        text.draw(at: point, withAttributes: attributes)
+        text.draw(
+            with: NSRect(x: point.x, y: point.y, width: bounds.width, height: textSize.height),
+            options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
+            attributes: attributes
+        )
+    }
+
+    private var paragraphStyle: NSParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.lineBreakMode = .byTruncatingTail
+        return style
     }
 }

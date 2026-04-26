@@ -28,27 +28,31 @@ public enum SuggestionPanelFrameCalculator {
         textLineRect: CGRect? = nil,
         textSize: CGSize,
         screenFrame: CGRect,
+        clippingFrame: CGRect? = nil,
         minimumWidth: CGFloat = 40,
         maximumWidth: CGFloat = 420
     ) -> CGRect {
-        let width = panelWidth(
-            preferredWidth: textSize.width + 6,
-            minimumWidth: minimumWidth,
-            maximumWidth: maximumWidth,
-            screenFrame: screenFrame
-        )
         let lineRect = textLineRect ?? caretRect
         let height = max(lineRect.height, textSize.height)
-        let preferredX = caretRect.maxX
+        let horizontalBounds = horizontalBounds(screenFrame: screenFrame, clippingFrame: clippingFrame)
+        let preferredWidth = textSize.width + 6
+        let preferredX = clampedOrigin(
+            preferred: caretRect.maxX,
+            length: min(minimumWidth, horizontalBounds.upper - horizontalBounds.lower),
+            lowerBound: horizontalBounds.lower,
+            upperBound: horizontalBounds.upper
+        )
+        let width = widthFromOrigin(
+            preferredWidth: preferredWidth,
+            originX: preferredX,
+            minimumWidth: minimumWidth,
+            maximumWidth: maximumWidth,
+            upperBound: horizontalBounds.upper
+        )
         let preferredY = lineRect.maxY - height
 
         return CGRect(
-            x: clampedOrigin(
-                preferred: preferredX,
-                length: width,
-                lowerBound: screenFrame.minX + 8,
-                upperBound: screenFrame.maxX - 8
-            ),
+            x: preferredX,
             y: clampedOrigin(
                 preferred: preferredY,
                 length: height,
@@ -64,14 +68,16 @@ public enum SuggestionPanelFrameCalculator {
         anchorRect: CGRect,
         textSize: CGSize,
         screenFrame: CGRect,
+        clippingFrame: CGRect? = nil,
         minimumWidth: CGFloat = 72,
         maximumWidth: CGFloat = 420
     ) -> CGRect {
+        let horizontalBounds = horizontalBounds(screenFrame: screenFrame, clippingFrame: clippingFrame)
         let width = panelWidth(
             preferredWidth: textSize.width + 10,
             minimumWidth: minimumWidth,
             maximumWidth: maximumWidth,
-            screenFrame: screenFrame
+            availableWidth: horizontalBounds.upper - horizontalBounds.lower
         )
         let height = max(textSize.height, min(max(anchorRect.height, 20), 30))
         let preferredX = anchorRect.minX + 8
@@ -81,8 +87,8 @@ public enum SuggestionPanelFrameCalculator {
             x: clampedOrigin(
                 preferred: preferredX,
                 length: width,
-                lowerBound: screenFrame.minX + 8,
-                upperBound: screenFrame.maxX - 8
+                lowerBound: horizontalBounds.lower,
+                upperBound: horizontalBounds.upper
             ),
             y: clampedOrigin(
                 preferred: preferredY,
@@ -99,11 +105,42 @@ public enum SuggestionPanelFrameCalculator {
         preferredWidth: CGFloat,
         minimumWidth: CGFloat,
         maximumWidth: CGFloat,
-        screenFrame: CGRect,
-        horizontalMargin: CGFloat = 8
+        availableWidth: CGFloat
     ) -> CGFloat {
-        let availableWidth = max(1, screenFrame.width - (horizontalMargin * 2))
         return min(max(preferredWidth, minimumWidth), maximumWidth, availableWidth)
+    }
+
+    private static func widthFromOrigin(
+        preferredWidth: CGFloat,
+        originX: CGFloat,
+        minimumWidth: CGFloat,
+        maximumWidth: CGFloat,
+        upperBound: CGFloat
+    ) -> CGFloat {
+        let availableWidth = max(1, upperBound - originX)
+        return panelWidth(
+            preferredWidth: preferredWidth,
+            minimumWidth: min(minimumWidth, availableWidth),
+            maximumWidth: maximumWidth,
+            availableWidth: availableWidth
+        )
+    }
+
+    private static func horizontalBounds(
+        screenFrame: CGRect,
+        clippingFrame: CGRect?,
+        horizontalMargin: CGFloat = 8
+    ) -> (lower: CGFloat, upper: CGFloat) {
+        let screenLower = screenFrame.minX + horizontalMargin
+        let screenUpper = screenFrame.maxX - horizontalMargin
+
+        guard let clippingFrame else {
+            return (screenLower, max(screenLower + 1, screenUpper))
+        }
+
+        let lower = max(screenLower, clippingFrame.minX + horizontalMargin)
+        let upper = min(screenUpper, clippingFrame.maxX - horizontalMargin)
+        return (lower, max(lower + 1, upper))
     }
 
     private static func clampedOrigin(

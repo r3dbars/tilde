@@ -30,6 +30,20 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(frame.minY >= 4)
     }
 
+    @Test("Keeps inline ghost text inside the focused editor bounds")
+    func keepsInlineGhostTextInsideEditorBounds() {
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            caretRect: CGRect(x: 1265, y: 420, width: 0, height: 22),
+            textLineRect: CGRect(x: 20, y: 415, width: 1245, height: 22),
+            textSize: CGSize(width: 360, height: 22),
+            screenFrame: CGRect(x: 0, y: 0, width: 1600, height: 900),
+            clippingFrame: CGRect(x: 0, y: 80, width: 1312, height: 740)
+        )
+
+        #expect(frame.minX >= 1264)
+        #expect(frame.maxX <= 1304)
+    }
+
     @Test("Keeps panel valid on narrow screens")
     func keepsPanelValidOnNarrowScreens() {
         let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
@@ -40,7 +54,7 @@ struct SuggestionPanelFrameCalculatorTests {
 
         #expect(frame.minX >= 8)
         #expect(frame.maxX <= 88)
-        #expect(frame.width == 80)
+        #expect(frame.width == 40)
     }
 
     @Test("Mirror fallback anchors inside the focused element")
