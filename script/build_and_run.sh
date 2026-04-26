@@ -5,6 +5,7 @@ MODE="${1:-run}"
 APP_NAME="AutocompleteLab"
 BUNDLE_ID="bar.r3d.autocomplete-lab"
 MIN_SYSTEM_VERSION="26.0"
+BUILD_CONFIGURATION="${AUTOCOMPLETE_LAB_BUILD_CONFIGURATION:-debug}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -39,8 +40,8 @@ find_signing_identity() {
   echo "$identity"
 }
 
-swift build -c debug --product "$APP_NAME"
-BUILD_BINARY="$(swift build -c debug --show-bin-path)/$APP_NAME"
+swift build -c "$BUILD_CONFIGURATION" --product "$APP_NAME"
+BUILD_BINARY="$(swift build -c "$BUILD_CONFIGURATION" --show-bin-path)/$APP_NAME"
 
 build_mlx_metallib_if_needed() {
   if [[ -f "$MLX_METALLIB" ]]; then
@@ -202,8 +203,11 @@ case "$MODE" in
     done
     exit 1
     ;;
+  --bundle-only|bundle-only)
+    echo "App bundle built: $APP_BUNDLE"
+    ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify]" >&2
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--bundle-only]" >&2
     exit 2
     ;;
 esac
