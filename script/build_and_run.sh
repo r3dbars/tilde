@@ -162,10 +162,16 @@ else
 fi
 
 open_app() {
-  if [[ "${AUTOCOMPLETE_LAB_RAW_TRACE:-}" =~ ^(1|true|yes|on)$ ]]; then
-    launchctl setenv AUTOCOMPLETE_LAB_RAW_TRACE "$AUTOCOMPLETE_LAB_RAW_TRACE"
+  if [[ "${AUTOCOMPLETE_LAB_TRACE:-}" =~ ^(0|false|no|off)$ ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_TRACE "$AUTOCOMPLETE_LAB_TRACE"
   else
-    launchctl unsetenv AUTOCOMPLETE_LAB_RAW_TRACE >/dev/null 2>&1 || true
+    launchctl unsetenv AUTOCOMPLETE_LAB_TRACE >/dev/null 2>&1 || true
+  fi
+
+  if [[ "${AUTOCOMPLETE_LAB_SCREENSHOT_TRACE:-}" =~ ^(1|true|yes|on)$ ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_SCREENSHOT_TRACE "$AUTOCOMPLETE_LAB_SCREENSHOT_TRACE"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_SCREENSHOT_TRACE >/dev/null 2>&1 || true
   fi
 
   /usr/bin/open -n "$APP_BUNDLE"
