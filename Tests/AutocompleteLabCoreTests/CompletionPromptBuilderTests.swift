@@ -19,7 +19,11 @@ struct CompletionPromptBuilderTests {
 
     @Test("Prompt trims long context from the left")
     func promptTrimsLongContext() {
-        let builder = CompletionPromptBuilder(maxContextCharacters: 120, maxCurrentParagraphCharacters: 120)
+        let builder = CompletionPromptBuilder(
+            maxContextCharacters: 120,
+            maxCurrentParagraphCharacters: 120,
+            maxCurrentSentenceCharacters: 120
+        )
         let longText = String(repeating: "a", count: 200)
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: longText))
 
@@ -29,7 +33,11 @@ struct CompletionPromptBuilderTests {
 
     @Test("Prompt uses current paragraph instead of older field text")
     func promptUsesCurrentParagraph() {
-        let builder = CompletionPromptBuilder(maxContextCharacters: 300, maxCurrentParagraphCharacters: 120)
+        let builder = CompletionPromptBuilder(
+            maxContextCharacters: 300,
+            maxCurrentParagraphCharacters: 120,
+            maxCurrentSentenceCharacters: 120
+        )
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: """
         I know you are ready and this old line should not steer the next suggestion.
 
@@ -42,12 +50,43 @@ struct CompletionPromptBuilderTests {
 
     @Test("Prompt trims current paragraph from the left")
     func promptTrimsCurrentParagraphFromLeft() {
-        let builder = CompletionPromptBuilder(maxContextCharacters: 300, maxCurrentParagraphCharacters: 90)
+        let builder = CompletionPromptBuilder(
+            maxContextCharacters: 300,
+            maxCurrentParagraphCharacters: 90,
+            maxCurrentSentenceCharacters: 90
+        )
         let currentParagraph = String(repeating: "b", count: 140)
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "Old paragraph\n\n\(currentParagraph)"))
 
         #expect(prompt.user.contains(String(repeating: "b", count: 90)))
         #expect(!prompt.user.contains("Old paragraph"))
         #expect(!prompt.user.contains(String(repeating: "b", count: 91)))
+    }
+
+    @Test("Prompt uses current sentence instead of earlier paragraph sentence")
+    func promptUsesCurrentSentence() {
+        let builder = CompletionPromptBuilder(
+            maxContextCharacters: 300,
+            maxCurrentParagraphCharacters: 220,
+            maxCurrentSentenceCharacters: 120
+        )
+        let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: """
+        I know you are ready and this earlier sentence should not steer Gemma. Hey how are you
+        """))
+
+        #expect(!prompt.user.contains("I know you are ready"))
+        #expect(prompt.user.contains("Hey how are you"))
+    }
+
+    @Test("Prompt keeps current paragraph when sentence ends at cursor")
+    func promptKeepsParagraphWhenSentenceEndsAtCursor() {
+        let builder = CompletionPromptBuilder(
+            maxContextCharacters: 300,
+            maxCurrentParagraphCharacters: 220,
+            maxCurrentSentenceCharacters: 120
+        )
+        let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "Can we make this work."))
+
+        #expect(prompt.user.contains("Can we make this work."))
     }
 }

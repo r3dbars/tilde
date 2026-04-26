@@ -40,7 +40,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - Never require Ollama, llama.cpp, or any separate user-started server.
 
 - [ ] Keep inference tiny.
-  - [x] Prompt from a small current-paragraph context window.
+  - [x] Prompt from a small current sentence/paragraph context window.
   - Generate 2-8 visible words.
   - Keep reasoning off.
   - [x] Cancel stale requests when typing continues.
