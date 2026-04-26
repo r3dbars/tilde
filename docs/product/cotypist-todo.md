@@ -106,6 +106,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Validate bundle structure, menu-bar plist, packaged MLX metallib, and signature in smoke.
   - [x] Sign debug bundles with hardened runtime.
   - [x] Add a release packaging and notarization-readiness script.
+  - [x] Gate smoke on release packaging prerequisite checks.
   - Signing and notarization submission.
   - [x] Add a direct Accessibility settings link for first-run setup.
   - [x] Cleaner first-run onboarding.
