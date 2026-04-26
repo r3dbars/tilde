@@ -76,4 +76,32 @@ struct CompatibilityProfileTests {
         #expect(InsertionModePlan.modes(for: chrome) == [.axValueReplacement, .keyEvents])
         #expect(InsertionModePlan.modes(for: mail) == [])
     }
+
+    @Test("Render mode plans fall back to mirror when inline bounds are unavailable")
+    func renderModePlansFallbackToMirrorWhenInlineBoundsAreUnavailable() throws {
+        let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+        let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
+
+        #expect(RenderModePlan.effectiveMode(
+            for: textEdit,
+            supportsInlineSuggestions: true,
+            hasMirrorAnchor: true
+        ) == .inlineAdjacent)
+        #expect(RenderModePlan.effectiveMode(
+            for: textEdit,
+            supportsInlineSuggestions: false,
+            hasMirrorAnchor: true
+        ) == .floatingMirror)
+        #expect(RenderModePlan.effectiveMode(
+            for: chrome,
+            supportsInlineSuggestions: false,
+            hasMirrorAnchor: true
+        ) == .floatingMirror)
+        #expect(RenderModePlan.effectiveMode(
+            for: mail,
+            supportsInlineSuggestions: true,
+            hasMirrorAnchor: true
+        ) == nil)
+    }
 }

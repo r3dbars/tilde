@@ -54,7 +54,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 - [ ] Make the panel calmer.
   - [x] Reduce flicker while typing quickly.
   - Reposition on caret changes without stealing focus.
-  - Use floating mirror mode when inline bounds are unstable.
+  - [x] Use floating mirror mode when inline bounds are unstable.
 
 - [ ] Make failure states understandable.
   - [x] Show local model readiness and mock fallback reason.

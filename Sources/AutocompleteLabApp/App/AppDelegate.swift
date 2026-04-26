@@ -293,7 +293,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        guard context.capabilities.supportsInlineSuggestions || profile.renderMode == .floatingMirror else {
+        let renderMode = RenderModePlan.effectiveMode(
+            for: profile,
+            supportsInlineSuggestions: context.capabilities.supportsInlineSuggestions,
+            hasMirrorAnchor: context.elementRect != nil || context.windowRect != nil
+        )
+
+        guard let renderMode else {
             recordSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
@@ -328,6 +334,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             appBundleIdentifier: frontmostApp.bundleIdentifier,
             fieldIdentity: fieldIdentity,
+            renderMode: renderMode,
             delayMilliseconds: delayMilliseconds
         )
     }
@@ -534,6 +541,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         appBundleIdentifier: String,
         fieldIdentity: FocusedFieldIdentity,
+        renderMode: SuggestionRenderMode,
         delayMilliseconds: Int
     ) {
         lastRequestedTextBeforeCursor = context.textBeforeCursor
@@ -547,7 +555,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let requestTicket = suggestionRequestGate.issue(request: request)
 
         debounceTask = Task { [engine, requestTicket, fieldIdentity] in
-            let renderDelay = profile.renderMode == .inlineAdjacent ? delayMilliseconds : max(delayMilliseconds, 120)
+            let renderDelay = renderMode == .inlineAdjacent ? delayMilliseconds : max(delayMilliseconds, 120)
             try? await Task.sleep(for: .milliseconds(renderDelay))
             guard !Task.isCancelled else {
                 return
@@ -563,7 +571,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
 
-                    let anchorRect = context.caretRect ?? (profile.renderMode == .floatingMirror ? context.elementRect ?? context.windowRect : nil)
+                    let anchorRect = renderMode == .floatingMirror
+                        ? context.elementRect ?? context.windowRect ?? context.caretRect
+                        : context.caretRect
                     guard let suggestion, !suggestion.isEmpty else {
                         self.recordSuggestionEvent(
                             "suggestion-blocked",
@@ -594,19 +604,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.lastCaretRect = anchorRect
                     self.lastTextLineRect = context.textLineRect
                     self.lastTextStyle = context.textStyle
-                    self.lastRenderMode = profile.renderMode
+                    self.lastRenderMode = renderMode
                     self.suggestionPanel.show(
                         text: suggestion.visibleText,
                         near: anchorRect,
-                        alignedTo: profile.renderMode == .inlineAdjacent ? context.textLineRect : nil,
+                        alignedTo: renderMode == .inlineAdjacent ? context.textLineRect : nil,
                         style: context.textStyle,
-                        renderMode: profile.renderMode
+                        renderMode: renderMode
                     )
                     self.recordSuggestionEvent(
                         "suggestion-presented",
                         context: context,
                         profile: profile,
                         metadata: [
+                            "effectiveRenderMode": renderMode.rawValue,
                             "visibleChars": String(suggestion.visibleText.count)
                         ]
                     )
