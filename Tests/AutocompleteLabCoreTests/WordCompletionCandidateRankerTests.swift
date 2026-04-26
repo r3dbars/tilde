@@ -31,6 +31,8 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "I nee")?.visibleText == "d")
         #expect(ranker.suggestion(for: "Can you tes")?.visibleText == "t")
         #expect(ranker.suggestion(for: "I see thi")?.visibleText == "ng")
+        #expect(ranker.suggestion(for: "This should be su")?.visibleText == "per")
+        #expect(ranker.suggestion(for: "This should be super fas")?.visibleText == "t")
         #expect(ranker.suggestion(for: "hey tr")?.visibleText == "ying")
         #expect(ranker.suggestion(for: "It is worki")?.visibleText == "ng")
     }
