@@ -52,6 +52,33 @@ run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' flo
 run_passing_case obsidian Obsidian md.obsidian floatingMirror floatingMirror
 run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror
 
+STATUS_OUTPUT="$TMP_DIR/status-output.txt"
+AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_status.sh >"$STATUS_OUTPUT"
+
+for app_name in TextEdit Notes Obsidian Chrome; do
+  if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
+    echo "manual smoke self-test did not report $app_name as passed" >&2
+    exit 1
+  fi
+done
+
+EMPTY_REPORT="$TMP_DIR/empty-manual-smoke-runs.md"
+cat >"$EMPTY_REPORT" <<'EOF'
+# Manual Smoke Runs
+
+| Time UTC | App | Bundle | Verified accepts | Render expectation | Diagnostics slice |
+| --- | --- | --- | ---: | --- | --- |
+EOF
+
+AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$EMPTY_REPORT" \
+  script/manual_smoke_status.sh >"$STATUS_OUTPUT"
+
+if ! grep -F -- "- TextEdit: pending" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not report missing app proof as pending" >&2
+  exit 1
+fi
+
 cat >"$LOG_PATH" <<'EOF'
 2026-04-26T08:00:00Z suggestion-presented app=com.apple.TextEdit effectiveRenderMode=inlineAdjacent
 EOF
