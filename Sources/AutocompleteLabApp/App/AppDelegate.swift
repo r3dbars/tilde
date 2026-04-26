@@ -59,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recentAcceptedWords: [String] = []
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var lastStatusLine: String?
+    private var lastSyntheticCaretDiagnosticSignature: String?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -230,14 +231,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        guard let context = accessibilityClient.focusedTextContext(
+        guard let rawContext = accessibilityClient.focusedTextContext(
             allowDescendantTextFallback: profile.allowsDescendantTextFallback
-        ), !context.isSecure else {
+        ), !rawContext.isSecure else {
             clearFocusedFieldState()
             currentProfile = profile
             hideSuggestion()
             return
         }
+        let context = presentationAdjustedContext(rawContext, app: frontmostApp, profile: profile)
 
         let fieldIdentity = fieldIdentity(
             app: frontmostApp,
@@ -408,6 +410,134 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         renderMode == .floatingMirror
             && context.caretRect == nil
             && !profile.allowsDetachedSuggestions
+    }
+
+    private func presentationAdjustedContext(
+        _ context: FocusedTextContext,
+        app: RunningApplicationInfo,
+        profile: CompatibilityProfile
+    ) -> FocusedTextContext {
+        guard app.bundleIdentifier == "com.openai.codex",
+              context.caretRect == nil,
+              let syntheticCaret = codexSyntheticCaretRect(for: context) else {
+            return context
+        }
+
+        let capabilities = FocusedTextCapabilities(
+            canReadValue: context.capabilities.canReadValue,
+            canReadSelectedTextRange: context.capabilities.canReadSelectedTextRange,
+            canReadBoundsForRange: true,
+            canReadAttributedText: context.capabilities.canReadAttributedText,
+            canSetSelectedText: context.capabilities.canSetSelectedText
+        )
+
+        recordSyntheticCaretIfNeeded(syntheticCaret, context: context, profile: profile)
+
+        return FocusedTextContext(
+            elementIdentifier: context.elementIdentifier,
+            role: context.role,
+            subrole: context.subrole,
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            caretRect: syntheticCaret,
+            elementRect: context.elementRect,
+            windowRect: context.windowRect,
+            textLineRect: syntheticCaret,
+            textStyle: context.textStyle,
+            isSecure: context.isSecure,
+            capabilities: capabilities
+        )
+    }
+
+    private func codexSyntheticCaretRect(for context: FocusedTextContext) -> CGRect? {
+        guard context.role == "AXTextArea",
+              let elementRect = context.elementRect,
+              elementRect.width > 80,
+              elementRect.height > 20 else {
+            return nil
+        }
+
+        let font = context.textStyle?.font ?? NSFont.systemFont(ofSize: 18)
+        let lineHeight = max(font.ascender - font.descender + font.leading, 20)
+        let horizontalPadding: CGFloat = 18
+        let verticalPadding: CGFloat = 10
+        let maxLineWidth = max(40, elementRect.width - (horizontalPadding * 2))
+        let visualLines = wrappedVisualLines(
+            for: context.textBeforeCursor,
+            font: font,
+            maxLineWidth: maxLineWidth
+        )
+        let currentLine = visualLines.last ?? ""
+        let lineIndex = max(0, visualLines.count - 1)
+        let currentLineWidth = min(width(of: currentLine, font: font), maxLineWidth)
+        let caretHeight = min(max(lineHeight, 16), max(16, elementRect.height - (verticalPadding * 2)))
+        let maxY = elementRect.maxY - verticalPadding - caretHeight
+        let preferredY = elementRect.minY + verticalPadding + (CGFloat(lineIndex) * lineHeight)
+        let y = min(max(preferredY, elementRect.minY + verticalPadding), maxY)
+
+        return CGRect(
+            x: min(elementRect.minX + horizontalPadding + currentLineWidth, elementRect.maxX - horizontalPadding),
+            y: y,
+            width: 0,
+            height: caretHeight
+        )
+    }
+
+    private func wrappedVisualLines(for text: String, font: NSFont, maxLineWidth: CGFloat) -> [String] {
+        var lines: [String] = []
+
+        for paragraph in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+            var current = ""
+
+            for character in paragraph {
+                let next = current + String(character)
+                if !current.isEmpty, width(of: next, font: font) > maxLineWidth {
+                    lines.append(current)
+                    current = String(character)
+                } else {
+                    current = next
+                }
+            }
+
+            lines.append(current)
+        }
+
+        return lines.isEmpty ? [""] : lines
+    }
+
+    private func width(of text: String, font: NSFont) -> CGFloat {
+        text.size(withAttributes: [.font: font]).width
+    }
+
+    private func compactRectDescription(_ rect: CGRect) -> String {
+        "x=\(Int(rect.origin.x.rounded())),y=\(Int(rect.origin.y.rounded())),w=\(Int(rect.width.rounded())),h=\(Int(rect.height.rounded()))"
+    }
+
+    private func recordSyntheticCaretIfNeeded(
+        _ caret: CGRect,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) {
+        let signature = [
+            profile.bundleIdentifier,
+            String(context.textBeforeCursor.count),
+            compactRectDescription(caret)
+        ].joined(separator: "|")
+
+        guard signature != lastSyntheticCaretDiagnosticSignature else {
+            return
+        }
+
+        lastSyntheticCaretDiagnosticSignature = signature
+        DiagnosticsLog.shared.record(
+            "synthetic-caret",
+            metadata: [
+                "app": profile.bundleIdentifier,
+                "source": "codex-textarea-estimate",
+                "caret": compactRectDescription(caret),
+                "beforeChars": String(context.textBeforeCursor.count)
+            ]
+        )
     }
 
     private func startKeyboardEventTapIfPossible() {

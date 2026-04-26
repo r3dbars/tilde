@@ -184,7 +184,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             fallbackInsertionMode: .axThenKeyEvents,
             fieldIdentityMode: .stableBounds,
             suppressesAfterInsertionFailure: false,
-            notes: "Dogfood target. Prefer caret-bound inline suggestions when the prompt editor exposes bounds; fall back to mirror rendering and key-event insertion so the user can tune autocomplete while building it."
+            allowsDetachedSuggestions: false,
+            notes: "Dogfood target. Prefer caret-bound inline suggestions when the prompt editor exposes bounds. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions."
         )
     ])
 

@@ -36,6 +36,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.insertionMode == .keyEvents)
         #expect(store.profile(for: "com.openai.codex")?.fallbackInsertionMode == .axThenKeyEvents)
         #expect(store.profile(for: "com.openai.codex")?.fieldIdentityMode == .stableBounds)
+        #expect(store.profile(for: "com.openai.codex")?.allowsDetachedSuggestions == false)
     }
 
     @Test("Denylisted apps are never allowed")
