@@ -94,7 +94,7 @@ final class SettingsWindowController: NSObject {
         )
         openSettingsButton.bezelStyle = .rounded
 
-        let runtimeTarget = NSTextField(labelWithString: "Runtime target: app-owned Gemma 4 26B A4B MLX")
+        let runtimeTarget = NSTextField(labelWithString: "Runtime target: app-owned Qwen3.5 9B MLX 4-bit")
         runtimeTarget.textColor = .secondaryLabelColor
 
         let screenRecording = NSButton(checkboxWithTitle: "Screen Recording", target: nil, action: nil)

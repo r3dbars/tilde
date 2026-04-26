@@ -75,7 +75,7 @@ struct RuntimePolicyTests {
         let missingReport = missingPlan.readinessReport(for: .ready(candidate: .mock))
 
         #expect(missingReport.stage == .downloadNeeded)
-        #expect(missingReport.summary == "download needed (Gemma 4 26B A4B); fallback: ready (mock)")
+        #expect(missingReport.summary == "download needed (Qwen3.5 9B); fallback: ready (mock)")
         #expect(missingReport.detail == "Expected MLX model folder at /tmp/gemma")
         #expect(missingReport.action == .revealModelFolder)
 
@@ -139,13 +139,13 @@ struct RuntimePolicyTests {
         #expect(plan.readinessReport(for: .ready(candidate: .mlx)).allowsSuggestions)
     }
 
-    @Test("Gemma 4 asset manifest is MLX first")
-    func gemma4AssetManifestIsMLXFirst() {
-        let manifest = LocalModelAssetManifest.gemma4A4BMLX
+    @Test("Qwen3.5 9B asset manifest is MLX first")
+    func qwen35NineBAssetManifestIsMLXFirst() {
+        let manifest = LocalModelAssetManifest.preferredMLX
 
-        #expect(manifest.model == .gemma4A4B)
+        #expect(manifest.model == .qwen35NineB)
         #expect(manifest.runtimeCandidate == .mlx)
-        #expect(manifest.cacheDirectoryName.contains("Gemma4A4B"))
+        #expect(manifest.cacheDirectoryName.contains("Qwen35NineB"))
         #expect(manifest.requiredFileNames.contains("config.json"))
         #expect(manifest.requiredModelFileExtension == "safetensors")
         #expect(manifest.requiresVisionLanguageFactory)
@@ -153,7 +153,7 @@ struct RuntimePolicyTests {
 
     @Test("MLX model asset validation expects a Hugging Face directory")
     func mlxAssetValidationExpectsDirectory() {
-        let manifest = LocalModelAssetManifest.gemma4A4BMLX
+        let manifest = LocalModelAssetManifest.preferredMLX
 
         #expect(manifest.validatedDirectoryState(
             path: "/tmp/gemma",
@@ -187,7 +187,7 @@ struct RuntimePolicyTests {
             path: "/tmp/gemma",
             isDirectory: true,
             childFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json", "model.safetensors"],
-            modelBytes: 16 * 1024 * 1024 * 1024
+            modelBytes: 6 * 1024 * 1024 * 1024
         ) == .available(path: "/tmp/gemma"))
     }
 
@@ -196,12 +196,12 @@ struct RuntimePolicyTests {
         let benchmark = CompletionRuntimeBenchmark(
             candidate: .liteRTLM,
             samples: [
-                CompletionLatencySample(candidate: .liteRTLM, milliseconds: 180, tokenCount: 5),
-                CompletionLatencySample(candidate: .liteRTLM, milliseconds: 220, tokenCount: 7)
+                CompletionLatencySample(candidate: .liteRTLM, milliseconds: 90, tokenCount: 5),
+                CompletionLatencySample(candidate: .liteRTLM, milliseconds: 110, tokenCount: 7)
             ]
         )
 
-        #expect(benchmark.averageLatencyMilliseconds == 200)
+        #expect(benchmark.averageLatencyMilliseconds == 100)
         #expect(benchmark.passesAutocompleteTarget())
     }
 

@@ -17,6 +17,7 @@ public enum LocalModelID: String, Equatable, Sendable {
     case gemma4A4B = "Gemma 4 26B A4B"
     case qwen3Small = "Qwen3 0.6B"
     case qwen3Medium = "Qwen3 1.7B"
+    case qwen35NineB = "Qwen3.5 9B"
 }
 
 public enum ModelRuntimeOwnership: String, Equatable, Sendable {
@@ -57,13 +58,13 @@ public struct CompletionModelPolicy: Equatable, Sendable {
     }
 
     public static let mvp = CompletionModelPolicy(
-        model: .gemma4A4B,
+        model: .qwen35NineB,
         runtimeOwnership: .appOwnedEmbedded,
-        minimumMemoryGB: 64,
+        minimumMemoryGB: 32,
         maxGeneratedTokens: 8,
         maxVisibleWords: 4,
         debounceMilliseconds: 240,
-        targetLatencyMilliseconds: 250,
+        targetLatencyMilliseconds: 150,
         reasoningEnabled: false
     )
 

@@ -144,6 +144,18 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         expectedMinimumBytes: 768 * 1024 * 1024
     )
 
+    public static let qwen35NineBMLX = LocalModelAssetManifest(
+        model: .qwen35NineB,
+        runtimeCandidate: .mlx,
+        cacheDirectoryName: "Models/Qwen35NineB/MLX",
+        fileName: "Qwen3.5-9B-MLX-4bit",
+        expectedMinimumBytes: 5 * 1024 * 1024 * 1024,
+        requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"],
+        requiresVisionLanguageFactory: true
+    )
+
+    public static let preferredMLX = qwen35NineBMLX
+
     public func validatedDirectoryState(
         path: String,
         isDirectory: Bool,
@@ -186,7 +198,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
 
     public init(
         decision: EmbeddedRuntimeDecision = .mvp,
-        preferredAsset: LocalModelAssetManifest = .gemma4A4BMLX,
+        preferredAsset: LocalModelAssetManifest = .preferredMLX,
         assetState: LocalModelAssetState,
         nativeRuntimeAvailable: Bool
     ) {

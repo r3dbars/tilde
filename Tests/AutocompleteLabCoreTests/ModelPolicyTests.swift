@@ -3,11 +3,11 @@ import Testing
 
 @Suite("Model policy")
 struct ModelPolicyTests {
-    @Test("MVP uses an app-owned large MLX model with reasoning off")
+    @Test("MVP uses an app-owned Qwen MLX model with reasoning off")
     func mvpPolicy() {
         let policy = CompletionModelPolicy.mvp
 
-        #expect(policy.model == .gemma4A4B)
+        #expect(policy.model == .qwen35NineB)
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)
         #expect(policy.maxGeneratedTokens == 8)
@@ -19,9 +19,9 @@ struct ModelPolicyTests {
     @Test("Model policy clamps visible completions to autocomplete size")
     func modelPolicyClampsVisibleCompletions() {
         let tiny = CompletionModelPolicy(
-            model: .gemma4A4B,
+            model: .qwen35NineB,
             runtimeOwnership: .appOwnedEmbedded,
-            minimumMemoryGB: 64,
+            minimumMemoryGB: 32,
             maxGeneratedTokens: 12,
             maxVisibleWords: 1,
             debounceMilliseconds: 240,
@@ -29,9 +29,9 @@ struct ModelPolicyTests {
             reasoningEnabled: false
         )
         let huge = CompletionModelPolicy(
-            model: .gemma4A4B,
+            model: .qwen35NineB,
             runtimeOwnership: .appOwnedEmbedded,
-            minimumMemoryGB: 64,
+            minimumMemoryGB: 32,
             maxGeneratedTokens: 12,
             maxVisibleWords: 20,
             debounceMilliseconds: 240,
@@ -60,8 +60,8 @@ struct ModelPolicyTests {
         #expect(CompletionModelPolicy.mvp.supports(hardware))
     }
 
-    @Test("16 GB profile is not the large-model MVP target")
-    func sixteenGBIsNotTheLargeModelMVPTarget() {
+    @Test("16 GB profile is not the 9B MVP target")
+    func sixteenGBIsNotTheNineBMVPTarget() {
         let hardware = HardwareProfile(chipName: "M1", memoryGB: 16, isAppleSilicon: true)
 
         #expect(!CompletionModelPolicy.mvp.supports(hardware))

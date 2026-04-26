@@ -18,7 +18,7 @@ swift test
 ./script/build_and_run.sh --verify
 ./script/check_app_bundle.sh
 AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
-  AUTOCOMPLETE_LAB_EXPECTED_ASSET="gemma-4-26b-a4b-it-4bit" \
+  AUTOCOMPLETE_LAB_EXPECTED_ASSET="Qwen3.5-9B-MLX-4bit" \
   AUTOCOMPLETE_LAB_LOG_START_LINE="$LOG_START_LINE" \
   ./script/check_diagnostics_log.sh
 
