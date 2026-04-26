@@ -5,6 +5,14 @@ import AutocompleteLabCore
 final class DiagnosticsWindowController {
     private let window: NSWindow
     private let textView: NSTextView
+    private let refreshButton: NSButton
+    private let pauseTracingButton: NSButton
+    private let openTraceFolderButton: NSButton
+    private let deleteTracesButton: NSButton
+    private var refreshAction: (() -> Void)?
+    private var toggleTracingAction: (() -> Void)?
+    private var openTraceFolderAction: (() -> Void)?
+    private var deleteTracesAction: (() -> Void)?
 
     init() {
         textView = NSTextView(frame: .zero)
@@ -13,18 +21,48 @@ final class DiagnosticsWindowController {
         textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         textView.textContainerInset = NSSize(width: 12, height: 12)
 
-        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 620, height: 420))
+        refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
+        pauseTracingButton = NSButton(title: "Pause Tracing", target: nil, action: nil)
+        openTraceFolderButton = NSButton(title: "Open Trace Folder", target: nil, action: nil)
+        deleteTracesButton = NSButton(title: "Delete Traces", target: nil, action: nil)
+
+        let scrollView = NSScrollView(frame: .zero)
         scrollView.hasVerticalScroller = true
         scrollView.documentView = textView
 
+        let buttonStack = NSStackView(views: [
+            refreshButton,
+            pauseTracingButton,
+            openTraceFolderButton,
+            deleteTracesButton
+        ])
+        buttonStack.orientation = .horizontal
+        buttonStack.spacing = 8
+        buttonStack.edgeInsets = NSEdgeInsets(top: 10, left: 10, bottom: 6, right: 10)
+
+        let contentStack = NSStackView(views: [buttonStack, scrollView])
+        contentStack.orientation = .vertical
+        contentStack.spacing = 0
+        contentStack.frame = NSRect(x: 0, y: 0, width: 780, height: 560)
+        scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 460).isActive = true
+
         window = NSWindow(
-            contentRect: scrollView.frame,
+            contentRect: contentStack.frame,
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Autocomplete Diagnostics"
-        window.contentView = scrollView
+        window.contentView = contentStack
+
+        refreshButton.target = self
+        refreshButton.action = #selector(refresh)
+        pauseTracingButton.target = self
+        pauseTracingButton.action = #selector(toggleTracing)
+        openTraceFolderButton.target = self
+        openTraceFolderButton.action = #selector(openTraceFolder)
+        deleteTracesButton.target = self
+        deleteTracesButton.action = #selector(deleteTraces)
     }
 
     func show(
@@ -35,8 +73,22 @@ final class DiagnosticsWindowController {
         appTrusted: Bool,
         runtimeReport: RuntimeReadinessReport,
         modelDirectoryPath: String,
-        recentEvents: [String]
+        recentEvents: [String],
+        traceSummary: AutocompleteTraceSummary,
+        recentTraceEvents: [AutocompleteTraceEvent],
+        tracePath: String,
+        tracingPaused: Bool,
+        refreshAction: @escaping () -> Void,
+        toggleTracingAction: @escaping () -> Void,
+        openTraceFolderAction: @escaping () -> Void,
+        deleteTracesAction: @escaping () -> Void
     ) {
+        self.refreshAction = refreshAction
+        self.toggleTracingAction = toggleTracingAction
+        self.openTraceFolderAction = openTraceFolderAction
+        self.deleteTracesAction = deleteTracesAction
+        pauseTracingButton.title = tracingPaused ? "Resume Tracing" : "Pause Tracing"
+
         var sections: [String] = []
 
         sections.append("Permission: Accessibility \(appTrusted ? "granted" : "missing")")
@@ -51,6 +103,8 @@ final class DiagnosticsWindowController {
         sections.append("Model folder: \(modelDirectoryPath)")
         sections.append("Compatibility: \(compatibilityStatus.summary)")
         sections.append("Current app enabled: \(appEnabled)")
+        sections.append(traceSummaryText(traceSummary, tracePath: tracePath, tracingPaused: tracingPaused))
+        sections.append(topMissesText(traceSummary.topMisses))
 
         if let profile {
             sections.append(
@@ -75,20 +129,98 @@ final class DiagnosticsWindowController {
         }
 
         sections.append(diagnostics?.summary ?? "Focused text diagnostics: unavailable")
-
-        if recentEvents.isEmpty {
-            sections.append("Recent events: unavailable")
-        } else {
-            sections.append(
-                """
-                Recent events:
-                \(recentEvents.map { "  \($0)" }.joined(separator: "\n"))
-                """
-            )
-        }
+        sections.append(recentTraceText(recentTraceEvents))
+        sections.append(recentDiagnosticsText(recentEvents))
 
         textView.string = sections.joined(separator: "\n\n")
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func traceSummaryText(
+        _ summary: AutocompleteTraceSummary,
+        tracePath: String,
+        tracingPaused: Bool
+    ) -> String {
+        """
+        Trace eval:
+          path: \(tracePath)
+          tracing: \(tracingPaused ? "paused" : "on")
+          events: \(summary.totalEvents)
+          presented: \(summary.presentedCount)
+          accepted: \(summary.acceptedCount)
+          typed over: \(summary.typedOverCount)
+          ignored: \(summary.ignoredCount)
+          insertion failures: \(summary.insertionFailureCount)
+          accept rate: \(Self.percent(summary.acceptRate))
+          p50 latency: \(Self.latency(summary.p50LatencyMilliseconds))
+          p90 latency: \(Self.latency(summary.p90LatencyMilliseconds))
+          p95 latency: \(Self.latency(summary.p95LatencyMilliseconds))
+        """
+    }
+
+    private func topMissesText(_ misses: [AutocompleteTraceMiss]) -> String {
+        guard !misses.isEmpty else {
+            return "Top 5 misses: none yet"
+        }
+
+        return """
+        Top 5 misses:
+        \(misses.enumerated().map { index, miss in
+            "  \(index + 1). \(miss.title) | count=\(miss.count) | fix=\(miss.fixCategory) | example=\(miss.exampleSuggestionID)"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func recentTraceText(_ events: [AutocompleteTraceEvent]) -> String {
+        guard !events.isEmpty else {
+            return "Recent trace events: none yet"
+        }
+
+        return """
+        Recent trace events:
+        \(events.suffix(16).map {
+            "  \($0.timestamp) \($0.type.rawValue) mode=\($0.requestMode) app=\($0.appBundleIdentifier) shown=\($0.displayedText) accepted=\($0.acceptedText) reason=\($0.reason) latency=\(Self.latency($0.latencyMilliseconds))"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func recentDiagnosticsText(_ events: [String]) -> String {
+        guard !events.isEmpty else {
+            return "Recent events: unavailable"
+        }
+
+        return """
+        Recent events:
+        \(events.map { "  \($0)" }.joined(separator: "\n"))
+        """
+    }
+
+    private static func percent(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+
+    private static func latency(_ value: Int?) -> String {
+        value.map { "\($0)ms" } ?? "n/a"
+    }
+
+    @objc
+    private func refresh() {
+        refreshAction?()
+    }
+
+    @objc
+    private func toggleTracing() {
+        toggleTracingAction?()
+    }
+
+    @objc
+    private func openTraceFolder() {
+        openTraceFolderAction?()
+    }
+
+    @objc
+    private func deleteTraces() {
+        deleteTracesAction?()
     }
 }
