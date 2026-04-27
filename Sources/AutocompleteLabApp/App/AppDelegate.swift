@@ -677,7 +677,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             suggestionSession.commitNextWordAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
-            suggestionRepetitionSuppressor.recordAcceptance(acceptedText, mode: currentSuggestionRequestMode)
+            suggestionRepetitionSuppressor.recordAcceptance(
+                acceptedText,
+                mode: currentSuggestionRequestMode,
+                scope: currentProfile?.bundleIdentifier ?? ""
+            )
             recordRawAcceptance(action: action, acceptedText: acceptedText)
             if suggestionSession.hasVisibleSuggestion {
                 refreshVisibleSuggestion()
@@ -704,7 +708,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             suggestionSession.commitAllVisibleAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
-            suggestionRepetitionSuppressor.recordAcceptance(acceptedText, mode: currentSuggestionRequestMode)
+            suggestionRepetitionSuppressor.recordAcceptance(
+                acceptedText,
+                mode: currentSuggestionRequestMode,
+                scope: currentProfile?.bundleIdentifier ?? ""
+            )
             recordRawAcceptance(action: action, acceptedText: acceptedText)
             hideSuggestion(reason: "accepted-all")
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
@@ -1004,7 +1012,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             guard !partialSuggestion.isEmpty,
                                   !self.suggestionRepetitionSuppressor.shouldSuppress(
                                       partialSuggestion.visibleText,
-                                      mode: request.mode
+                                      mode: request.mode,
+                                      scope: appBundleIdentifier
                                   ) else {
                                 return
                             }
@@ -1106,7 +1115,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     )
                     guard !self.suggestionRepetitionSuppressor.shouldSuppress(
                         suggestion.visibleText,
-                        mode: request.mode
+                        mode: request.mode,
+                        scope: appBundleIdentifier
                     ) else {
                         RawAutocompleteTraceLog.shared.record(
                             type: .suggestionSuppressed,
@@ -1619,7 +1629,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if normalizedDisplayed.hasPrefix(normalizedTyped), !normalizedTyped.isEmpty {
             hideSuggestion(reason: "typed-through-visible-prefix")
         } else {
-            suggestionRepetitionSuppressor.recordMiss(displayedText, mode: currentSuggestionRequestMode)
+            suggestionRepetitionSuppressor.recordMiss(
+                displayedText,
+                mode: currentSuggestionRequestMode,
+                scope: currentProfile?.bundleIdentifier ?? ""
+            )
             hideSuggestion(reason: "typed-over")
         }
     }

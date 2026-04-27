@@ -41,4 +41,18 @@ struct SuggestionRepetitionSuppressorTests {
         suppressor.recordAcceptance("keep going", mode: .phraseContinuation)
         #expect(!suppressor.shouldSuppress("keep going", mode: .phraseContinuation))
     }
+
+    @Test("miss suppression is scoped by app")
+    func missSuppressionIsScopedByApp() {
+        var suppressor = SuggestionRepetitionSuppressor(missThreshold: 1)
+
+        suppressor.recordMiss("is", mode: .wordCompletion, scope: "com.openai.codex")
+
+        #expect(suppressor.shouldSuppress("is", mode: .wordCompletion, scope: "com.openai.codex"))
+        #expect(!suppressor.shouldSuppress("is", mode: .wordCompletion, scope: "com.apple.TextEdit"))
+
+        suppressor.recordAcceptance("is", mode: .wordCompletion, scope: "com.apple.TextEdit")
+
+        #expect(suppressor.shouldSuppress("is", mode: .wordCompletion, scope: "com.openai.codex"))
+    }
 }
