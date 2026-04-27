@@ -4,6 +4,8 @@ public struct AutocompleteTraceMiss: Equatable, Sendable {
     public let title: String
     public let count: Int
     public let exampleSuggestionID: String
+    public let appBundleIdentifier: String
+    public let requestMode: String
     public let suggestedCause: String
     public let fixCategory: String
 
@@ -11,12 +13,16 @@ public struct AutocompleteTraceMiss: Equatable, Sendable {
         title: String,
         count: Int,
         exampleSuggestionID: String,
+        appBundleIdentifier: String = "",
+        requestMode: String = "",
         suggestedCause: String,
         fixCategory: String
     ) {
         self.title = title
         self.count = count
         self.exampleSuggestionID = exampleSuggestionID
+        self.appBundleIdentifier = appBundleIdentifier
+        self.requestMode = requestMode
         self.suggestedCause = suggestedCause
         self.fixCategory = fixCategory
     }
@@ -289,6 +295,8 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                     title: key,
                     count: value.count,
                     exampleSuggestionID: value.example.suggestionID,
+                    appBundleIdentifier: value.example.appBundleIdentifier,
+                    requestMode: value.example.requestMode,
                     suggestedCause: value.cause,
                     fixCategory: value.category
                 )
@@ -326,11 +334,23 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             }
 
             let repeatedText = normalizedSuggestionText(example.displayedText)
+            let appCounts = Dictionary(grouping: unacceptedSuggestions, by: \.appBundleIdentifier)
+                .mapValues(\.count)
+            let topApp = appCounts.max { lhs, rhs in
+                if lhs.value == rhs.value {
+                    return lhs.key > rhs.key
+                }
+
+                return lhs.value < rhs.value
+            }
+            let appSummary = topApp.map { app, count in
+                " Mostly in \(app.isEmpty ? "unknown app" : app) (\(count)/\(unacceptedSuggestions.count))."
+            } ?? ""
             let title = "Repeated unaccepted: \(repeatedText)"
             add(
                 key: title,
                 event: example,
-                cause: "The same suggestion was shown \(unacceptedSuggestions.count) times without being accepted.",
+                cause: "The same \(example.requestMode) suggestion was shown \(unacceptedSuggestions.count) times without being accepted.\(appSummary)",
                 category: example.requestMode == "wordCompletion" ? "word-completion issue" : "prompt issue",
                 buckets: &buckets
             )

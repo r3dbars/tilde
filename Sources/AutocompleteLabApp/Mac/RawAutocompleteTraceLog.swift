@@ -282,7 +282,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         }.joined(separator: "\n")
 
         let misses = summary.topMisses.map { miss in
-            "<li><strong>\(escape(miss.title))</strong> count=\(miss.count) fix=\(escape(miss.fixCategory)) example=\(escape(miss.exampleSuggestionID))</li>"
+            "<li><strong>\(escape(miss.title))</strong> count=\(miss.count) app=<code>\(escape(miss.appBundleIdentifier.isEmpty ? "unknown" : miss.appBundleIdentifier))</code> mode=<code>\(escape(miss.requestMode.isEmpty ? "unknown" : miss.requestMode))</code> fix=\(escape(miss.fixCategory)) cause=\(escape(miss.suggestedCause)) example=\(escape(miss.exampleSuggestionID))</li>"
         }.joined(separator: "\n")
         let appRates = summary.acceptRateByApp
             .sorted { $0.key < $1.key }

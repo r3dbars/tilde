@@ -190,8 +190,11 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.topMisses.contains { miss in
             miss.title == "Repeated unaccepted: i think so."
                 && miss.count == 3
+                && miss.appBundleIdentifier == "com.apple.TextEdit"
+                && miss.requestMode == "phraseContinuation"
                 && miss.fixCategory == "prompt issue"
                 && miss.suggestedCause.contains("3 times")
+                && miss.suggestedCause.contains("com.apple.TextEdit")
         })
         #expect(!summary.topMisses.contains { $0.title == "Repeated unaccepted: that sounds good" })
     }

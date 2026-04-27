@@ -107,7 +107,16 @@ for (mode, displayed), signature_events in presented_by_signature.items():
         if event.get("suggestionID") not in useful_suggestion_ids
     ]
     if len(unaccepted) >= 3:
-        repeated_unaccepted.append((len(unaccepted), mode, displayed, unaccepted[0].get("suggestionID") or "unknown"))
+        app_counts = Counter(event.get("appBundleIdentifier") or "unknown" for event in unaccepted)
+        top_app, top_app_count = app_counts.most_common(1)[0]
+        repeated_unaccepted.append((
+            len(unaccepted),
+            mode,
+            displayed,
+            top_app,
+            top_app_count,
+            unaccepted[0].get("suggestionID") or "unknown"
+        ))
 repeated_unaccepted.sort(key=lambda item: (-item[0], item[1], item[2]))
 
 print(f"Trace: {path}")
@@ -144,8 +153,8 @@ for app, (useful_count, shown_count) in sorted(useful_by_app.items()):
     print(f"  {app}: {rate}% ({useful_count}/{shown_count})")
 print("Top repeated unaccepted suggestions:")
 if repeated_unaccepted:
-    for count, mode, displayed, suggestion_id in repeated_unaccepted[:5]:
-        print(f"  {count}x {mode}: {displayed} (example {suggestion_id})")
+    for count, mode, displayed, top_app, top_app_count, suggestion_id in repeated_unaccepted[:5]:
+        print(f"  {count}x {mode}: {displayed} | app {top_app} {top_app_count}/{count} (example {suggestion_id})")
 else:
     print("  none")
 

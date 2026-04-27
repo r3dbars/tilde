@@ -209,7 +209,7 @@ final class DiagnosticsWindowController {
         return """
         Top 5 misses:
         \(misses.enumerated().map { index, miss in
-            "  \(index + 1). \(miss.title) | count=\(miss.count) | fix=\(miss.fixCategory) | example=\(miss.exampleSuggestionID)"
+            "  \(index + 1). \(miss.title) | count=\(miss.count) | app=\(miss.appBundleIdentifier.isEmpty ? "unknown" : miss.appBundleIdentifier) | mode=\(miss.requestMode.isEmpty ? "unknown" : miss.requestMode) | fix=\(miss.fixCategory) | cause=\(miss.suggestedCause) | example=\(miss.exampleSuggestionID)"
         }.joined(separator: "\n"))
         """
     }

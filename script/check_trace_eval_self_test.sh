@@ -85,7 +85,7 @@ if grep -F "220ms" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   exit 1
 fi
 
-if ! grep -F "3x phraseContinuation: i think so. (example three)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+if ! grep -F "3x phraseContinuation: i think so. | app com.openai.codex 3/3 (example three)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not report repeated unaccepted suggestions" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
   exit 1
