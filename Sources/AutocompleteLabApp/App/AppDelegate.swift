@@ -138,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startPolling() {
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.pollFocusedText()
             }
