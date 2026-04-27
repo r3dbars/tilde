@@ -6,6 +6,7 @@ struct AppModelRuntimeBundle {
     let bootstrapPlan: RuntimeBootstrapPlan
     let modelDirectoryURL: URL
     let modelOverrideName: String?
+    let lengthConfiguration: CompletionLengthConfiguration
 
     var activeCandidate: CompletionRuntimeCandidate {
         bootstrapPlan.activeCandidate
@@ -20,6 +21,8 @@ struct AppModelRuntimeBundle {
             "assetDirectory": modelDirectoryURL.path,
             "assetState": bootstrapPlan.assetState.statusSummary,
             "modelOverride": modelOverrideName ?? "",
+            "maxVisibleWords": String(lengthConfiguration.maxVisibleWords),
+            "maxGeneratedTokens": String(lengthConfiguration.maxGeneratedTokens),
             "nativeRuntimeAvailable": String(bootstrapPlan.nativeRuntimeAvailable),
             "allowsUserManagedServer": String(bootstrapPlan.decision.allowsUserManagedServer)
         ]
@@ -38,6 +41,7 @@ enum AppModelRuntimeFactory {
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> AppModelRuntimeBundle {
         let modelOverrideName = environment["AUTOCOMPLETE_LAB_MODEL"]
+        let lengthConfiguration = CompletionLengthConfiguration.fromEnvironment(environment)
         let manifest = LocalModelAssetManifest.mlxManifest(named: modelOverrideName)
         let modelDirectoryURL = modelAssetURL(for: manifest, fileManager: fileManager)
         let assetState = modelAssetState(
@@ -55,7 +59,8 @@ enum AppModelRuntimeFactory {
         if plan.activeCandidate == .mlx {
             runtime = MLXModelRuntime(
                 modelDirectoryURL: modelDirectoryURL,
-                usesVisionLanguageFactory: manifest.requiresVisionLanguageFactory
+                usesVisionLanguageFactory: manifest.requiresVisionLanguageFactory,
+                lengthConfiguration: lengthConfiguration
             )
         } else {
             runtime = MockModelRuntime(candidate: plan.activeCandidate)
@@ -65,7 +70,8 @@ enum AppModelRuntimeFactory {
             runtime: runtime,
             bootstrapPlan: plan,
             modelDirectoryURL: modelDirectoryURL,
-            modelOverrideName: modelOverrideName
+            modelOverrideName: modelOverrideName,
+            lengthConfiguration: lengthConfiguration
         )
     }
 

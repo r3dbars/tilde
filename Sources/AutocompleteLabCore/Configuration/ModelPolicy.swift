@@ -30,6 +30,8 @@ public enum ModelRuntimeOwnership: String, Equatable, Sendable {
 public struct CompletionModelPolicy: Equatable, Sendable {
     public static let minimumVisibleWords = 1
     public static let maximumVisibleWords = 10
+    public static let minimumGeneratedTokens = 3
+    public static let maximumGeneratedTokens = 32
 
     public let model: LocalModelID
     public let runtimeOwnership: ModelRuntimeOwnership
@@ -81,5 +83,50 @@ public struct CompletionModelPolicy: Equatable, Sendable {
 
     private static func clampedVisibleWords(_ value: Int) -> Int {
         min(maximumVisibleWords, max(minimumVisibleWords, value))
+    }
+
+    public static func clampedGeneratedTokens(_ value: Int) -> Int {
+        min(maximumGeneratedTokens, max(minimumGeneratedTokens, value))
+    }
+}
+
+public struct CompletionLengthConfiguration: Equatable, Sendable {
+    public let maxVisibleWords: Int
+    public let maxGeneratedTokens: Int
+
+    public init(maxVisibleWords: Int, maxGeneratedTokens: Int? = nil) {
+        let visibleWords = min(
+            CompletionModelPolicy.maximumVisibleWords,
+            max(CompletionModelPolicy.minimumVisibleWords, maxVisibleWords)
+        )
+        self.maxVisibleWords = visibleWords
+        self.maxGeneratedTokens = CompletionModelPolicy.clampedGeneratedTokens(
+            maxGeneratedTokens ?? Self.defaultGeneratedTokens(forVisibleWords: visibleWords)
+        )
+    }
+
+    public static let `default` = CompletionLengthConfiguration(
+        maxVisibleWords: CompletionModelPolicy.mvp.maxVisibleWords,
+        maxGeneratedTokens: CompletionModelPolicy.mvp.maxGeneratedTokens
+    )
+
+    public static func fromEnvironment(_ environment: [String: String]) -> CompletionLengthConfiguration {
+        CompletionLengthConfiguration(
+            maxVisibleWords: parsedInt(environment["AUTOCOMPLETE_LAB_VISIBLE_WORDS"])
+                ?? CompletionModelPolicy.mvp.maxVisibleWords,
+            maxGeneratedTokens: parsedInt(environment["AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS"])
+        )
+    }
+
+    private static func parsedInt(_ value: String?) -> Int? {
+        guard let value else {
+            return nil
+        }
+
+        return Int(value.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private static func defaultGeneratedTokens(forVisibleWords visibleWords: Int) -> Int {
+        CompletionModelPolicy.clampedGeneratedTokens(visibleWords + 6)
     }
 }

@@ -55,6 +55,22 @@ struct ModelPolicyTests {
         #expect(!policy.allowsVisibleWordCount(11))
     }
 
+    @Test("Completion length configuration reads environment overrides")
+    func completionLengthConfigurationReadsEnvironmentOverrides() {
+        let short = CompletionLengthConfiguration.fromEnvironment([
+            "AUTOCOMPLETE_LAB_VISIBLE_WORDS": "3"
+        ])
+        let long = CompletionLengthConfiguration.fromEnvironment([
+            "AUTOCOMPLETE_LAB_VISIBLE_WORDS": "42",
+            "AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS": "99"
+        ])
+
+        #expect(short.maxVisibleWords == 3)
+        #expect(short.maxGeneratedTokens == 9)
+        #expect(long.maxVisibleWords == 10)
+        #expect(long.maxGeneratedTokens == 32)
+    }
+
     @Test("M5 with 128 GB is supported")
     func m5With128GBIsSupported() {
         let hardware = HardwareProfile(chipName: "M5 Max", memoryGB: 128, isAppleSilicon: true)

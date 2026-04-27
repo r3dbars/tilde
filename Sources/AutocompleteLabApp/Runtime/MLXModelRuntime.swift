@@ -11,6 +11,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private let usesVisionLanguageFactory: Bool
     private let promptBuilder: CompletionPromptBuilder
     private let cleaner: CompletionOutputCleaner
+    private let lengthConfiguration: CompletionLengthConfiguration
     private let stateQueue = DispatchQueue(label: "app.transcripted.autocomplete.mlx-model-runtime")
 
     private var storedState: LocalRuntimeState
@@ -20,13 +21,15 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     public init(
         modelDirectoryURL: URL,
         usesVisionLanguageFactory: Bool = false,
-        promptBuilder: CompletionPromptBuilder = CompletionPromptBuilder(),
-        cleaner: CompletionOutputCleaner = CompletionOutputCleaner()
+        lengthConfiguration: CompletionLengthConfiguration = .default,
+        promptBuilder: CompletionPromptBuilder? = nil,
+        cleaner: CompletionOutputCleaner? = nil
     ) {
         self.modelDirectoryURL = modelDirectoryURL
         self.usesVisionLanguageFactory = usesVisionLanguageFactory
-        self.promptBuilder = promptBuilder
-        self.cleaner = cleaner
+        self.lengthConfiguration = lengthConfiguration
+        self.promptBuilder = promptBuilder ?? CompletionPromptBuilder(maxVisibleWords: lengthConfiguration.maxVisibleWords)
+        self.cleaner = cleaner ?? CompletionOutputCleaner(maxVisibleWords: lengthConfiguration.maxVisibleWords)
         self.storedState = .unavailable(reason: "MLX runtime has not been warmed.")
     }
 
@@ -104,7 +107,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             container,
             instructions: prompt.system,
             generateParameters: GenerateParameters(
-                maxTokens: Self.maxGeneratedTokens(for: request.mode),
+                maxTokens: maxGeneratedTokens(for: request.mode),
                 temperature: 0
             ),
             additionalContext: ["enable_thinking": false]
@@ -149,7 +152,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                 "generationMilliseconds": String(Self.milliseconds(from: sessionBuiltAt, to: generatedAt)),
                 "cleanupMilliseconds": String(Self.milliseconds(from: generatedAt, to: cleanedAt)),
                 "totalMilliseconds": String(Self.milliseconds(from: startedAt, to: cleanedAt)),
-                "maxTokens": String(Self.maxGeneratedTokens(for: request.mode)),
+                "maxTokens": String(maxGeneratedTokens(for: request.mode)),
+                "maxVisibleWords": String(lengthConfiguration.maxVisibleWords),
                 "rawChars": String(rawOutput.count),
                 "cleanedChars": String(cleanedSuggestion?.visibleText.count ?? 0)
             ]
@@ -175,7 +179,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         }
 
         return suggestion.visibleWordCount >= CompletionModelPolicy.minimumVisibleWords
-            && (suggestion.visibleWordCount >= CompletionModelPolicy.mvp.maxVisibleWords
+            && (suggestion.visibleWordCount >= lengthConfiguration.maxVisibleWords
                 || rawOutput.contains(where: { [".", "!", "?", "\n"].contains($0) }))
     }
 
@@ -183,12 +187,12 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         max(0, Int(end.timeIntervalSince(start) * 1000))
     }
 
-    private static func maxGeneratedTokens(for mode: CompletionRequestMode) -> Int {
+    private func maxGeneratedTokens(for mode: CompletionRequestMode) -> Int {
         switch mode {
         case .wordCompletion:
             return 3
         case .phraseContinuation:
-            return min(16, CompletionModelPolicy.mvp.maxGeneratedTokens)
+            return lengthConfiguration.maxGeneratedTokens
         }
     }
 

@@ -13,6 +13,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pauseDelayMilliseconds: 15
     )
     private let modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
+    private var completionLengthConfiguration: CompletionLengthConfiguration {
+        modelRuntimeBundle.lengthConfiguration
+    }
     private var modelRuntime: any ModelRuntime {
         modelRuntimeBundle.runtime
     }
@@ -904,6 +907,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             appBundleIdentifier: appBundleIdentifier,
+            maxVisibleWords: completionLengthConfiguration.maxVisibleWords,
             mode: requestMode,
             suggestionID: suggestionID
         )
