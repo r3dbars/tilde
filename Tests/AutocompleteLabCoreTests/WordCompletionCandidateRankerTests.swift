@@ -31,7 +31,6 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "he")?.visibleText == "llo")
         #expect(ranker.suggestion(for: "It seems to be de")?.visibleText == "cent")
         #expect(ranker.suggestion(for: "I wa")?.visibleText == "nt")
-        #expect(ranker.suggestion(for: "I see thi")?.visibleText == "ng")
         #expect(ranker.suggestion(for: "This should be su")?.visibleText == "per")
         #expect(ranker.suggestion(for: "hey tr")?.visibleText == "ying")
         #expect(ranker.suggestion(for: "It is worki")?.visibleText == "ng")
@@ -47,13 +46,15 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "why is it so slo") == nil)
         #expect(ranker.suggestion(for: "This should be super fas") == nil)
         #expect(ranker.suggestion(for: "Can you look") == nil)
+        #expect(ranker.suggestion(for: "I see thi") == nil)
     }
 
-    @Test("allows one letter recent suffixes")
-    func allowsOneLetterRecentSuffixes() {
+    @Test("allows one letter recent suffixes for long fragments")
+    func allowsOneLetterRecentSuffixesForLongFragments() {
         let ranker = WordCompletionCandidateRanker(staticWords: [])
 
-        #expect(ranker.suggestion(for: "This should be super fas", recentWords: ["fast"])?.visibleText == "t")
+        #expect(ranker.suggestion(for: "That was fantasti", recentWords: ["fantastic"])?.visibleText == "c")
+        #expect(ranker.suggestion(for: "This should be super fas", recentWords: ["fast"]) == nil)
     }
 
     @Test("uses newest recent words before older learned words")

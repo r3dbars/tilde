@@ -29,7 +29,13 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         }
 
         let suffix = String(candidate.word.dropFirst(normalizedFragment.count))
-        guard isUsefulSuffix(suffix, fragment: normalizedFragment, source: candidate.source) else {
+        let competingCandidateCount = candidates.filter { $0.source == candidate.source }.count
+        guard isUsefulSuffix(
+            suffix,
+            fragment: normalizedFragment,
+            source: candidate.source,
+            competingCandidateCount: competingCandidateCount
+        ) else {
             return nil
         }
 
@@ -65,13 +71,28 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
             }
     }
 
-    private func isUsefulSuffix(_ suffix: String, fragment: String, source: CandidateSource) -> Bool {
+    private func isUsefulSuffix(
+        _ suffix: String,
+        fragment: String,
+        source: CandidateSource,
+        competingCandidateCount: Int
+    ) -> Bool {
         guard !suffix.isEmpty else {
             return false
         }
 
         if source == .recent {
-            return suffix.count >= 1
+            if suffix.count == 1 {
+                return fragment.count >= 5
+            }
+
+            return true
+        }
+
+        if suffix.count <= 2,
+           fragment.count >= 3,
+           competingCandidateCount >= 3 {
+            return false
         }
 
         if suffix.count == 1 {
