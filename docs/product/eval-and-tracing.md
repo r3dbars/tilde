@@ -85,6 +85,12 @@ AUTOCOMPLETE_LAB_MODEL=qwen35-9b ./script/build_and_run.sh --verify
 
 Supported override names include `qwen35-4b`, `qwen35-9b`, `qwen3-1.7b`, `qwen3-0.6b`, `gemma-4-e4b`, and `gemma-4-26b`.
 
+After a manual model trial, require enough samples before trusting the result:
+
+```bash
+script/model_latency_report.py --latest --require-timing-samples 5 --require-shown-samples 5
+```
+
 For a clean app-specific slice:
 
 ```bash

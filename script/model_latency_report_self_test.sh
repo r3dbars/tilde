@@ -59,4 +59,15 @@ if ! grep -F "instant word-completion may bypass the model" <<<"$EMPTY_REPORT" >
   exit 1
 fi
 
+script/model_latency_report.py \
+  --log "$LOG_FILE" \
+  --latest \
+  --require-timing-samples 1 \
+  --require-shown-samples 2 >/dev/null
+
+if script/model_latency_report.py --log "$EMPTY_LOG_FILE" --latest --require-timing-samples 1 >/dev/null 2>&1; then
+  echo "latency report self-test did not fail missing timing samples" >&2
+  exit 1
+fi
+
 echo "Model latency report self-test passed."

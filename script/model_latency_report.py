@@ -148,11 +148,35 @@ def print_launch(launch):
         print(f"    {metric_line('shown latency', shown)}")
 
 
+def count_samples(launches, bucket):
+    return sum(len(launch[bucket]) for launch in launches)
+
+
+def enforce_minimum(label, actual, expected):
+    if expected is None:
+        return
+
+    if actual < expected:
+        raise SystemExit(
+            f"not enough {label} samples: expected at least {expected}, found {actual}"
+        )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Summarize local Autocomplete Lab model latency logs.")
     parser.add_argument("--log", default=str(DEFAULT_LOG), help="diagnostics.log path")
     parser.add_argument("--latest", action="store_true", help="show only the latest model launch")
     parser.add_argument("--asset", help="show only launches whose asset contains this text")
+    parser.add_argument(
+        "--require-timing-samples",
+        type=int,
+        help="fail unless the selected launches include at least this many model timing samples",
+    )
+    parser.add_argument(
+        "--require-shown-samples",
+        type=int,
+        help="fail unless the selected launches include at least this many shown suggestion samples",
+    )
     args = parser.parse_args()
 
     log_path = Path(args.log).expanduser()
@@ -167,6 +191,17 @@ def main():
 
     if not launches:
         raise SystemExit("no matching model launches found")
+
+    enforce_minimum(
+        "model timing",
+        count_samples(launches, "timings"),
+        args.require_timing_samples,
+    )
+    enforce_minimum(
+        "shown suggestion",
+        count_samples(launches, "presented"),
+        args.require_shown_samples,
+    )
 
     for index, launch in enumerate(launches):
         if index:
