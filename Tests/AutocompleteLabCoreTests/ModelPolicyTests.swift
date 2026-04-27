@@ -10,8 +10,8 @@ struct ModelPolicyTests {
         #expect(policy.model == .qwen35FourB)
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)
-        #expect(policy.maxGeneratedTokens == 10)
-        #expect(policy.maxVisibleWords == 6)
+        #expect(policy.maxGeneratedTokens == 16)
+        #expect(policy.maxVisibleWords == 10)
         #expect(policy.maxVisibleWords >= CompletionModelPolicy.minimumVisibleWords)
         #expect(policy.maxVisibleWords <= CompletionModelPolicy.maximumVisibleWords)
     }
@@ -40,7 +40,7 @@ struct ModelPolicyTests {
         )
 
         #expect(tiny.maxVisibleWords == 1)
-        #expect(huge.maxVisibleWords == 8)
+        #expect(huge.maxVisibleWords == 10)
     }
 
     @Test("Model policy accepts only tiny autocomplete-sized visible output")
@@ -51,7 +51,8 @@ struct ModelPolicyTests {
         #expect(policy.allowsVisibleWordCount(2))
         #expect(policy.allowsVisibleWordCount(3))
         #expect(policy.allowsVisibleWordCount(6))
-        #expect(!policy.allowsVisibleWordCount(7))
+        #expect(policy.allowsVisibleWordCount(10))
+        #expect(!policy.allowsVisibleWordCount(11))
     }
 
     @Test("M5 with 128 GB is supported")

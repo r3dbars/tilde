@@ -8,13 +8,13 @@ struct CompletionActivationPolicyTests {
         let policy = CompletionActivationPolicy()
 
         #expect(policy.canSuggest(
-            textBeforeCursor: "I think this",
+            textBeforeCursor: "I think this ",
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: false
         ))
         #expect(policy.decision(
-            textBeforeCursor: "I think this",
+            textBeforeCursor: "I think this ",
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: false
@@ -118,6 +118,25 @@ struct CompletionActivationPolicyTests {
 
         #expect(policy.decision(
             textBeforeCursor: "the thing.",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.phraseContinuation))
+    }
+
+    @Test("Blocks phrase continuation while cursor is inside a common word")
+    func blocksPhraseContinuationInsideCommonWord() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "I need to understand an",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.unfinishedWord))
+
+        #expect(policy.decision(
+            textBeforeCursor: "I need to understand an ",
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: false

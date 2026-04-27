@@ -28,6 +28,7 @@ public enum CompletionActivationBlockReason: String, Equatable, Sendable {
     case suppressedField
     case tooLittleContext
     case middleOfLine
+    case unfinishedWord
 }
 
 public struct CompletionActivationPolicy: Equatable, Sendable {
@@ -91,6 +92,10 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             return .allow(.wordCompletion)
         }
 
+        if endsInsideWord(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
+            return .block(.unfinishedWord)
+        }
+
         return .allow(.phraseContinuation)
     }
 
@@ -117,6 +122,27 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         }
 
         return !Self.commonCompleteWords.contains(normalized)
+    }
+
+    private func endsInsideWord(textBeforeCursor: String, textAfterCursor: String) -> Bool {
+        guard let last = textBeforeCursor.last, last.isLetter else {
+            return false
+        }
+
+        if let next = textAfterCursor.first, next.isWhitespace {
+            return false
+        }
+
+        guard let fragment = textBeforeCursor.split(whereSeparator: { $0.isWhitespace }).last else {
+            return false
+        }
+
+        let normalized = fragment
+            .trimmingCharacters(in: .punctuationCharacters)
+            .lowercased()
+
+        return normalized.count >= minimumWordCompletionCharacters
+            && normalized.allSatisfy { $0.isLetter }
     }
 
     private static let commonCompleteWords: Set<String> = [
