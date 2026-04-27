@@ -196,6 +196,7 @@ final class DiagnosticsWindowController {
           typed over: \(summary.typedOverCount)
           ignored: \(summary.ignoredCount)
           suppressed: \(summary.suppressedCount)
+          actionable suppressed: \(summary.actionableSuppressedCount)
           insertion failures: \(summary.insertionFailureCount)
           accept rate: \(Self.percent(summary.acceptRate))
           useful rate: \(Self.percent(summary.usefulRate))

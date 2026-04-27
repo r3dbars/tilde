@@ -16,20 +16,23 @@ struct AutocompleteTraceAnalyzerTests {
             event(.suggestionHidden, suggestionID: "three", displayedText: "ng", outcome: "typed-through"),
             event(.insertionFailed, suggestionID: "four", reason: "insert-verification-failed"),
             event(.suggestionSuppressed, suggestionID: "five", reason: "repeated-miss"),
-            event(.suggestionSuppressed, suggestionID: "six", reason: "repeated-miss")
+            event(.suggestionSuppressed, suggestionID: "six", reason: "repeated-miss"),
+            event(.suggestionSuppressed, suggestionID: "seven", reason: "no-fast-word-candidate")
         ]
 
         let summary = AutocompleteTraceAnalyzer().summary(for: events)
 
-        #expect(summary.totalEvents == 10)
+        #expect(summary.totalEvents == 11)
         #expect(summary.presentedCount == 3)
         #expect(summary.acceptedCount == 2)
         #expect(summary.typedThroughCount == 1)
         #expect(summary.typedOverCount == 1)
-        #expect(summary.suppressedCount == 2)
+        #expect(summary.suppressedCount == 3)
+        #expect(summary.actionableSuppressedCount == 2)
         #expect(summary.suppressedByReason["repeated-miss"] == 2)
-        #expect(summary.suppressedByApp["com.apple.TextEdit"] == 2)
-        #expect(summary.suppressedByMode["wordCompletion"] == 2)
+        #expect(summary.suppressedByReason["no-fast-word-candidate"] == 1)
+        #expect(summary.suppressedByApp["com.apple.TextEdit"] == 3)
+        #expect(summary.suppressedByMode["wordCompletion"] == 3)
         #expect(summary.insertionFailureCount == 1)
         #expect(summary.acceptRate == 1.0 / 3.0)
         #expect(summary.usefulRate == 2.0 / 3.0)

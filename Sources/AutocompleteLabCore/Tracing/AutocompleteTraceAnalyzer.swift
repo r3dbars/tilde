@@ -36,6 +36,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let typedOverCount: Int
     public let ignoredCount: Int
     public let suppressedCount: Int
+    public let actionableSuppressedCount: Int
     public let insertionFailureCount: Int
     public let acceptRate: Double
     public let usefulRate: Double
@@ -59,6 +60,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         typedOverCount: Int,
         ignoredCount: Int,
         suppressedCount: Int = 0,
+        actionableSuppressedCount: Int = 0,
         insertionFailureCount: Int,
         acceptRate: Double,
         usefulRate: Double,
@@ -81,6 +83,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.typedOverCount = typedOverCount
         self.ignoredCount = ignoredCount
         self.suppressedCount = suppressedCount
+        self.actionableSuppressedCount = actionableSuppressedCount
         self.insertionFailureCount = insertionFailureCount
         self.acceptRate = acceptRate
         self.usefulRate = usefulRate
@@ -115,6 +118,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let typedOver = events.filter { $0.type == .suggestionTypedOver }
         let hiddenIgnored = events.filter { $0.type == .suggestionHidden && $0.outcome == "ignored" }
         let suppressed = events.filter { $0.type == .suggestionSuppressed }
+        let actionableSuppressed = suppressed.filter { isActionableSuppression($0) }
         let insertionFailures = events.filter { $0.type == .insertionFailed }
         let firstShownLatencies = firstPresentedByID.values.compactMap(\.latencyMilliseconds).sorted()
 
@@ -126,6 +130,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             typedOverCount: typedOver.count,
             ignoredCount: hiddenIgnored.count,
             suppressedCount: suppressed.count,
+            actionableSuppressedCount: actionableSuppressed.count,
             insertionFailureCount: insertionFailures.count,
             acceptRate: presentedIDs.isEmpty ? 0 : Double(acceptedIDs.count) / Double(presentedIDs.count),
             usefulRate: presentedIDs.isEmpty ? 0 : Double(usefulIDs.count) / Double(presentedIDs.count),
@@ -184,6 +189,10 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             return bucket.isEmpty ? "unknown" : bucket
         }
         .mapValues(\.count)
+    }
+
+    private func isActionableSuppression(_ event: AutocompleteTraceEvent) -> Bool {
+        event.reason != "no-fast-word-candidate"
     }
 
     private func rates(
