@@ -1242,6 +1242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "effectiveRenderMode": effectiveRenderMode.rawValue,
                 "requestMode": request.mode.rawValue,
+                "traceID": String(suggestionID.prefix(8)),
                 "visibleChars": String(suggestion.visibleText.count),
                 "suggestionID": suggestionID,
                 "latencyMilliseconds": String(latencyMilliseconds)

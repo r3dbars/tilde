@@ -14,9 +14,7 @@ TIMING_RE = re.compile(
     r"^(?P<timestamp>\S+) mlx-completion-timing (?P<fields>.*)$"
 )
 PRESENTED_RE = re.compile(
-    r"^(?P<timestamp>\S+) suggestion-presented .*?"
-    r"\blatencyMilliseconds=(?P<latency>\d+).*?"
-    r"\brequestMode=(?P<mode>\w+)"
+    r"^(?P<timestamp>\S+) suggestion-presented (?P<fields>.*)$"
 )
 
 
@@ -101,22 +99,42 @@ def parse_launches(lines):
 
         presented = PRESENTED_RE.search(line)
         if presented:
+            fields = presented.group("fields")
+            mode = field_value(fields, "requestMode")
+            latency = int_field(fields, "latencyMilliseconds")
+            if mode is None or latency is None:
+                continue
+
             current["presented"].append(
                 {
                     "timestamp": presented.group("timestamp"),
-                    "mode": presented.group("mode"),
-                    "latency": int(presented.group("latency")),
+                    "traceID": field_value(fields, "traceID"),
+                    "mode": mode,
+                    "latency": latency,
                 }
             )
 
     return launches
 
 
+def first_presented_samples(presented):
+    samples = []
+    seen_trace_ids = set()
+    for item in presented:
+        trace_id = item.get("traceID")
+        if trace_id:
+            if trace_id in seen_trace_ids:
+                continue
+            seen_trace_ids.add(trace_id)
+        samples.append(item)
+    return samples
+
+
 def print_launch(launch):
     print(f"Launch: {launch['timestamp']} asset={launch['asset']}")
 
     timings = launch["timings"]
-    presented = launch["presented"]
+    presented = first_presented_samples(launch["presented"])
     if not timings and not presented:
         print("  no timing samples yet")
         print("  try: type one short sentence in TextEdit or Codex, wait for a phrase suggestion, then rerun this report")
@@ -149,6 +167,9 @@ def print_launch(launch):
 
 
 def count_samples(launches, bucket):
+    if bucket == "presented":
+        return sum(len(first_presented_samples(launch[bucket])) for launch in launches)
+
     return sum(len(launch[bucket]) for launch in launches)
 
 
