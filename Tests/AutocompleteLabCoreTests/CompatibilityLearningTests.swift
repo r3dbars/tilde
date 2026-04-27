@@ -45,6 +45,28 @@ struct CompatibilityLearningTests {
         #expect(adjustment.metadata["learningRenderMode"] == "floatingMirror")
     }
 
+    @Test("Learning can ignore stale visual offsets")
+    func canIgnoreVisualOffsets() {
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "com.openai.codex",
+            xOffset: -12,
+            yOffset: 14,
+            observations: 10,
+            confidence: 1
+        )
+        let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+        let adjustment = engine.adjustment(
+            for: "com.openai.codex",
+            profileRenderMode: .inlineAdjacent
+        ).withoutVisualOffset
+
+        let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
+
+        #expect(adjustment.adjusted(rect) == rect)
+        #expect(adjustment.metadata["learningXOffset"] == "0.0")
+        #expect(adjustment.metadata["learningYOffset"] == "0.0")
+    }
+
     @Test("Missing learning profile leaves geometry alone")
     func missingProfileLeavesGeometryAlone() {
         let engine = CompatibilityLearningEngine()

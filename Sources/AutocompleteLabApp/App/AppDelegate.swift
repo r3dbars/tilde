@@ -490,6 +490,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let lineIndex = max(0, visualLines.count - 1)
         let currentLineWidth = min(width(of: currentLine, font: font), maxLineWidth)
         let caretHeight = max(lineHeight, 16)
+        let inlineGap: CGFloat = 8
         let preferredY = elementRect.minY + verticalPadding - codexVisualBaselineLift + (CGFloat(lineIndex) * lineHeight)
         let y = clampedCodexCaretY(
             preferredY,
@@ -500,7 +501,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         return CGRect(
             x: min(
-                elementRect.minX + horizontalPadding + currentLineWidth,
+                elementRect.minX + horizontalPadding + currentLineWidth + inlineGap,
                 elementRect.maxX - horizontalPadding
             ),
             y: y,
@@ -1107,10 +1108,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         triggerReason: String,
         screenshotPath: String
     ) {
-        let learningAdjustment = compatibilityLearningStore.engine().adjustment(
+        let storedLearningAdjustment = compatibilityLearningStore.engine().adjustment(
             for: profile.bundleIdentifier,
             profileRenderMode: renderMode
         )
+        let learningAdjustment = profile.bundleIdentifier == "com.openai.codex"
+            ? storedLearningAdjustment.withoutVisualOffset
+            : storedLearningAdjustment
         let effectiveRenderMode = learningAdjustment.effectiveRenderMode
         let anchorRect = learningAdjustment.adjusted(RenderModePlan.anchorRect(
             for: effectiveRenderMode,
@@ -1424,10 +1428,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let learningAdjustment = compatibilityLearningStore.engine().adjustment(
+        let storedLearningAdjustment = compatibilityLearningStore.engine().adjustment(
             for: profile.bundleIdentifier,
             profileRenderMode: renderMode
         )
+        let learningAdjustment = profile.bundleIdentifier == "com.openai.codex"
+            ? storedLearningAdjustment.withoutVisualOffset
+            : storedLearningAdjustment
         let effectiveRenderMode = learningAdjustment.effectiveRenderMode
         let anchorRect = learningAdjustment.adjusted(RenderModePlan.anchorRect(
             for: effectiveRenderMode,

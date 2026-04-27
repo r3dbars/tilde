@@ -68,6 +68,20 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
         profile?.screenshotTracingEnabled == true
     }
 
+    public var withoutVisualOffset: CompatibilityLearningAdjustment {
+        guard var profile else {
+            return self
+        }
+
+        profile.xOffset = 0
+        profile.yOffset = 0
+
+        return CompatibilityLearningAdjustment(
+            profile: profile,
+            effectiveRenderMode: effectiveRenderMode
+        )
+    }
+
     public var metadata: [String: String] {
         guard let profile else {
             return [
