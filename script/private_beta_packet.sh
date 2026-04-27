@@ -3,12 +3,13 @@ set -euo pipefail
 
 MODE="${1:-create}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DIST_DIR="$ROOT_DIR/dist"
+DIST_DIR="${AUTOCOMPLETE_LAB_DIST_DIR:-$ROOT_DIR/dist}"
 ARCHIVE_PATH="$DIST_DIR/AutocompleteLab.zip"
 PACKET_DIR="$DIST_DIR/private-beta"
 README_PATH="$PACKET_DIR/README.md"
 INSTALL_PATH="$PACKET_DIR/install-checklist.md"
 FEEDBACK_PATH="$PACKET_DIR/feedback-log.md"
+SESSION_REPORT_PATH="$PACKET_DIR/session-report.md"
 CHECKSUM_PATH="$PACKET_DIR/checksums.txt"
 
 cd "$ROOT_DIR"
@@ -60,6 +61,8 @@ Useful commands:
 \`\`\`bash
 ./script/beta_readiness.sh
 ./script/manual_smoke_status.sh --require-all
+./script/check_trace_eval.sh
+./script/model_latency_report.py --latest
 open "\$HOME/Library/Logs/AutocompleteLab"
 \`\`\`
 EOF
@@ -98,6 +101,27 @@ Questions to answer after each session:
 - Did it ever insert text you did not expect?
 EOF
 
+  cat >"$SESSION_REPORT_PATH" <<'EOF'
+# Session Report
+
+Use this after each real beta writing session.
+
+## Commands
+
+```bash
+./script/check_trace_eval.sh
+./script/model_latency_report.py --latest
+./script/model_latency_report.py --latest --require-shown-samples 5
+```
+
+## Notes
+
+- Record the app, minutes, and whether Tab felt predictable.
+- Copy the top repeated misses from Diagnostics or the trace eval report.
+- If the latency report has no samples, type one short sentence, wait for a phrase suggestion, and rerun it.
+- Fix the top repeated miss before inviting more testers.
+EOF
+
   printf 'AutocompleteLab.zip  %s\n' "$sha" >"$CHECKSUM_PATH"
   echo "Private beta packet created: $PACKET_DIR"
 }
@@ -105,7 +129,7 @@ EOF
 check_packet() {
   require_archive
 
-  for path in "$README_PATH" "$INSTALL_PATH" "$FEEDBACK_PATH" "$CHECKSUM_PATH"; do
+  for path in "$README_PATH" "$INSTALL_PATH" "$FEEDBACK_PATH" "$SESSION_REPORT_PATH" "$CHECKSUM_PATH"; do
     if [[ ! -s "$path" ]]; then
       echo "missing beta packet file: $path" >&2
       exit 1

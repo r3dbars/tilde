@@ -15,6 +15,7 @@ That creates:
 - `dist/private-beta/README.md`
 - `dist/private-beta/install-checklist.md`
 - `dist/private-beta/feedback-log.md`
+- `dist/private-beta/session-report.md`
 - `dist/private-beta/checksums.txt`
 
 ## Test Shape
@@ -53,5 +54,11 @@ Record one row in:
 dist/private-beta/feedback-log.md
 ```
 
-Then run the trace eval panel or trace analyzer and fix the top repeated miss
-before adding more testers.
+Then follow:
+
+```text
+dist/private-beta/session-report.md
+```
+
+Run the trace eval panel or trace analyzer, check latency, and fix the top
+repeated miss before adding more testers.
