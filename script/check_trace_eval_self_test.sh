@@ -127,4 +127,10 @@ if ! grep -F "Start line: 3" /tmp/autocomplete-trace-eval-self-test-slice.txt >/
   exit 1
 fi
 
+if [[ "$(AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh --quiet)" != "20" ]]; then
+  echo "trace mark self-test did not report the current trace line" >&2
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh >&2
+  exit 1
+fi
+
 echo "Trace eval self-test passed."

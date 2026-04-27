@@ -108,6 +108,12 @@ AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP=com.apple.TextEdit \
   ./script/check_trace_eval.sh
 ```
 
+Or use the helper, which prints the exact command to run after your dogfood pass:
+
+```bash
+./script/trace_mark.sh
+```
+
 For Codex dogfooding, use:
 
 ```bash
