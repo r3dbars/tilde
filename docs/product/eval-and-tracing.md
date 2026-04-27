@@ -85,6 +85,13 @@ AUTOCOMPLETE_LAB_MODEL=qwen35-9b ./script/build_and_run.sh --verify
 
 Supported override names include `qwen35-4b`, `qwen35-9b`, `qwen3-1.7b`, `qwen3-0.6b`, `gemma-4-e4b`, `gemma-4-e4b-it-optiq`, and `gemma-4-26b`.
 
+Try shorter or longer streamed phrase suggestions without editing code:
+
+```bash
+AUTOCOMPLETE_LAB_MODEL=gemma-4-e4b-it-optiq AUTOCOMPLETE_LAB_VISIBLE_WORDS=3 ./script/build_and_run.sh --verify
+AUTOCOMPLETE_LAB_MODEL=gemma-4-e4b-it-optiq AUTOCOMPLETE_LAB_VISIBLE_WORDS=10 AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS=16 ./script/build_and_run.sh --verify
+```
+
 After a manual model trial, require enough samples before trusting the result:
 
 ```bash

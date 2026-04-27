@@ -183,6 +183,18 @@ open_app() {
     launchctl unsetenv AUTOCOMPLETE_LAB_MODEL >/dev/null 2>&1 || true
   fi
 
+  if [[ -n "${AUTOCOMPLETE_LAB_VISIBLE_WORDS:-}" ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_VISIBLE_WORDS "$AUTOCOMPLETE_LAB_VISIBLE_WORDS"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_VISIBLE_WORDS >/dev/null 2>&1 || true
+  fi
+
+  if [[ -n "${AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS:-}" ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS "$AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS >/dev/null 2>&1 || true
+  fi
+
   /usr/bin/open -n "$APP_BUNDLE"
 }
 
