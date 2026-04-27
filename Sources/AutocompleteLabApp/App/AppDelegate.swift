@@ -6,7 +6,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let accessibilityClient = AccessibilityClient()
     private let profileStore = CompatibilityProfileStore.mvp
     private let activationPolicy = CompletionActivationPolicy()
-    private let triggerPolicy = SuggestionTriggerPolicy()
+    private let triggerPolicy = SuggestionTriggerPolicy(
+        charactersBeforePauseRequest: 1,
+        wordCompletionDelayMilliseconds: 0,
+        wordBoundaryDelayMilliseconds: 0,
+        pauseDelayMilliseconds: 15
+    )
     private let modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
     private var modelRuntime: any ModelRuntime {
         modelRuntimeBundle.runtime
@@ -133,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startPolling() {
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.pollFocusedText()
             }

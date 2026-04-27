@@ -28,7 +28,7 @@ public enum ModelRuntimeOwnership: String, Equatable, Sendable {
 }
 
 public struct CompletionModelPolicy: Equatable, Sendable {
-    public static let minimumVisibleWords = 2
+    public static let minimumVisibleWords = 1
     public static let maximumVisibleWords = 8
 
     public let model: LocalModelID
@@ -64,10 +64,10 @@ public struct CompletionModelPolicy: Equatable, Sendable {
         model: .qwen35FourB,
         runtimeOwnership: .appOwnedEmbedded,
         minimumMemoryGB: 16,
-        maxGeneratedTokens: 8,
-        maxVisibleWords: 4,
-        debounceMilliseconds: 240,
-        targetLatencyMilliseconds: 100,
+        maxGeneratedTokens: 5,
+        maxVisibleWords: 3,
+        debounceMilliseconds: 15,
+        targetLatencyMilliseconds: 50,
         reasoningEnabled: false
     )
 

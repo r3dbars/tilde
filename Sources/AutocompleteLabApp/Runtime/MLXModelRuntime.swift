@@ -173,7 +173,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         case .wordCompletion:
             return 3
         case .phraseContinuation:
-            return min(4, CompletionModelPolicy.mvp.maxGeneratedTokens)
+            return min(3, CompletionModelPolicy.mvp.maxGeneratedTokens)
         }
     }
 

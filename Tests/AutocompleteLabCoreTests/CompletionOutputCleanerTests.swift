@@ -63,12 +63,12 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("Know you are", after: "I know you are") == nil)
     }
 
-    @Test("Suppresses one word twitch completions")
-    func suppressesOneWordTwitchCompletions() {
+    @Test("Allows one word phrase completions for snappy mode")
+    func allowsOneWordPhraseCompletionsForSnappyMode() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
-        #expect(cleaner.clean("there.", after: "Hey") == nil)
-        #expect(cleaner.clean("ready.", after: "I know you are") == nil)
+        #expect(cleaner.clean("there.", after: "Hey")?.visibleText == " there.")
+        #expect(cleaner.clean("ready.", after: "I know you are")?.visibleText == " ready.")
     }
 
     @Test("Allows single token word completion suffixes")

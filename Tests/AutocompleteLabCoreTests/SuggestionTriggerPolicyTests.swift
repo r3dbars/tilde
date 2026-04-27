@@ -7,7 +7,7 @@ struct SuggestionTriggerPolicyTests {
     func firstSnapshotRequestsSuggestion() {
         let policy = SuggestionTriggerPolicy()
 
-        #expect(policy.shouldRequestSuggestion(previousTextBeforeCursor: nil, currentTextBeforeCursor: "I think"))
+        #expect(policy.decision(previousTextBeforeCursor: nil, currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 70))
     }
 
     @Test("Unchanged snapshots do not request again")
@@ -44,6 +44,19 @@ struct SuggestionTriggerPolicyTests {
 
         #expect(policy.decision(previousTextBeforeCursor: "I thi", currentTextBeforeCursor: "I thin") == .request(delayMilliseconds: 0))
         #expect(policy.decision(previousTextBeforeCursor: "I ", currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 0))
+    }
+
+    @Test("Snappy mode requests a phrase on every changed character")
+    func snappyModeRequestsEveryChangedCharacter() {
+        let policy = SuggestionTriggerPolicy(
+            charactersBeforePauseRequest: 1,
+            wordBoundaryDelayMilliseconds: 0,
+            pauseDelayMilliseconds: 15
+        )
+
+        #expect(policy.decision(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I think ") == .request(delayMilliseconds: 0))
+        #expect(policy.decision(previousTextBeforeCursor: "I think this wor", currentTextBeforeCursor: "I think this work") == .request(delayMilliseconds: 0))
+        #expect(policy.decision(previousTextBeforeCursor: "I think ", currentTextBeforeCursor: "I think x") == .request(delayMilliseconds: 15))
     }
 
     @Test("Word fragments trigger quickly for completion")
