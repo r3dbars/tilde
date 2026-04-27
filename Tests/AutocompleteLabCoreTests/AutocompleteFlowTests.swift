@@ -12,8 +12,14 @@ struct AutocompleteFlowTests {
 
         var session = SuggestionSession(visibleSuggestion: suggestion)
 
-        #expect(session.acceptNextWord() == " we")
-        #expect(session.acceptAllVisible() == " should ship this")
+        let nextWord = session.nextWordAcceptance()
+        #expect(nextWord == " we")
+        #expect(session.visibleSuggestion?.visibleText == " we should ship this")
+        session.commitNextWordAcceptance(nextWord ?? "")
+
+        let remaining = session.allVisibleAcceptance()
+        #expect(remaining == " should ship this")
+        session.commitAllVisibleAcceptance(remaining ?? "")
         #expect(!session.hasVisibleSuggestion)
     }
 
@@ -46,5 +52,15 @@ struct AutocompleteFlowTests {
         )
 
         #expect(suggestion?.visibleText == "nd keep moving")
+    }
+
+    @Test("Word completion mode completes only the current word")
+    func wordCompletionModeCompletesOnlyCurrentWord() async throws {
+        let engine = MockCompletionEngine()
+        let suggestion = try await engine.suggestion(
+            for: CompletionRequest(textBeforeCursor: "dic", maxVisibleWords: 8, mode: .wordCompletion)
+        )
+
+        #expect(suggestion?.visibleText == "tation")
     }
 }

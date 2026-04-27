@@ -17,6 +17,10 @@ let package = Package(
             targets: ["AutocompleteLabApp"]
         )
     ],
+    dependencies: [
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", .upToNextMajor(from: "3.31.3")),
+        .package(url: "https://github.com/huggingface/swift-transformers.git", .upToNextMajor(from: "1.3.0"))
+    ],
     targets: [
         .target(
             name: "AutocompleteLabCore",
@@ -33,11 +37,19 @@ let package = Package(
         ),
         .executableTarget(
             name: "AutocompleteLabApp",
-            dependencies: ["AutocompleteLabCore"],
+            dependencies: [
+                "AutocompleteLabCore",
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXVLM", package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "MLXHuggingFace", package: "mlx-swift-lm"),
+                .product(name: "Tokenizers", package: "swift-transformers")
+            ],
             exclude: [
                 "AGENTS.md",
                 "App/AGENTS.md",
                 "Mac/AGENTS.md",
+                "Runtime/AGENTS.md",
                 "UI/AGENTS.md"
             ]
         ),

@@ -14,6 +14,13 @@ public struct HardwareProfile: Equatable, Sendable {
 
 public enum LocalModelID: String, Equatable, Sendable {
     case gemma4E2B = "Gemma 4 E2B"
+    case gemma4E4B = "Gemma 4 E4B"
+    case gemma4E4BItOptiQ = "Gemma 4 E4B IT OptiQ"
+    case gemma4A4B = "Gemma 4 26B A4B"
+    case qwen3Small = "Qwen3 0.6B"
+    case qwen3Medium = "Qwen3 1.7B"
+    case qwen35FourB = "Qwen3.5 4B"
+    case qwen35NineB = "Qwen3.5 9B"
 }
 
 public enum ModelRuntimeOwnership: String, Equatable, Sendable {
@@ -21,6 +28,11 @@ public enum ModelRuntimeOwnership: String, Equatable, Sendable {
 }
 
 public struct CompletionModelPolicy: Equatable, Sendable {
+    public static let minimumVisibleWords = 1
+    public static let maximumVisibleWords = 10
+    public static let minimumGeneratedTokens = 3
+    public static let maximumGeneratedTokens = 32
+
     public let model: LocalModelID
     public let runtimeOwnership: ModelRuntimeOwnership
     public let minimumMemoryGB: Int
@@ -44,24 +56,81 @@ public struct CompletionModelPolicy: Equatable, Sendable {
         self.runtimeOwnership = runtimeOwnership
         self.minimumMemoryGB = minimumMemoryGB
         self.maxGeneratedTokens = maxGeneratedTokens
-        self.maxVisibleWords = maxVisibleWords
+        self.maxVisibleWords = Self.clampedVisibleWords(maxVisibleWords)
         self.debounceMilliseconds = debounceMilliseconds
         self.targetLatencyMilliseconds = targetLatencyMilliseconds
         self.reasoningEnabled = reasoningEnabled
     }
 
     public static let mvp = CompletionModelPolicy(
-        model: .gemma4E2B,
+        model: .qwen35FourB,
         runtimeOwnership: .appOwnedEmbedded,
         minimumMemoryGB: 16,
         maxGeneratedTokens: 16,
-        maxVisibleWords: 8,
-        debounceMilliseconds: 200,
-        targetLatencyMilliseconds: 700,
+        maxVisibleWords: 10,
+        debounceMilliseconds: 15,
+        targetLatencyMilliseconds: 50,
         reasoningEnabled: false
     )
 
     public func supports(_ hardware: HardwareProfile) -> Bool {
         hardware.isAppleSilicon && hardware.memoryGB >= minimumMemoryGB
+    }
+
+    public func allowsVisibleWordCount(_ wordCount: Int) -> Bool {
+        wordCount >= Self.minimumVisibleWords && wordCount <= maxVisibleWords
+    }
+
+    private static func clampedVisibleWords(_ value: Int) -> Int {
+        min(maximumVisibleWords, max(minimumVisibleWords, value))
+    }
+
+    public static func clampedGeneratedTokens(_ value: Int) -> Int {
+        min(maximumGeneratedTokens, max(minimumGeneratedTokens, value))
+    }
+}
+
+public struct CompletionLengthConfiguration: Equatable, Sendable {
+    public let maxVisibleWords: Int
+    public let maxGeneratedTokens: Int
+
+    public init(maxVisibleWords: Int, maxGeneratedTokens: Int? = nil) {
+        let visibleWords = min(
+            CompletionModelPolicy.maximumVisibleWords,
+            max(CompletionModelPolicy.minimumVisibleWords, maxVisibleWords)
+        )
+        self.maxVisibleWords = visibleWords
+        self.maxGeneratedTokens = CompletionModelPolicy.clampedGeneratedTokens(
+            maxGeneratedTokens ?? Self.defaultGeneratedTokens(forVisibleWords: visibleWords)
+        )
+    }
+
+    public static let `default` = CompletionLengthConfiguration(
+        maxVisibleWords: CompletionModelPolicy.mvp.maxVisibleWords,
+        maxGeneratedTokens: CompletionModelPolicy.mvp.maxGeneratedTokens
+    )
+
+    public var displaySummary: String {
+        "\(maxVisibleWords) words / \(maxGeneratedTokens) tokens"
+    }
+
+    public static func fromEnvironment(_ environment: [String: String]) -> CompletionLengthConfiguration {
+        CompletionLengthConfiguration(
+            maxVisibleWords: parsedInt(environment["AUTOCOMPLETE_LAB_VISIBLE_WORDS"])
+                ?? CompletionModelPolicy.mvp.maxVisibleWords,
+            maxGeneratedTokens: parsedInt(environment["AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS"])
+        )
+    }
+
+    private static func parsedInt(_ value: String?) -> Int? {
+        guard let value else {
+            return nil
+        }
+
+        return Int(value.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private static func defaultGeneratedTokens(forVisibleWords visibleWords: Int) -> Int {
+        CompletionModelPolicy.clampedGeneratedTokens(visibleWords + 6)
     }
 }

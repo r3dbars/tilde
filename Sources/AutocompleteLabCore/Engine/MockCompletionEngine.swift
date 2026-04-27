@@ -13,7 +13,11 @@ public final class MockCompletionEngine: CompletionEngine, @unchecked Sendable {
         let lowercased = trimmed.lowercased()
         let text: String
 
-        if lowercased.hasSuffix("i think") {
+        if request.mode == .wordCompletion, lowercased.hasSuffix("dic") {
+            text = "dictation"
+        } else if request.mode == .wordCompletion, lowercased.hasSuffix("ar") {
+            text = "are"
+        } else if lowercased.hasSuffix("i think") {
             text = " we should ship this"
         } else if lowercased.hasSuffix("can we") {
             text = " make this feel instant"
