@@ -31,6 +31,28 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.topMisses.contains { $0.fixCategory == "insertion bug" })
     }
 
+    @Test("Streaming updates count as one shown suggestion")
+    func streamingUpdatesCountAsOneShownSuggestion() {
+        let events = [
+            event(.suggestionPresented, suggestionID: "one", displayedText: "we", latency: 80),
+            event(.suggestionPresented, suggestionID: "one", displayedText: "we should", latency: 120),
+            event(.suggestionPresented, suggestionID: "one", displayedText: "we should keep going", latency: 180),
+            event(.suggestionAccepted, suggestionID: "one", acceptedText: "we should"),
+            event(.suggestionPresented, suggestionID: "two", displayedText: "maybe later", latency: 240),
+            event(.suggestionHidden, suggestionID: "two", displayedText: "maybe later", outcome: "ignored")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.totalEvents == 6)
+        #expect(summary.presentedCount == 2)
+        #expect(summary.acceptedCount == 1)
+        #expect(summary.acceptRate == 0.5)
+        #expect(summary.acceptRateByApp["com.apple.TextEdit"] == 0.5)
+        #expect(summary.p50LatencyMilliseconds == 240)
+        #expect(summary.p90LatencyMilliseconds == 240)
+    }
+
     @Test("typed-over hides do not count as ignored")
     func typedOverHidesDoNotCountAsIgnored() {
         let events = [

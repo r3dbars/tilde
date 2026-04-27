@@ -73,32 +73,33 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
     public func summary(for events: [AutocompleteTraceEvent]) -> AutocompleteTraceSummary {
         let presented = events.filter { $0.type == .suggestionPresented }
+        let firstPresentedByID = firstEventsBySuggestionID(from: presented)
         let accepted = events.filter { $0.type == .suggestionAccepted }
-        let presentedIDs = Set(presented.map(\.suggestionID))
+        let presentedIDs = Set(firstPresentedByID.keys)
         let acceptedIDs = Set(accepted.map(\.suggestionID)).intersection(presentedIDs)
         let typedOver = events.filter { $0.type == .suggestionTypedOver }
         let hiddenIgnored = events.filter { $0.type == .suggestionHidden && $0.outcome == "ignored" }
         let insertionFailures = events.filter { $0.type == .insertionFailed }
-        let latencies = events.compactMap(\.latencyMilliseconds).sorted()
+        let firstShownLatencies = firstPresentedByID.values.compactMap(\.latencyMilliseconds).sorted()
 
         return AutocompleteTraceSummary(
             totalEvents: events.count,
-            presentedCount: presented.count,
+            presentedCount: firstPresentedByID.count,
             acceptedCount: accepted.count,
             typedOverCount: typedOver.count,
             ignoredCount: hiddenIgnored.count,
             insertionFailureCount: insertionFailures.count,
             acceptRate: presentedIDs.isEmpty ? 0 : Double(acceptedIDs.count) / Double(presentedIDs.count),
-            p50LatencyMilliseconds: percentile(0.50, in: latencies),
-            p90LatencyMilliseconds: percentile(0.90, in: latencies),
-            p95LatencyMilliseconds: percentile(0.95, in: latencies),
+            p50LatencyMilliseconds: percentile(0.50, in: firstShownLatencies),
+            p90LatencyMilliseconds: percentile(0.90, in: firstShownLatencies),
+            p95LatencyMilliseconds: percentile(0.95, in: firstShownLatencies),
             acceptRateByApp: acceptRates(
-                presented: presented,
+                presentedByID: firstPresentedByID,
                 accepted: accepted,
                 key: \.appBundleIdentifier
             ),
             acceptRateByMode: acceptRates(
-                presented: presented,
+                presentedByID: firstPresentedByID,
                 accepted: accepted,
                 key: \.requestMode
             ),
@@ -106,12 +107,21 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         )
     }
 
+    private func firstEventsBySuggestionID(
+        from events: [AutocompleteTraceEvent]
+    ) -> [String: AutocompleteTraceEvent] {
+        var eventsByID: [String: AutocompleteTraceEvent] = [:]
+        for event in events where eventsByID[event.suggestionID] == nil {
+            eventsByID[event.suggestionID] = event
+        }
+        return eventsByID
+    }
+
     private func acceptRates(
-        presented: [AutocompleteTraceEvent],
+        presentedByID: [String: AutocompleteTraceEvent],
         accepted: [AutocompleteTraceEvent],
         key: (AutocompleteTraceEvent) -> String
     ) -> [String: Double] {
-        let presentedByID = Dictionary(uniqueKeysWithValues: presented.map { ($0.suggestionID, $0) })
         let acceptedIDs = Set(accepted.map(\.suggestionID))
         let acceptedPresented = presentedByID
             .filter { acceptedIDs.contains($0.key) }
