@@ -292,6 +292,14 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             .sorted { $0.key < $1.key }
             .map { "<li><code>\(escape($0.key))</code>: \(Int(($0.value * 100).rounded()))%</li>" }
             .joined(separator: "\n")
+        let usefulAppRates = summary.usefulRateByApp
+            .sorted { $0.key < $1.key }
+            .map { "<li><code>\(escape($0.key))</code>: \(Int(($0.value * 100).rounded()))%</li>" }
+            .joined(separator: "\n")
+        let usefulModeRates = summary.usefulRateByMode
+            .sorted { $0.key < $1.key }
+            .map { "<li><code>\(escape($0.key))</code>: \(Int(($0.value * 100).rounded()))%</li>" }
+            .joined(separator: "\n")
 
         return """
         <!doctype html>
@@ -327,6 +335,10 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           <ul>\(appRates)</ul>
           <h2>Accept rate by mode</h2>
           <ul>\(modeRates)</ul>
+          <h2>Useful rate by app</h2>
+          <ul>\(usefulAppRates)</ul>
+          <h2>Useful rate by mode</h2>
+          <ul>\(usefulModeRates)</ul>
           <h2>Top 5 misses</h2>
           <ol>\(misses)</ol>
           <h2>Recent events</h2>

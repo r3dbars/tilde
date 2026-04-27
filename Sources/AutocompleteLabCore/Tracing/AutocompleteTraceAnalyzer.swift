@@ -37,6 +37,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let p95LatencyMilliseconds: Int?
     public let acceptRateByApp: [String: Double]
     public let acceptRateByMode: [String: Double]
+    public let usefulRateByApp: [String: Double]
+    public let usefulRateByMode: [String: Double]
     public let topMisses: [AutocompleteTraceMiss]
 
     public init(
@@ -54,6 +56,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         p95LatencyMilliseconds: Int?,
         acceptRateByApp: [String: Double] = [:],
         acceptRateByMode: [String: Double] = [:],
+        usefulRateByApp: [String: Double] = [:],
+        usefulRateByMode: [String: Double] = [:],
         topMisses: [AutocompleteTraceMiss]
     ) {
         self.totalEvents = totalEvents
@@ -70,6 +74,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.p95LatencyMilliseconds = p95LatencyMilliseconds
         self.acceptRateByApp = acceptRateByApp
         self.acceptRateByMode = acceptRateByMode
+        self.usefulRateByApp = usefulRateByApp
+        self.usefulRateByMode = usefulRateByMode
         self.topMisses = topMisses
     }
 }
@@ -106,14 +112,24 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             p50LatencyMilliseconds: percentile(0.50, in: firstShownLatencies),
             p90LatencyMilliseconds: percentile(0.90, in: firstShownLatencies),
             p95LatencyMilliseconds: percentile(0.95, in: firstShownLatencies),
-            acceptRateByApp: acceptRates(
+            acceptRateByApp: rates(
                 presentedByID: firstPresentedByID,
-                accepted: accepted,
+                outcomeIDs: acceptedIDs,
                 key: \.appBundleIdentifier
             ),
-            acceptRateByMode: acceptRates(
+            acceptRateByMode: rates(
                 presentedByID: firstPresentedByID,
-                accepted: accepted,
+                outcomeIDs: acceptedIDs,
+                key: \.requestMode
+            ),
+            usefulRateByApp: rates(
+                presentedByID: firstPresentedByID,
+                outcomeIDs: usefulIDs,
+                key: \.appBundleIdentifier
+            ),
+            usefulRateByMode: rates(
+                presentedByID: firstPresentedByID,
+                outcomeIDs: usefulIDs,
                 key: \.requestMode
             ),
             topMisses: topMisses(from: events)
@@ -130,24 +146,23 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         return eventsByID
     }
 
-    private func acceptRates(
+    private func rates(
         presentedByID: [String: AutocompleteTraceEvent],
-        accepted: [AutocompleteTraceEvent],
+        outcomeIDs: Set<String>,
         key: (AutocompleteTraceEvent) -> String
     ) -> [String: Double] {
-        let acceptedIDs = Set(accepted.map(\.suggestionID))
-        let acceptedPresented = presentedByID
-            .filter { acceptedIDs.contains($0.key) }
+        let outcomePresented = presentedByID
+            .filter { outcomeIDs.contains($0.key) }
             .map(\.value)
         let presentedCounts = Dictionary(grouping: Array(presentedByID.values), by: key)
             .mapValues(\.count)
-        let acceptedCounts = Dictionary(grouping: acceptedPresented, by: key)
+        let outcomeCounts = Dictionary(grouping: outcomePresented, by: key)
             .mapValues(\.count)
 
         var rates: [String: Double] = [:]
         for (bucket, presentedCount) in presentedCounts where presentedCount > 0 {
             let normalizedBucket = bucket.isEmpty ? "unknown" : bucket
-            rates[normalizedBucket] = Double(acceptedCounts[bucket] ?? 0) / Double(presentedCount)
+            rates[normalizedBucket] = Double(outcomeCounts[bucket] ?? 0) / Double(presentedCount)
         }
         return rates
     }

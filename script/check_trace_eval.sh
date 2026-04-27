@@ -72,14 +72,23 @@ if not latencies:
 
 accept_by_mode = defaultdict(lambda: [0, 0])
 accept_by_app = defaultdict(lambda: [0, 0])
+useful_by_mode = defaultdict(lambda: [0, 0])
+useful_by_app = defaultdict(lambda: [0, 0])
 for event in presented_by_id.values():
     accept_by_mode[event.get("requestMode") or "unknown"][1] += 1
     accept_by_app[event.get("appBundleIdentifier") or "unknown"][1] += 1
+    useful_by_mode[event.get("requestMode") or "unknown"][1] += 1
+    useful_by_app[event.get("appBundleIdentifier") or "unknown"][1] += 1
 for suggestion_id in accepted_ids:
     event = presented_by_id.get(suggestion_id)
     if event:
         accept_by_mode[event.get("requestMode") or "unknown"][0] += 1
         accept_by_app[event.get("appBundleIdentifier") or "unknown"][0] += 1
+for suggestion_id in useful_suggestion_ids:
+    event = presented_by_id.get(suggestion_id)
+    if event:
+        useful_by_mode[event.get("requestMode") or "unknown"][0] += 1
+        useful_by_app[event.get("appBundleIdentifier") or "unknown"][0] += 1
 
 def normalized_suggestion(text):
     return " ".join((text or "").lower().split()).strip()
@@ -125,6 +134,14 @@ print("Accept rate by app:")
 for app, (accepted_count, shown_count) in sorted(accept_by_app.items()):
     rate = 0 if shown_count == 0 else round((accepted_count / shown_count) * 100)
     print(f"  {app}: {rate}% ({accepted_count}/{shown_count})")
+print("Useful rate by mode:")
+for mode, (useful_count, shown_count) in sorted(useful_by_mode.items()):
+    rate = 0 if shown_count == 0 else round((useful_count / shown_count) * 100)
+    print(f"  {mode}: {rate}% ({useful_count}/{shown_count})")
+print("Useful rate by app:")
+for app, (useful_count, shown_count) in sorted(useful_by_app.items()):
+    rate = 0 if shown_count == 0 else round((useful_count / shown_count) * 100)
+    print(f"  {app}: {rate}% ({useful_count}/{shown_count})")
 print("Top repeated unaccepted suggestions:")
 if repeated_unaccepted:
     for count, mode, displayed, suggestion_id in repeated_unaccepted[:5]:

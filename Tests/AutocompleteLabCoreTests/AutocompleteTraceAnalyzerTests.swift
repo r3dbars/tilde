@@ -29,6 +29,8 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.usefulRate == 2.0 / 3.0)
         #expect(summary.acceptRateByApp["com.apple.TextEdit"] == 1.0 / 3.0)
         #expect(summary.acceptRateByMode["wordCompletion"] == 1.0 / 3.0)
+        #expect(summary.usefulRateByApp["com.apple.TextEdit"] == 2.0 / 3.0)
+        #expect(summary.usefulRateByMode["wordCompletion"] == 2.0 / 3.0)
         #expect(summary.p50LatencyMilliseconds == 30)
         #expect(summary.topMisses.count == 2)
         #expect(summary.topMisses.contains { $0.fixCategory == "word-completion issue" })
@@ -53,6 +55,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.acceptedCount == 1)
         #expect(summary.acceptRate == 0.5)
         #expect(summary.acceptRateByApp["com.apple.TextEdit"] == 0.5)
+        #expect(summary.usefulRateByApp["com.apple.TextEdit"] == 0.5)
         #expect(summary.p50LatencyMilliseconds == 240)
         #expect(summary.p90LatencyMilliseconds == 240)
     }
