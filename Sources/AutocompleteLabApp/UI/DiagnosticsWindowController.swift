@@ -137,6 +137,7 @@ final class DiagnosticsWindowController {
         sections.append(acceptRateBucketsText(title: "Accept rate by mode", buckets: traceSummary.acceptRateByMode))
         sections.append(acceptRateBucketsText(title: "Useful rate by app", buckets: traceSummary.usefulRateByApp))
         sections.append(acceptRateBucketsText(title: "Useful rate by mode", buckets: traceSummary.usefulRateByMode))
+        sections.append(countBucketsText(title: "Suppressed by reason", buckets: traceSummary.suppressedByReason))
         sections.append(topMissesText(traceSummary.topMisses))
 
         if let profile {
@@ -192,6 +193,7 @@ final class DiagnosticsWindowController {
           typed through: \(summary.typedThroughCount)
           typed over: \(summary.typedOverCount)
           ignored: \(summary.ignoredCount)
+          suppressed: \(summary.suppressedCount)
           insertion failures: \(summary.insertionFailureCount)
           accept rate: \(Self.percent(summary.acceptRate))
           useful rate: \(Self.percent(summary.usefulRate))
@@ -223,6 +225,25 @@ final class DiagnosticsWindowController {
         \(title):
         \(buckets.sorted { $0.key < $1.key }.map { key, value in
             "  \(key): \(Self.percent(value))"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func countBucketsText(title: String, buckets: [String: Int]) -> String {
+        guard !buckets.isEmpty else {
+            return "\(title): none yet"
+        }
+
+        return """
+        \(title):
+        \(buckets.sorted { lhs, rhs in
+            if lhs.value == rhs.value {
+                return lhs.key < rhs.key
+            }
+
+            return lhs.value > rhs.value
+        }.map { key, value in
+            "  \(key): \(value)"
         }.joined(separator: "\n"))
         """
     }

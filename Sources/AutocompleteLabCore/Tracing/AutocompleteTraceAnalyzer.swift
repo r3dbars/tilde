@@ -35,6 +35,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let typedThroughCount: Int
     public let typedOverCount: Int
     public let ignoredCount: Int
+    public let suppressedCount: Int
     public let insertionFailureCount: Int
     public let acceptRate: Double
     public let usefulRate: Double
@@ -45,6 +46,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let acceptRateByMode: [String: Double]
     public let usefulRateByApp: [String: Double]
     public let usefulRateByMode: [String: Double]
+    public let suppressedByReason: [String: Int]
     public let topMisses: [AutocompleteTraceMiss]
 
     public init(
@@ -54,6 +56,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         typedThroughCount: Int,
         typedOverCount: Int,
         ignoredCount: Int,
+        suppressedCount: Int = 0,
         insertionFailureCount: Int,
         acceptRate: Double,
         usefulRate: Double,
@@ -64,6 +67,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         acceptRateByMode: [String: Double] = [:],
         usefulRateByApp: [String: Double] = [:],
         usefulRateByMode: [String: Double] = [:],
+        suppressedByReason: [String: Int] = [:],
         topMisses: [AutocompleteTraceMiss]
     ) {
         self.totalEvents = totalEvents
@@ -72,6 +76,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.typedThroughCount = typedThroughCount
         self.typedOverCount = typedOverCount
         self.ignoredCount = ignoredCount
+        self.suppressedCount = suppressedCount
         self.insertionFailureCount = insertionFailureCount
         self.acceptRate = acceptRate
         self.usefulRate = usefulRate
@@ -82,6 +87,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.acceptRateByMode = acceptRateByMode
         self.usefulRateByApp = usefulRateByApp
         self.usefulRateByMode = usefulRateByMode
+        self.suppressedByReason = suppressedByReason
         self.topMisses = topMisses
     }
 }
@@ -102,6 +108,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let usefulIDs = acceptedIDs.union(typedThroughIDs)
         let typedOver = events.filter { $0.type == .suggestionTypedOver }
         let hiddenIgnored = events.filter { $0.type == .suggestionHidden && $0.outcome == "ignored" }
+        let suppressed = events.filter { $0.type == .suggestionSuppressed }
         let insertionFailures = events.filter { $0.type == .insertionFailed }
         let firstShownLatencies = firstPresentedByID.values.compactMap(\.latencyMilliseconds).sorted()
 
@@ -112,6 +119,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             typedThroughCount: typedThroughIDs.count,
             typedOverCount: typedOver.count,
             ignoredCount: hiddenIgnored.count,
+            suppressedCount: suppressed.count,
             insertionFailureCount: insertionFailures.count,
             acceptRate: presentedIDs.isEmpty ? 0 : Double(acceptedIDs.count) / Double(presentedIDs.count),
             usefulRate: presentedIDs.isEmpty ? 0 : Double(usefulIDs.count) / Double(presentedIDs.count),
@@ -138,6 +146,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 outcomeIDs: usefulIDs,
                 key: \.requestMode
             ),
+            suppressedByReason: countsByReason(suppressed),
             topMisses: topMisses(from: events)
         )
     }
@@ -150,6 +159,13 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             eventsByID[event.suggestionID] = event
         }
         return eventsByID
+    }
+
+    private func countsByReason(_ events: [AutocompleteTraceEvent]) -> [String: Int] {
+        Dictionary(grouping: events) { event in
+            event.reason.isEmpty ? "unknown" : event.reason
+        }
+        .mapValues(\.count)
     }
 
     private func rates(

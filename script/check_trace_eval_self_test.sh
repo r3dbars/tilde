@@ -25,6 +25,8 @@ cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionHidden","suggestionID":"nine","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","outcome":"typed-through"}
 {"type":"suggestionHidden","suggestionID":"ten","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","outcome":"typed-through"}
 {"type":"suggestionHidden","suggestionID":"eleven","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","outcome":"typed-through"}
+{"type":"suggestionSuppressed","suggestionID":"twelve","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"is","reason":"repeated-miss"}
+{"type":"suggestionSuppressed","suggestionID":"thirteen","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"e","reason":"repeated-miss"}
 JSONL
 
 AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
@@ -45,6 +47,18 @@ fi
 
 if ! grep -F "Typed through: 3" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not report typed-through suggestions" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Suppressed: 2" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report suppressed suggestions" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "repeated-miss: 2" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report suppression reasons" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
   exit 1
 fi
@@ -127,7 +141,7 @@ if ! grep -F "Start line: 3" /tmp/autocomplete-trace-eval-self-test-slice.txt >/
   exit 1
 fi
 
-if [[ "$(AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh --quiet)" != "20" ]]; then
+if [[ "$(AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh --quiet)" != "22" ]]; then
   echo "trace mark self-test did not report the current trace line" >&2
   AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh >&2
   exit 1
@@ -138,7 +152,7 @@ AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
 AUTOCOMPLETE_LAB_TRACE_MARK_PATH="$MARK_FILE" \
   script/trace_mark.sh --save >/tmp/autocomplete-trace-mark-save.txt
 
-if ! grep -F "Saved trace mark: 20" /tmp/autocomplete-trace-mark-save.txt >/dev/null; then
+if ! grep -F "Saved trace mark: 22" /tmp/autocomplete-trace-mark-save.txt >/dev/null; then
   echo "trace mark self-test did not save the current trace line" >&2
   cat /tmp/autocomplete-trace-mark-save.txt >&2
   exit 1

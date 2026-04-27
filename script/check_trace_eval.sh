@@ -128,6 +128,7 @@ print(f"Accepted suggestions: {len(accepted_ids.intersection(presented_by_id.key
 print(f"Typed through: {len(typed_through_ids.intersection(presented_ids))}")
 print(f"Typed over: {types['suggestionTypedOver']}")
 print(f"Hidden ignored: {sum(1 for event in events if event.get('type') == 'suggestionHidden' and event.get('outcome') == 'ignored')}")
+print(f"Suppressed: {types['suggestionSuppressed']}")
 print(f"Insertion failures: {types['insertionFailed']}")
 accept_rate = 0 if not presented_ids else round((len(accepted_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
 useful_rate = 0 if not presented_ids else round((len(useful_suggestion_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
@@ -151,6 +152,17 @@ print("Useful rate by app:")
 for app, (useful_count, shown_count) in sorted(useful_by_app.items()):
     rate = 0 if shown_count == 0 else round((useful_count / shown_count) * 100)
     print(f"  {app}: {rate}% ({useful_count}/{shown_count})")
+print("Suppressed by reason:")
+suppressed_reasons = Counter(
+    event.get("reason") or "unknown"
+    for event in events
+    if event.get("type") == "suggestionSuppressed"
+)
+if suppressed_reasons:
+    for reason, count in suppressed_reasons.most_common():
+        print(f"  {reason}: {count}")
+else:
+    print("  none")
 print("Top repeated unaccepted suggestions:")
 if repeated_unaccepted:
     for count, mode, displayed, top_app, top_app_count, suggestion_id in repeated_unaccepted[:5]:

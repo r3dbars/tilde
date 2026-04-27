@@ -300,6 +300,16 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             .sorted { $0.key < $1.key }
             .map { "<li><code>\(escape($0.key))</code>: \(Int(($0.value * 100).rounded()))%</li>" }
             .joined(separator: "\n")
+        let suppressedReasons = summary.suppressedByReason
+            .sorted { lhs, rhs in
+                if lhs.value == rhs.value {
+                    return lhs.key < rhs.key
+                }
+
+                return lhs.value > rhs.value
+            }
+            .map { "<li><code>\(escape($0.key))</code>: \($0.value)</li>" }
+            .joined(separator: "\n")
 
         return """
         <!doctype html>
@@ -328,6 +338,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             <div class="metric"><b>\(summary.acceptedCount)</b>accepted</div>
             <div class="metric"><b>\(summary.typedThroughCount)</b>typed through</div>
             <div class="metric"><b>\(summary.typedOverCount)</b>typed over</div>
+            <div class="metric"><b>\(summary.suppressedCount)</b>suppressed</div>
             <div class="metric"><b>\(Int((summary.acceptRate * 100).rounded()))%</b>accept rate</div>
             <div class="metric"><b>\(Int((summary.usefulRate * 100).rounded()))%</b>useful rate</div>
           </div>
@@ -339,6 +350,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           <ul>\(usefulAppRates)</ul>
           <h2>Useful rate by mode</h2>
           <ul>\(usefulModeRates)</ul>
+          <h2>Suppressed by reason</h2>
+          <ul>\(suppressedReasons)</ul>
           <h2>Top 5 misses</h2>
           <ol>\(misses)</ol>
           <h2>Recent events</h2>
