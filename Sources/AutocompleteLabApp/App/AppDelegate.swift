@@ -87,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsWindow.show(
                 isTrusted: false,
                 runtimeReport: runtimeReadinessReport,
+                runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath
             )
         }
@@ -213,6 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
             runtimeReport: runtimeReadinessReport,
+            runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath
         )
     }
@@ -223,6 +225,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var modelDirectoryPath: String {
         modelRuntimeBundle.modelDirectoryURL.path
+    }
+
+    private var runtimeTargetSummary: String {
+        "\(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(completionLengthConfiguration.displaySummary)"
     }
 
     private func pollFocusedText() {
@@ -1674,6 +1680,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
             runtimeReport: runtimeReadinessReport,
+            runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath
         )
 
@@ -1753,6 +1760,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
             runtimeReport: runtimeReadinessReport,
+            runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath
         )
         DiagnosticsLog.shared.record("request-accessibility")
@@ -1773,6 +1781,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.show(
             isTrusted: accessibilityClient.isTrusted,
             runtimeReport: runtimeReadinessReport,
+            runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath
         )
     }

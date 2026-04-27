@@ -8,6 +8,7 @@ final class SettingsWindowController: NSObject {
     private let runtimeLabel = NSTextField(labelWithString: "")
     private let runtimeDetailLabel = NSTextField(labelWithString: "")
     private let runtimeActionLabel = NSTextField(labelWithString: "")
+    private let runtimeTargetLabel = NSTextField(labelWithString: "")
     private let modelDirectoryLabel = NSTextField(labelWithString: "")
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
     private let requestPermission: () -> Void
@@ -36,10 +37,16 @@ final class SettingsWindowController: NSObject {
         buildContent(in: contentView)
     }
 
-    func show(isTrusted: Bool, runtimeReport: RuntimeReadinessReport, modelDirectoryPath: String) {
+    func show(
+        isTrusted: Bool,
+        runtimeReport: RuntimeReadinessReport,
+        runtimeTargetSummary: String,
+        modelDirectoryPath: String
+    ) {
         refresh(
             isTrusted: isTrusted,
             runtimeReport: runtimeReport,
+            runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath
         )
         window.center()
@@ -47,12 +54,18 @@ final class SettingsWindowController: NSObject {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    func refresh(isTrusted: Bool, runtimeReport: RuntimeReadinessReport, modelDirectoryPath: String) {
+    func refresh(
+        isTrusted: Bool,
+        runtimeReport: RuntimeReadinessReport,
+        runtimeTargetSummary: String,
+        modelDirectoryPath: String
+    ) {
         permissionLabel.stringValue = isTrusted ? "Accessibility: granted" : "Accessibility: needed"
         runtimeLabel.stringValue = "Local model: \(runtimeReport.summary)"
         runtimeDetailLabel.stringValue = runtimeReport.detail.map { "Detail: \($0)" } ?? ""
         runtimeDetailLabel.isHidden = runtimeReport.detail == nil
         runtimeActionLabel.stringValue = "Next: \(runtimeReport.action.displayName)"
+        runtimeTargetLabel.stringValue = "Runtime target: \(runtimeTargetSummary)"
         modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
         firstRunLabel.stringValue = onboardingText(isTrusted: isTrusted, runtimeReport: runtimeReport)
     }
@@ -76,6 +89,10 @@ final class SettingsWindowController: NSObject {
         runtimeDetailLabel.preferredMaxLayoutWidth = 360
         runtimeActionLabel.font = NSFont.systemFont(ofSize: 12)
         runtimeActionLabel.textColor = .secondaryLabelColor
+        runtimeTargetLabel.textColor = .secondaryLabelColor
+        runtimeTargetLabel.lineBreakMode = .byWordWrapping
+        runtimeTargetLabel.maximumNumberOfLines = 0
+        runtimeTargetLabel.preferredMaxLayoutWidth = 360
         modelDirectoryLabel.lineBreakMode = .byTruncatingMiddle
         modelDirectoryLabel.maximumNumberOfLines = 1
         modelDirectoryLabel.preferredMaxLayoutWidth = 360
@@ -93,9 +110,6 @@ final class SettingsWindowController: NSObject {
             action: #selector(openAccessibilitySettingsPane)
         )
         openSettingsButton.bezelStyle = .rounded
-
-        let runtimeTarget = NSTextField(labelWithString: "Runtime target: app-owned Qwen3.5 4B MLX 4-bit")
-        runtimeTarget.textColor = .secondaryLabelColor
 
         let screenRecording = NSButton(checkboxWithTitle: "Screen Recording", target: nil, action: nil)
         screenRecording.isEnabled = false
@@ -115,7 +129,7 @@ final class SettingsWindowController: NSObject {
             runtimeLabel,
             runtimeDetailLabel,
             runtimeActionLabel,
-            runtimeTarget,
+            runtimeTargetLabel,
             modelDirectoryLabel,
             firstRunLabel,
             screenRecording,
