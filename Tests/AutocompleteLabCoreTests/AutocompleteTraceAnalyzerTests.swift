@@ -164,6 +164,31 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(!summary.topMisses.contains { $0.title == "Slow suggestion: wordCompletion" })
     }
 
+    @Test("flags repeated unaccepted suggestions")
+    func flagsRepeatedUnacceptedSuggestions() {
+        let events = [
+            event(.suggestionPresented, suggestionID: "one", requestMode: "phraseContinuation", displayedText: "I think so."),
+            event(.suggestionPresented, suggestionID: "two", requestMode: "phraseContinuation", displayedText: " I   think so. "),
+            event(.suggestionPresented, suggestionID: "three", requestMode: "phraseContinuation", displayedText: "i think so."),
+            event(.suggestionPresented, suggestionID: "four", requestMode: "phraseContinuation", displayedText: "that sounds good"),
+            event(.suggestionPresented, suggestionID: "five", requestMode: "phraseContinuation", displayedText: "that sounds good"),
+            event(.suggestionPresented, suggestionID: "six", requestMode: "phraseContinuation", displayedText: "that sounds good"),
+            event(.suggestionAccepted, suggestionID: "four", acceptedText: "that"),
+            event(.suggestionAccepted, suggestionID: "five", acceptedText: "that"),
+            event(.suggestionAccepted, suggestionID: "six", acceptedText: "that")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Repeated unaccepted: i think so."
+                && miss.count == 3
+                && miss.fixCategory == "prompt issue"
+                && miss.suggestedCause.contains("3 times")
+        })
+        #expect(!summary.topMisses.contains { $0.title == "Repeated unaccepted: that sounds good" })
+    }
+
     private func event(
         _ type: AutocompleteTraceEventType,
         suggestionID: String,

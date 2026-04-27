@@ -141,6 +141,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
     private func topMisses(from events: [AutocompleteTraceEvent]) -> [AutocompleteTraceMiss] {
         var buckets: [String: (count: Int, example: AutocompleteTraceEvent, cause: String, category: String)] = [:]
+        addRepeatedUnacceptedSuggestions(from: events, buckets: &buckets)
 
         for event in events {
             if event.type == .suggestionTypedOver {
@@ -273,6 +274,52 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             }
             .prefix(5)
             .map { $0 }
+    }
+
+    private func addRepeatedUnacceptedSuggestions(
+        from events: [AutocompleteTraceEvent],
+        buckets: inout [String: (count: Int, example: AutocompleteTraceEvent, cause: String, category: String)]
+    ) {
+        let presentedByID = firstEventsBySuggestionID(from: events.filter { $0.type == .suggestionPresented })
+        let acceptedIDs = Set(events
+            .filter { $0.type == .suggestionAccepted }
+            .map(\.suggestionID))
+        let repeated = Dictionary(grouping: presentedByID.values) { event in
+            "\(event.requestMode)|\(normalizedSuggestionText(event.displayedText))"
+        }
+
+        for (_, suggestions) in repeated {
+            let unacceptedSuggestions = suggestions.filter { !acceptedIDs.contains($0.suggestionID) }
+            guard unacceptedSuggestions.count >= 3,
+                  let example = unacceptedSuggestions.first,
+                  !normalizedSuggestionText(example.displayedText).isEmpty
+            else {
+                continue
+            }
+
+            let repeatedText = normalizedSuggestionText(example.displayedText)
+            let title = "Repeated unaccepted: \(repeatedText)"
+            add(
+                key: title,
+                event: example,
+                cause: "The same suggestion was shown \(unacceptedSuggestions.count) times without being accepted.",
+                category: example.requestMode == "wordCompletion" ? "word-completion issue" : "prompt issue",
+                buckets: &buckets
+            )
+
+            if var existing = buckets[title] {
+                existing.count = max(existing.count, unacceptedSuggestions.count)
+                buckets[title] = existing
+            }
+        }
+    }
+
+    private func normalizedSuggestionText(_ text: String) -> String {
+        text
+            .lowercased()
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func looksLikeAssistantStyleCompletion(_ text: String) -> Bool {
