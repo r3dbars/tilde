@@ -1825,6 +1825,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appEnabled: appEnabled,
             appTrusted: accessibilityClient.isTrusted,
             runtimeReport: runtimeReadinessReport,
+            runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
             recentEvents: DiagnosticsLog.shared.recentLines(limit: 24),
             traceSummary: RawAutocompleteTraceLog.shared.summary(),

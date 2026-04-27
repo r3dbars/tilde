@@ -84,6 +84,7 @@ final class DiagnosticsWindowController {
         appEnabled: Bool,
         appTrusted: Bool,
         runtimeReport: RuntimeReadinessReport,
+        runtimeTargetSummary: String,
         modelDirectoryPath: String,
         recentEvents: [String],
         traceSummary: AutocompleteTraceSummary,
@@ -115,6 +116,7 @@ final class DiagnosticsWindowController {
         sections.append(
             """
             Local model: \(runtimeReport.summary)
+              target: \(runtimeTargetSummary)
               stage: \(runtimeReport.stage.rawValue)
               action: \(runtimeReport.action.displayName)
               detail: \(runtimeReport.detail ?? "none")
