@@ -26,10 +26,12 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let totalEvents: Int
     public let presentedCount: Int
     public let acceptedCount: Int
+    public let typedThroughCount: Int
     public let typedOverCount: Int
     public let ignoredCount: Int
     public let insertionFailureCount: Int
     public let acceptRate: Double
+    public let usefulRate: Double
     public let p50LatencyMilliseconds: Int?
     public let p90LatencyMilliseconds: Int?
     public let p95LatencyMilliseconds: Int?
@@ -41,10 +43,12 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         totalEvents: Int,
         presentedCount: Int,
         acceptedCount: Int,
+        typedThroughCount: Int,
         typedOverCount: Int,
         ignoredCount: Int,
         insertionFailureCount: Int,
         acceptRate: Double,
+        usefulRate: Double,
         p50LatencyMilliseconds: Int?,
         p90LatencyMilliseconds: Int?,
         p95LatencyMilliseconds: Int?,
@@ -55,10 +59,12 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.totalEvents = totalEvents
         self.presentedCount = presentedCount
         self.acceptedCount = acceptedCount
+        self.typedThroughCount = typedThroughCount
         self.typedOverCount = typedOverCount
         self.ignoredCount = ignoredCount
         self.insertionFailureCount = insertionFailureCount
         self.acceptRate = acceptRate
+        self.usefulRate = usefulRate
         self.p50LatencyMilliseconds = p50LatencyMilliseconds
         self.p90LatencyMilliseconds = p90LatencyMilliseconds
         self.p95LatencyMilliseconds = p95LatencyMilliseconds
@@ -77,6 +83,11 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let accepted = events.filter { $0.type == .suggestionAccepted }
         let presentedIDs = Set(firstPresentedByID.keys)
         let acceptedIDs = Set(accepted.map(\.suggestionID)).intersection(presentedIDs)
+        let typedThroughIDs = Set(events
+            .filter { $0.type == .suggestionHidden && $0.outcome == "typed-through" }
+            .map(\.suggestionID))
+            .intersection(presentedIDs)
+        let usefulIDs = acceptedIDs.union(typedThroughIDs)
         let typedOver = events.filter { $0.type == .suggestionTypedOver }
         let hiddenIgnored = events.filter { $0.type == .suggestionHidden && $0.outcome == "ignored" }
         let insertionFailures = events.filter { $0.type == .insertionFailed }
@@ -86,10 +97,12 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             totalEvents: events.count,
             presentedCount: firstPresentedByID.count,
             acceptedCount: accepted.count,
+            typedThroughCount: typedThroughIDs.count,
             typedOverCount: typedOver.count,
             ignoredCount: hiddenIgnored.count,
             insertionFailureCount: insertionFailures.count,
             acceptRate: presentedIDs.isEmpty ? 0 : Double(acceptedIDs.count) / Double(presentedIDs.count),
+            usefulRate: presentedIDs.isEmpty ? 0 : Double(usefulIDs.count) / Double(presentedIDs.count),
             p50LatencyMilliseconds: percentile(0.50, in: firstShownLatencies),
             p90LatencyMilliseconds: percentile(0.90, in: firstShownLatencies),
             p95LatencyMilliseconds: percentile(0.95, in: firstShownLatencies),

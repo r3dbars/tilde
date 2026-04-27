@@ -51,6 +51,7 @@ typed_through_ids = {
     and event.get("suggestionID")
 }
 useful_suggestion_ids = accepted_ids.union(typed_through_ids)
+presented_ids = set(presented_by_id.keys())
 latencies = sorted(
     event["latencyMilliseconds"]
     for event in presented_by_id.values()
@@ -106,9 +107,14 @@ print(f"Events: {len(events)}")
 print(f"Presented: {len(presented_by_id)}")
 print(f"Accepted keypresses: {len(accepted)}")
 print(f"Accepted suggestions: {len(accepted_ids.intersection(presented_by_id.keys()))}")
+print(f"Typed through: {len(typed_through_ids.intersection(presented_ids))}")
 print(f"Typed over: {types['suggestionTypedOver']}")
 print(f"Hidden ignored: {sum(1 for event in events if event.get('type') == 'suggestionHidden' and event.get('outcome') == 'ignored')}")
 print(f"Insertion failures: {types['insertionFailed']}")
+accept_rate = 0 if not presented_ids else round((len(accepted_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
+useful_rate = 0 if not presented_ids else round((len(useful_suggestion_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
+print(f"Accept rate: {accept_rate}%")
+print(f"Useful rate: {useful_rate}%")
 print(f"p50 latency: {percentile(latencies, 0.50)}")
 print(f"p90 latency: {percentile(latencies, 0.90)}")
 print("Accept rate by mode:")

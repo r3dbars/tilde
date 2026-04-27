@@ -12,20 +12,24 @@ struct AutocompleteTraceAnalyzerTests {
             event(.suggestionAccepted, suggestionID: "one", acceptedText: " again"),
             event(.suggestionPresented, suggestionID: "two", displayedText: "best option available", latency: 80),
             event(.suggestionTypedOver, suggestionID: "two", displayedText: "best option available"),
-            event(.insertionFailed, suggestionID: "three", reason: "insert-verification-failed")
+            event(.suggestionPresented, suggestionID: "three", displayedText: "ng", latency: 30),
+            event(.suggestionHidden, suggestionID: "three", displayedText: "ng", outcome: "typed-through"),
+            event(.insertionFailed, suggestionID: "four", reason: "insert-verification-failed")
         ]
 
         let summary = AutocompleteTraceAnalyzer().summary(for: events)
 
-        #expect(summary.totalEvents == 6)
-        #expect(summary.presentedCount == 2)
+        #expect(summary.totalEvents == 8)
+        #expect(summary.presentedCount == 3)
         #expect(summary.acceptedCount == 2)
+        #expect(summary.typedThroughCount == 1)
         #expect(summary.typedOverCount == 1)
         #expect(summary.insertionFailureCount == 1)
-        #expect(summary.acceptRate == 0.5)
-        #expect(summary.acceptRateByApp["com.apple.TextEdit"] == 0.5)
-        #expect(summary.acceptRateByMode["wordCompletion"] == 0.5)
-        #expect(summary.p50LatencyMilliseconds == 80)
+        #expect(summary.acceptRate == 1.0 / 3.0)
+        #expect(summary.usefulRate == 2.0 / 3.0)
+        #expect(summary.acceptRateByApp["com.apple.TextEdit"] == 1.0 / 3.0)
+        #expect(summary.acceptRateByMode["wordCompletion"] == 1.0 / 3.0)
+        #expect(summary.p50LatencyMilliseconds == 30)
         #expect(summary.topMisses.count == 2)
         #expect(summary.topMisses.contains { $0.fixCategory == "word-completion issue" })
         #expect(summary.topMisses.contains { $0.fixCategory == "insertion bug" })

@@ -318,8 +318,10 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             <div class="metric"><b>\(summary.totalEvents)</b>events</div>
             <div class="metric"><b>\(summary.presentedCount)</b>shown</div>
             <div class="metric"><b>\(summary.acceptedCount)</b>accepted</div>
+            <div class="metric"><b>\(summary.typedThroughCount)</b>typed through</div>
             <div class="metric"><b>\(summary.typedOverCount)</b>typed over</div>
             <div class="metric"><b>\(Int((summary.acceptRate * 100).rounded()))%</b>accept rate</div>
+            <div class="metric"><b>\(Int((summary.usefulRate * 100).rounded()))%</b>useful rate</div>
           </div>
           <h2>Accept rate by app</h2>
           <ul>\(appRates)</ul>
