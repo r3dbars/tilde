@@ -114,6 +114,14 @@ Or use the helper, which prints the exact command to run after your dogfood pass
 ./script/trace_mark.sh
 ```
 
+For repeated dogfood sessions, save a mark and report from it later:
+
+```bash
+./script/trace_mark.sh --save
+# type for a while
+./script/trace_mark.sh --eval com.openai.codex
+```
+
 For Codex dogfooding, use:
 
 ```bash

@@ -133,4 +133,32 @@ if [[ "$(AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh --quiet)
   exit 1
 fi
 
+MARK_FILE="$(mktemp)"
+AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
+AUTOCOMPLETE_LAB_TRACE_MARK_PATH="$MARK_FILE" \
+  script/trace_mark.sh --save >/tmp/autocomplete-trace-mark-save.txt
+
+if ! grep -F "Saved trace mark: 20" /tmp/autocomplete-trace-mark-save.txt >/dev/null; then
+  echo "trace mark self-test did not save the current trace line" >&2
+  cat /tmp/autocomplete-trace-mark-save.txt >&2
+  exit 1
+fi
+
+printf "0\n" >"$MARK_FILE"
+AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
+AUTOCOMPLETE_LAB_TRACE_MARK_PATH="$MARK_FILE" \
+  script/trace_mark.sh --eval com.apple.TextEdit >/tmp/autocomplete-trace-mark-eval.txt
+
+if ! grep -F "Start line: 0" /tmp/autocomplete-trace-mark-eval.txt >/dev/null; then
+  echo "trace mark self-test did not evaluate from the saved mark" >&2
+  cat /tmp/autocomplete-trace-mark-eval.txt >&2
+  exit 1
+fi
+
+if ! grep -F "com.apple.TextEdit: 100% (1/1)" /tmp/autocomplete-trace-mark-eval.txt >/dev/null; then
+  echo "trace mark self-test did not pass the app gate through" >&2
+  cat /tmp/autocomplete-trace-mark-eval.txt >&2
+  exit 1
+fi
+
 echo "Trace eval self-test passed."
