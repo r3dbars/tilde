@@ -64,8 +64,8 @@ public struct CompletionModelPolicy: Equatable, Sendable {
         model: .qwen35FourB,
         runtimeOwnership: .appOwnedEmbedded,
         minimumMemoryGB: 16,
-        maxGeneratedTokens: 5,
-        maxVisibleWords: 3,
+        maxGeneratedTokens: 10,
+        maxVisibleWords: 6,
         debounceMilliseconds: 15,
         targetLatencyMilliseconds: 50,
         reasoningEnabled: false

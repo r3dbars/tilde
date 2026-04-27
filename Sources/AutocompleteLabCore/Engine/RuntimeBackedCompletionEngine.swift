@@ -10,4 +10,11 @@ public final class RuntimeBackedCompletionEngine: CompletionEngine, @unchecked S
     public func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
         try await runtime.complete(request)
     }
+
+    public func suggestion(
+        for request: CompletionRequest,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+    ) async throws -> CompletionSuggestion? {
+        try await runtime.complete(request, onPartialSuggestion: onPartialSuggestion)
+    }
 }

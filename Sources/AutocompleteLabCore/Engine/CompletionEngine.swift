@@ -32,4 +32,17 @@ public struct CompletionRequest: Equatable, Sendable {
 
 public protocol CompletionEngine: Sendable {
     func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion?
+    func suggestion(
+        for request: CompletionRequest,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+    ) async throws -> CompletionSuggestion?
+}
+
+public extension CompletionEngine {
+    func suggestion(
+        for request: CompletionRequest,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+    ) async throws -> CompletionSuggestion? {
+        try await suggestion(for: request)
+    }
 }

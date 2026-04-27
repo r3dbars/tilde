@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import AutocompleteLabCore
 
@@ -13,7 +14,7 @@ struct MockModelRuntimeTests {
 
         let suggestion = try await runtime.complete(CompletionRequest(textBeforeCursor: "I think"))
 
-        #expect(suggestion?.visibleText == " we should ship")
+        #expect(suggestion?.visibleText == " we should ship this")
     }
 
     @Test("Runtime backed engine delegates to the model runtime")
@@ -24,7 +25,24 @@ struct MockModelRuntimeTests {
         let suggestion = try await engine.suggestion(for: CompletionRequest(textBeforeCursor: "Can we"))
 
         #expect(await runtime.state == .ready(candidate: .mock))
-        #expect(suggestion?.visibleText == " make this feel")
+        #expect(suggestion?.visibleText == " make this feel instant")
+    }
+
+    @Test("Runtime backed engine streams partial suggestions")
+    func runtimeBackedEngineStreamsPartials() async throws {
+        let runtime = MockModelRuntime()
+        let engine = RuntimeBackedCompletionEngine(runtime: runtime)
+        let partials = PartialCollector()
+
+        let suggestion = try await engine.suggestion(
+            for: CompletionRequest(textBeforeCursor: "Can we"),
+            onPartialSuggestion: { partial in
+                partials.append(partial.visibleText)
+            }
+        )
+
+        #expect(suggestion?.visibleText == " make this feel instant")
+        #expect(partials.values == [" make this feel instant"])
     }
 
     @Test("Canceling a warm runtime leaves it unavailable")
@@ -41,5 +59,22 @@ struct MockModelRuntimeTests {
             try await warmTask.value
         }
         await #expect(runtime.state == .unavailable(reason: "Runtime was canceled."))
+    }
+}
+
+private final class PartialCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedValues: [String] = []
+
+    var values: [String] {
+        lock.withLock {
+            storedValues
+        }
+    }
+
+    func append(_ value: String) {
+        lock.withLock {
+            storedValues.append(value)
+        }
     }
 }

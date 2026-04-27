@@ -978,7 +978,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             do {
-                let suggestion = try await engine.suggestion(for: request)
+                let suggestion = try await engine.suggestion(
+                    for: request,
+                    onPartialSuggestion: { partialSuggestion in
+                        Task { @MainActor in
+                            let latencyMilliseconds = max(0, Int(Date().timeIntervalSince(requestStartedAt) * 1000))
+                            guard self.suggestionRequestGate.allows(
+                                requestTicket,
+                                currentRequest: self.currentCompletionRequest
+                            ), self.currentFieldIdentity == fieldIdentity else {
+                                return
+                            }
+
+                            guard !partialSuggestion.isEmpty,
+                                  !self.suggestionRepetitionSuppressor.shouldSuppress(
+                                      partialSuggestion.visibleText,
+                                      mode: request.mode
+                                  ) else {
+                                return
+                            }
+
+                            self.presentSuggestion(
+                                partialSuggestion,
+                                suggestionID: suggestionID,
+                                request: request,
+                                context: context,
+                                profile: profile,
+                                fieldIdentity: fieldIdentity,
+                                renderMode: renderMode,
+                                latencyMilliseconds: latencyMilliseconds,
+                                triggerReason: "model-stream",
+                                screenshotPath: ""
+                            )
+                        }
+                    }
+                )
                 await MainActor.run {
                     let latencyMilliseconds = max(0, Int(Date().timeIntervalSince(requestStartedAt) * 1000))
                     guard self.suggestionRequestGate.allows(

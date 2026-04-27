@@ -111,4 +111,17 @@ public protocol ModelRuntime: Sendable {
     func warm() async throws
     func cancel()
     func complete(_ request: CompletionRequest) async throws -> CompletionSuggestion?
+    func complete(
+        _ request: CompletionRequest,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+    ) async throws -> CompletionSuggestion?
+}
+
+public extension ModelRuntime {
+    func complete(
+        _ request: CompletionRequest,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+    ) async throws -> CompletionSuggestion? {
+        try await complete(request)
+    }
 }

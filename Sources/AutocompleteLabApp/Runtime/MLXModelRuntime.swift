@@ -87,6 +87,13 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 
     public func complete(_ request: CompletionRequest) async throws -> CompletionSuggestion? {
+        try await complete(request, onPartialSuggestion: { _ in })
+    }
+
+    public func complete(
+        _ request: CompletionRequest,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+    ) async throws -> CompletionSuggestion? {
         let container = try await readyContainer()
         try Task.checkCancellation()
 
@@ -106,6 +113,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let sessionBuiltAt = Date()
         var rawOutput = ""
         var firstChunkMilliseconds: Int?
+        var lastPartialVisibleText = ""
         let stream = session.streamResponse(to: prompt.user)
         for try await chunk in stream {
             if firstChunkMilliseconds == nil {
@@ -113,6 +121,13 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             }
 
             rawOutput += chunk
+
+            if let partialSuggestion = cleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode),
+               !partialSuggestion.isEmpty,
+               partialSuggestion.visibleText != lastPartialVisibleText {
+                lastPartialVisibleText = partialSuggestion.visibleText
+                onPartialSuggestion(partialSuggestion)
+            }
 
             if shouldStopEarly(rawOutput, request: request) {
                 break
@@ -173,7 +188,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         case .wordCompletion:
             return 3
         case .phraseContinuation:
-            return min(3, CompletionModelPolicy.mvp.maxGeneratedTokens)
+            return min(10, CompletionModelPolicy.mvp.maxGeneratedTokens)
         }
     }
 

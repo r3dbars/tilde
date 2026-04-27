@@ -72,6 +72,13 @@ public final class MockModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 
     public func complete(_ request: CompletionRequest) async throws -> CompletionSuggestion? {
+        try await complete(request, onPartialSuggestion: { _ in })
+    }
+
+    public func complete(
+        _ request: CompletionRequest,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+    ) async throws -> CompletionSuggestion? {
         let currentState = await state
         if case .ready = currentState {
             try Task.checkCancellation()
@@ -79,6 +86,10 @@ public final class MockModelRuntime: ModelRuntime, @unchecked Sendable {
             try await warm()
         }
 
-        return try await engine.suggestion(for: request)
+        let suggestion = try await engine.suggestion(for: request)
+        if let suggestion {
+            onPartialSuggestion(suggestion)
+        }
+        return suggestion
     }
 }
