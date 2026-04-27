@@ -10,12 +10,110 @@ struct RunningApplicationInfo: Equatable {
 }
 
 struct FocusedTextContext: Equatable {
+    let elementIdentifier: Int
+    let role: String?
+    let subrole: String?
     let textBeforeCursor: String
     let textAfterCursor: String
     let caretRect: CGRect?
+    let elementRect: CGRect?
+    let windowRect: CGRect?
     let textLineRect: CGRect?
     let textStyle: FocusedTextStyle?
     let isSecure: Bool
+    let capabilities: FocusedTextCapabilities
+}
+
+struct FocusedTextCapabilities: Equatable {
+    let canReadValue: Bool
+    let canReadSelectedTextRange: Bool
+    let canReadBoundsForRange: Bool
+    let canReadAttributedText: Bool
+    let canSetSelectedText: Bool
+
+    var supportsInlineSuggestions: Bool {
+        canReadValue && canReadSelectedTextRange && canReadBoundsForRange
+    }
+
+    var supportsAXInsertion: Bool {
+        canSetSelectedText
+    }
+}
+
+struct FocusedTextDiagnostics: Equatable {
+    let bundleIdentifier: String?
+    let localizedAppName: String?
+    let role: String?
+    let subrole: String?
+    let isSecure: Bool
+    let textBeforeCursorLength: Int
+    let textAfterCursorLength: Int
+    let selectedRangeDescription: String
+    let caretRect: CGRect?
+    let elementRect: CGRect?
+    let windowRect: CGRect?
+    let textLineRect: CGRect?
+    let capabilities: FocusedTextCapabilities
+    let attributeDump: FocusedElementAttributeDump
+
+    var summary: String {
+        """
+        App: \(localizedAppName ?? "Unknown") (\(bundleIdentifier ?? "unknown bundle"))
+        Role: \(role ?? "unknown")
+        Subrole: \(subrole ?? "none")
+        Secure: \(isSecure)
+        Selected range: \(selectedRangeDescription)
+        Text before cursor: \(textBeforeCursorLength) chars
+        Text after cursor: \(textAfterCursorLength) chars
+        Caret rect: \(caretRect.map(String.init(describing:)) ?? "missing")
+        Element rect: \(elementRect.map(String.init(describing:)) ?? "missing")
+        Window rect: \(windowRect.map(String.init(describing:)) ?? "missing")
+        Text line rect: \(textLineRect.map(String.init(describing:)) ?? "missing")
+        Capabilities:
+          value: \(capabilities.canReadValue)
+          selected range: \(capabilities.canReadSelectedTextRange)
+          bounds for range: \(capabilities.canReadBoundsForRange)
+          attributed text: \(capabilities.canReadAttributedText)
+          selected text insertion: \(capabilities.canSetSelectedText)
+
+        Attributes:
+        \(attributeDump.attributeSummary)
+
+        Parameterized attributes:
+        \(attributeDump.parameterizedAttributeSummary)
+        """
+    }
+}
+
+struct FocusedElementAttributeDump: Equatable {
+    let attributes: [FocusedElementAttributeSummary]
+    let parameterizedAttributes: [String]
+
+    var attributeSummary: String {
+        guard !attributes.isEmpty else {
+            return "  unavailable"
+        }
+
+        return attributes
+            .map { "  \($0.name): \($0.valueSummary) | settable=\($0.isSettable)" }
+            .joined(separator: "\n")
+    }
+
+    var parameterizedAttributeSummary: String {
+        guard !parameterizedAttributes.isEmpty else {
+            return "  none"
+        }
+
+        return parameterizedAttributes
+            .map { "  \($0)" }
+            .joined(separator: "\n")
+    }
+}
+
+struct FocusedElementAttributeSummary: Equatable {
+    let name: String
+    let valueSummary: String
+    let isSettable: Bool
 }
 
 struct FocusedTextStyle: Equatable {
@@ -58,7 +156,7 @@ final class AccessibilityClient {
         )
     }
 
-    func focusedTextContext() -> FocusedTextContext? {
+    func focusedTextContext(allowDescendantTextFallback: Bool = false) -> FocusedTextContext? {
         guard let app = NSWorkspace.shared.frontmostApplication else {
             return nil
         }
@@ -67,9 +165,18 @@ final class AccessibilityClient {
             return nil
         }
 
-        let isSecure = isSecureTextElement(focusedElement)
+        configureMessagingTimeout(for: focusedElement)
 
-        guard let text = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String else {
+        let isSecure = isSecureTextElement(focusedElement)
+        let role = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
+        let subrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
+
+        guard let text = editableText(
+            in: focusedElement,
+            role: role,
+            processIdentifier: app.processIdentifier,
+            allowDescendantTextFallback: allowDescendantTextFallback
+        ) else {
             return nil
         }
 
@@ -78,21 +185,44 @@ final class AccessibilityClient {
             text,
             utf16Offset: selectedRange?.location ?? text.utf16.count
         )
-        let caretRect = selectedRange.flatMap { caretBounds(for: focusedElement, range: $0) }
+        let caretRect = selectedRange.flatMap {
+            AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
+        }
+        let elementRect = elementBounds(for: focusedElement)
+        let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
         let textLineRect = selectedRange.flatMap {
-            textLineBounds(for: focusedElement, textLength: text.utf16.count, textBeforeCursor: textSlice.textBeforeCursor, range: $0)
+            AccessibilityTextBoundsPolicy.usableTextBounds(
+                textLineBounds(
+                    for: focusedElement,
+                    textLength: text.utf16.count,
+                    textBeforeCursor: textSlice.textBeforeCursor,
+                    range: $0
+                )
+            )
         }
         let textStyle = selectedRange.flatMap {
             focusedTextStyle(in: focusedElement, textLength: text.utf16.count, range: $0)
         }
+        let capabilities = textCapabilities(
+            for: focusedElement,
+            selectedRange: selectedRange,
+            caretRect: caretRect,
+            textStyle: textStyle
+        )
 
         return FocusedTextContext(
+            elementIdentifier: Int(CFHash(focusedElement)),
+            role: role,
+            subrole: subrole,
             textBeforeCursor: textSlice.textBeforeCursor,
             textAfterCursor: textSlice.textAfterCursor,
             caretRect: caretRect,
+            elementRect: elementRect,
+            windowRect: windowRect,
             textLineRect: textLineRect,
             textStyle: textStyle,
-            isSecure: isSecure
+            isSecure: isSecure,
+            capabilities: capabilities
         )
     }
 
@@ -102,17 +232,128 @@ final class AccessibilityClient {
             return false
         }
 
+        let textBeforeInsert = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String
         let result = AXUIElementSetAttributeValue(
             focusedElement,
             kAXSelectedTextAttribute as CFString,
             text as CFTypeRef
         )
 
-        return result == .success
+        guard result == .success else {
+            return false
+        }
+
+        guard let textBeforeInsert else {
+            return true
+        }
+
+        let textAfterInsert = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String
+        return textAfterInsert != textBeforeInsert
+    }
+
+    func replaceSelectedTextBySettingValue(_ text: String) -> Bool {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              let focusedElement = focusedElement(for: app.processIdentifier),
+              let textBeforeInsert = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String,
+              let selectedRange = selectedTextRange(in: focusedElement),
+              let replacement = SelectedTextRangeReplacer.replacingSelectedRange(
+                  in: textBeforeInsert,
+                  utf16Location: selectedRange.location,
+                  utf16Length: selectedRange.length,
+                  with: text
+              ) else {
+            return false
+        }
+
+        let result = AXUIElementSetAttributeValue(
+            focusedElement,
+            kAXValueAttribute as CFString,
+            replacement.text as CFTypeRef
+        )
+
+        guard result == .success else {
+            return false
+        }
+
+        var cursorRange = CFRange(location: replacement.cursorUTF16Offset, length: 0)
+        if let rangeValue = AXValueCreate(.cfRange, &cursorRange) {
+            AXUIElementSetAttributeValue(
+                focusedElement,
+                kAXSelectedTextRangeAttribute as CFString,
+                rangeValue
+            )
+        }
+
+        return replacement.text != textBeforeInsert
+    }
+
+    func focusedTextDiagnostics(allowDescendantTextFallback: Bool = false) -> FocusedTextDiagnostics? {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              let focusedElement = focusedElement(for: app.processIdentifier) else {
+            return nil
+        }
+
+        configureMessagingTimeout(for: focusedElement)
+
+        let role = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
+        let subrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
+        let text = editableText(
+            in: focusedElement,
+            role: role,
+            processIdentifier: app.processIdentifier,
+            allowDescendantTextFallback: allowDescendantTextFallback
+        )
+        let selectedRange = selectedTextRange(in: focusedElement)
+        let textSlice = text.map {
+            CursorTextSplitter.split($0, utf16Offset: selectedRange?.location ?? $0.utf16.count)
+        }
+        let caretRect = selectedRange.flatMap {
+            AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
+        }
+        let elementRect = elementBounds(for: focusedElement)
+        let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
+        let textLineRect = selectedRange.flatMap {
+            AccessibilityTextBoundsPolicy.usableTextBounds(
+                textLineBounds(
+                    for: focusedElement,
+                    textLength: text?.utf16.count ?? 0,
+                    textBeforeCursor: textSlice?.textBeforeCursor ?? "",
+                    range: $0
+                )
+            )
+        }
+        let textStyle = selectedRange.flatMap {
+            focusedTextStyle(in: focusedElement, textLength: text?.utf16.count ?? 0, range: $0)
+        }
+        let capabilities = textCapabilities(
+            for: focusedElement,
+            selectedRange: selectedRange,
+            caretRect: caretRect,
+            textStyle: textStyle
+        )
+        let attributeDump = focusedElementAttributeDump(for: focusedElement)
+
+        return FocusedTextDiagnostics(
+            bundleIdentifier: app.bundleIdentifier,
+            localizedAppName: app.localizedName,
+            role: role,
+            subrole: subrole,
+            isSecure: isSecureTextElement(focusedElement),
+            textBeforeCursorLength: textSlice?.textBeforeCursor.count ?? 0,
+            textAfterCursorLength: textSlice?.textAfterCursor.count ?? 0,
+            selectedRangeDescription: selectedRange.map { "location=\($0.location), length=\($0.length)" } ?? "missing",
+            caretRect: caretRect,
+            elementRect: elementRect,
+            windowRect: windowRect,
+            textLineRect: textLineRect,
+            capabilities: capabilities,
+            attributeDump: attributeDump
+        )
     }
 
     private func focusedElement(for processIdentifier: pid_t) -> AXUIElement? {
         let appElement = AXUIElementCreateApplication(processIdentifier)
+        configureMessagingTimeout(for: appElement)
         guard let focusedElementValue = copyAttribute(appElement, attribute: kAXFocusedUIElementAttribute) else {
             return nil
         }
@@ -128,6 +369,192 @@ final class AccessibilityClient {
         }
 
         return value
+    }
+
+    private func focusedElementAttributeDump(for element: AXUIElement) -> FocusedElementAttributeDump {
+        let attributes = attributeNames(for: element).map { attribute in
+            FocusedElementAttributeSummary(
+                name: attribute,
+                valueSummary: diagnosticValueSummary(copyAttribute(element, attribute: attribute)),
+                isSettable: canSetAttribute(element, attribute: attribute)
+            )
+        }
+
+        return FocusedElementAttributeDump(
+            attributes: attributes,
+            parameterizedAttributes: parameterizedAttributeNames(for: element)
+        )
+    }
+
+    private func attributeNames(for element: AXUIElement) -> [String] {
+        var names: CFArray?
+        let result = AXUIElementCopyAttributeNames(element, &names)
+
+        guard result == .success,
+              let names = names as? [String] else {
+            return []
+        }
+
+        return names.sorted()
+    }
+
+    private func parameterizedAttributeNames(for element: AXUIElement) -> [String] {
+        var names: CFArray?
+        let result = AXUIElementCopyParameterizedAttributeNames(element, &names)
+
+        guard result == .success,
+              let names = names as? [String] else {
+            return []
+        }
+
+        return names.sorted()
+    }
+
+    private func diagnosticValueSummary(_ value: CFTypeRef?) -> String {
+        guard let value else {
+            return "unavailable"
+        }
+
+        if let string = value as? String {
+            return DiagnosticValueRedactor.stringSummary(length: string.count)
+        }
+
+        if let attributedString = value as? NSAttributedString {
+            return DiagnosticValueRedactor.attributedStringSummary(length: attributedString.length)
+        }
+
+        if let array = value as? [Any] {
+            return DiagnosticValueRedactor.arraySummary(count: array.count)
+        }
+
+        if let bool = value as? Bool {
+            return String(bool)
+        }
+
+        if let number = value as? NSNumber {
+            return number.stringValue
+        }
+
+        let cfTypeID = CFGetTypeID(value)
+
+        if cfTypeID == AXUIElementGetTypeID() {
+            return "AXUIElement"
+        }
+
+        if cfTypeID == AXValueGetTypeID(),
+           let summary = axValueSummary(value as! AXValue) {
+            return summary
+        }
+
+        return DiagnosticValueRedactor.unknownSummary(typeName: String(describing: type(of: value)))
+    }
+
+    private func axValueSummary(_ value: AXValue) -> String? {
+        switch AXValueGetType(value) {
+        case .cfRange:
+            var range = CFRange()
+            guard AXValueGetValue(value, .cfRange, &range) else {
+                return nil
+            }
+
+            return "Range(location=\(range.location), length=\(range.length))"
+
+        case .cgPoint:
+            var point = CGPoint.zero
+            guard AXValueGetValue(value, .cgPoint, &point) else {
+                return nil
+            }
+
+            return "Point(x=\(Int(point.x)), y=\(Int(point.y)))"
+
+        case .cgSize:
+            var size = CGSize.zero
+            guard AXValueGetValue(value, .cgSize, &size) else {
+                return nil
+            }
+
+            return "Size(width=\(Int(size.width)), height=\(Int(size.height)))"
+
+        case .cgRect:
+            var rect = CGRect.zero
+            guard AXValueGetValue(value, .cgRect, &rect) else {
+                return nil
+            }
+
+            return "Rect(x=\(Int(rect.origin.x)), y=\(Int(rect.origin.y)), width=\(Int(rect.width)), height=\(Int(rect.height)))"
+
+        default:
+            return "AXValue(\(AXValueGetType(value).rawValue))"
+        }
+    }
+
+    private func editableText(
+        in element: AXUIElement,
+        role: String?,
+        processIdentifier: pid_t,
+        allowDescendantTextFallback: Bool
+    ) -> String? {
+        let directText = copyAttribute(element, attribute: kAXValueAttribute) as? String
+        guard allowDescendantTextFallback,
+              role == "AXWebArea",
+              directText?.isEmpty != false,
+              containingWindowTitle(for: element, processIdentifier: processIdentifier) == "New Message" else {
+            return directText
+        }
+
+        let descendantText = descendantText(in: element)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !descendantText.isEmpty else {
+            return directText
+        }
+
+        return descendantText
+    }
+
+    private func containingWindowTitle(for element: AXUIElement, processIdentifier: pid_t) -> String? {
+        if let windowValue = copyAttribute(element, attribute: kAXWindowAttribute),
+           let title = copyAttribute((windowValue as! AXUIElement), attribute: kAXTitleAttribute) as? String {
+            return title
+        }
+
+        let appElement = AXUIElementCreateApplication(processIdentifier)
+        configureMessagingTimeout(for: appElement)
+
+        guard let windowValue = copyAttribute(appElement, attribute: kAXFocusedWindowAttribute) else {
+            return nil
+        }
+
+        return copyAttribute((windowValue as! AXUIElement), attribute: kAXTitleAttribute) as? String
+    }
+
+    private func descendantText(in element: AXUIElement, depth: Int = 0) -> String {
+        guard depth < 6 else {
+            return ""
+        }
+
+        let children = copyAttribute(element, attribute: kAXChildrenAttribute) as? [AXUIElement] ?? []
+        var parts: [String] = []
+
+        for child in children {
+            configureMessagingTimeout(for: child)
+
+            if let value = copyAttribute(child, attribute: kAXValueAttribute) as? String,
+               !value.isEmpty {
+                parts.append(value)
+            }
+
+            let nestedText = descendantText(in: child, depth: depth + 1)
+            if !nestedText.isEmpty {
+                parts.append(nestedText)
+            }
+        }
+
+        return parts.joined(separator: "\n")
+    }
+
+    private func configureMessagingTimeout(for element: AXUIElement) {
+        AXUIElementSetMessagingTimeout(element, 0.12)
     }
 
     private func selectedTextRange(in element: AXUIElement) -> CFRange? {
@@ -194,6 +621,38 @@ final class AccessibilityClient {
         return rect
     }
 
+    private func elementBounds(for element: AXUIElement) -> CGRect? {
+        guard let positionValue = copyAttribute(element, attribute: kAXPositionAttribute),
+              let sizeValue = copyAttribute(element, attribute: kAXSizeAttribute) else {
+            return nil
+        }
+
+        var position = CGPoint.zero
+        var size = CGSize.zero
+
+        guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+              AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else {
+            return nil
+        }
+
+        return CGRect(origin: position, size: size)
+    }
+
+    private func containingWindowBounds(for element: AXUIElement, processIdentifier: pid_t) -> CGRect? {
+        if let windowValue = copyAttribute(element, attribute: kAXWindowAttribute) {
+            return elementBounds(for: (windowValue as! AXUIElement))
+        }
+
+        let appElement = AXUIElementCreateApplication(processIdentifier)
+        configureMessagingTimeout(for: appElement)
+
+        guard let windowValue = copyAttribute(appElement, attribute: kAXFocusedWindowAttribute) else {
+            return nil
+        }
+
+        return elementBounds(for: (windowValue as! AXUIElement))
+    }
+
     private func focusedTextStyle(in element: AXUIElement, textLength: Int, range: CFRange) -> FocusedTextStyle? {
         let location: Int
         let length: Int
@@ -234,6 +693,27 @@ final class AccessibilityClient {
             fontName: font.fontName,
             fontSize: font.pointSize,
             foregroundColor: accessibilityForegroundColor(from: attributes)
+        )
+    }
+
+    private func canSetAttribute(_ element: AXUIElement, attribute: String) -> Bool {
+        var settable = DarwinBoolean(false)
+        let result = AXUIElementIsAttributeSettable(element, attribute as CFString, &settable)
+        return result == .success && settable.boolValue
+    }
+
+    private func textCapabilities(
+        for element: AXUIElement,
+        selectedRange: CFRange?,
+        caretRect: CGRect?,
+        textStyle: FocusedTextStyle?
+    ) -> FocusedTextCapabilities {
+        FocusedTextCapabilities(
+            canReadValue: copyAttribute(element, attribute: kAXValueAttribute) is String,
+            canReadSelectedTextRange: selectedRange != nil,
+            canReadBoundsForRange: caretRect != nil,
+            canReadAttributedText: textStyle != nil,
+            canSetSelectedText: canSetAttribute(element, attribute: kAXSelectedTextAttribute)
         )
     }
 
