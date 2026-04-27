@@ -67,8 +67,10 @@ struct ModelPolicyTests {
 
         #expect(short.maxVisibleWords == 3)
         #expect(short.maxGeneratedTokens == 9)
+        #expect(short.displaySummary == "3 words / 9 tokens")
         #expect(long.maxVisibleWords == 10)
         #expect(long.maxGeneratedTokens == 32)
+        #expect(long.displaySummary == "10 words / 32 tokens")
     }
 
     @Test("M5 with 128 GB is supported")

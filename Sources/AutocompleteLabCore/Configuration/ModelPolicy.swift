@@ -110,6 +110,10 @@ public struct CompletionLengthConfiguration: Equatable, Sendable {
         maxGeneratedTokens: CompletionModelPolicy.mvp.maxGeneratedTokens
     )
 
+    public var displaySummary: String {
+        "\(maxVisibleWords) words / \(maxGeneratedTokens) tokens"
+    }
+
     public static func fromEnvironment(_ environment: [String: String]) -> CompletionLengthConfiguration {
         CompletionLengthConfiguration(
             maxVisibleWords: parsedInt(environment["AUTOCOMPLETE_LAB_VISIBLE_WORDS"])

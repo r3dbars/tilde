@@ -201,6 +201,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "runtime",
             metadata: [
                 "state": state.statusSummary,
+                "completionLength": completionLengthConfiguration.displaySummary,
                 "readinessStage": report.stage.rawValue,
                 "readinessAction": report.action.rawValue
             ]
@@ -208,7 +209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshRuntimeChrome() {
-        runtimeMenuItem?.title = "Model: \(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(runtimeReadinessReport.summary)"
+        runtimeMenuItem?.title = "Model: \(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(runtimeReadinessReport.summary) • \(completionLengthConfiguration.displaySummary)"
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
             runtimeReport: runtimeReadinessReport,
