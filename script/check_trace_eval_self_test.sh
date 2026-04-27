@@ -144,6 +144,16 @@ if ! grep -F "Saved trace mark: 20" /tmp/autocomplete-trace-mark-save.txt >/dev/
   exit 1
 fi
 
+AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
+AUTOCOMPLETE_LAB_TRACE_MARK_PATH="$MARK_FILE" \
+  script/trace_mark.sh --eval >/tmp/autocomplete-trace-mark-empty.txt
+
+if ! grep -F "No new trace events since the saved mark." /tmp/autocomplete-trace-mark-empty.txt >/dev/null; then
+  echo "trace mark self-test did not explain an empty dogfood slice" >&2
+  cat /tmp/autocomplete-trace-mark-empty.txt >&2
+  exit 1
+fi
+
 printf "0\n" >"$MARK_FILE"
 AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
 AUTOCOMPLETE_LAB_TRACE_MARK_PATH="$MARK_FILE" \

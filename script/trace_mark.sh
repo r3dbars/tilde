@@ -37,6 +37,15 @@ case "$MODE" in
       exit 1
     fi
 
+    if (( START_LINE <= SAVED_LINE )); then
+      echo "Trace: $TRACE_PATH"
+      echo "Saved mark: $SAVED_LINE"
+      echo "Current line: $START_LINE"
+      echo "No new trace events since the saved mark."
+      echo "Type for a bit, accept/dismiss a few suggestions, then run this again."
+      exit 0
+    fi
+
     if [[ -n "$APP_BUNDLE_ID" ]]; then
       AUTOCOMPLETE_LAB_TRACE_START_LINE="$SAVED_LINE" \
       AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP="$APP_BUNDLE_ID" \
