@@ -23,20 +23,20 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
             recentWords: recentWords
         )
 
-        guard let word = candidates.first,
-              word.count > normalizedFragment.count else {
+        guard let candidate = candidates.first,
+              candidate.word.count > normalizedFragment.count else {
             return nil
         }
 
-        let suffix = String(word.dropFirst(normalizedFragment.count))
-        guard !suffix.isEmpty else {
+        let suffix = String(candidate.word.dropFirst(normalizedFragment.count))
+        guard isUsefulSuffix(suffix, fragment: normalizedFragment, source: candidate.source) else {
             return nil
         }
 
         return CompletionSuggestion(text: suffix, maxVisibleWords: 1)
     }
 
-    private func rankedCandidates(fragment: String, recentWords: [String]) -> [String] {
+    private func rankedCandidates(fragment: String, recentWords: [String]) -> [Candidate] {
         let recent = recentWords
             .reversed()
             .map { normalize($0) }
@@ -47,8 +47,8 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
             .filter { $0.hasPrefix(fragment) && $0.count > fragment.count }
 
         var seen: Set<String> = []
-        return (recent.enumerated().map { (index, word) in (word: word, priority: 0, index: index) }
-            + staticMatches.enumerated().map { (index, word) in (word: word, priority: 1, index: index) })
+        return (recent.enumerated().map { (index, word) in Candidate(word: word, source: .recent, priority: 0, index: index) }
+            + staticMatches.enumerated().map { (index, word) in Candidate(word: word, source: .staticDictionary, priority: 1, index: index) })
             .filter { candidate in
                 guard !seen.contains(candidate.word) else {
                     return false
@@ -63,7 +63,26 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
 
                 return lhs.index < rhs.index
             }
-            .map(\.word)
+    }
+
+    private func isUsefulSuffix(_ suffix: String, fragment: String, source: CandidateSource) -> Bool {
+        guard !suffix.isEmpty else {
+            return false
+        }
+
+        if source == .recent {
+            return suffix.count >= 1
+        }
+
+        if suffix.count == 1 {
+            return fragment.count >= 5
+        }
+
+        if suffix == "ing" {
+            return fragment.count >= 5
+        }
+
+        return true
     }
 
     private func trailingFragment(in text: String) -> String? {
@@ -99,4 +118,16 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         "verification", "what", "when", "where", "which", "while", "window",
         "without", "working", "would", "writing"
     ]
+
+    private struct Candidate: Equatable {
+        let word: String
+        let source: CandidateSource
+        let priority: Int
+        let index: Int
+    }
+
+    private enum CandidateSource: Equatable {
+        case recent
+        case staticDictionary
+    }
 }

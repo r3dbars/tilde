@@ -13,9 +13,9 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
 
     public init(
         charactersBeforePauseRequest: Int = 4,
-        wordCompletionDelayMilliseconds: Int = 20,
-        wordBoundaryDelayMilliseconds: Int = 120,
-        pauseDelayMilliseconds: Int = 180
+        wordCompletionDelayMilliseconds: Int = 0,
+        wordBoundaryDelayMilliseconds: Int = 35,
+        pauseDelayMilliseconds: Int = 70
     ) {
         self.charactersBeforePauseRequest = max(1, charactersBeforePauseRequest)
         self.wordCompletionDelayMilliseconds = max(0, wordCompletionDelayMilliseconds)

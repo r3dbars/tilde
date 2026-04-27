@@ -54,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var runtimeWarmTask: Task<Void, Never>?
     private var suggestionRequestGate = SuggestionRequestGate()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
+    private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
     private var currentCompletionRequest: CompletionRequest?
     private var currentSuggestionID: String?
     private var currentSuggestionRequestMode: CompletionRequestMode?
@@ -655,6 +656,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             suggestionSession.commitNextWordAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
+            suggestionRepetitionSuppressor.recordAcceptance(acceptedText, mode: currentSuggestionRequestMode)
             recordRawAcceptance(action: action, acceptedText: acceptedText)
             if suggestionSession.hasVisibleSuggestion {
                 refreshVisibleSuggestion()
@@ -681,6 +683,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             suggestionSession.commitAllVisibleAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
+            suggestionRepetitionSuppressor.recordAcceptance(acceptedText, mode: currentSuggestionRequestMode)
             recordRawAcceptance(action: action, acceptedText: acceptedText)
             hideSuggestion(reason: "accepted-all")
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
@@ -957,7 +960,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         debounceTask = Task { [engine, requestTicket, fieldIdentity] in
-            let renderDelay = renderMode == .inlineAdjacent ? delayMilliseconds : max(delayMilliseconds, 120)
+            let renderDelay = renderMode == .inlineAdjacent ? delayMilliseconds : max(delayMilliseconds, 60)
             try? await Task.sleep(for: .milliseconds(renderDelay))
             guard !Task.isCancelled else {
                 return
@@ -1045,6 +1048,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         displayedText: suggestion.visibleText,
                         latencyMilliseconds: latencyMilliseconds
                     )
+                    guard !self.suggestionRepetitionSuppressor.shouldSuppress(
+                        suggestion.visibleText,
+                        mode: request.mode
+                    ) else {
+                        RawAutocompleteTraceLog.shared.record(
+                            type: .suggestionSuppressed,
+                            suggestionID: suggestionID,
+                            appBundleIdentifier: appBundleIdentifier,
+                            fieldIdentity: fieldIdentityDescription,
+                            requestMode: request.mode.rawValue,
+                            triggerReason: "model-result",
+                            textBeforeCursor: request.textBeforeCursor,
+                            textAfterCursor: request.textAfterCursor,
+                            cleanedVisibleText: suggestion.visibleText,
+                            displayedText: suggestion.visibleText,
+                            latencyMilliseconds: latencyMilliseconds,
+                            reason: "repeated-miss"
+                        )
+                        self.hideSuggestion()
+                        return
+                    }
                     let screenshotPath = self.captureTraceScreenshot(
                         near: context.elementRect ?? context.windowRect ?? context.caretRect,
                         suggestionID: suggestionID,
@@ -1532,6 +1556,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if normalizedDisplayed.hasPrefix(normalizedTyped), !normalizedTyped.isEmpty {
             hideSuggestion(reason: "typed-through-visible-prefix")
         } else {
+            suggestionRepetitionSuppressor.recordMiss(displayedText, mode: currentSuggestionRequestMode)
             hideSuggestion(reason: "typed-over")
         }
     }

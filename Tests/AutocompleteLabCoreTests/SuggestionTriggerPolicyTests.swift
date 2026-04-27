@@ -38,12 +38,12 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(previousTextBeforeCursor: "Can we", currentTextBeforeCursor: "Can we,") == .request(delayMilliseconds: 80))
     }
 
-    @Test("Short in-word typing waits for the pause threshold")
+    @Test("Short in-word typing requests instant word completion")
     func shortInWordTypingWaits() {
         let policy = SuggestionTriggerPolicy(charactersBeforePauseRequest: 4)
 
-        #expect(policy.decision(previousTextBeforeCursor: "I thi", currentTextBeforeCursor: "I thin") == .request(delayMilliseconds: 20))
-        #expect(policy.decision(previousTextBeforeCursor: "I ", currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 20))
+        #expect(policy.decision(previousTextBeforeCursor: "I thi", currentTextBeforeCursor: "I thin") == .request(delayMilliseconds: 0))
+        #expect(policy.decision(previousTextBeforeCursor: "I ", currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 0))
     }
 
     @Test("Word fragments trigger quickly for completion")

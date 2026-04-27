@@ -27,19 +27,33 @@ struct WordCompletionCandidateRankerTests {
 
         #expect(ranker.suggestion(for: "Hey wh")?.visibleText == "at")
         #expect(ranker.suggestion(for: "Can we ma")?.visibleText == "ke")
-        #expect(ranker.suggestion(for: "This is kin")?.visibleText == "d")
-        #expect(ranker.suggestion(for: "I nee")?.visibleText == "d")
-        #expect(ranker.suggestion(for: "Can you tes")?.visibleText == "t")
-        #expect(ranker.suggestion(for: "why is it so slo")?.visibleText == "w")
         #expect(ranker.suggestion(for: "This sh")?.visibleText == "ould")
         #expect(ranker.suggestion(for: "he")?.visibleText == "llo")
         #expect(ranker.suggestion(for: "It seems to be de")?.visibleText == "cent")
         #expect(ranker.suggestion(for: "I wa")?.visibleText == "nt")
         #expect(ranker.suggestion(for: "I see thi")?.visibleText == "ng")
         #expect(ranker.suggestion(for: "This should be su")?.visibleText == "per")
-        #expect(ranker.suggestion(for: "This should be super fas")?.visibleText == "t")
         #expect(ranker.suggestion(for: "hey tr")?.visibleText == "ying")
         #expect(ranker.suggestion(for: "It is worki")?.visibleText == "ng")
+    }
+
+    @Test("suppresses low value static suffixes")
+    func suppressesLowValueStaticSuffixes() {
+        let ranker = WordCompletionCandidateRanker()
+
+        #expect(ranker.suggestion(for: "This is kin") == nil)
+        #expect(ranker.suggestion(for: "I nee") == nil)
+        #expect(ranker.suggestion(for: "Can you tes") == nil)
+        #expect(ranker.suggestion(for: "why is it so slo") == nil)
+        #expect(ranker.suggestion(for: "This should be super fas") == nil)
+        #expect(ranker.suggestion(for: "Can you look") == nil)
+    }
+
+    @Test("allows one letter recent suffixes")
+    func allowsOneLetterRecentSuffixes() {
+        let ranker = WordCompletionCandidateRanker(staticWords: [])
+
+        #expect(ranker.suggestion(for: "This should be super fas", recentWords: ["fast"])?.visibleText == "t")
     }
 
     @Test("uses newest recent words before older learned words")
