@@ -189,6 +189,22 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(!summary.topMisses.contains { $0.title == "Repeated unaccepted: that sounds good" })
     }
 
+    @Test("typed-through suggestions do not count as repeated misses")
+    func typedThroughSuggestionsDoNotCountAsRepeatedMisses() {
+        let events = [
+            event(.suggestionPresented, suggestionID: "one", requestMode: "wordCompletion", displayedText: "ng"),
+            event(.suggestionPresented, suggestionID: "two", requestMode: "wordCompletion", displayedText: "ng"),
+            event(.suggestionPresented, suggestionID: "three", requestMode: "wordCompletion", displayedText: "ng"),
+            event(.suggestionHidden, suggestionID: "one", requestMode: "wordCompletion", displayedText: "ng", outcome: "typed-through"),
+            event(.suggestionHidden, suggestionID: "two", requestMode: "wordCompletion", displayedText: "ng", outcome: "typed-through"),
+            event(.suggestionHidden, suggestionID: "three", requestMode: "wordCompletion", displayedText: "ng", outcome: "typed-through")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(!summary.topMisses.contains { $0.title == "Repeated unaccepted: ng" })
+    }
+
     private func event(
         _ type: AutocompleteTraceEventType,
         suggestionID: String,

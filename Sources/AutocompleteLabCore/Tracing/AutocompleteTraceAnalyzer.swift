@@ -281,15 +281,15 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         buckets: inout [String: (count: Int, example: AutocompleteTraceEvent, cause: String, category: String)]
     ) {
         let presentedByID = firstEventsBySuggestionID(from: events.filter { $0.type == .suggestionPresented })
-        let acceptedIDs = Set(events
-            .filter { $0.type == .suggestionAccepted }
+        let usefulSuggestionIDs = Set(events
+            .filter { $0.type == .suggestionAccepted || ($0.type == .suggestionHidden && $0.outcome == "typed-through") }
             .map(\.suggestionID))
         let repeated = Dictionary(grouping: presentedByID.values) { event in
             "\(event.requestMode)|\(normalizedSuggestionText(event.displayedText))"
         }
 
         for (_, suggestions) in repeated {
-            let unacceptedSuggestions = suggestions.filter { !acceptedIDs.contains($0.suggestionID) }
+            let unacceptedSuggestions = suggestions.filter { !usefulSuggestionIDs.contains($0.suggestionID) }
             guard unacceptedSuggestions.count >= 3,
                   let example = unacceptedSuggestions.first,
                   !normalizedSuggestionText(example.displayedText).isEmpty

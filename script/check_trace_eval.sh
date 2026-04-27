@@ -43,6 +43,14 @@ for event in presented:
     if suggestion_id and suggestion_id not in presented_by_id:
         presented_by_id[suggestion_id] = event
 accepted_ids = {event.get("suggestionID") for event in accepted if event.get("suggestionID")}
+typed_through_ids = {
+    event.get("suggestionID")
+    for event in events
+    if event.get("type") == "suggestionHidden"
+    and event.get("outcome") == "typed-through"
+    and event.get("suggestionID")
+}
+useful_suggestion_ids = accepted_ids.union(typed_through_ids)
 latencies = sorted(
     event["latencyMilliseconds"]
     for event in presented_by_id.values()
@@ -86,7 +94,7 @@ for suggestion_id, event in presented_by_id.items():
 for (mode, displayed), signature_events in presented_by_signature.items():
     unaccepted = [
         event for event in signature_events
-        if event.get("suggestionID") not in accepted_ids
+        if event.get("suggestionID") not in useful_suggestion_ids
     ]
     if len(unaccepted) >= 3:
         repeated_unaccepted.append((len(unaccepted), mode, displayed, unaccepted[0].get("suggestionID") or "unknown"))

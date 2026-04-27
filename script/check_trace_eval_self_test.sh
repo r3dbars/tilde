@@ -19,6 +19,12 @@ cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionAccepted","suggestionID":"six","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"that"}
 {"type":"suggestionAccepted","suggestionID":"seven","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"that"}
 {"type":"suggestionAccepted","suggestionID":"eight","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"that"}
+{"type":"suggestionPresented","suggestionID":"nine","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","latencyMilliseconds":0}
+{"type":"suggestionPresented","suggestionID":"ten","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","latencyMilliseconds":0}
+{"type":"suggestionPresented","suggestionID":"eleven","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","latencyMilliseconds":0}
+{"type":"suggestionHidden","suggestionID":"nine","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","outcome":"typed-through"}
+{"type":"suggestionHidden","suggestionID":"ten","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","outcome":"typed-through"}
+{"type":"suggestionHidden","suggestionID":"eleven","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","outcome":"typed-through"}
 JSONL
 
 AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
@@ -31,7 +37,7 @@ if ! grep -F "com.apple.TextEdit: 100% (1/1)" /tmp/autocomplete-trace-eval-self-
   exit 1
 fi
 
-if ! grep -F "Presented: 8" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+if ! grep -F "Presented: 11" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not deduplicate streamed presentations" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
   exit 1
@@ -57,6 +63,12 @@ fi
 
 if grep -F "that works" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test incorrectly reported accepted repeated suggestions" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if grep -F "ng" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test incorrectly reported typed-through suggestions as repeated misses" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
   exit 1
 fi
