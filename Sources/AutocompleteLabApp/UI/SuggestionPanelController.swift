@@ -56,7 +56,11 @@ final class SuggestionPanelController {
         let font = style?.font ?? NSFont.systemFont(ofSize: fontSize, weight: .regular)
         let color = textColor(matching: style?.foregroundColor, renderMode: renderMode)
 
-        let textPadding = renderMode == .floatingMirror ? CGSize(width: 18, height: 10) : .zero
+        let textInsets = Self.textInsets(for: renderMode)
+        let textPadding = CGSize(
+            width: textInsets.left + textInsets.right,
+            height: textInsets.top + textInsets.bottom
+        )
         let rawSize = text.size(withAttributes: [.font: font])
         let size = CGSize(width: rawSize.width + textPadding.width, height: rawSize.height + textPadding.height)
         let screen = screen(containing: anchorRect) ?? NSScreen.main
@@ -115,7 +119,13 @@ final class SuggestionPanelController {
             return
         }
 
-        ghostTextView.update(text: text, font: font, color: color, renderMode: renderMode)
+        ghostTextView.update(
+            text: text,
+            font: font,
+            color: color,
+            renderMode: renderMode,
+            textInsets: textInsets
+        )
         panel.setFrame(frame, display: true)
         DiagnosticsLog.shared.record(
             "suggestion-panel-frame",
@@ -174,6 +184,17 @@ final class SuggestionPanelController {
         }
     }
 
+    private static func textInsets(for renderMode: SuggestionRenderMode) -> NSEdgeInsets {
+        switch renderMode {
+        case .floatingMirror:
+            return NSEdgeInsets(top: 5, left: 9, bottom: 5, right: 9)
+        case .inlineAdjacent:
+            return NSEdgeInsets(top: 0, left: 6, bottom: 0, right: 2)
+        case .disabled:
+            return NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        }
+    }
+
     private func compactFrameDescription(_ rect: CGRect) -> String {
         "x=\(Int(rect.origin.x.rounded())),y=\(Int(rect.origin.y.rounded())),w=\(Int(rect.width.rounded())),h=\(Int(rect.height.rounded()))"
     }
@@ -184,16 +205,24 @@ private final class GhostTextView: NSView {
     private var font = NSFont.systemFont(ofSize: 15)
     private var color = NSColor.labelColor.withAlphaComponent(0.42)
     private var renderMode = SuggestionRenderMode.inlineAdjacent
+    private var textInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
 
     override var isFlipped: Bool {
         true
     }
 
-    func update(text: String, font: NSFont, color: NSColor, renderMode: SuggestionRenderMode) {
+    func update(
+        text: String,
+        font: NSFont,
+        color: NSColor,
+        renderMode: SuggestionRenderMode,
+        textInsets: NSEdgeInsets
+    ) {
         self.text = text
         self.font = font
         self.color = color
         self.renderMode = renderMode
+        self.textInsets = textInsets
         needsDisplay = true
     }
 
@@ -204,7 +233,6 @@ private final class GhostTextView: NSView {
             return
         }
 
-        let textInset = textInsets
         if renderMode == .floatingMirror {
             let bubbleRect = bounds.insetBy(dx: 0.5, dy: 0.5)
             let path = NSBezierPath(roundedRect: bubbleRect, xRadius: 6, yRadius: 6)
@@ -222,29 +250,20 @@ private final class GhostTextView: NSView {
         ]
         let textSize = text.size(withAttributes: attributes)
         let point = NSPoint(
-            x: textInset.left,
-            y: max(textInset.top, (bounds.height - textSize.height) / 2)
+            x: textInsets.left,
+            y: max(textInsets.top, (bounds.height - textSize.height) / 2)
         )
 
         text.draw(
             with: NSRect(
                 x: point.x,
                 y: point.y,
-                width: max(1, bounds.width - textInset.left - textInset.right),
+                width: max(1, bounds.width - textInsets.left - textInsets.right),
                 height: textSize.height
             ),
             options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
             attributes: attributes
         )
-    }
-
-    private var textInsets: NSEdgeInsets {
-        switch renderMode {
-        case .floatingMirror:
-            return NSEdgeInsets(top: 5, left: 9, bottom: 5, right: 9)
-        case .inlineAdjacent, .disabled:
-            return NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
-        }
     }
 
     private var paragraphStyle: NSParagraphStyle {
