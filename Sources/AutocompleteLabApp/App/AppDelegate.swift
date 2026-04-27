@@ -491,7 +491,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let currentLineWidth = min(width(of: currentLine, font: font), maxLineWidth)
         let caretHeight = max(lineHeight, 16)
         let inlineGap: CGFloat = 8
-        let preferredY = elementRect.minY + verticalPadding - codexVisualBaselineLift + (CGFloat(lineIndex) * lineHeight)
+        let inlineVerticalDrop = lineHeight * 0.85
+        let preferredY = elementRect.minY
+            + verticalPadding
+            - codexVisualBaselineLift
+            + inlineVerticalDrop
+            + (CGFloat(lineIndex) * lineHeight)
         let y = clampedCodexCaretY(
             preferredY,
             caretHeight: caretHeight,
