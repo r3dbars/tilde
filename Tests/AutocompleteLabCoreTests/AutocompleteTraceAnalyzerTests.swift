@@ -28,6 +28,8 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.typedOverCount == 1)
         #expect(summary.suppressedCount == 2)
         #expect(summary.suppressedByReason["repeated-miss"] == 2)
+        #expect(summary.suppressedByApp["com.apple.TextEdit"] == 2)
+        #expect(summary.suppressedByMode["wordCompletion"] == 2)
         #expect(summary.insertionFailureCount == 1)
         #expect(summary.acceptRate == 1.0 / 3.0)
         #expect(summary.usefulRate == 2.0 / 3.0)

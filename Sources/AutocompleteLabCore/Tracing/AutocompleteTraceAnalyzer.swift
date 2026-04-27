@@ -47,6 +47,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let usefulRateByApp: [String: Double]
     public let usefulRateByMode: [String: Double]
     public let suppressedByReason: [String: Int]
+    public let suppressedByApp: [String: Int]
+    public let suppressedByMode: [String: Int]
     public let topMisses: [AutocompleteTraceMiss]
 
     public init(
@@ -68,6 +70,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         usefulRateByApp: [String: Double] = [:],
         usefulRateByMode: [String: Double] = [:],
         suppressedByReason: [String: Int] = [:],
+        suppressedByApp: [String: Int] = [:],
+        suppressedByMode: [String: Int] = [:],
         topMisses: [AutocompleteTraceMiss]
     ) {
         self.totalEvents = totalEvents
@@ -88,6 +92,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.usefulRateByApp = usefulRateByApp
         self.usefulRateByMode = usefulRateByMode
         self.suppressedByReason = suppressedByReason
+        self.suppressedByApp = suppressedByApp
+        self.suppressedByMode = suppressedByMode
         self.topMisses = topMisses
     }
 }
@@ -147,6 +153,8 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 key: \.requestMode
             ),
             suppressedByReason: countsByReason(suppressed),
+            suppressedByApp: counts(suppressed, key: \.appBundleIdentifier),
+            suppressedByMode: counts(suppressed, key: \.requestMode),
             topMisses: topMisses(from: events)
         )
     }
@@ -162,8 +170,18 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     }
 
     private func countsByReason(_ events: [AutocompleteTraceEvent]) -> [String: Int] {
-        Dictionary(grouping: events) { event in
+        counts(events) { event in
             event.reason.isEmpty ? "unknown" : event.reason
+        }
+    }
+
+    private func counts(
+        _ events: [AutocompleteTraceEvent],
+        key: (AutocompleteTraceEvent) -> String
+    ) -> [String: Int] {
+        Dictionary(grouping: events) { event in
+            let bucket = key(event)
+            return bucket.isEmpty ? "unknown" : bucket
         }
         .mapValues(\.count)
     }

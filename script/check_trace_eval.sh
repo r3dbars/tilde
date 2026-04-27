@@ -153,14 +153,31 @@ for app, (useful_count, shown_count) in sorted(useful_by_app.items()):
     rate = 0 if shown_count == 0 else round((useful_count / shown_count) * 100)
     print(f"  {app}: {rate}% ({useful_count}/{shown_count})")
 print("Suppressed by reason:")
+suppressed_events = [
+    event for event in events
+    if event.get("type") == "suggestionSuppressed"
+]
 suppressed_reasons = Counter(
     event.get("reason") or "unknown"
-    for event in events
-    if event.get("type") == "suggestionSuppressed"
+    for event in suppressed_events
 )
 if suppressed_reasons:
     for reason, count in suppressed_reasons.most_common():
         print(f"  {reason}: {count}")
+else:
+    print("  none")
+print("Suppressed by app:")
+suppressed_apps = Counter(event.get("appBundleIdentifier") or "unknown" for event in suppressed_events)
+if suppressed_apps:
+    for app, count in suppressed_apps.most_common():
+        print(f"  {app}: {count}")
+else:
+    print("  none")
+print("Suppressed by mode:")
+suppressed_modes = Counter(event.get("requestMode") or "unknown" for event in suppressed_events)
+if suppressed_modes:
+    for mode, count in suppressed_modes.most_common():
+        print(f"  {mode}: {count}")
 else:
     print("  none")
 print("Top repeated unaccepted suggestions:")

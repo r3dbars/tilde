@@ -138,6 +138,8 @@ final class DiagnosticsWindowController {
         sections.append(acceptRateBucketsText(title: "Useful rate by app", buckets: traceSummary.usefulRateByApp))
         sections.append(acceptRateBucketsText(title: "Useful rate by mode", buckets: traceSummary.usefulRateByMode))
         sections.append(countBucketsText(title: "Suppressed by reason", buckets: traceSummary.suppressedByReason))
+        sections.append(countBucketsText(title: "Suppressed by app", buckets: traceSummary.suppressedByApp))
+        sections.append(countBucketsText(title: "Suppressed by mode", buckets: traceSummary.suppressedByMode))
         sections.append(topMissesText(traceSummary.topMisses))
 
         if let profile {

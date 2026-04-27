@@ -310,6 +310,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             }
             .map { "<li><code>\(escape($0.key))</code>: \($0.value)</li>" }
             .joined(separator: "\n")
+        let suppressedApps = sortedCountList(summary.suppressedByApp)
+        let suppressedModes = sortedCountList(summary.suppressedByMode)
 
         return """
         <!doctype html>
@@ -352,6 +354,10 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           <ul>\(usefulModeRates)</ul>
           <h2>Suppressed by reason</h2>
           <ul>\(suppressedReasons)</ul>
+          <h2>Suppressed by app</h2>
+          <ul>\(suppressedApps)</ul>
+          <h2>Suppressed by mode</h2>
+          <ul>\(suppressedModes)</ul>
           <h2>Top 5 misses</h2>
           <ol>\(misses)</ol>
           <h2>Recent events</h2>
@@ -362,6 +368,19 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         </body>
         </html>
         """
+    }
+
+    private static func sortedCountList(_ buckets: [String: Int]) -> String {
+        buckets
+            .sorted { lhs, rhs in
+                if lhs.value == rhs.value {
+                    return lhs.key < rhs.key
+                }
+
+                return lhs.value > rhs.value
+            }
+            .map { "<li><code>\(escape($0.key))</code>: \($0.value)</li>" }
+            .joined(separator: "\n")
     }
 
     private static func escape(_ value: String) -> String {
