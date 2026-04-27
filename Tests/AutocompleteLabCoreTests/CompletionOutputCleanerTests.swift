@@ -71,6 +71,16 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("ready.", after: "I know you are")?.visibleText == " ready.")
     }
 
+    @Test("Suppresses low value one word phrase completions")
+    func suppressesLowValueOneWordPhraseCompletions() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("it", after: "I think") == nil)
+        #expect(cleaner.clean("is.", after: "The answer") == nil)
+        #expect(cleaner.clean("the", after: "This is") == nil)
+        #expect(cleaner.clean("ready.", after: "I know you are")?.visibleText == " ready.")
+    }
+
     @Test("Allows single token word completion suffixes")
     func allowsSingleTokenWordCompletionSuffixes() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)

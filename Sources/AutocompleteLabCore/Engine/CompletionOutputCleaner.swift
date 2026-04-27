@@ -83,6 +83,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        if mode == .phraseContinuation,
+           isLowValueSingleWordPhrase(suggestion.visibleText) {
+            return nil
+        }
+
         return suggestion
     }
 
@@ -137,6 +142,16 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return trimmed.contains(where: { $0.isLetter })
     }
 
+    private func isLowValueSingleWordPhrase(_ text: String) -> Bool {
+        let words = normalizedWords(in: text)
+        guard words.count == 1,
+              let word = words.first else {
+            return false
+        }
+
+        return Self.lowValueSingleWordPhrases.contains(word)
+    }
+
     private func repeatsEarlierContext(_ suggestion: String, after textBeforeCursor: String) -> Bool {
         let suggestionWords = normalizedWords(in: suggestion)
         guard suggestionWords.count >= 3 else {
@@ -164,6 +179,12 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             }
             .filter { !$0.isEmpty }
     }
+
+    private static let lowValueSingleWordPhrases: Set<String> = [
+        "a", "an", "and", "are", "as", "at", "be", "but", "for", "if",
+        "in", "is", "it", "of", "on", "or", "so", "the", "to", "was",
+        "were", "with"
+    ]
 }
 
 private extension Array where Element: Equatable {
