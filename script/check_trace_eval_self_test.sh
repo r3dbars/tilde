@@ -82,6 +82,18 @@ if ! grep -F "wordCompletion: 3" /tmp/autocomplete-trace-eval-self-test.txt >/de
   exit 1
 fi
 
+if ! grep -F "com.openai.codex: 2" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report actionable suppression counts by app" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "wordCompletion: 2" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report actionable suppression counts by mode" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
 if ! grep -F "Accept rate: 36%" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not report overall accept rate" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2

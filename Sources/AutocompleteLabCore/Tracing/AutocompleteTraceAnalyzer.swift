@@ -50,6 +50,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let suppressedByReason: [String: Int]
     public let suppressedByApp: [String: Int]
     public let suppressedByMode: [String: Int]
+    public let actionableSuppressedByApp: [String: Int]
+    public let actionableSuppressedByMode: [String: Int]
     public let topMisses: [AutocompleteTraceMiss]
 
     public init(
@@ -74,6 +76,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         suppressedByReason: [String: Int] = [:],
         suppressedByApp: [String: Int] = [:],
         suppressedByMode: [String: Int] = [:],
+        actionableSuppressedByApp: [String: Int] = [:],
+        actionableSuppressedByMode: [String: Int] = [:],
         topMisses: [AutocompleteTraceMiss]
     ) {
         self.totalEvents = totalEvents
@@ -97,6 +101,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.suppressedByReason = suppressedByReason
         self.suppressedByApp = suppressedByApp
         self.suppressedByMode = suppressedByMode
+        self.actionableSuppressedByApp = actionableSuppressedByApp
+        self.actionableSuppressedByMode = actionableSuppressedByMode
         self.topMisses = topMisses
     }
 }
@@ -160,6 +166,8 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             suppressedByReason: countsByReason(suppressed),
             suppressedByApp: counts(suppressed, key: \.appBundleIdentifier),
             suppressedByMode: counts(suppressed, key: \.requestMode),
+            actionableSuppressedByApp: counts(actionableSuppressed, key: \.appBundleIdentifier),
+            actionableSuppressedByMode: counts(actionableSuppressed, key: \.requestMode),
             topMisses: topMisses(from: events)
         )
     }

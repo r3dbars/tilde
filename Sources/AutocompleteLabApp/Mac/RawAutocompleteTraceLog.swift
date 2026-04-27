@@ -312,6 +312,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             .joined(separator: "\n")
         let suppressedApps = sortedCountList(summary.suppressedByApp)
         let suppressedModes = sortedCountList(summary.suppressedByMode)
+        let actionableSuppressedApps = sortedCountList(summary.actionableSuppressedByApp)
+        let actionableSuppressedModes = sortedCountList(summary.actionableSuppressedByMode)
 
         return """
         <!doctype html>
@@ -359,6 +361,10 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           <ul>\(suppressedApps)</ul>
           <h2>Suppressed by mode</h2>
           <ul>\(suppressedModes)</ul>
+          <h2>Actionable suppressed by app</h2>
+          <ul>\(actionableSuppressedApps)</ul>
+          <h2>Actionable suppressed by mode</h2>
+          <ul>\(actionableSuppressedModes)</ul>
           <h2>Top 5 misses</h2>
           <ol>\(misses)</ol>
           <h2>Recent events</h2>

@@ -158,6 +158,10 @@ suppressed_events = [
     event for event in events
     if event.get("type") == "suggestionSuppressed"
 ]
+actionable_suppressed_events = [
+    event for event in suppressed_events
+    if event.get("reason") != "no-fast-word-candidate"
+]
 suppressed_reasons = Counter(
     event.get("reason") or "unknown"
     for event in suppressed_events
@@ -178,6 +182,20 @@ print("Suppressed by mode:")
 suppressed_modes = Counter(event.get("requestMode") or "unknown" for event in suppressed_events)
 if suppressed_modes:
     for mode, count in suppressed_modes.most_common():
+        print(f"  {mode}: {count}")
+else:
+    print("  none")
+print("Actionable suppressed by app:")
+actionable_suppressed_apps = Counter(event.get("appBundleIdentifier") or "unknown" for event in actionable_suppressed_events)
+if actionable_suppressed_apps:
+    for app, count in actionable_suppressed_apps.most_common():
+        print(f"  {app}: {count}")
+else:
+    print("  none")
+print("Actionable suppressed by mode:")
+actionable_suppressed_modes = Counter(event.get("requestMode") or "unknown" for event in actionable_suppressed_events)
+if actionable_suppressed_modes:
+    for mode, count in actionable_suppressed_modes.most_common():
         print(f"  {mode}: {count}")
 else:
     print("  none")

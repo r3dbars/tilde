@@ -140,6 +140,8 @@ final class DiagnosticsWindowController {
         sections.append(countBucketsText(title: "Suppressed by reason", buckets: traceSummary.suppressedByReason))
         sections.append(countBucketsText(title: "Suppressed by app", buckets: traceSummary.suppressedByApp))
         sections.append(countBucketsText(title: "Suppressed by mode", buckets: traceSummary.suppressedByMode))
+        sections.append(countBucketsText(title: "Actionable suppressed by app", buckets: traceSummary.actionableSuppressedByApp))
+        sections.append(countBucketsText(title: "Actionable suppressed by mode", buckets: traceSummary.actionableSuppressedByMode))
         sections.append(topMissesText(traceSummary.topMisses))
 
         if let profile {

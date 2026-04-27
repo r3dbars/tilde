@@ -33,6 +33,8 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.suppressedByReason["no-fast-word-candidate"] == 1)
         #expect(summary.suppressedByApp["com.apple.TextEdit"] == 3)
         #expect(summary.suppressedByMode["wordCompletion"] == 3)
+        #expect(summary.actionableSuppressedByApp["com.apple.TextEdit"] == 2)
+        #expect(summary.actionableSuppressedByMode["wordCompletion"] == 2)
         #expect(summary.insertionFailureCount == 1)
         #expect(summary.acceptRate == 1.0 / 3.0)
         #expect(summary.usefulRate == 2.0 / 3.0)
