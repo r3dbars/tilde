@@ -37,11 +37,15 @@ if not events:
 types = Counter(event.get("type", "") for event in events)
 presented = [event for event in events if event.get("type") == "suggestionPresented"]
 accepted = [event for event in events if event.get("type") == "suggestionAccepted"]
-presented_by_id = {event.get("suggestionID"): event for event in presented if event.get("suggestionID")}
+presented_by_id = {}
+for event in presented:
+    suggestion_id = event.get("suggestionID")
+    if suggestion_id and suggestion_id not in presented_by_id:
+        presented_by_id[suggestion_id] = event
 accepted_ids = {event.get("suggestionID") for event in accepted if event.get("suggestionID")}
 latencies = sorted(
     event["latencyMilliseconds"]
-    for event in events
+    for event in presented_by_id.values()
     if isinstance(event.get("latencyMilliseconds"), int)
 )
 
@@ -71,7 +75,7 @@ for suggestion_id in accepted_ids:
 print(f"Trace: {path}")
 print(f"Start line: {start_line}")
 print(f"Events: {len(events)}")
-print(f"Presented: {len(presented)}")
+print(f"Presented: {len(presented_by_id)}")
 print(f"Accepted keypresses: {len(accepted)}")
 print(f"Accepted suggestions: {len(accepted_ids.intersection(presented_by_id.keys()))}")
 print(f"Typed over: {types['suggestionTypedOver']}")
