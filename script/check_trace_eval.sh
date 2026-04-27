@@ -72,6 +72,26 @@ for suggestion_id in accepted_ids:
         accept_by_mode[event.get("requestMode") or "unknown"][0] += 1
         accept_by_app[event.get("appBundleIdentifier") or "unknown"][0] += 1
 
+def normalized_suggestion(text):
+    return " ".join((text or "").lower().split()).strip()
+
+repeated_unaccepted = []
+presented_by_signature = defaultdict(list)
+for suggestion_id, event in presented_by_id.items():
+    displayed = normalized_suggestion(event.get("displayedText") or event.get("cleanedVisibleText") or "")
+    if not displayed:
+        continue
+    signature = (event.get("requestMode") or "unknown", displayed)
+    presented_by_signature[signature].append(event)
+for (mode, displayed), signature_events in presented_by_signature.items():
+    unaccepted = [
+        event for event in signature_events
+        if event.get("suggestionID") not in accepted_ids
+    ]
+    if len(unaccepted) >= 3:
+        repeated_unaccepted.append((len(unaccepted), mode, displayed, unaccepted[0].get("suggestionID") or "unknown"))
+repeated_unaccepted.sort(key=lambda item: (-item[0], item[1], item[2]))
+
 print(f"Trace: {path}")
 print(f"Start line: {start_line}")
 print(f"Events: {len(events)}")
@@ -91,6 +111,12 @@ print("Accept rate by app:")
 for app, (accepted_count, shown_count) in sorted(accept_by_app.items()):
     rate = 0 if shown_count == 0 else round((accepted_count / shown_count) * 100)
     print(f"  {app}: {rate}% ({accepted_count}/{shown_count})")
+print("Top repeated unaccepted suggestions:")
+if repeated_unaccepted:
+    for count, mode, displayed, suggestion_id in repeated_unaccepted[:5]:
+        print(f"  {count}x {mode}: {displayed} (example {suggestion_id})")
+else:
+    print("  none")
 
 if require_app:
     app_events = [event for event in events if event.get("appBundleIdentifier") == require_app]
