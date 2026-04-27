@@ -40,6 +40,8 @@ find_signing_identity() {
   echo "$identity"
 }
 
+swift package resolve
+./script/patch_mlx_swift_lm.sh
 swift build -c "$BUILD_CONFIGURATION" --product "$APP_NAME"
 BUILD_BINARY="$(swift build -c "$BUILD_CONFIGURATION" --show-bin-path)/$APP_NAME"
 

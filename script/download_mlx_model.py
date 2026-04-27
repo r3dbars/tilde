@@ -13,6 +13,10 @@ MODELS = {
         "repo_id": "mlx-community/gemma-4-e4b-4bit",
         "target": "Models/Gemma4E4B/MLX/gemma-4-e4b-4bit",
     },
+    "gemma-4-e4b-it-optiq": {
+        "repo_id": "mlx-community/gemma-4-e4b-it-OptiQ-4bit",
+        "target": "Models/Gemma4E4BItOptiQ/MLX/gemma-4-e4b-it-OptiQ-4bit",
+    },
 }
 
 ALLOW_PATTERNS = [

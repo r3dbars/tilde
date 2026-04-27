@@ -15,6 +15,7 @@ public struct HardwareProfile: Equatable, Sendable {
 public enum LocalModelID: String, Equatable, Sendable {
     case gemma4E2B = "Gemma 4 E2B"
     case gemma4E4B = "Gemma 4 E4B"
+    case gemma4E4BItOptiQ = "Gemma 4 E4B IT OptiQ"
     case gemma4A4B = "Gemma 4 26B A4B"
     case qwen3Small = "Qwen3 0.6B"
     case qwen3Medium = "Qwen3 1.7B"

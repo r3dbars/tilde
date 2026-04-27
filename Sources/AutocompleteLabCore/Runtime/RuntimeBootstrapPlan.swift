@@ -128,6 +128,15 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         requiresVisionLanguageFactory: true
     )
 
+    public static let gemma4E4BItOptiQMLX = LocalModelAssetManifest(
+        model: .gemma4E4BItOptiQ,
+        runtimeCandidate: .mlx,
+        cacheDirectoryName: "Models/Gemma4E4BItOptiQ/MLX",
+        fileName: "gemma-4-e4b-it-OptiQ-4bit",
+        expectedMinimumBytes: 5 * 1024 * 1024 * 1024,
+        requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"]
+    )
+
     public static let gemma4A4BMLX = LocalModelAssetManifest(
         model: .gemma4A4B,
         runtimeCandidate: .mlx,
@@ -179,6 +188,9 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         "gemma-4-e4b": .gemma4E4BMLX,
         "gemma4-e4b": .gemma4E4BMLX,
         "gemma-4-e4b-4bit": .gemma4E4BMLX,
+        "gemma-4-e4b-it-optiq": .gemma4E4BItOptiQMLX,
+        "gemma-4-e4b-it-optiq-4bit": .gemma4E4BItOptiQMLX,
+        "gemma4-e4b-it-optiq": .gemma4E4BItOptiQMLX,
         "gemma-4-26b": .gemma4A4BMLX,
         "qwen3-0.6b": .qwen3SmallMLX,
         "qwen3-1.7b": .qwen3MediumMLX,

@@ -10,6 +10,8 @@ if [[ -f "$LOG_PATH" ]]; then
   LOG_START_LINE="$(wc -l <"$LOG_PATH" | tr -d ' ')"
 fi
 
+swift package resolve
+./script/patch_mlx_swift_lm.sh
 swift test
 ./script/check_test_coverage_manifest.sh
 ./script/manual_smoke_self_test.sh

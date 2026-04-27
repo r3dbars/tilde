@@ -159,6 +159,8 @@ struct RuntimePolicyTests {
         #expect(LocalModelAssetManifest.mlxManifest(named: " Qwen3.5-9B ") == .qwen35NineBMLX)
         #expect(LocalModelAssetManifest.mlxManifest(named: "gemma-4-e4b") == .gemma4E4BMLX)
         #expect(LocalModelAssetManifest.mlxManifest(named: "gemma-4-e4b-4bit") == .gemma4E4BMLX)
+        #expect(LocalModelAssetManifest.mlxManifest(named: "gemma-4-e4b-it-optiq") == .gemma4E4BItOptiQMLX)
+        #expect(LocalModelAssetManifest.mlxManifest(named: "gemma-4-e4b-it-optiq-4bit") == .gemma4E4BItOptiQMLX)
         #expect(LocalModelAssetManifest.mlxManifest(named: "gemma-4-26b") == .gemma4A4BMLX)
         #expect(LocalModelAssetManifest.mlxManifest(named: "unknown") == .qwen35FourBMLX)
     }
