@@ -3,14 +3,15 @@
 This is the current rating after the trust-first hardening, browser editor
 compatibility pass, Codex/Claude dogfood pass, Obsidian synthetic-caret pass,
 typing-performance pass, cleaner hardening, and polling-pause extraction.
-It now also includes the first Settings readiness/control pass.
+It now also includes the Settings readiness/control pass and Settings privacy
+controls.
 
 Scale: 10 means beta-ready for normal people. 5 means promising but still easy
 to break or annoy users.
 
 ## Executive Rating
 
-Overall: 9.2/10.
+Overall: 9.3/10.
 
 The app is no longer just a neat lab build. It now has real proof across
 TextEdit, Notes, Obsidian, Codex, Claude desktop, and five Chrome editor shapes:
@@ -50,7 +51,7 @@ fixtures.
 | Output relevance | 9/10 | Prompt labels, instruction echoes, assistant filler, punctuation suffixes, and context parroting are suppressed before display. |
 | Word completion quality | 9/10 | Fast ranker path is useful, partial accept keeps remaining text alive, and repeated misses are suppressed. |
 | Non-annoyance | 9/10 | Esc, typed-over tracking, repetition suppression, pause control, and insertion recovery all reduce bad loops. |
-| Privacy | 8/10 | Local-first, secure fields suppressed, diagnostics redact text by default; raw trace and screenshots remain opt-in. |
+| Privacy | 9/10 | Local-first, secure fields suppressed, diagnostics redact text by default, and Settings exposes trace pause, raw text, screenshots, paths, and delete-local-logs controls. |
 | Onboarding | 8/10 | Settings now gives stage-specific model guidance and runtime actions; model install/repair is still not fully in-app. |
 | User control | 9/10 | Settings exposes pause, current-app enablement, disabled-app count, and enable-all; shortcut remapping is still missing. |
 | Diagnostics | 9/10 | Strong placement, latency, insertion, trace, recovered-insertion, and manual proof logs. |
@@ -81,6 +82,8 @@ fixtures.
   `CompletionQualityEvalTests`.
 - Settings UI launched from the menu bar and exposed model readiness, runtime
   action, current-app state, disabled-app count, pause, and enable-all controls.
+- Settings UI also exposes privacy controls for trace pause, raw text tracing,
+  screenshot tracing, local log paths, and local log deletion.
 - `AUTOCOMPLETE_LAB_LOG_START_LINE=53357 AUTOCOMPLETE_LAB_LOG_LINES=260 ./script/check_diagnostics_log.sh`:
   launch/status diagnostics verified after a fresh relaunch.
 - `./script/check_model_asset.py`: Qwen3.5 4B MLX asset ready at the app-owned
@@ -135,6 +138,9 @@ fixtures.
   enable-all controls.
 - The app opens Settings automatically when Accessibility or model/runtime
   readiness needs user attention.
+- Settings now exposes local privacy controls that were previously buried in
+  Diagnostics: pause trace logging, raw text tracing, screenshot tracing, and
+  local log deletion.
 
 ## Next Highest-Leverage Work
 
