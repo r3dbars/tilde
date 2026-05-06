@@ -53,6 +53,16 @@ if not events:
 types = Counter(event.get("type", "") for event in events)
 presented = [event for event in events if event.get("type") == "suggestionPresented"]
 accepted = [event for event in events if event.get("type") == "suggestionAccepted"]
+insertion_failed = [
+    (index, event)
+    for index, event in enumerate(events)
+    if event.get("type") == "insertionFailed"
+]
+insertion_verified = [
+    (index, event)
+    for index, event in enumerate(events)
+    if event.get("type") == "insertionVerified"
+]
 presented_by_id = {}
 for event in presented:
     suggestion_id = event.get("suggestionID")
@@ -89,6 +99,56 @@ if not latencies:
 performance_failures = []
 placement_failures = []
 annoyance_failures = []
+insertion_failures = []
+
+def event_key(event):
+    suggestion_id = event.get("suggestionID")
+    if not suggestion_id:
+        return None
+    return (event.get("appBundleIdentifier") or "unknown", suggestion_id)
+
+def truthy(value):
+    return str(value).lower() in {"1", "true", "yes", "recovered"}
+
+def is_recovered_insertion_failure(failed_index, failed_event):
+    metadata = failed_event.get("metadata") or {}
+    if truthy(failed_event.get("recovered")) or truthy(metadata.get("recovered")):
+        return True
+
+    key = event_key(failed_event)
+    if not key:
+        return False
+
+    return any(
+        verified_index > failed_index and event_key(verified_event) == key
+        for verified_index, verified_event in insertion_verified
+    )
+
+recovered_insertion_failures = [
+    event
+    for index, event in insertion_failed
+    if is_recovered_insertion_failure(index, event)
+]
+unrecovered_insertion_failures = [
+    event
+    for index, event in insertion_failed
+    if not is_recovered_insertion_failure(index, event)
+]
+
+if unrecovered_insertion_failures:
+    examples = []
+    for event in unrecovered_insertion_failures[:5]:
+        app = event.get("appBundleIdentifier") or "unknown"
+        suggestion_id = event.get("suggestionID") or "unknown"
+        reason = event.get("reason") or event.get("verificationResult") or "unknown"
+        examples.append(f"{app}/{suggestion_id} ({reason})")
+    extra = len(unrecovered_insertion_failures) - len(examples)
+    if extra > 0:
+        examples.append(f"{extra} more")
+    insertion_failures.append(
+        "unrecovered insertion failure: " + ", ".join(examples)
+    )
+
 if enforce_performance:
     presentations_by_id = defaultdict(list)
     for event in presented:
@@ -204,6 +264,8 @@ print(f"Hidden ignored: {sum(1 for event in events if event.get('type') == 'sugg
 print(f"Suppressed: {types['suggestionSuppressed']}")
 print(f"Actionable suppressed: {sum(1 for event in events if event.get('type') == 'suggestionSuppressed' and event.get('reason') != 'no-fast-word-candidate')}")
 print(f"Insertion failures: {types['insertionFailed']}")
+print(f"Recovered insertion failures: {len(recovered_insertion_failures)}")
+print(f"Unrecovered insertion failures: {len(unrecovered_insertion_failures)}")
 accept_rate = 0 if not presented_ids else round((len(accepted_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
 useful_rate = 0 if not presented_ids else round((len(useful_suggestion_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
 if min_useful_rate is not None and useful_rate < min_useful_rate:
@@ -320,6 +382,10 @@ if require_app:
         event for event in app_events
         if event.get("type") == "insertionFailed"
     ]
+    app_unrecovered_failed = [
+        event for event in app_failed
+        if event in unrecovered_insertion_failures
+    ]
 
     if not app_presented:
         missing.append(f"{require_app}: suggestionPresented")
@@ -327,11 +393,13 @@ if require_app:
         missing.append(f"{require_app}: accepted suggestion")
     if not app_verified:
         missing.append(f"{require_app}: insertionVerified")
-    if app_failed:
-        missing.append(f"{require_app}: no insertionFailed")
+    if app_unrecovered_failed:
+        missing.append(f"{require_app}: no unrecovered insertionFailed")
 
 if missing:
     raise SystemExit("missing required trace coverage: " + ", ".join(missing))
+if insertion_failures:
+    raise SystemExit("insertion recovery guardrail failed: " + "; ".join(insertion_failures))
 if performance_failures:
     raise SystemExit("typing performance guardrail failed: " + "; ".join(performance_failures))
 if placement_failures:

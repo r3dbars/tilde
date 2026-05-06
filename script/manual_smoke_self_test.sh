@@ -10,6 +10,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 LOG_PATH="$TMP_DIR/diagnostics.log"
 TRACE_PATH="$TMP_DIR/traces.jsonl"
 REPORT_PATH="$TMP_DIR/manual-smoke-runs.md"
+SCORECARD_PATH="$TMP_DIR/deep-dive-scorecard.md"
 FAILURE_OUTPUT="$TMP_DIR/failure-output.txt"
 
 write_passing_log() {
@@ -34,6 +35,7 @@ write_passing_trace() {
   cat >"$TRACE_PATH" <<EOF
 {"type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","latencyMilliseconds":0}
 {"type":"suggestionAccepted","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","acceptedText":"make"}
+{"type":"insertionFailed","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","reason":"unchanged"}
 {"type":"insertionVerified","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","acceptedText":"make"}
 {"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","latencyMilliseconds":110}
 {"type":"suggestionAccepted","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","acceptedText":" this work"}
@@ -104,8 +106,18 @@ if ! grep -F "| Obsidian | \`md.obsidian\` | 0 | \`detached-suppressed\` | lines
   fi
 fi
 
+cat >"$SCORECARD_PATH" <<'EOF'
+# Deep Dive Scorecard
+
+| Area | Rating | Why |
+| --- | ---: | --- |
+| Codex support | 6/10 | Needs prompt proof. |
+| Diagnostics | 10/10 | Clear enough. |
+EOF
+
 STATUS_OUTPUT="$TMP_DIR/status-output.txt"
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
   script/manual_smoke_status.sh >"$STATUS_OUTPUT"
 
 for app_name in TextEdit Notes "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" Codex "Claude Code"; do
@@ -121,7 +133,18 @@ if ! grep -F -- "- Obsidian: limited pass" "$STATUS_OUTPUT" >/dev/null &&
   exit 1
 fi
 
+if ! grep -F -- "- Codex support: 6/10 - Needs prompt proof." "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not report remaining non-10 scorecard gaps" >&2
+  exit 1
+fi
+
+if grep -F -- "- Diagnostics: 10/10" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test should not report 10/10 scorecard rows as gaps" >&2
+  exit 1
+fi
+
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
   script/manual_smoke_status.sh --require-all >/dev/null
 
 EMPTY_REPORT="$TMP_DIR/empty-manual-smoke-runs.md"
@@ -133,6 +156,7 @@ cat >"$EMPTY_REPORT" <<'EOF'
 EOF
 
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$EMPTY_REPORT" \
+  AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
   script/manual_smoke_status.sh >"$STATUS_OUTPUT"
 
 if ! grep -F -- "- TextEdit: pending" "$STATUS_OUTPUT" >/dev/null; then
@@ -141,8 +165,16 @@ if ! grep -F -- "- TextEdit: pending" "$STATUS_OUTPUT" >/dev/null; then
 fi
 
 if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$EMPTY_REPORT" \
+  AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
   script/manual_smoke_status.sh --require-all >/dev/null 2>&1; then
   echo "manual smoke self-test expected --require-all to fail without app proof" >&2
+  exit 1
+fi
+
+if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$EMPTY_REPORT" \
+  AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
+  script/manual_smoke_status.sh --strict >/dev/null 2>&1; then
+  echo "manual smoke self-test expected --strict to fail without app proof" >&2
   exit 1
 fi
 
@@ -183,6 +215,27 @@ fi
 
 if ! grep -F 'failed TextEdit trace eval coverage' "$FAILURE_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not explain missing trace eval coverage" >&2
+  exit 1
+fi
+
+write_passing_log "com.apple.TextEdit" "inlineAdjacent"
+cat >>"$LOG_PATH" <<'EOF'
+2026-04-26T08:00:06Z insert-verification-final-failure app=com.apple.TextEdit mode=keyEvents result=unchanged
+EOF
+write_passing_trace "com.apple.TextEdit"
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh textedit --check >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected a failed pass with unrecovered insertion failure" >&2
+  exit 1
+fi
+
+if ! grep -F 'unrecovered insertion verification failure' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not explain unrecovered insertion failures" >&2
   exit 1
 fi
 
