@@ -51,9 +51,9 @@ Recorder: `script/manual_smoke_session.sh obsidian`
 
 - Use a disposable note.
 - Type a partial word like `dicta`.
-- If CodeMirror does not expose caret bounds, confirm no detached floating bubble appears.
-- If a real caret-bound suggestion appears, accept one word, then full visible text.
-- Confirm either insertion verification succeeds or detached suggestion suppression is logged.
+- Confirm the mirror suggestion is anchored to the caret, not the whole editor.
+- Accept one word, then full visible text.
+- Confirm insertion verification succeeds. Detached suggestion suppression is useful safety evidence, but it is not a full pass.
 
 ## Chrome
 

@@ -631,6 +631,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func supportsSyntheticTextAreaCaret(for bundleIdentifier: String) -> Bool {
         PromptEditorFingerprintPolicy.dogfoodBundleIdentifiers.contains(bundleIdentifier)
+            || bundleIdentifier == "md.obsidian"
     }
 
     private struct PromptTextAreaMatch {

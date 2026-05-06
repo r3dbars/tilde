@@ -1,26 +1,30 @@
 # Deep Dive Scorecard - 2026-05-06
 
 This is the current rating after the trust-first hardening, browser editor
-compatibility pass, Codex/Claude dogfood pass, and typing-performance pass.
+compatibility pass, Codex/Claude dogfood pass, Obsidian synthetic-caret pass,
+and typing-performance pass.
 
 Scale: 10 means beta-ready for normal people. 5 means promising but still easy
 to break or annoy users.
 
 ## Executive Rating
 
-Overall: 8.9/10.
+Overall: 9.0/10.
 
 The app is no longer just a neat lab build. It now has real proof across
 TextEdit, Notes, Obsidian, Codex, Claude desktop, and five Chrome editor shapes:
 textarea, contenteditable, CodeMirror-style editor, Monaco-like editor, and
 ProseMirror-like editor. The tight typing path is also fast in the latest
 diagnostics slice: event-tap p95 is 63 microseconds, p99/max is 101 microseconds,
-with zero slow markers and zero tap-disabled events.
+with zero slow markers and zero tap-disabled events. The fresh Obsidian slice
+also stayed fast while accepting suggestions: event-tap p95 was 132
+microseconds with no slow markers.
 
 It is still not a 10/10. Claude Code does not have a safe live prompt proof yet,
 release notarization is missing `NOTARYTOOL_PROFILE`, onboarding still needs a
-normal-user model readiness path, and the app still needs broader proof in real
-production editors beyond local fixtures.
+normal-user model readiness path, user-facing app controls are still too thin,
+and the app still needs broader proof in real production editors beyond local
+fixtures.
 
 ## Area Ratings
 
@@ -38,7 +42,7 @@ production editors beyond local fixtures.
 | Chrome editor-like support | 9/10 | CodeMirror-style local fixture passes with two verified accepts. |
 | Chrome Monaco-like support | 9/10 | Monaco-shaped local fixture passes with two verified accepts. |
 | Chrome ProseMirror-like support | 9/10 | ProseMirror-shaped local fixture passes with two verified accepts. |
-| Obsidian support | 8/10 | Recorded proof exists and detached suggestions are suppressed, but broader CodeMirror proof should be refreshed. |
+| Obsidian support | 9/10 | Fresh CodeMirror proof now passes with synthetic caret placement, high-confidence caret anchoring, and two verified accepts. |
 | Codex support | 9/10 | Live AppleScript-gated proof passes Tab plus full accept with caret-anchored placement and verified AX insertion. Computer Use remains blocked from inspecting Codex directly. |
 | Claude Code support | 4/10 | Profile exists, but there is still no safe live prompt proof for the Claude Code surface. |
 | Claude desktop support | 9/10 | Live proof now passes Tab plus full accept. Cursor repair and post-insert polling pause handle Electron selection drift. |
@@ -66,6 +70,9 @@ production editors beyond local fixtures.
   insertion to AX value replacement.
 - Claude desktop manual smoke: passed with two verified accepts after the
   stricter AX value verification change.
+- Obsidian manual smoke: passed with two verified accepts after synthetic
+  text-area caret placement; diagnostics show `placementAnchorSource=caret`,
+  `placementConfidenceBand=high`, `hasCaretRect=true`, and event-tap p95 132us.
 - `AUTOCOMPLETE_LAB_LOG_START_LINE=53058 AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES=10 ./script/check_typing_performance_log.sh`:
   p95 63us, p99/max 101us, zero slow markers, zero tap-disabled events.
 - `AUTOCOMPLETE_LAB_LOG_START_LINE=53357 AUTOCOMPLETE_LAB_LOG_LINES=260 ./script/check_diagnostics_log.sh`:
@@ -102,13 +109,20 @@ production editors beyond local fixtures.
 - Codex insertion now uses verified AX value replacement first, which fixed a
   live Codex failure where key events reported success but the prompt text did
   not change.
+- Obsidian now participates in synthetic text-area caret placement, so CodeMirror
+  hidden caret bounds no longer force a detached-suppression-only result.
+- Manual smoke status now treats detached-suppression rows as limited evidence,
+  not full green proof. A green Obsidian row now requires two verified accepts.
+- Obsidian, Codex, Claude Code, and Claude desktop smoke checks now require
+  caret-anchored high-confidence placement with `hasCaretRect=true`.
 
 ## Next Highest-Leverage Work
 
 1. Run a safe Claude Code prompt proof.
 2. Test real production Monaco and ProseMirror surfaces, not just local
    dependency-free fixtures.
-3. Refresh Obsidian proof with current CodeMirror behavior.
-4. Build a normal-user model readiness flow.
+3. Build a normal-user model readiness flow.
+4. Add a visible app-control table for per-app enablement, Tab behavior, and
+   quick pause.
 5. Split AppDelegate into focused services around polling, insertion,
    verification, and tracing.
