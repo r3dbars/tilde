@@ -77,6 +77,8 @@ run_passing_case obsidian Obsidian md.obsidian floatingMirror floatingMirror
 run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror textarea
 run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror contenteditable
 run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror editor-like
+run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror monaco-like
+run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror prosemirror-like
 run_passing_case codex Codex com.openai.codex 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_passing_case claude-code "Claude Code" com.anthropic.claude-code 'inlineAdjacent|floatingMirror' inlineAdjacent
 
@@ -105,7 +107,7 @@ STATUS_OUTPUT="$TMP_DIR/status-output.txt"
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   script/manual_smoke_status.sh >"$STATUS_OUTPUT"
 
-for app_name in TextEdit Notes "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" Codex "Claude Code"; do
+for app_name in TextEdit Notes "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" Codex "Claude Code"; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
     exit 1

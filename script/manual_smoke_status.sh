@@ -29,6 +29,8 @@ declare -a APPS=(
   "Chrome textarea|Chrome|com.google.Chrome|full|textarea"
   "Chrome contenteditable|Chrome|com.google.Chrome|full|contenteditable"
   "Chrome editor-like|Chrome|com.google.Chrome|full|editor-like"
+  "Chrome Monaco-like|Chrome|com.google.Chrome|full|monaco-like"
+  "Chrome ProseMirror-like|Chrome|com.google.Chrome|full|prosemirror-like"
   "Codex|Codex|com.openai.codex|full|default"
   "Claude Code|Claude Code|com.anthropic.claude-code|full|default"
 )

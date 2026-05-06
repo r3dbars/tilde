@@ -35,7 +35,8 @@ python3 -m pip install --user huggingface_hub
 - Start in TextEdit.
 - Then Notes.
 - Then Obsidian if they already use it.
-- Chrome textarea is only a sanity check.
+- Chrome fixture proof covers textarea, contenteditable, editor-like,
+  Monaco-like, and ProseMirror-like local pages before any broad browser beta.
 
 ## What To Watch
 
