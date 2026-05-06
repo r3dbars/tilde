@@ -6,6 +6,7 @@ final class DiagnosticsLog: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "app.transcripted.autocomplete.diagnostics-log")
     private let logURL: URL
+    private let timestampFormatter = ISO8601DateFormatter()
 
     private init() {
         logURL = FileManager.default
@@ -14,10 +15,9 @@ final class DiagnosticsLog: @unchecked Sendable {
     }
 
     func record(_ event: String, metadata: [String: String] = [:]) {
-        let line = format(event: event, metadata: metadata)
-
-        queue.async { [logURL] in
+        queue.async { [self, logURL] in
             do {
+                let line = format(event: event, metadata: metadata)
                 let fileManager = FileManager.default
                 try fileManager.createDirectory(
                     at: logURL.deletingLastPathComponent(),
@@ -53,7 +53,7 @@ final class DiagnosticsLog: @unchecked Sendable {
     }
 
     private func format(event: String, metadata: [String: String]) -> String {
-        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let timestamp = timestampFormatter.string(from: Date())
         let fields = metadata
             .sorted { $0.key < $1.key }
             .map { "\($0.key)=\(DiagnosticsMetadataRedactor.logSafeValue(forKey: $0.key, value: $0.value))" }

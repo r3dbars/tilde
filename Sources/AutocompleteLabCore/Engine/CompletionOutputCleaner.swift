@@ -48,9 +48,17 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        guard !looksLikePromptInstructionEcho(singleLine) else {
+            return nil
+        }
+
         let withoutPromptEchoLabel = strippingPromptEchoLabel(from: singleLine)
 
         guard !withoutPromptEchoLabel.isEmpty else {
+            return nil
+        }
+
+        guard !looksLikePromptInstructionEcho(withoutPromptEchoLabel) else {
             return nil
         }
 
@@ -109,6 +117,21 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("user is ")
             || normalized.hasPrefix("assistant:")
             || normalized.hasPrefix("system:")
+    }
+
+    private func looksLikePromptInstructionEcho(_ text: String) -> Bool {
+        let normalized = text
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return normalized.hasPrefix("before cursor:")
+            || normalized.hasPrefix("after cursor:")
+            || normalized.hasPrefix("inline autocomplete")
+            || normalized.hasPrefix("inline word completion")
+            || normalized.hasPrefix("return only")
+            || normalized.hasPrefix("no spaces")
+            || normalized.hasPrefix("continue the current sentence")
+            || normalized.hasPrefix("start the next sentence")
     }
 
     private func strippingPromptEchoLabel(from text: String) -> String {
