@@ -29,27 +29,28 @@ Shows which target apps have real manual smoke proof in
 docs/product/manual-smoke-runs.md and lists remaining sub-10 scorecard gaps.
 It separates insertion proof from screenshot-backed visual placement proof so
 real-app visual gaps stay visible after insertion passes.
+Notes title, body, and checklist are separate proof targets.
 
 Use --require-all or --strict when you want the command to fail until every
-target app has at least one recorded pass with two or more verified accepts.
+target app has a recorded pass for the behavior its profile currently allows.
 EOF
   exit 0
 fi
 
 declare -a APPS=(
-  "TextEdit|TextEdit|com.apple.TextEdit|full|default"
-  "Notes title|Notes|com.apple.Notes|full|notes-title"
-  "Notes body|Notes|com.apple.Notes|full|notes-body"
-  "Notes checklist|Notes|com.apple.Notes|full|notes-checklist"
-  "Obsidian|Obsidian|md.obsidian|full|default"
-  "Chrome textarea|Chrome|com.google.Chrome|full|textarea"
-  "Chrome contenteditable|Chrome|com.google.Chrome|full|contenteditable"
-  "Chrome editor-like|Chrome|com.google.Chrome|full|editor-like"
-  "Chrome Monaco-like|Chrome|com.google.Chrome|full|monaco-like"
-  "Chrome ProseMirror-like|Chrome|com.google.Chrome|full|prosemirror-like"
-  "Codex|Codex|com.openai.codex|full|default"
-  "Claude Code|Claude Code|com.anthropic.claude-code|full|default"
-  "Claude desktop|Claude|com.anthropic.claudefordesktop|full|default"
+  "TextEdit|TextEdit|com.apple.TextEdit|full|default|script/manual_smoke_session.sh textedit --visual"
+  "Notes title|Notes|com.apple.Notes|full|notes-title|script/manual_smoke_session.sh notes-title --visual"
+  "Notes body|Notes|com.apple.Notes|full|notes-body|script/manual_smoke_session.sh notes-body --visual"
+  "Notes checklist|Notes|com.apple.Notes|full|notes-checklist|script/manual_smoke_session.sh notes-checklist --visual"
+  "Obsidian|Obsidian|md.obsidian|full|default|script/manual_smoke_session.sh obsidian --visual"
+  "Chrome textarea|Chrome|com.google.Chrome|full|textarea|script/manual_smoke_session.sh chrome --visual"
+  "Chrome contenteditable|Chrome|com.google.Chrome|full|contenteditable|AUTOCOMPLETE_LAB_CHROME_FIXTURE=contenteditable script/manual_smoke_session.sh chrome --visual"
+  "Chrome editor-like|Chrome|com.google.Chrome|full|editor-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=editor-like script/manual_smoke_session.sh chrome --visual"
+  "Chrome Monaco-like|Chrome|com.google.Chrome|full|monaco-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=monaco-like script/manual_smoke_session.sh chrome --visual"
+  "Chrome ProseMirror-like|Chrome|com.google.Chrome|full|prosemirror-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=prosemirror-like script/manual_smoke_session.sh chrome --visual"
+  "Codex|Codex|com.openai.codex|full|default|script/manual_smoke_session.sh codex --visual"
+  "Claude Code|Claude Code|com.anthropic.claude-code|one-word|default|script/manual_smoke_session.sh claude-code --visual"
+  "Claude desktop|Claude|com.anthropic.claudefordesktop|full|default|script/manual_smoke_session.sh claude --visual"
 )
 
 trim() {
@@ -118,6 +119,7 @@ print_visual_audit_status() {
   fi
 
   echo "Screenshot proof status: $SCORECARD_PATH"
+  echo "Screenshot proof only counts rows whose Evidence cell links a screenshot."
 
   local in_visual_table=0
   local found=0
@@ -198,24 +200,33 @@ for app_entry in "${APPS[@]}"; do
   bundle_id="${rest%%|*}"
   rest="${rest#*|}"
   proof_mode="${rest%%|*}"
-  proof_label="${app_entry##*|}"
+  rest="${rest#*|}"
+  proof_label="${rest%%|*}"
+  rest="${rest#*|}"
+  run_hint="${rest:-script/manual_smoke_session.sh $report_name}"
+  required_verified_regex='[2-9][0-9]*'
+  pass_suffix=""
+  if [[ "$proof_mode" == "one-word" ]]; then
+    required_verified_regex='[1-9][0-9]*'
+    pass_suffix=" (one-word profile)"
+  fi
 
   if [[ -f "$REPORT_PATH" ]] &&
-    grep -E "\\| $report_name \\| \`$bundle_id\` \\| \`$proof_label\` \\| [2-9][0-9]* \\|" "$REPORT_PATH" >/dev/null; then
-    echo "- $display_name: passed"
+    grep -E "\\| $report_name \\| \`$bundle_id\` \\| \`$proof_label\` \\| $required_verified_regex \\|" "$REPORT_PATH" >/dev/null; then
+    echo "- $display_name: passed$pass_suffix"
   elif [[ "$proof_label" == "default" ]] &&
     [[ -f "$REPORT_PATH" ]] &&
-    grep -E "\\| $report_name \\| \`$bundle_id\` \\| [2-9][0-9]* \\|" "$REPORT_PATH" >/dev/null; then
-    echo "- $display_name: passed"
+    grep -E "\\| $report_name \\| \`$bundle_id\` \\| $required_verified_regex \\|" "$REPORT_PATH" >/dev/null; then
+    echo "- $display_name: passed$pass_suffix"
   elif [[ -f "$REPORT_PATH" ]] &&
     grep -E "\\| $report_name \\| \`$bundle_id\` \\| (\`$proof_label\` \\| )?0 \\| \`detached-suppressed\` \\|" "$REPORT_PATH" >/dev/null; then
-    echo "- $display_name: limited pass (needs full accept proof)"
+    echo "- $display_name: limited pass (needs full accept proof; run $run_hint)"
     missing=$((missing + 1))
-    pending_apps+=("$display_name")
+    pending_apps+=("$display_name - $run_hint")
   else
-    echo "- $display_name: pending"
+    echo "- $display_name: pending (run $run_hint)"
     missing=$((missing + 1))
-    pending_apps+=("$display_name")
+    pending_apps+=("$display_name - $run_hint")
   fi
 done
 
