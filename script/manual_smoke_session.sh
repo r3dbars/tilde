@@ -53,7 +53,7 @@ case "$APP" in
   chrome)
     BUNDLE_ID="com.google.Chrome"
     DISPLAY_NAME="Chrome"
-    EXPECTED_RENDER="floatingMirror"
+    EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     PROOF_LABEL="${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-$PROOF_LABEL}"
     STEPS=$'- Open a local fixture page with a textarea, contenteditable field, editor-like field, Monaco-like editor, or ProseMirror-like editor.\n- Type `Can we` in the focused field.\n- Confirm focus stays in the field.\n- Use Tab once, then the key above Tab for full visible accept.'
     ;;

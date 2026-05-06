@@ -44,6 +44,7 @@ final class SuggestionPanelController {
         panel.contentView = container
     }
 
+    @discardableResult
     func show(
         text: String,
         near anchorRect: CGRect,
@@ -51,7 +52,7 @@ final class SuggestionPanelController {
         boundedBy clippingRect: CGRect?,
         style: FocusedTextStyle?,
         renderMode: SuggestionRenderMode
-    ) {
+    ) -> CGRect? {
         let fontSize = defaultFontSize(anchorRect: anchorRect, renderMode: renderMode)
         let font = style?.font ?? NSFont.systemFont(ofSize: fontSize, weight: .regular)
         let color = textColor(matching: style?.foregroundColor, renderMode: renderMode)
@@ -103,8 +104,13 @@ final class SuggestionPanelController {
             )
 
         case .disabled:
-            return
+            return nil
         }
+
+        let accessibilityFrame = AccessibilityCoordinateConverter.accessibilityRect(
+            fromAppKitRect: frame,
+            screenHeight: screenHeight
+        )
 
         let shouldRefresh = !panel.isVisible || SuggestionPanelFrameCalculator.shouldRefreshPresentation(
             previousText: lastText,
@@ -116,7 +122,7 @@ final class SuggestionPanelController {
         )
 
         guard shouldRefresh else {
-            return
+            return accessibilityFrame
         }
 
         ghostTextView.update(
@@ -140,6 +146,7 @@ final class SuggestionPanelController {
         lastFrame = frame
         lastRenderMode = renderMode
         panel.orderFrontRegardless()
+        return accessibilityFrame
     }
 
     func hide() {
@@ -165,18 +172,13 @@ final class SuggestionPanelController {
             return NSColor.white.withAlphaComponent(0.86)
         }
 
-        guard let foregroundColor else {
-            return NSColor.labelColor.withAlphaComponent(0.42)
-        }
-
-        let color = foregroundColor.usingColorSpace(.deviceRGB) ?? foregroundColor
-        return color.withAlphaComponent(0.42)
+        return NSColor(calibratedWhite: 0.54, alpha: 0.78)
     }
 
     private func defaultFontSize(anchorRect: CGRect, renderMode: SuggestionRenderMode) -> CGFloat {
         switch renderMode {
         case .inlineAdjacent:
-            return min(max(anchorRect.height * 1.02, 12), 32)
+            return min(max(anchorRect.height * 0.9, 12), 28)
         case .floatingMirror:
             return 15
         case .disabled:

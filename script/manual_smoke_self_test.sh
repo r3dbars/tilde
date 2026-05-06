@@ -78,11 +78,11 @@ run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' flo
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-body
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-checklist
 run_passing_case obsidian Obsidian md.obsidian floatingMirror floatingMirror
-run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror textarea
-run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror contenteditable
-run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror editor-like
-run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror monaco-like
-run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror prosemirror-like
+run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent textarea
+run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent contenteditable
+run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent editor-like
+run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent monaco-like
+run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent prosemirror-like
 run_passing_case codex Codex com.openai.codex 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_passing_case claude-code "Claude Code" com.anthropic.claude-code 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_passing_case claude Claude com.anthropic.claudefordesktop 'inlineAdjacent|floatingMirror' inlineAdjacent
