@@ -14,6 +14,10 @@ final class DiagnosticsLog: @unchecked Sendable {
             .appendingPathComponent("Library/Logs/AutocompleteLab/diagnostics.log")
     }
 
+    var path: String {
+        logURL.path
+    }
+
     func record(_ event: String, metadata: [String: String] = [:]) {
         queue.async { [self, logURL] in
             do {
@@ -49,6 +53,12 @@ final class DiagnosticsLog: @unchecked Sendable {
                 .split(separator: "\n", omittingEmptySubsequences: true)
                 .suffix(limit)
                 .map(String.init)
+        }
+    }
+
+    func deleteAll() {
+        queue.sync { [logURL] in
+            try? FileManager.default.removeItem(at: logURL)
         }
     }
 

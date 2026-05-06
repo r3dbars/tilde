@@ -52,6 +52,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         enableAllApps: { [weak self] in
             self?.enableAllDisabledApps()
+        },
+        toggleTracingPaused: { [weak self] in
+            self?.toggleSettingsTracingPaused()
+        },
+        toggleRawContentTracing: { [weak self] in
+            self?.toggleRawContentTracing()
+        },
+        toggleScreenshotTracing: { [weak self] in
+            self?.toggleGlobalScreenshotTracing()
+        },
+        deleteLocalLogs: { [weak self] in
+            self?.deleteLocalPrivacyLogs()
         }
     )
 
@@ -278,7 +290,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
-            currentApp: settingsCurrentAppState
+            currentApp: settingsCurrentAppState,
+            privacy: settingsPrivacyState
         )
     }
 
@@ -308,6 +321,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isSupported: isSupported,
             isEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier),
             disabledAppCount: disabledBundleIdentifiers.count
+        )
+    }
+
+    private var settingsPrivacyState: SettingsPrivacyState {
+        SettingsPrivacyState(
+            tracingPaused: RawAutocompleteTraceLog.shared.isPaused,
+            rawContentTracingEnabled: RawAutocompleteTraceLog.shared.rawContentTracingEnabled,
+            screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled,
+            diagnosticsPath: DiagnosticsLog.shared.path,
+            tracePath: RawAutocompleteTraceLog.shared.path
         )
     }
 
@@ -2170,7 +2193,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
-            currentApp: settingsCurrentAppState
+            currentApp: settingsCurrentAppState,
+            privacy: settingsPrivacyState
         )
 
         guard lastStatusLine != statusLine else {
@@ -2266,7 +2290,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
-            currentApp: settingsCurrentAppState
+            currentApp: settingsCurrentAppState,
+            privacy: settingsPrivacyState
         )
         DiagnosticsLog.shared.record("request-accessibility")
     }
@@ -2289,7 +2314,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
-            currentApp: settingsCurrentAppState
+            currentApp: settingsCurrentAppState,
+            privacy: settingsPrivacyState
         )
     }
 
@@ -2385,6 +2411,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: ["paused": String(nextPaused)]
         )
         showDiagnostics()
+    }
+
+    private func toggleSettingsTracingPaused() {
+        let nextPaused = !RawAutocompleteTraceLog.shared.isPaused
+        RawAutocompleteTraceLog.shared.setPaused(nextPaused)
+        DiagnosticsLog.shared.record(
+            "trace-control",
+            metadata: [
+                "surface": "settings",
+                "paused": String(nextPaused)
+            ]
+        )
+        refreshRuntimeChrome()
+    }
+
+    private func toggleRawContentTracing() {
+        let nextEnabled = !RawAutocompleteTraceLog.shared.rawContentTracingEnabled
+        RawAutocompleteTraceLog.shared.setRawContentTracingEnabled(nextEnabled)
+        DiagnosticsLog.shared.record(
+            "raw-trace-control",
+            metadata: [
+                "surface": "settings",
+                "enabled": String(nextEnabled)
+            ]
+        )
+        refreshRuntimeChrome()
+    }
+
+    private func toggleGlobalScreenshotTracing() {
+        let nextEnabled = !RawAutocompleteTraceLog.shared.screenshotTracingEnabled
+        RawAutocompleteTraceLog.shared.setScreenshotTracingEnabled(nextEnabled)
+        DiagnosticsLog.shared.record(
+            "screenshot-trace-control",
+            metadata: [
+                "surface": "settings",
+                "enabled": String(nextEnabled)
+            ]
+        )
+        refreshRuntimeChrome()
+    }
+
+    private func deleteLocalPrivacyLogs() {
+        RawAutocompleteTraceLog.shared.deleteAll()
+        DiagnosticsLog.shared.deleteAll()
+        DiagnosticsLog.shared.record(
+            "local-privacy-logs-deleted",
+            metadata: ["surface": "settings"]
+        )
+        refreshRuntimeChrome()
     }
 
     private func toggleScreenshotTracing(for bundleIdentifier: String) {

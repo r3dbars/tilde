@@ -25,6 +25,18 @@ struct SettingsCurrentAppState: Equatable {
     }
 }
 
+struct SettingsPrivacyState: Equatable {
+    let tracingPaused: Bool
+    let rawContentTracingEnabled: Bool
+    let screenshotTracingEnabled: Bool
+    let diagnosticsPath: String
+    let tracePath: String
+
+    var statusText: String {
+        "Privacy: traces \(tracingPaused ? "paused" : "on"), raw text \(rawContentTracingEnabled ? "on" : "off"), screenshots \(screenshotTracingEnabled ? "on" : "off")"
+    }
+}
+
 @MainActor
 final class SettingsWindowController: NSObject {
     private let window: NSWindow
@@ -41,6 +53,12 @@ final class SettingsWindowController: NSObject {
     private let disabledAppsLabel = NSTextField(labelWithString: "")
     private let toggleCurrentAppButton = NSButton(title: "Disable Current App", target: nil, action: nil)
     private let enableAllAppsButton = NSButton(title: "Enable All Apps", target: nil, action: nil)
+    private let privacyLabel = NSTextField(labelWithString: "")
+    private let privacyPathLabel = NSTextField(labelWithString: "")
+    private let toggleTracingButton = NSButton(title: "Pause Tracing", target: nil, action: nil)
+    private let toggleRawTraceButton = NSButton(title: "Raw Text Off", target: nil, action: nil)
+    private let toggleScreenshotTraceButton = NSButton(title: "Screenshots Off", target: nil, action: nil)
+    private let deleteLocalLogsButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
     private let requestPermission: () -> Void
     private let openAccessibilitySettings: () -> Void
@@ -48,6 +66,10 @@ final class SettingsWindowController: NSObject {
     private let performRuntimeAction: (RuntimeReadinessAction) -> Void
     private let toggleCurrentApp: () -> Void
     private let enableAllApps: () -> Void
+    private let toggleTracingPaused: () -> Void
+    private let toggleRawContentTracing: () -> Void
+    private let toggleScreenshotTracing: () -> Void
+    private let deleteLocalLogs: () -> Void
     private var currentRuntimeAction: RuntimeReadinessAction = .none
 
     init(
@@ -56,7 +78,11 @@ final class SettingsWindowController: NSObject {
         toggleSuggestionsPaused: @escaping () -> Void,
         performRuntimeAction: @escaping (RuntimeReadinessAction) -> Void,
         toggleCurrentApp: @escaping () -> Void,
-        enableAllApps: @escaping () -> Void
+        enableAllApps: @escaping () -> Void,
+        toggleTracingPaused: @escaping () -> Void,
+        toggleRawContentTracing: @escaping () -> Void,
+        toggleScreenshotTracing: @escaping () -> Void,
+        deleteLocalLogs: @escaping () -> Void
     ) {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
@@ -64,8 +90,12 @@ final class SettingsWindowController: NSObject {
         self.performRuntimeAction = performRuntimeAction
         self.toggleCurrentApp = toggleCurrentApp
         self.enableAllApps = enableAllApps
+        self.toggleTracingPaused = toggleTracingPaused
+        self.toggleRawContentTracing = toggleRawContentTracing
+        self.toggleScreenshotTracing = toggleScreenshotTracing
+        self.deleteLocalLogs = deleteLocalLogs
 
-        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 520))
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 650))
         window = NSWindow(
             contentRect: contentView.frame,
             styleMask: [.titled, .closable],
@@ -87,7 +117,8 @@ final class SettingsWindowController: NSObject {
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
         modelDirectoryPath: String,
-        currentApp: SettingsCurrentAppState
+        currentApp: SettingsCurrentAppState,
+        privacy: SettingsPrivacyState
     ) {
         refresh(
             isTrusted: isTrusted,
@@ -95,7 +126,8 @@ final class SettingsWindowController: NSObject {
             runtimeReport: runtimeReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
-            currentApp: currentApp
+            currentApp: currentApp,
+            privacy: privacy
         )
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -108,7 +140,8 @@ final class SettingsWindowController: NSObject {
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
         modelDirectoryPath: String,
-        currentApp: SettingsCurrentAppState
+        currentApp: SettingsCurrentAppState,
+        privacy: SettingsPrivacyState
     ) {
         let guidance = RuntimeReadinessGuidance(report: runtimeReport)
         permissionLabel.stringValue = isTrusted ? "Accessibility: granted" : "Accessibility: needed"
@@ -132,6 +165,11 @@ final class SettingsWindowController: NSObject {
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
         disabledAppsLabel.stringValue = "Disabled apps: \(currentApp.disabledAppCount)"
         enableAllAppsButton.isEnabled = currentApp.disabledAppCount > 0
+        privacyLabel.stringValue = privacy.statusText
+        privacyPathLabel.stringValue = "Diagnostics: \(privacy.diagnosticsPath) | Traces: \(privacy.tracePath)"
+        toggleTracingButton.title = privacy.tracingPaused ? "Resume Tracing" : "Pause Tracing"
+        toggleRawTraceButton.title = privacy.rawContentTracingEnabled ? "Raw Text On" : "Raw Text Off"
+        toggleScreenshotTraceButton.title = privacy.screenshotTracingEnabled ? "Screenshots On" : "Screenshots Off"
         firstRunLabel.stringValue = onboardingText(
             isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
@@ -171,6 +209,12 @@ final class SettingsWindowController: NSObject {
         firstRunLabel.lineBreakMode = .byWordWrapping
         firstRunLabel.maximumNumberOfLines = 0
         firstRunLabel.preferredMaxLayoutWidth = 390
+        privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        privacyPathLabel.font = NSFont.systemFont(ofSize: 11)
+        privacyPathLabel.textColor = .secondaryLabelColor
+        privacyPathLabel.lineBreakMode = .byTruncatingMiddle
+        privacyPathLabel.maximumNumberOfLines = 1
+        privacyPathLabel.preferredMaxLayoutWidth = 420
 
         let requestButton = NSButton(title: "Request Accessibility", target: self, action: #selector(requestAccessibility))
         requestButton.bezelStyle = .rounded
@@ -192,6 +236,18 @@ final class SettingsWindowController: NSObject {
         enableAllAppsButton.target = self
         enableAllAppsButton.action = #selector(enableAllAppsControl)
         enableAllAppsButton.bezelStyle = .rounded
+        toggleTracingButton.target = self
+        toggleTracingButton.action = #selector(toggleTracingControl)
+        toggleTracingButton.bezelStyle = .rounded
+        toggleRawTraceButton.target = self
+        toggleRawTraceButton.action = #selector(toggleRawTraceControl)
+        toggleRawTraceButton.bezelStyle = .rounded
+        toggleScreenshotTraceButton.target = self
+        toggleScreenshotTraceButton.action = #selector(toggleScreenshotTraceControl)
+        toggleScreenshotTraceButton.bezelStyle = .rounded
+        deleteLocalLogsButton.target = self
+        deleteLocalLogsButton.action = #selector(deleteLocalLogsControl)
+        deleteLocalLogsButton.bezelStyle = .rounded
 
         let screenRecording = NSButton(checkboxWithTitle: "Screen Recording", target: nil, action: nil)
         screenRecording.isEnabled = false
@@ -220,6 +276,12 @@ final class SettingsWindowController: NSObject {
             toggleCurrentAppButton,
             disabledAppsLabel,
             enableAllAppsButton,
+            privacyLabel,
+            privacyPathLabel,
+            toggleTracingButton,
+            toggleRawTraceButton,
+            toggleScreenshotTraceButton,
+            deleteLocalLogsButton,
             firstRunLabel,
             screenRecording,
             clipboardFallback,
@@ -281,5 +343,25 @@ final class SettingsWindowController: NSObject {
     @objc
     private func enableAllAppsControl() {
         enableAllApps()
+    }
+
+    @objc
+    private func toggleTracingControl() {
+        toggleTracingPaused()
+    }
+
+    @objc
+    private func toggleRawTraceControl() {
+        toggleRawContentTracing()
+    }
+
+    @objc
+    private func toggleScreenshotTraceControl() {
+        toggleScreenshotTracing()
+    }
+
+    @objc
+    private func deleteLocalLogsControl() {
+        deleteLocalLogs()
     }
 }
