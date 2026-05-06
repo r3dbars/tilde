@@ -67,4 +67,42 @@ struct SuggestionPresentationGateTests {
             previousVisibleText: " make this"
         ))
     }
+
+    @Test("streaming partials are paced and capped")
+    func streamingPartialsArePacedAndCapped() {
+        let gate = SuggestionPresentationGate(
+            minimumStreamingPhraseCharacterDelta: 6,
+            minimumStreamingIntervalMilliseconds: 50,
+            maximumStreamingPartialPresentations: 2
+        )
+        var state = StreamingPresentationState()
+
+        #expect(gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this"),
+            mode: .phraseContinuation,
+            state: &state,
+            nowMilliseconds: 100
+        ))
+
+        #expect(!gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this work"),
+            mode: .phraseContinuation,
+            state: &state,
+            nowMilliseconds: 130
+        ))
+
+        #expect(gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this work now"),
+            mode: .phraseContinuation,
+            state: &state,
+            nowMilliseconds: 160
+        ))
+
+        #expect(!gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this work now please"),
+            mode: .phraseContinuation,
+            state: &state,
+            nowMilliseconds: 230
+        ))
+    }
 }

@@ -66,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
     private var currentCompletionRequest: CompletionRequest?
+    private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
     private var currentSuggestionID: String?
     private var currentSuggestionRequestMode: CompletionRequestMode?
     private var currentSuggestionTextBeforeCursor: String?
@@ -79,6 +80,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
     private let focusedTextPollInterval: TimeInterval = 0.05
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
+    private let postTypingPollPauseMilliseconds = 120
+    private var focusedTextPollingPausedUntil: Date?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ProcessInfo.processInfo.disableAutomaticTermination("AutocompleteLab runs as a persistent menu bar agent.")
@@ -245,6 +248,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setSuggestionDecision("Blocked: Accessibility permission missing")
             updateStatusMenu(app: nil, profile: nil, appEnabled: false)
             hideSuggestion()
+            return
+        }
+
+        if isFocusedTextPollingPausedForTyping() {
+            setSuggestionDecision("Waiting: typing")
             return
         }
 
@@ -468,6 +476,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private func isFocusedTextPollingPausedForTyping(now: Date = Date()) -> Bool {
+        guard let focusedTextPollingPausedUntil else {
+            return false
+        }
+
+        if focusedTextPollingPausedUntil > now {
+            return true
+        }
+
+        self.focusedTextPollingPausedUntil = nil
+        return false
+    }
+
     private func shouldSuppressDetachedSuggestion(
         profile: CompatibilityProfile,
         context: FocusedTextContext,
@@ -586,23 +607,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let eventTap = KeyboardEventTap { [weak self] key, isAutorepeat in
-            var handled = false
+        let eventTap = KeyboardEventTap(
+            handler: { [weak self] key, isAutorepeat, didObservePassthroughKeyDown in
+                var handled = false
 
-            if Thread.isMainThread {
-                handled = MainActor.assumeIsolated {
-                    self?.handleAutocompleteKey(key, isAutorepeat: isAutorepeat) ?? false
-                }
-            } else {
-                DispatchQueue.main.sync {
+                if Thread.isMainThread {
                     handled = MainActor.assumeIsolated {
-                        self?.handleAutocompleteKey(key, isAutorepeat: isAutorepeat) ?? false
+                        self?.handleAutocompleteKey(
+                            key,
+                            isAutorepeat: isAutorepeat,
+                            didObservePassthroughKeyDown: didObservePassthroughKeyDown
+                        ) ?? false
+                    }
+                } else {
+                    DispatchQueue.main.sync {
+                        handled = MainActor.assumeIsolated {
+                            self?.handleAutocompleteKey(
+                                key,
+                                isAutorepeat: isAutorepeat,
+                                didObservePassthroughKeyDown: didObservePassthroughKeyDown
+                            ) ?? false
+                        }
                     }
                 }
-            }
 
-            return handled
-        }
+                return handled
+            },
+            passthroughKeyDownObserver: { [weak self] in
+                self?.observePassthroughTypingKeyDown()
+            }
+        )
 
         if eventTap.start() {
             keyboardEventTap = eventTap
@@ -647,25 +681,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func handleAutocompleteKey(_ key: AutocompleteKey, isAutorepeat: Bool = false) -> Bool {
-        if key == .other {
-            guard suggestionSession.hasVisibleSuggestion else {
-                return false
-            }
+    private func observePassthroughTypingKeyDown() {
+        focusedTextPollingPausedUntil = Date().addingTimeInterval(
+            TimeInterval(postTypingPollPauseMilliseconds) / 1000
+        )
 
-            if !currentSuggestionInvalidatedByUserKeyDown {
-                currentSuggestionInvalidatedByUserKeyDown = true
-                invalidatePendingSuggestionRequest()
-                setSuggestionDecision("Stale: typing continued after suggestion")
-                recordKeyboardAction(
-                    key: key,
-                    action: .passThrough,
-                    handled: false,
-                    reason: "invalidated-visible-suggestion"
-                )
-            }
+        guard suggestionSession.hasVisibleSuggestion else {
+            return
+        }
 
-            return false
+        currentSuggestionInvalidatedByUserKeyDown = true
+        invalidatePendingSuggestionRequest()
+        setSuggestionDecision("Waiting: typing")
+        hideSuggestion(reason: "typing-continued")
+    }
+
+    private func handleAutocompleteKey(
+        _ key: AutocompleteKey,
+        isAutorepeat: Bool = false,
+        didObservePassthroughKeyDown: Bool = false
+    ) -> Bool {
+        if didObservePassthroughKeyDown {
+            currentSuggestionInvalidatedByUserKeyDown = true
         }
 
         guard suggestionSession.hasVisibleSuggestion else {
@@ -970,6 +1007,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionID: suggestionID
         )
         currentCompletionRequest = request
+        streamingPresentationStates[suggestionID] = StreamingPresentationState()
         let requestTicket = suggestionRequestGate.issue(request: request)
         let requestStartedAt = Date()
         let fieldIdentityDescription = fieldIdentity.traceDescription
@@ -1057,15 +1095,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                       partialSuggestion.visibleText,
                                       mode: request.mode,
                                       scope: appBundleIdentifier
-                                  ),
-                                  self.suggestionPresentationGate.shouldPresent(
-                                      partialSuggestion,
-                                      mode: request.mode,
-                                      phase: .streamingPartial,
-                                      previousVisibleText: self.suggestionSession.visibleSuggestion?.visibleText
                                   ) else {
                                 return
                             }
+
+                            var streamingState = self.streamingPresentationStates[suggestionID]
+                                ?? StreamingPresentationState()
+                            guard self.suggestionPresentationGate.shouldPresentStreamingPartial(
+                                partialSuggestion,
+                                mode: request.mode,
+                                state: &streamingState,
+                                nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1000)
+                            ) else {
+                                return
+                            }
+                            self.streamingPresentationStates[suggestionID] = streamingState
 
                             self.presentSuggestion(
                                 partialSuggestion,
@@ -1201,9 +1245,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         triggerReason: "model-result",
                         screenshotPath: screenshotPath
                     )
+                    self.streamingPresentationStates[suggestionID] = nil
                 }
             } catch {
                 await MainActor.run {
+                    self.streamingPresentationStates[suggestionID] = nil
                     self.hideSuggestion(reason: "engine-error")
                 }
             }
@@ -1281,6 +1327,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionTextBeforeCursor = request.textBeforeCursor
         currentSuggestionDisplayedText = suggestion.visibleText
         currentSuggestionInvalidatedByUserKeyDown = false
+        keyboardEventTap?.resetPassthroughObservation()
         lastCaretRect = placement.anchorRect
         lastTextLineRect = placement.textLineRect
         lastClippingRect = placement.clippingRect
@@ -1779,6 +1826,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionTextBeforeCursor = nil
         currentSuggestionDisplayedText = nil
         currentSuggestionInvalidatedByUserKeyDown = false
+        streamingPresentationStates.removeAll(keepingCapacity: true)
         lastCaretRect = nil
         lastTextLineRect = nil
         lastClippingRect = nil
@@ -1880,6 +1928,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debounceTask?.cancel()
         debounceTask = nil
         currentCompletionRequest = nil
+        streamingPresentationStates.removeAll(keepingCapacity: true)
         suggestionRequestGate.invalidate()
     }
 

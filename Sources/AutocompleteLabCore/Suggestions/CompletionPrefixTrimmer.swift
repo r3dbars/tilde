@@ -50,19 +50,60 @@ public enum CompletionPrefixTrimmer {
             let typedSuffix = Array(typedWords.suffix(overlap))
             let suggestionPrefix = Array(normalizedSuggestionWords.prefix(overlap))
 
-            guard typedSuffix == suggestionPrefix else {
-                continue
+            if typedSuffix == suggestionPrefix {
+                if overlap >= suggestionWords.count {
+                    return ""
+                }
+
+                let nextStart = suggestionWords[overlap].lowerBound
+                return formattedRemainingSuggestion(String(suggestion[nextStart...]), after: textBeforeCursor)
             }
 
-            if overlap >= suggestionWords.count {
-                return ""
+            if let partialRemaining = trimPartialFinalWordOverlap(
+                suggestion,
+                suggestionWords: suggestionWords,
+                typedSuffix: typedSuffix,
+                suggestionPrefix: suggestionPrefix,
+                overlap: overlap,
+                after: textBeforeCursor
+            ) {
+                return partialRemaining
             }
-
-            let nextStart = suggestionWords[overlap].lowerBound
-            return formattedRemainingSuggestion(String(suggestion[nextStart...]), after: textBeforeCursor)
         }
 
         return nil
+    }
+
+    private static func trimPartialFinalWordOverlap(
+        _ suggestion: String,
+        suggestionWords: [Range<String.Index>],
+        typedSuffix: [String],
+        suggestionPrefix: [String],
+        overlap: Int,
+        after textBeforeCursor: String
+    ) -> String? {
+        guard textBeforeCursor.last?.isWhitespace != true,
+              overlap > 0,
+              typedSuffix.count == suggestionPrefix.count,
+              let typedLast = typedSuffix.last,
+              let suggestionLast = suggestionPrefix.last,
+              !typedLast.isEmpty,
+              suggestionLast.hasPrefix(typedLast),
+              typedLast.count < suggestionLast.count,
+              Array(typedSuffix.dropLast()) == Array(suggestionPrefix.dropLast()) else {
+            return nil
+        }
+
+        let lastWordRange = suggestionWords[overlap - 1]
+        guard let remainingStart = suggestion.index(
+            lastWordRange.lowerBound,
+            offsetBy: typedLast.count,
+            limitedBy: lastWordRange.upperBound
+        ) else {
+            return nil
+        }
+
+        return String(suggestion[remainingStart...])
     }
 
     private static func formattedRemainingSuggestion(_ suggestion: String, after textBeforeCursor: String) -> String {
