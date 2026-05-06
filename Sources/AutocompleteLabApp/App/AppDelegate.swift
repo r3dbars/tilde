@@ -1167,17 +1167,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let learningAdjustment = supportsSyntheticTextAreaCaret(for: profile.bundleIdentifier)
             ? storedLearningAdjustment.withoutVisualOffset
             : storedLearningAdjustment
-        let effectiveRenderMode = learningAdjustment.effectiveRenderMode
-        let anchorRect = learningAdjustment.adjusted(RenderModePlan.anchorRect(
-            for: effectiveRenderMode,
-            caretRect: context.caretRect,
-            elementRect: context.elementRect,
-            windowRect: context.windowRect
-        ))
-        let adjustedTextLineRect = learningAdjustment.adjusted(context.textLineRect)
-        let adjustedClippingRect = context.elementRect ?? context.windowRect
+        let placementPlan = placementHealthPlan(
+            context: context,
+            profile: profile,
+            learningAdjustment: learningAdjustment
+        )
 
-        guard let anchorRect else {
+        guard case let .present(placement) = placementPlan else {
+            let suppression: PlacementHealthSuppression
+            if case let .suppress(value) = placementPlan {
+                suppression = value
+            } else {
+                suppression = PlacementHealthSuppression(
+                    requestedRenderMode: learningAdjustment.effectiveRenderMode,
+                    reason: .missingAnchor
+                )
+            }
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
                 suggestionID: suggestionID,
@@ -1189,7 +1194,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textAfterCursor: request.textAfterCursor,
                 displayedText: suggestion.visibleText,
                 latencyMilliseconds: latencyMilliseconds,
-                reason: "missing-anchor"
+                reason: suppression.reason.rawValue,
+                metadata: traceGeometryMetadata(context: context, renderMode: learningAdjustment.effectiveRenderMode)
+                    .merging(learningAdjustment.metadata) { current, _ in current }
+                    .merging(suppression.metadata) { current, _ in current }
+            )
+            recordSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                metadata: [
+                    "reason": suppression.reason.rawValue
+                ]
+                .merging(learningAdjustment.metadata) { current, _ in current }
+                .merging(suppression.metadata) { current, _ in current }
             )
             return
         }
@@ -1199,18 +1217,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionRequestMode = request.mode
         currentSuggestionTextBeforeCursor = request.textBeforeCursor
         currentSuggestionDisplayedText = suggestion.visibleText
-        lastCaretRect = anchorRect
-        lastTextLineRect = adjustedTextLineRect
-        lastClippingRect = adjustedClippingRect
+        lastCaretRect = placement.anchorRect
+        lastTextLineRect = placement.textLineRect
+        lastClippingRect = placement.clippingRect
         lastTextStyle = context.textStyle
-        lastRenderMode = effectiveRenderMode
+        lastRenderMode = placement.renderMode
         suggestionPanel.show(
             text: suggestion.visibleText,
-            near: anchorRect,
-            alignedTo: effectiveRenderMode == .inlineAdjacent ? adjustedTextLineRect : nil,
-            boundedBy: adjustedClippingRect,
+            near: placement.anchorRect,
+            alignedTo: placement.renderMode == .inlineAdjacent ? placement.textLineRect : nil,
+            boundedBy: placement.clippingRect,
             style: context.textStyle,
-            renderMode: effectiveRenderMode
+            renderMode: placement.renderMode
         )
         compatibilityLearningStore.recordObservation(
             for: profile.bundleIdentifier,
@@ -1230,29 +1248,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             latencyMilliseconds: latencyMilliseconds,
             screenshotPath: screenshotPath,
             metadata: [
-                "effectiveRenderMode": effectiveRenderMode.rawValue,
+                "effectiveRenderMode": placement.renderMode.rawValue,
                 "visibleChars": String(suggestion.visibleText.count),
-                "anchorRect": compactRectDescription(anchorRect),
-                "textLineRect": adjustedTextLineRect.map(compactRectDescription) ?? "none",
-                "clippingRect": adjustedClippingRect.map(compactRectDescription) ?? "none"
+                "anchorRect": compactRectDescription(placement.anchorRect),
+                "textLineRect": placement.textLineRect.map(compactRectDescription) ?? "none",
+                "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none"
             ]
-            .merging(traceGeometryMetadata(context: context, renderMode: effectiveRenderMode)) { current, _ in current }
+            .merging(traceGeometryMetadata(context: context, renderMode: placement.renderMode)) { current, _ in current }
             .merging(learningAdjustment.metadata) { current, _ in current }
+            .merging(placement.metadata) { current, _ in current }
         )
         recordSuggestionEvent(
             "suggestion-presented",
             context: context,
             profile: profile,
             metadata: [
-                "effectiveRenderMode": effectiveRenderMode.rawValue,
+                "effectiveRenderMode": placement.renderMode.rawValue,
                 "requestMode": request.mode.rawValue,
                 "traceID": String(suggestionID.prefix(8)),
                 "visibleChars": String(suggestion.visibleText.count),
                 "suggestionID": suggestionID,
                 "latencyMilliseconds": String(latencyMilliseconds)
-            ].merging(learningAdjustment.metadata) { current, _ in current }
+            ]
+            .merging(learningAdjustment.metadata) { current, _ in current }
+            .merging(placement.metadata) { current, _ in current }
         )
         startKeyboardEventTapIfPossible()
+    }
+
+    private func placementHealthPlan(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        learningAdjustment: CompatibilityLearningAdjustment
+    ) -> PlacementHealthPlan {
+        PlacementHealth.plan(
+            requestedRenderMode: learningAdjustment.effectiveRenderMode,
+            fallbackRenderMode: profile.fallbackRenderMode,
+            caretRect: learningAdjustment.adjusted(context.caretRect),
+            elementRect: learningAdjustment.adjusted(context.elementRect),
+            windowRect: learningAdjustment.adjusted(context.windowRect),
+            textLineRect: learningAdjustment.adjusted(context.textLineRect),
+            allowsDetachedSuggestions: profile.allowsDetachedSuggestions
+        )
     }
 
     private func captureTraceScreenshot(
@@ -1488,23 +1525,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let learningAdjustment = supportsSyntheticTextAreaCaret(for: profile.bundleIdentifier)
             ? storedLearningAdjustment.withoutVisualOffset
             : storedLearningAdjustment
-        let effectiveRenderMode = learningAdjustment.effectiveRenderMode
-        let anchorRect = learningAdjustment.adjusted(RenderModePlan.anchorRect(
-            for: effectiveRenderMode,
-            caretRect: context.caretRect,
-            elementRect: context.elementRect,
-            windowRect: context.windowRect
-        ))
+        let placementPlan = placementHealthPlan(
+            context: context,
+            profile: profile,
+            learningAdjustment: learningAdjustment
+        )
 
-        guard let anchorRect else {
+        guard case let .present(placement) = placementPlan else {
+            if case let .suppress(suppression) = placementPlan {
+                recordSuggestionEvent(
+                    "suggestion-hidden",
+                    context: context,
+                    profile: profile,
+                    metadata: [
+                        "reason": "placement-\(suppression.reason.rawValue)"
+                    ]
+                    .merging(learningAdjustment.metadata) { current, _ in current }
+                    .merging(suppression.metadata) { current, _ in current }
+                )
+                hideSuggestion(reason: "placement-\(suppression.reason.rawValue)")
+            }
             return
         }
 
-        lastCaretRect = anchorRect
-        lastTextLineRect = learningAdjustment.adjusted(context.textLineRect)
-        lastClippingRect = context.elementRect ?? context.windowRect
+        lastCaretRect = placement.anchorRect
+        lastTextLineRect = placement.textLineRect
+        lastClippingRect = placement.clippingRect
         lastTextStyle = context.textStyle
-        lastRenderMode = effectiveRenderMode
+        lastRenderMode = placement.renderMode
         refreshVisibleSuggestion()
     }
 

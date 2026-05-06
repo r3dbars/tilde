@@ -34,7 +34,9 @@ The app also keeps local compatibility learning here:
 ~/Library/Application Support/AutocompleteLab/compatibility-learning.json
 ```
 
-That file can hold per-app visual offsets, render-mode overrides, screenshot-tracing state, observation counts, and confidence. This is the first self-healing layer: small learned adjustments can apply at runtime, while bigger repeated misses become adapter patches.
+That file can hold per-app visual offsets, render-mode overrides, screenshot-tracing state, observation counts, and confidence. This is the learned self-healing layer: small learned adjustments can apply at runtime, while bigger repeated misses become adapter patches.
+
+The live placement health layer runs before a suggestion is shown. It trusts a caret only when the rect is finite, caret-shaped, and inside the focused element/window. If the caret is missing, invalid, or outside the focused bounds, the app either heals to a floating mirror anchor or suppresses the suggestion when detached anchors are disabled for that app. Traces mark these cases with `placementSelfHealingApplied`, `placementHealthReason`, and `placementAnchorSource`.
 
 For quick visual calibration, use the menu bar nudge actions while the target app is focused:
 
