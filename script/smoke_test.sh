@@ -15,12 +15,14 @@ swift package resolve
 swift test
 ./script/check_test_coverage_manifest.sh
 ./script/check_quality_eval.sh
+./script/check_model_asset_self_test.sh
 ./script/manual_smoke_self_test.sh
 ./script/real_app_smoke_self_test.sh
 ./script/check_trace_eval_self_test.sh
 ./script/check_typing_performance_log_self_test.sh
 ./script/model_latency_report_self_test.sh
 ./script/package_release.sh --check
+./script/check_model_asset.py
 ./script/build_and_run.sh --verify
 ./script/check_app_bundle.sh
 AUTOCOMPLETE_LAB_REQUIRE_READY=1 \

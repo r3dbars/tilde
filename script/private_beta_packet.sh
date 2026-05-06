@@ -10,6 +10,7 @@ README_PATH="$PACKET_DIR/README.md"
 INSTALL_PATH="$PACKET_DIR/install-checklist.md"
 FEEDBACK_PATH="$PACKET_DIR/feedback-log.md"
 SESSION_REPORT_PATH="$PACKET_DIR/session-report.md"
+MODEL_ASSET_PATH="$PACKET_DIR/model-asset.md"
 CHECKSUM_PATH="$PACKET_DIR/checksums.txt"
 
 cd "$ROOT_DIR"
@@ -39,6 +40,7 @@ require_archive() {
 
 create_packet() {
   require_archive
+  ./script/check_model_asset.py
   mkdir -p "$PACKET_DIR"
 
   local sha
@@ -59,6 +61,7 @@ sanity check, not the main product loop.
 Useful commands:
 
 \`\`\`bash
+./script/check_model_asset.py
 ./script/beta_readiness.sh
 ./script/manual_smoke_status.sh --require-all
 ./script/check_trace_eval.sh
@@ -70,17 +73,48 @@ EOF
   cat >"$INSTALL_PATH" <<'EOF'
 # Install Checklist
 
-1. Unzip `AutocompleteLab.zip`.
-2. Open `AutocompleteLab.app`.
-3. Grant Accessibility when macOS asks.
-4. Confirm the menu bar item says the model is ready.
-5. Open TextEdit and type a normal sentence.
-6. Use Tab for one-word accept.
-7. Use the key above Tab for full accept.
-8. Press Esc if a suggestion feels wrong.
+1. Run `./script/check_model_asset.py` on the test Mac.
+2. If it fails, run `./script/download_mlx_model.py --model qwen35-4b`.
+3. Unzip `AutocompleteLab.zip`.
+4. Open `AutocompleteLab.app`.
+5. Grant Accessibility when macOS asks.
+6. Confirm the menu bar item says the model is ready.
+7. Open TextEdit and type a normal sentence.
+8. Use Tab for one-word accept.
+9. Use the key above Tab for full accept.
+10. Press Esc if a suggestion feels wrong.
 
 Stop the test if suggestions feel distracting, appear in the wrong app, or
 insert text somewhere surprising.
+EOF
+
+  local expected_model_path
+  expected_model_path="$(./script/check_model_asset.py --print-path)"
+
+  cat >"$MODEL_ASSET_PATH" <<EOF
+# Model Asset Check
+
+The private beta is not ready if the app falls back to mock output.
+
+Expected model:
+
+\`\`\`text
+$expected_model_path
+\`\`\`
+
+Verify it:
+
+\`\`\`bash
+./script/check_model_asset.py
+\`\`\`
+
+Fix a missing or invalid model:
+
+\`\`\`bash
+python3 -m pip install --user huggingface_hub
+./script/download_mlx_model.py --model qwen35-4b
+./script/check_model_asset.py
+\`\`\`
 EOF
 
   cat >"$FEEDBACK_PATH" <<'EOF'
@@ -129,7 +163,13 @@ EOF
 check_packet() {
   require_archive
 
-  for path in "$README_PATH" "$INSTALL_PATH" "$FEEDBACK_PATH" "$SESSION_REPORT_PATH" "$CHECKSUM_PATH"; do
+  ./script/check_model_asset.py --quiet || {
+    echo "preferred MLX model is missing or invalid" >&2
+    echo "Run ./script/check_model_asset.py for the exact fix." >&2
+    exit 1
+  }
+
+  for path in "$README_PATH" "$INSTALL_PATH" "$MODEL_ASSET_PATH" "$FEEDBACK_PATH" "$SESSION_REPORT_PATH" "$CHECKSUM_PATH"; do
     if [[ ! -s "$path" ]]; then
       echo "missing beta packet file: $path" >&2
       exit 1

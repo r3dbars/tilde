@@ -44,7 +44,7 @@ unhelpful suggestions.
 | Diagnostics | 8/10 | Strong trace, placement, latency, and insertion signals. Needs a simpler top summary. |
 | Automated tests | 9/10 | Core has broad tests, 202 Swift tests pass, and script self-tests cover manual and real-app smoke harnesses. |
 | Real-app smoke | 8/10 | TextEdit and Chrome textarea/contenteditable/editor-like are automated; Codex and Claude Code remain manual-gated. |
-| Release readiness | 6/10 | Bundle checks, signing, and version metadata exist; model distribution is not self-contained yet. |
+| Release readiness | 7/10 | Bundle checks, signing, version metadata, and a hard preferred-model asset gate exist; model distribution is still not self-contained yet. |
 | Architecture | 7/10 | Core boundaries are solid; AppDelegate is still too large. |
 
 ## Research Notes
@@ -93,6 +93,8 @@ Primary references:
 - Insertion verification accepts rich-editor non-breaking-space equivalents.
 - Partial word acceptance no longer lets cadence or fast-candidate misses erase
   the remaining visible suggestion before full accept.
+- Beta and package readiness now fail clearly when the preferred Qwen3.5 4B MLX
+  model asset is missing, malformed, or too small.
 
 ## Next Highest-Leverage Work
 
@@ -103,4 +105,5 @@ Primary references:
 4. Add visible app management beyond the current-app toggle.
 5. Split AppDelegate into testable services around focused text polling,
    suggestion coordination, insertion verification, and tracing.
-6. Make the beta artifact self-sufficient with model download or bundling.
+6. Make the beta artifact self-sufficient with app-driven first-run model
+   download or bundling.
