@@ -80,9 +80,10 @@ install/repair and better shortcut controls before it feels fully productized.
 - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh chrome --fixture all`: passed for textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixtures.
 - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh chrome --fixture monaco-like`: passed after the final Monaco gap adjustment.
 - `./script/smoke_test.sh`: passed after the visible-nudge change, including model asset, trace eval, typing-performance, real-app smoke self-test, visual evidence, and package preflight checks. Latest focused-text poll p95 was 2ms with no slow markers.
-- `./script/manual_smoke_status.sh --strict`: failed honestly on Notes title/body/checklist and Claude Code proof gaps.
-- `./script/check_visual_placement_evidence_self_test.sh`: passed, including missing, empty, invalid, too-small, and unreferenced screenshot failure cases.
-- `./script/check_visual_placement_evidence.sh`: passed with six verified visual-placement screenshots.
+- `./script/manual_smoke_status.sh --strict`: failed honestly on Notes title/body/checklist and Claude Code insertion proof gaps, and separately reports Obsidian, Codex, Apple Notes, Claude Code, and Claude desktop screenshot proof gaps.
+- `./script/check_visual_placement_evidence_self_test.sh`: passed, including missing, empty, invalid, too-small, unreferenced, and pending strict screenshot failure cases.
+- `./script/check_visual_placement_evidence.sh`: passed with six verified visual-placement screenshots and reports five pending real-app screenshot audits.
+- `./script/check_visual_placement_evidence.sh --require-all`: failed honestly on the five pending real-app screenshot audits.
 - `swift test --filter CompatibilityLearningTests`: passed, covering trusted manual visual offsets and untrusted stale-offset rejection.
 - `swift build`: passed after the visible-suggestion nudge targeting change.
 
@@ -106,6 +107,8 @@ install/repair and better shortcut controls before it feels fully productized.
   fixtures, not from private prompts or user work.
 - Visual-placement evidence now has an executable repo check that fails on
   missing, empty, invalid, too-small, or unreferenced screenshots.
+- Manual smoke status now separates insertion proof from screenshot-backed
+  placement proof, and the visual evidence check can fail on pending audit rows.
 - Trusted learned visual offsets now apply to synthetic-caret apps such as
   Codex, Obsidian, and Chrome; untrusted stale offsets are still ignored.
 - Manual visual nudges now target the visible suggestion's app instead of

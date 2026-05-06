@@ -111,17 +111,31 @@ fi
 cat >"$SCORECARD_PATH" <<'EOF'
 # Deep Dive Scorecard
 
+## Area Ratings
+
 | Area | Rating | Why |
 | --- | ---: | --- |
 | Codex support | 6/10 | Needs prompt proof. |
 | Normal typing passthrough | 9.5/10 | Poll guard proof is almost there. |
 | Diagnostics | 10/10 | Clear enough. |
+
+## Visual Placement And Text Box Audit
+
+| App or surface | Grade | Evidence | What is good | What still needs work |
+| --- | ---: | --- | --- | --- |
+| TextEdit | 9.5/10 | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Inline proof exists. | More variants. |
+| Codex | 7.5/10 | Pending safe screenshot | Insertion proof exists. | Needs a safe prompt screenshot audit. |
 EOF
 
 STATUS_OUTPUT="$TMP_DIR/status-output.txt"
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
   script/manual_smoke_status.sh >"$STATUS_OUTPUT"
+
+if ! grep -F "Insertion proof status: $REPORT_PATH" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not label insertion proof separately" >&2
+  exit 1
+fi
 
 for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" Codex "Claude Code"; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
@@ -132,6 +146,21 @@ done
 
 if ! grep -F -- "- Obsidian: passed" "$STATUS_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not report full Obsidian proof as passed" >&2
+  exit 1
+fi
+
+if ! grep -F -- "- TextEdit: screenshot-backed (visual-placement-screenshots/textedit-inline.png)" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not report TextEdit screenshot proof separately" >&2
+  exit 1
+fi
+
+if ! grep -F -- "- Codex: pending screenshot proof - Pending safe screenshot" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not report pending Codex screenshot proof separately" >&2
+  exit 1
+fi
+
+if ! grep -F -- "next: Needs a safe prompt screenshot audit." "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not print the next visual audit action" >&2
   exit 1
 fi
 
