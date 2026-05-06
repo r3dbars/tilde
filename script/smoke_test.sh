@@ -18,6 +18,7 @@ swift test
 ./script/manual_smoke_self_test.sh
 ./script/real_app_smoke_self_test.sh
 ./script/check_trace_eval_self_test.sh
+./script/check_typing_performance_log_self_test.sh
 ./script/model_latency_report_self_test.sh
 ./script/package_release.sh --check
 ./script/build_and_run.sh --verify

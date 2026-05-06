@@ -112,6 +112,20 @@ After a manual model trial, require enough samples before trusting the result:
 script/model_latency_report.py --latest --require-timing-samples 5 --require-shown-samples 5
 ```
 
+Check whether typing stayed fast at the keyboard event tap:
+
+```bash
+START_LINE=$(wc -l < "$HOME/Library/Logs/AutocompleteLab/diagnostics.log" | tr -d ' ')
+# type normally with a visible suggestion, then:
+AUTOCOMPLETE_LAB_LOG_START_LINE=$START_LINE ./script/check_typing_performance_log.sh
+```
+
+The typing guard fails on `keyboard-event-tap-latency-slow`,
+`keyboard-event-tap-disabled`, raw latency above 8000us, or a latency summary
+whose p95/max is above 8000us. Use
+`AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES=1` when the slice must prove real
+event-tap traffic.
+
 For a clean app-specific slice:
 
 ```bash
