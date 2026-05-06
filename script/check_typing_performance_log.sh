@@ -8,6 +8,7 @@ MAX_SAMPLE_MICROS="${AUTOCOMPLETE_LAB_EVENT_TAP_MAX_MICROS:-8000}"
 MAX_P95_MICROS="${AUTOCOMPLETE_LAB_EVENT_TAP_MAX_P95_MICROS:-8000}"
 MAX_POLL_P95_MS="${AUTOCOMPLETE_LAB_FOCUSED_TEXT_POLL_MAX_P95_MS:-80}"
 MAX_POLL_SAMPLE_MS="${AUTOCOMPLETE_LAB_FOCUSED_TEXT_POLL_MAX_MS:-120}"
+MAX_POLL_SKIPPED="${AUTOCOMPLETE_LAB_FOCUSED_TEXT_POLL_MAX_SKIPPED:-0}"
 REQUIRE_SAMPLES="${AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES:-0}"
 REQUIRE_POLL_SAMPLES="${AUTOCOMPLETE_LAB_FOCUSED_TEXT_POLL_REQUIRE_SAMPLES:-0}"
 
@@ -16,7 +17,7 @@ if [[ ! -f "$LOG_PATH" ]]; then
   exit 1
 fi
 
-python3 - "$LOG_PATH" "$START_LINE" "$LINE_LIMIT" "$MAX_SAMPLE_MICROS" "$MAX_P95_MICROS" "$MAX_POLL_P95_MS" "$MAX_POLL_SAMPLE_MS" "$REQUIRE_SAMPLES" "$REQUIRE_POLL_SAMPLES" <<'PY'
+python3 - "$LOG_PATH" "$START_LINE" "$LINE_LIMIT" "$MAX_SAMPLE_MICROS" "$MAX_P95_MICROS" "$MAX_POLL_P95_MS" "$MAX_POLL_SAMPLE_MS" "$MAX_POLL_SKIPPED" "$REQUIRE_SAMPLES" "$REQUIRE_POLL_SAMPLES" <<'PY'
 import sys
 
 path = sys.argv[1]
@@ -26,8 +27,9 @@ max_sample_micros = int(sys.argv[4])
 max_p95_micros = int(sys.argv[5])
 max_poll_p95_ms = int(sys.argv[6])
 max_poll_sample_ms = int(sys.argv[7])
-required_samples = int(sys.argv[8] or "0")
-required_poll_samples = int(sys.argv[9] or "0")
+max_poll_skipped = int(sys.argv[8])
+required_samples = int(sys.argv[9] or "0")
+required_poll_samples = int(sys.argv[10] or "0")
 
 
 def fields_from(parts):
@@ -54,6 +56,17 @@ def required_int_field(fields, key, line_number, event, malformed_events):
     value = fields.get(key)
     if value is None:
         malformed_events.append(f"line {line_number} {event} missing {key}")
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        malformed_events.append(f"line {line_number} {event} invalid {key}={value}")
+        return None
+
+
+def optional_int_field(fields, key, line_number, event, malformed_events):
+    value = fields.get(key)
+    if value is None:
         return None
     try:
         return int(value)
@@ -99,6 +112,8 @@ slow_markers = []
 summaries = []
 poll_slow_markers = []
 poll_summaries = []
+poll_skipped_events = []
+poll_skip_summaries = []
 disabled_events = []
 malformed_events = []
 
@@ -190,11 +205,40 @@ for line_number, line in selected:
                 "max": max_milliseconds,
             }
         )
+    elif event == "focused-text-poll-skipped":
+        count = optional_int_field(fields, "count", line_number, event, malformed_events)
+        poll_skipped_events.append(
+            {
+                "line": line_number,
+                "reason": fields.get("reason", "unknown"),
+                "count": count or 1,
+            }
+        )
+    elif event == "focused-text-poll-skip-summary":
+        count = required_int_field(fields, "count", line_number, event, malformed_events)
+        duration = required_int_field(
+            fields,
+            "durationMilliseconds",
+            line_number,
+            event,
+            malformed_events,
+        )
+        poll_skip_summaries.append(
+            {
+                "line": line_number,
+                "reason": fields.get("reason", "unknown"),
+                "count": count or 0,
+                "duration": duration,
+            }
+        )
 
 raw_values = [item["duration"] for item in raw_samples]
 summary_sample_count = sum(item["count"] for item in summaries)
 total_sample_evidence = len(raw_samples) + summary_sample_count
 poll_summary_sample_count = sum(item["count"] for item in poll_summaries)
+poll_skipped_event_count = sum(item["count"] for item in poll_skipped_events)
+poll_skipped_summary_count = sum(item["count"] for item in poll_skip_summaries)
+poll_skipped_evidence = max(poll_skipped_event_count, poll_skipped_summary_count)
 
 print(f"Typing performance log: {path}")
 print(f"Start line: {start_line}")
@@ -223,6 +267,13 @@ if poll_summaries:
     print(f"Focused text poll p95 max: {max(poll_p95) if poll_p95 else 'n/a'}ms")
     print(f"Focused text poll max: {max(poll_max) if poll_max else 'n/a'}ms")
 print(f"Focused text poll slow markers: {len(poll_slow_markers)}")
+print(
+    "Focused text poll skipped: "
+    f"events={len(poll_skipped_events)} "
+    f"eventSkipped={poll_skipped_event_count} "
+    f"summarySkipped={poll_skipped_summary_count} "
+    f"evidence={poll_skipped_evidence}"
+)
 
 failures = []
 
@@ -276,6 +327,23 @@ for item in poll_slow_markers:
     duration_text = "unknown" if duration is None else f"{duration}ms"
     failures.append(
         f"{line_label(item)} slow focused text poll marker {duration_text}"
+    )
+
+if poll_skipped_evidence > max_poll_skipped:
+    details = []
+    for item in poll_skipped_events[:3]:
+        details.append(
+            f"{line_label(item)} focused text poll skipped reason={item['reason']} count={item['count']}"
+        )
+    for item in poll_skip_summaries[:3]:
+        duration = item["duration"]
+        duration_text = "unknown" if duration is None else f"{duration}ms"
+        details.append(
+            f"{line_label(item)} focused text poll skip summary reason={item['reason']} count={item['count']} duration={duration_text}"
+        )
+    failures.append(
+        f"focused text poll skipped {poll_skipped_evidence} time(s) exceeds {max_poll_skipped}: "
+        + "; ".join(details[:4])
     )
 
 for item in disabled_events:

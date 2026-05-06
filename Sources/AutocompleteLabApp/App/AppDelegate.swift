@@ -95,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private var isFocusedTextPollInFlight = false
     private var focusedTextPollLatencyStats = FocusedTextPollLatencyStats()
+    private var focusedTextPollSkipStats = FocusedTextPollSkipStats()
     private var suggestionRequestGate = SuggestionRequestGate()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
@@ -380,12 +381,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func pollFocusedTextIfIdle() {
         guard !isFocusedTextPollInFlight else {
-            DiagnosticsLog.shared.record(
-                "focused-text-poll-skipped",
-                metadata: [
-                    "reason": "in-flight"
-                ]
-            )
+            if let notice = focusedTextPollSkipStats.recordSkippedInFlight(now: Date()) {
+                DiagnosticsLog.shared.record(
+                    "focused-text-poll-skipped",
+                    metadata: [
+                        "reason": "in-flight",
+                        "count": String(notice.count)
+                    ]
+                )
+            }
             return
         }
 
@@ -396,6 +400,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let durationMilliseconds = Int((endedAt - startedAt) / 1_000_000)
             isFocusedTextPollInFlight = false
             recordFocusedTextPollLatency(durationMilliseconds)
+            recordFocusedTextPollSkipSummaryIfNeeded()
         }
 
         pollFocusedText()
@@ -695,6 +700,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
             )
         }
+    }
+
+    private func recordFocusedTextPollSkipSummaryIfNeeded() {
+        guard let summary = focusedTextPollSkipStats.drain(now: Date()) else {
+            return
+        }
+
+        DiagnosticsLog.shared.record(
+            "focused-text-poll-skip-summary",
+            metadata: [
+                "reason": "in-flight",
+                "count": String(summary.count),
+                "durationMilliseconds": String(summary.durationMilliseconds)
+            ]
+        )
     }
 
     private func shouldSuppressDetachedSuggestion(

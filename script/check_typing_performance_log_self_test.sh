@@ -46,6 +46,12 @@ if ! grep -F "Focused text poll windows: n=1 samples=3" "$TMP_DIR/pass.txt" >/de
   exit 1
 fi
 
+if ! grep -F "Focused text poll skipped: events=0 eventSkipped=0 summarySkipped=0 evidence=0" "$TMP_DIR/pass.txt" >/dev/null; then
+  echo "typing performance self-test did not summarize focused-text poll skips" >&2
+  cat "$TMP_DIR/pass.txt" >&2
+  exit 1
+fi
+
 cat >"$LOG_PATH" <<'EOF'
 2026-05-06T10:00:00Z keyboard-event-tap-latency decision=consume durationMicros=500 key=tab
 EOF
@@ -68,6 +74,8 @@ cat >"$LOG_PATH" <<'EOF'
 2026-05-06T10:00:00Z keyboard-event-tap-latency decision=consume durationMicros=fast key=tab
 2026-05-06T10:00:01Z keyboard-event-tap-latency-summary count=3 maxMicros=900 p50Micros=500 reason=stop
 2026-05-06T10:00:02Z focused-text-poll-latency-summary count=3 maxMilliseconds=12 p50Milliseconds=4
+2026-05-06T10:00:03Z focused-text-poll-skip-summary reason=in-flight durationMilliseconds=10
+2026-05-06T10:00:04Z focused-text-poll-skipped reason=in-flight count=many
 EOF
 
 if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" script/check_typing_performance_log.sh >"$TMP_DIR/malformed.txt" 2>&1; then
@@ -90,6 +98,18 @@ fi
 
 if ! grep -F "focused-text-poll-latency-summary missing p95Milliseconds" "$TMP_DIR/malformed.txt" >/dev/null; then
   echo "typing performance self-test did not catch malformed focused-text poll summaries" >&2
+  cat "$TMP_DIR/malformed.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "focused-text-poll-skip-summary missing count" "$TMP_DIR/malformed.txt" >/dev/null; then
+  echo "typing performance self-test did not catch malformed focused-text poll skip summaries" >&2
+  cat "$TMP_DIR/malformed.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "focused-text-poll-skipped invalid count=many" "$TMP_DIR/malformed.txt" >/dev/null; then
+  echo "typing performance self-test did not catch malformed focused-text poll skip events" >&2
   cat "$TMP_DIR/malformed.txt" >&2
   exit 1
 fi
@@ -168,6 +188,29 @@ fi
 if ! grep -F "slow focused text poll marker 91ms" "$TMP_DIR/poll-marker-fail.txt" >/dev/null; then
   echo "typing performance self-test did not catch slow focused-text poll markers" >&2
   cat "$TMP_DIR/poll-marker-fail.txt" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-05-06T10:00:00Z focused-text-poll-skipped reason=in-flight count=1
+2026-05-06T10:00:01Z focused-text-poll-skip-summary reason=in-flight count=3 durationMilliseconds=110
+EOF
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" script/check_typing_performance_log.sh >"$TMP_DIR/poll-skip-fail.txt" 2>&1; then
+  echo "typing performance self-test expected focused-text poll skips to fail" >&2
+  cat "$TMP_DIR/poll-skip-fail.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "focused text poll skipped 3 time(s) exceeds 0" "$TMP_DIR/poll-skip-fail.txt" >/dev/null; then
+  echo "typing performance self-test did not catch focused-text poll skips" >&2
+  cat "$TMP_DIR/poll-skip-fail.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "focused text poll skip summary reason=in-flight count=3 duration=110ms" "$TMP_DIR/poll-skip-fail.txt" >/dev/null; then
+  echo "typing performance self-test did not report focused-text poll skip summaries" >&2
+  cat "$TMP_DIR/poll-skip-fail.txt" >&2
   exit 1
 fi
 
