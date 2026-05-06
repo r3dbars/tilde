@@ -153,6 +153,10 @@ final class SettingsWindowController: NSObject {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    var isShowing: Bool {
+        window.isVisible
+    }
+
     func refresh(
         isTrusted: Bool,
         suggestionsPaused: Bool,

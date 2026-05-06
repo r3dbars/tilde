@@ -41,28 +41,6 @@ struct FocusedTextCapabilities: Equatable {
     }
 }
 
-struct FocusedElementFingerprint: Equatable {
-    let identifier: String?
-    let title: String?
-    let description: String?
-    let help: String?
-    let placeholder: String?
-    let windowTitle: String?
-
-    var searchableText: String {
-        [
-            identifier,
-            title,
-            description,
-            help,
-            placeholder,
-            windowTitle
-        ]
-        .compactMap { $0?.lowercased() }
-        .joined(separator: " ")
-    }
-}
-
 struct FocusedTextDiagnostics: Equatable {
     let bundleIdentifier: String?
     let localizedAppName: String?

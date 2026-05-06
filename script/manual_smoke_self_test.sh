@@ -114,6 +114,7 @@ cat >"$SCORECARD_PATH" <<'EOF'
 | Area | Rating | Why |
 | --- | ---: | --- |
 | Codex support | 6/10 | Needs prompt proof. |
+| Normal typing passthrough | 9.5/10 | Poll guard proof is almost there. |
 | Diagnostics | 10/10 | Clear enough. |
 EOF
 
@@ -136,6 +137,11 @@ fi
 
 if ! grep -F -- "- Codex support: 6/10 - Needs prompt proof." "$STATUS_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not report remaining non-10 scorecard gaps" >&2
+  exit 1
+fi
+
+if ! grep -F -- "- Normal typing passthrough: 9.5/10 - Poll guard proof is almost there." "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not report decimal scorecard gaps" >&2
   exit 1
 fi
 

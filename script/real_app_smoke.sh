@@ -222,6 +222,24 @@ end tell
 APPLESCRIPT
 }
 
+focus_chrome_smoke_editor() {
+  osascript >/dev/null <<'APPLESCRIPT'
+tell application "Google Chrome"
+  activate
+  try
+    tell active tab of front window to execute javascript "window.focusSmokeEditor && window.focusSmokeEditor();"
+  end try
+end tell
+delay 0.1
+tell application "System Events"
+  tell process "Google Chrome"
+    set frontmost to true
+  end tell
+end tell
+APPLESCRIPT
+  wait_for_frontmost_app "Google Chrome" 5
+}
+
 chrome_fixture_html() {
   local fixture="${1:-$CHROME_FIXTURE}"
 
@@ -537,6 +555,7 @@ end tell
 APPLESCRIPT
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
+  focus_chrome_smoke_editor
   press_key_code 48
   wait_for_log_fields "$start_line" "Chrome $fixture Tab acceptance" 12 \
     "keyboard-action" \
@@ -545,6 +564,7 @@ APPLESCRIPT
     "action=acceptNextWord" \
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.google.Chrome .*result=verified" "Chrome $fixture first verified insertion"
+  focus_chrome_smoke_editor
   press_key_code 50
 
   sleep 1

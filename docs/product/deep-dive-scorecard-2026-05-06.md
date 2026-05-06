@@ -2,16 +2,17 @@
 
 This is the current rating after the trust-first hardening, browser editor
 compatibility pass, Codex/Claude dogfood pass, Obsidian synthetic-caret pass,
-typing-performance pass, cleaner hardening, and polling-pause extraction.
-It now also includes the Settings readiness/control pass and Settings privacy
-controls.
+typing-performance pass, cleaner hardening, polling-pause extraction, focused
+field identity extraction, focused-text poll latency guard, release packet
+hardening, and model source cleanup. It also includes the Settings
+readiness/control pass and Settings privacy controls.
 
 Scale: 10 means beta-ready for normal people. 5 means promising but still easy
 to break or annoy users.
 
 ## Executive Rating
 
-Overall: 9.4/10.
+Overall: 9.5/10.
 
 The app is no longer just a neat lab build. It now has real proof across
 TextEdit, Notes, Obsidian, Codex, Claude desktop, and five Chrome editor shapes:
@@ -20,19 +21,21 @@ ProseMirror-like editor. The tight typing path is also fast in the latest
 diagnostics slice: event-tap p95 is 63 microseconds, p99/max is 101 microseconds,
 with zero slow markers and zero tap-disabled events. The fresh Obsidian slice
 also stayed fast while accepting suggestions: event-tap p95 was 132
-microseconds with no slow markers.
+microseconds with no slow markers. The latest relaunch adds a focused-text poll
+guard: 120 focused-text poll samples verified with p95 at 3ms, max at 9ms, and
+zero focused-text poll slow markers.
 
 It is still not a 10/10. Claude Code does not have a safe live prompt proof yet,
-release notarization is missing `NOTARYTOOL_PROFILE`, onboarding still needs a
-self-contained model install/repair path, shortcut controls are still thin, and
-the app still needs broader proof in real production editors beyond local
-fixtures.
+release notarization still requires an explicit `NOTARYTOOL_PROFILE`, onboarding
+still needs a self-contained in-app model install/repair path, shortcut controls
+are still thin, and the app still needs broader proof in real production editors
+beyond local fixtures.
 
 ## Area Ratings
 
 | Area | Rating | Why |
 | --- | ---: | --- |
-| Normal typing passthrough | 9/10 | Fresh smoke slice shows event-tap p95 63us, p99/max 101us, no slow markers, and no tap-disabled events. |
+| Normal typing passthrough | 9.5/10 | Fresh smoke slice shows event-tap p95 63us, p99/max 101us, no slow markers, and no tap-disabled events; latest relaunch adds focused-text poll p95 3ms, max 9ms, and no poll slow markers. |
 | Keyboard capture safety | 9/10 | Capture starts only around visible suggestions, records latency, suppresses its own synthetic insertion observations, and passes normal keys through. |
 | Acceptance reliability | 9/10 | Tab and full accept are verified across TextEdit, Codex, Claude desktop, and five Chrome fixture shapes. Codex now uses verified AX value replacement instead of failing key-event insertion. |
 | Placement confidence | 9/10 | Strong where caret bounds exist, safer mirror placement where browser editors hide geometry, and dogfood smoke now requires caret-anchored high-confidence placement. |
@@ -54,18 +57,19 @@ fixtures.
 | Privacy | 9/10 | Local-first, secure fields suppressed, diagnostics redact text by default, and Settings exposes trace pause, raw text, screenshots, paths, and delete-local-logs controls. |
 | Onboarding | 8/10 | Settings now gives stage-specific model guidance and runtime actions; model install/repair is still not fully in-app. |
 | User control | 9/10 | Settings exposes pause, current-app enablement, disabled-app count, enable-all, privacy controls, and a full-accept shortcut toggle. |
-| Diagnostics | 9/10 | Strong placement, latency, insertion, trace, recovered-insertion, and manual proof logs. |
-| Automated tests | 9/10 | 231 Swift tests pass, plus script self-tests for smoke, model asset, trace eval, and typing-performance guards. |
+| Diagnostics | 9.5/10 | Strong placement, event-tap latency, focused-text poll latency, insertion, trace, recovered-insertion, and manual proof logs. |
+| Automated tests | 9.5/10 | 239 Swift tests pass, plus script self-tests for smoke, model asset, trace eval, typing-performance guards, and focused-text poll guardrails. |
 | Real-app smoke | 9/10 | TextEdit, Obsidian, Codex, Claude desktop, and five Chrome shapes are green; Notes split rich-text proof and Claude Code remain pending. |
-| Release readiness | 7/10 | Release scripts now require Developer ID checks and can fail `--check` on missing notary profile, but `NOTARYTOOL_PROFILE` is still missing and model distribution is not self-contained. |
-| Architecture | 8/10 | Core boundaries are solid, and polling-pause timing plus recent-word memory moved into tested core types; AppDelegate still needs larger service extraction. |
+| Release readiness | 8/10 | Release archive is Developer-ID signed, private beta packet now validates the app inside the zip, and notary preflight passes when `NOTARYTOOL_PROFILE=Transcripted`; notarization/stapling still remains external. |
+| Architecture | 8.5/10 | Field identity, fingerprint state, text snapshots, polling-pause timing, focused-text poll latency stats, and recent-word memory now live in tested core types; AppDelegate still needs larger service extraction. |
 
 ## Latest Proof
 
-- `swift test`: 231 tests passed.
+- `swift test`: 239 tests passed.
 - `./script/real_app_smoke.sh chrome --fixture all`: textarea, contenteditable,
   editor-like, Monaco-like, and ProseMirror-like all passed with two verified
-  accepts each.
+  accepts each. A rerun after the runner focus-healing patch also passed all
+  five Chrome fixture shapes.
 - `AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD=1 ./script/real_app_smoke.sh textedit`:
   passed with two verified accepts.
 - Codex manual smoke: passed with two verified accepts after switching Codex
@@ -77,6 +81,9 @@ fixtures.
   `placementConfidenceBand=high`, `hasCaretRect=true`, and event-tap p95 132us.
 - `AUTOCOMPLETE_LAB_LOG_START_LINE=53058 AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES=10 ./script/check_typing_performance_log.sh`:
   p95 63us, p99/max 101us, zero slow markers, zero tap-disabled events.
+- `AUTOCOMPLETE_LAB_LOG_START_LINE=56124 ./script/check_typing_performance_log.sh`:
+  focused-text poll windows `n=2`, 120 samples, p95 max 3ms, max 9ms, zero
+  focused-text poll slow markers.
 - Focused cleaner and architecture tests passed:
   `FocusedTextPollingPauseTests`, `CompletionOutputCleanerTests`, and
   `CompletionQualityEvalTests`.
@@ -90,6 +97,14 @@ fixtures.
   model path.
 - `./script/package_release.sh --check`: Developer ID identity found, preferred
   MLX model ready, notary profile missing.
+- `NOTARYTOOL_PROFILE=Transcripted ./script/package_release.sh --check --require-notary-profile`:
+  Developer ID identity found, notary profile present, preferred MLX model ready.
+- `./script/package_release.sh archive`: release app built, Developer-ID bundle
+  check passed, zip created; Gatekeeper still rejects before notarization.
+- `./script/private_beta_packet.sh create && ./script/private_beta_packet.sh --check`:
+  packet verified after unzipping the archive and checking the app bundle inside.
+- `./script/manual_smoke_status.sh --strict`: still fails honestly on Notes
+  title/body/checklist and Claude Code.
 
 ## What Changed In This Pass
 
@@ -151,14 +166,32 @@ fixtures.
   notary-profile-required preflight, and post-staple zip verification.
 - Model-check failures and private beta docs now route normal testers to the
   app Settings model action before developer terminal commands.
+- Focused field identity, stable-bounds fingerprinting, and focused text
+  snapshots moved out of AppDelegate into tested core types.
+- Focused-text polling now records latency summaries, flags slow poll windows,
+  skips in-flight poll work, and participates in the typing-performance guard.
+- Settings only refreshes its full state while visible, avoiding hidden Settings
+  work during the 50ms focused-text poll loop.
+- Repeated blocked dogfood prompt checks no longer reset the block-log gate on
+  every poll, which keeps diagnostics from flooding while focus sits on a
+  non-prompt Codex control.
+- The preferred Qwen3.5 4B model metadata and downloader now point at the
+  carded `mlx-community/Qwen3.5-4B-MLX-4bit` source while preserving the local
+  cache path.
+- The private beta packet checker now unzips `AutocompleteLab.zip` and validates
+  the actual app bundle inside, including Developer ID signing by default.
+- The Chrome real-app smoke runner now re-focuses the local editor immediately
+  before Tab and full-accept keys, preventing Codex/frontmost-app focus bounce
+  from turning a good Chrome suggestion into a false failed accept.
 
 ## Next Highest-Leverage Work
 
-1. Run a safe Claude Code prompt proof.
-2. Test real production Monaco and ProseMirror surfaces, not just local
+1. Run safe Notes title/body/checklist proof in a disposable note.
+2. Run a safe Claude Code prompt proof when a visible prompt surface is available.
+3. Test real production Monaco and ProseMirror surfaces, not just local
    dependency-free fixtures.
-3. Build a fully in-app model install/repair flow.
-4. Add a fuller shortcut editor if beta users need more than the Backtick /
+4. Build a fully in-app model install/repair flow.
+5. Add a fuller shortcut editor if beta users need more than the Backtick /
    Option-Tab full-accept toggle.
-5. Split AppDelegate into focused services around polling, insertion,
+6. Split AppDelegate into focused services around polling, insertion,
    verification, and tracing.
