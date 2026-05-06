@@ -6,6 +6,8 @@ START_LINE="${AUTOCOMPLETE_LAB_LOG_START_LINE:-0}"
 LINE_LIMIT="${AUTOCOMPLETE_LAB_TYPING_PERF_LOG_LINES:-0}"
 MAX_SAMPLE_MICROS="${AUTOCOMPLETE_LAB_EVENT_TAP_MAX_MICROS:-8000}"
 MAX_P95_MICROS="${AUTOCOMPLETE_LAB_EVENT_TAP_MAX_P95_MICROS:-8000}"
+MAX_POLL_P95_MS="${AUTOCOMPLETE_LAB_FOCUSED_TEXT_POLL_MAX_P95_MS:-80}"
+MAX_POLL_SAMPLE_MS="${AUTOCOMPLETE_LAB_FOCUSED_TEXT_POLL_MAX_MS:-120}"
 REQUIRE_SAMPLES="${AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES:-0}"
 
 if [[ ! -f "$LOG_PATH" ]]; then
@@ -13,7 +15,7 @@ if [[ ! -f "$LOG_PATH" ]]; then
   exit 1
 fi
 
-python3 - "$LOG_PATH" "$START_LINE" "$LINE_LIMIT" "$MAX_SAMPLE_MICROS" "$MAX_P95_MICROS" "$REQUIRE_SAMPLES" <<'PY'
+python3 - "$LOG_PATH" "$START_LINE" "$LINE_LIMIT" "$MAX_SAMPLE_MICROS" "$MAX_P95_MICROS" "$MAX_POLL_P95_MS" "$MAX_POLL_SAMPLE_MS" "$REQUIRE_SAMPLES" <<'PY'
 import sys
 
 path = sys.argv[1]
@@ -21,7 +23,9 @@ start_line = int(sys.argv[2] or "0")
 line_limit = int(sys.argv[3] or "0")
 max_sample_micros = int(sys.argv[4])
 max_p95_micros = int(sys.argv[5])
-required_samples = int(sys.argv[6] or "0")
+max_poll_p95_ms = int(sys.argv[6])
+max_poll_sample_ms = int(sys.argv[7])
+required_samples = int(sys.argv[8] or "0")
 
 
 def fields_from(parts):
@@ -79,6 +83,8 @@ if line_limit > 0:
 raw_samples = []
 slow_markers = []
 summaries = []
+poll_slow_markers = []
+poll_summaries = []
 disabled_events = []
 
 for line_number, line in selected:
@@ -128,6 +134,23 @@ for line_number, line in selected:
                 "reason": fields.get("reason", "unknown"),
             }
         )
+    elif event == "focused-text-poll-latency-slow":
+        poll_slow_markers.append(
+            {
+                "line": line_number,
+                "duration": int_field(fields, "durationMilliseconds"),
+            }
+        )
+    elif event == "focused-text-poll-latency-summary":
+        poll_summaries.append(
+            {
+                "line": line_number,
+                "count": int_field(fields, "count") or 0,
+                "p50": int_field(fields, "p50Milliseconds"),
+                "p95": int_field(fields, "p95Milliseconds"),
+                "max": int_field(fields, "maxMilliseconds"),
+            }
+        )
 
 raw_values = [item["duration"] for item in raw_samples]
 summary_sample_count = sum(item["count"] for item in summaries)
@@ -150,6 +173,16 @@ if summaries:
     print(f"Summary max: {max(summary_max) if summary_max else 'n/a'}us")
 print(f"Slow latency markers: {len(slow_markers)}")
 print(f"Tap disabled events: {len(disabled_events)}")
+print(
+    "Focused text poll windows: "
+    f"n={len(poll_summaries)} samples={sum(item['count'] for item in poll_summaries)}"
+)
+if poll_summaries:
+    poll_p95 = [item["p95"] for item in poll_summaries if item["p95"] is not None]
+    poll_max = [item["max"] for item in poll_summaries if item["max"] is not None]
+    print(f"Focused text poll p95 max: {max(poll_p95) if poll_p95 else 'n/a'}ms")
+    print(f"Focused text poll max: {max(poll_max) if poll_max else 'n/a'}ms")
+print(f"Focused text poll slow markers: {len(poll_slow_markers)}")
 
 failures = []
 
@@ -179,6 +212,23 @@ for item in slow_markers:
     duration_text = "unknown" if duration is None else f"{duration}us"
     failures.append(
         f"{line_label(item)} slow event tap latency marker {duration_text} key={item['key']} decision={item['decision']}"
+    )
+
+for item in poll_summaries:
+    if item["p95"] is not None and item["p95"] > max_poll_p95_ms:
+        failures.append(
+            f"{line_label(item)} focused text poll p95 {item['p95']}ms exceeds {max_poll_p95_ms}ms"
+        )
+    if item["max"] is not None and item["max"] > max_poll_sample_ms:
+        failures.append(
+            f"{line_label(item)} focused text poll max {item['max']}ms exceeds {max_poll_sample_ms}ms"
+        )
+
+for item in poll_slow_markers:
+    duration = item["duration"]
+    duration_text = "unknown" if duration is None else f"{duration}ms"
+    failures.append(
+        f"{line_label(item)} slow focused text poll marker {duration_text}"
     )
 
 for item in disabled_events:

@@ -14,6 +14,7 @@ cat >"$LOG_PATH" <<'EOF'
 2026-05-06T10:00:01Z keyboard-event-tap-latency decision=consume durationMicros=410 key=tab
 2026-05-06T10:00:02Z keyboard-event-tap-latency decision=passthrough durationMicros=620 key=escape
 2026-05-06T10:00:03Z keyboard-event-tap-latency-summary count=3 maxMicros=900 p50Micros=500 p95Micros=900 p99Micros=900 reason=stop
+2026-05-06T10:00:04Z focused-text-poll-latency-summary count=3 maxMilliseconds=12 p50Milliseconds=4 p95Milliseconds=12
 EOF
 
 AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
@@ -34,6 +35,12 @@ fi
 
 if ! grep -F "Typing performance log verified." "$TMP_DIR/pass.txt" >/dev/null; then
   echo "typing performance self-test did not pass the good log" >&2
+  cat "$TMP_DIR/pass.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Focused text poll windows: n=1 samples=3" "$TMP_DIR/pass.txt" >/dev/null; then
+  echo "typing performance self-test did not summarize focused text poll windows" >&2
   cat "$TMP_DIR/pass.txt" >&2
   exit 1
 fi
@@ -74,6 +81,44 @@ fi
 if ! grep -F "event tap max 11000us exceeds 8000us" "$TMP_DIR/summary-fail.txt" >/dev/null; then
   echo "typing performance self-test did not catch slow max summaries" >&2
   cat "$TMP_DIR/summary-fail.txt" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-05-06T10:00:00Z focused-text-poll-latency-summary count=60 maxMilliseconds=140 p50Milliseconds=12 p95Milliseconds=90
+EOF
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" script/check_typing_performance_log.sh >"$TMP_DIR/poll-summary-fail.txt" 2>&1; then
+  echo "typing performance self-test expected slow focused-text poll summaries to fail" >&2
+  cat "$TMP_DIR/poll-summary-fail.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "focused text poll p95 90ms exceeds 80ms" "$TMP_DIR/poll-summary-fail.txt" >/dev/null; then
+  echo "typing performance self-test did not catch slow focused-text poll p95 summaries" >&2
+  cat "$TMP_DIR/poll-summary-fail.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "focused text poll max 140ms exceeds 120ms" "$TMP_DIR/poll-summary-fail.txt" >/dev/null; then
+  echo "typing performance self-test did not catch slow focused-text poll max summaries" >&2
+  cat "$TMP_DIR/poll-summary-fail.txt" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-05-06T10:00:00Z focused-text-poll-latency-slow durationMilliseconds=91
+EOF
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" script/check_typing_performance_log.sh >"$TMP_DIR/poll-marker-fail.txt" 2>&1; then
+  echo "typing performance self-test expected slow focused-text poll markers to fail" >&2
+  cat "$TMP_DIR/poll-marker-fail.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "slow focused text poll marker 91ms" "$TMP_DIR/poll-marker-fail.txt" >/dev/null; then
+  echo "typing performance self-test did not catch slow focused-text poll markers" >&2
+  cat "$TMP_DIR/poll-marker-fail.txt" >&2
   exit 1
 fi
 

@@ -23,6 +23,8 @@ create   Create a local private-beta packet beside dist/AutocompleteLab.zip.
 --check  Validate that the packet exists and points at the current archive.
 
 This script only writes local files. It never uploads or sends beta data.
+By default it requires the archive to contain a Developer ID signed app. Set
+AUTOCOMPLETE_LAB_PRIVATE_BETA_REQUIRE_RELEASE_SIGNATURE=0 only for local script tests.
 EOF
 }
 
@@ -38,9 +40,32 @@ require_archive() {
   fi
 }
 
+check_archive_app() {
+  local verify_dir app_path
+  verify_dir="$(mktemp -d)"
+
+  ditto -x -k "$ARCHIVE_PATH" "$verify_dir"
+  app_path="$verify_dir/AutocompleteLab.app"
+
+  if [[ ! -d "$app_path" ]]; then
+    rm -rf "$verify_dir"
+    echo "archive does not contain AutocompleteLab.app" >&2
+    exit 1
+  fi
+
+  if [[ "${AUTOCOMPLETE_LAB_PRIVATE_BETA_REQUIRE_RELEASE_SIGNATURE:-1}" == "1" ]]; then
+    ./script/check_app_bundle.sh --release "$app_path"
+  else
+    ./script/check_app_bundle.sh "$app_path"
+  fi
+
+  rm -rf "$verify_dir"
+}
+
 create_packet() {
   require_archive
   ./script/check_model_asset.py
+  check_archive_app
   mkdir -p "$PACKET_DIR"
 
   local sha
@@ -164,6 +189,7 @@ EOF
 
 check_packet() {
   require_archive
+  check_archive_app
 
   ./script/check_model_asset.py --quiet || {
     echo "preferred MLX model is missing or invalid" >&2

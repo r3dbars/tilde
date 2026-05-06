@@ -92,6 +92,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debounceTask: Task<Void, Never>?
     private var insertionVerificationTask: Task<Void, Never>?
     private var runtimeWarmTask: Task<Void, Never>?
+    private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
+    private var isFocusedTextPollInFlight = false
+    private var focusedTextPollLatencyStats = FocusedTextPollLatencyStats()
     private var suggestionRequestGate = SuggestionRequestGate()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
@@ -114,6 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 120
     private let postInsertionPollPauseMilliseconds = 220
+    private let slowFocusedTextPollLatencyMilliseconds = 80
     private var focusedTextPollingPause = FocusedTextPollingPause()
     private var suggestionsPaused = false
     private var keyboardShortcutConfiguration = KeyboardShortcutConfiguration.default
@@ -194,7 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startPolling() {
         let timer = Timer.scheduledTimer(withTimeInterval: focusedTextPollInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.pollFocusedText()
+                self?.pollFocusedTextIfIdle()
             }
         }
         timer.tolerance = focusedTextPollInterval / 2
@@ -288,16 +292,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshRuntimeChrome() {
         runtimeMenuItem?.title = "Model: \(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(runtimeReadinessReport.summary) • \(completionLengthConfiguration.displaySummary)"
-        settingsWindow.refresh(
-            isTrusted: accessibilityClient.isTrusted,
-            suggestionsPaused: suggestionsPaused,
-            runtimeReport: runtimeReadinessReport,
-            runtimeTargetSummary: runtimeTargetSummary,
-            modelDirectoryPath: modelDirectoryPath,
-            currentApp: settingsCurrentAppState,
-            privacy: settingsPrivacyState,
-            keyboardShortcuts: settingsKeyboardShortcutState
-        )
+        if settingsWindow.isShowing {
+            settingsWindow.refresh(
+                isTrusted: accessibilityClient.isTrusted,
+                suggestionsPaused: suggestionsPaused,
+                runtimeReport: runtimeReadinessReport,
+                runtimeTargetSummary: runtimeTargetSummary,
+                modelDirectoryPath: modelDirectoryPath,
+                currentApp: settingsCurrentAppState,
+                privacy: settingsPrivacyState,
+                keyboardShortcuts: settingsKeyboardShortcutState
+            )
+        }
     }
 
     private var runtimeReadinessReport: RuntimeReadinessReport {
@@ -370,6 +376,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionControlPolicy.state(isPaused: suggestionsPaused)
     }
 
+    private func pollFocusedTextIfIdle() {
+        guard !isFocusedTextPollInFlight else {
+            DiagnosticsLog.shared.record(
+                "focused-text-poll-skipped",
+                metadata: [
+                    "reason": "in-flight"
+                ]
+            )
+            return
+        }
+
+        isFocusedTextPollInFlight = true
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+        defer {
+            let endedAt = DispatchTime.now().uptimeNanoseconds
+            let durationMilliseconds = Int((endedAt - startedAt) / 1_000_000)
+            isFocusedTextPollInFlight = false
+            recordFocusedTextPollLatency(durationMilliseconds)
+        }
+
+        pollFocusedText()
+    }
+
     private func pollFocusedText() {
         if case let .blocked(reason) = suggestionControlPolicy.suggestionAvailability(for: suggestionControlState) {
             setSuggestionDecision(reason.decisionText)
@@ -395,12 +424,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        guard let frontmostApp = accessibilityClient.frontmostApplication(),
+        let activeApp = accessibilityClient.frontmostApplication()
+        guard let frontmostApp = activeApp,
               let profile = profileStore.profile(for: frontmostApp.bundleIdentifier) else {
             clearFocusedFieldState()
             currentProfile = nil
             setSuggestionDecision("Blocked: unsupported app")
-            updateStatusMenu(app: accessibilityClient.frontmostApplication(), profile: nil, appEnabled: false)
+            updateStatusMenu(app: activeApp, profile: nil, appEnabled: false)
             hideSuggestion()
             return
         }
@@ -438,7 +468,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: rawContext
         )
         guard promptMatch.canSuggest else {
-            clearFocusedFieldState()
+            clearFocusedFieldState(resetBlockLogGate: false)
             currentProfile = profile
             setSuggestionDecision("Blocked: \(promptMatch.reason)")
             recordBlockedSuggestionEvent(
@@ -640,6 +670,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             delayMilliseconds: delayMilliseconds,
             requestMode: requestMode
         )
+    }
+
+    private func recordFocusedTextPollLatency(_ durationMilliseconds: Int) {
+        if durationMilliseconds >= slowFocusedTextPollLatencyMilliseconds {
+            DiagnosticsLog.shared.record(
+                "focused-text-poll-latency-slow",
+                metadata: [
+                    "durationMilliseconds": String(durationMilliseconds)
+                ]
+            )
+        }
+
+        if let summary = focusedTextPollLatencyStats.record(durationMilliseconds) {
+            DiagnosticsLog.shared.record(
+                "focused-text-poll-latency-summary",
+                metadata: [
+                    "count": String(summary.count),
+                    "p50Milliseconds": String(summary.p50Milliseconds),
+                    "p95Milliseconds": String(summary.p95Milliseconds),
+                    "maxMilliseconds": String(summary.maxMilliseconds)
+                ]
+            )
+        }
     }
 
     private func shouldSuppressDetachedSuggestion(
@@ -1788,65 +1841,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         context: FocusedTextContext,
         profile: CompatibilityProfile
     ) -> FocusedFieldIdentity {
-        let elementIdentifier: Int
-
-        switch profile.fieldIdentityMode {
-        case .accessibilityElement:
-            elementIdentifier = context.elementIdentifier
-        case .stableBounds:
-            elementIdentifier = stableBoundsIdentifier(context: context)
-        }
-
-        return FocusedFieldIdentity(
+        focusedFieldIdentityPolicy.identity(
             bundleIdentifier: app.bundleIdentifier,
             processIdentifier: app.processIdentifier,
-            elementIdentifier: elementIdentifier
+            mode: profile.fieldIdentityMode,
+            input: FocusedFieldIdentityInput(context: context)
         )
-    }
-
-    private func stableBoundsIdentifier(context: FocusedTextContext) -> Int {
-        var hasher = Hasher()
-        hasher.combine(context.role ?? "unknown")
-        hasher.combine(context.subrole ?? "none")
-        combineStableFingerprint(context.fingerprint, into: &hasher)
-        combineRoundedRect(context.elementRect, into: &hasher)
-        combineRoundedRect(context.windowRect, into: &hasher)
-        return hasher.finalize()
-    }
-
-    private func combineStableFingerprint(_ fingerprint: FocusedElementFingerprint, into hasher: inout Hasher) {
-        combineStableFingerprintValue(fingerprint.identifier, label: "identifier", into: &hasher)
-        combineStableFingerprintValue(fingerprint.title, label: "title", into: &hasher)
-        combineStableFingerprintValue(fingerprint.description, label: "description", into: &hasher)
-        combineStableFingerprintValue(fingerprint.help, label: "help", into: &hasher)
-        combineStableFingerprintValue(fingerprint.placeholder, label: "placeholder", into: &hasher)
-        combineStableFingerprintValue(fingerprint.windowTitle, label: "windowTitle", into: &hasher)
-    }
-
-    private func combineStableFingerprintValue(_ value: String?, label: String, into hasher: inout Hasher) {
-        let normalized = value?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-
-        guard let normalized, !normalized.isEmpty else {
-            hasher.combine("\(label):missing")
-            return
-        }
-
-        hasher.combine(label)
-        hasher.combine(normalized)
-    }
-
-    private func combineRoundedRect(_ rect: CGRect?, into hasher: inout Hasher) {
-        guard let rect else {
-            hasher.combine("missing")
-            return
-        }
-
-        hasher.combine(Int(rect.origin.x.rounded()))
-        hasher.combine(Int(rect.origin.y.rounded()))
-        hasher.combine(Int(rect.width.rounded()))
-        hasher.combine(Int(rect.height.rounded()))
     }
 
     private func insertionRetrySkippedModes(
@@ -2192,16 +2192,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusMenuItem?.title = statusLine
         pauseSuggestionsMenuItem?.title = pauseSuggestionsTitle
         toggleAppMenuItem?.title = app.map { appEnabled ? "Disable \($0.localizedName)" : "Enable \($0.localizedName)" } ?? "Toggle Current App"
-        settingsWindow.refresh(
-            isTrusted: accessibilityClient.isTrusted,
-            suggestionsPaused: suggestionsPaused,
-            runtimeReport: runtimeReadinessReport,
-            runtimeTargetSummary: runtimeTargetSummary,
-            modelDirectoryPath: modelDirectoryPath,
-            currentApp: settingsCurrentAppState,
-            privacy: settingsPrivacyState,
-            keyboardShortcuts: settingsKeyboardShortcutState
-        )
+        if settingsWindow.isShowing {
+            settingsWindow.refresh(
+                isTrusted: accessibilityClient.isTrusted,
+                suggestionsPaused: suggestionsPaused,
+                runtimeReport: runtimeReadinessReport,
+                runtimeTargetSummary: runtimeTargetSummary,
+                modelDirectoryPath: modelDirectoryPath,
+                currentApp: settingsCurrentAppState,
+                privacy: settingsPrivacyState,
+                keyboardShortcuts: settingsKeyboardShortcutState
+            )
+        }
 
         guard lastStatusLine != statusLine else {
             return
@@ -2263,7 +2265,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionBlockLogGate.reset()
     }
 
-    private func clearFocusedFieldState(hideReason: String = "focus-lost") {
+    private func clearFocusedFieldState(
+        hideReason: String = "focus-lost",
+        resetBlockLogGate: Bool = true
+    ) {
         if suggestionSession.hasVisibleSuggestion {
             hideSuggestion(reason: hideReason)
         }
@@ -2276,7 +2281,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentFieldIdentity = nil
         lastTextSnapshot = nil
         lastRequestedTextBeforeCursor = nil
-        suggestionBlockLogGate.reset()
+        if resetBlockLogGate {
+            suggestionBlockLogGate.reset()
+        }
     }
 
     private func invalidatePendingSuggestionRequest() {
@@ -2733,22 +2740,6 @@ private extension AppDelegate {
     }
 }
 
-private struct FocusedFieldIdentity: Equatable, Hashable {
-    let bundleIdentifier: String
-    let processIdentifier: pid_t
-    let elementIdentifier: Int
-
-    var traceDescription: String {
-        "\(bundleIdentifier)|pid:\(processIdentifier)|element:\(elementIdentifier)"
-    }
-}
-
-private struct FocusedTextSnapshot: Equatable {
-    let fieldIdentity: FocusedFieldIdentity
-    let textBeforeCursor: String
-    let textAfterCursor: String
-}
-
 private struct InsertionVerificationBaseline: Equatable {
     let fieldIdentity: FocusedFieldIdentity
     let previousTextBeforeCursor: String
@@ -2756,6 +2747,19 @@ private struct InsertionVerificationBaseline: Equatable {
     let suggestionID: String?
     let requestMode: CompletionRequestMode?
     let retryCount: Int
+}
+
+private extension FocusedFieldIdentityInput {
+    init(context: FocusedTextContext) {
+        self.init(
+            elementIdentifier: context.elementIdentifier,
+            role: context.role,
+            subrole: context.subrole,
+            fingerprint: context.fingerprint,
+            elementRect: context.elementRect,
+            windowRect: context.windowRect
+        )
+    }
 }
 
 private extension CompletionActivationDecision {

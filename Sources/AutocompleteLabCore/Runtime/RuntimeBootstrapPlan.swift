@@ -85,6 +85,7 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
     public let runtimeCandidate: CompletionRuntimeCandidate
     public let cacheDirectoryName: String
     public let fileName: String
+    public let source: LocalModelAssetSource?
     public let expectedMinimumBytes: Int64
     public let requiredFileNames: Set<String>
     public let requiredModelFileExtension: String
@@ -95,6 +96,7 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         runtimeCandidate: CompletionRuntimeCandidate,
         cacheDirectoryName: String,
         fileName: String,
+        source: LocalModelAssetSource? = nil,
         expectedMinimumBytes: Int64,
         requiredFileNames: Set<String> = ["config.json"],
         requiredModelFileExtension: String = "safetensors",
@@ -104,6 +106,7 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         self.runtimeCandidate = runtimeCandidate
         self.cacheDirectoryName = cacheDirectoryName
         self.fileName = fileName
+        self.source = source
         self.expectedMinimumBytes = max(1, expectedMinimumBytes)
         self.requiredFileNames = requiredFileNames
         self.requiredModelFileExtension = requiredModelFileExtension
@@ -177,6 +180,7 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         runtimeCandidate: .mlx,
         cacheDirectoryName: "Models/Qwen35FourB/MLX",
         fileName: "Qwen3.5-4B-4bit",
+        source: .qwen35FourBMLX4Bit,
         expectedMinimumBytes: 2 * 1024 * 1024 * 1024,
         requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"]
     )
@@ -248,6 +252,52 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
 
         return .available(path: path)
     }
+}
+
+public struct LocalModelAssetSource: Equatable, Sendable {
+    public let repoID: String
+    public let revision: String
+    public let allowPatterns: [String]
+    public let estimatedBytes: Int64?
+    public let licenseURL: String?
+
+    public init(
+        repoID: String,
+        revision: String = "main",
+        allowPatterns: [String],
+        estimatedBytes: Int64? = nil,
+        licenseURL: String? = nil
+    ) {
+        self.repoID = repoID
+        self.revision = revision
+        self.allowPatterns = allowPatterns
+        self.estimatedBytes = estimatedBytes
+        self.licenseURL = licenseURL
+    }
+
+    public static let defaultMLXAllowPatterns = [
+        "chat_template.jinja",
+        "config.json",
+        "generation_config.json",
+        "*.safetensors",
+        "*.safetensors.index.json",
+        "merges.txt",
+        "preprocessor_config.json",
+        "processor_config.json",
+        "special_tokens_map.json",
+        "tokenizer.model",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "video_preprocessor_config.json",
+        "vocab.json"
+    ]
+
+    public static let qwen35FourBMLX4Bit = LocalModelAssetSource(
+        repoID: "mlx-community/Qwen3.5-4B-MLX-4bit",
+        allowPatterns: defaultMLXAllowPatterns,
+        estimatedBytes: 3_030_000_000,
+        licenseURL: "https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit"
+    )
 }
 
 public struct RuntimeBootstrapPlan: Equatable, Sendable {

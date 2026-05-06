@@ -78,9 +78,9 @@ print_scorecard_gaps() {
     rating="$(trim "$rating")"
     why="$(trim "$why")"
 
-    if [[ "$rating" =~ ^([0-9]+)/10$ ]]; then
+    if [[ "$rating" =~ ^([0-9]+([.][0-9]+)?)/10$ ]]; then
       score="${BASH_REMATCH[1]}"
-      if (( score < 10 )); then
+      if awk "BEGIN { exit !($score < 10) }"; then
         echo "- $area: $rating - $why"
         found=1
       fi
