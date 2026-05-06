@@ -8,6 +8,7 @@ trap 'rm -f "$TRACE_FILE" "$BAD_TRACE_FILE"' EXIT
 cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0}
 {"type":"suggestionAccepted","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at"}
+{"type":"insertionFailed","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","reason":"unchanged"}
 {"type":"insertionVerified","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at"}
 {"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","latencyMilliseconds":120}
 {"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","latencyMilliseconds":220}
@@ -61,6 +62,24 @@ fi
 
 if ! grep -F "Actionable suppressed: 2" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not separate actionable suppressions" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Insertion failures: 1" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report insertion failures" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Recovered insertion failures: 1" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report recovered insertion failures" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Unrecovered insertion failures: 0" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not allow recovered fallback insertion failures" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
   exit 1
 fi
@@ -248,6 +267,31 @@ if ! grep -F "missing-place: missing placementConfidenceBand" /tmp/autocomplete-
   exit 1
 fi
 
+cat >"$BAD_TRACE_FILE" <<'JSONL'
+{"type":"suggestionPresented","suggestionID":"stuck","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","latencyMilliseconds":0}
+{"type":"suggestionAccepted","suggestionID":"stuck","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","acceptedText":"ing"}
+{"type":"insertionFailed","suggestionID":"stuck","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","reason":"unchanged"}
+JSONL
+
+if AUTOCOMPLETE_LAB_TRACE_PATH="$BAD_TRACE_FILE" \
+   script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-insertion-fail.txt 2>&1; then
+  echo "trace eval self-test expected unrecovered insertion failures to fail" >&2
+  cat /tmp/autocomplete-trace-eval-insertion-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "insertion recovery guardrail failed" /tmp/autocomplete-trace-eval-insertion-fail.txt >/dev/null; then
+  echo "trace eval self-test did not explain unrecovered insertion guardrail failures" >&2
+  cat /tmp/autocomplete-trace-eval-insertion-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "com.openai.codex/stuck (unchanged)" /tmp/autocomplete-trace-eval-insertion-fail.txt >/dev/null; then
+  echo "trace eval self-test did not identify the unrecovered insertion failure" >&2
+  cat /tmp/autocomplete-trace-eval-insertion-fail.txt >&2
+  exit 1
+fi
+
 if AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
    AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP="md.obsidian" \
    script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-self-test-fail.txt 2>&1; then
@@ -272,7 +316,7 @@ if ! grep -F "Start line: 3" /tmp/autocomplete-trace-eval-self-test-slice.txt >/
   exit 1
 fi
 
-if [[ "$(AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh --quiet)" != "23" ]]; then
+if [[ "$(AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh --quiet)" != "24" ]]; then
   echo "trace mark self-test did not report the current trace line" >&2
   AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh >&2
   exit 1
@@ -283,7 +327,7 @@ AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
 AUTOCOMPLETE_LAB_TRACE_MARK_PATH="$MARK_FILE" \
   script/trace_mark.sh --save >/tmp/autocomplete-trace-mark-save.txt
 
-if ! grep -F "Saved trace mark: 23" /tmp/autocomplete-trace-mark-save.txt >/dev/null; then
+if ! grep -F "Saved trace mark: 24" /tmp/autocomplete-trace-mark-save.txt >/dev/null; then
   echo "trace mark self-test did not save the current trace line" >&2
   cat /tmp/autocomplete-trace-mark-save.txt >&2
   exit 1

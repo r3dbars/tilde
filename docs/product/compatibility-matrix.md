@@ -19,9 +19,11 @@ the manual smoke status is refreshed from the current build.
 Run:
 
 ```bash
-./script/manual_smoke_status.sh --require-all
+./script/manual_smoke_status.sh --strict
 ```
 
 TextEdit, Notes, Chrome, Codex, and Claude Code must have full accept proof.
 Obsidian may pass as limited proof when CodeMirror does not expose caret bounds
 and detached suggestions are suppressed instead of shown.
+The status command also prints remaining sub-10 scorecard gaps so release risk
+is visible beside the smoke proof.

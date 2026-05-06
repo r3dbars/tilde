@@ -2,24 +2,36 @@
 set -euo pipefail
 
 REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-runs.md}"
-MODE="${1:-}"
+SCORECARD_PATH="${AUTOCOMPLETE_LAB_SCORECARD:-docs/product/deep-dive-scorecard-2026-05-06.md}"
+MODE=""
+REQUIRE_ALL=0
 
-if [[ "$MODE" == "-h" || "$MODE" == "--help" ]]; then
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help)
+      MODE="help"
+      ;;
+    --require-all | --strict)
+      REQUIRE_ALL=1
+      ;;
+    *)
+      echo "unknown option: $arg" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ "$MODE" == "help" ]]; then
   cat <<'EOF'
-Usage: script/manual_smoke_status.sh [--require-all]
+Usage: script/manual_smoke_status.sh [--require-all|--strict]
 
 Shows which target apps have real manual smoke proof in
-docs/product/manual-smoke-runs.md.
+docs/product/manual-smoke-runs.md and lists remaining sub-10 scorecard gaps.
 
-Use --require-all when you want the command to fail until every target app has
-at least one recorded pass with two or more verified accepts.
+Use --require-all or --strict when you want the command to fail until every
+target app has at least one recorded pass with two or more verified accepts.
 EOF
   exit 0
-fi
-
-if [[ -n "$MODE" && "$MODE" != "--require-all" ]]; then
-  echo "unknown option: $MODE" >&2
-  exit 2
 fi
 
 declare -a APPS=(
@@ -36,6 +48,48 @@ declare -a APPS=(
   "Claude desktop|Claude|com.anthropic.claudefordesktop|full|default"
 )
 
+trim() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
+print_scorecard_gaps() {
+  echo
+  if [[ ! -f "$SCORECARD_PATH" ]]; then
+    echo "Remaining non-10 scorecard gaps: no scorecard found ($SCORECARD_PATH)"
+    return
+  fi
+
+  echo "Remaining non-10 scorecard gaps: $SCORECARD_PATH"
+
+  local found=0
+  local line area rating why score
+  while IFS= read -r line; do
+    [[ "$line" == \|* ]] || continue
+    [[ "$line" != *"| Area |"* ]] || continue
+    [[ "$line" != *"| --- |"* ]] || continue
+
+    IFS='|' read -r _ area rating why _ <<<"$line"
+    area="$(trim "$area")"
+    rating="$(trim "$rating")"
+    why="$(trim "$why")"
+
+    if [[ "$rating" =~ ^([0-9]+)/10$ ]]; then
+      score="${BASH_REMATCH[1]}"
+      if (( score < 10 )); then
+        echo "- $area: $rating - $why"
+        found=1
+      fi
+    fi
+  done <"$SCORECARD_PATH"
+
+  if (( found == 0 )); then
+    echo "- none"
+  fi
+}
+
 if [[ ! -f "$REPORT_PATH" ]]; then
   echo "Manual smoke status: no report yet ($REPORT_PATH)"
 else
@@ -43,6 +97,7 @@ else
 fi
 
 missing=0
+declare -a pending_apps=()
 
 for app_entry in "${APPS[@]}"; do
   display_name="${app_entry%%|*}"
@@ -68,14 +123,26 @@ for app_entry in "${APPS[@]}"; do
   else
     echo "- $display_name: pending"
     missing=$((missing + 1))
+    pending_apps+=("$display_name")
   fi
 done
 
 if (( missing > 0 )); then
   echo
-  echo "$missing target app pass(es) still need real manual smoke proof."
+  echo "Required proof gaps:"
+  for app_name in "${pending_apps[@]}"; do
+    echo "- $app_name"
+  done
 
-  if [[ "$MODE" == "--require-all" ]]; then
-    exit 1
-  fi
+  echo
+  echo "$missing target app pass(es) still need real manual smoke proof."
+else
+  echo
+  echo "All required target proofs are covered."
+fi
+
+print_scorecard_gaps
+
+if (( missing > 0 && REQUIRE_ALL == 1 )); then
+  exit 1
 fi

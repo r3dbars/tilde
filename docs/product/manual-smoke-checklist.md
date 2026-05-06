@@ -8,7 +8,9 @@ new diagnostics and matching JSONL trace coverage for suggestion presentation,
 acceptance, and insertion verification.
 Successful runs are recorded in `docs/product/manual-smoke-runs.md`.
 Run `script/manual_smoke_status.sh` to see which target apps still need proof,
-or `script/manual_smoke_status.sh --require-all` when compatibility proof should block release/beta work.
+or `script/manual_smoke_status.sh --strict` when compatibility proof should
+block release/beta work. The status command also lists the current scorecard
+rows that are still below 10/10.
 
 ## Setup
 
@@ -19,6 +21,8 @@ or `script/manual_smoke_status.sh --require-all` when compatibility proof should
 - Watch `~/Library/Logs/AutocompleteLab/traces.jsonl` for matching `suggestionPresented`, `suggestionAccepted`, and `insertionVerified` events.
 - Prefer a real hardware key press for Tab/backtick acceptance. Some automation paths can set text or insert a literal tab without going through the app's event tap, which is useful to catch but does not count as an accept pass.
 - If a recorder fails, read its layer summary. `suggestion-presented` with `Tab autocomplete action: 0` means rendering worked but key routing did not.
+- Recovered insertion fallbacks are allowed when the same suggestion later verifies.
+  Unrecovered insertion failures fail the recorder.
 - After a typing pass, run `AUTOCOMPLETE_LAB_LOG_START_LINE=<mark> ./script/check_typing_performance_log.sh`. It fails on slow event-tap latency or tap disable/timeout events.
 
 ## TextEdit
