@@ -811,6 +811,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for context: FocusedTextContext,
         bundleIdentifier: String
     ) -> SyntheticTextAreaTuning {
+        if PromptEditorFingerprintPolicy.dogfoodBundleIdentifiers.contains(bundleIdentifier) {
+            return SyntheticTextAreaTuning(font: NSFont.systemFont(ofSize: 15), verticalPadding: 4, inlineGap: 8)
+        }
+
         guard bundleIdentifier == "com.google.Chrome" else {
             return SyntheticTextAreaTuning(font: nil, verticalPadding: 4, inlineGap: 8)
         }

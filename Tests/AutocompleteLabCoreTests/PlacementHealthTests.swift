@@ -151,6 +151,30 @@ struct PlacementHealthTests {
         #expect(presentation.isSelfHealing)
     }
 
+    @Test("Synthetic impossible caret cannot be high confidence")
+    func syntheticImpossibleCaretCannotBeHighConfidence() {
+        let plan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: .floatingMirror,
+            caretRect: CGRect(x: -4000, y: 900, width: 0, height: 22),
+            elementRect: CGRect(x: -1900, y: 81, width: 713, height: 105),
+            windowRect: CGRect(x: -1924, y: 57, width: 761, height: 153),
+            textLineRect: nil,
+            caretIsSynthetic: true,
+            allowsDetachedSuggestions: true
+        )
+
+        guard case let .present(presentation) = plan else {
+            Issue.record("Expected placement to fall back instead of presenting synthetic inline")
+            return
+        }
+
+        #expect(presentation.renderMode == .floatingMirror)
+        #expect(presentation.anchorSource == .element)
+        #expect(presentation.reason == .caretOutsideFocusedBounds)
+        #expect(presentation.metadata["placementConfidenceBand"] == "low")
+    }
+
     @Test("Keeps mirror placement on focused element anchor")
     func keepsMirrorPlacementOnFocusedElementAnchor() {
         let plan = PlacementHealth.plan(

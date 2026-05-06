@@ -66,21 +66,20 @@ final class SuggestionPanelController {
         let size = CGSize(width: rawSize.width + textPadding.width, height: rawSize.height + textPadding.height)
         let screen = screen(containing: anchorRect) ?? NSScreen.main
         let screenFrame = screen?.frame ?? .zero
-        let screenHeight = screenFrame.height > 0 ? screenFrame.height : anchorRect.maxY
         let appKitAnchorRect = AccessibilityCoordinateConverter.appKitRect(
             fromAccessibilityRect: anchorRect,
-            screenHeight: screenHeight
+            in: screenFrame
         )
         let appKitTextLineRect = textLineRect.map {
             AccessibilityCoordinateConverter.appKitRect(
                 fromAccessibilityRect: $0,
-                screenHeight: screenHeight
+                in: screenFrame
             )
         }
         let appKitClippingRect = clippingRect.map {
             AccessibilityCoordinateConverter.appKitRect(
                 fromAccessibilityRect: $0,
-                screenHeight: screenHeight
+                in: screenFrame
             )
         }
         let frame: CGRect
@@ -109,7 +108,7 @@ final class SuggestionPanelController {
 
         let accessibilityFrame = AccessibilityCoordinateConverter.accessibilityRect(
             fromAppKitRect: frame,
-            screenHeight: screenHeight
+            in: screenFrame
         )
 
         let shouldRefresh = !panel.isVisible || SuggestionPanelFrameCalculator.shouldRefreshPresentation(
@@ -139,7 +138,8 @@ final class SuggestionPanelController {
                 "renderMode": renderMode.rawValue,
                 "anchor": compactFrameDescription(anchorRect),
                 "frame": compactFrameDescription(frame),
-                "clipping": clippingRect.map(compactFrameDescription) ?? "none"
+                "clipping": clippingRect.map(compactFrameDescription) ?? "none",
+                "screen": compactFrameDescription(screenFrame)
             ]
         )
         lastText = text
@@ -158,12 +158,12 @@ final class SuggestionPanelController {
 
     private func screen(containing accessibilityRect: CGRect) -> NSScreen? {
         NSScreen.screens.first { screen in
-            let convertedRect = AccessibilityCoordinateConverter.appKitRect(
+            let probeRect = AccessibilityCoordinateConverter.appKitProbeRect(
                 fromAccessibilityRect: accessibilityRect,
-                screenHeight: screen.frame.height
+                in: screen.frame
             )
 
-            return screen.frame.intersects(convertedRect)
+            return screen.frame.intersects(probeRect)
         }
     }
 
