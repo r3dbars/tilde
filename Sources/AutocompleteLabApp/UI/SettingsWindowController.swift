@@ -1,6 +1,30 @@
 import AppKit
 import AutocompleteLabCore
 
+struct SettingsCurrentAppState: Equatable {
+    let displayName: String
+    let bundleIdentifier: String?
+    let isSupported: Bool
+    let isEnabled: Bool
+    let disabledAppCount: Int
+
+    var canToggle: Bool {
+        bundleIdentifier != nil && isSupported
+    }
+
+    var statusText: String {
+        guard bundleIdentifier != nil else {
+            return "Current app: none"
+        }
+
+        guard isSupported else {
+            return "Current app: \(displayName) - unsupported"
+        }
+
+        return "Current app: \(displayName) - \(isEnabled ? "on" : "off")"
+    }
+}
+
 @MainActor
 final class SettingsWindowController: NSObject {
     private let window: NSWindow
@@ -12,21 +36,36 @@ final class SettingsWindowController: NSObject {
     private let modelDirectoryLabel = NSTextField(labelWithString: "")
     private let controlLabel = NSTextField(labelWithString: "")
     private let togglePauseButton = NSButton(title: "Pause Suggestions", target: nil, action: nil)
+    private let runtimeActionButton = NSButton(title: "Open Model Folder", target: nil, action: nil)
+    private let currentAppLabel = NSTextField(labelWithString: "")
+    private let disabledAppsLabel = NSTextField(labelWithString: "")
+    private let toggleCurrentAppButton = NSButton(title: "Disable Current App", target: nil, action: nil)
+    private let enableAllAppsButton = NSButton(title: "Enable All Apps", target: nil, action: nil)
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
     private let requestPermission: () -> Void
     private let openAccessibilitySettings: () -> Void
     private let toggleSuggestionsPaused: () -> Void
+    private let performRuntimeAction: (RuntimeReadinessAction) -> Void
+    private let toggleCurrentApp: () -> Void
+    private let enableAllApps: () -> Void
+    private var currentRuntimeAction: RuntimeReadinessAction = .none
 
     init(
         requestPermission: @escaping () -> Void,
         openAccessibilitySettings: @escaping () -> Void,
-        toggleSuggestionsPaused: @escaping () -> Void
+        toggleSuggestionsPaused: @escaping () -> Void,
+        performRuntimeAction: @escaping (RuntimeReadinessAction) -> Void,
+        toggleCurrentApp: @escaping () -> Void,
+        enableAllApps: @escaping () -> Void
     ) {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
         self.toggleSuggestionsPaused = toggleSuggestionsPaused
+        self.performRuntimeAction = performRuntimeAction
+        self.toggleCurrentApp = toggleCurrentApp
+        self.enableAllApps = enableAllApps
 
-        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 428))
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 520))
         window = NSWindow(
             contentRect: contentView.frame,
             styleMask: [.titled, .closable],
@@ -47,14 +86,16 @@ final class SettingsWindowController: NSObject {
         suggestionsPaused: Bool,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
-        modelDirectoryPath: String
+        modelDirectoryPath: String,
+        currentApp: SettingsCurrentAppState
     ) {
         refresh(
             isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
             runtimeReport: runtimeReport,
             runtimeTargetSummary: runtimeTargetSummary,
-            modelDirectoryPath: modelDirectoryPath
+            modelDirectoryPath: modelDirectoryPath,
+            currentApp: currentApp
         )
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -66,8 +107,10 @@ final class SettingsWindowController: NSObject {
         suggestionsPaused: Bool,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
-        modelDirectoryPath: String
+        modelDirectoryPath: String,
+        currentApp: SettingsCurrentAppState
     ) {
+        let guidance = RuntimeReadinessGuidance(report: runtimeReport)
         permissionLabel.stringValue = isTrusted ? "Accessibility: granted" : "Accessibility: needed"
         controlLabel.stringValue = suggestionsPaused ? "Global control: paused" : "Global control: on"
         togglePauseButton.title = suggestionsPaused ? "Resume Suggestions" : "Pause Suggestions"
@@ -75,12 +118,24 @@ final class SettingsWindowController: NSObject {
         runtimeDetailLabel.stringValue = runtimeReport.detail.map { "Detail: \($0)" } ?? ""
         runtimeDetailLabel.isHidden = runtimeReport.detail == nil
         runtimeActionLabel.stringValue = "Next: \(runtimeReport.action.displayName)"
+        runtimeActionButton.title = guidance.actionTitle
+        runtimeActionButton.isEnabled = guidance.isActionEnabled
+        currentRuntimeAction = runtimeReport.action
         runtimeTargetLabel.stringValue = "Runtime target: \(runtimeTargetSummary)"
         modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
+        currentAppLabel.stringValue = currentApp.statusText
+        if currentApp.isSupported {
+            toggleCurrentAppButton.title = currentApp.isEnabled ? "Disable Current App" : "Enable Current App"
+        } else {
+            toggleCurrentAppButton.title = "Unsupported App"
+        }
+        toggleCurrentAppButton.isEnabled = currentApp.canToggle
+        disabledAppsLabel.stringValue = "Disabled apps: \(currentApp.disabledAppCount)"
+        enableAllAppsButton.isEnabled = currentApp.disabledAppCount > 0
         firstRunLabel.stringValue = onboardingText(
             isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
-            runtimeReport: runtimeReport
+            guidance: guidance
         )
     }
 
@@ -128,6 +183,15 @@ final class SettingsWindowController: NSObject {
         togglePauseButton.target = self
         togglePauseButton.action = #selector(togglePause)
         togglePauseButton.bezelStyle = .rounded
+        runtimeActionButton.target = self
+        runtimeActionButton.action = #selector(runRuntimeAction)
+        runtimeActionButton.bezelStyle = .rounded
+        toggleCurrentAppButton.target = self
+        toggleCurrentAppButton.action = #selector(toggleCurrentAppControl)
+        toggleCurrentAppButton.bezelStyle = .rounded
+        enableAllAppsButton.target = self
+        enableAllAppsButton.action = #selector(enableAllAppsControl)
+        enableAllAppsButton.bezelStyle = .rounded
 
         let screenRecording = NSButton(checkboxWithTitle: "Screen Recording", target: nil, action: nil)
         screenRecording.isEnabled = false
@@ -147,10 +211,15 @@ final class SettingsWindowController: NSObject {
             runtimeLabel,
             runtimeDetailLabel,
             runtimeActionLabel,
+            runtimeActionButton,
             runtimeTargetLabel,
             modelDirectoryLabel,
             controlLabel,
             togglePauseButton,
+            currentAppLabel,
+            toggleCurrentAppButton,
+            disabledAppsLabel,
+            enableAllAppsButton,
             firstRunLabel,
             screenRecording,
             clipboardFallback,
@@ -171,7 +240,7 @@ final class SettingsWindowController: NSObject {
     private func onboardingText(
         isTrusted: Bool,
         suggestionsPaused: Bool,
-        runtimeReport: RuntimeReadinessReport
+        guidance: RuntimeReadinessGuidance
     ) -> String {
         if !isTrusted {
             return "First run: grant Accessibility, then return here. The app only reads the active text field locally."
@@ -181,11 +250,7 @@ final class SettingsWindowController: NSObject {
             return "Paused: resume when you are ready to test suggestions again."
         }
 
-        if !runtimeReport.isReady {
-            return "First run: keep this app open while the local model warms. Suggestions stay off until the model is ready."
-        }
-
-        return "First run: open TextEdit, type a short sentence, press Tab for one word, Esc to dismiss, or disable the current app from the menu."
+        return guidance.message
     }
 
     @objc
@@ -201,5 +266,20 @@ final class SettingsWindowController: NSObject {
     @objc
     private func togglePause() {
         toggleSuggestionsPaused()
+    }
+
+    @objc
+    private func runRuntimeAction() {
+        performRuntimeAction(currentRuntimeAction)
+    }
+
+    @objc
+    private func toggleCurrentAppControl() {
+        toggleCurrentApp()
+    }
+
+    @objc
+    private func enableAllAppsControl() {
+        enableAllApps()
     }
 }

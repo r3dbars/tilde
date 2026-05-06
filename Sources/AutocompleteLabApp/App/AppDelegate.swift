@@ -43,6 +43,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         toggleSuggestionsPaused: { [weak self] in
             self?.togglePauseSuggestions()
+        },
+        performRuntimeAction: { [weak self] action in
+            self?.performRuntimeAction(action)
+        },
+        toggleCurrentApp: { [weak self] in
+            self?.toggleCurrentApp()
+        },
+        enableAllApps: { [weak self] in
+            self?.enableAllDisabledApps()
         }
     )
 
@@ -104,14 +113,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
         accessibilityClient.requestPermissionIfNeeded()
         warmModelRuntime()
-        if !accessibilityClient.isTrusted {
-            settingsWindow.show(
-                isTrusted: false,
-                suggestionsPaused: suggestionsPaused,
-                runtimeReport: runtimeReadinessReport,
-                runtimeTargetSummary: runtimeTargetSummary,
-                modelDirectoryPath: modelDirectoryPath
-            )
+        if shouldShowSettingsForCurrentReadiness {
+            showSettings()
         }
         startPolling()
     }
@@ -235,6 +238,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !wasReadyForSuggestions && report.allowsSuggestions {
             rearmFocusedTextAfterRuntimeReady()
         }
+        if report.stage == .failed {
+            showSettings()
+        }
         DiagnosticsLog.shared.record(
             "runtime",
             metadata: [
@@ -271,7 +277,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionsPaused: suggestionsPaused,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
-            modelDirectoryPath: modelDirectoryPath
+            modelDirectoryPath: modelDirectoryPath,
+            currentApp: settingsCurrentAppState
         )
     }
 
@@ -283,8 +290,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modelRuntimeBundle.modelDirectoryURL.path
     }
 
+    private var settingsCurrentAppState: SettingsCurrentAppState {
+        guard let app = accessibilityClient.frontmostApplication() else {
+            return SettingsCurrentAppState(
+                displayName: "None",
+                bundleIdentifier: nil,
+                isSupported: false,
+                isEnabled: false,
+                disabledAppCount: disabledBundleIdentifiers.count
+            )
+        }
+
+        let isSupported = profileStore.allows(bundleIdentifier: app.bundleIdentifier)
+        return SettingsCurrentAppState(
+            displayName: app.localizedName,
+            bundleIdentifier: app.bundleIdentifier,
+            isSupported: isSupported,
+            isEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier),
+            disabledAppCount: disabledBundleIdentifiers.count
+        )
+    }
+
     private var runtimeTargetSummary: String {
         "\(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(completionLengthConfiguration.displaySummary)"
+    }
+
+    private var shouldShowSettingsForCurrentReadiness: Bool {
+        if !accessibilityClient.isTrusted {
+            return true
+        }
+
+        switch runtimeReadinessReport.stage {
+        case .downloadNeeded, .repairNeeded, .runtimeUnavailable, .failed:
+            return true
+        case .warming, .ready:
+            return false
+        }
     }
 
     private var pauseSuggestionsTitle: String {
@@ -2128,7 +2169,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionsPaused: suggestionsPaused,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
-            modelDirectoryPath: modelDirectoryPath
+            modelDirectoryPath: modelDirectoryPath,
+            currentApp: settingsCurrentAppState
         )
 
         guard lastStatusLine != statusLine else {
@@ -2223,7 +2265,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionsPaused: suggestionsPaused,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
-            modelDirectoryPath: modelDirectoryPath
+            modelDirectoryPath: modelDirectoryPath,
+            currentApp: settingsCurrentAppState
         )
         DiagnosticsLog.shared.record("request-accessibility")
     }
@@ -2245,7 +2288,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionsPaused: suggestionsPaused,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
-            modelDirectoryPath: modelDirectoryPath
+            modelDirectoryPath: modelDirectoryPath,
+            currentApp: settingsCurrentAppState
         )
     }
 
@@ -2266,6 +2310,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "reveal-model-folder-failed",
                 metadata: ["reason": error.localizedDescription]
             )
+        }
+    }
+
+    private func performRuntimeAction(_ action: RuntimeReadinessAction) {
+        switch action {
+        case .revealModelFolder:
+            revealModelFolder()
+        case .retry:
+            warmModelRuntime()
+        case .wait, .none:
+            break
         }
     }
 
@@ -2462,6 +2517,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             app: app,
             profile: profileStore.profile(for: app.bundleIdentifier),
             appEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier)
+        )
+    }
+
+    private func enableAllDisabledApps() {
+        var selection = DisabledAppSelection(bundleIdentifiers: disabledBundleIdentifiers)
+        guard !selection.isEmpty else {
+            return
+        }
+
+        let disabledCount = selection.count
+        selection.clear()
+        disabledBundleIdentifiers = selection.bundleIdentifiers
+        persistDisabledApps()
+
+        let frontmostApp = accessibilityClient.frontmostApplication()
+        DiagnosticsLog.shared.record(
+            "app-control",
+            metadata: [
+                "action": "enable-all",
+                "disabledCount": String(disabledCount)
+            ]
+        )
+        updateStatusMenu(
+            app: frontmostApp,
+            profile: frontmostApp.flatMap { profileStore.profile(for: $0.bundleIdentifier) },
+            appEnabled: frontmostApp.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
         )
     }
 

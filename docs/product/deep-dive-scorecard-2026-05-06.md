@@ -3,13 +3,14 @@
 This is the current rating after the trust-first hardening, browser editor
 compatibility pass, Codex/Claude dogfood pass, Obsidian synthetic-caret pass,
 typing-performance pass, cleaner hardening, and polling-pause extraction.
+It now also includes the first Settings readiness/control pass.
 
 Scale: 10 means beta-ready for normal people. 5 means promising but still easy
 to break or annoy users.
 
 ## Executive Rating
 
-Overall: 9.1/10.
+Overall: 9.2/10.
 
 The app is no longer just a neat lab build. It now has real proof across
 TextEdit, Notes, Obsidian, Codex, Claude desktop, and five Chrome editor shapes:
@@ -22,8 +23,8 @@ microseconds with no slow markers.
 
 It is still not a 10/10. Claude Code does not have a safe live prompt proof yet,
 release notarization is missing `NOTARYTOOL_PROFILE`, onboarding still needs a
-normal-user model readiness path, user-facing app controls are still too thin,
-and the app still needs broader proof in real production editors beyond local
+self-contained model install/repair path, shortcut controls are still thin, and
+the app still needs broader proof in real production editors beyond local
 fixtures.
 
 ## Area Ratings
@@ -50,17 +51,17 @@ fixtures.
 | Word completion quality | 9/10 | Fast ranker path is useful, partial accept keeps remaining text alive, and repeated misses are suppressed. |
 | Non-annoyance | 9/10 | Esc, typed-over tracking, repetition suppression, pause control, and insertion recovery all reduce bad loops. |
 | Privacy | 8/10 | Local-first, secure fields suppressed, diagnostics redact text by default; raw trace and screenshots remain opt-in. |
-| Onboarding | 7/10 | Permission flow and settings exist, but first-run model readiness still needs a normal-user path. |
-| User control | 8/10 | Per-app disable and global pause/resume exist; visible multi-app management is still missing. |
+| Onboarding | 8/10 | Settings now gives stage-specific model guidance and runtime actions; model install/repair is still not fully in-app. |
+| User control | 9/10 | Settings exposes pause, current-app enablement, disabled-app count, and enable-all; shortcut remapping is still missing. |
 | Diagnostics | 9/10 | Strong placement, latency, insertion, trace, recovered-insertion, and manual proof logs. |
-| Automated tests | 9/10 | 222 Swift tests pass, plus script self-tests for smoke, model asset, trace eval, and typing-performance guards. |
+| Automated tests | 9/10 | 225 Swift tests pass, plus script self-tests for smoke, model asset, trace eval, and typing-performance guards. |
 | Real-app smoke | 9/10 | TextEdit, Notes, Obsidian, Codex, Claude desktop, and five Chrome shapes are green; Claude Code remains pending. |
 | Release readiness | 7/10 | Signing identity and preferred MLX model are ready, but `NOTARYTOOL_PROFILE` is missing and model distribution is not self-contained. |
 | Architecture | 8/10 | Core boundaries are solid, and polling-pause timing moved into a tested core type; AppDelegate still needs larger service extraction. |
 
 ## Latest Proof
 
-- `swift test`: 222 tests passed.
+- `swift test`: 225 tests passed.
 - `./script/real_app_smoke.sh chrome --fixture all`: textarea, contenteditable,
   editor-like, Monaco-like, and ProseMirror-like all passed with two verified
   accepts each.
@@ -78,6 +79,8 @@ fixtures.
 - Focused cleaner and architecture tests passed:
   `FocusedTextPollingPauseTests`, `CompletionOutputCleanerTests`, and
   `CompletionQualityEvalTests`.
+- Settings UI launched from the menu bar and exposed model readiness, runtime
+  action, current-app state, disabled-app count, pause, and enable-all controls.
 - `AUTOCOMPLETE_LAB_LOG_START_LINE=53357 AUTOCOMPLETE_LAB_LOG_LINES=260 ./script/check_diagnostics_log.sh`:
   launch/status diagnostics verified after a fresh relaunch.
 - `./script/check_model_asset.py`: Qwen3.5 4B MLX asset ready at the app-owned
@@ -126,14 +129,19 @@ fixtures.
 - Completion cleaning now blocks prompt scaffolding echoes such as
   `Before cursor:`, `Inline autocomplete`, `Return only`, and related
   instruction text before anything is shown to the user.
+- Settings now uses stage-specific runtime readiness guidance instead of a
+  generic warmup message.
+- Settings now exposes current-app enable/disable, disabled-app count, and
+  enable-all controls.
+- The app opens Settings automatically when Accessibility or model/runtime
+  readiness needs user attention.
 
 ## Next Highest-Leverage Work
 
 1. Run a safe Claude Code prompt proof.
 2. Test real production Monaco and ProseMirror surfaces, not just local
    dependency-free fixtures.
-3. Build a normal-user model readiness flow.
-4. Add a visible app-control table for per-app enablement, Tab behavior, and
-   quick pause.
+3. Build a fully in-app model install/repair flow.
+4. Add shortcut controls for accept-next-word and accept-all behavior.
 5. Split AppDelegate into focused services around polling, insertion,
    verification, and tracing.
