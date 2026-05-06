@@ -18,6 +18,8 @@ swift test
 ./script/check_model_asset_self_test.sh
 ./script/manual_smoke_self_test.sh
 ./script/real_app_smoke_self_test.sh
+./script/check_visual_placement_evidence_self_test.sh
+./script/check_visual_placement_evidence.sh
 ./script/check_trace_eval_self_test.sh
 ./script/check_typing_performance_log_self_test.sh
 ./script/model_latency_report_self_test.sh
