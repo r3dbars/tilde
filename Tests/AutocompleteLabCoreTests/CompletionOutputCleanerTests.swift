@@ -71,7 +71,7 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("ready.", after: "I know you are")?.visibleText == " ready.")
     }
 
-    @Test("Suppresses low value one word phrase completions")
+    @Test("Suppresses one word twitch completions")
     func suppressesLowValueOneWordPhraseCompletions() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
