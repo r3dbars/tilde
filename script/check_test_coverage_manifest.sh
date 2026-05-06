@@ -58,4 +58,11 @@ require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swi
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Allows single token word completion suffixes" "word-completion cleanup coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Removes thinking tags" "thinking-tag cleanup coverage"
 
+require_file "Tests/AutocompleteLabCoreTests/SuggestionPresentationGateTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/SuggestionPresentationGateTests.swift" "streamed phrase partials wait for enough visible words" "streaming presentation coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/SuggestionPresentationGateTests.swift" "streaming suppresses duplicate and tiny same-word changes" "streaming churn coverage"
+
+require_file "Tests/AutocompleteLabCoreTests/WordCompletionCandidateRankerTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/WordCompletionCandidateRankerTests.swift" "suppresses tiny recent suffixes until the fragment is strong" "recent-word completion quality coverage"
+
 echo "Test coverage manifest verified."

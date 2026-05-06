@@ -38,6 +38,8 @@ That file can hold per-app visual offsets, render-mode overrides, screenshot-tra
 
 The live placement health layer runs before a suggestion is shown. It trusts a caret only when the rect is finite, caret-shaped, and inside the focused element/window. If the caret is missing, invalid, or outside the focused bounds, the app either heals to a floating mirror anchor or suppresses the suggestion when detached anchors are disabled for that app. Traces mark these cases with `placementSelfHealingApplied`, `placementHealthReason`, and `placementAnchorSource`.
 
+The live suggestion quality layer is intentionally conservative. Streaming phrase partials do not show until they have enough visible words to be worth looking at, tiny repeated word completions are suppressed more aggressively, ignored suggestions are learned as misses, and any normal typing key invalidates the current visible suggestion before Tab/backtick can accept it. The app should feel calmer, even if that means showing fewer completions.
+
 For quick visual calibration, use the menu bar nudge actions while the target app is focused:
 
 - `Nudge Suggestion Up/Down/Left/Right`
@@ -74,7 +76,7 @@ Track these rates per app and request mode:
 - suppressed as empty, meta, repeated context, or invalid word completion
 - insertion verification failures
 
-Use the in-app Diagnostics window for the quickest read. It shows recent trace events, top misses, accept rates by app/mode, pause/delete controls, screenshot tracing, current learned adapter state, and an HTML export.
+Use the in-app Diagnostics window for the quickest read. It shows the current suggestion verdict, recent trace events, top misses, accept rates by app/mode, pause/delete controls, screenshot tracing, current learned adapter state, and an HTML export.
 
 Use the command-line checker for repeatable proof:
 

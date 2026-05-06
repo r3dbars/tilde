@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let insertionVerification = InsertionVerification()
     private let insertionRetryPolicy = InsertionRetryPolicy()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
+    private let suggestionPresentationGate = SuggestionPresentationGate()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private let suggestionPanel = SuggestionPanelController()
@@ -69,9 +70,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionRequestMode: CompletionRequestMode?
     private var currentSuggestionTextBeforeCursor: String?
     private var currentSuggestionDisplayedText: String?
+    private var currentSuggestionInvalidatedByUserKeyDown = false
     private var recentAcceptedWords: [String] = []
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var lastStatusLine: String?
+    private var lastSuggestionDecision = "Starting"
     private var lastSyntheticCaretDiagnosticSignature: String?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
     private let focusedTextPollInterval: TimeInterval = 0.05
@@ -239,6 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func pollFocusedText() {
         guard accessibilityClient.isTrusted else {
+            setSuggestionDecision("Blocked: Accessibility permission missing")
             updateStatusMenu(app: nil, profile: nil, appEnabled: false)
             hideSuggestion()
             return
@@ -248,6 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let profile = profileStore.profile(for: frontmostApp.bundleIdentifier) else {
             clearFocusedFieldState()
             currentProfile = nil
+            setSuggestionDecision("Blocked: unsupported app")
             updateStatusMenu(app: accessibilityClient.frontmostApplication(), profile: nil, appEnabled: false)
             hideSuggestion()
             return
@@ -259,12 +264,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard appEnabled else {
             clearFocusedFieldState()
+            setSuggestionDecision("Blocked: app disabled")
             hideSuggestion()
             return
         }
 
         guard profile.canPresentSuggestions, !profile.isSensitive else {
             clearFocusedFieldState()
+            setSuggestionDecision(profile.isSensitive ? "Blocked: sensitive app" : "Blocked: profile disabled")
             hideSuggestion()
             return
         }
@@ -274,6 +281,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ), !rawContext.isSecure else {
             clearFocusedFieldState()
             currentProfile = profile
+            setSuggestionDecision("Blocked: no editable text field or secure field")
             hideSuggestion()
             return
         }
@@ -293,6 +301,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard snapshot != lastTextSnapshot else {
+            setSuggestionDecision(
+                suggestionSession.hasVisibleSuggestion
+                    ? "Shown: tracking current field"
+                    : "Ready: waiting for text change"
+            )
             repositionVisibleSuggestion(context: context, profile: profile)
             return
         }
@@ -315,6 +328,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         invalidatePendingSuggestionRequest()
 
         guard profile.canPresentSuggestions else {
+            setSuggestionDecision("Blocked: profile diagnostics only")
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
@@ -330,6 +344,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let runtimeReport = runtimeReadinessReport
         guard runtimeReport.allowsSuggestions else {
+            setSuggestionDecision("Blocked: runtime \(runtimeReport.stage.rawValue)")
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
@@ -352,6 +367,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard activationDecision.canSuggest else {
+            setSuggestionDecision("Blocked: \(activationDecision.blockReasonDescription)")
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
@@ -372,6 +388,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard let baseRenderMode else {
+            setSuggestionDecision("Blocked: missing inline capabilities")
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
@@ -393,6 +410,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: context,
             renderMode: renderMode
         ) {
+            setSuggestionDecision("Blocked: detached suggestion disabled")
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
                 suggestionID: UUID().uuidString,
@@ -424,6 +442,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard case let .request(delayMilliseconds) = triggerDecision else {
+            setSuggestionDecision("Waiting: cadence policy")
             recordSuggestionEvent(
                 "suggestion-trigger-skipped",
                 context: context,
@@ -436,6 +455,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let requestMode = activationDecision.requestMode ?? .phraseContinuation
+        setSuggestionDecision("Queued: \(requestMode.rawValue)")
         scheduleSuggestion(
             context: context,
             profile: profile,
@@ -443,7 +464,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: fieldIdentity,
             renderMode: renderMode,
             delayMilliseconds: delayMilliseconds,
-            requestMode: activationDecision.requestMode ?? .phraseContinuation
+            requestMode: requestMode
         )
     }
 
@@ -627,13 +648,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleAutocompleteKey(_ key: AutocompleteKey, isAutorepeat: Bool = false) -> Bool {
-        if shouldSuppressKey(key, isAutorepeat: isAutorepeat) {
-            recordKeyboardAction(key: key, action: .passThrough, handled: true, reason: "suppressed-autorepeat")
-            return true
+        if key == .other {
+            guard suggestionSession.hasVisibleSuggestion else {
+                return false
+            }
+
+            if !currentSuggestionInvalidatedByUserKeyDown {
+                currentSuggestionInvalidatedByUserKeyDown = true
+                invalidatePendingSuggestionRequest()
+                setSuggestionDecision("Stale: typing continued after suggestion")
+                recordKeyboardAction(
+                    key: key,
+                    action: .passThrough,
+                    handled: false,
+                    reason: "invalidated-visible-suggestion"
+                )
+            }
+
+            return false
         }
 
         guard suggestionSession.hasVisibleSuggestion else {
+            suppressKeyUntil[key] = nil
             return false
+        }
+
+        if currentSuggestionInvalidatedByUserKeyDown {
+            setSuggestionDecision("Blocked: stale suggestion passed through")
+            hideSuggestion(reason: "stale-after-keydown")
+            recordKeyboardAction(
+                key: key,
+                action: .passThrough,
+                handled: false,
+                reason: "stale-after-keydown"
+            )
+            return false
+        }
+
+        if shouldSuppressKey(key, isAutorepeat: isAutorepeat) {
+            recordKeyboardAction(key: key, action: .passThrough, handled: true, reason: "suppressed-autorepeat")
+            return true
         }
 
         let action = keyboardRouter.action(
@@ -663,6 +717,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 scope: currentProfile?.bundleIdentifier ?? ""
             )
             recordRawAcceptance(action: action, acceptedText: acceptedText)
+            setSuggestionDecision("Accepted: next word")
             if suggestionSession.hasVisibleSuggestion {
                 refreshVisibleSuggestion()
             } else {
@@ -694,6 +749,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 scope: currentProfile?.bundleIdentifier ?? ""
             )
             recordRawAcceptance(action: action, acceptedText: acceptedText)
+            setSuggestionDecision("Accepted: full suggestion")
             hideSuggestion(reason: "accepted-all")
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
@@ -1001,6 +1057,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                       partialSuggestion.visibleText,
                                       mode: request.mode,
                                       scope: appBundleIdentifier
+                                  ),
+                                  self.suggestionPresentationGate.shouldPresent(
+                                      partialSuggestion,
+                                      mode: request.mode,
+                                      phase: .streamingPartial,
+                                      previousVisibleText: self.suggestionSession.visibleSuggestion?.visibleText
                                   ) else {
                                 return
                             }
@@ -1213,10 +1275,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         suggestionSession.present(suggestion)
+        setSuggestionDecision("Shown: \(triggerReason) \(latencyMilliseconds)ms")
         currentSuggestionID = suggestionID
         currentSuggestionRequestMode = request.mode
         currentSuggestionTextBeforeCursor = request.textBeforeCursor
         currentSuggestionDisplayedText = suggestion.visibleText
+        currentSuggestionInvalidatedByUserKeyDown = false
         lastCaretRect = placement.anchorRect
         lastTextLineRect = placement.textLineRect
         lastClippingRect = placement.clippingRect
@@ -1686,6 +1750,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 outcome = "ignored"
             }
+            let displayedText = currentSuggestionDisplayedText ?? suggestionSession.visibleSuggestion?.visibleText ?? ""
+
+            if outcome == "ignored" {
+                suggestionRepetitionSuppressor.recordMiss(
+                    displayedText,
+                    mode: currentSuggestionRequestMode,
+                    scope: currentProfile?.bundleIdentifier ?? ""
+                )
+            }
 
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionHidden,
@@ -1693,10 +1766,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 appBundleIdentifier: currentProfile?.bundleIdentifier ?? "",
                 fieldIdentity: currentFieldIdentity?.traceDescription ?? "",
                 requestMode: currentSuggestionRequestMode?.rawValue ?? "",
-                displayedText: currentSuggestionDisplayedText ?? suggestionSession.visibleSuggestion?.visibleText ?? "",
+                displayedText: displayedText,
                 outcome: outcome,
                 reason: reason
             )
+            setSuggestionDecision("Hidden: \(reason)")
         }
 
         suggestionSession.dismiss()
@@ -1704,6 +1778,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionRequestMode = nil
         currentSuggestionTextBeforeCursor = nil
         currentSuggestionDisplayedText = nil
+        currentSuggestionInvalidatedByUserKeyDown = false
         lastCaretRect = nil
         lastTextLineRect = nil
         lastClippingRect = nil
@@ -1722,7 +1797,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appName = app?.localizedName ?? "No app"
         let profileName = profile?.displayName ?? "unsupported"
         let enabled = appEnabled ? "on" : "off"
-        let statusLine = "Status: \(permission) | \(appName) | \(profileName) | \(enabled)"
+        let statusLine = "Status: \(permission) | \(appName) | \(profileName) | \(enabled) | \(lastSuggestionDecision)"
 
         statusMenuItem?.title = statusLine
         toggleAppMenuItem?.title = app.map { appEnabled ? "Disable \($0.localizedName)" : "Enable \($0.localizedName)" } ?? "Toggle Current App"
@@ -1744,9 +1819,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "accessibility": permission,
                 "app": appName,
                 "profile": profileName,
-                "enabled": enabled
+                "enabled": enabled,
+                "decision": lastSuggestionDecision
             ]
         )
+    }
+
+    private func setSuggestionDecision(_ decision: String) {
+        lastSuggestionDecision = decision
     }
 
     private func suppressCurrentField(reason: String) {
@@ -1873,6 +1953,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             compatibilityStatus: compatibilityStatus,
             appEnabled: appEnabled,
             appTrusted: accessibilityClient.isTrusted,
+            lastSuggestionDecision: lastSuggestionDecision,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,

@@ -83,6 +83,7 @@ final class DiagnosticsWindowController {
         compatibilityStatus: CompatibilitySupportStatus,
         appEnabled: Bool,
         appTrusted: Bool,
+        lastSuggestionDecision: String,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
         modelDirectoryPath: String,
@@ -113,6 +114,7 @@ final class DiagnosticsWindowController {
         var sections: [String] = []
 
         sections.append("Permission: Accessibility \(appTrusted ? "granted" : "missing")")
+        sections.append("Suggestion verdict: \(lastSuggestionDecision)")
         sections.append(
             """
             Local model: \(runtimeReport.summary)

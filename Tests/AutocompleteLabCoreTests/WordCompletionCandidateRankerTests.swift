@@ -33,7 +33,6 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "I wa")?.visibleText == "nt")
         #expect(ranker.suggestion(for: "This should be su")?.visibleText == "per")
         #expect(ranker.suggestion(for: "hey tr")?.visibleText == "ying")
-        #expect(ranker.suggestion(for: "It is worki")?.visibleText == "ng")
     }
 
     @Test("suppresses low value static suffixes")
@@ -47,6 +46,16 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "This should be super fas") == nil)
         #expect(ranker.suggestion(for: "Can you look") == nil)
         #expect(ranker.suggestion(for: "I see thi") == nil)
+        #expect(ranker.suggestion(for: "It is worki") == nil)
+    }
+
+    @Test("suppresses tiny recent suffixes until the fragment is strong")
+    func suppressesTinyRecentSuffixesUntilFragmentIsStrong() {
+        let ranker = WordCompletionCandidateRanker(staticWords: [])
+
+        #expect(ranker.suggestion(for: "th", recentWords: ["this"]) == nil)
+        #expect(ranker.suggestion(for: "It is worki", recentWords: ["working"]) == nil)
+        #expect(ranker.suggestion(for: "It is workin", recentWords: ["working"])?.visibleText == "g")
     }
 
     @Test("allows one letter recent suffixes for long fragments")
