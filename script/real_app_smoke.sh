@@ -13,7 +13,7 @@ CHROME_FIXTURE_WAS_SET=0
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome|codex|claude-code> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|all>]
+Usage: script/real_app_smoke.sh <textedit|chrome|codex|claude-code> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|all>]
 
 Runs a real app smoke pass where it is safe to automate. Codex and Claude Code
 are manual-gated so this script never types into an agent prompt by surprise.
@@ -70,7 +70,7 @@ case "$APP" in
 esac
 
 case "$CHROME_FIXTURE" in
-  textarea|contenteditable|editor-like|all)
+  textarea|contenteditable|editor-like|monaco-like|prosemirror-like|all)
     ;;
   *)
     echo "Unknown Chrome fixture: $CHROME_FIXTURE" >&2
@@ -290,6 +290,121 @@ window.addEventListener("load", window.focusSmokeEditor);
 </script>
 HTML
       ;;
+    monaco-like)
+      cat <<'HTML'
+<!doctype html>
+<meta charset="utf-8">
+<title>Autocomplete Lab Chrome Monaco-Like Smoke</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
+<style>
+body { margin: 0; background: #f7f7f7; }
+.monaco-editor {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  width: 760px;
+  min-height: 220px;
+  margin: 80px;
+  border: 1px solid #c7c7c7;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  font: 16px Menlo, Monaco, Consolas, monospace;
+}
+.margin {
+  padding: 18px 12px 0 0;
+  text-align: right;
+  color: #858585;
+  background: #252526;
+  border-right: 1px solid #333;
+}
+.overflow-guard { min-width: 0; overflow: hidden; }
+.monaco-scrollable-element { min-height: 220px; overflow: auto; }
+.view-lines { min-height: 180px; padding: 18px 20px; }
+[data-smoke-editor] {
+  min-height: 160px;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  caret-color: #ffffff;
+}
+</style>
+<section class="monaco-editor" role="application" aria-label="Local Monaco-like smoke fixture">
+  <div class="margin" aria-hidden="true">1</div>
+  <div class="overflow-guard">
+    <div class="monaco-scrollable-element">
+      <div class="view-lines">
+        <div data-smoke-editor class="view-line inputarea monaco-mouse-cursor-text" role="textbox" aria-label="Monaco-like editor input" aria-multiline="true" contenteditable="true" spellcheck="false"></div>
+      </div>
+    </div>
+  </div>
+</section>
+<script>
+window.focusSmokeEditor = function () {
+  const editor = document.querySelector("[data-smoke-editor]");
+  editor.focus();
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+window.addEventListener("load", window.focusSmokeEditor);
+</script>
+HTML
+      ;;
+    prosemirror-like)
+      cat <<'HTML'
+<!doctype html>
+<meta charset="utf-8">
+<title>Autocomplete Lab Chrome ProseMirror-Like Smoke</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
+<style>
+body { margin: 0; background: #fbfbfb; }
+.editor-shell {
+  width: 760px;
+  min-height: 220px;
+  margin: 80px;
+  border: 1px solid #cfcfcf;
+  background: #ffffff;
+  font: 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.menubar {
+  display: flex;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e1e1e1;
+  color: #555;
+  font-size: 13px;
+}
+.ProseMirror {
+  min-height: 170px;
+  padding: 18px 22px;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ProseMirror p { margin: 0 0 12px; }
+</style>
+<article class="editor-shell" aria-label="Local ProseMirror-like smoke fixture">
+  <div class="menubar" aria-hidden="true"><span>B</span><span>I</span><span>H1</span></div>
+  <div data-smoke-editor class="ProseMirror" role="textbox" aria-label="ProseMirror-like editor" aria-multiline="true" contenteditable="true" spellcheck="false"><p><br></p></div>
+</article>
+<script>
+window.focusSmokeEditor = function () {
+  const editor = document.querySelector("[data-smoke-editor]");
+  editor.focus();
+  const paragraph = editor.querySelector("p") || editor;
+  const range = document.createRange();
+  range.selectNodeContents(paragraph);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+window.addEventListener("load", window.focusSmokeEditor);
+</script>
+HTML
+      ;;
   esac
 }
 
@@ -304,7 +419,7 @@ describe_plan() {
     chrome)
       echo "Chrome fixture: $CHROME_FIXTURE"
       if [[ "$CHROME_FIXTURE" == "all" ]]; then
-        echo "Plan: build/relaunch AutocompleteLab, then run disposable Chrome textarea, contenteditable, and editor-like local fixtures."
+        echo "Plan: build/relaunch AutocompleteLab, then run disposable Chrome textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like local fixtures."
       else
         echo "Plan: build/relaunch AutocompleteLab, open a disposable Chrome $CHROME_FIXTURE fixture, type a test fragment, then validate logs and traces."
       fi
@@ -455,6 +570,8 @@ run_chrome() {
     run_chrome_fixture textarea
     run_chrome_fixture contenteditable
     run_chrome_fixture editor-like
+    run_chrome_fixture monaco-like
+    run_chrome_fixture prosemirror-like
   else
     run_chrome_fixture "$CHROME_FIXTURE"
   fi

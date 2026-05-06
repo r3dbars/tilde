@@ -55,11 +55,15 @@ Recorder: `script/manual_smoke_session.sh obsidian`
 
 Recorder: `script/manual_smoke_session.sh chrome`
 
-- Use a local `data:` page with a textarea.
+- Use a local fixture page: textarea, contenteditable, editor-like,
+  Monaco-like, or ProseMirror-like.
 - Type `Can we`.
-- Confirm the profile is Chrome, render mode is `floatingMirror`, and insertion mode is `axValueReplacement`.
-- Press Tab and expect `Can we make` without focus leaving the textarea.
+- Confirm the profile is Chrome, render mode is `floatingMirror`, and insertion
+  uses key events with AX value replacement as fallback.
+- Press Tab and expect `Can we make` without focus leaving the editor.
 - Confirm verification succeeds.
+- For proof rows, run `script/real_app_smoke.sh chrome --fixture all`; each
+  fixture records its own proof label.
 
 ## Codex
 

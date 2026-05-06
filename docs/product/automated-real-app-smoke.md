@@ -9,6 +9,8 @@ script/real_app_smoke.sh textedit
 script/real_app_smoke.sh chrome
 script/real_app_smoke.sh chrome --fixture contenteditable
 script/real_app_smoke.sh chrome --fixture editor-like
+script/real_app_smoke.sh chrome --fixture monaco-like
+script/real_app_smoke.sh chrome --fixture prosemirror-like
 ```
 
 Run all local Chrome browser/editor fixtures with one build:
@@ -31,11 +33,11 @@ What this proves:
 - a suggestion is shown with the expected render mode
 - Tab and the full-accept key are handled only while a suggestion is visible
 - insertion is verified in diagnostics and traces
-- Chrome works in plain textareas, contenteditable fields, and an editor-like
-  nested contenteditable fixture
+- Chrome works in plain textareas, contenteditable fields, editor-like nested
+  contenteditables, Monaco-like editors, and ProseMirror-like editors
 
 The Codex and Claude Code checks are manual-gated because auto-typing into an agent prompt is too risky.
 
-The editor-like Chrome fixture is local and dependency-free. It behaves like a
-nested browser editor surface, but it is not a full Monaco, CodeMirror, or
-ProseMirror integration test yet.
+All Chrome fixtures are local and dependency-free. The Monaco-like and
+ProseMirror-like fixtures copy the DOM shape and focus behavior those editors
+usually expose, but they do not load the real upstream libraries.

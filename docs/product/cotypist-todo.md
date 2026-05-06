@@ -16,7 +16,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - Notes: title/body/list fields use key-event insertion because AX selected-text insertion can report success without moving the caret.
   - Obsidian: keep CodeMirror behavior stable across AX element churn; do not suppress the whole field after one flaky key-event verification miss.
   - Mail: safe diagnostics pass shows compose body as AXWebArea with empty direct value, no selected range, and no selected-text insertion; profile is diagnostics-only until a safe adapter is verified.
-  - Chrome: local textarea passed AX capability checks; live one-word and full accept verified with mirror anchoring and AX value replacement because Chrome's selected-text insert is a no-op.
+  - Chrome: local textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture paths have distinct smoke proof labels.
   - Atlas: keep unsupported until the focused AX element is reliably available.
   - [x] Capture the current app stance in `docs/product/compatibility-matrix.md`.
 
@@ -85,7 +85,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] TextEdit one-word accept and full accept.
   - [x] Notes one-word accept and full accept.
   - [x] Obsidian one-word accept and full accept.
-  - [x] Chrome text field one-word and full accept.
+  - [x] Chrome text field and local editor fixture one-word and full accept.
   - [ ] Codex one-word accept and full accept.
   - [ ] Claude Code one-word accept and full accept.
 

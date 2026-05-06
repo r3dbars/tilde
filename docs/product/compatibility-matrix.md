@@ -10,7 +10,7 @@ the manual smoke status is refreshed from the current build.
 | TextEdit | supported | inline, mirror fallback | AX selected text, value fallback | recorded manual smoke pass |
 | Notes | supported | inline, mirror fallback | key events, AX selected text fallback | recorded manual smoke pass |
 | Obsidian | supported only when caret bounds are available | mirror | AX then key events, key fallback | detached CodeMirror suggestions are suppressed because whole-editor anchors look wrong |
-| Chrome | supported for local text fields and local editor fixtures | mirror | AX value replacement, key fallback | recorded local textarea pass; repeatable textarea, contenteditable, and editor-like fixture commands |
+| Chrome | supported for local text fields and local editor fixtures | mirror | key events, AX value fallback | repeatable textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture commands with distinct proof labels |
 | Codex | dogfood target | synthetic inline caret, no detached fallback | key events, AX fallback | pending manual smoke pass |
 | Claude Code | dogfood target | synthetic inline caret, no detached fallback | key events, AX fallback | pending manual smoke pass |
 | Mail | diagnostics only | disabled | disabled | blocked until safe compose adapter exists |

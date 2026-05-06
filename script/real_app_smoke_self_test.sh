@@ -31,8 +31,20 @@ if ! grep -F "disposable Chrome editor-like fixture" "$TMP_DIR/chrome-editor-lik
   exit 1
 fi
 
+script/real_app_smoke.sh chrome --fixture monaco-like --dry-run >"$TMP_DIR/chrome-monaco-like.txt"
+if ! grep -F "disposable Chrome monaco-like fixture" "$TMP_DIR/chrome-monaco-like.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Chrome Monaco-like dry-run plan" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh chrome --fixture prosemirror-like --dry-run >"$TMP_DIR/chrome-prosemirror-like.txt"
+if ! grep -F "disposable Chrome prosemirror-like fixture" "$TMP_DIR/chrome-prosemirror-like.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Chrome ProseMirror-like dry-run plan" >&2
+  exit 1
+fi
+
 script/real_app_smoke.sh chrome --fixture all --dry-run >"$TMP_DIR/chrome-all.txt"
-if ! grep -F "textarea, contenteditable, and editor-like local fixtures" "$TMP_DIR/chrome-all.txt" >/dev/null; then
+if ! grep -F "textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like local fixtures" "$TMP_DIR/chrome-all.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome all-fixtures dry-run plan" >&2
   exit 1
 fi
