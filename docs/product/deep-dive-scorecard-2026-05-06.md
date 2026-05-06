@@ -35,8 +35,8 @@ suggestions.
 | Word completion quality | 7/10 | Fast ranker path is useful, repeated word misses are now suppressed, punctuation suffixes are rejected. |
 | Non-annoyance | 7/10 | Esc, typed-over tracking, repetition suppression, and useful-rate gates are in place. |
 | Privacy | 8/10 | Local-first, secure fields suppressed, diagnostics redact text by default. Raw trace and screenshots stay opt-in. |
-| Onboarding | 6/10 | Permission flow exists, but the settings surface needs a calmer user-facing explanation. |
-| User control | 6/10 | Per-app disable exists; global pause and visible app management should come next. |
+| Onboarding | 7/10 | Permission flow exists, the settings surface now shows the global control state, and debug tools are less prominent. |
+| User control | 7/10 | Per-app disable exists, and a persisted global pause/resume control now stops suggestions everywhere. |
 | Diagnostics | 8/10 | Strong trace, placement, latency, and insertion signals. Needs a simpler top summary. |
 | Automated tests | 8/10 | Core has broad tests and script self-tests. App-layer services still need seams. |
 | Real-app smoke | 7/10 | TextEdit and Chrome are automated; Codex and Claude Code are manual-gated; Obsidian needs refresh. |
@@ -74,10 +74,13 @@ Primary references:
   AXWebArea wrappers without opening up non-prompt content.
 - The generated app bundle now includes version metadata, and the bundle checker
   requires it.
+- The menu now has a global Pause/Resume Suggestions control.
+- Debug-heavy diagnostics, model folder, nudge, and reset actions now live under
+  a Debug submenu.
 
 ## Next Highest-Leverage Work
 
-1. Add a user-facing global pause and move debug controls into a Debug submenu.
+1. Add visible app management beyond the current-app toggle.
 2. Add Chrome fixture pages for textarea, contenteditable, Monaco, CodeMirror,
    and ProseMirror.
 3. Refresh Obsidian proof under the current no-detached-suggestion rule.

@@ -38,12 +38,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         openAccessibilitySettings: { [weak self] in
             self?.openAccessibilitySettings()
+        },
+        toggleSuggestionsPaused: { [weak self] in
+            self?.togglePauseSuggestions()
         }
     )
 
     private var statusItem: NSStatusItem?
     private var statusMenuItem: NSMenuItem?
     private var runtimeMenuItem: NSMenuItem?
+    private var pauseSuggestionsMenuItem: NSMenuItem?
     private var toggleAppMenuItem: NSMenuItem?
     private var pollTimer: Timer?
     private var keyboardEventTap: KeyboardEventTap?
@@ -85,12 +89,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 120
     private var focusedTextPollingPausedUntil: Date?
+    private var suggestionsPaused = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ProcessInfo.processInfo.disableAutomaticTermination("AutocompleteLab runs as a persistent menu bar agent.")
         NSApp.setActivationPolicy(.accessory)
-        configureStatusItem()
+        loadPauseState()
         loadDisabledApps()
+        configureStatusItem()
         DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
         accessibilityClient.requestPermissionIfNeeded()
@@ -98,6 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !accessibilityClient.isTrusted {
             settingsWindow.show(
                 isTrusted: false,
+                suggestionsPaused: suggestionsPaused,
                 runtimeReport: runtimeReadinessReport,
                 runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath
@@ -125,31 +132,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         let statusMenu = NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: "")
         let runtimeMenu = NSMenuItem(title: "Model: starting", action: nil, keyEquivalent: "")
+        let pauseItem = NSMenuItem(title: pauseSuggestionsTitle, action: #selector(togglePauseSuggestions), keyEquivalent: "p")
         let toggleItem = NSMenuItem(title: "Toggle Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
+        let debugMenuItem = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
+        let debugMenu = NSMenu()
 
         menu.addItem(NSMenuItem(title: "Transcripted Autocomplete Lab", action: nil, keyEquivalent: ""))
         menu.addItem(statusMenu)
         menu.addItem(runtimeMenu)
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Settings", action: #selector(showSettings), keyEquivalent: ","))
-        menu.addItem(NSMenuItem(title: "Show Diagnostics", action: #selector(showDiagnostics), keyEquivalent: "d"))
-        menu.addItem(NSMenuItem(title: "Reveal Model Folder", action: #selector(revealModelFolder), keyEquivalent: "m"))
+        menu.addItem(pauseItem)
         menu.addItem(toggleItem)
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Nudge Suggestion Up", action: #selector(nudgeCurrentAppSuggestionUp), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Nudge Suggestion Down", action: #selector(nudgeCurrentAppSuggestionDown), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Nudge Suggestion Left", action: #selector(nudgeCurrentAppSuggestionLeft), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Nudge Suggestion Right", action: #selector(nudgeCurrentAppSuggestionRight), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Reset Current App Learning", action: #selector(resetCurrentAppLearning), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Settings", action: #selector(showSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Request Accessibility Permission", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Open Accessibility Settings", action: #selector(openAccessibilitySettings), keyEquivalent: ""))
+        debugMenu.addItem(NSMenuItem(title: "Show Diagnostics", action: #selector(showDiagnostics), keyEquivalent: "d"))
+        debugMenu.addItem(NSMenuItem(title: "Reveal Model Folder", action: #selector(revealModelFolder), keyEquivalent: "m"))
+        debugMenu.addItem(NSMenuItem.separator())
+        debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Up", action: #selector(nudgeCurrentAppSuggestionUp), keyEquivalent: ""))
+        debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Down", action: #selector(nudgeCurrentAppSuggestionDown), keyEquivalent: ""))
+        debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Left", action: #selector(nudgeCurrentAppSuggestionLeft), keyEquivalent: ""))
+        debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Right", action: #selector(nudgeCurrentAppSuggestionRight), keyEquivalent: ""))
+        debugMenu.addItem(NSMenuItem(title: "Reset Current App Learning", action: #selector(resetCurrentAppLearning), keyEquivalent: ""))
+        menu.setSubmenu(debugMenu, for: debugMenuItem)
+        menu.addItem(debugMenuItem)
+        menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
 
         item.menu = menu
         statusItem = item
         statusMenuItem = statusMenu
         runtimeMenuItem = runtimeMenu
+        pauseSuggestionsMenuItem = pauseItem
         toggleAppMenuItem = toggleItem
         refreshRuntimeChrome()
     }
@@ -228,6 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runtimeMenuItem?.title = "Model: \(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(runtimeReadinessReport.summary) • \(completionLengthConfiguration.displaySummary)"
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
+            suggestionsPaused: suggestionsPaused,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath
@@ -246,7 +262,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         "\(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(completionLengthConfiguration.displaySummary)"
     }
 
+    private var pauseSuggestionsTitle: String {
+        suggestionsPaused ? "Resume Suggestions" : "Pause Suggestions"
+    }
+
     private func pollFocusedText() {
+        guard !suggestionsPaused else {
+            setSuggestionDecision("Paused")
+            let frontmostApp = accessibilityClient.frontmostApplication()
+            updateStatusMenu(
+                app: frontmostApp,
+                profile: frontmostApp.flatMap { profileStore.profile(for: $0.bundleIdentifier) },
+                appEnabled: frontmostApp.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
+            )
+            hideSuggestion(reason: "global-pause")
+            return
+        }
+
         guard accessibilityClient.isTrusted else {
             setSuggestionDecision("Blocked: Accessibility permission missing")
             updateStatusMenu(app: nil, profile: nil, appEnabled: false)
@@ -1949,15 +1981,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appEnabled: Bool
     ) {
         let permission = accessibilityClient.isTrusted ? "AX ok" : "AX missing"
+        let control = suggestionsPaused ? "paused" : "running"
         let appName = app?.localizedName ?? "No app"
         let profileName = profile?.displayName ?? "unsupported"
         let enabled = appEnabled ? "on" : "off"
-        let statusLine = "Status: \(permission) | \(appName) | \(profileName) | \(enabled) | \(lastSuggestionDecision)"
+        let statusLine = "Status: \(control) | \(permission) | \(appName) | \(profileName) | app \(enabled) | \(lastSuggestionDecision)"
 
         statusMenuItem?.title = statusLine
+        pauseSuggestionsMenuItem?.title = pauseSuggestionsTitle
         toggleAppMenuItem?.title = app.map { appEnabled ? "Disable \($0.localizedName)" : "Enable \($0.localizedName)" } ?? "Toggle Current App"
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
+            suggestionsPaused: suggestionsPaused,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath
@@ -1972,9 +2007,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "status",
             metadata: [
                 "accessibility": permission,
+                "control": control,
                 "app": appName,
                 "profile": profileName,
                 "enabled": enabled,
+                "paused": String(suggestionsPaused),
                 "decision": lastSuggestionDecision
             ]
         )
@@ -2021,9 +2058,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionBlockLogGate.reset()
     }
 
-    private func clearFocusedFieldState() {
+    private func clearFocusedFieldState(hideReason: String = "focus-lost") {
         if suggestionSession.hasVisibleSuggestion {
-            hideSuggestion(reason: "focus-lost")
+            hideSuggestion(reason: hideReason)
         }
         invalidatePendingSuggestionRequest()
 
@@ -2050,6 +2087,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         accessibilityClient.requestPermissionIfNeeded()
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
+            suggestionsPaused: suggestionsPaused,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath
@@ -2071,6 +2109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showSettings() {
         settingsWindow.show(
             isTrusted: accessibilityClient.isTrusted,
+            suggestionsPaused: suggestionsPaused,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath
@@ -2294,6 +2333,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
+    private func togglePauseSuggestions() {
+        suggestionsPaused.toggle()
+
+        if suggestionsPaused {
+            setSuggestionDecision("Paused")
+            clearFocusedFieldState(hideReason: "global-pause")
+            stopKeyboardEventTapNow(reason: "global-pause")
+        } else {
+            setSuggestionDecision("Ready: resumed")
+        }
+
+        persistPauseState()
+        DiagnosticsLog.shared.record(
+            "suggestions-control",
+            metadata: [
+                "paused": String(suggestionsPaused)
+            ]
+        )
+        let frontmostApp = accessibilityClient.frontmostApplication()
+        updateStatusMenu(
+            app: frontmostApp,
+            profile: frontmostApp.flatMap { profileStore.profile(for: $0.bundleIdentifier) },
+            appEnabled: frontmostApp.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
+        )
+    }
+
+    @objc
     private func quit() {
         NSApp.terminate(nil)
     }
@@ -2302,6 +2368,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 private extension AppDelegate {
     static var disabledAppsDefaultsKey: String {
         "DisabledBundleIdentifiers"
+    }
+
+    static var suggestionsPausedDefaultsKey: String {
+        "SuggestionsPaused"
+    }
+
+    func loadPauseState() {
+        suggestionsPaused = UserDefaults.standard.bool(forKey: Self.suggestionsPausedDefaultsKey)
+    }
+
+    func persistPauseState() {
+        UserDefaults.standard.set(
+            suggestionsPaused,
+            forKey: Self.suggestionsPausedDefaultsKey
+        )
     }
 
     func loadDisabledApps() {
