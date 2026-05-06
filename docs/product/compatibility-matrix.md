@@ -9,10 +9,11 @@ the manual smoke status is refreshed from the current build.
 | --- | --- | --- | --- | --- |
 | TextEdit | supported | inline, mirror fallback | AX selected text, value fallback | recorded manual smoke pass |
 | Notes | supported | inline, mirror fallback | key events, AX selected text fallback | recorded manual smoke pass |
-| Obsidian | supported only when caret bounds are available | mirror | AX then key events, key fallback | detached CodeMirror suggestions are suppressed because whole-editor anchors look wrong |
+| Obsidian | supported | synthetic caret mirror, no detached fallback | AX then key events, key fallback | recorded CodeMirror smoke pass with two verified accepts; detached whole-editor anchors stay suppressed |
 | Chrome | supported for local text fields and local editor fixtures | mirror | key events, AX value fallback | repeatable textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture commands with distinct proof labels |
-| Codex | dogfood target | synthetic inline caret, no detached fallback | key events, AX fallback | pending manual smoke pass |
+| Codex | dogfood target | synthetic inline caret, no detached fallback | AX value replacement, key fallback | recorded manual smoke pass |
 | Claude Code | dogfood target | synthetic inline caret, no detached fallback | key events, AX fallback | pending manual smoke pass |
+| Claude desktop | dogfood target | synthetic inline caret, no detached fallback | AX value replacement | recorded manual smoke pass |
 | Mail | diagnostics only | disabled | disabled | blocked until safe compose adapter exists |
 | Atlas | unsupported | disabled | disabled | blocked until focused AX element is reliable |
 
@@ -22,8 +23,8 @@ Run:
 ./script/manual_smoke_status.sh --strict
 ```
 
-TextEdit, Notes, Chrome, Codex, and Claude Code must have full accept proof.
-Obsidian may pass as limited proof when CodeMirror does not expose caret bounds
-and detached suggestions are suppressed instead of shown.
+TextEdit, Notes, Obsidian, Chrome, Codex, Claude Code, and Claude desktop must
+have full accept proof. A detached-suppression Obsidian row is useful safety
+evidence, but it is not enough for a green manual smoke status.
 The status command also prints remaining sub-10 scorecard gaps so release risk
 is visible beside the smoke proof.

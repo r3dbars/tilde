@@ -127,9 +127,8 @@ for app_name in TextEdit Notes "Chrome textarea" "Chrome contenteditable" "Chrom
   fi
 done
 
-if ! grep -F -- "- Obsidian: limited pass" "$STATUS_OUTPUT" >/dev/null &&
-  ! grep -F -- "- Obsidian: passed" "$STATUS_OUTPUT" >/dev/null; then
-  echo "manual smoke self-test did not report Obsidian as covered" >&2
+if ! grep -F -- "- Obsidian: passed" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not report full Obsidian proof as passed" >&2
   exit 1
 fi
 
@@ -146,6 +145,31 @@ fi
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
   script/manual_smoke_status.sh --require-all >/dev/null
+
+LIMITED_REPORT="$TMP_DIR/limited-manual-smoke-runs.md"
+cat >"$LIMITED_REPORT" <<'EOF'
+# Manual Smoke Runs
+
+| Time UTC | App | Bundle | Proof label | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
+| --- | --- | --- | --- | ---: | --- | --- | --- |
+| 2026-04-26T08:00:00Z | Obsidian | `md.obsidian` | `default` | 0 | `detached-suppressed` | lines 1+ in `/tmp/diagnostics.log` | lines 1+ in `/tmp/traces.jsonl` |
+EOF
+
+AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$LIMITED_REPORT" \
+  AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
+  script/manual_smoke_status.sh >"$STATUS_OUTPUT"
+
+if ! grep -F -- "- Obsidian: limited pass (needs full accept proof)" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not report limited Obsidian proof as incomplete" >&2
+  exit 1
+fi
+
+if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$LIMITED_REPORT" \
+  AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
+  script/manual_smoke_status.sh --require-all >/dev/null 2>&1; then
+  echo "manual smoke self-test expected --require-all to fail with only limited Obsidian proof" >&2
+  exit 1
+fi
 
 EMPTY_REPORT="$TMP_DIR/empty-manual-smoke-runs.md"
 cat >"$EMPTY_REPORT" <<'EOF'

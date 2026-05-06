@@ -37,7 +37,7 @@ fi
 declare -a APPS=(
   "TextEdit|TextEdit|com.apple.TextEdit|full|default"
   "Notes|Notes|com.apple.Notes|full|default"
-  "Obsidian|Obsidian|md.obsidian|limited|default"
+  "Obsidian|Obsidian|md.obsidian|full|default"
   "Chrome textarea|Chrome|com.google.Chrome|full|textarea"
   "Chrome contenteditable|Chrome|com.google.Chrome|full|contenteditable"
   "Chrome editor-like|Chrome|com.google.Chrome|full|editor-like"
@@ -109,17 +109,18 @@ for app_entry in "${APPS[@]}"; do
   proof_mode="${rest%%|*}"
   proof_label="${app_entry##*|}"
 
-  if [[ "$proof_mode" == "limited" ]] &&
-    [[ -f "$REPORT_PATH" ]] &&
-    grep -E "\\| $report_name \\| \`$bundle_id\` \\| (\`$proof_label\` \\| )?0 \\| \`detached-suppressed\` \\|" "$REPORT_PATH" >/dev/null; then
-    echo "- $display_name: limited pass"
-  elif [[ -f "$REPORT_PATH" ]] &&
+  if [[ -f "$REPORT_PATH" ]] &&
     grep -E "\\| $report_name \\| \`$bundle_id\` \\| \`$proof_label\` \\| [2-9][0-9]* \\|" "$REPORT_PATH" >/dev/null; then
     echo "- $display_name: passed"
   elif [[ "$proof_label" == "default" ]] &&
     [[ -f "$REPORT_PATH" ]] &&
     grep -E "\\| $report_name \\| \`$bundle_id\` \\| [2-9][0-9]* \\|" "$REPORT_PATH" >/dev/null; then
     echo "- $display_name: passed"
+  elif [[ -f "$REPORT_PATH" ]] &&
+    grep -E "\\| $report_name \\| \`$bundle_id\` \\| (\`$proof_label\` \\| )?0 \\| \`detached-suppressed\` \\|" "$REPORT_PATH" >/dev/null; then
+    echo "- $display_name: limited pass (needs full accept proof)"
+    missing=$((missing + 1))
+    pending_apps+=("$display_name")
   else
     echo "- $display_name: pending"
     missing=$((missing + 1))

@@ -150,7 +150,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             fieldIdentityMode: .stableBounds,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Yellow Electron target. Prefer capability probing, mirror-style placement, and verified AX before synthetic key insertion. Do not show detached suggestions when CodeMirror hides caret bounds."
+            notes: "Yellow Electron target. Prefer capability probing, synthetic text-area caret placement, and verified AX before synthetic key insertion. Do not show detached suggestions when CodeMirror hides usable caret bounds."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.apple.mail",
