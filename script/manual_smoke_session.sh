@@ -10,7 +10,7 @@ PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-default}"
 
 usage() {
   cat <<'EOF'
-Usage: script/manual_smoke_session.sh <textedit|notes|obsidian|chrome|codex|claude-code> [--print|--check]
+Usage: script/manual_smoke_session.sh <textedit|notes|obsidian|chrome|codex|claude-code|claude> [--print|--check]
 
 Default mode prints the local manual steps, records the current diagnostics log
 line, waits for Enter, validates the new diagnostics for that app, then appends
@@ -68,6 +68,12 @@ case "$APP" in
     DISPLAY_NAME="Claude Code"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     STEPS=$'- Focus the Claude Code prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once, then the key above Tab for full visible accept.\n- Do not press Enter as part of the smoke pass.'
+    ;;
+  claude)
+    BUNDLE_ID="com.anthropic.claudefordesktop"
+    DISPLAY_NAME="Claude"
+    EXPECTED_RENDER="inlineAdjacent|floatingMirror"
+    STEPS=$'- Focus the Claude prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once, then the key above Tab for full visible accept.\n- Do not press Enter as part of the smoke pass.'
     ;;
   *)
     usage >&2
@@ -262,7 +268,7 @@ if (( VERIFIED_COUNT < 2 )); then
   exit 1
 fi
 
-reject_pattern "insert-verification .*app=$BUNDLE_ID .*result=(unchanged|partial|changedUnexpectedly|missing-context)" "failed insertion verification"
+reject_pattern "insert-verification-final-failure .*app=$BUNDLE_ID" "unrecovered insertion verification failure"
 reject_pattern "field-suppressed .*app=$BUNDLE_ID" "field suppression"
 reject_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=(insert-verification-failed|missing-anchor|runtime-not-ready)" "blocking failure"
 

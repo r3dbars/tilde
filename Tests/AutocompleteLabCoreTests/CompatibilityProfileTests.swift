@@ -44,6 +44,13 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackInsertionMode == .axThenKeyEvents)
         #expect(store.profile(for: "com.anthropic.claude-code")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "com.anthropic.claude-code")?.allowsDetachedSuggestions == false)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.displayName == "Claude")
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.renderMode == .inlineAdjacent)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackRenderMode == .floatingMirror)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.insertionMode == .axValueReplacement)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackInsertionMode == nil)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fieldIdentityMode == .stableBounds)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.allowsDetachedSuggestions == false)
     }
 
     @Test("Denylisted apps are never allowed")
@@ -89,13 +96,23 @@ struct CompatibilityProfileTests {
         let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
         let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
         let claudeCode = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claude-code"))
+        let claude = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claudefordesktop"))
         let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
 
         #expect(InsertionModePlan.modes(for: textEdit) == [.axSelectedText, .axValueReplacement])
         #expect(InsertionModePlan.modes(for: chrome) == [.keyEvents, .axValueReplacement])
         #expect(InsertionModePlan.modes(for: codex) == [.keyEvents, .axThenKeyEvents])
         #expect(InsertionModePlan.modes(for: claudeCode) == [.keyEvents, .axThenKeyEvents])
+        #expect(InsertionModePlan.modes(for: claude) == [.axValueReplacement])
         #expect(InsertionModePlan.modes(for: mail) == [])
+    }
+
+    @Test("Insertion mode plans can skip failed primary modes")
+    func insertionModePlansCanSkipFailedPrimaryModes() throws {
+        let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+
+        #expect(InsertionModePlan.modes(for: chrome, skipping: [.keyEvents]) == [.axValueReplacement])
+        #expect(InsertionModePlan.modes(for: chrome, skipping: [.keyEvents, .axValueReplacement]) == [])
     }
 
     @Test("Render mode plans fall back to mirror when inline bounds are unavailable")
@@ -104,6 +121,7 @@ struct CompatibilityProfileTests {
         let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
         let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
         let claudeCode = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claude-code"))
+        let claude = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claudefordesktop"))
         let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
 
         #expect(RenderModePlan.effectiveMode(
@@ -138,6 +156,16 @@ struct CompatibilityProfileTests {
         ) == .inlineAdjacent)
         #expect(RenderModePlan.effectiveMode(
             for: claudeCode,
+            supportsInlineSuggestions: false,
+            hasMirrorAnchor: true
+        ) == .floatingMirror)
+        #expect(RenderModePlan.effectiveMode(
+            for: claude,
+            supportsInlineSuggestions: true,
+            hasMirrorAnchor: true
+        ) == .inlineAdjacent)
+        #expect(RenderModePlan.effectiveMode(
+            for: claude,
             supportsInlineSuggestions: false,
             hasMirrorAnchor: true
         ) == .floatingMirror)

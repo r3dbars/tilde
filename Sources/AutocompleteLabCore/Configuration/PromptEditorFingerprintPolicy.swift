@@ -14,7 +14,8 @@ public struct PromptEditorFingerprintDecision: Equatable, Sendable {
 public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
     public static let dogfoodBundleIdentifiers: Set<String> = [
         "com.openai.codex",
-        "com.anthropic.claude-code"
+        "com.anthropic.claude-code",
+        "com.anthropic.claudefordesktop"
     ]
 
     public init() {}

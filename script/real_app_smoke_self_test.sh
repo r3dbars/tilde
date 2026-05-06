@@ -76,6 +76,12 @@ if ! grep -F "manual-gated prompt smoke" "$TMP_DIR/codex.txt" >/dev/null; then
   exit 1
 fi
 
+script/real_app_smoke.sh claude --dry-run >"$TMP_DIR/claude.txt"
+if ! grep -F "manual-gated prompt smoke" "$TMP_DIR/claude.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Claude manual gate" >&2
+  exit 1
+fi
+
 if script/real_app_smoke.sh unknown --dry-run >/dev/null 2>&1; then
   echo "real app smoke self-test expected unknown apps to fail" >&2
   exit 1
@@ -88,6 +94,16 @@ fi
 
 if ! grep -F "requires --manual-gate" "$TMP_DIR/codex-fail.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the Codex safety gate" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh claude >/dev/null 2>"$TMP_DIR/claude-fail.txt"; then
+  echo "real app smoke self-test expected Claude to require --manual-gate" >&2
+  exit 1
+fi
+
+if ! grep -F "requires --manual-gate" "$TMP_DIR/claude-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Claude safety gate" >&2
   exit 1
 fi
 
