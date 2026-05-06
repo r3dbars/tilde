@@ -55,6 +55,15 @@ struct CompletionOutputCleanerTests {
         #expect(suggestion?.visibleText == " ship this today")
     }
 
+    @Test("Strips echoed prompt labels")
+    func stripsEchoedPromptLabels() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("Next words: keep moving today", after: "Let's")?.visibleText == " keep moving today")
+        #expect(cleaner.clean("Suffix: tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
+        #expect(cleaner.clean("Next words:", after: "Let's") == nil)
+    }
+
     @Test("Trims repeated typed prefix from real model output")
     func trimsRepeatedTypedPrefix() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
