@@ -87,10 +87,6 @@ final class KeyboardEventTap {
             modifiers: AutocompleteKeyModifiers(flags: event.flags)
         )
 
-        guard key != .other else {
-            return Unmanaged.passUnretained(event)
-        }
-
         let isAutorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
         guard handler(key, isAutorepeat) else {
             return Unmanaged.passUnretained(event)

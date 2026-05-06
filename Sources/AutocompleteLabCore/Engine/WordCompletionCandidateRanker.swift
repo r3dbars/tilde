@@ -82,11 +82,15 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         }
 
         if source == .recent {
-            if suffix.count == 1 {
-                return fragment.count >= 5
+            if suffix.count <= 2 {
+                return fragment.count >= 6
             }
 
             return true
+        }
+
+        if suffix == "ng" {
+            return fragment.count >= 6
         }
 
         if suffix.count <= 2,

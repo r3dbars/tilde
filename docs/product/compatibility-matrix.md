@@ -2,6 +2,9 @@
 
 Current compatibility stance for the lab build.
 
+After changing placement or key handling, treat recorded proof as stale until
+the manual smoke status is refreshed from the current build.
+
 | App | Status | Render | Insert | Proof |
 | --- | --- | --- | --- | --- |
 | TextEdit | supported | inline, mirror fallback | AX selected text, value fallback | recorded manual smoke pass |

@@ -181,9 +181,9 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
     }
 
     private static let lowValueSingleWordPhrases: Set<String> = [
-        "a", "an", "and", "are", "as", "at", "be", "but", "for", "if",
-        "in", "is", "it", "of", "on", "or", "so", "the", "to", "was",
-        "were", "with"
+        "a", "an", "and", "are", "as", "at", "be", "but", "for", "i",
+        "if", "in", "is", "it", "of", "on", "or", "so", "the", "to",
+        "was", "we", "were", "with", "you"
     ]
 }
 
