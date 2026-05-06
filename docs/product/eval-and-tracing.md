@@ -2,9 +2,11 @@
 
 This is the local tuning loop for making autocomplete better before it becomes customer-facing.
 
+Phase zero privacy rule: beta and customer language starts with local aggregate counters only. Raw text traces and debug screenshots require a clear local opt-in.
+
 ## Local Tracing
 
-Tracing is local-only and enabled for the lab by default.
+Tracing is local-only. Internal lab runs can use raw traces. Beta/customer runs should keep raw tracing off unless the tester turns on local debug capture.
 
 Disable it for a run with:
 
@@ -18,7 +20,7 @@ The app writes JSONL to:
 ~/Library/Logs/AutocompleteLab/traces.jsonl
 ```
 
-Enable optional local screenshot traces with:
+Enable optional local screenshot traces only for local debugging:
 
 ```bash
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/build_and_run.sh
@@ -55,7 +57,9 @@ Each suggestion gets a `suggestionID` and emits lifecycle events:
 - `insertionVerified`
 - `insertionFailed`
 
-Events include app bundle id, request mode, field identity, prompt/output when available, displayed text, accepted text, outcome, reason, latency, screenshot path, caret/panel geometry, and compatibility-learning metadata.
+Events include app bundle id, request mode, field identity, outcome, reason, latency, caret/panel geometry, and compatibility-learning metadata.
+
+When raw tracing is explicitly enabled, events can also include prompt/output, displayed text, accepted text, and screenshot paths.
 
 ## What To Evaluate
 
@@ -80,7 +84,7 @@ Compare local model latency after a trial launch:
 
 ```bash
 script/model_latency_report.py --latest
-AUTOCOMPLETE_LAB_MODEL=qwen35-9b ./script/build_and_run.sh --verify
+AUTOCOMPLETE_LAB_MODEL=qwen35-4b ./script/build_and_run.sh --verify
 ```
 
 Supported override names include `qwen35-4b`, `qwen35-9b`, `qwen3-1.7b`, `qwen3-0.6b`, `gemma-4-e4b`, `gemma-4-e4b-it-optiq`, and `gemma-4-26b`.
@@ -88,8 +92,8 @@ Supported override names include `qwen35-4b`, `qwen35-9b`, `qwen3-1.7b`, `qwen3-
 Try shorter or longer streamed phrase suggestions without editing code:
 
 ```bash
-AUTOCOMPLETE_LAB_MODEL=gemma-4-e4b-it-optiq AUTOCOMPLETE_LAB_VISIBLE_WORDS=3 ./script/build_and_run.sh --verify
-AUTOCOMPLETE_LAB_MODEL=gemma-4-e4b-it-optiq AUTOCOMPLETE_LAB_VISIBLE_WORDS=10 AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS=16 ./script/build_and_run.sh --verify
+AUTOCOMPLETE_LAB_MODEL=qwen35-4b AUTOCOMPLETE_LAB_VISIBLE_WORDS=3 ./script/build_and_run.sh --verify
+AUTOCOMPLETE_LAB_MODEL=qwen35-4b AUTOCOMPLETE_LAB_VISIBLE_WORDS=10 AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS=16 ./script/build_and_run.sh --verify
 ```
 
 After a manual model trial, require enough samples before trusting the result:
@@ -134,6 +138,6 @@ AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP=com.openai.codex \
 
 ## Current Product Boundary
 
-For the lab, raw local traces are useful because the user is tuning their own local model behavior.
+For the internal lab, raw local traces are useful because the user is tuning their own local model behavior.
 
-For a customer-facing app, keep raw tracing disabled by default and require a clear local-only debug toggle. Do not upload typed text, prompts, outputs, or accepted text without explicit user consent.
+For beta or customer-facing language, keep raw tracing disabled by default and require a clear local-only debug toggle. Do not upload typed text, prompts, outputs, accepted text, or screenshots.

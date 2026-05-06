@@ -36,6 +36,14 @@ That creates:
 - Did anything insert in a surprising place?
 - Did the app ever appear in a private or unsupported field?
 
+## Privacy Rule
+
+- No user-managed model server.
+- The app owns the local MLX runtime.
+- Raw text traces are off unless the tester opts in locally.
+- Debug screenshots are off unless the tester opts in locally.
+- Do not ask for trace files unless the tester chose to export them.
+
 ## Stop Conditions
 
 Stop the beta if:
@@ -44,7 +52,8 @@ Stop the beta if:
 - a suggestion appears over sensitive text,
 - Tab becomes unreliable,
 - the local model falls back to mock output,
-- the app needs manual model/server setup.
+- the app needs manual model/server setup,
+- raw text or screenshot logging turns on without explicit local opt-in.
 
 ## After Each Session
 
@@ -60,5 +69,6 @@ Then follow:
 dist/private-beta/session-report.md
 ```
 
-Run the trace eval panel or trace analyzer, check latency, and fix the top
-repeated miss before adding more testers.
+Run aggregate trace eval, check latency, and fix the top repeated miss before
+adding more testers. Only inspect raw traces or screenshots when the tester
+explicitly opted in.
