@@ -11,21 +11,12 @@ public enum AccessibilityCoordinateConverter {
         )
     }
 
-    public static func appKitRect(fromAccessibilityRect rect: CGRect, in screenFrame: CGRect) -> CGRect {
-        CGRect(
-            x: rect.minX,
-            y: screenFrame.maxY - rect.minY - rect.height,
-            width: rect.width,
-            height: rect.height
-        )
-    }
-
     public static func appKitProbeRect(
         fromAccessibilityRect rect: CGRect,
-        in screenFrame: CGRect,
+        screenHeight: CGFloat,
         minimumSize: CGFloat = 1
     ) -> CGRect {
-        let convertedRect = appKitRect(fromAccessibilityRect: rect, in: screenFrame)
+        let convertedRect = appKitRect(fromAccessibilityRect: rect, screenHeight: screenHeight)
         let width = max(convertedRect.width, minimumSize)
         let height = max(convertedRect.height, minimumSize)
 
@@ -46,12 +37,4 @@ public enum AccessibilityCoordinateConverter {
         )
     }
 
-    public static func accessibilityRect(fromAppKitRect rect: CGRect, in screenFrame: CGRect) -> CGRect {
-        CGRect(
-            x: rect.minX,
-            y: screenFrame.maxY - rect.minY - rect.height,
-            width: rect.width,
-            height: rect.height
-        )
-    }
 }

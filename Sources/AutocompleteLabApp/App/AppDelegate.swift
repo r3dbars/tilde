@@ -815,6 +815,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             elementRect: elementRect,
             windowRect: context.windowRect,
             lineHeight: lineHeight,
+            horizontalPadding: tuning.horizontalPadding,
             verticalPadding: tuning.verticalPadding,
             inlineGap: tuning.inlineGap,
             widthOfText: { width(of: $0, font: font) }
@@ -823,6 +824,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private struct SyntheticTextAreaTuning {
         let font: NSFont?
+        let horizontalPadding: CGFloat
         let verticalPadding: CGFloat
         let inlineGap: CGFloat
     }
@@ -832,31 +834,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bundleIdentifier: String
     ) -> SyntheticTextAreaTuning {
         if PromptEditorFingerprintPolicy.dogfoodBundleIdentifiers.contains(bundleIdentifier) {
-            return SyntheticTextAreaTuning(font: NSFont.systemFont(ofSize: 15), verticalPadding: 4, inlineGap: 8)
+            return SyntheticTextAreaTuning(
+                font: NSFont.systemFont(ofSize: 15),
+                horizontalPadding: 0,
+                verticalPadding: 4,
+                inlineGap: 8
+            )
         }
 
         guard bundleIdentifier == "com.google.Chrome" else {
-            return SyntheticTextAreaTuning(font: nil, verticalPadding: 4, inlineGap: 8)
+            return SyntheticTextAreaTuning(font: nil, horizontalPadding: 18, verticalPadding: 4, inlineGap: 8)
         }
 
         let searchable = context.fingerprint.searchableText
         if searchable.contains("monaco") {
-            return SyntheticTextAreaTuning(font: nil, verticalPadding: 4, inlineGap: 44)
+            return SyntheticTextAreaTuning(font: nil, horizontalPadding: 18, verticalPadding: 4, inlineGap: 44)
         }
 
         if searchable.contains("prosemirror") {
             return SyntheticTextAreaTuning(
                 font: NSFont.systemFont(ofSize: 18),
+                horizontalPadding: 18,
                 verticalPadding: 14,
                 inlineGap: 8
             )
         }
 
         if usesChromeRichEditorSyntheticTuning(for: context, bundleIdentifier: bundleIdentifier) {
-            return SyntheticTextAreaTuning(font: nil, verticalPadding: 14, inlineGap: 20)
+            return SyntheticTextAreaTuning(font: nil, horizontalPadding: 18, verticalPadding: 14, inlineGap: 20)
         }
 
-        return SyntheticTextAreaTuning(font: nil, verticalPadding: 4, inlineGap: 8)
+        return SyntheticTextAreaTuning(font: nil, horizontalPadding: 18, verticalPadding: 4, inlineGap: 8)
     }
 
     private func syntheticTextAreaFont(
