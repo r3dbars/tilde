@@ -138,7 +138,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .disabled,
-            notes: "Yellow rich-text target. Use key events only and fail closed on unchanged verification because Notes can report AX selected-text insertion success without moving the caret."
+            allowsDetachedSuggestions: false,
+            notes: "Yellow rich-text target. Use key events only, fail closed on unchanged verification, and suppress detached mirror placement until fresh title/body/checklist proof exists because Notes can report AX selected-text insertion success without moving the caret."
         ),
         CompatibilityProfile(
             bundleIdentifier: "md.obsidian",
@@ -195,9 +196,10 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .axThenKeyEvents,
             fieldIdentityMode: .stableBounds,
+            supportsFullAcceptance: false,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Dogfood target. Prefer caret-bound inline suggestions when the prompt editor exposes bounds. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions."
+            notes: "Dogfood target. Prefer caret-bound inline suggestions when the prompt editor exposes bounds. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Full accept stays disabled until a safe live prompt pass proves it."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claudefordesktop",
