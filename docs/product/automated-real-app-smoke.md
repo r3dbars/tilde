@@ -7,6 +7,14 @@ Run the safe automated passes:
 ```bash
 script/real_app_smoke.sh textedit
 script/real_app_smoke.sh chrome
+script/real_app_smoke.sh chrome --fixture contenteditable
+script/real_app_smoke.sh chrome --fixture editor-like
+```
+
+Run all local Chrome browser/editor fixtures with one build:
+
+```bash
+script/real_app_smoke.sh chrome --fixture all
 ```
 
 Run agent prompt passes only with a manual gate:
@@ -23,5 +31,11 @@ What this proves:
 - a suggestion is shown with the expected render mode
 - Tab and the full-accept key are handled only while a suggestion is visible
 - insertion is verified in diagnostics and traces
+- Chrome works in plain textareas, contenteditable fields, and an editor-like
+  nested contenteditable fixture
 
 The Codex and Claude Code checks are manual-gated because auto-typing into an agent prompt is too risky.
+
+The editor-like Chrome fixture is local and dependency-free. It behaves like a
+nested browser editor surface, but it is not a full Monaco, CodeMirror, or
+ProseMirror integration test yet.

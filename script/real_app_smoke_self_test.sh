@@ -14,8 +14,47 @@ if ! grep -F "Real app smoke: textedit" "$TMP_DIR/textedit.txt" >/dev/null; then
 fi
 
 script/real_app_smoke.sh chrome --dry-run >"$TMP_DIR/chrome.txt"
-if ! grep -F "disposable Chrome textarea" "$TMP_DIR/chrome.txt" >/dev/null; then
+if ! grep -F "disposable Chrome textarea fixture" "$TMP_DIR/chrome.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome dry-run plan" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh chrome --fixture contenteditable --dry-run >"$TMP_DIR/chrome-contenteditable.txt"
+if ! grep -F "disposable Chrome contenteditable fixture" "$TMP_DIR/chrome-contenteditable.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Chrome contenteditable dry-run plan" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh chrome --fixture editor-like --dry-run >"$TMP_DIR/chrome-editor-like.txt"
+if ! grep -F "disposable Chrome editor-like fixture" "$TMP_DIR/chrome-editor-like.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Chrome editor-like dry-run plan" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh chrome --fixture all --dry-run >"$TMP_DIR/chrome-all.txt"
+if ! grep -F "textarea, contenteditable, and editor-like local fixtures" "$TMP_DIR/chrome-all.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Chrome all-fixtures dry-run plan" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh chrome --fixture=contenteditable --dry-run >"$TMP_DIR/chrome-contenteditable-equals.txt"
+if ! grep -F "Chrome fixture: contenteditable" "$TMP_DIR/chrome-contenteditable-equals.txt" >/dev/null; then
+  echo "real app smoke self-test did not parse --fixture=contenteditable" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh chrome --fixture unknown --dry-run >/dev/null 2>&1; then
+  echo "real app smoke self-test expected unknown Chrome fixtures to fail" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh chrome --fixture >/dev/null 2>&1; then
+  echo "real app smoke self-test expected missing Chrome fixture values to fail" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh textedit --fixture contenteditable --dry-run >/dev/null 2>&1; then
+  echo "real app smoke self-test expected non-Chrome fixtures to fail" >&2
   exit 1
 fi
 
