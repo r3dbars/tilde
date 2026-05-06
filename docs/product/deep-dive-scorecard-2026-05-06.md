@@ -57,7 +57,7 @@ fixtures.
 | Diagnostics | 9/10 | Strong placement, latency, insertion, trace, recovered-insertion, and manual proof logs. |
 | Automated tests | 9/10 | 231 Swift tests pass, plus script self-tests for smoke, model asset, trace eval, and typing-performance guards. |
 | Real-app smoke | 9/10 | TextEdit, Obsidian, Codex, Claude desktop, and five Chrome shapes are green; Notes split rich-text proof and Claude Code remain pending. |
-| Release readiness | 7/10 | Signing identity and preferred MLX model are ready, but `NOTARYTOOL_PROFILE` is missing and model distribution is not self-contained. |
+| Release readiness | 7/10 | Release scripts now require Developer ID checks and can fail `--check` on missing notary profile, but `NOTARYTOOL_PROFILE` is still missing and model distribution is not self-contained. |
 | Architecture | 8/10 | Core boundaries are solid, and polling-pause timing plus recent-word memory moved into tested core types; AppDelegate still needs larger service extraction. |
 
 ## Latest Proof
@@ -147,6 +147,8 @@ fixtures.
   separate title, body, and checklist proof labels.
 - Recent accepted/completed word memory moved out of AppDelegate into a tested
   core type.
+- Release packaging now has a stricter Developer ID bundle check, optional
+  notary-profile-required preflight, and post-staple zip verification.
 
 ## Next Highest-Leverage Work
 

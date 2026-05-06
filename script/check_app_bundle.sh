@@ -2,16 +2,41 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_BUNDLE="${1:-$ROOT_DIR/dist/AutocompleteLab.app}"
-INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
-EXECUTABLE="$APP_BUNDLE/Contents/MacOS/AutocompleteLab"
-APP_ICON="$APP_BUNDLE/Contents/Resources/AppIcon.icns"
-MLX_METALLIB="$APP_BUNDLE/Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib"
+RELEASE_MODE=0
+APP_BUNDLE="$ROOT_DIR/dist/AutocompleteLab.app"
 
 fail() {
   echo "bundle check failed: $*" >&2
   exit 1
 }
+
+for arg in "$@"; do
+  case "$arg" in
+    --release)
+      RELEASE_MODE=1
+      ;;
+    -h|--help)
+      cat <<'EOF'
+Usage: script/check_app_bundle.sh [--release] [path/to/AutocompleteLab.app]
+
+Checks the local app bundle shape, signature, and hardened runtime.
+Use --release to also require a Developer ID Application signature.
+EOF
+      exit 0
+      ;;
+    -*)
+      fail "unknown option: $arg"
+      ;;
+    *)
+      APP_BUNDLE="$arg"
+      ;;
+  esac
+done
+
+INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
+EXECUTABLE="$APP_BUNDLE/Contents/MacOS/AutocompleteLab"
+APP_ICON="$APP_BUNDLE/Contents/Resources/AppIcon.icns"
+MLX_METALLIB="$APP_BUNDLE/Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib"
 
 plist_value() {
   /usr/libexec/PlistBuddy -c "Print :$1" "$INFO_PLIST" 2>/dev/null || true
@@ -38,5 +63,10 @@ codesign --verify --deep --strict "$APP_BUNDLE" >/dev/null 2>&1 || fail "codesig
 
 SIGNATURE_DETAILS="$(codesign --display --verbose=4 "$APP_BUNDLE" 2>&1 || true)"
 grep -F "runtime" <<<"$SIGNATURE_DETAILS" >/dev/null || fail "hardened runtime flag is missing"
+
+if [[ "$RELEASE_MODE" == "1" ]]; then
+  grep -F "Authority=Developer ID Application" <<<"$SIGNATURE_DETAILS" >/dev/null \
+    || fail "release bundle is not signed with Developer ID Application"
+fi
 
 echo "App bundle verified: $APP_BUNDLE"
