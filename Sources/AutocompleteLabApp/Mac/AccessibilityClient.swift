@@ -22,6 +22,7 @@ struct FocusedTextContext: Equatable {
     let textLineRect: CGRect?
     let textStyle: FocusedTextStyle?
     let isSecure: Bool
+    let caretIsSynthetic: Bool
     let capabilities: FocusedTextCapabilities
 }
 
@@ -237,6 +238,7 @@ final class AccessibilityClient {
             textLineRect: textLineRect,
             textStyle: textStyle,
             isSecure: isSecure,
+            caretIsSynthetic: false,
             capabilities: capabilities
         )
     }
@@ -263,6 +265,7 @@ final class AccessibilityClient {
             textLineRect: nil,
             textStyle: nil,
             isSecure: true,
+            caretIsSynthetic: false,
             capabilities: FocusedTextCapabilities(
                 canReadValue: false,
                 canReadSelectedTextRange: false,

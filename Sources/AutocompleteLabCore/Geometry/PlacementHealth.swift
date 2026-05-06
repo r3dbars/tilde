@@ -15,6 +15,7 @@ public enum PlacementHealthReason: String, Equatable, Sendable {
 
 public enum PlacementAnchorSource: String, Equatable, Sendable {
     case caret
+    case syntheticCaret = "synthetic-caret"
     case element
     case window
 }
@@ -68,8 +69,12 @@ public struct PlacementHealthPresentation: Equatable {
         switch (renderMode, anchorSource) {
         case (.inlineAdjacent, .caret):
             base = 1.0
+        case (.inlineAdjacent, .syntheticCaret):
+            base = 0.7
         case (.floatingMirror, .caret):
             base = 0.8
+        case (.floatingMirror, .syntheticCaret):
+            base = 0.65
         case (.floatingMirror, .element):
             base = 0.6
         case (.floatingMirror, .window):
@@ -144,6 +149,7 @@ public enum PlacementHealth {
         elementRect: CGRect?,
         windowRect: CGRect?,
         textLineRect: CGRect?,
+        caretIsSynthetic: Bool = false,
         allowsDetachedSuggestions: Bool
     ) -> PlacementHealthPlan {
         let validCaret = caretRect.flatMap(validCaretRect)
@@ -186,7 +192,7 @@ public enum PlacementHealth {
                 requestedRenderMode: requestedRenderMode,
                 renderMode: .inlineAdjacent,
                 anchorRect: validCaret,
-                anchorSource: .caret,
+                anchorSource: caretIsSynthetic ? .syntheticCaret : .caret,
                 textLineRect: textLineRect.flatMap(validContainerRect),
                 clippingRect: clippingRect,
                 reason: .healthy
@@ -201,7 +207,7 @@ public enum PlacementHealth {
                 return mirrorPresentation(
                     requestedRenderMode: requestedRenderMode,
                     anchorRect: validCaret,
-                    anchorSource: .caret,
+                    anchorSource: caretIsSynthetic ? .syntheticCaret : .caret,
                     clippingRect: clippingRect,
                     reason: .healthy
                 )
@@ -231,7 +237,7 @@ public enum PlacementHealth {
                 return mirrorPresentation(
                     requestedRenderMode: requestedRenderMode,
                     anchorRect: validCaret,
-                    anchorSource: .caret,
+                    anchorSource: caretIsSynthetic ? .syntheticCaret : .caret,
                     clippingRect: clippingRect,
                     reason: .healthy
                 )

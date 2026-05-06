@@ -31,6 +31,32 @@ struct PlacementHealthTests {
         #expect(presentation.metadata["placementConfidenceBand"] == "high")
     }
 
+    @Test("Synthetic inline caret placement is medium confidence")
+    func syntheticInlineCaretPlacementIsMediumConfidence() {
+        let plan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: .floatingMirror,
+            caretRect: CGRect(x: 140, y: 220, width: 0, height: 22),
+            elementRect: CGRect(x: 80, y: 180, width: 520, height: 160),
+            windowRect: CGRect(x: 40, y: 120, width: 640, height: 360),
+            textLineRect: CGRect(x: 140, y: 220, width: 0, height: 22),
+            caretIsSynthetic: true,
+            allowsDetachedSuggestions: true
+        )
+
+        guard case let .present(presentation) = plan else {
+            Issue.record("Expected placement to present")
+            return
+        }
+
+        #expect(presentation.renderMode == .inlineAdjacent)
+        #expect(presentation.anchorSource == .syntheticCaret)
+        #expect(presentation.reason == .healthy)
+        #expect(presentation.metadata["placementAnchorSource"] == "synthetic-caret")
+        #expect(presentation.metadata["placementConfidenceScore"] == "0.70")
+        #expect(presentation.metadata["placementConfidenceBand"] == "medium")
+    }
+
     @Test("Falls back to mirror when inline caret is missing and detached anchors are allowed")
     func fallsBackToMirrorForMissingCaretWhenAllowed() {
         let plan = PlacementHealth.plan(

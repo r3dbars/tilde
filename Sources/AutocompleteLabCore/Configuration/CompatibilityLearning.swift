@@ -43,11 +43,7 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
             return false
         }
 
-        if lastReason == "manual-visual-nudge" || lastReason == "screenshot-visual-correction" {
-            return true
-        }
-
-        return confidence >= 0.6 && observations >= 3
+        return lastReason == "manual-visual-nudge" || lastReason == "screenshot-visual-correction"
     }
 
     public var debugSummary: String {
