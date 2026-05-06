@@ -42,6 +42,19 @@ struct CompletionPromptBuilderTests {
         #expect(!prompt.system.contains("Prefer concrete continuations about testing"))
     }
 
+    @Test("Claude Code prompt uses dogfood guidance")
+    func claudeCodePromptUsesDogfoodGuidance() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "I need this autocomplete debug trace to",
+            appBundleIdentifier: "com.anthropic.claude-code"
+        ))
+
+        #expect(prompt.system.contains("The active app is Claude Code"))
+        #expect(prompt.system.contains("dogfooding this autocomplete tool"))
+        #expect(prompt.system.contains("testing, using, building, debugging"))
+    }
+
     @Test("Word completion prompt asks for only the current word suffix")
     func wordCompletionPromptAsksForSuffixOnly() {
         let builder = CompletionPromptBuilder()

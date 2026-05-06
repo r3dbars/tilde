@@ -28,6 +28,7 @@ declare -a APPS=(
   "Obsidian|md.obsidian|limited"
   "Chrome|com.google.Chrome|full"
   "Codex|com.openai.codex|full"
+  "Claude Code|com.anthropic.claude-code|full"
 )
 
 if [[ ! -f "$REPORT_PATH" ]]; then

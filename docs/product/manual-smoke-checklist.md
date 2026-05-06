@@ -71,6 +71,17 @@ Recorder: `script/manual_smoke_session.sh codex`
 - Press the key above Tab for full visible accept.
 - Do not press Enter as part of the smoke pass.
 
+## Claude Code
+
+Recorder: `script/manual_smoke_session.sh claude-code`
+
+- Focus the Claude Code prompt without submitting.
+- Type a harmless local test fragment like `Can we make this`.
+- Confirm a suggestion appears near the prompt or in a stable mirror position.
+- Press Tab and expect the next word/suffix to insert without submitting.
+- Press the key above Tab for full visible accept.
+- Do not press Enter as part of the smoke pass.
+
 ## Hold For Explicit Confirmation
 
 - Mail compose body insertion. Mail is diagnostics-only until a safe adapter is verified.
