@@ -171,6 +171,15 @@ final class AccessibilityClient {
         let role = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
         let subrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
 
+        guard !isSecure else {
+            return secureTextContext(
+                element: focusedElement,
+                role: role,
+                subrole: subrole,
+                processIdentifier: app.processIdentifier
+            )
+        }
+
         guard let text = editableText(
             in: focusedElement,
             role: role,
@@ -223,6 +232,34 @@ final class AccessibilityClient {
             textStyle: textStyle,
             isSecure: isSecure,
             capabilities: capabilities
+        )
+    }
+
+    private func secureTextContext(
+        element: AXUIElement,
+        role: String?,
+        subrole: String?,
+        processIdentifier: pid_t
+    ) -> FocusedTextContext {
+        FocusedTextContext(
+            elementIdentifier: Int(CFHash(element)),
+            role: role,
+            subrole: subrole,
+            textBeforeCursor: "",
+            textAfterCursor: "",
+            caretRect: nil,
+            elementRect: elementBounds(for: element),
+            windowRect: containingWindowBounds(for: element, processIdentifier: processIdentifier),
+            textLineRect: nil,
+            textStyle: nil,
+            isSecure: true,
+            capabilities: FocusedTextCapabilities(
+                canReadValue: false,
+                canReadSelectedTextRange: false,
+                canReadBoundsForRange: false,
+                canReadAttributedText: false,
+                canSetSelectedText: false
+            )
         )
     }
 
