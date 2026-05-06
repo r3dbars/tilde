@@ -2590,26 +2590,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func nudgeCurrentAppSuggestion(dx: Double, dy: Double) {
-        guard let bundleIdentifier = accessibilityClient.frontmostApplication()?.bundleIdentifier,
+        guard let bundleIdentifier = visibleSuggestionBundleIdentifier
+                ?? accessibilityClient.frontmostApplication()?.bundleIdentifier,
               profileStore.allows(bundleIdentifier: bundleIdentifier) else {
-            DiagnosticsLog.shared.record("compatibility-learning-nudge-skipped")
+            DiagnosticsLog.shared.record(
+                "compatibility-learning-nudge-skipped",
+                metadata: ["reason": "no-eligible-app"]
+            )
             return
         }
 
         compatibilityLearningStore.nudgeOffset(dx: dx, dy: dy, for: bundleIdentifier)
+        let appliedToVisibleSuggestion = applyVisibleSuggestionNudge(dx: dx, dy: dy, bundleIdentifier: bundleIdentifier)
         DiagnosticsLog.shared.record(
             "compatibility-learning-nudge",
             metadata: [
                 "app": bundleIdentifier,
                 "dx": String(dx),
-                "dy": String(dy)
+                "dy": String(dy),
+                "appliedToVisibleSuggestion": String(appliedToVisibleSuggestion)
             ]
         )
     }
 
+    private var visibleSuggestionBundleIdentifier: String? {
+        guard suggestionSession.hasVisibleSuggestion else {
+            return nil
+        }
+
+        return currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier
+    }
+
+    private func applyVisibleSuggestionNudge(dx: Double, dy: Double, bundleIdentifier: String) -> Bool {
+        guard suggestionSession.hasVisibleSuggestion,
+              visibleSuggestionBundleIdentifier == bundleIdentifier,
+              lastCaretRect != nil else {
+            return false
+        }
+
+        let deltaX = CGFloat(dx)
+        let deltaY = CGFloat(dy)
+        lastCaretRect = lastCaretRect?.offsetBy(dx: deltaX, dy: deltaY)
+        lastTextLineRect = lastTextLineRect?.offsetBy(dx: deltaX, dy: deltaY)
+        lastClippingRect = lastClippingRect?.offsetBy(dx: deltaX, dy: deltaY)
+        refreshVisibleSuggestion()
+        return true
+    }
+
     @objc
     private func resetCurrentAppLearning() {
-        guard let bundleIdentifier = accessibilityClient.frontmostApplication()?.bundleIdentifier else {
+        guard let bundleIdentifier = visibleSuggestionBundleIdentifier
+                ?? accessibilityClient.frontmostApplication()?.bundleIdentifier else {
             return
         }
 
