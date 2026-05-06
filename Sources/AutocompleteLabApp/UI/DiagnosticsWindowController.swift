@@ -23,17 +23,22 @@ final class DiagnosticsWindowController {
         textView.isEditable = false
         textView.isSelectable = true
         textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.textColor = .textColor
+        textView.backgroundColor = .textBackgroundColor
+        textView.drawsBackground = true
         textView.textContainerInset = NSSize(width: 12, height: 12)
 
         refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
-        pauseTracingButton = NSButton(title: "Pause Tracing", target: nil, action: nil)
-        screenshotTracingButton = NSButton(title: "Screenshot Trace", target: nil, action: nil)
-        openTraceFolderButton = NSButton(title: "Open Trace Folder", target: nil, action: nil)
-        exportReportButton = NSButton(title: "Export Report", target: nil, action: nil)
-        deleteTracesButton = NSButton(title: "Delete Traces", target: nil, action: nil)
+        pauseTracingButton = NSButton(title: "Pause", target: nil, action: nil)
+        screenshotTracingButton = NSButton(title: "Screenshots", target: nil, action: nil)
+        openTraceFolderButton = NSButton(title: "Trace Folder", target: nil, action: nil)
+        exportReportButton = NSButton(title: "Export", target: nil, action: nil)
+        deleteTracesButton = NSButton(title: "Delete", target: nil, action: nil)
 
         let scrollView = NSScrollView(frame: .zero)
         scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.borderType = .bezelBorder
         scrollView.documentView = textView
 
         let buttonStack = NSStackView(views: [
@@ -46,22 +51,48 @@ final class DiagnosticsWindowController {
         ])
         buttonStack.orientation = .horizontal
         buttonStack.spacing = 8
+        buttonStack.alignment = .centerY
         buttonStack.edgeInsets = NSEdgeInsets(top: 10, left: 10, bottom: 6, right: 10)
+        [
+            refreshButton,
+            pauseTracingButton,
+            screenshotTracingButton,
+            openTraceFolderButton,
+            exportReportButton,
+            deleteTracesButton
+        ].forEach {
+            $0.bezelStyle = .rounded
+            $0.controlSize = .small
+            $0.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        }
 
         let contentStack = NSStackView(views: [buttonStack, scrollView])
         contentStack.orientation = .vertical
         contentStack.spacing = 0
-        contentStack.frame = NSRect(x: 0, y: 0, width: 780, height: 560)
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
         scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 460).isActive = true
+        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 780, height: 560))
+        contentView.material = .contentBackground
+        contentView.blendingMode = .behindWindow
+        contentView.state = .active
+        contentView.addSubview(contentStack)
 
         window = NSWindow(
-            contentRect: contentStack.frame,
+            contentRect: contentView.frame,
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "Autocomplete Diagnostics"
-        window.contentView = contentStack
+        window.title = "Diagnostics"
+        window.contentView = contentView
+        window.contentMinSize = NSSize(width: 680, height: 460)
+        window.isMovableByWindowBackground = true
+        NSLayoutConstraint.activate([
+            contentStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            contentStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            contentStack.topAnchor.constraint(equalTo: contentView.topAnchor),
+            contentStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
+        ])
 
         refreshButton.target = self
         refreshButton.action = #selector(refresh)
@@ -108,13 +139,13 @@ final class DiagnosticsWindowController {
         self.openTraceFolderAction = openTraceFolderAction
         self.exportReportAction = exportReportAction
         self.deleteTracesAction = deleteTracesAction
-        pauseTracingButton.title = tracingPaused ? "Resume Tracing" : "Pause Tracing"
+        pauseTracingButton.title = tracingPaused ? "Resume" : "Pause"
         screenshotTracingButton.title = screenshotTracingEnabled ? "Screenshots On" : "Screenshots Off"
 
         var sections: [String] = []
 
-        sections.append("Permission: Accessibility \(appTrusted ? "granted" : "missing")")
-        sections.append("Suggestion verdict: \(lastSuggestionDecision)")
+        sections.append("Accessibility: \(appTrusted ? "on" : "needed")")
+        sections.append("Suggestion: \(lastSuggestionDecision)")
         sections.append(
             """
             Local model: \(runtimeReport.summary)
@@ -126,7 +157,7 @@ final class DiagnosticsWindowController {
         )
         sections.append("Model folder: \(modelDirectoryPath)")
         sections.append("Compatibility: \(compatibilityStatus.summary)")
-        sections.append("Current app enabled: \(appEnabled)")
+        sections.append("App enabled: \(appEnabled)")
         sections.append(traceSummaryText(
             traceSummary,
             tracePath: tracePath,
