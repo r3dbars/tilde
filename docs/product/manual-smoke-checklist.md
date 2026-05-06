@@ -40,6 +40,10 @@ Recorder: `script/manual_smoke_session.sh textedit`
 Recorder: `script/manual_smoke_session.sh notes`
 
 - Use the existing autocomplete smoke note.
+- Run three separate passes:
+  `AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-title script/manual_smoke_session.sh notes`,
+  `AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-body script/manual_smoke_session.sh notes`,
+  and `AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-checklist script/manual_smoke_session.sh notes`.
 - Test title-only text with `Can we`.
 - Test body text with `Autocomplete smoke` on line one and `Can we` on line two.
 - Toggle Checklist and test a checklist row.

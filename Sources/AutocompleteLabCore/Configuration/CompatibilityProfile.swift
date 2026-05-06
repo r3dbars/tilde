@@ -137,8 +137,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             renderMode: .inlineAdjacent,
             insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
-            fallbackInsertionMode: .axSelectedText,
-            notes: "Green/yellow rich-text target. Notes can report AX selected-text insertion success without moving the caret, so prefer verified key-event insertion."
+            fallbackInsertionMode: .disabled,
+            notes: "Yellow rich-text target. Use key events only and fail closed on unchanged verification because Notes can report AX selected-text insertion success without moving the caret."
         ),
         CompatibilityProfile(
             bundleIdentifier: "md.obsidian",
