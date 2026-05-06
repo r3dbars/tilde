@@ -1,45 +1,49 @@
 # Deep Dive Scorecard - 2026-05-06
 
-This is the current rating for the lab app after the trust-first hardening pass.
+This is the current rating for the lab app after the trust-first hardening and
+Chrome editor compatibility passes.
 
 Scale: 10 means beta-ready for normal people. 5 means promising but still easy
 to break or annoy users.
 
 ## Executive Rating
 
-Overall: 7/10.
+Overall: 8/10.
 
-The app is now credible as a private lab build. It is strongest in TextEdit and
-Notes, good enough to keep testing in Chrome textareas, and still not proven
-enough in Codex, Claude Code, or Obsidian to call universal. The biggest product
-risk is not raw typing latency anymore; it is trust. The app must never show in
-the wrong field, never steal normal keys, and never keep repeating unhelpful
-suggestions.
+The app is now a strong private lab build. It has automated real-app proof in
+TextEdit and three Chrome browser editor shapes: textarea, contenteditable, and
+CodeMirror-style contenteditable. Notes and Obsidian have recorded manual proof,
+but Codex and Claude Code remain manual-gated and unproven enough that the app
+is not yet universal. The biggest product risk is still trust: the app must never
+show in the wrong field, never steal normal keys, and never keep repeating
+unhelpful suggestions.
 
 ## Area Ratings
 
 | Area | Rating | Why |
 | --- | ---: | --- |
-| Normal typing passthrough | 8/10 | Non-autocomplete keys pass through immediately and only mark typing async. |
-| Keyboard capture safety | 7/10 | The tap is only active while suggestions are visible, now starts before the panel appears, and logs latency. |
-| Acceptance reliability | 7/10 | Tab/backtick are verified after insertion, but focus checks still depend on app AX behavior. |
-| Placement confidence | 6/10 | Strong with caret bounds, medium with mirror placement, still weak in apps that hide editor geometry. |
-| Self-healing placement | 7/10 | Falls back from inline to mirror and records confidence, but needs more app fixtures. |
+| Normal typing passthrough | 8/10 | Non-autocomplete keys pass through immediately; diagnostics now prove event-tap work stays in microseconds during smoke runs. |
+| Keyboard capture safety | 8/10 | The tap is active only while suggestions are visible, starts before the panel appears, logs latency, and ignores its own synthetic insertion events. |
+| Acceptance reliability | 8/10 | Tab/backtick are verified after insertion across TextEdit and Chrome textarea/contenteditable/editor-like fixtures. |
+| Placement confidence | 7/10 | Strong with caret bounds and now better proven with Chrome mirror placement, but still medium when apps hide editor geometry. |
+| Self-healing placement | 8/10 | Falls back from inline to mirror, records confidence, and now has browser fixture proof for textarea and rich-editor shapes. |
 | TextEdit support | 9/10 | Best reference target with current real smoke proof. |
 | Notes support | 8/10 | Good support with key-event insertion, but rich text remains a higher-risk surface. |
-| Chrome textarea support | 7/10 | Real textarea smoke passes; contenteditable, Monaco, ProseMirror, and CodeMirror still need fixtures. |
-| Obsidian support | 5/10 | Safer than before because detached suggestions are suppressed, but current proof needs a fresh no-detached run. |
+| Chrome textarea support | 9/10 | Automated smoke passes with two verified accepts. |
+| Chrome contenteditable support | 8/10 | Automated smoke passes after switching Chrome to key-event insertion and rich-whitespace verification. |
+| Chrome editor-like support | 8/10 | Automated CodeMirror-style contenteditable fixture passes with two verified accepts. |
+| Obsidian support | 7/10 | Safer than before because detached suggestions are suppressed and recorded proof exists, but broader CodeMirror proof still needs refresh. |
 | Codex support | 6/10 | Synthetic caret path is promising; manual proof still pending. |
 | Claude Code support | 4/10 | Profile exists, but live proof is still missing. |
-| Output relevance | 7/10 | Prompts and cleaners are short and local; sentence-boundary guidance is now better. |
-| Word completion quality | 7/10 | Fast ranker path is useful, repeated word misses are now suppressed, punctuation suffixes are rejected. |
-| Non-annoyance | 7/10 | Esc, typed-over tracking, repetition suppression, and useful-rate gates are in place. |
+| Output relevance | 8/10 | Prompts and cleaners are short and local; prompt-label echoes and punctuation suffixes are stripped. |
+| Word completion quality | 8/10 | Fast ranker path is useful, repeated word misses are suppressed, punctuation suffixes are rejected, and partial accept keeps remaining text alive. |
+| Non-annoyance | 8/10 | Esc, typed-over tracking, repetition suppression, useful-rate gates, pause control, and synthetic-event suppression are in place. |
 | Privacy | 8/10 | Local-first, secure fields suppressed, diagnostics redact text by default. Raw trace and screenshots stay opt-in. |
 | Onboarding | 7/10 | Permission flow exists, the settings surface now shows the global control state, and debug tools are less prominent. |
-| User control | 7/10 | Per-app disable exists, and a persisted global pause/resume control now stops suggestions everywhere. |
+| User control | 8/10 | Per-app disable exists, and a persisted global pause/resume control now stops suggestions everywhere. |
 | Diagnostics | 8/10 | Strong trace, placement, latency, and insertion signals. Needs a simpler top summary. |
-| Automated tests | 8/10 | Core has broad tests and script self-tests. App-layer services still need seams. |
-| Real-app smoke | 7/10 | TextEdit and Chrome are automated; Codex and Claude Code are manual-gated; Obsidian needs refresh. |
+| Automated tests | 9/10 | Core has broad tests, 202 Swift tests pass, and script self-tests cover manual and real-app smoke harnesses. |
+| Real-app smoke | 8/10 | TextEdit and Chrome textarea/contenteditable/editor-like are automated; Codex and Claude Code remain manual-gated. |
 | Release readiness | 6/10 | Bundle checks, signing, and version metadata exist; model distribution is not self-contained yet. |
 | Architecture | 7/10 | Core boundaries are solid; AppDelegate is still too large. |
 
@@ -77,14 +81,26 @@ Primary references:
 - The menu now has a global Pause/Resume Suggestions control.
 - Debug-heavy diagnostics, model folder, nudge, and reset actions now live under
   a Debug submenu.
+- Runtime-ready transitions now re-arm the current field so first typing during
+  model warmup does not get stranded.
+- Chrome smoke now tests textarea, contenteditable, and editor-like local
+  fixtures, with fixture-specific proof rows.
+- Chrome now prefers key-event insertion with AX value replacement as fallback,
+  because rich browser editors can report AX replacement success while moving
+  the cursor in surprising ways.
+- Synthetic key-event insertion no longer makes the keyboard tap treat its own
+  inserted text as user typing.
+- Insertion verification accepts rich-editor non-breaking-space equivalents.
+- Partial word acceptance no longer lets cadence or fast-candidate misses erase
+  the remaining visible suggestion before full accept.
 
 ## Next Highest-Leverage Work
 
-1. Add visible app management beyond the current-app toggle.
-2. Add Chrome fixture pages for textarea, contenteditable, Monaco, CodeMirror,
-   and ProseMirror.
+1. Finish manual-gated Codex and Claude Code smoke proof.
+2. Add real Monaco and ProseMirror fixtures beyond the current CodeMirror-style
+   contenteditable proxy.
 3. Refresh Obsidian proof under the current no-detached-suggestion rule.
-4. Finish manual-gated Codex and Claude Code smoke proof.
+4. Add visible app management beyond the current-app toggle.
 5. Split AppDelegate into testable services around focused text polling,
    suggestion coordination, insertion verification, and tracing.
 6. Make the beta artifact self-sufficient with model download or bundling.

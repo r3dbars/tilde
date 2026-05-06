@@ -170,10 +170,10 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             bundleIdentifier: "com.google.Chrome",
             displayName: "Chrome",
             renderMode: .floatingMirror,
-            insertionMode: .axValueReplacement,
+            insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
-            fallbackInsertionMode: .keyEvents,
-            notes: "Yellow browser target. Verified on a local textarea with AXTextArea, selected range, and settable selected text. Chrome can report zero-height caret bounds, so use mirror anchoring."
+            fallbackInsertionMode: .axValueReplacement,
+            notes: "Yellow browser target. Prefer key-event insertion across textarea and contenteditable surfaces because rich browser editors can report AX replacement success without keeping cursor verification stable. Chrome can report zero-height caret bounds, so use mirror anchoring."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.openai.codex",
