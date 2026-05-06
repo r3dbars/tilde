@@ -73,19 +73,21 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
 ## QA
 
 - [x] Build repeatable smoke checks.
-  - [x] Add a manual smoke checklist for TextEdit, Notes, Obsidian, and Chrome.
+  - [x] Add a manual smoke checklist for TextEdit, Notes, Obsidian, Chrome, Codex, and Claude Code.
   - [x] Add a manual smoke recorder that validates per-app diagnostics.
   - [x] Record successful manual app passes in an append-only smoke-run ledger.
   - [x] Add a self-test for the manual smoke recorder across target app profiles.
   - [x] Add a status command and proof gate for missing manual app passes.
   - [x] Verify launch/runtime/status diagnostics in the smoke script.
-  - [x] Wait for Gemma 4 MLX readiness in the smoke script.
+  - [x] Wait for Qwen3.5 4B MLX readiness in the smoke script.
   - [x] Gate smoke on trace eval self-test coverage.
   - App-specific checks below should only be marked done after `docs/product/manual-smoke-runs.md` has a matching pass.
   - [x] TextEdit one-word accept and full accept.
   - [x] Notes one-word accept and full accept.
   - [x] Obsidian one-word accept and full accept.
   - [x] Chrome text field one-word and full accept.
+  - [ ] Codex one-word accept and full accept.
+  - [ ] Claude Code one-word accept and full accept.
 
 - [x] Build the local eval loop.
   - [x] Add local prompt/output tracing for private local tuning.

@@ -456,9 +456,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         app: RunningApplicationInfo,
         profile: CompatibilityProfile
     ) -> FocusedTextContext {
-        guard app.bundleIdentifier == "com.openai.codex",
+        guard supportsSyntheticTextAreaCaret(for: app.bundleIdentifier),
               context.caretRect == nil,
-              let syntheticCaret = codexSyntheticCaretRect(for: context) else {
+              let syntheticCaret = syntheticTextAreaCaretRect(for: context) else {
             return context
         }
 
@@ -488,7 +488,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func codexSyntheticCaretRect(for context: FocusedTextContext) -> CGRect? {
+    private func supportsSyntheticTextAreaCaret(for bundleIdentifier: String) -> Bool {
+        bundleIdentifier == "com.openai.codex"
+            || bundleIdentifier == "com.anthropic.claude-code"
+    }
+
+    private func syntheticTextAreaCaretRect(for context: FocusedTextContext) -> CGRect? {
         guard context.role == "AXTextArea",
               let elementRect = context.elementRect,
               elementRect.width > 80,
@@ -536,7 +541,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "synthetic-caret",
             metadata: [
                 "app": profile.bundleIdentifier,
-                "source": "codex-textarea-estimate",
+                "source": "text-area-estimate",
                 "caret": compactRectDescription(caret),
                 "beforeChars": String(context.textBeforeCursor.count)
             ]
@@ -1112,7 +1117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: profile.bundleIdentifier,
             profileRenderMode: renderMode
         )
-        let learningAdjustment = profile.bundleIdentifier == "com.openai.codex"
+        let learningAdjustment = supportsSyntheticTextAreaCaret(for: profile.bundleIdentifier)
             ? storedLearningAdjustment.withoutVisualOffset
             : storedLearningAdjustment
         let effectiveRenderMode = learningAdjustment.effectiveRenderMode
@@ -1433,7 +1438,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: profile.bundleIdentifier,
             profileRenderMode: renderMode
         )
-        let learningAdjustment = profile.bundleIdentifier == "com.openai.codex"
+        let learningAdjustment = supportsSyntheticTextAreaCaret(for: profile.bundleIdentifier)
             ? storedLearningAdjustment.withoutVisualOffset
             : storedLearningAdjustment
         let effectiveRenderMode = learningAdjustment.effectiveRenderMode

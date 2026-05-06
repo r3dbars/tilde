@@ -136,6 +136,16 @@ AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP=com.openai.codex \
   ./script/check_trace_eval.sh
 ```
 
+For Claude Code dogfooding, use the same flow with the Claude Code bundle:
+
+```bash
+START_LINE=$(wc -l < "$HOME/Library/Logs/AutocompleteLab/traces.jsonl" | tr -d ' ')
+# type in the Claude Code prompt, accept with Tab/backtick, but do not submit
+AUTOCOMPLETE_LAB_TRACE_START_LINE=$START_LINE \
+AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP=com.anthropic.claude-code \
+  ./script/check_trace_eval.sh
+```
+
 ## Current Product Boundary
 
 For the internal lab, raw local traces are useful because the user is tuning their own local model behavior.

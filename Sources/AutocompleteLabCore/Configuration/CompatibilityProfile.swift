@@ -186,6 +186,18 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
             notes: "Dogfood target. Prefer caret-bound inline suggestions when the prompt editor exposes bounds. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions."
+        ),
+        CompatibilityProfile(
+            bundleIdentifier: "com.anthropic.claude-code",
+            displayName: "Claude Code",
+            renderMode: .inlineAdjacent,
+            insertionMode: .keyEvents,
+            fallbackRenderMode: .floatingMirror,
+            fallbackInsertionMode: .axThenKeyEvents,
+            fieldIdentityMode: .stableBounds,
+            suppressesAfterInsertionFailure: false,
+            allowsDetachedSuggestions: false,
+            notes: "Dogfood target. Prefer caret-bound inline suggestions when the prompt editor exposes bounds. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions."
         )
     ])
 

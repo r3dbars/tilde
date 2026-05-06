@@ -55,14 +55,14 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         Continue the current sentence. Do not answer, explain, greet, quote, reason, or restart.
         """
 
-        guard request.appBundleIdentifier == "com.openai.codex" else {
+        guard let dogfoodAppName = request.appBundleIdentifier.dogfoodAppName else {
             return base
         }
 
         guard request.textBeforeCursor.isAutocompleteDogfoodContext else {
             return base + """
 
-            The active app is Codex. Continue the user's actual sentence naturally.
+            The active app is \(dogfoodAppName). Continue the user's actual sentence naturally.
             Do not force software, testing, latency, placement, or debugging topics unless the sentence is already about them.
             Avoid vague product phrases like "integrate it seamlessly", "enhance the experience", or "leverage the system".
             """
@@ -70,7 +70,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
 
         return base + """
 
-        The active app is Codex, where the user is dogfooding this autocomplete tool while building and debugging it.
+        The active app is \(dogfoodAppName), where the user is dogfooding this autocomplete tool while building and debugging it.
         Prefer concrete continuations about testing, using, building, debugging, logs, traces, placement, or app behavior.
         Avoid vague product phrases like "integrate it seamlessly", "enhance the experience", or "leverage the system".
         """
@@ -100,6 +100,19 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         }
 
         return fragment
+    }
+}
+
+private extension Optional where Wrapped == String {
+    var dogfoodAppName: String? {
+        switch self {
+        case .some("com.openai.codex"):
+            return "Codex"
+        case .some("com.anthropic.claude-code"):
+            return "Claude Code"
+        default:
+            return nil
+        }
     }
 }
 
