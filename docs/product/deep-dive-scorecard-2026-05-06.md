@@ -81,6 +81,8 @@ install/repair and better shortcut controls before it feels fully productized.
 - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh chrome --fixture monaco-like`: passed after the final Monaco gap adjustment.
 - `./script/smoke_test.sh`: passed, including model asset, trace eval, typing-performance, real-app smoke self-test, and package preflight checks.
 - `./script/manual_smoke_status.sh --strict`: failed honestly on Notes title/body/checklist and Claude Code proof gaps.
+- `./script/check_visual_placement_evidence_self_test.sh`: passed, including missing, empty, invalid, too-small, and unreferenced screenshot failure cases.
+- `./script/check_visual_placement_evidence.sh`: passed with six verified visual-placement screenshots.
 
 ## What Changed In This Pass
 
@@ -100,6 +102,8 @@ install/repair and better shortcut controls before it feels fully productized.
   asserts the target app is still frontmost before accepting.
 - Screenshot evidence has been committed only from disposable TextEdit/Chrome
   fixtures, not from private prompts or user work.
+- Visual-placement evidence now has an executable repo check that fails on
+  missing, empty, invalid, too-small, or unreferenced screenshots.
 - A 15-minute automation now checks this scorecard and keeps looping when any
   category is below 10/10.
 
