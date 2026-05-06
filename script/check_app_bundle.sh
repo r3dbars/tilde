@@ -27,6 +27,8 @@ plist_value() {
 [[ "$(plist_value CFBundleExecutable)" == "AutocompleteLab" ]] || fail "CFBundleExecutable mismatch"
 [[ "$(plist_value CFBundleIconFile)" == "AppIcon" ]] || fail "CFBundleIconFile mismatch"
 [[ "$(plist_value CFBundleIdentifier)" == "bar.r3d.autocomplete-lab" ]] || fail "CFBundleIdentifier mismatch"
+[[ -n "$(plist_value CFBundleShortVersionString)" ]] || fail "missing CFBundleShortVersionString"
+[[ -n "$(plist_value CFBundleVersion)" ]] || fail "missing CFBundleVersion"
 [[ "$(plist_value LSUIElement)" == "true" ]] || fail "LSUIElement must be true for menu bar agent"
 
 ACCESSIBILITY_REASON="$(plist_value NSAccessibilityUsageDescription)"

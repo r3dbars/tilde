@@ -149,6 +149,33 @@ if grep -F "3x wordCompletion: ng" /tmp/autocomplete-trace-eval-self-test.txt >/
   exit 1
 fi
 
+if AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
+   AUTOCOMPLETE_LAB_TRACE_MIN_USEFUL_RATE=70 \
+   AUTOCOMPLETE_LAB_TRACE_MAX_REPEATED_UNACCEPTED=2 \
+   script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-annoyance-fail.txt 2>&1; then
+  echo "trace eval self-test expected suggestion annoyance guardrails to fail" >&2
+  cat /tmp/autocomplete-trace-eval-annoyance-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "suggestion annoyance guardrail failed" /tmp/autocomplete-trace-eval-annoyance-fail.txt >/dev/null; then
+  echo "trace eval self-test did not explain annoyance guardrail failures" >&2
+  cat /tmp/autocomplete-trace-eval-annoyance-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "useful rate 64% is below required 70%" /tmp/autocomplete-trace-eval-annoyance-fail.txt >/dev/null; then
+  echo "trace eval self-test did not catch low useful rate" >&2
+  cat /tmp/autocomplete-trace-eval-annoyance-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "3x repeated unaccepted phraseContinuation suggestion exceeds limit 2" /tmp/autocomplete-trace-eval-annoyance-fail.txt >/dev/null; then
+  echo "trace eval self-test did not catch repeated unaccepted suggestions" >&2
+  cat /tmp/autocomplete-trace-eval-annoyance-fail.txt >&2
+  exit 1
+fi
+
 cat >"$BAD_TRACE_FILE" <<'JSONL'
 {"type":"suggestionPresented","suggestionID":"repaint","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":80,"metadata":{"visibleWords":"2"}}
 {"type":"suggestionPresented","suggestionID":"repaint","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":95,"metadata":{"visibleWords":"3"}}

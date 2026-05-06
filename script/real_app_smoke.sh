@@ -242,7 +242,7 @@ HTML
 
   local chrome_url="file://$html_file"
 
-  osascript <<APPLESCRIPT
+  osascript >/dev/null <<APPLESCRIPT
 tell application "Google Chrome"
   activate
   if not (exists window 1) then make new window

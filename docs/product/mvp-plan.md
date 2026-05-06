@@ -33,8 +33,8 @@ The first prototype should feel like a quiet writing assist, not a chatbot.
 - accept the whole visible suggestion with backtick/tilde
 - dismiss with `Esc`
 - insert through AX selected text when possible
-- fall back to clipboard paste when needed
-- preserve clipboard when possible
+- fall back to synthetic key events when safer for the target app
+- keep clipboard fallback off unless a debug build explicitly opts in
 
 ### 3. Completion Engine
 
@@ -47,7 +47,8 @@ The first prototype should feel like a quiet writing assist, not a chatbot.
 - disable thinking/reasoning
 - keep output to 2-8 words
 - cap generation around 8-16 tokens
-- debounce typing around 150-250ms
+- keep normal typing passthrough immediate
+- debounce or delay only suggestion requests and floating presentation
 - hard cap latency target under 700ms for the first useful build
 
 ### 4. Private Beta

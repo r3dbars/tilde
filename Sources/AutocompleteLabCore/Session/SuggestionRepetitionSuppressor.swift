@@ -93,12 +93,16 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
         case .phraseContinuation:
             return true
         case .wordCompletion:
-            return isTinyWordSuffix(text)
+            return isWordSuffix(text)
         }
     }
 
-    private func isTinyWordSuffix(_ text: String) -> Bool {
-        let normalized = normalizedKey(for: text)
-        return normalized.count <= 2 && normalized.allSatisfy(\.isLetter)
+    private func isWordSuffix(_ text: String) -> Bool {
+        let normalized = text
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return !normalized.isEmpty
+            && normalized.count <= 16
+            && normalized.allSatisfy(\.isLetter)
     }
 }

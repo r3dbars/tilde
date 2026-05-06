@@ -49,10 +49,13 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
     }
 
     private func phraseContinuationSystemPrompt(for request: CompletionRequest) -> String {
+        let sentenceGuidance = request.textBeforeCursor.endsAtSentenceBoundary
+            ? "Start the next sentence naturally."
+            : "Continue the current sentence."
         let base = """
         Inline autocomplete.
         Return only the next \(maxVisibleWords) words or fewer.
-        Continue the current sentence. Do not answer, explain, greet, quote, reason, or restart.
+        \(sentenceGuidance) Do not answer, explain, greet, quote, reason, or restart.
         """
 
         guard let dogfoodAppName = request.appBundleIdentifier.dogfoodAppName else {
@@ -117,6 +120,14 @@ private extension Optional where Wrapped == String {
 }
 
 private extension String {
+    var endsAtSentenceBoundary: Bool {
+        guard let last = trimmingCharacters(in: .whitespacesAndNewlines).last else {
+            return false
+        }
+
+        return [".", "!", "?"].contains(last)
+    }
+
     var isAutocompleteDogfoodContext: Bool {
         let lowercasedText = lowercased()
         let dogfoodTerms = [
