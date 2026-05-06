@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var toggleAppMenuItem: NSMenuItem?
     private var pollTimer: Timer?
     private var keyboardEventTap: KeyboardEventTap?
+    private var keyboardEventTapStopTask: Task<Void, Never>?
     private var suggestionSession = SuggestionSession()
     private var lastCaretRect: CGRect?
     private var lastTextLineRect: CGRect?
@@ -73,6 +74,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastStatusLine: String?
     private var lastSyntheticCaretDiagnosticSignature: String?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
+    private let focusedTextPollInterval: TimeInterval = 0.05
+    private let keyboardEventTapIdleStopDelayMilliseconds = 700
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ProcessInfo.processInfo.disableAutomaticTermination("AutocompleteLab runs as a persistent menu bar agent.")
@@ -97,12 +100,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         DiagnosticsLog.shared.record("terminate")
         debounceTask?.cancel()
+        keyboardEventTapStopTask?.cancel()
         insertionVerificationTask?.cancel()
         runtimeWarmTask?.cancel()
         invalidatePendingSuggestionRequest()
         modelRuntime.cancel()
         pollTimer?.invalidate()
-        stopKeyboardEventTapIfActive()
+        stopKeyboardEventTapNow(reason: "terminate")
     }
 
     private func configureStatusItem() {
@@ -142,11 +146,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startPolling() {
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 0, repeats: true) { [weak self] _ in
+        let timer = Timer.scheduledTimer(withTimeInterval: focusedTextPollInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.pollFocusedText()
             }
         }
+        timer.tolerance = focusedTextPollInterval / 2
+        pollTimer = timer
     }
 
     private func warmModelRuntime() {
@@ -549,6 +555,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startKeyboardEventTapIfPossible() {
+        keyboardEventTapStopTask?.cancel()
+        keyboardEventTapStopTask = nil
+
         guard keyboardCapturePolicy.shouldCaptureKeys(
             isTrustedForAccessibility: accessibilityClient.isTrusted,
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
@@ -556,17 +565,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let eventTap = KeyboardEventTap { [weak self] key in
+        let eventTap = KeyboardEventTap { [weak self] key, isAutorepeat in
             var handled = false
 
             if Thread.isMainThread {
                 handled = MainActor.assumeIsolated {
-                    self?.handleAutocompleteKey(key) ?? false
+                    self?.handleAutocompleteKey(key, isAutorepeat: isAutorepeat) ?? false
                 }
             } else {
                 DispatchQueue.main.sync {
                     handled = MainActor.assumeIsolated {
-                        self?.handleAutocompleteKey(key) ?? false
+                        self?.handleAutocompleteKey(key, isAutorepeat: isAutorepeat) ?? false
                     }
                 }
             }
@@ -580,20 +589,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func stopKeyboardEventTapIfActive() {
+    private func scheduleKeyboardEventTapStopIfIdle() {
+        guard keyboardEventTap != nil else {
+            return
+        }
+
+        keyboardEventTapStopTask?.cancel()
+        let idleStopDelayMilliseconds = keyboardEventTapIdleStopDelayMilliseconds
+        keyboardEventTapStopTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(idleStopDelayMilliseconds))
+            guard !Task.isCancelled,
+                  let self,
+                  !self.suggestionSession.hasVisibleSuggestion else {
+                return
+            }
+
+            self.stopKeyboardEventTapNow(reason: "idle")
+        }
+    }
+
+    private func stopKeyboardEventTapNow(reason: String) {
+        keyboardEventTapStopTask?.cancel()
+        keyboardEventTapStopTask = nil
+
         guard let keyboardEventTap else {
             return
         }
 
         keyboardEventTap.stop()
         self.keyboardEventTap = nil
-        DiagnosticsLog.shared.record("keyboard-event-tap-stopped")
+        DiagnosticsLog.shared.record(
+            "keyboard-event-tap-stopped",
+            metadata: [
+                "reason": reason
+            ]
+        )
     }
 
-    private func handleAutocompleteKey(_ key: AutocompleteKey) -> Bool {
-        if shouldSuppressKey(key) {
-            recordKeyboardAction(key: key, action: .passThrough, handled: true, reason: "suppressed-repeat")
+    private func handleAutocompleteKey(_ key: AutocompleteKey, isAutorepeat: Bool = false) -> Bool {
+        if shouldSuppressKey(key, isAutorepeat: isAutorepeat) {
+            recordKeyboardAction(key: key, action: .passThrough, handled: true, reason: "suppressed-autorepeat")
             return true
+        }
+
+        guard suggestionSession.hasVisibleSuggestion else {
+            return false
         }
 
         let action = keyboardRouter.action(
@@ -668,7 +708,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
 
         case .passThrough:
-            recordKeyboardAction(key: key, action: action, handled: false, reason: "pass-through")
+            if key != .other {
+                recordKeyboardAction(key: key, action: action, handled: false, reason: "pass-through")
+            }
             return false
         }
     }
@@ -691,7 +733,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func shouldSuppressKey(_ key: AutocompleteKey) -> Bool {
+    private func shouldSuppressKey(_ key: AutocompleteKey, isAutorepeat: Bool) -> Bool {
+        guard isAutorepeat else {
+            suppressKeyUntil[key] = nil
+            return false
+        }
+
         guard let until = suppressKeyUntil[key] else {
             return false
         }
@@ -1615,7 +1662,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextStyle = nil
         lastRenderMode = nil
         suggestionPanel.hide()
-        stopKeyboardEventTapIfActive()
+        scheduleKeyboardEventTapStopIfIdle()
     }
 
     private func updateStatusMenu(
