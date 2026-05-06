@@ -38,7 +38,7 @@ fixtures.
 | Placement confidence | 9/10 | Strong where caret bounds exist, safer mirror placement where browser editors hide geometry, and dogfood smoke now requires caret-anchored high-confidence placement. |
 | Self-healing behavior | 9/10 | Falls back from inline to mirror, repairs AX cursor drift after value replacement, pauses polling during editor settle time, and retries unchanged insertion through fallback modes. |
 | TextEdit support | 9/10 | Reference target with current automated real-app proof. |
-| Notes support | 8/10 | Recorded manual proof exists, but rich text remains a higher-risk surface. |
+| Notes support | 8/10 | Notes now fails closed with key-event-only insertion, but title/body/checklist proof still needs to be refreshed on the current build. |
 | Chrome textarea support | 9/10 | Automated smoke passes with two verified accepts. |
 | Chrome contenteditable support | 9/10 | Automated smoke passes with recovered insertion handling. |
 | Chrome editor-like support | 9/10 | CodeMirror-style local fixture passes with two verified accepts. |
@@ -55,14 +55,14 @@ fixtures.
 | Onboarding | 8/10 | Settings now gives stage-specific model guidance and runtime actions; model install/repair is still not fully in-app. |
 | User control | 9/10 | Settings exposes pause, current-app enablement, disabled-app count, enable-all, privacy controls, and a full-accept shortcut toggle. |
 | Diagnostics | 9/10 | Strong placement, latency, insertion, trace, recovered-insertion, and manual proof logs. |
-| Automated tests | 9/10 | 227 Swift tests pass, plus script self-tests for smoke, model asset, trace eval, and typing-performance guards. |
-| Real-app smoke | 9/10 | TextEdit, Notes, Obsidian, Codex, Claude desktop, and five Chrome shapes are green; Claude Code remains pending. |
+| Automated tests | 9/10 | 228 Swift tests pass, plus script self-tests for smoke, model asset, trace eval, and typing-performance guards. |
+| Real-app smoke | 9/10 | TextEdit, Obsidian, Codex, Claude desktop, and five Chrome shapes are green; Notes split rich-text proof and Claude Code remain pending. |
 | Release readiness | 7/10 | Signing identity and preferred MLX model are ready, but `NOTARYTOOL_PROFILE` is missing and model distribution is not self-contained. |
 | Architecture | 8/10 | Core boundaries are solid, and polling-pause timing moved into a tested core type; AppDelegate still needs larger service extraction. |
 
 ## Latest Proof
 
-- `swift test`: 225 tests passed.
+- `swift test`: 228 tests passed.
 - `./script/real_app_smoke.sh chrome --fixture all`: textarea, contenteditable,
   editor-like, Monaco-like, and ProseMirror-like all passed with two verified
   accepts each.
@@ -143,6 +143,8 @@ fixtures.
   local log deletion.
 - Settings now lets users switch full accept between Backtick and Option-Tab,
   while Tab remains the next-word accept key.
+- Notes now uses key-event insertion only and the manual smoke gate requires
+  separate title, body, and checklist proof labels.
 
 ## Next Highest-Leverage Work
 

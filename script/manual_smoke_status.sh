@@ -36,7 +36,9 @@ fi
 
 declare -a APPS=(
   "TextEdit|TextEdit|com.apple.TextEdit|full|default"
-  "Notes|Notes|com.apple.Notes|full|default"
+  "Notes title|Notes|com.apple.Notes|full|notes-title"
+  "Notes body|Notes|com.apple.Notes|full|notes-body"
+  "Notes checklist|Notes|com.apple.Notes|full|notes-checklist"
   "Obsidian|Obsidian|md.obsidian|full|default"
   "Chrome textarea|Chrome|com.google.Chrome|full|textarea"
   "Chrome contenteditable|Chrome|com.google.Chrome|full|contenteditable"

@@ -8,7 +8,7 @@ the manual smoke status is refreshed from the current build.
 | App | Status | Render | Insert | Proof |
 | --- | --- | --- | --- | --- |
 | TextEdit | supported | inline, mirror fallback | AX selected text, value fallback | recorded manual smoke pass |
-| Notes | supported | inline, mirror fallback | key events, AX selected text fallback | recorded manual smoke pass |
+| Notes | supported | inline, mirror fallback | key events only | requires title, body, and checklist proof labels |
 | Obsidian | supported | synthetic caret mirror, no detached fallback | AX then key events, key fallback | recorded CodeMirror smoke pass with two verified accepts; detached whole-editor anchors stay suppressed |
 | Chrome | supported for local text fields and local editor fixtures | mirror | key events, AX value fallback | repeatable textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture commands with distinct proof labels |
 | Codex | dogfood target | synthetic inline caret, no detached fallback | AX value replacement, key fallback | recorded manual smoke pass |
@@ -23,8 +23,8 @@ Run:
 ./script/manual_smoke_status.sh --strict
 ```
 
-TextEdit, Notes, Obsidian, Chrome, Codex, Claude Code, and Claude desktop must
-have full accept proof. A detached-suppression Obsidian row is useful safety
-evidence, but it is not enough for a green manual smoke status.
+TextEdit, Notes title/body/checklist, Obsidian, Chrome, Codex, Claude Code, and
+Claude desktop must have full accept proof. A detached-suppression Obsidian row
+is useful safety evidence, but it is not enough for a green manual smoke status.
 The status command also prints remaining sub-10 scorecard gaps so release risk
 is visible beside the smoke proof.

@@ -74,7 +74,9 @@ run_passing_case() {
 }
 
 run_passing_case textedit TextEdit com.apple.TextEdit 'inlineAdjacent|floatingMirror' inlineAdjacent
-run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror
+run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-title
+run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-body
+run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-checklist
 run_passing_case obsidian Obsidian md.obsidian floatingMirror floatingMirror
 run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror textarea
 run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror contenteditable
@@ -120,7 +122,7 @@ AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
   script/manual_smoke_status.sh >"$STATUS_OUTPUT"
 
-for app_name in TextEdit Notes "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" Codex "Claude Code"; do
+for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" Codex "Claude Code"; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
     exit 1
@@ -145,6 +147,26 @@ fi
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
   script/manual_smoke_status.sh --require-all >/dev/null
+
+GENERIC_NOTES_REPORT="$TMP_DIR/generic-notes-manual-smoke-runs.md"
+cat >"$GENERIC_NOTES_REPORT" <<'EOF'
+# Manual Smoke Runs
+
+| Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
+| --- | --- | --- | --- | ---: | --- | --- | --- |
+| 2026-04-26T08:00:00Z | Notes | `com.apple.Notes` | `default` | 2 | `inlineAdjacent|floatingMirror` | lines 1+ in `/tmp/diagnostics.log` | lines 1+ in `/tmp/traces.jsonl` |
+EOF
+
+AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$GENERIC_NOTES_REPORT" \
+  AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
+  script/manual_smoke_status.sh >"$STATUS_OUTPUT"
+
+for app_name in "Notes title" "Notes body" "Notes checklist"; do
+  if ! grep -F -- "- $app_name: pending" "$STATUS_OUTPUT" >/dev/null; then
+    echo "manual smoke self-test should not accept generic Notes proof for $app_name" >&2
+    exit 1
+  fi
+done
 
 LIMITED_REPORT="$TMP_DIR/limited-manual-smoke-runs.md"
 cat >"$LIMITED_REPORT" <<'EOF'

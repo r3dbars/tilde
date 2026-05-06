@@ -42,7 +42,7 @@ case "$APP" in
     BUNDLE_ID="com.apple.Notes"
     DISPLAY_NAME="Notes"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
-    STEPS=$'- Open the disposable autocomplete smoke note.\n- Test a title field with `Can we`.\n- Test a body line with `Can we`.\n- Test a checklist row with `Can we`.\n- Use Tab once, then the key above Tab for full visible accept.'
+    STEPS=$'- Open the disposable autocomplete smoke note.\n- Run this recorder three times with AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-title, notes-body, and notes-checklist.\n- For notes-title, test title-only text with `Can we`.\n- For notes-body, test body text with `Autocomplete smoke` on line one and `Can we` on line two.\n- For notes-checklist, toggle Checklist and test a checklist row.\n- Use Tab once, then the key above Tab for full visible accept.'
     ;;
   obsidian)
     BUNDLE_ID="md.obsidian"
