@@ -225,9 +225,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyRuntimeState(_ state: LocalRuntimeState) {
+        let wasReadyForSuggestions = runtimeReadinessReport.allowsSuggestions
         currentRuntimeState = state
         refreshRuntimeChrome()
         let report = runtimeReadinessReport
+        if !wasReadyForSuggestions && report.allowsSuggestions {
+            rearmFocusedTextAfterRuntimeReady()
+        }
         DiagnosticsLog.shared.record(
             "runtime",
             metadata: [
@@ -235,6 +239,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "completionLength": completionLengthConfiguration.displaySummary,
                 "readinessStage": report.stage.rawValue,
                 "readinessAction": report.action.rawValue
+            ]
+        )
+    }
+
+    private func rearmFocusedTextAfterRuntimeReady() {
+        guard currentFieldIdentity != nil else {
+            return
+        }
+
+        lastTextSnapshot = nil
+        lastRequestedTextBeforeCursor = nil
+        invalidatePendingSuggestionRequest()
+        suggestionBlockLogGate.reset()
+        setSuggestionDecision("Ready: runtime")
+        DiagnosticsLog.shared.record(
+            "runtime-ready-rearmed",
+            metadata: [
+                "reason": "runtime-became-ready"
             ]
         )
     }
@@ -506,6 +528,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard case let .request(delayMilliseconds) = triggerDecision else {
+            if suggestionSession.hasVisibleSuggestion {
+                setSuggestionDecision("Shown: waiting for cadence")
+                repositionVisibleSuggestion(context: context, profile: profile)
+                return
+            }
+
             setSuggestionDecision("Waiting: cadence policy")
             recordSuggestionEvent(
                 "suggestion-trigger-skipped",
@@ -1184,6 +1212,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "renderMode": renderMode.rawValue
                 ]
             )
+            if suggestionSession.hasVisibleSuggestion {
+                setSuggestionDecision("Shown: no fast word replacement")
+                repositionVisibleSuggestion(context: context, profile: profile)
+                return
+            }
+
             hideSuggestion()
             return
         }
@@ -1696,6 +1730,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func insertAcceptedText(_ acceptedText: String) -> Bool {
         guard let profile = currentProfile else {
             return accessibilityClient.insertText(acceptedText)
+        }
+
+        if InsertionModePlan.modes(for: profile).contains(.keyEvents) {
+            keyboardEventTap?.suppressPassthroughObservation(
+                until: Date().addingTimeInterval(0.20)
+            )
         }
 
         let result = insertionEngine.insert(acceptedText, profile: profile)

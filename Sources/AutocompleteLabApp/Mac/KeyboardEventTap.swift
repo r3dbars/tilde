@@ -22,6 +22,7 @@ final class KeyboardEventTap: @unchecked Sendable {
     private var snapshot = KeyboardEventTapSnapshot()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var hasObservedPassthroughKeyDown = false
+    private var passthroughObservationSuppressedUntil: Date?
     private var pendingReplayedKeyDowns: [KeyboardEventReplay: KeyboardEventReplayState] = [:]
     private var latencyStats = KeyboardEventTapLatencyStats()
     private let slowEventTapLatencyMicros = 8_000
@@ -158,6 +159,14 @@ final class KeyboardEventTap: @unchecked Sendable {
     func resetPassthroughObservation() {
         passthroughLock.lock()
         hasObservedPassthroughKeyDown = false
+        passthroughObservationSuppressedUntil = nil
+        passthroughLock.unlock()
+    }
+
+    func suppressPassthroughObservation(until date: Date) {
+        passthroughLock.lock()
+        passthroughObservationSuppressedUntil = max(passthroughObservationSuppressedUntil ?? date, date)
+        hasObservedPassthroughKeyDown = false
         passthroughLock.unlock()
     }
 
@@ -209,6 +218,15 @@ final class KeyboardEventTap: @unchecked Sendable {
         }
 
         if key == .other {
+            if shouldSuppressPassthroughObservation() {
+                return finish(
+                    Unmanaged.passUnretained(event),
+                    key: key,
+                    decision: "passthrough-synthetic-insert",
+                    startedAt: startedAt
+                )
+            }
+
             markPassthroughObserved()
             markSnapshotInvalidatedByTyping()
             if let passthroughKeyDownObserver {
@@ -382,6 +400,22 @@ final class KeyboardEventTap: @unchecked Sendable {
         passthroughLock.lock()
         hasObservedPassthroughKeyDown = true
         passthroughLock.unlock()
+    }
+
+    private func shouldSuppressPassthroughObservation(now: Date = Date()) -> Bool {
+        passthroughLock.lock()
+        defer { passthroughLock.unlock() }
+
+        guard let suppressedUntil = passthroughObservationSuppressedUntil else {
+            return false
+        }
+
+        if suppressedUntil > now {
+            return true
+        }
+
+        passthroughObservationSuppressedUntil = nil
+        return false
     }
 
     private func consumePassthroughObservation() -> Bool {

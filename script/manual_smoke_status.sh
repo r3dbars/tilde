@@ -23,12 +23,14 @@ if [[ -n "$MODE" && "$MODE" != "--require-all" ]]; then
 fi
 
 declare -a APPS=(
-  "TextEdit|com.apple.TextEdit|full"
-  "Notes|com.apple.Notes|full"
-  "Obsidian|md.obsidian|limited"
-  "Chrome|com.google.Chrome|full"
-  "Codex|com.openai.codex|full"
-  "Claude Code|com.anthropic.claude-code|full"
+  "TextEdit|TextEdit|com.apple.TextEdit|full|default"
+  "Notes|Notes|com.apple.Notes|full|default"
+  "Obsidian|Obsidian|md.obsidian|limited|default"
+  "Chrome textarea|Chrome|com.google.Chrome|full|textarea"
+  "Chrome contenteditable|Chrome|com.google.Chrome|full|contenteditable"
+  "Chrome editor-like|Chrome|com.google.Chrome|full|editor-like"
+  "Codex|Codex|com.openai.codex|full|default"
+  "Claude Code|Claude Code|com.anthropic.claude-code|full|default"
 )
 
 if [[ ! -f "$REPORT_PATH" ]]; then
@@ -42,15 +44,23 @@ missing=0
 for app_entry in "${APPS[@]}"; do
   display_name="${app_entry%%|*}"
   rest="${app_entry#*|}"
+  report_name="${rest%%|*}"
+  rest="${rest#*|}"
   bundle_id="${rest%%|*}"
-  proof_mode="${app_entry##*|}"
+  rest="${rest#*|}"
+  proof_mode="${rest%%|*}"
+  proof_label="${app_entry##*|}"
 
   if [[ "$proof_mode" == "limited" ]] &&
     [[ -f "$REPORT_PATH" ]] &&
-    grep -E "\\| $display_name \\| \`$bundle_id\` \\| 0 \\| \`detached-suppressed\` \\|" "$REPORT_PATH" >/dev/null; then
+    grep -E "\\| $report_name \\| \`$bundle_id\` \\| (\`$proof_label\` \\| )?0 \\| \`detached-suppressed\` \\|" "$REPORT_PATH" >/dev/null; then
     echo "- $display_name: limited pass"
   elif [[ -f "$REPORT_PATH" ]] &&
-    grep -E "\\| $display_name \\| \`$bundle_id\` \\| [2-9][0-9]* \\|" "$REPORT_PATH" >/dev/null; then
+    grep -E "\\| $report_name \\| \`$bundle_id\` \\| \`$proof_label\` \\| [2-9][0-9]* \\|" "$REPORT_PATH" >/dev/null; then
+    echo "- $display_name: passed"
+  elif [[ "$proof_label" == "default" ]] &&
+    [[ -f "$REPORT_PATH" ]] &&
+    grep -E "\\| $report_name \\| \`$bundle_id\` \\| [2-9][0-9]* \\|" "$REPORT_PATH" >/dev/null; then
     echo "- $display_name: passed"
   else
     echo "- $display_name: pending"

@@ -6,6 +6,7 @@ MODE="${2:-run}"
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
 REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-runs.md}"
+PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-default}"
 
 usage() {
   cat <<'EOF'
@@ -53,7 +54,8 @@ case "$APP" in
     BUNDLE_ID="com.google.Chrome"
     DISPLAY_NAME="Chrome"
     EXPECTED_RENDER="floatingMirror"
-    STEPS=$'- Open a local data: page with a textarea.\n- Type `Can we` in the textarea.\n- Confirm focus stays in the textarea.\n- Use Tab once, then the key above Tab for full visible accept.'
+    PROOF_LABEL="${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-$PROOF_LABEL}"
+    STEPS=$'- Open a local fixture page with a textarea, contenteditable field, or editor-like field.\n- Type `Can we` in the focused field.\n- Confirm focus stays in the field.\n- Use Tab once, then the key above Tab for full visible accept.'
     ;;
   codex)
     BUNDLE_ID="com.openai.codex"
@@ -201,15 +203,16 @@ This file is append-only proof for real app passes.
 
 Only mark app-specific TODO items green after a run is recorded here.
 
-| Time UTC | App | Bundle | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
-| --- | --- | --- | ---: | --- | --- | --- |
+| Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
+| --- | --- | --- | --- | ---: | --- | --- | --- |
 EOF
   fi
 
-  printf '| %s | %s | `%s` | %s | `%s` | lines %s+ in `%s` | lines %s+ in `%s` |\n' \
+  printf '| %s | %s | `%s` | `%s` | %s | `%s` | lines %s+ in `%s` | lines %s+ in `%s` |\n' \
     "$timestamp" \
     "$DISPLAY_NAME" \
     "$BUNDLE_ID" \
+    "$PROOF_LABEL" \
     "$verified_count" \
     "$render_expectation" \
     "$((START_LINE + 1))" \

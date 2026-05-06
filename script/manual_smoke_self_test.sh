@@ -47,6 +47,7 @@ run_passing_case() {
   local bundle_id="$3"
   local expected_render="$4"
   local observed_render="$5"
+  local proof_label="${6:-default}"
 
   write_passing_log "$bundle_id" "$observed_render"
   write_passing_trace "$bundle_id"
@@ -55,10 +56,11 @@ run_passing_case() {
     AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
     AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
     AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+    AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL="$proof_label" \
     AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
     script/manual_smoke_session.sh "$app" --check >/dev/null
 
-  if ! grep -F "| $display_name | \`$bundle_id\` | 2 | \`$expected_render\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
+  if ! grep -F "| $display_name | \`$bundle_id\` | \`$proof_label\` | 2 | \`$expected_render\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
     echo "manual smoke self-test did not record the successful $display_name pass" >&2
     exit 1
   fi
@@ -72,7 +74,9 @@ run_passing_case() {
 run_passing_case textedit TextEdit com.apple.TextEdit 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror
 run_passing_case obsidian Obsidian md.obsidian floatingMirror floatingMirror
-run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror
+run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror textarea
+run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror contenteditable
+run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror editor-like
 run_passing_case codex Codex com.openai.codex 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_passing_case claude-code "Claude Code" com.anthropic.claude-code 'inlineAdjacent|floatingMirror' inlineAdjacent
 
@@ -91,15 +95,17 @@ AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
   script/manual_smoke_session.sh obsidian --check >/dev/null
 
 if ! grep -F "| Obsidian | \`md.obsidian\` | 0 | \`detached-suppressed\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
-  echo "manual smoke self-test did not record the successful Obsidian detached-suppression proof" >&2
-  exit 1
+  if ! grep -F "| Obsidian | \`md.obsidian\` | \`default\` | 0 | \`detached-suppressed\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
+    echo "manual smoke self-test did not record the successful Obsidian detached-suppression proof" >&2
+    exit 1
+  fi
 fi
 
 STATUS_OUTPUT="$TMP_DIR/status-output.txt"
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   script/manual_smoke_status.sh >"$STATUS_OUTPUT"
 
-for app_name in TextEdit Notes Chrome Codex "Claude Code"; do
+for app_name in TextEdit Notes "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" Codex "Claude Code"; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
     exit 1

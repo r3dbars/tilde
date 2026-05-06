@@ -87,6 +87,22 @@ fi
 
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
+declare -a SMOKE_TMP_DIRS=()
+
+cleanup_smoke_tmp_dirs() {
+  if ((${#SMOKE_TMP_DIRS[@]})); then
+    rm -rf "${SMOKE_TMP_DIRS[@]}"
+  fi
+}
+
+trap cleanup_smoke_tmp_dirs EXIT
+
+make_tmp_dir() {
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  SMOKE_TMP_DIRS+=("$tmp_dir")
+  printf '%s\n' "$tmp_dir"
+}
 
 line_count() {
   local path="$1"
@@ -141,6 +157,38 @@ wait_for_log_fields() {
 
   echo "Timed out waiting for $label." >&2
   echo "Required fields: $prefix $*" >&2
+  echo "Log: $LOG_PATH" >&2
+  tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+  exit 1
+}
+
+latest_runtime_is_ready() {
+  local latest_runtime_line
+  latest_runtime_line="$(grep -E " runtime .*readinessStage=" "$LOG_PATH" 2>/dev/null | tail -n 1 || true)"
+  [[ "$latest_runtime_line" == *"readinessStage=ready"* ]]
+}
+
+wait_for_runtime_ready() {
+  local start_line="$1"
+  local label="${2:-runtime ready}"
+  local timeout_seconds="${3:-60}"
+  local allow_existing_ready="${4:-0}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    if tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -E " runtime .*readinessStage=ready" >/dev/null; then
+      return 0
+    fi
+
+    if [[ "$allow_existing_ready" == "1" ]] && latest_runtime_is_ready; then
+      return 0
+    fi
+
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for $label." >&2
+  echo "Pattern: runtime readinessStage=ready" >&2
   echo "Log: $LOG_PATH" >&2
   tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
   exit 1
@@ -287,14 +335,16 @@ run_manual_gated() {
 }
 
 run_textedit() {
-  build_if_needed
+  local runtime_start_line start_line trace_start_line tmp_dir tmp_file
+  runtime_start_line="$(line_count "$LOG_PATH")"
 
-  local start_line trace_start_line tmp_dir tmp_file
+  build_if_needed
+  wait_for_runtime_ready "$runtime_start_line" "TextEdit runtime readiness" 60 "$SKIP_BUILD"
+
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
-  tmp_dir="$(mktemp -d)"
+  tmp_dir="$(make_tmp_dir)"
   tmp_file="$tmp_dir/autocomplete-lab-textedit-smoke.txt"
-  trap 'rm -rf "$tmp_dir"' RETURN
 
   : >"$tmp_file"
   open -a TextEdit "$tmp_file"
@@ -332,9 +382,8 @@ run_chrome_fixture() {
   local start_line trace_start_line tmp_dir html_file
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
-  tmp_dir="$(mktemp -d)"
+  tmp_dir="$(make_tmp_dir)"
   html_file="$tmp_dir/autocomplete-lab-chrome-$fixture-smoke.html"
-  trap 'rm -rf "$tmp_dir"' RETURN
 
   chrome_fixture_html "$fixture" >"$html_file"
 
@@ -396,7 +445,11 @@ run_chrome() {
     exit 1
   fi
 
+  local runtime_start_line
+  runtime_start_line="$(line_count "$LOG_PATH")"
+
   build_if_needed
+  wait_for_runtime_ready "$runtime_start_line" "Chrome runtime readiness" 60 "$SKIP_BUILD"
 
   if [[ "$CHROME_FIXTURE" == "all" ]]; then
     run_chrome_fixture textarea

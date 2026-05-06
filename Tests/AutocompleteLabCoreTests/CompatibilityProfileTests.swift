@@ -28,8 +28,8 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.mail")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.google.Chrome")?.displayName == "Chrome")
         #expect(store.profile(for: "com.google.Chrome")?.renderMode == .floatingMirror)
-        #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .axValueReplacement)
-        #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .keyEvents)
+        #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .keyEvents)
+        #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.openai.codex")?.displayName == "Codex")
         #expect(store.profile(for: "com.openai.codex")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "com.openai.codex")?.fallbackRenderMode == .floatingMirror)
@@ -77,9 +77,9 @@ struct CompatibilityProfileTests {
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
 
         #expect(profile.debugSummary.contains("primary render=floatingMirror"))
-        #expect(profile.debugSummary.contains("insert=axValueReplacement"))
-        #expect(profile.debugSummary.contains("fallback render=floatingMirror"))
         #expect(profile.debugSummary.contains("insert=keyEvents"))
+        #expect(profile.debugSummary.contains("fallback render=floatingMirror"))
+        #expect(profile.debugSummary.contains("insert=axValueReplacement"))
         #expect(profile.debugSummary.contains("field=accessibilityElement"))
     }
 
@@ -92,7 +92,7 @@ struct CompatibilityProfileTests {
         let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
 
         #expect(InsertionModePlan.modes(for: textEdit) == [.axSelectedText, .axValueReplacement])
-        #expect(InsertionModePlan.modes(for: chrome) == [.axValueReplacement, .keyEvents])
+        #expect(InsertionModePlan.modes(for: chrome) == [.keyEvents, .axValueReplacement])
         #expect(InsertionModePlan.modes(for: codex) == [.keyEvents, .axThenKeyEvents])
         #expect(InsertionModePlan.modes(for: claudeCode) == [.keyEvents, .axThenKeyEvents])
         #expect(InsertionModePlan.modes(for: mail) == [])
