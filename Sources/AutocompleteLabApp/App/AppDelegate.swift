@@ -498,85 +498,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let font = context.textStyle?.font ?? NSFont.systemFont(ofSize: 18)
         let lineHeight = max(font.ascender - font.descender + font.leading, 20)
-        let horizontalPadding: CGFloat = 18
-        let verticalPadding: CGFloat = 4
-        let codexVisualBaselineLift = lineHeight * 0.85
-        let maxLineWidth = max(40, elementRect.width - (horizontalPadding * 2))
-        let visualLines = wrappedVisualLines(
-            for: context.textBeforeCursor,
-            font: font,
-            maxLineWidth: maxLineWidth
-        )
-        let currentLine = visualLines.last ?? ""
-        let lineIndex = max(0, visualLines.count - 1)
-        let currentLineWidth = min(width(of: currentLine, font: font), maxLineWidth)
-        let caretHeight = max(lineHeight, 16)
-        let inlineGap: CGFloat = 8
-        let inlineVerticalDrop = lineHeight * 0.85
-        let preferredY = elementRect.minY
-            + verticalPadding
-            - codexVisualBaselineLift
-            + inlineVerticalDrop
-            + (CGFloat(lineIndex) * lineHeight)
-        let y = clampedCodexCaretY(
-            preferredY,
-            caretHeight: caretHeight,
+
+        return SyntheticCaretEstimator.caretRect(
+            textBeforeCursor: context.textBeforeCursor,
             elementRect: elementRect,
-            windowRect: context.windowRect
+            windowRect: context.windowRect,
+            lineHeight: lineHeight,
+            widthOfText: { width(of: $0, font: font) }
         )
-
-        return CGRect(
-            x: min(
-                elementRect.minX + horizontalPadding + currentLineWidth + inlineGap,
-                elementRect.maxX - horizontalPadding
-            ),
-            y: y,
-            width: 0,
-            height: caretHeight
-        )
-    }
-
-    private func clampedCodexCaretY(
-        _ preferredY: CGFloat,
-        caretHeight: CGFloat,
-        elementRect: CGRect,
-        windowRect: CGRect?
-    ) -> CGFloat {
-        let boundingRect = windowRect ?? elementRect
-        let upperPadding: CGFloat = 8
-        let lowerPadding: CGFloat = 8
-        let minY = min(elementRect.minY - (caretHeight * 1.25), boundingRect.maxY - caretHeight - lowerPadding)
-        let maxY = max(elementRect.maxY + (caretHeight * 6), minY)
-        let boundedMinY = max(boundingRect.minY + upperPadding, minY)
-        let boundedMaxY = min(boundingRect.maxY - caretHeight - lowerPadding, maxY)
-
-        guard boundedMaxY >= boundedMinY else {
-            return preferredY
-        }
-
-        return min(max(preferredY, boundedMinY), boundedMaxY)
-    }
-
-    private func wrappedVisualLines(for text: String, font: NSFont, maxLineWidth: CGFloat) -> [String] {
-        var lines: [String] = []
-
-        for paragraph in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
-            var current = ""
-
-            for character in paragraph {
-                let next = current + String(character)
-                if !current.isEmpty, width(of: next, font: font) > maxLineWidth {
-                    lines.append(current)
-                    current = String(character)
-                } else {
-                    current = next
-                }
-            }
-
-            lines.append(current)
-        }
-
-        return lines.isEmpty ? [""] : lines
     }
 
     private func width(of text: String, font: NSFont) -> CGFloat {
