@@ -36,8 +36,24 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
         }
 
         let searchable = fingerprintText.lowercased()
-        if Self.promptTerms.contains(where: { searchable.contains($0) }) {
+        if Self.strongPromptTerms.contains(where: { searchable.contains($0) }) {
             return PromptEditorFingerprintDecision(canSuggest: true, reason: "prompt-fingerprint")
+        }
+
+        let hasGenericPromptTerm = Self.genericPromptTerms.contains(where: { searchable.contains($0) })
+        if hasGenericPromptTerm {
+            guard let elementRect,
+                  let windowRect,
+                  windowRect.width > 0,
+                  windowRect.height > 0 else {
+                return PromptEditorFingerprintDecision(canSuggest: false, reason: "missing-prompt-bounds")
+            }
+
+            guard isPromptLikeGeometry(elementRect: elementRect, windowRect: windowRect) else {
+                return PromptEditorFingerprintDecision(canSuggest: false, reason: "generic-prompt-not-composer")
+            }
+
+            return PromptEditorFingerprintDecision(canSuggest: true, reason: "generic-prompt-geometry")
         }
 
         guard role == "AXTextArea" else {
@@ -62,19 +78,30 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
         let maxComposerHeight = min(220, windowRect.height * 0.35)
         let isComposerSized = elementRect.height >= 20 && elementRect.height <= maxComposerHeight
         let isWideEnough = elementRect.width >= min(260, windowRect.width * 0.35)
-        let distanceToTop = abs(elementRect.minY - windowRect.minY)
         let distanceToBottom = abs(windowRect.maxY - elementRect.maxY)
-        let isNearVerticalEdge = min(distanceToTop, distanceToBottom) <= windowRect.height * 0.28
+        let isNearBottomComposerEdge = distanceToBottom <= windowRect.height * 0.18
 
-        return isComposerSized && isWideEnough && isNearVerticalEdge
+        return isComposerSized && isWideEnough && isNearBottomComposerEdge
     }
 
-    private static let promptTerms: Set<String> = [
+    private static let strongPromptTerms: Set<String> = [
+        "ask codex",
+        "ask claude",
+        "claude message composer",
+        "codex message composer",
+        "compose a message",
+        "composer",
+        "describe a task or ask a question",
+        "message composer",
+        "prompt editor",
+        "prompt input"
+    ]
+
+    private static let genericPromptTerms: Set<String> = [
         "ask",
         "chat",
         "claude",
         "codex",
-        "composer",
         "input",
         "message",
         "prompt",

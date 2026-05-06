@@ -20,12 +20,14 @@ final class KeyboardEventTap: @unchecked Sendable {
     private var eventThread: Thread?
     private var isStopping = false
     private var snapshot = KeyboardEventTapSnapshot()
-    private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
+    private var suppressKeyUntilNanos: [AutocompleteKey: UInt64] = [:]
     private var hasObservedPassthroughKeyDown = false
-    private var passthroughObservationSuppressedUntil: Date?
+    private var passthroughObservationSuppressedUntilNanos: UInt64?
     private var pendingReplayedKeyDowns: [KeyboardEventReplay: KeyboardEventReplayState] = [:]
     private var latencyStats = KeyboardEventTapLatencyStats()
     private let slowEventTapLatencyMicros = 8_000
+    private let keySuppressDurationNanos: UInt64 = 250_000_000
+    private let replayExpirationNanos: UInt64 = 1_000_000_000
 
     init(
         handler: @escaping Handler,
@@ -159,13 +161,22 @@ final class KeyboardEventTap: @unchecked Sendable {
     func resetPassthroughObservation() {
         passthroughLock.lock()
         hasObservedPassthroughKeyDown = false
-        passthroughObservationSuppressedUntil = nil
+        passthroughObservationSuppressedUntilNanos = nil
         passthroughLock.unlock()
     }
 
     func suppressPassthroughObservation(until date: Date) {
+        suppressPassthroughObservation(for: max(0, date.timeIntervalSinceNow))
+    }
+
+    func suppressPassthroughObservation(for seconds: TimeInterval) {
+        let durationNanos = UInt64(max(0, seconds) * 1_000_000_000)
+        let untilNanos = DispatchTime.now().uptimeNanoseconds + durationNanos
         passthroughLock.lock()
-        passthroughObservationSuppressedUntil = max(passthroughObservationSuppressedUntil ?? date, date)
+        passthroughObservationSuppressedUntilNanos = max(
+            passthroughObservationSuppressedUntilNanos ?? untilNanos,
+            untilNanos
+        )
         hasObservedPassthroughKeyDown = false
         passthroughLock.unlock()
     }
@@ -351,24 +362,24 @@ final class KeyboardEventTap: @unchecked Sendable {
     }
 
     private func shouldConsume(_ key: AutocompleteKey, isAutorepeat: Bool) -> Bool {
-        let now = Date()
+        let nowNanos = DispatchTime.now().uptimeNanoseconds
         snapshotLock.lock()
         let snapshot = self.snapshot
 
         guard snapshot.hasVisibleSuggestion,
               !snapshot.isInvalidatedByUserTyping else {
-            suppressKeyUntil.removeAll(keepingCapacity: true)
+            suppressKeyUntilNanos.removeAll(keepingCapacity: true)
             snapshotLock.unlock()
             return false
         }
 
         if isAutorepeat,
-           let suppressUntil = suppressKeyUntil[key],
-           suppressUntil > now {
+           let suppressUntil = suppressKeyUntilNanos[key],
+           suppressUntil > nowNanos {
             snapshotLock.unlock()
             return true
         }
-        suppressKeyUntil[key] = nil
+        suppressKeyUntilNanos[key] = nil
 
         let shouldConsume: Bool
         switch key {
@@ -383,7 +394,7 @@ final class KeyboardEventTap: @unchecked Sendable {
         }
 
         if shouldConsume, !isAutorepeat {
-            suppressKeyUntil[key] = now.addingTimeInterval(0.25)
+            suppressKeyUntilNanos[key] = nowNanos + keySuppressDurationNanos
         }
         snapshotLock.unlock()
         return shouldConsume
@@ -392,7 +403,7 @@ final class KeyboardEventTap: @unchecked Sendable {
     private func markSnapshotInvalidatedByTyping() {
         snapshotLock.lock()
         snapshot.isInvalidatedByUserTyping = true
-        suppressKeyUntil.removeAll(keepingCapacity: true)
+        suppressKeyUntilNanos.removeAll(keepingCapacity: true)
         snapshotLock.unlock()
     }
 
@@ -402,19 +413,19 @@ final class KeyboardEventTap: @unchecked Sendable {
         passthroughLock.unlock()
     }
 
-    private func shouldSuppressPassthroughObservation(now: Date = Date()) -> Bool {
+    private func shouldSuppressPassthroughObservation(nowNanos: UInt64 = DispatchTime.now().uptimeNanoseconds) -> Bool {
         passthroughLock.lock()
         defer { passthroughLock.unlock() }
 
-        guard let suppressedUntil = passthroughObservationSuppressedUntil else {
+        guard let suppressedUntil = passthroughObservationSuppressedUntilNanos else {
             return false
         }
 
-        if suppressedUntil > now {
+        if suppressedUntil > nowNanos {
             return true
         }
 
-        passthroughObservationSuppressedUntil = nil
+        passthroughObservationSuppressedUntilNanos = nil
         return false
     }
 
@@ -438,8 +449,10 @@ final class KeyboardEventTap: @unchecked Sendable {
 
     private func consumePendingReplay(_ replay: KeyboardEventReplay) -> Bool {
         replayLock.lock()
-        let now = Date()
-        pendingReplayedKeyDowns = pendingReplayedKeyDowns.filter { $0.value.expiresAt > now }
+        if !pendingReplayedKeyDowns.isEmpty {
+            let nowNanos = DispatchTime.now().uptimeNanoseconds
+            pendingReplayedKeyDowns = pendingReplayedKeyDowns.filter { $0.value.expiresAtNanos > nowNanos }
+        }
         guard var state = pendingReplayedKeyDowns[replay],
               state.count > 0 else {
             replayLock.unlock()
@@ -477,10 +490,11 @@ final class KeyboardEventTap: @unchecked Sendable {
     }
 
     private func markPendingReplay(_ replay: KeyboardEventReplay) {
+        let nowNanos = DispatchTime.now().uptimeNanoseconds
         replayLock.lock()
         pendingReplayedKeyDowns[replay] = KeyboardEventReplayState(
             count: (pendingReplayedKeyDowns[replay]?.count ?? 0) + 1,
-            expiresAt: Date().addingTimeInterval(1)
+            expiresAtNanos: nowNanos + replayExpirationNanos
         )
         replayLock.unlock()
     }
@@ -521,7 +535,7 @@ private struct KeyboardEventReplay: Hashable, Sendable {
 
 private struct KeyboardEventReplayState: Sendable {
     var count: Int
-    var expiresAt: Date
+    var expiresAtNanos: UInt64
 }
 
 private struct KeyboardEventTapLatencyStats: Sendable {
