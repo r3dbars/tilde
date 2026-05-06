@@ -108,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionDisplayedText: String?
     private var currentSuggestionInvalidatedByUserKeyDown = false
     private var scheduledScreenshotSuggestionIDs: Set<String> = []
+    private let maxScheduledScreenshotSuggestionIDs = 256
     private var recentWordMemory = RecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var lastStatusLine: String?
@@ -744,6 +745,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textLineRect: syntheticCaret,
             textStyle: context.textStyle,
             isSecure: context.isSecure,
+            caretIsSynthetic: true,
             capabilities: capabilities
         )
     }
@@ -1715,7 +1717,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             style: context.textStyle,
             renderMode: placement.renderMode
         )
-        let screenshotPath = captureTraceScreenshot(
+        let screenshotCapture = captureTraceScreenshot(
             around: [
                 placement.anchorRect,
                 placement.textLineRect,
@@ -1743,14 +1745,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             cleanedVisibleText: suggestion.visibleText,
             displayedText: suggestion.visibleText,
             latencyMilliseconds: latencyMilliseconds,
-            screenshotPath: screenshotPath,
+            screenshotPath: screenshotCapture.path,
             metadata: [
                 "effectiveRenderMode": placement.renderMode.rawValue,
                 "visibleChars": String(suggestion.visibleText.count),
                 "visibleWords": String(suggestion.visibleWordCount),
                 "anchorRect": compactRectDescription(placement.anchorRect),
                 "textLineRect": placement.textLineRect.map(compactRectDescription) ?? "none",
-                "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none"
+                "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none",
+                "screenshotCaptureRect": screenshotCapture.rectDescription
             ]
             .merging(traceGeometryMetadata(context: context, renderMode: placement.renderMode)) { current, _ in current }
             .merging(learningAdjustment.metadata) { current, _ in current }
@@ -1787,6 +1790,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             elementRect: learningAdjustment.adjusted(context.elementRect),
             windowRect: learningAdjustment.adjusted(context.windowRect),
             textLineRect: learningAdjustment.adjusted(context.textLineRect),
+            caretIsSynthetic: context.caretIsSynthetic,
             allowsDetachedSuggestions: profile.allowsDetachedSuggestions
         )
     }
@@ -1797,14 +1801,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bundleIdentifier: String,
         triggerReason: String,
         appScreenshotTracingEnabled: Bool
-    ) -> String {
+    ) -> TraceScreenshotCapture {
         guard (RawAutocompleteTraceLog.shared.screenshotTracingEnabled || appScreenshotTracingEnabled),
               triggerReason != "model-stream",
               let captureRect = ScreenshotCaptureRegion.enclosing(rects) else {
-            return ""
+            return .none
+        }
+        if scheduledScreenshotSuggestionIDs.count >= maxScheduledScreenshotSuggestionIDs {
+            scheduledScreenshotSuggestionIDs.removeAll(keepingCapacity: true)
         }
         guard scheduledScreenshotSuggestionIDs.insert(suggestionID).inserted else {
-            return ""
+            return .none
         }
 
         let folderURL = RawAutocompleteTraceLog.shared.screenshotFolderURL
@@ -1815,7 +1822,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             to: screenshotURL,
             bundleIdentifier: bundleIdentifier
         )
-        return screenshotURL.path
+        return TraceScreenshotCapture(
+            path: screenshotURL.path,
+            rectDescription: compactRectDescription(captureRect)
+        )
     }
 
     private func traceGeometryMetadata(
@@ -1825,6 +1835,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         [
             "effectiveRenderMode": renderMode.rawValue,
             "hasCaretRect": String(context.caretRect != nil),
+            "caretIsSynthetic": String(context.caretIsSynthetic),
             "hasElementRect": String(context.elementRect != nil),
             "hasWindowRect": String(context.windowRect != nil),
             "canReadBounds": String(context.capabilities.canReadBoundsForRange)
@@ -2775,6 +2786,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func quit() {
         NSApp.terminate(nil)
     }
+}
+
+private struct TraceScreenshotCapture {
+    let path: String
+    let rectDescription: String
+
+    static let none = TraceScreenshotCapture(path: "", rectDescription: "none")
 }
 
 private extension AppDelegate {

@@ -66,7 +66,8 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
                     "screenshot-captured",
                     metadata: [
                         "app": bundleIdentifier,
-                        "path": screenshotURL.path
+                        "path": screenshotURL.path,
+                        "rect": Self.compactRectDescription(rect)
                     ]
                 )
             } catch {
@@ -79,5 +80,9 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
                 )
             }
         }
+    }
+
+    private static func compactRectDescription(_ rect: CGRect) -> String {
+        "x=\(Int(rect.origin.x.rounded())),y=\(Int(rect.origin.y.rounded())),w=\(Int(rect.width.rounded())),h=\(Int(rect.height.rounded()))"
     }
 }

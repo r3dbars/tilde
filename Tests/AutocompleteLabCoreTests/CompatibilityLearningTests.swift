@@ -91,8 +91,8 @@ struct CompatibilityLearningTests {
         #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "true")
     }
 
-    @Test("Learning keeps high confidence visual offsets")
-    func keepsHighConfidenceVisualOffsets() {
+    @Test("Learning ignores generic high confidence visual offsets")
+    func ignoresGenericHighConfidenceVisualOffsets() {
         let profile = CompatibilityLearningProfile(
             bundleIdentifier: "md.obsidian",
             xOffset: -3,
@@ -100,6 +100,28 @@ struct CompatibilityLearningTests {
             observations: 4,
             confidence: 0.7,
             lastReason: "placement-review"
+        )
+        let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+        let adjustment = engine.adjustment(
+            for: "md.obsidian",
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly
+
+        let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
+
+        #expect(adjustment.adjusted(rect) == rect)
+        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "false")
+    }
+
+    @Test("Learning keeps screenshot visual corrections")
+    func keepsScreenshotVisualCorrections() {
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "md.obsidian",
+            xOffset: -3,
+            yOffset: 8,
+            observations: 4,
+            confidence: 0.7,
+            lastReason: "screenshot-visual-correction"
         )
         let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
         let adjustment = engine.adjustment(
