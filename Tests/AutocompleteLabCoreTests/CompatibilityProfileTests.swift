@@ -13,6 +13,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.TextEdit")?.fallbackInsertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.apple.Notes")?.insertionMode == .keyEvents)
         #expect(store.profile(for: "com.apple.Notes")?.fallbackInsertionMode == .disabled)
+        #expect(store.profile(for: "com.apple.Notes")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "md.obsidian")?.renderMode == .floatingMirror)
         #expect(store.profile(for: "md.obsidian")?.insertionMode == .axThenKeyEvents)
         #expect(store.profile(for: "md.obsidian")?.fallbackInsertionMode == .keyEvents)
@@ -44,6 +45,9 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.anthropic.claude-code")?.insertionMode == .keyEvents)
         #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackInsertionMode == .axThenKeyEvents)
         #expect(store.profile(for: "com.anthropic.claude-code")?.fieldIdentityMode == .stableBounds)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.supportsOneWordAcceptance == true)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.supportsFullAcceptance == false)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.canPresentSuggestions == true)
         #expect(store.profile(for: "com.anthropic.claude-code")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.displayName == "Claude")
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.renderMode == .inlineAdjacent)
@@ -108,6 +112,18 @@ struct CompatibilityProfileTests {
         #expect(InsertionModePlan.modes(for: claudeCode) == [.keyEvents, .axThenKeyEvents])
         #expect(InsertionModePlan.modes(for: claude) == [.axValueReplacement])
         #expect(InsertionModePlan.modes(for: mail) == [])
+    }
+
+    @Test("Unproven real app profiles fail closed on risky affordances")
+    func unprovenRealAppProfilesFailClosedOnRiskyAffordances() throws {
+        let notes = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.Notes"))
+        let claudeCode = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claude-code"))
+
+        #expect(notes.allowsDetachedSuggestions == false)
+        #expect(notes.fallbackInsertionMode == .disabled)
+        #expect(claudeCode.supportsOneWordAcceptance == true)
+        #expect(claudeCode.supportsFullAcceptance == false)
+        #expect(claudeCode.canPresentSuggestions == true)
     }
 
     @Test("Insertion mode plans can skip failed primary modes")
