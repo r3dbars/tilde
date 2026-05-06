@@ -33,6 +33,7 @@ declare -a APPS=(
   "Chrome ProseMirror-like|Chrome|com.google.Chrome|full|prosemirror-like"
   "Codex|Codex|com.openai.codex|full|default"
   "Claude Code|Claude Code|com.anthropic.claude-code|full|default"
+  "Claude desktop|Claude|com.anthropic.claudefordesktop|full|default"
 )
 
 if [[ ! -f "$REPORT_PATH" ]]; then

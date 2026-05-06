@@ -346,14 +346,42 @@ final class AccessibilityClient {
 
         var cursorRange = CFRange(location: replacement.cursorUTF16Offset, length: 0)
         if let rangeValue = AXValueCreate(.cfRange, &cursorRange) {
-            AXUIElementSetAttributeValue(
+            _ = AXUIElementSetAttributeValue(
                 focusedElement,
                 kAXSelectedTextRangeAttribute as CFString,
                 rangeValue
             )
         }
 
+        if !cursorMatches(cursorRange, in: focusedElement),
+           replacement.cursorUTF16Offset == replacement.text.utf16.count {
+            moveInsertionPointToLineEnd()
+        }
+
         return replacement.text != textBeforeInsert
+    }
+
+    private func cursorMatches(_ expectedRange: CFRange, in element: AXUIElement) -> Bool {
+        Thread.sleep(forTimeInterval: 0.04)
+        guard let currentRange = selectedTextRange(in: element) else {
+            return false
+        }
+
+        return currentRange.location == expectedRange.location
+            && currentRange.length == expectedRange.length
+    }
+
+    private func moveInsertionPointToLineEnd() {
+        let source = CGEventSource(stateID: .hidSystemState)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: false) else {
+            return
+        }
+
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
     }
 
     func focusedTextDiagnostics(allowDescendantTextFallback: Bool = false) -> FocusedTextDiagnostics? {

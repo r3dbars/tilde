@@ -81,6 +81,7 @@ run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror m
 run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror prosemirror-like
 run_passing_case codex Codex com.openai.codex 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_passing_case claude-code "Claude Code" com.anthropic.claude-code 'inlineAdjacent|floatingMirror' inlineAdjacent
+run_passing_case claude Claude com.anthropic.claudefordesktop 'inlineAdjacent|floatingMirror' inlineAdjacent
 
 cat >"$LOG_PATH" <<'EOF'
 2026-04-26T08:00:00Z suggestion-blocked app=md.obsidian reason=detached-suggestion-disabled hasCaretRect=false

@@ -6,7 +6,7 @@ public enum SuggestionRenderMode: String, Codable, Equatable, Sendable {
     case disabled
 }
 
-public enum InsertionMode: String, Equatable, Sendable {
+public enum InsertionMode: String, Equatable, Hashable, Sendable {
     case axSelectedText
     case axValueReplacement
     case axThenKeyEvents
@@ -198,6 +198,17 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
             notes: "Dogfood target. Prefer caret-bound inline suggestions when the prompt editor exposes bounds. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions."
+        ),
+        CompatibilityProfile(
+            bundleIdentifier: "com.anthropic.claudefordesktop",
+            displayName: "Claude",
+            renderMode: .inlineAdjacent,
+            insertionMode: .axValueReplacement,
+            fallbackRenderMode: .floatingMirror,
+            fieldIdentityMode: .stableBounds,
+            suppressesAfterInsertionFailure: false,
+            allowsDetachedSuggestions: false,
+            notes: "Dogfood target for Claude desktop. Prefer prompt-bound inline suggestions when the composer exposes bounds; otherwise use mirror placement without showing detached whole-window suggestions."
         )
     ])
 

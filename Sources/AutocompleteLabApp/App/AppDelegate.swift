@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let insertionVerification = InsertionVerification()
     private let insertionRetryPolicy = InsertionRetryPolicy()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
+    private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
@@ -89,6 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusedTextPollInterval: TimeInterval = 0.05
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 120
+    private let postInsertionPollPauseMilliseconds = 220
     private var focusedTextPollingPausedUntil: Date?
     private var suggestionsPaused = false
 
@@ -875,6 +877,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             suggestionSession.commitNextWordAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
+            advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
             suggestionRepetitionSuppressor.recordAcceptance(
                 acceptedText,
                 mode: currentSuggestionRequestMode,
@@ -1091,7 +1094,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         ]
                     )
 
-                    if insertAcceptedText(acceptedText) {
+                    let skippedModes = insertionRetrySkippedModes(
+                        result: result,
+                        profile: baseline.profile,
+                        retryCount: baseline.retryCount
+                    )
+                    if insertAcceptedText(acceptedText, skippingInsertionModes: skippedModes) {
                         let retryBaseline = InsertionVerificationBaseline(
                             fieldIdentity: baseline.fieldIdentity,
                             previousTextBeforeCursor: baseline.previousTextBeforeCursor,
@@ -1105,6 +1113,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
 
+                DiagnosticsLog.shared.record(
+                    "insert-verification-final-failure",
+                    metadata: [
+                        "app": baseline.profile.bundleIdentifier,
+                        "result": String(describing: result),
+                        "acceptedChars": String(acceptedText.count),
+                        "retryCount": String(baseline.retryCount)
+                    ]
+                )
                 RawAutocompleteTraceLog.shared.record(
                     type: .insertionFailed,
                     suggestionID: baseline.suggestionID ?? "",
@@ -1126,6 +1143,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
+            if baseline.retryCount > 0 {
+                DiagnosticsLog.shared.record(
+                    "insert-verification-recovered",
+                    metadata: [
+                        "app": baseline.profile.bundleIdentifier,
+                        "acceptedChars": String(acceptedText.count),
+                        "retryCount": String(baseline.retryCount)
+                    ]
+                )
+            }
             RawAutocompleteTraceLog.shared.record(
                 type: .insertionVerified,
                 suggestionID: baseline.suggestionID ?? "",
@@ -1733,26 +1760,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hasher.combine(Int(rect.height.rounded()))
     }
 
-    private func insertAcceptedText(_ acceptedText: String) -> Bool {
+    private func insertionRetrySkippedModes(
+        result: InsertionVerificationResult,
+        profile: CompatibilityProfile,
+        retryCount: Int
+    ) -> Set<InsertionMode> {
+        guard result == .unchanged,
+              retryCount == 0,
+              profile.fallbackInsertionMode != nil else {
+            return []
+        }
+
+        return [profile.insertionMode]
+    }
+
+    private func insertAcceptedText(
+        _ acceptedText: String,
+        skippingInsertionModes skippedModes: Set<InsertionMode> = []
+    ) -> Bool {
         guard let profile = currentProfile else {
             return accessibilityClient.insertText(acceptedText)
         }
 
-        if InsertionModePlan.modes(for: profile).contains(.keyEvents) {
-            keyboardEventTap?.suppressPassthroughObservation(
-                until: Date().addingTimeInterval(0.20)
-            )
-        }
+        keyboardEventTap?.suppressPassthroughObservation(
+            until: Date().addingTimeInterval(0.25)
+        )
 
-        let result = insertionEngine.insert(acceptedText, profile: profile)
+        let result = insertionEngine.insert(
+            acceptedText,
+            profile: profile,
+            skipping: skippedModes
+        )
         DiagnosticsLog.shared.record(
             "insert",
             metadata: [
                 "app": profile.bundleIdentifier,
                 "mode": result.mode.rawValue,
-                "success": String(result.succeeded)
+                "success": String(result.succeeded),
+                "skippedModes": skippedModes
+                    .map(\.rawValue)
+                    .sorted()
+                    .joined(separator: ",")
             ]
         )
+
+        if result.succeeded {
+            focusedTextPollingPausedUntil = Date().addingTimeInterval(
+                TimeInterval(postInsertionPollPauseMilliseconds) / 1000
+            )
+        }
 
         return result.succeeded
     }
@@ -1861,6 +1917,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private func advanceCurrentSuggestionBaseline(afterAccepting acceptedText: String) {
+        guard !acceptedText.isEmpty else {
+            return
+        }
+
+        if let lastTextSnapshot,
+           lastTextSnapshot.fieldIdentity == currentFieldIdentity {
+            currentSuggestionTextBeforeCursor = lastTextSnapshot.textBeforeCursor
+            return
+        }
+
+        if let currentSuggestionTextBeforeCursor {
+            self.currentSuggestionTextBeforeCursor = currentSuggestionTextBeforeCursor + acceptedText
+        }
+    }
+
     private func rememberAcceptedWords(in text: String) {
         rememberRecentWords(recentWordExtractor.words(in: text))
     }
@@ -1906,14 +1978,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let typedSuffix = String(newTextBeforeCursor.dropFirst(originalTextBeforeCursor.count))
-        guard !typedSuffix.isEmpty else {
-            return
-        }
+        let progress = suggestionTypingProgressPolicy.progress(
+            originalTextBeforeCursor: originalTextBeforeCursor,
+            displayedText: displayedText,
+            newTextBeforeCursor: newTextBeforeCursor
+        )
 
-        let normalizedDisplayed = displayedText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let normalizedTyped = typedSuffix.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedDisplayed.hasPrefix(normalizedTyped) else {
+        guard case let .typedOver(typedSuffix) = progress else {
             return
         }
 
@@ -1946,13 +2017,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let typedSuffix = String(newTextBeforeCursor.dropFirst(originalTextBeforeCursor.count))
-        let normalizedDisplayed = displayedText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let normalizedTyped = typedSuffix.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let progress = suggestionTypingProgressPolicy.progress(
+            originalTextBeforeCursor: originalTextBeforeCursor,
+            displayedText: displayedText,
+            newTextBeforeCursor: newTextBeforeCursor
+        )
 
-        if normalizedDisplayed.hasPrefix(normalizedTyped), !normalizedTyped.isEmpty {
+        if case .typedThroughVisiblePrefix = progress {
             hideSuggestion(reason: "typed-through-visible-prefix")
-        } else {
+        } else if case .typedOver = progress {
             suggestionRepetitionSuppressor.recordMiss(
                 displayedText,
                 mode: currentSuggestionRequestMode,

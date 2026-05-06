@@ -13,7 +13,7 @@ CHROME_FIXTURE_WAS_SET=0
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome|codex|claude-code> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|all>]
+Usage: script/real_app_smoke.sh <textedit|chrome|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|all>]
 
 Runs a real app smoke pass where it is safe to automate. Codex and Claude Code
 are manual-gated so this script never types into an agent prompt by surprise.
@@ -61,7 +61,7 @@ while (($#)); do
 done
 
 case "$APP" in
-  textedit|chrome|codex|claude-code)
+  textedit|chrome|codex|claude-code|claude)
     ;;
   *)
     usage >&2
@@ -424,7 +424,7 @@ describe_plan() {
         echo "Plan: build/relaunch AutocompleteLab, open a disposable Chrome $CHROME_FIXTURE fixture, type a test fragment, then validate logs and traces."
       fi
       ;;
-    codex|claude-code)
+    codex|claude-code|claude)
       echo "Plan: manual-gated prompt smoke. The script prints the checklist and validates after you run it."
       echo "Safety: pass --manual-gate to continue."
       ;;
@@ -590,7 +590,7 @@ case "$APP" in
   chrome)
     run_chrome
     ;;
-  codex|claude-code)
+  codex|claude-code|claude)
     run_manual_gated
     ;;
 esac

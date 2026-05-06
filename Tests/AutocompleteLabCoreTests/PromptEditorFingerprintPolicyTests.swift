@@ -69,6 +69,17 @@ struct PromptEditorFingerprintPolicyTests {
         #expect(groupDecision.reason == "prompt-fingerprint")
         #expect(webAreaDecision.canSuggest)
         #expect(webAreaDecision.reason == "prompt-fingerprint")
+
+        let desktopDecision = policy.decision(
+            bundleIdentifier: "com.anthropic.claudefordesktop",
+            role: "AXTextArea",
+            fingerprintText: "Describe a task or ask a question",
+            elementRect: CGRect(x: 100, y: 620, width: 700, height: 84),
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
+        )
+
+        #expect(desktopDecision.canSuggest)
+        #expect(desktopDecision.reason == "prompt-fingerprint")
     }
 
     @Test("Blocks dogfood wrappers without prompt fingerprints")
