@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let accessibilityClient = AccessibilityClient()
     private let profileStore = CompatibilityProfileStore.mvp
     private let promptEditorPolicy = PromptEditorFingerprintPolicy()
+    private let suggestionControlPolicy = SuggestionControlPolicy()
     private let activationPolicy = CompletionActivationPolicy()
     private let triggerPolicy = SuggestionTriggerPolicy(
         charactersBeforePauseRequest: 1,
@@ -285,19 +286,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var pauseSuggestionsTitle: String {
-        suggestionsPaused ? "Resume Suggestions" : "Pause Suggestions"
+        suggestionControlState.toggleTitle
+    }
+
+    private var suggestionControlState: SuggestionControlState {
+        suggestionControlPolicy.state(isPaused: suggestionsPaused)
     }
 
     private func pollFocusedText() {
-        guard !suggestionsPaused else {
-            setSuggestionDecision("Paused")
+        if case let .blocked(reason) = suggestionControlPolicy.suggestionAvailability(for: suggestionControlState) {
+            setSuggestionDecision(reason.decisionText)
             let frontmostApp = accessibilityClient.frontmostApplication()
             updateStatusMenu(
                 app: frontmostApp,
                 profile: frontmostApp.flatMap { profileStore.profile(for: $0.bundleIdentifier) },
                 appEnabled: frontmostApp.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
             )
-            hideSuggestion(reason: "global-pause")
+            hideSuggestion(reason: reason.hideReason)
             return
         }
 
@@ -711,7 +716,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard keyboardCapturePolicy.shouldCaptureKeys(
             isTrustedForAccessibility: accessibilityClient.isTrusted,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+            controlState: suggestionControlState
         ) else {
             return false
         }
@@ -2021,7 +2027,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appEnabled: Bool
     ) {
         let permission = accessibilityClient.isTrusted ? "AX ok" : "AX missing"
-        let control = suggestionsPaused ? "paused" : "running"
+        let control = suggestionControlState.statusName
         let appName = app?.localizedName ?? "No app"
         let profileName = profile?.displayName ?? "unsupported"
         let enabled = appEnabled ? "on" : "off"
@@ -2374,14 +2380,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc
     private func togglePauseSuggestions() {
-        suggestionsPaused.toggle()
+        let transition = suggestionControlPolicy.toggle(suggestionControlState)
+        suggestionsPaused = transition.nextState.isPaused
 
-        if suggestionsPaused {
-            setSuggestionDecision("Paused")
-            clearFocusedFieldState(hideReason: "global-pause")
-            stopKeyboardEventTapNow(reason: "global-pause")
-        } else {
-            setSuggestionDecision("Ready: resumed")
+        setSuggestionDecision(transition.decisionText)
+
+        let cleanupReason = transition.cleanupReason?.hideReason
+        if transition.shouldClearFocusedField {
+            clearFocusedFieldState(hideReason: cleanupReason ?? "control-toggle")
+        }
+
+        if transition.shouldStopKeyboardCapture {
+            stopKeyboardEventTapNow(reason: cleanupReason ?? "control-toggle")
         }
 
         persistPauseState()
