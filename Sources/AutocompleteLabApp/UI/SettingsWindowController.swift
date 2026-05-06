@@ -37,6 +37,18 @@ struct SettingsPrivacyState: Equatable {
     }
 }
 
+struct SettingsKeyboardShortcutState: Equatable {
+    let acceptAllShortcut: AcceptAllShortcut
+
+    var statusText: String {
+        "Shortcuts: Tab next word, \(acceptAllShortcut.displayName) full accept"
+    }
+
+    var cycleButtonTitle: String {
+        "Use \(acceptAllShortcut.next.displayName)"
+    }
+}
+
 @MainActor
 final class SettingsWindowController: NSObject {
     private let window: NSWindow
@@ -59,6 +71,8 @@ final class SettingsWindowController: NSObject {
     private let toggleRawTraceButton = NSButton(title: "Raw Text Off", target: nil, action: nil)
     private let toggleScreenshotTraceButton = NSButton(title: "Screenshots Off", target: nil, action: nil)
     private let deleteLocalLogsButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
+    private let shortcutLabel = NSTextField(labelWithString: "")
+    private let cycleAcceptAllShortcutButton = NSButton(title: "Use Option-Tab", target: nil, action: nil)
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
     private let requestPermission: () -> Void
     private let openAccessibilitySettings: () -> Void
@@ -70,6 +84,7 @@ final class SettingsWindowController: NSObject {
     private let toggleRawContentTracing: () -> Void
     private let toggleScreenshotTracing: () -> Void
     private let deleteLocalLogs: () -> Void
+    private let cycleAcceptAllShortcut: () -> Void
     private var currentRuntimeAction: RuntimeReadinessAction = .none
 
     init(
@@ -82,7 +97,8 @@ final class SettingsWindowController: NSObject {
         toggleTracingPaused: @escaping () -> Void,
         toggleRawContentTracing: @escaping () -> Void,
         toggleScreenshotTracing: @escaping () -> Void,
-        deleteLocalLogs: @escaping () -> Void
+        deleteLocalLogs: @escaping () -> Void,
+        cycleAcceptAllShortcut: @escaping () -> Void
     ) {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
@@ -94,8 +110,9 @@ final class SettingsWindowController: NSObject {
         self.toggleRawContentTracing = toggleRawContentTracing
         self.toggleScreenshotTracing = toggleScreenshotTracing
         self.deleteLocalLogs = deleteLocalLogs
+        self.cycleAcceptAllShortcut = cycleAcceptAllShortcut
 
-        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 650))
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 690))
         window = NSWindow(
             contentRect: contentView.frame,
             styleMask: [.titled, .closable],
@@ -118,7 +135,8 @@ final class SettingsWindowController: NSObject {
         runtimeTargetSummary: String,
         modelDirectoryPath: String,
         currentApp: SettingsCurrentAppState,
-        privacy: SettingsPrivacyState
+        privacy: SettingsPrivacyState,
+        keyboardShortcuts: SettingsKeyboardShortcutState
     ) {
         refresh(
             isTrusted: isTrusted,
@@ -127,7 +145,8 @@ final class SettingsWindowController: NSObject {
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
             currentApp: currentApp,
-            privacy: privacy
+            privacy: privacy,
+            keyboardShortcuts: keyboardShortcuts
         )
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -141,7 +160,8 @@ final class SettingsWindowController: NSObject {
         runtimeTargetSummary: String,
         modelDirectoryPath: String,
         currentApp: SettingsCurrentAppState,
-        privacy: SettingsPrivacyState
+        privacy: SettingsPrivacyState,
+        keyboardShortcuts: SettingsKeyboardShortcutState
     ) {
         let guidance = RuntimeReadinessGuidance(report: runtimeReport)
         permissionLabel.stringValue = isTrusted ? "Accessibility: granted" : "Accessibility: needed"
@@ -170,6 +190,8 @@ final class SettingsWindowController: NSObject {
         toggleTracingButton.title = privacy.tracingPaused ? "Resume Tracing" : "Pause Tracing"
         toggleRawTraceButton.title = privacy.rawContentTracingEnabled ? "Raw Text On" : "Raw Text Off"
         toggleScreenshotTraceButton.title = privacy.screenshotTracingEnabled ? "Screenshots On" : "Screenshots Off"
+        shortcutLabel.stringValue = keyboardShortcuts.statusText
+        cycleAcceptAllShortcutButton.title = keyboardShortcuts.cycleButtonTitle
         firstRunLabel.stringValue = onboardingText(
             isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
@@ -215,6 +237,7 @@ final class SettingsWindowController: NSObject {
         privacyPathLabel.lineBreakMode = .byTruncatingMiddle
         privacyPathLabel.maximumNumberOfLines = 1
         privacyPathLabel.preferredMaxLayoutWidth = 420
+        shortcutLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
 
         let requestButton = NSButton(title: "Request Accessibility", target: self, action: #selector(requestAccessibility))
         requestButton.bezelStyle = .rounded
@@ -248,6 +271,9 @@ final class SettingsWindowController: NSObject {
         deleteLocalLogsButton.target = self
         deleteLocalLogsButton.action = #selector(deleteLocalLogsControl)
         deleteLocalLogsButton.bezelStyle = .rounded
+        cycleAcceptAllShortcutButton.target = self
+        cycleAcceptAllShortcutButton.action = #selector(cycleAcceptAllShortcutControl)
+        cycleAcceptAllShortcutButton.bezelStyle = .rounded
 
         let screenRecording = NSButton(checkboxWithTitle: "Screen Recording", target: nil, action: nil)
         screenRecording.isEnabled = false
@@ -282,6 +308,8 @@ final class SettingsWindowController: NSObject {
             toggleRawTraceButton,
             toggleScreenshotTraceButton,
             deleteLocalLogsButton,
+            shortcutLabel,
+            cycleAcceptAllShortcutButton,
             firstRunLabel,
             screenRecording,
             clipboardFallback,
@@ -363,5 +391,10 @@ final class SettingsWindowController: NSObject {
     @objc
     private func deleteLocalLogsControl() {
         deleteLocalLogs()
+    }
+
+    @objc
+    private func cycleAcceptAllShortcutControl() {
+        cycleAcceptAllShortcut()
     }
 }

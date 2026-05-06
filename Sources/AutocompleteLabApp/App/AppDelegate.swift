@@ -23,7 +23,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private lazy var engine: any CompletionEngine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
-    private let keyboardRouter = KeyboardActionRouter()
     private let keyboardCapturePolicy = KeyboardCapturePolicy()
     private let insertionVerification = InsertionVerification()
     private let insertionRetryPolicy = InsertionRetryPolicy()
@@ -64,6 +63,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         deleteLocalLogs: { [weak self] in
             self?.deleteLocalPrivacyLogs()
+        },
+        cycleAcceptAllShortcut: { [weak self] in
+            self?.cycleAcceptAllShortcut()
         }
     )
 
@@ -114,12 +116,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let postInsertionPollPauseMilliseconds = 220
     private var focusedTextPollingPause = FocusedTextPollingPause()
     private var suggestionsPaused = false
+    private var keyboardShortcutConfiguration = KeyboardShortcutConfiguration.default
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ProcessInfo.processInfo.disableAutomaticTermination("AutocompleteLab runs as a persistent menu bar agent.")
         NSApp.setActivationPolicy(.accessory)
         loadPauseState()
         loadDisabledApps()
+        loadKeyboardShortcutConfiguration()
         configureStatusItem()
         DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
@@ -291,7 +295,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
             currentApp: settingsCurrentAppState,
-            privacy: settingsPrivacyState
+            privacy: settingsPrivacyState,
+            keyboardShortcuts: settingsKeyboardShortcutState
         )
     }
 
@@ -331,6 +336,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled,
             diagnosticsPath: DiagnosticsLog.shared.path,
             tracePath: RawAutocompleteTraceLog.shared.path
+        )
+    }
+
+    private var settingsKeyboardShortcutState: SettingsKeyboardShortcutState {
+        SettingsKeyboardShortcutState(
+            acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut
         )
     }
 
@@ -805,7 +816,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
             supportsOneWordAcceptance: currentProfile?.supportsOneWordAcceptance == true,
             supportsFullAcceptance: currentProfile?.supportsFullAcceptance == true,
-            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown
+            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+            acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut
         )
     }
 
@@ -909,7 +921,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
 
-        let action = keyboardRouter.action(
+        let action = KeyboardActionRouter(shortcutConfiguration: keyboardShortcutConfiguration).action(
             for: key,
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
         )
@@ -2194,7 +2206,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
             currentApp: settingsCurrentAppState,
-            privacy: settingsPrivacyState
+            privacy: settingsPrivacyState,
+            keyboardShortcuts: settingsKeyboardShortcutState
         )
 
         guard lastStatusLine != statusLine else {
@@ -2291,7 +2304,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
             currentApp: settingsCurrentAppState,
-            privacy: settingsPrivacyState
+            privacy: settingsPrivacyState,
+            keyboardShortcuts: settingsKeyboardShortcutState
         )
         DiagnosticsLog.shared.record("request-accessibility")
     }
@@ -2315,7 +2329,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
             currentApp: settingsCurrentAppState,
-            privacy: settingsPrivacyState
+            privacy: settingsPrivacyState,
+            keyboardShortcuts: settingsKeyboardShortcutState
         )
     }
 
@@ -2458,6 +2473,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.record(
             "local-privacy-logs-deleted",
             metadata: ["surface": "settings"]
+        )
+        refreshRuntimeChrome()
+    }
+
+    private func cycleAcceptAllShortcut() {
+        keyboardShortcutConfiguration.acceptAllShortcut = keyboardShortcutConfiguration.acceptAllShortcut.next
+        persistKeyboardShortcutConfiguration()
+        updateKeyboardEventTapSnapshot()
+        DiagnosticsLog.shared.record(
+            "keyboard-shortcut-control",
+            metadata: [
+                "surface": "settings",
+                "acceptAllShortcut": keyboardShortcutConfiguration.acceptAllShortcut.rawValue
+            ]
         )
         refreshRuntimeChrome()
     }
@@ -2667,6 +2696,10 @@ private extension AppDelegate {
         "SuggestionsPaused"
     }
 
+    static var acceptAllShortcutDefaultsKey: String {
+        "AcceptAllShortcut"
+    }
+
     func loadPauseState() {
         suggestionsPaused = UserDefaults.standard.bool(forKey: Self.suggestionsPausedDefaultsKey)
     }
@@ -2690,6 +2723,19 @@ private extension AppDelegate {
         UserDefaults.standard.set(
             selection.persistedBundleIdentifiers,
             forKey: Self.disabledAppsDefaultsKey
+        )
+    }
+
+    func loadKeyboardShortcutConfiguration() {
+        keyboardShortcutConfiguration = KeyboardShortcutConfiguration(
+            persistedAcceptAllShortcutRawValue: UserDefaults.standard.string(forKey: Self.acceptAllShortcutDefaultsKey)
+        )
+    }
+
+    func persistKeyboardShortcutConfiguration() {
+        UserDefaults.standard.set(
+            keyboardShortcutConfiguration.acceptAllShortcut.rawValue,
+            forKey: Self.acceptAllShortcutDefaultsKey
         )
     }
 }

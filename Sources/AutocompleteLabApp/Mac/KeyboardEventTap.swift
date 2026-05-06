@@ -386,10 +386,12 @@ final class KeyboardEventTap: @unchecked Sendable {
         case .tab:
             shouldConsume = snapshot.supportsOneWordAcceptance
         case .backtick:
-            shouldConsume = snapshot.supportsFullAcceptance
+            shouldConsume = snapshot.supportsFullAcceptance && snapshot.acceptAllShortcut == .backtick
         case .escape:
             shouldConsume = true
-        case .optionTab, .other:
+        case .optionTab:
+            shouldConsume = snapshot.supportsFullAcceptance && snapshot.acceptAllShortcut == .optionTab
+        case .other:
             shouldConsume = false
         }
 
@@ -505,17 +507,20 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
     var supportsOneWordAcceptance: Bool
     var supportsFullAcceptance: Bool
     var isInvalidatedByUserTyping: Bool
+    var acceptAllShortcut: AcceptAllShortcut
 
     init(
         hasVisibleSuggestion: Bool = false,
         supportsOneWordAcceptance: Bool = false,
         supportsFullAcceptance: Bool = false,
-        isInvalidatedByUserTyping: Bool = false
+        isInvalidatedByUserTyping: Bool = false,
+        acceptAllShortcut: AcceptAllShortcut = .backtick
     ) {
         self.hasVisibleSuggestion = hasVisibleSuggestion
         self.supportsOneWordAcceptance = supportsOneWordAcceptance
         self.supportsFullAcceptance = supportsFullAcceptance
         self.isInvalidatedByUserTyping = isInvalidatedByUserTyping
+        self.acceptAllShortcut = acceptAllShortcut
     }
 }
 
