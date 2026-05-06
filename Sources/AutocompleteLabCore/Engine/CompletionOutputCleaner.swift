@@ -48,15 +48,21 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
-        guard !looksLikeAssistantMeta(singleLine) else {
+        let withoutPromptEchoLabel = strippingPromptEchoLabel(from: singleLine)
+
+        guard !withoutPromptEchoLabel.isEmpty else {
             return nil
         }
 
-        guard !looksLikeGenericChatFiller(singleLine) else {
+        guard !looksLikeAssistantMeta(withoutPromptEchoLabel) else {
             return nil
         }
 
-        let normalizedSuggestion = mode == .wordCompletion ? singleLine : ensureLeadingSpace(singleLine)
+        guard !looksLikeGenericChatFiller(withoutPromptEchoLabel) else {
+            return nil
+        }
+
+        let normalizedSuggestion = mode == .wordCompletion ? withoutPromptEchoLabel : ensureLeadingSpace(withoutPromptEchoLabel)
         let trimmedSuggestion: String
         if let textBeforeCursor {
             trimmedSuggestion = CompletionPrefixTrimmer.trim(normalizedSuggestion, after: textBeforeCursor)
@@ -103,6 +109,21 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("user is ")
             || normalized.hasPrefix("assistant:")
             || normalized.hasPrefix("system:")
+    }
+
+    private func strippingPromptEchoLabel(from text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        for label in Self.promptEchoLabels {
+            guard trimmed.lowercased().hasPrefix(label) else {
+                continue
+            }
+
+            return String(trimmed.dropFirst(label.count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        return trimmed
     }
 
     private func looksLikeGenericChatFiller(_ text: String) -> Bool {
@@ -184,6 +205,15 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "a", "an", "and", "are", "as", "at", "be", "but", "for", "i",
         "if", "in", "is", "it", "of", "on", "or", "so", "the", "to",
         "was", "we", "were", "with", "you"
+    ]
+
+    private static let promptEchoLabels = [
+        "next words:",
+        "next word:",
+        "continuation:",
+        "completion:",
+        "suggestion:",
+        "suffix:"
     ]
 }
 

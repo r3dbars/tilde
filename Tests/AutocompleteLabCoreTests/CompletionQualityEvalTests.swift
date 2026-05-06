@@ -51,6 +51,13 @@ struct CompletionQualityEvalTests {
                 expectedVisibleText: " keep moving"
             ),
             EvalCase(
+                name: "prompt echo label stripped",
+                rawOutput: "Next words: keep moving",
+                textBeforeCursor: "Let's",
+                mode: .phraseContinuation,
+                expectedVisibleText: " keep moving"
+            ),
+            EvalCase(
                 name: "earlier context repeat blocked",
                 rawOutput: "know you are ready",
                 textBeforeCursor: "I know you are\n\nHey how are you",
