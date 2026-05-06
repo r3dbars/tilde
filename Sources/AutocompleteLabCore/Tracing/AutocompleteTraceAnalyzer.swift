@@ -353,6 +353,18 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             }
 
             if event.type == .suggestionPresented,
+               event.metadata["placementConfidenceBand"] == "low" {
+                let score = event.metadata["placementConfidenceScore"] ?? "unknown"
+                add(
+                    key: "Low-confidence placement in \(event.appBundleIdentifier)",
+                    event: event,
+                    cause: "Placement confidence was \(score), so this app needs a better caret anchor.",
+                    category: "renderer/caret bug",
+                    buckets: &buckets
+                )
+            }
+
+            if event.type == .suggestionPresented,
                let latencyMilliseconds = event.latencyMilliseconds,
                latencyMilliseconds >= slowSuggestionThresholdMilliseconds(for: event.requestMode) {
                 add(

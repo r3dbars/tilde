@@ -26,6 +26,9 @@ struct PlacementHealthTests {
         #expect(presentation.reason == .healthy)
         #expect(!presentation.isSelfHealing)
         #expect(presentation.metadata["placementSelfHealingApplied"] == "false")
+        #expect(presentation.metadata["placementSelfHealingAction"] == "none")
+        #expect(presentation.metadata["placementConfidenceScore"] == "1.00")
+        #expect(presentation.metadata["placementConfidenceBand"] == "high")
     }
 
     @Test("Falls back to mirror when inline caret is missing and detached anchors are allowed")
@@ -51,6 +54,9 @@ struct PlacementHealthTests {
         #expect(presentation.isSelfHealing)
         #expect(presentation.metadata["placementRequestedRenderMode"] == "inlineAdjacent")
         #expect(presentation.metadata["placementEffectiveRenderMode"] == "floatingMirror")
+        #expect(presentation.metadata["placementSelfHealingAction"] == "fallback-floating-mirror")
+        #expect(presentation.metadata["placementConfidenceScore"] == "0.40")
+        #expect(presentation.metadata["placementConfidenceBand"] == "low")
     }
 
     @Test("Suppresses missing inline caret when detached anchors are disabled")
@@ -71,6 +77,9 @@ struct PlacementHealthTests {
         }
 
         #expect(suppression.reason == .detachedSuggestionDisabled)
+        #expect(suppression.metadata["placementSelfHealingAction"] == "suppress")
+        #expect(suppression.metadata["placementConfidenceScore"] == "0.00")
+        #expect(suppression.metadata["placementConfidenceBand"] == "none")
     }
 
     @Test("Suppresses invalid inline caret when detached anchors are disabled")
@@ -160,6 +169,8 @@ struct PlacementHealthTests {
         #expect(presentation.anchorRect == caret)
         #expect(presentation.anchorSource == .caret)
         #expect(presentation.reason == .healthy)
+        #expect(presentation.metadata["placementConfidenceScore"] == "0.80")
+        #expect(presentation.metadata["placementConfidenceBand"] == "high")
     }
 
     @Test("Suppresses floating mirror when all anchors are unusable")

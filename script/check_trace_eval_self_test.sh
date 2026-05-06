@@ -143,7 +143,7 @@ if grep -F "that works" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; t
   exit 1
 fi
 
-if grep -F "ng" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+if grep -F "3x wordCompletion: ng" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test incorrectly reported typed-through suggestions as repeated misses" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
   exit 1
@@ -187,6 +187,37 @@ fi
 if ! grep -F "word-too-long: wordCompletion showed 2 words" /tmp/autocomplete-trace-eval-performance-fail.txt >/dev/null; then
   echo "trace eval self-test did not catch too-long word completions" >&2
   cat /tmp/autocomplete-trace-eval-performance-fail.txt >&2
+  exit 1
+fi
+
+cat >"$BAD_TRACE_FILE" <<'JSONL'
+{"type":"suggestionPresented","suggestionID":"low-place","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":80,"metadata":{"placementConfidenceBand":"low","placementConfidenceScore":"0.40","placementSelfHealingAction":"fallback-floating-mirror"}}
+{"type":"suggestionPresented","suggestionID":"missing-place","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{}}
+JSONL
+
+if AUTOCOMPLETE_LAB_TRACE_PATH="$BAD_TRACE_FILE" \
+   AUTOCOMPLETE_LAB_TRACE_REQUIRE_CONFIDENT_PLACEMENT=1 \
+   script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-placement-fail.txt 2>&1; then
+  echo "trace eval self-test expected placement confidence guardrails to fail" >&2
+  cat /tmp/autocomplete-trace-eval-placement-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "placement confidence guardrail failed" /tmp/autocomplete-trace-eval-placement-fail.txt >/dev/null; then
+  echo "trace eval self-test did not explain placement confidence failures" >&2
+  cat /tmp/autocomplete-trace-eval-placement-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "low-place: placement confidence low (0.40)" /tmp/autocomplete-trace-eval-placement-fail.txt >/dev/null; then
+  echo "trace eval self-test did not catch low-confidence placement" >&2
+  cat /tmp/autocomplete-trace-eval-placement-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "missing-place: missing placementConfidenceBand" /tmp/autocomplete-trace-eval-placement-fail.txt >/dev/null; then
+  echo "trace eval self-test did not catch missing placement confidence metadata" >&2
+  cat /tmp/autocomplete-trace-eval-placement-fail.txt >&2
   exit 1
 fi
 
