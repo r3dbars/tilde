@@ -11,6 +11,14 @@ struct InsertionRetryPolicyTests {
         #expect(!policy.shouldRetry(result: .unchanged, insertionMode: .keyEvents, retryCount: 1))
     }
 
+    @Test("Retries one unchanged AX value replacement")
+    func retriesOneUnchangedAXValueReplacement() {
+        let policy = InsertionRetryPolicy(maxRetryCount: 1)
+
+        #expect(policy.shouldRetry(result: .unchanged, insertionMode: .axValueReplacement, retryCount: 0))
+        #expect(!policy.shouldRetry(result: .unchanged, insertionMode: .axValueReplacement, retryCount: 1))
+    }
+
     @Test("Retries unchanged hybrid AX then key-event insertion")
     func retriesUnchangedHybridInsertion() {
         let policy = InsertionRetryPolicy(maxRetryCount: 2)
@@ -28,7 +36,6 @@ struct InsertionRetryPolicyTests {
         #expect(!policy.shouldRetry(result: .changedUnexpectedly, insertionMode: .keyEvents, retryCount: 0))
         #expect(!policy.shouldRetry(result: .verified, insertionMode: .keyEvents, retryCount: 0))
         #expect(!policy.shouldRetry(result: .unchanged, insertionMode: .axSelectedText, retryCount: 0))
-        #expect(!policy.shouldRetry(result: .unchanged, insertionMode: .axValueReplacement, retryCount: 0))
         #expect(!policy.shouldRetry(result: .unchanged, insertionMode: .clipboardFallbackOptIn, retryCount: 0))
         #expect(!policy.shouldRetry(result: .unchanged, insertionMode: .disabled, retryCount: 0))
     }

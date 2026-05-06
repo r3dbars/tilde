@@ -1743,9 +1743,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var hasher = Hasher()
         hasher.combine(context.role ?? "unknown")
         hasher.combine(context.subrole ?? "none")
+        combineStableFingerprint(context.fingerprint, into: &hasher)
         combineRoundedRect(context.elementRect, into: &hasher)
         combineRoundedRect(context.windowRect, into: &hasher)
         return hasher.finalize()
+    }
+
+    private func combineStableFingerprint(_ fingerprint: FocusedElementFingerprint, into hasher: inout Hasher) {
+        combineStableFingerprintValue(fingerprint.identifier, label: "identifier", into: &hasher)
+        combineStableFingerprintValue(fingerprint.title, label: "title", into: &hasher)
+        combineStableFingerprintValue(fingerprint.description, label: "description", into: &hasher)
+        combineStableFingerprintValue(fingerprint.help, label: "help", into: &hasher)
+        combineStableFingerprintValue(fingerprint.placeholder, label: "placeholder", into: &hasher)
+        combineStableFingerprintValue(fingerprint.windowTitle, label: "windowTitle", into: &hasher)
+    }
+
+    private func combineStableFingerprintValue(_ value: String?, label: String, into hasher: inout Hasher) {
+        let normalized = value?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        guard let normalized, !normalized.isEmpty else {
+            hasher.combine("\(label):missing")
+            return
+        }
+
+        hasher.combine(label)
+        hasher.combine(normalized)
     }
 
     private func combineRoundedRect(_ rect: CGRect?, into hasher: inout Hasher) {

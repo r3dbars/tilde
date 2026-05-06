@@ -255,6 +255,9 @@ if [[ "$APP" == "obsidian" ]] &&
 fi
 
 require_pattern "suggestion-presented .*app=$BUNDLE_ID .*effectiveRenderMode=($EXPECTED_RENDER)" "suggestion presented with expected render mode"
+if [[ "$APP" == "codex" || "$APP" == "claude-code" || "$APP" == "claude" ]]; then
+  require_pattern "suggestion-presented .*app=$BUNDLE_ID .*placementAnchorSource=caret .*placementConfidenceBand=high" "caret-anchored high-confidence dogfood placement"
+fi
 require_line_with_fields "Tab handled by autocomplete" "keyboard-action" "app=$BUNDLE_ID" "key=tab" "action=acceptNextWord" "handled=true"
 require_line_with_fields "full accept key handled by autocomplete" "keyboard-action" "app=$BUNDLE_ID" "key=backtick" "action=acceptAllVisible" "handled=true"
 require_pattern "insert .*app=$BUNDLE_ID .*success=true" "successful insert"

@@ -82,6 +82,57 @@ struct PromptEditorFingerprintPolicyTests {
         #expect(desktopDecision.reason == "prompt-fingerprint")
     }
 
+    @Test("Allows generic prompt fingerprints only with composer geometry")
+    func genericPromptFingerprintRequiresComposerGeometry() {
+        let goodDecision = policy.decision(
+            bundleIdentifier: "com.openai.codex",
+            role: "AXTextArea",
+            fingerprintText: "chat input",
+            elementRect: CGRect(x: 100, y: 620, width: 700, height: 84),
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
+        )
+        let centralDecision = policy.decision(
+            bundleIdentifier: "com.openai.codex",
+            role: "AXTextArea",
+            fingerprintText: "chat input",
+            elementRect: CGRect(x: 100, y: 180, width: 700, height: 340),
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
+        )
+
+        #expect(goodDecision.canSuggest)
+        #expect(goodDecision.reason == "generic-prompt-geometry")
+        #expect(!centralDecision.canSuggest)
+        #expect(centralDecision.reason == "generic-prompt-not-composer")
+    }
+
+    @Test("Blocks generic prompt fingerprints without geometry")
+    func blocksGenericPromptFingerprintWithoutGeometry() {
+        let decision = policy.decision(
+            bundleIdentifier: "com.openai.codex",
+            role: "AXTextArea",
+            fingerprintText: "input",
+            elementRect: nil,
+            windowRect: nil
+        )
+
+        #expect(!decision.canSuggest)
+        #expect(decision.reason == "missing-prompt-bounds")
+    }
+
+    @Test("Blocks bare prompt fingerprints without composer geometry")
+    func blocksBarePromptFingerprintWithoutGeometry() {
+        let decision = policy.decision(
+            bundleIdentifier: "com.openai.codex",
+            role: "AXTextArea",
+            fingerprintText: "prompt",
+            elementRect: nil,
+            windowRect: nil
+        )
+
+        #expect(!decision.canSuggest)
+        #expect(decision.reason == "missing-prompt-bounds")
+    }
+
     @Test("Blocks dogfood wrappers without prompt fingerprints")
     func blocksDogfoodWrappersWithoutPromptFingerprints() {
         let decision = policy.decision(
@@ -108,6 +159,20 @@ struct PromptEditorFingerprintPolicyTests {
 
         #expect(decision.canSuggest)
         #expect(decision.reason == "prompt-geometry")
+    }
+
+    @Test("Blocks top-edge dogfood text areas")
+    func blocksTopEdgeTextAreas() {
+        let decision = policy.decision(
+            bundleIdentifier: "com.openai.codex",
+            role: "AXTextArea",
+            fingerprintText: "",
+            elementRect: CGRect(x: 100, y: 8, width: 700, height: 56),
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
+        )
+
+        #expect(!decision.canSuggest)
+        #expect(decision.reason == "not-prompt-like")
     }
 
     @Test("Blocks large central dogfood text areas")

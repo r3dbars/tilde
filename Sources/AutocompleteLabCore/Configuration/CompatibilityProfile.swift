@@ -179,13 +179,13 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             bundleIdentifier: "com.openai.codex",
             displayName: "Codex",
             renderMode: .inlineAdjacent,
-            insertionMode: .keyEvents,
+            insertionMode: .axValueReplacement,
             fallbackRenderMode: .floatingMirror,
-            fallbackInsertionMode: .axThenKeyEvents,
+            fallbackInsertionMode: .keyEvents,
             fieldIdentityMode: .stableBounds,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Dogfood target. Prefer caret-bound inline suggestions when the prompt editor exposes bounds. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions."
+            notes: "Dogfood target. Prefer caret-bound inline suggestions and AX value replacement in the prompt editor. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claude-code",

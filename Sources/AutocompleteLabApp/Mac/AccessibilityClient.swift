@@ -358,7 +358,9 @@ final class AccessibilityClient {
             moveInsertionPointToLineEnd()
         }
 
-        return replacement.text != textBeforeInsert
+        Thread.sleep(forTimeInterval: 0.03)
+        let textAfterInsert = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String
+        return textAfterInsert == replacement.text
     }
 
     private func cursorMatches(_ expectedRange: CFRange, in element: AXUIElement) -> Bool {
