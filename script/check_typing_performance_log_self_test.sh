@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+LOG_PATH="$TMP_DIR/diagnostics.log"
+
+cat >"$LOG_PATH" <<'EOF'
+2026-05-06T10:00:00Z launch accessibility=trusted
+2026-05-06T10:00:01Z keyboard-event-tap-latency decision=consume durationMicros=410 key=tab
+2026-05-06T10:00:02Z keyboard-event-tap-latency decision=passthrough durationMicros=620 key=escape
+2026-05-06T10:00:03Z keyboard-event-tap-latency-summary count=3 maxMicros=900 p50Micros=500 p95Micros=900 p99Micros=900 reason=stop
+EOF
+
+AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES=3 \
+  script/check_typing_performance_log.sh >"$TMP_DIR/pass.txt"
+
+if ! grep -F "Raw event tap latency: n=2" "$TMP_DIR/pass.txt" >/dev/null; then
+  echo "typing performance self-test did not summarize raw latency samples" >&2
+  cat "$TMP_DIR/pass.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Latency summary windows: n=1 samples=3" "$TMP_DIR/pass.txt" >/dev/null; then
+  echo "typing performance self-test did not summarize latency windows" >&2
+  cat "$TMP_DIR/pass.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Typing performance log verified." "$TMP_DIR/pass.txt" >/dev/null; then
+  echo "typing performance self-test did not pass the good log" >&2
+  cat "$TMP_DIR/pass.txt" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-05-06T10:00:00Z keyboard-event-tap-latency decision=consume durationMicros=1200 key=tab
+2026-05-06T10:00:01Z keyboard-event-tap-latency-slow decision=consume durationMicros=9100 key=tab
+EOF
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" script/check_typing_performance_log.sh >"$TMP_DIR/slow.txt" 2>&1; then
+  echo "typing performance self-test expected slow markers to fail" >&2
+  cat "$TMP_DIR/slow.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "slow event tap latency marker 9100us" "$TMP_DIR/slow.txt" >/dev/null; then
+  echo "typing performance self-test did not explain slow latency markers" >&2
+  cat "$TMP_DIR/slow.txt" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-05-06T10:00:00Z keyboard-event-tap-latency-summary count=100 maxMicros=11000 p50Micros=600 p95Micros=9000 p99Micros=10500 reason=sample-window
+EOF
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" script/check_typing_performance_log.sh >"$TMP_DIR/summary-fail.txt" 2>&1; then
+  echo "typing performance self-test expected slow summaries to fail" >&2
+  cat "$TMP_DIR/summary-fail.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "event tap p95 9000us exceeds 8000us" "$TMP_DIR/summary-fail.txt" >/dev/null; then
+  echo "typing performance self-test did not catch slow p95 summaries" >&2
+  cat "$TMP_DIR/summary-fail.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "event tap max 11000us exceeds 8000us" "$TMP_DIR/summary-fail.txt" >/dev/null; then
+  echo "typing performance self-test did not catch slow max summaries" >&2
+  cat "$TMP_DIR/summary-fail.txt" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-05-06T10:00:00Z keyboard-event-tap-disabled reason=timeout
+EOF
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" script/check_typing_performance_log.sh >"$TMP_DIR/disabled-timeout.txt" 2>&1; then
+  echo "typing performance self-test expected timeout disables to fail" >&2
+  cat "$TMP_DIR/disabled-timeout.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "event tap disabled reason=timeout" "$TMP_DIR/disabled-timeout.txt" >/dev/null; then
+  echo "typing performance self-test did not catch timeout disables" >&2
+  cat "$TMP_DIR/disabled-timeout.txt" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-05-06T10:00:00Z keyboard-event-tap-disabled reason=user-input
+EOF
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" script/check_typing_performance_log.sh >"$TMP_DIR/disabled-user-input.txt" 2>&1; then
+  echo "typing performance self-test expected user-input disables to fail" >&2
+  cat "$TMP_DIR/disabled-user-input.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "event tap disabled reason=user-input" "$TMP_DIR/disabled-user-input.txt" >/dev/null; then
+  echo "typing performance self-test did not catch user-input disables" >&2
+  cat "$TMP_DIR/disabled-user-input.txt" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-05-06T10:00:00Z keyboard-event-tap-disabled reason=timeout
+2026-05-06T10:00:01Z keyboard-event-tap-latency decision=consume durationMicros=500 key=tab
+EOF
+
+AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+AUTOCOMPLETE_LAB_LOG_START_LINE=1 \
+AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES=1 \
+  script/check_typing_performance_log.sh >"$TMP_DIR/sliced-pass.txt"
+
+if ! grep -F "Start line: 1" "$TMP_DIR/sliced-pass.txt" >/dev/null; then
+  echo "typing performance self-test did not honor AUTOCOMPLETE_LAB_LOG_START_LINE" >&2
+  cat "$TMP_DIR/sliced-pass.txt" >&2
+  exit 1
+fi
+
+echo "Typing performance log self-test passed."
