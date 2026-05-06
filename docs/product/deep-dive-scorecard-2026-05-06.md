@@ -30,7 +30,7 @@ install/repair and better shortcut controls before it feels fully productized.
 | Keyboard capture safety | 9.5/10 | Capture starts only while a suggestion is visible, passes ordinary typing through, and the real-app smoke now asserts the target app stays frontmost before accept. |
 | Acceptance reliability | 9/10 | TextEdit and Chrome fixtures verify Tab plus full accept. Codex and Claude desktop have previous manual proof. Notes and Claude Code still need refreshed proof. |
 | Visual caret alignment | 8/10 | TextEdit and Chrome fixtures now have screenshot-backed proof. Real Codex, Obsidian, Notes, and Claude Code visual proof is still incomplete. |
-| Self-healing behavior | 8.7/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, and now applies trusted visual offsets to synthetic-caret apps. It does not yet auto-detect offsets from pixels. |
+| Self-healing behavior | 8.8/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, applies trusted visual offsets to synthetic-caret apps, and manual nudges now move the visible ghost immediately. It does not yet auto-detect offsets from pixels. |
 | Screenshot tracing | 9/10 | Screen Recording is preflighted, capture runs off the hot path, and screenshots now include editor bounds plus ghost text. |
 | TextEdit support | 9.5/10 | Fresh screenshot-backed run shows ghost text aligned after the caret and two verified accepts. |
 | Notes support | 6.5/10 | Profile is safer than before, but title/body/checklist proof is still stale and rich-text placement has not been re-shot. |
@@ -79,11 +79,12 @@ install/repair and better shortcut controls before it feels fully productized.
 - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit`: passed with two verified accepts and screenshot capture.
 - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh chrome --fixture all`: passed for textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixtures.
 - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh chrome --fixture monaco-like`: passed after the final Monaco gap adjustment.
-- `./script/smoke_test.sh`: passed after the trusted-offset change, including model asset, trace eval, typing-performance, real-app smoke self-test, visual evidence, and package preflight checks.
+- `./script/smoke_test.sh`: passed after the visible-nudge change, including model asset, trace eval, typing-performance, real-app smoke self-test, visual evidence, and package preflight checks. Latest focused-text poll p95 was 2ms with no slow markers.
 - `./script/manual_smoke_status.sh --strict`: failed honestly on Notes title/body/checklist and Claude Code proof gaps.
 - `./script/check_visual_placement_evidence_self_test.sh`: passed, including missing, empty, invalid, too-small, and unreferenced screenshot failure cases.
 - `./script/check_visual_placement_evidence.sh`: passed with six verified visual-placement screenshots.
 - `swift test --filter CompatibilityLearningTests`: passed, covering trusted manual visual offsets and untrusted stale-offset rejection.
+- `swift build`: passed after the visible-suggestion nudge targeting change.
 
 ## What Changed In This Pass
 
@@ -107,6 +108,9 @@ install/repair and better shortcut controls before it feels fully productized.
   missing, empty, invalid, too-small, or unreferenced screenshots.
 - Trusted learned visual offsets now apply to synthetic-caret apps such as
   Codex, Obsidian, and Chrome; untrusted stale offsets are still ignored.
+- Manual visual nudges now target the visible suggestion's app instead of
+  relying on frontmost-app state after the menu opens, and the visible ghost
+  moves immediately after the nudge.
 - A 15-minute automation now checks this scorecard and keeps looping when any
   category is below 10/10.
 
