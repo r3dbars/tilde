@@ -4,12 +4,14 @@ import AutocompleteLabCore
 @MainActor
 final class SuggestionPanelController {
     private let panel: NSPanel
+    private let backdropView: NSVisualEffectView
     private let ghostTextView: GhostTextView
     private var lastText: String?
     private var lastFrame: CGRect?
     private var lastRenderMode: SuggestionRenderMode?
 
     init() {
+        backdropView = NSVisualEffectView(frame: .zero)
         ghostTextView = GhostTextView(frame: .zero)
 
         panel = NSPanel(
@@ -24,6 +26,7 @@ final class SuggestionPanelController {
         panel.isOpaque = false
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
+        panel.animationBehavior = .none
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
         let container = NSView(frame: panel.contentView?.bounds ?? .zero)
@@ -31,10 +34,23 @@ final class SuggestionPanelController {
         container.wantsLayer = true
         container.layer?.backgroundColor = NSColor.clear.cgColor
 
+        backdropView.translatesAutoresizingMaskIntoConstraints = false
+        backdropView.material = .popover
+        backdropView.blendingMode = .behindWindow
+        backdropView.state = .active
+        backdropView.isHidden = true
+        backdropView.wantsLayer = true
+        backdropView.layer?.cornerRadius = 7
+        backdropView.layer?.masksToBounds = true
         ghostTextView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(backdropView)
         container.addSubview(ghostTextView)
 
         NSLayoutConstraint.activate([
+            backdropView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            backdropView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            backdropView.topAnchor.constraint(equalTo: container.topAnchor),
+            backdropView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             ghostTextView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             ghostTextView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             ghostTextView.topAnchor.constraint(equalTo: container.topAnchor),
@@ -63,7 +79,13 @@ final class SuggestionPanelController {
             height: textInsets.top + textInsets.bottom
         )
         let rawSize = text.size(withAttributes: [.font: font])
-        let size = CGSize(width: rawSize.width + textPadding.width, height: rawSize.height + textPadding.height)
+        let lineHeight = ceil(max(rawSize.height, font.ascender - font.descender + font.leading))
+        let textSize = CGSize(width: ceil(rawSize.width), height: lineHeight)
+        let minimumSize = Self.minimumPanelSize(for: renderMode, anchorRect: anchorRect, textSize: textSize)
+        let size = CGSize(
+            width: max(ceil(textSize.width + textPadding.width), minimumSize.width),
+            height: max(ceil(textSize.height + textPadding.height), minimumSize.height)
+        )
         let screen = screen(containing: anchorRect) ?? NSScreen.main
         let screenFrame = screen?.frame ?? .zero
         let appKitAnchorRect = AccessibilityCoordinateConverter.appKitRect(
@@ -124,6 +146,8 @@ final class SuggestionPanelController {
             return accessibilityFrame
         }
 
+        let wasVisible = panel.isVisible
+        backdropView.isHidden = renderMode != .floatingMirror
         ghostTextView.update(
             text: text,
             font: font,
@@ -131,7 +155,7 @@ final class SuggestionPanelController {
             renderMode: renderMode,
             textInsets: textInsets
         )
-        panel.setFrame(frame, display: true)
+        panel.setFrame(frame, display: wasVisible, animate: false)
         DiagnosticsLog.shared.record(
             "suggestion-panel-frame",
             metadata: [
@@ -145,7 +169,11 @@ final class SuggestionPanelController {
         lastText = text
         lastFrame = frame
         lastRenderMode = renderMode
-        panel.orderFrontRegardless()
+        if wasVisible {
+            panel.displayIfNeeded()
+        } else {
+            panel.orderFrontRegardless()
+        }
         return accessibilityFrame
     }
 
@@ -168,11 +196,18 @@ final class SuggestionPanelController {
     }
 
     private func textColor(matching foregroundColor: NSColor?, renderMode: SuggestionRenderMode) -> NSColor {
-        if renderMode == .floatingMirror {
-            return NSColor.white.withAlphaComponent(0.86)
-        }
+        switch renderMode {
+        case .floatingMirror:
+            return NSColor.labelColor
+        case .inlineAdjacent:
+            guard let foregroundColor else {
+                return NSColor.secondaryLabelColor.withAlphaComponent(0.74)
+            }
 
-        return NSColor(calibratedWhite: 0.54, alpha: 0.78)
+            return Self.inlineGhostColor(matching: foregroundColor)
+        case .disabled:
+            return NSColor.secondaryLabelColor
+        }
     }
 
     private func defaultFontSize(anchorRect: CGRect, renderMode: SuggestionRenderMode) -> CGFloat {
@@ -195,6 +230,34 @@ final class SuggestionPanelController {
         case .disabled:
             return NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
         }
+    }
+
+    private static func minimumPanelSize(
+        for renderMode: SuggestionRenderMode,
+        anchorRect: CGRect,
+        textSize: CGSize
+    ) -> CGSize {
+        switch renderMode {
+        case .floatingMirror:
+            return CGSize(width: 44, height: 28)
+        case .inlineAdjacent:
+            let anchorHeight = anchorRect.height > 0 ? min(anchorRect.height, 32) : textSize.height
+            return CGSize(width: 1, height: ceil(max(textSize.height, anchorHeight)))
+        case .disabled:
+            return .zero
+        }
+    }
+
+    private static func inlineGhostColor(matching foregroundColor: NSColor) -> NSColor {
+        guard let rgbColor = foregroundColor.usingColorSpace(.sRGB) else {
+            return NSColor.secondaryLabelColor.withAlphaComponent(0.74)
+        }
+
+        let luminance = (0.2126 * rgbColor.redComponent)
+            + (0.7152 * rgbColor.greenComponent)
+            + (0.0722 * rgbColor.blueComponent)
+        let alpha: CGFloat = luminance > 0.55 ? 0.48 : 0.42
+        return rgbColor.withAlphaComponent(alpha)
     }
 
     private func compactFrameDescription(_ rect: CGRect) -> String {
@@ -233,16 +296,6 @@ private final class GhostTextView: NSView {
 
         guard !text.isEmpty else {
             return
-        }
-
-        if renderMode == .floatingMirror {
-            let bubbleRect = bounds.insetBy(dx: 0.5, dy: 0.5)
-            let path = NSBezierPath(roundedRect: bubbleRect, xRadius: 6, yRadius: 6)
-            NSColor.black.withAlphaComponent(0.76).setFill()
-            path.fill()
-            NSColor.white.withAlphaComponent(0.18).setStroke()
-            path.lineWidth = 1
-            path.stroke()
         }
 
         let attributes: [NSAttributedString.Key: Any] = [

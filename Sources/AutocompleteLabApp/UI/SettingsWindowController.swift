@@ -14,14 +14,14 @@ struct SettingsCurrentAppState: Equatable {
 
     var statusText: String {
         guard bundleIdentifier != nil else {
-            return "Current app: none"
+            return "App: none"
         }
 
         guard isSupported else {
-            return "Current app: \(displayName) - unsupported"
+            return "App: \(displayName) unsupported"
         }
 
-        return "Current app: \(displayName) - \(isEnabled ? "on" : "off")"
+        return "App: \(displayName) \(isEnabled ? "on" : "off")"
     }
 }
 
@@ -33,7 +33,7 @@ struct SettingsPrivacyState: Equatable {
     let tracePath: String
 
     var statusText: String {
-        "Privacy: traces \(tracingPaused ? "paused" : "on"), raw text \(rawContentTracingEnabled ? "on" : "off"), screenshots \(screenshotTracingEnabled ? "on" : "off")"
+        "Privacy: traces \(tracingPaused ? "paused" : "on") | raw text \(rawContentTracingEnabled ? "on" : "off") | screenshots \(screenshotTracingEnabled ? "on" : "off")"
     }
 }
 
@@ -41,7 +41,7 @@ struct SettingsKeyboardShortcutState: Equatable {
     let acceptAllShortcut: AcceptAllShortcut
 
     var statusText: String {
-        "Shortcuts: Tab next word, \(acceptAllShortcut.displayName) full accept"
+        "Shortcuts: Tab next word | \(acceptAllShortcut.displayName) all"
     }
 
     var cycleButtonTitle: String {
@@ -112,16 +112,21 @@ final class SettingsWindowController: NSObject {
         self.deleteLocalLogs = deleteLocalLogs
         self.cycleAcceptAllShortcut = cycleAcceptAllShortcut
 
-        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 690))
+        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 520, height: 690))
+        contentView.material = .contentBackground
+        contentView.blendingMode = .behindWindow
+        contentView.state = .active
         window = NSWindow(
             contentRect: contentView.frame,
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
-        window.title = "Autocomplete Lab Settings"
+        window.title = "Autocomplete Lab"
         window.contentView = contentView
         window.isReleasedWhenClosed = false
+        window.contentMinSize = NSSize(width: 520, height: 620)
+        window.isMovableByWindowBackground = true
 
         super.init()
 
@@ -168,13 +173,13 @@ final class SettingsWindowController: NSObject {
         keyboardShortcuts: SettingsKeyboardShortcutState
     ) {
         let guidance = RuntimeReadinessGuidance(report: runtimeReport)
-        permissionLabel.stringValue = isTrusted ? "Accessibility: granted" : "Accessibility: needed"
-        controlLabel.stringValue = suggestionsPaused ? "Global control: paused" : "Global control: on"
+        permissionLabel.stringValue = isTrusted ? "Accessibility: on" : "Accessibility: needed"
+        controlLabel.stringValue = suggestionsPaused ? "Suggestions: paused" : "Suggestions: on"
         togglePauseButton.title = suggestionsPaused ? "Resume Suggestions" : "Pause Suggestions"
         runtimeLabel.stringValue = "Local model: \(runtimeReport.summary)"
-        runtimeDetailLabel.stringValue = runtimeReport.detail.map { "Detail: \($0)" } ?? ""
+        runtimeDetailLabel.stringValue = runtimeReport.detail ?? ""
         runtimeDetailLabel.isHidden = runtimeReport.detail == nil
-        runtimeActionLabel.stringValue = "Next: \(runtimeReport.action.displayName)"
+        runtimeActionLabel.stringValue = "Next step: \(runtimeReport.action.displayName)"
         runtimeActionButton.title = guidance.actionTitle
         runtimeActionButton.isEnabled = guidance.isActionEnabled
         currentRuntimeAction = runtimeReport.action
@@ -190,7 +195,7 @@ final class SettingsWindowController: NSObject {
         disabledAppsLabel.stringValue = "Disabled apps: \(currentApp.disabledAppCount)"
         enableAllAppsButton.isEnabled = currentApp.disabledAppCount > 0
         privacyLabel.stringValue = privacy.statusText
-        privacyPathLabel.stringValue = "Diagnostics: \(privacy.diagnosticsPath) | Traces: \(privacy.tracePath)"
+        privacyPathLabel.stringValue = "Logs: \(privacy.diagnosticsPath) | Traces: \(privacy.tracePath)"
         toggleTracingButton.title = privacy.tracingPaused ? "Resume Tracing" : "Pause Tracing"
         toggleRawTraceButton.title = privacy.rawContentTracingEnabled ? "Raw Text On" : "Raw Text Off"
         toggleScreenshotTraceButton.title = privacy.screenshotTracingEnabled ? "Screenshots On" : "Screenshots Off"
@@ -210,8 +215,9 @@ final class SettingsWindowController: NSObject {
         stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
 
-        let title = NSTextField(labelWithString: "Transcripted Autocomplete Lab")
+        let title = NSTextField(labelWithString: "Autocomplete Lab")
         title.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
+        permissionLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         runtimeLabel.lineBreakMode = .byWordWrapping
         runtimeLabel.maximumNumberOfLines = 0
         runtimeLabel.preferredMaxLayoutWidth = 360
@@ -243,10 +249,10 @@ final class SettingsWindowController: NSObject {
         privacyPathLabel.preferredMaxLayoutWidth = 420
         shortcutLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
 
-        let requestButton = NSButton(title: "Request Accessibility", target: self, action: #selector(requestAccessibility))
+        let requestButton = NSButton(title: "Request Access", target: self, action: #selector(requestAccessibility))
         requestButton.bezelStyle = .rounded
         let openSettingsButton = NSButton(
-            title: "Open Accessibility Settings",
+            title: "Open Settings",
             target: self,
             action: #selector(openAccessibilitySettingsPane)
         )
@@ -337,11 +343,11 @@ final class SettingsWindowController: NSObject {
         guidance: RuntimeReadinessGuidance
     ) -> String {
         if !isTrusted {
-            return "First run: grant Accessibility, then return here. The app only reads the active text field locally."
+            return "Grant Accessibility to read the active text field locally."
         }
 
         if suggestionsPaused {
-            return "Paused: resume when you are ready to test suggestions again."
+            return "Paused. Resume when you want to test suggestions."
         }
 
         return guidance.message
