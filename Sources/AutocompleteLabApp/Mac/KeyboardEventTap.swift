@@ -3,7 +3,7 @@ import AutocompleteLabCore
 import Foundation
 
 final class KeyboardEventTap {
-    typealias Handler = (AutocompleteKey) -> Bool
+    typealias Handler = (AutocompleteKey, Bool) -> Bool
 
     private let handler: Handler
     private let keyMapper = AutocompleteKeyMapper()
@@ -63,6 +63,13 @@ final class KeyboardEventTap {
 
     fileprivate func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            DiagnosticsLog.shared.record(
+                "keyboard-event-tap-disabled",
+                metadata: [
+                    "reason": type == .tapDisabledByTimeout ? "timeout" : "user-input"
+                ]
+            )
+
             if let eventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
@@ -80,7 +87,12 @@ final class KeyboardEventTap {
             modifiers: AutocompleteKeyModifiers(flags: event.flags)
         )
 
-        guard handler(key) else {
+        guard key != .other else {
+            return Unmanaged.passUnretained(event)
+        }
+
+        let isAutorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+        guard handler(key, isAutorepeat) else {
             return Unmanaged.passUnretained(event)
         }
 
