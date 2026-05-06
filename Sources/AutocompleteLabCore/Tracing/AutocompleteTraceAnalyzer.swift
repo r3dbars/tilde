@@ -226,9 +226,22 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
     private func topMisses(from events: [AutocompleteTraceEvent]) -> [AutocompleteTraceMiss] {
         var buckets: [String: (count: Int, example: AutocompleteTraceEvent, cause: String, category: String)] = [:]
+        let presentedByID = firstEventsBySuggestionID(from: events.filter { $0.type == .suggestionPresented })
         addRepeatedUnacceptedSuggestions(from: events, buckets: &buckets)
 
         for event in events {
+            if event.type == .suggestionHidden,
+               let presented = presentedByID[event.suggestionID],
+               suggestionLifecycleScopeChanged(from: presented, to: event) {
+                add(
+                    key: "Suggestion hidden under a different field",
+                    event: event,
+                    cause: "The suggestion was presented in \(presented.appBundleIdentifier) but hidden under \(event.appBundleIdentifier).",
+                    category: "trace ownership bug",
+                    buckets: &buckets
+                )
+            }
+
             if event.type == .suggestionTypedOver {
                 let typedSuffix = event.metadata["typedSuffix"]?
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -377,6 +390,18 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
     private func slowSuggestionThresholdMilliseconds(for requestMode: String) -> Int {
         requestMode == "wordCompletion" ? 25 : 225
+    }
+
+    private func suggestionLifecycleScopeChanged(
+        from presented: AutocompleteTraceEvent,
+        to hidden: AutocompleteTraceEvent
+    ) -> Bool {
+        presented.appBundleIdentifier != hidden.appBundleIdentifier
+            || (
+                !presented.fieldIdentity.isEmpty
+                    && !hidden.fieldIdentity.isEmpty
+                    && presented.fieldIdentity != hidden.fieldIdentity
+            )
     }
 
     private func addRepeatedUnacceptedSuggestions(

@@ -3,20 +3,25 @@ import AutocompleteLabCore
 import Foundation
 
 final class KeyboardEventTap: @unchecked Sendable {
-    typealias Handler = @Sendable (AutocompleteKey, Bool, Bool) -> Bool
+    typealias Handler = @MainActor @Sendable (AutocompleteKey, Bool, Bool) -> Bool
     typealias PassthroughKeyDownObserver = @MainActor @Sendable () -> Void
 
     private let handler: Handler
     private let passthroughKeyDownObserver: PassthroughKeyDownObserver?
     private let keyMapper = AutocompleteKeyMapper()
     private let lifecycleLock = NSLock()
+    private let snapshotLock = NSLock()
     private let passthroughLock = NSLock()
+    private let replayLock = NSLock()
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var eventRunLoop: CFRunLoop?
     private var eventThread: Thread?
     private var isStopping = false
+    private var snapshot = KeyboardEventTapSnapshot()
+    private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var hasObservedPassthroughKeyDown = false
+    private var pendingReplayedKeyDowns: [KeyboardEventReplay: KeyboardEventReplayState] = [:]
 
     init(
         handler: @escaping Handler,
@@ -28,6 +33,12 @@ final class KeyboardEventTap: @unchecked Sendable {
 
     deinit {
         stop()
+    }
+
+    func updateSnapshot(_ snapshot: KeyboardEventTapSnapshot) {
+        snapshotLock.lock()
+        self.snapshot = snapshot
+        snapshotLock.unlock()
     }
 
     func start() -> Bool {
@@ -180,9 +191,15 @@ final class KeyboardEventTap: @unchecked Sendable {
             modifiers: AutocompleteKeyModifiers(flags: event.flags)
         )
         let isAutorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+        let replay = KeyboardEventReplay(keyCode: keyCode, flagsRawValue: event.flags.rawValue)
+
+        if consumePendingReplay(replay) {
+            return Unmanaged.passUnretained(event)
+        }
 
         if key == .other {
             markPassthroughObserved()
+            markSnapshotInvalidatedByTyping()
             if let passthroughKeyDownObserver {
                 Task { @MainActor in
                     passthroughKeyDownObserver()
@@ -192,11 +209,73 @@ final class KeyboardEventTap: @unchecked Sendable {
         }
 
         let hadPassthroughKeyDown = consumePassthroughObservation()
-        guard handler(key, isAutorepeat, hadPassthroughKeyDown) else {
+        if hadPassthroughKeyDown {
+            markSnapshotInvalidatedByTyping()
+            if let passthroughKeyDownObserver {
+                Task { @MainActor in
+                    passthroughKeyDownObserver()
+                }
+            }
             return Unmanaged.passUnretained(event)
         }
 
+        guard shouldConsume(key, isAutorepeat: isAutorepeat) else {
+            return Unmanaged.passUnretained(event)
+        }
+
+        Task { @MainActor in
+            let handled = handler(key, isAutorepeat, hadPassthroughKeyDown)
+            if !handled {
+                replayKey(replay)
+            }
+        }
         return nil
+    }
+
+    private func shouldConsume(_ key: AutocompleteKey, isAutorepeat: Bool) -> Bool {
+        let now = Date()
+        snapshotLock.lock()
+        let snapshot = self.snapshot
+
+        guard snapshot.hasVisibleSuggestion,
+              !snapshot.isInvalidatedByUserTyping else {
+            suppressKeyUntil.removeAll(keepingCapacity: true)
+            snapshotLock.unlock()
+            return false
+        }
+
+        if isAutorepeat,
+           let suppressUntil = suppressKeyUntil[key],
+           suppressUntil > now {
+            snapshotLock.unlock()
+            return true
+        }
+        suppressKeyUntil[key] = nil
+
+        let shouldConsume: Bool
+        switch key {
+        case .tab:
+            shouldConsume = snapshot.supportsOneWordAcceptance
+        case .backtick:
+            shouldConsume = snapshot.supportsFullAcceptance
+        case .escape:
+            shouldConsume = true
+        case .optionTab, .other:
+            shouldConsume = false
+        }
+
+        if shouldConsume, !isAutorepeat {
+            suppressKeyUntil[key] = now.addingTimeInterval(0.25)
+        }
+        snapshotLock.unlock()
+        return shouldConsume
+    }
+
+    private func markSnapshotInvalidatedByTyping() {
+        snapshotLock.lock()
+        snapshot.isInvalidatedByUserTyping = true
+        suppressKeyUntil.removeAll(keepingCapacity: true)
+        snapshotLock.unlock()
     }
 
     private func markPassthroughObserved() {
@@ -222,6 +301,93 @@ final class KeyboardEventTap: @unchecked Sendable {
         isStopping = false
         lifecycleLock.unlock()
     }
+
+    private func consumePendingReplay(_ replay: KeyboardEventReplay) -> Bool {
+        replayLock.lock()
+        let now = Date()
+        pendingReplayedKeyDowns = pendingReplayedKeyDowns.filter { $0.value.expiresAt > now }
+        guard var state = pendingReplayedKeyDowns[replay],
+              state.count > 0 else {
+            replayLock.unlock()
+            return false
+        }
+
+        state.count -= 1
+        if state.count == 0 {
+            pendingReplayedKeyDowns[replay] = nil
+        } else {
+            pendingReplayedKeyDowns[replay] = state
+        }
+        replayLock.unlock()
+        return true
+    }
+
+    @MainActor
+    private func replayKey(_ replay: KeyboardEventReplay) {
+        guard let virtualKey = replay.virtualKeyCode else {
+            return
+        }
+
+        let source = CGEventSource(stateID: .hidSystemState)
+        let flags = CGEventFlags(rawValue: replay.flagsRawValue)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: false) else {
+            return
+        }
+
+        markPendingReplay(replay)
+        keyDown.flags = flags
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.flags = flags
+        keyUp.post(tap: .cghidEventTap)
+    }
+
+    private func markPendingReplay(_ replay: KeyboardEventReplay) {
+        replayLock.lock()
+        pendingReplayedKeyDowns[replay] = KeyboardEventReplayState(
+            count: (pendingReplayedKeyDowns[replay]?.count ?? 0) + 1,
+            expiresAt: Date().addingTimeInterval(1)
+        )
+        replayLock.unlock()
+    }
+}
+
+struct KeyboardEventTapSnapshot: Equatable, Sendable {
+    var hasVisibleSuggestion: Bool
+    var supportsOneWordAcceptance: Bool
+    var supportsFullAcceptance: Bool
+    var isInvalidatedByUserTyping: Bool
+
+    init(
+        hasVisibleSuggestion: Bool = false,
+        supportsOneWordAcceptance: Bool = false,
+        supportsFullAcceptance: Bool = false,
+        isInvalidatedByUserTyping: Bool = false
+    ) {
+        self.hasVisibleSuggestion = hasVisibleSuggestion
+        self.supportsOneWordAcceptance = supportsOneWordAcceptance
+        self.supportsFullAcceptance = supportsFullAcceptance
+        self.isInvalidatedByUserTyping = isInvalidatedByUserTyping
+    }
+}
+
+private struct KeyboardEventReplay: Hashable, Sendable {
+    let keyCode: Int64
+    let flagsRawValue: UInt64
+
+    var virtualKeyCode: CGKeyCode? {
+        guard keyCode >= 0,
+              keyCode <= Int64(UInt16.max) else {
+            return nil
+        }
+
+        return CGKeyCode(keyCode)
+    }
+}
+
+private struct KeyboardEventReplayState: Sendable {
+    var count: Int
+    var expiresAt: Date
 }
 
 private func keyboardEventTapCallback(

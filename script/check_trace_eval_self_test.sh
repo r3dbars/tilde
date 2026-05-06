@@ -2,7 +2,8 @@
 set -euo pipefail
 
 TRACE_FILE="$(mktemp)"
-trap 'rm -f "$TRACE_FILE"' EXIT
+BAD_TRACE_FILE="$(mktemp)"
+trap 'rm -f "$TRACE_FILE" "$BAD_TRACE_FILE"' EXIT
 
 cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0}
@@ -145,6 +146,47 @@ fi
 if grep -F "ng" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test incorrectly reported typed-through suggestions as repeated misses" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+cat >"$BAD_TRACE_FILE" <<'JSONL'
+{"type":"suggestionPresented","suggestionID":"repaint","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":80,"metadata":{"visibleWords":"2"}}
+{"type":"suggestionPresented","suggestionID":"repaint","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":95,"metadata":{"visibleWords":"3"}}
+{"type":"suggestionPresented","suggestionID":"repaint","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":110,"metadata":{"visibleWords":"4"}}
+{"type":"suggestionPresented","suggestionID":"repaint","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":125,"metadata":{"visibleWords":"5"}}
+{"type":"suggestionPresented","suggestionID":"too-long","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":90,"metadata":{"visibleWords":"6"}}
+{"type":"suggestionPresented","suggestionID":"word-too-long","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"visibleWords":"2"}}
+JSONL
+
+if AUTOCOMPLETE_LAB_TRACE_PATH="$BAD_TRACE_FILE" \
+   AUTOCOMPLETE_LAB_TRACE_ENFORCE_PERFORMANCE=1 \
+   script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-performance-fail.txt 2>&1; then
+  echo "trace eval self-test expected typing performance guardrails to fail" >&2
+  cat /tmp/autocomplete-trace-eval-performance-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "typing performance guardrail failed" /tmp/autocomplete-trace-eval-performance-fail.txt >/dev/null; then
+  echo "trace eval self-test did not explain typing performance guardrail failures" >&2
+  cat /tmp/autocomplete-trace-eval-performance-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "repaint: phraseContinuation presented 4 times" /tmp/autocomplete-trace-eval-performance-fail.txt >/dev/null; then
+  echo "trace eval self-test did not catch excessive streaming repaints" >&2
+  cat /tmp/autocomplete-trace-eval-performance-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "too-long: phraseContinuation showed 6 words" /tmp/autocomplete-trace-eval-performance-fail.txt >/dev/null; then
+  echo "trace eval self-test did not catch too-long phrase suggestions" >&2
+  cat /tmp/autocomplete-trace-eval-performance-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "word-too-long: wordCompletion showed 2 words" /tmp/autocomplete-trace-eval-performance-fail.txt >/dev/null; then
+  echo "trace eval self-test did not catch too-long word completions" >&2
+  cat /tmp/autocomplete-trace-eval-performance-fail.txt >&2
   exit 1
 fi
 

@@ -145,4 +145,9 @@ if [[ "${AUTOCOMPLETE_LAB_REQUIRE_READY:-0}" == "1" ]]; then
   reject_latest_launch_pattern "runtime-warm-failed"
 fi
 
+if [[ "${AUTOCOMPLETE_LAB_REQUIRE_TYPING_FAST:-0}" == "1" ]]; then
+  reject_recent_pattern "keyboard-action .*key=other"
+  reject_recent_pattern "keyboard-event-tap-disabled"
+fi
+
 echo "Diagnostics log verified: $LOG_PATH"

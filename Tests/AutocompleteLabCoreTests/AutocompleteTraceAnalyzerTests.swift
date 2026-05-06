@@ -208,6 +208,34 @@ struct AutocompleteTraceAnalyzerTests {
         })
     }
 
+    @Test("flags suggestion lifecycle scope changes")
+    func flagsSuggestionLifecycleScopeChanges() {
+        let events = [
+            event(
+                .suggestionPresented,
+                suggestionID: "one",
+                appBundleIdentifier: "com.apple.TextEdit",
+                fieldIdentity: "textedit-field",
+                displayedText: "tation"
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "one",
+                appBundleIdentifier: "com.openai.codex",
+                fieldIdentity: "codex-field",
+                displayedText: "tation",
+                outcome: "ignored"
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Suggestion hidden under a different field"
+                && miss.fixCategory == "trace ownership bug"
+        })
+    }
+
     @Test("flags repeated unaccepted suggestions")
     func flagsRepeatedUnacceptedSuggestions() {
         let events = [
@@ -256,6 +284,7 @@ struct AutocompleteTraceAnalyzerTests {
         _ type: AutocompleteTraceEventType,
         suggestionID: String,
         appBundleIdentifier: String = "com.apple.TextEdit",
+        fieldIdentity: String = "",
         requestMode: String = "wordCompletion",
         rawOutput: String = "",
         cleanedVisibleText: String = "",
@@ -272,6 +301,7 @@ struct AutocompleteTraceAnalyzerTests {
             suggestionID: suggestionID,
             type: type,
             appBundleIdentifier: appBundleIdentifier,
+            fieldIdentity: fieldIdentity,
             requestMode: requestMode,
             rawOutput: rawOutput,
             cleanedVisibleText: cleanedVisibleText,
