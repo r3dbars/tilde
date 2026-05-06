@@ -7,10 +7,10 @@ each app pass. It prints the steps, waits while you test, then validates the
 new diagnostics and matching JSONL trace coverage for suggestion presentation,
 acceptance, and insertion verification.
 Successful runs are recorded in `docs/product/manual-smoke-runs.md`.
-Run `script/manual_smoke_status.sh` to see which target apps still need proof,
-or `script/manual_smoke_status.sh --strict` when compatibility proof should
-block release/beta work. The status command also lists the current scorecard
-rows that are still below 10/10.
+Run `script/manual_smoke_status.sh` to see insertion proof and separate
+screenshot-backed placement proof. Use `script/manual_smoke_status.sh --strict`
+when missing insertion proof should block release/beta work. The status command
+also lists the current scorecard rows that are still below 10/10.
 
 ## Setup
 
@@ -24,6 +24,9 @@ rows that are still below 10/10.
 - Recovered insertion fallbacks are allowed when the same suggestion later verifies.
   Unrecovered insertion failures fail the recorder.
 - After a typing pass, run `AUTOCOMPLETE_LAB_LOG_START_LINE=<mark> ./script/check_typing_performance_log.sh`. It fails on slow event-tap latency or tap disable/timeout events.
+- After a visual placement pass, update the scorecard screenshot row and run
+  `./script/check_visual_placement_evidence.sh --require-all` when every row
+  should have screenshot proof.
 
 ## TextEdit
 

@@ -27,6 +27,8 @@ Usage: script/manual_smoke_status.sh [--require-all|--strict]
 
 Shows which target apps have real manual smoke proof in
 docs/product/manual-smoke-runs.md and lists remaining sub-10 scorecard gaps.
+It separates insertion proof from screenshot-backed visual placement proof so
+real-app visual gaps stay visible after insertion passes.
 
 Use --require-all or --strict when you want the command to fail until every
 target app has at least one recorded pass with two or more verified accepts.
@@ -67,8 +69,24 @@ print_scorecard_gaps() {
   echo "Remaining non-10 scorecard gaps: $SCORECARD_PATH"
 
   local found=0
+  local saw_area_header=0
+  local in_area_table=0
   local line area rating why score
   while IFS= read -r line; do
+    if [[ "$line" =~ ^##[[:space:]]+Area[[:space:]]+Ratings ]]; then
+      saw_area_header=1
+      in_area_table=1
+      continue
+    fi
+
+    if (( saw_area_header == 1 && in_area_table == 1 )) && [[ "$line" =~ ^##[[:space:]]+ ]]; then
+      break
+    fi
+
+    if (( saw_area_header == 1 && in_area_table == 0 )); then
+      continue
+    fi
+
     [[ "$line" == \|* ]] || continue
     [[ "$line" != *"| Area |"* ]] || continue
     [[ "$line" != *"| --- |"* ]] || continue
@@ -92,10 +110,81 @@ print_scorecard_gaps() {
   fi
 }
 
+print_visual_audit_status() {
+  echo
+  if [[ ! -f "$SCORECARD_PATH" ]]; then
+    echo "Screenshot proof status: no scorecard found ($SCORECARD_PATH)"
+    return
+  fi
+
+  echo "Screenshot proof status: $SCORECARD_PATH"
+
+  local in_visual_table=0
+  local found=0
+  local missing=0
+  local line surface grade evidence good work link
+  local png_link_regex='visual-placement-screenshots/[^)]*[.]png'
+  declare -a pending_visuals=()
+
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^##[[:space:]]+Visual[[:space:]] ]]; then
+      in_visual_table=1
+      continue
+    fi
+
+    if (( in_visual_table == 1 )) && [[ "$line" =~ ^##[[:space:]]+ ]]; then
+      break
+    fi
+
+    (( in_visual_table == 1 )) || continue
+    [[ "$line" == \|* ]] || continue
+    [[ "$line" != *"| App or surface |"* ]] || continue
+    [[ "$line" != *"| --- |"* ]] || continue
+
+    IFS='|' read -r _ surface grade evidence good work _ <<<"$line"
+    surface="$(trim "$surface")"
+    evidence="$(trim "$evidence")"
+    work="$(trim "$work")"
+
+    [[ -n "$surface" ]] || continue
+    found=1
+
+    if [[ "$evidence" =~ $png_link_regex ]]; then
+      link="${BASH_REMATCH[0]}"
+      echo "- $surface: screenshot-backed ($link)"
+    else
+      echo "- $surface: pending screenshot proof - $evidence"
+      if [[ -n "$work" ]]; then
+        echo "  next: $work"
+      fi
+      missing=$((missing + 1))
+      pending_visuals+=("$surface")
+    fi
+  done <"$SCORECARD_PATH"
+
+  if (( found == 0 )); then
+    echo "- no visual placement audit table found"
+    return
+  fi
+
+  if (( missing > 0 )); then
+    echo
+    echo "Screenshot proof gaps:"
+    for surface in "${pending_visuals[@]}"; do
+      echo "- $surface"
+    done
+    echo
+    echo "$missing surface(s) still need screenshot-backed visual proof."
+  else
+    echo
+    echo "All visual placement rows are screenshot-backed."
+  fi
+}
+
 if [[ ! -f "$REPORT_PATH" ]]; then
-  echo "Manual smoke status: no report yet ($REPORT_PATH)"
+  echo "Insertion proof status: no report yet ($REPORT_PATH)"
 else
-  echo "Manual smoke status: $REPORT_PATH"
+  echo "Insertion proof status: $REPORT_PATH"
 fi
 
 missing=0
@@ -144,6 +233,7 @@ else
   echo "All required target proofs are covered."
 fi
 
+print_visual_audit_status
 print_scorecard_gaps
 
 if (( missing > 0 && REQUIRE_ALL == 1 )); then

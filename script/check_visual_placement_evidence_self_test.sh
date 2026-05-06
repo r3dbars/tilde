@@ -21,6 +21,8 @@ ORPHAN_OUTPUT="$TMP_DIR/orphan-output.txt"
 EMPTY_OUTPUT="$TMP_DIR/empty-output.txt"
 INVALID_OUTPUT="$TMP_DIR/invalid-output.txt"
 TINY_OUTPUT="$TMP_DIR/tiny-output.txt"
+PENDING_OUTPUT="$TMP_DIR/pending-output.txt"
+PENDING_STRICT_OUTPUT="$TMP_DIR/pending-strict-output.txt"
 
 expect_failure() {
   local scorecard_path="$1"
@@ -45,17 +47,64 @@ expect_failure() {
 cat >"$TMP_DIR/scorecard-good.md" <<'MARKDOWN'
 # Scorecard
 
-| App or surface | Grade | Evidence |
-| --- | ---: | --- |
-| Chrome textarea | 9/10 | [good.png](visual-placement-screenshots/good.png) |
+## Visual Placement And Text Box Audit
+
+| App or surface | Grade | Evidence | What is good | What still needs work |
+| --- | ---: | --- | --- | --- |
+| Chrome textarea | 9/10 | [good.png](visual-placement-screenshots/good.png) | Good. | More real sites. |
 MARKDOWN
 
 AUTOCOMPLETE_LAB_SCORECARD="$TMP_DIR/scorecard-good.md" \
-  script/check_visual_placement_evidence.sh >"$GOOD_OUTPUT"
+  script/check_visual_placement_evidence.sh >"$GOOD_OUTPUT" 2>&1
 
 if ! grep -F "Visual placement evidence verified: 1 screenshot(s)." "$GOOD_OUTPUT" >/dev/null; then
   echo "visual evidence self-test did not verify a good screenshot" >&2
   cat "$GOOD_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "All visual placement audit rows are screenshot-backed." "$GOOD_OUTPUT" >/dev/null; then
+  echo "visual evidence self-test did not report all screenshot-backed rows" >&2
+  cat "$GOOD_OUTPUT" >&2
+  exit 1
+fi
+
+cat >"$TMP_DIR/scorecard-pending.md" <<'MARKDOWN'
+# Scorecard
+
+## Visual Placement And Text Box Audit
+
+| App or surface | Grade | Evidence | What is good | What still needs work |
+| --- | ---: | --- | --- | --- |
+| Chrome textarea | 9/10 | [good.png](visual-placement-screenshots/good.png) | Good. | More real sites. |
+| Codex | 7.5/10 | Pending safe screenshot | Insertion proof exists. | Needs a safe prompt screenshot audit. |
+MARKDOWN
+
+AUTOCOMPLETE_LAB_SCORECARD="$TMP_DIR/scorecard-pending.md" \
+  script/check_visual_placement_evidence.sh >"$PENDING_OUTPUT" 2>&1
+
+if ! grep -F "Pending screenshot-backed visual proof:" "$PENDING_OUTPUT" >/dev/null; then
+  echo "visual evidence self-test did not list pending screenshot proof" >&2
+  cat "$PENDING_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "Codex: Pending safe screenshot - next: Needs a safe prompt screenshot audit." "$PENDING_OUTPUT" >/dev/null; then
+  echo "visual evidence self-test did not make the pending Codex proof actionable" >&2
+  cat "$PENDING_OUTPUT" >&2
+  exit 1
+fi
+
+if AUTOCOMPLETE_LAB_SCORECARD="$TMP_DIR/scorecard-pending.md" \
+  script/check_visual_placement_evidence.sh --require-all >"$PENDING_STRICT_OUTPUT" 2>&1; then
+  echo "visual evidence self-test expected strict pending screenshot proof to fail" >&2
+  cat "$PENDING_STRICT_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "Pending screenshot-backed visual proof:" "$PENDING_STRICT_OUTPUT" >/dev/null; then
+  echo "visual evidence self-test did not explain strict pending screenshot proof" >&2
+  cat "$PENDING_STRICT_OUTPUT" >&2
   exit 1
 fi
 
