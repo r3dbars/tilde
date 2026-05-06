@@ -13,6 +13,7 @@ final class KeyboardEventTap: @unchecked Sendable {
     private let snapshotLock = NSLock()
     private let passthroughLock = NSLock()
     private let replayLock = NSLock()
+    private let latencyLock = NSLock()
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var eventRunLoop: CFRunLoop?
@@ -22,6 +23,8 @@ final class KeyboardEventTap: @unchecked Sendable {
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var hasObservedPassthroughKeyDown = false
     private var pendingReplayedKeyDowns: [KeyboardEventReplay: KeyboardEventReplayState] = [:]
+    private var latencyStats = KeyboardEventTapLatencyStats()
+    private let slowEventTapLatencyMicros = 8_000
 
     init(
         handler: @escaping Handler,
@@ -116,7 +119,7 @@ final class KeyboardEventTap: @unchecked Sendable {
         return startResult.value
     }
 
-    func stop() {
+    func stop(reason: String = "stop") {
         lifecycleLock.lock()
         let tap = eventTap
         let source = runLoopSource
@@ -135,6 +138,7 @@ final class KeyboardEventTap: @unchecked Sendable {
         }
 
         guard let runLoop else {
+            flushLatencySummary(reason: reason)
             return
         }
 
@@ -148,6 +152,7 @@ final class KeyboardEventTap: @unchecked Sendable {
         }
         CFRunLoopWakeUp(runLoop)
         _ = stopped.wait(timeout: .now() + 1)
+        flushLatencySummary(reason: reason)
     }
 
     func resetPassthroughObservation() {
@@ -185,6 +190,7 @@ final class KeyboardEventTap: @unchecked Sendable {
             return Unmanaged.passUnretained(event)
         }
 
+        let startedAt = DispatchTime.now().uptimeNanoseconds
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let key = keyMapper.key(
             physicalKey: AutocompletePhysicalKey(keyCode: keyCode),
@@ -194,7 +200,12 @@ final class KeyboardEventTap: @unchecked Sendable {
         let replay = KeyboardEventReplay(keyCode: keyCode, flagsRawValue: event.flags.rawValue)
 
         if consumePendingReplay(replay) {
-            return Unmanaged.passUnretained(event)
+            return finish(
+                Unmanaged.passUnretained(event),
+                key: key,
+                decision: "replay-passthrough",
+                startedAt: startedAt
+            )
         }
 
         if key == .other {
@@ -205,7 +216,12 @@ final class KeyboardEventTap: @unchecked Sendable {
                     passthroughKeyDownObserver()
                 }
             }
-            return Unmanaged.passUnretained(event)
+            return finish(
+                Unmanaged.passUnretained(event),
+                key: key,
+                decision: "passthrough-other",
+                startedAt: startedAt
+            )
         }
 
         let hadPassthroughKeyDown = consumePassthroughObservation()
@@ -216,11 +232,21 @@ final class KeyboardEventTap: @unchecked Sendable {
                     passthroughKeyDownObserver()
                 }
             }
-            return Unmanaged.passUnretained(event)
+            return finish(
+                Unmanaged.passUnretained(event),
+                key: key,
+                decision: "passthrough-after-typing",
+                startedAt: startedAt
+            )
         }
 
         guard shouldConsume(key, isAutorepeat: isAutorepeat) else {
-            return Unmanaged.passUnretained(event)
+            return finish(
+                Unmanaged.passUnretained(event),
+                key: key,
+                decision: "passthrough-unsupported",
+                startedAt: startedAt
+            )
         }
 
         Task { @MainActor in
@@ -229,7 +255,81 @@ final class KeyboardEventTap: @unchecked Sendable {
                 replayKey(replay)
             }
         }
-        return nil
+        return finish(nil, key: key, decision: "consume", startedAt: startedAt)
+    }
+
+    private func finish(
+        _ result: Unmanaged<CGEvent>?,
+        key: AutocompleteKey,
+        decision: String,
+        startedAt: UInt64
+    ) -> Unmanaged<CGEvent>? {
+        recordEventTapLatency(key: key, decision: decision, startedAt: startedAt)
+        return result
+    }
+
+    private func recordEventTapLatency(
+        key: AutocompleteKey,
+        decision: String,
+        startedAt: UInt64
+    ) {
+        let elapsedMicros = Int((DispatchTime.now().uptimeNanoseconds - startedAt) / 1_000)
+        latencyLock.lock()
+        let summary = latencyStats.record(elapsedMicros)
+        latencyLock.unlock()
+
+        if key != .other {
+            DiagnosticsLog.shared.record(
+                "keyboard-event-tap-latency",
+                metadata: [
+                    "key": key.diagnosticName,
+                    "decision": decision,
+                    "durationMicros": String(elapsedMicros)
+                ]
+            )
+        }
+
+        if elapsedMicros >= slowEventTapLatencyMicros {
+            DiagnosticsLog.shared.record(
+                "keyboard-event-tap-latency-slow",
+                metadata: [
+                    "key": key.diagnosticName,
+                    "decision": decision,
+                    "durationMicros": String(elapsedMicros)
+                ]
+            )
+        }
+
+        if let summary {
+            recordLatencySummary(summary, reason: "sample-window")
+        }
+    }
+
+    private func flushLatencySummary(reason: String) {
+        latencyLock.lock()
+        let summary = latencyStats.drain()
+        latencyLock.unlock()
+
+        if let summary {
+            recordLatencySummary(summary, reason: reason)
+        }
+    }
+
+    private func recordLatencySummary(
+        _ summary: KeyboardEventTapLatencySummary,
+        reason: String
+    ) {
+        DiagnosticsLog.shared.record(
+            "keyboard-event-tap-latency-summary",
+            metadata: [
+                "reason": reason,
+                "count": String(summary.count),
+                "p50Micros": String(summary.p50Micros),
+                "p95Micros": String(summary.p95Micros),
+                "p99Micros": String(summary.p99Micros),
+                "maxMicros": String(summary.maxMicros)
+            ]
+        )
     }
 
     private func shouldConsume(_ key: AutocompleteKey, isAutorepeat: Bool) -> Bool {
@@ -388,6 +488,54 @@ private struct KeyboardEventReplay: Hashable, Sendable {
 private struct KeyboardEventReplayState: Sendable {
     var count: Int
     var expiresAt: Date
+}
+
+private struct KeyboardEventTapLatencyStats: Sendable {
+    private var samples: [Int] = []
+    private let flushCount = 100
+
+    mutating func record(_ durationMicros: Int) -> KeyboardEventTapLatencySummary? {
+        samples.append(durationMicros)
+        guard samples.count >= flushCount else {
+            return nil
+        }
+
+        return drain()
+    }
+
+    mutating func drain() -> KeyboardEventTapLatencySummary? {
+        guard !samples.isEmpty else {
+            return nil
+        }
+
+        let sorted = samples.sorted()
+        let summary = KeyboardEventTapLatencySummary(
+            count: sorted.count,
+            p50Micros: percentile(0.50, in: sorted),
+            p95Micros: percentile(0.95, in: sorted),
+            p99Micros: percentile(0.99, in: sorted),
+            maxMicros: sorted.last ?? 0
+        )
+        samples.removeAll(keepingCapacity: true)
+        return summary
+    }
+
+    private func percentile(_ fraction: Double, in sorted: [Int]) -> Int {
+        guard !sorted.isEmpty else {
+            return 0
+        }
+
+        let index = min(sorted.count - 1, Int((Double(sorted.count - 1) * fraction).rounded()))
+        return sorted[index]
+    }
+}
+
+private struct KeyboardEventTapLatencySummary: Sendable {
+    let count: Int
+    let p50Micros: Int
+    let p95Micros: Int
+    let p99Micros: Int
+    let maxMicros: Int
 }
 
 private func keyboardEventTapCallback(

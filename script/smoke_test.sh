@@ -14,7 +14,9 @@ swift package resolve
 ./script/patch_mlx_swift_lm.sh
 swift test
 ./script/check_test_coverage_manifest.sh
+./script/check_quality_eval.sh
 ./script/manual_smoke_self_test.sh
+./script/real_app_smoke_self_test.sh
 ./script/check_trace_eval_self_test.sh
 ./script/model_latency_report_self_test.sh
 ./script/package_release.sh --check

@@ -9,13 +9,14 @@ MAX_PHRASE_PRESENTATIONS="${AUTOCOMPLETE_LAB_TRACE_MAX_PHRASE_PRESENTATIONS:-3}"
 MAX_WORD_PRESENTATIONS="${AUTOCOMPLETE_LAB_TRACE_MAX_WORD_PRESENTATIONS:-1}"
 MAX_PHRASE_VISIBLE_WORDS="${AUTOCOMPLETE_LAB_TRACE_MAX_PHRASE_VISIBLE_WORDS:-5}"
 MAX_WORD_VISIBLE_WORDS="${AUTOCOMPLETE_LAB_TRACE_MAX_WORD_VISIBLE_WORDS:-1}"
+REQUIRE_CONFIDENT_PLACEMENT="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_CONFIDENT_PLACEMENT:-0}"
 
 if [[ ! -f "$TRACE_PATH" ]]; then
   echo "trace log missing: $TRACE_PATH" >&2
   exit 1
 fi
 
-python3 - "$TRACE_PATH" "$START_LINE" "$REQUIRE_APP" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" <<'PY'
+python3 - "$TRACE_PATH" "$START_LINE" "$REQUIRE_APP" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" "$REQUIRE_CONFIDENT_PLACEMENT" <<'PY'
 import json
 import sys
 from collections import Counter, defaultdict
@@ -28,6 +29,7 @@ max_phrase_presentations = int(sys.argv[5])
 max_word_presentations = int(sys.argv[6])
 max_phrase_visible_words = int(sys.argv[7])
 max_word_visible_words = int(sys.argv[8])
+require_confident_placement = sys.argv[9].lower() in {"1", "true", "yes", "on"}
 events = []
 with open(path, "r", encoding="utf-8") as handle:
     for line_number, line in enumerate(handle, start=1):
@@ -81,6 +83,7 @@ if not latencies:
     missing.append("latencyMilliseconds")
 
 performance_failures = []
+placement_failures = []
 if enforce_performance:
     presentations_by_id = defaultdict(list)
     for event in presented:
@@ -111,6 +114,28 @@ if enforce_performance:
         if visible_words > limit:
             performance_failures.append(
                 f"{event.get('suggestionID') or 'unknown'}: {mode} showed {visible_words} words (limit {limit})"
+            )
+
+placement_bands = Counter()
+self_healing_actions = Counter()
+for event in presented:
+    metadata = event.get("metadata") or {}
+    band = metadata.get("placementConfidenceBand")
+    action = metadata.get("placementSelfHealingAction")
+
+    if band:
+        placement_bands[band] += 1
+    if action:
+        self_healing_actions[action] += 1
+
+    if require_confident_placement:
+        suggestion_id = event.get("suggestionID") or "unknown"
+        if not band:
+            placement_failures.append(f"{suggestion_id}: missing placementConfidenceBand")
+        elif band not in {"high", "medium"}:
+            score = metadata.get("placementConfidenceScore") or "unknown"
+            placement_failures.append(
+                f"{suggestion_id}: placement confidence {band} ({score})"
             )
 
 accept_by_mode = defaultdict(lambda: [0, 0])
@@ -248,6 +273,18 @@ if repeated_unaccepted:
         print(f"  {count}x {mode}: {displayed} | app {top_app} {top_app_count}/{count} (example {suggestion_id})")
 else:
     print("  none")
+print("Placement confidence by band:")
+if placement_bands:
+    for band, count in placement_bands.most_common():
+        print(f"  {band}: {count}")
+else:
+    print("  none")
+print("Placement self-healing actions:")
+if self_healing_actions:
+    for action, count in self_healing_actions.most_common():
+        print(f"  {action}: {count}")
+else:
+    print("  none")
 
 if require_app:
     app_events = [event for event in events if event.get("appBundleIdentifier") == require_app]
@@ -284,4 +321,6 @@ if missing:
     raise SystemExit("missing required trace coverage: " + ", ".join(missing))
 if performance_failures:
     raise SystemExit("typing performance guardrail failed: " + "; ".join(performance_failures))
+if placement_failures:
+    raise SystemExit("placement confidence guardrail failed: " + "; ".join(placement_failures))
 PY

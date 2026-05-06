@@ -56,8 +56,54 @@ public struct PlacementHealthPresentation: Equatable {
             "placementEffectiveRenderMode": renderMode.rawValue,
             "placementAnchorSource": anchorSource.rawValue,
             "placementHealthReason": reason.rawValue,
-            "placementSelfHealingApplied": String(isSelfHealing)
+            "placementSelfHealingApplied": String(isSelfHealing),
+            "placementSelfHealingAction": selfHealingAction,
+            "placementConfidenceScore": String(format: "%.2f", confidenceScore),
+            "placementConfidenceBand": confidenceBand
         ]
+    }
+
+    public var confidenceScore: Double {
+        let base: Double
+        switch (renderMode, anchorSource) {
+        case (.inlineAdjacent, .caret):
+            base = 1.0
+        case (.floatingMirror, .caret):
+            base = 0.8
+        case (.floatingMirror, .element):
+            base = 0.6
+        case (.floatingMirror, .window):
+            base = 0.5
+        default:
+            base = 0.0
+        }
+
+        return max(0, base - (isSelfHealing ? 0.2 : 0))
+    }
+
+    public var confidenceBand: String {
+        switch confidenceScore {
+        case 0.8...:
+            return "high"
+        case 0.55..<0.8:
+            return "medium"
+        case 0.01..<0.55:
+            return "low"
+        default:
+            return "none"
+        }
+    }
+
+    public var selfHealingAction: String {
+        if !isSelfHealing {
+            return "none"
+        }
+
+        if renderMode == .floatingMirror {
+            return "fallback-floating-mirror"
+        }
+
+        return "adjust-anchor"
     }
 }
 
@@ -77,7 +123,10 @@ public struct PlacementHealthSuppression: Equatable {
         [
             "placementRequestedRenderMode": requestedRenderMode.rawValue,
             "placementHealthReason": reason.rawValue,
-            "placementSelfHealingApplied": "false"
+            "placementSelfHealingApplied": "false",
+            "placementSelfHealingAction": "suppress",
+            "placementConfidenceScore": "0.00",
+            "placementConfidenceBand": "none"
         ]
     }
 }

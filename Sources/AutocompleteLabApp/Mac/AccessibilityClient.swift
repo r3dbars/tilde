@@ -13,6 +13,7 @@ struct FocusedTextContext: Equatable {
     let elementIdentifier: Int
     let role: String?
     let subrole: String?
+    let fingerprint: FocusedElementFingerprint
     let textBeforeCursor: String
     let textAfterCursor: String
     let caretRect: CGRect?
@@ -37,6 +38,28 @@ struct FocusedTextCapabilities: Equatable {
 
     var supportsAXInsertion: Bool {
         canSetSelectedText
+    }
+}
+
+struct FocusedElementFingerprint: Equatable {
+    let identifier: String?
+    let title: String?
+    let description: String?
+    let help: String?
+    let placeholder: String?
+    let windowTitle: String?
+
+    var searchableText: String {
+        [
+            identifier,
+            title,
+            description,
+            help,
+            placeholder,
+            windowTitle
+        ]
+        .compactMap { $0?.lowercased() }
+        .joined(separator: " ")
     }
 }
 
@@ -199,6 +222,10 @@ final class AccessibilityClient {
         }
         let elementRect = elementBounds(for: focusedElement)
         let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
+        let fingerprint = focusedElementFingerprint(
+            for: focusedElement,
+            processIdentifier: app.processIdentifier
+        )
         let textLineRect = selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(
                 textLineBounds(
@@ -223,6 +250,7 @@ final class AccessibilityClient {
             elementIdentifier: Int(CFHash(focusedElement)),
             role: role,
             subrole: subrole,
+            fingerprint: fingerprint,
             textBeforeCursor: textSlice.textBeforeCursor,
             textAfterCursor: textSlice.textAfterCursor,
             caretRect: caretRect,
@@ -245,6 +273,10 @@ final class AccessibilityClient {
             elementIdentifier: Int(CFHash(element)),
             role: role,
             subrole: subrole,
+            fingerprint: focusedElementFingerprint(
+                for: element,
+                processIdentifier: processIdentifier
+            ),
             textBeforeCursor: "",
             textAfterCursor: "",
             caretRect: nil,
@@ -563,6 +595,37 @@ final class AccessibilityClient {
         }
 
         return copyAttribute((windowValue as! AXUIElement), attribute: kAXTitleAttribute) as? String
+    }
+
+    private func focusedElementFingerprint(
+        for element: AXUIElement,
+        processIdentifier: pid_t
+    ) -> FocusedElementFingerprint {
+        FocusedElementFingerprint(
+            identifier: compactAttributeText(copyAttribute(element, attribute: "AXIdentifier") as? String),
+            title: compactAttributeText(copyAttribute(element, attribute: kAXTitleAttribute) as? String),
+            description: compactAttributeText(copyAttribute(element, attribute: kAXDescriptionAttribute) as? String),
+            help: compactAttributeText(copyAttribute(element, attribute: kAXHelpAttribute) as? String),
+            placeholder: compactAttributeText(copyAttribute(element, attribute: "AXPlaceholderValue") as? String),
+            windowTitle: compactAttributeText(containingWindowTitle(for: element, processIdentifier: processIdentifier))
+        )
+    }
+
+    private func compactAttributeText(_ value: String?) -> String? {
+        guard let value else {
+            return nil
+        }
+
+        let compact = value
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !compact.isEmpty else {
+            return nil
+        }
+
+        return String(compact.prefix(120))
     }
 
     private func descendantText(in element: AXUIElement, depth: Int = 0) -> String {

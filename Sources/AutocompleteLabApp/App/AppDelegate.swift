@@ -5,6 +5,7 @@ import AutocompleteLabCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let accessibilityClient = AccessibilityClient()
     private let profileStore = CompatibilityProfileStore.mvp
+    private let promptEditorPolicy = PromptEditorFingerprintPolicy()
     private let activationPolicy = CompletionActivationPolicy()
     private let triggerPolicy = SuggestionTriggerPolicy(
         charactersBeforePauseRequest: 1,
@@ -295,6 +296,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion()
             return
         }
+
+        let promptMatch = promptTextAreaMatch(
+            for: frontmostApp.bundleIdentifier,
+            context: rawContext
+        )
+        guard promptMatch.canSuggest else {
+            clearFocusedFieldState()
+            currentProfile = profile
+            setSuggestionDecision("Blocked: \(promptMatch.reason)")
+            recordBlockedSuggestionEvent(
+                "suggestion-blocked",
+                context: rawContext,
+                profile: profile,
+                fieldIdentity: fieldIdentity(app: frontmostApp, context: rawContext, profile: profile),
+                metadata: [
+                    "reason": promptMatch.reason
+                ]
+            )
+            hideSuggestion()
+            return
+        }
         let context = presentationAdjustedContext(rawContext, app: frontmostApp, profile: profile)
 
         let fieldIdentity = fieldIdentity(
@@ -507,6 +529,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile
     ) -> FocusedTextContext {
         guard supportsSyntheticTextAreaCaret(for: app.bundleIdentifier),
+              promptTextAreaMatch(for: app.bundleIdentifier, context: context).canSuggest,
               context.caretRect == nil,
               let syntheticCaret = syntheticTextAreaCaretRect(for: context) else {
             return context
@@ -526,6 +549,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             elementIdentifier: context.elementIdentifier,
             role: context.role,
             subrole: context.subrole,
+            fingerprint: context.fingerprint,
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             caretRect: syntheticCaret,
@@ -539,8 +563,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func supportsSyntheticTextAreaCaret(for bundleIdentifier: String) -> Bool {
-        bundleIdentifier == "com.openai.codex"
-            || bundleIdentifier == "com.anthropic.claude-code"
+        PromptEditorFingerprintPolicy.dogfoodBundleIdentifiers.contains(bundleIdentifier)
+    }
+
+    private struct PromptTextAreaMatch {
+        let canSuggest: Bool
+        let reason: String
+    }
+
+    private func promptTextAreaMatch(
+        for bundleIdentifier: String,
+        context: FocusedTextContext
+    ) -> PromptTextAreaMatch {
+        let decision = promptEditorPolicy.decision(
+            bundleIdentifier: bundleIdentifier,
+            role: context.role,
+            fingerprintText: context.fingerprint.searchableText,
+            elementRect: context.elementRect,
+            windowRect: context.windowRect
+        )
+        return PromptTextAreaMatch(canSuggest: decision.canSuggest, reason: decision.reason)
     }
 
     private func syntheticTextAreaCaretRect(for context: FocusedTextContext) -> CGRect? {
@@ -669,7 +711,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        keyboardEventTap.stop()
+        keyboardEventTap.stop(reason: reason)
         self.keyboardEventTap = nil
         DiagnosticsLog.shared.record(
             "keyboard-event-tap-stopped",
@@ -827,7 +869,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let rawContext = accessibilityClient.focusedTextContext(
                   allowDescendantTextFallback: profile.allowsDescendantTextFallback
               ),
-              !rawContext.isSecure else {
+              !rawContext.isSecure,
+              promptTextAreaMatch(
+                  for: frontmostApp.bundleIdentifier,
+                  context: rawContext
+              ).canSuggest else {
             return false
         }
 

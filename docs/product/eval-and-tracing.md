@@ -36,7 +36,7 @@ The app also keeps local compatibility learning here:
 
 That file can hold per-app visual offsets, render-mode overrides, screenshot-tracing state, observation counts, and confidence. This is the learned self-healing layer: small learned adjustments can apply at runtime, while bigger repeated misses become adapter patches.
 
-The live placement health layer runs before a suggestion is shown. It trusts a caret only when the rect is finite, caret-shaped, and inside the focused element/window. If the caret is missing, invalid, or outside the focused bounds, the app either heals to a floating mirror anchor or suppresses the suggestion when detached anchors are disabled for that app. Traces mark these cases with `placementSelfHealingApplied`, `placementHealthReason`, and `placementAnchorSource`.
+The live placement health layer runs before a suggestion is shown. It trusts a caret only when the rect is finite, caret-shaped, and inside the focused element/window. If the caret is missing, invalid, or outside the focused bounds, the app either heals to a floating mirror anchor or suppresses the suggestion when detached anchors are disabled for that app. Traces mark these cases with `placementSelfHealingApplied`, `placementSelfHealingAction`, `placementHealthReason`, `placementAnchorSource`, `placementConfidenceScore`, and `placementConfidenceBand`.
 
 The live suggestion quality layer is intentionally conservative. Streaming phrase partials do not show until they have enough visible words to be worth looking at, tiny repeated word completions are suppressed more aggressively, ignored suggestions are learned as misses, and any normal typing key invalidates the current visible suggestion before Tab/backtick can accept it. The app should feel calmer, even if that means showing fewer completions.
 
@@ -82,6 +82,12 @@ Use the command-line checker for repeatable proof:
 
 ```bash
 ./script/check_trace_eval.sh
+```
+
+Fail a slice when any shown suggestion has missing or low placement confidence:
+
+```bash
+AUTOCOMPLETE_LAB_TRACE_REQUIRE_CONFIDENT_PLACEMENT=1 ./script/check_trace_eval.sh
 ```
 
 Compare local model latency after a trial launch:

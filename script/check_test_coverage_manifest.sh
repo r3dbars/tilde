@@ -44,6 +44,11 @@ require_pattern "Tests/AutocompleteLabCoreTests/CompatibilityProfileTests.swift"
 require_file "Tests/AutocompleteLabCoreTests/PlacementHealthTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/PlacementHealthTests.swift" "Falls back when caret is outside focused bounds" "placement self-healing coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/PlacementHealthTests.swift" "Suppresses missing inline caret when detached anchors are disabled" "unsafe detached placement coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/PlacementHealthTests.swift" "placementConfidenceBand" "placement confidence metadata coverage"
+
+require_file "Tests/AutocompleteLabCoreTests/PromptEditorFingerprintPolicyTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/PromptEditorFingerprintPolicyTests.swift" "Blocks large central dogfood text areas" "dogfood prompt textbox coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/PromptEditorFingerprintPolicyTests.swift" "Allows prompt-like composer geometry" "prompt geometry fallback coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/DiagnosticValueRedactorTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/DiagnosticValueRedactorTests.swift" "without raw text" "privacy-safe diagnostics coverage"
@@ -57,6 +62,9 @@ require_file "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Suppresses one word twitch completions" "model-output cleanup coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Allows single token word completion suffixes" "word-completion cleanup coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Removes thinking tags" "thinking-tag cleanup coverage"
+
+require_file "Tests/AutocompleteLabCoreTests/CompletionQualityEvalTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/CompletionQualityEvalTests.swift" "Keeps suggestions usable for the tight typing loop" "quality eval corpus coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/SuggestionPresentationGateTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/SuggestionPresentationGateTests.swift" "streamed phrase partials wait for enough visible words" "streaming presentation coverage"
