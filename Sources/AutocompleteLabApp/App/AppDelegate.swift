@@ -1638,7 +1638,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profileRenderMode: renderMode
         )
         let learningAdjustment = supportsSyntheticTextAreaCaret(for: profile.bundleIdentifier)
-            ? storedLearningAdjustment.withoutVisualOffset
+            ? storedLearningAdjustment.trustedVisualOffsetOnly
             : storedLearningAdjustment
         let placementPlan = placementHealthPlan(
             context: context,
@@ -2017,7 +2017,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profileRenderMode: renderMode
         )
         let learningAdjustment = supportsSyntheticTextAreaCaret(for: profile.bundleIdentifier)
-            ? storedLearningAdjustment.withoutVisualOffset
+            ? storedLearningAdjustment.trustedVisualOffsetOnly
             : storedLearningAdjustment
         let placementPlan = placementHealthPlan(
             context: context,
