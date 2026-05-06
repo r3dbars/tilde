@@ -61,6 +61,7 @@ struct CompletionOutputCleanerTests {
 
         #expect(cleaner.clean("Hey there friend.", after: "Hey")?.visibleText == " there friend.")
         #expect(cleaner.clean("Know you are", after: "I know you are") == nil)
+        #expect(cleaner.clean("hello and welcome", after: "hello and w")?.visibleText == "elcome")
     }
 
     @Test("Allows one word phrase completions for snappy mode")

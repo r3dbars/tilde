@@ -6,16 +6,38 @@ public enum SuggestionPresentationPhase: Equatable, Sendable {
     case final
 }
 
+public struct StreamingPresentationState: Equatable, Sendable {
+    public var presentedCount: Int
+    public var lastVisibleText: String
+    public var lastPresentedAtMilliseconds: Int?
+
+    public init(
+        presentedCount: Int = 0,
+        lastVisibleText: String = "",
+        lastPresentedAtMilliseconds: Int? = nil
+    ) {
+        self.presentedCount = presentedCount
+        self.lastVisibleText = lastVisibleText
+        self.lastPresentedAtMilliseconds = lastPresentedAtMilliseconds
+    }
+}
+
 public struct SuggestionPresentationGate: Equatable, Sendable {
     public let minimumStreamingPhraseWords: Int
     public let minimumStreamingPhraseCharacterDelta: Int
+    public let minimumStreamingIntervalMilliseconds: Int
+    public let maximumStreamingPartialPresentations: Int
 
     public init(
         minimumStreamingPhraseWords: Int = 2,
-        minimumStreamingPhraseCharacterDelta: Int = 3
+        minimumStreamingPhraseCharacterDelta: Int = 6,
+        minimumStreamingIntervalMilliseconds: Int = 50,
+        maximumStreamingPartialPresentations: Int = 2
     ) {
         self.minimumStreamingPhraseWords = max(1, minimumStreamingPhraseWords)
         self.minimumStreamingPhraseCharacterDelta = max(1, minimumStreamingPhraseCharacterDelta)
+        self.minimumStreamingIntervalMilliseconds = max(0, minimumStreamingIntervalMilliseconds)
+        self.maximumStreamingPartialPresentations = max(1, maximumStreamingPartialPresentations)
     }
 
     public func shouldPresent(
@@ -55,6 +77,36 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
             return false
         }
 
+        return true
+    }
+
+    public func shouldPresentStreamingPartial(
+        _ suggestion: CompletionSuggestion,
+        mode: CompletionRequestMode,
+        state: inout StreamingPresentationState,
+        nowMilliseconds: Int
+    ) -> Bool {
+        guard shouldPresent(
+            suggestion,
+            mode: mode,
+            phase: .streamingPartial,
+            previousVisibleText: state.lastVisibleText
+        ) else {
+            return false
+        }
+
+        guard state.presentedCount < maximumStreamingPartialPresentations else {
+            return false
+        }
+
+        if let lastPresentedAtMilliseconds = state.lastPresentedAtMilliseconds,
+           nowMilliseconds - lastPresentedAtMilliseconds < minimumStreamingIntervalMilliseconds {
+            return false
+        }
+
+        state.presentedCount += 1
+        state.lastVisibleText = suggestion.visibleText
+        state.lastPresentedAtMilliseconds = nowMilliseconds
         return true
     }
 

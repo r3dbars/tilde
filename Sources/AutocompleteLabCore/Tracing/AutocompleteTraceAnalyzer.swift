@@ -341,7 +341,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
             if event.type == .suggestionPresented,
                let latencyMilliseconds = event.latencyMilliseconds,
-               latencyMilliseconds >= 1_000 {
+               latencyMilliseconds >= slowSuggestionThresholdMilliseconds(for: event.requestMode) {
                 add(
                     key: "Slow suggestion: \(event.requestMode)",
                     event: event,
@@ -373,6 +373,10 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             }
             .prefix(5)
             .map { $0 }
+    }
+
+    private func slowSuggestionThresholdMilliseconds(for requestMode: String) -> Int {
+        requestMode == "wordCompletion" ? 25 : 225
     }
 
     private func addRepeatedUnacceptedSuggestions(

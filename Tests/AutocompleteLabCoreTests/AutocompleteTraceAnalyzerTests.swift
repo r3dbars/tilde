@@ -43,9 +43,10 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.usefulRateByApp["com.apple.TextEdit"] == 2.0 / 3.0)
         #expect(summary.usefulRateByMode["wordCompletion"] == 2.0 / 3.0)
         #expect(summary.p50LatencyMilliseconds == 30)
-        #expect(summary.topMisses.count == 2)
+        #expect(summary.topMisses.count == 3)
         #expect(summary.topMisses.contains { $0.fixCategory == "word-completion issue" })
         #expect(summary.topMisses.contains { $0.fixCategory == "insertion bug" })
+        #expect(summary.topMisses.contains { $0.fixCategory == "model latency issue" })
     }
 
     @Test("Streaming updates count as one shown suggestion")
@@ -181,6 +182,13 @@ struct AutocompleteTraceAnalyzerTests {
                 requestMode: "wordCompletion",
                 displayedText: "t",
                 latency: 42
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "three",
+                requestMode: "phraseContinuation",
+                displayedText: "right now",
+                latency: 224
             )
         ]
 
@@ -191,7 +199,13 @@ struct AutocompleteTraceAnalyzerTests {
                 && miss.fixCategory == "model latency issue"
                 && miss.suggestedCause.contains("2023")
         })
-        #expect(!summary.topMisses.contains { $0.title == "Slow suggestion: wordCompletion" })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Slow suggestion: wordCompletion"
+                && miss.suggestedCause.contains("42")
+        })
+        #expect(!summary.topMisses.contains { miss in
+            miss.exampleSuggestionID == "three"
+        })
     }
 
     @Test("flags repeated unaccepted suggestions")
