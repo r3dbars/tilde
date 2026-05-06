@@ -139,7 +139,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return false
         }
 
-        return trimmed.contains(where: { $0.isLetter })
+        return trimmed.allSatisfy { $0.isLetter }
     }
 
     private func isLowValueSingleWordPhrase(_ text: String) -> Bool {

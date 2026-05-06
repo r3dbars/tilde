@@ -30,13 +30,17 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
             return PromptEditorFingerprintDecision(canSuggest: true, reason: "non-dogfood-profile")
         }
 
-        guard role == "AXTextArea" else {
+        guard Self.promptCompatibleRoles.contains(role ?? "") else {
             return PromptEditorFingerprintDecision(canSuggest: false, reason: "non-prompt-role")
         }
 
         let searchable = fingerprintText.lowercased()
         if Self.promptTerms.contains(where: { searchable.contains($0) }) {
             return PromptEditorFingerprintDecision(canSuggest: true, reason: "prompt-fingerprint")
+        }
+
+        guard role == "AXTextArea" else {
+            return PromptEditorFingerprintDecision(canSuggest: false, reason: "missing-prompt-fingerprint")
         }
 
         guard let elementRect,
@@ -75,5 +79,11 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
         "prompt",
         "text area",
         "textarea"
+    ]
+
+    private static let promptCompatibleRoles: Set<String> = [
+        "AXTextArea",
+        "AXGroup",
+        "AXWebArea"
     ]
 }

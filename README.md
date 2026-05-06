@@ -31,7 +31,10 @@ Target apps for the first pass:
 - TextEdit
 - Notes
 - Obsidian
-- Mail
+- Chrome text fields
+- Codex and Claude Code prompt fields
+
+Mail is diagnostics-only until compose insertion is proven safe.
 
 ## Model Decision
 

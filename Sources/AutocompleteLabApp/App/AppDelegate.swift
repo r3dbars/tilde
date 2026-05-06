@@ -640,15 +640,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func startKeyboardEventTapIfPossible() {
+    @discardableResult
+    private func startKeyboardEventTapIfPossible() -> Bool {
         keyboardEventTapStopTask?.cancel()
         keyboardEventTapStopTask = nil
+
+        guard keyboardEventTap == nil else {
+            return true
+        }
 
         guard keyboardCapturePolicy.shouldCaptureKeys(
             isTrustedForAccessibility: accessibilityClient.isTrusted,
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
-        ), keyboardEventTap == nil else {
-            return
+        ) else {
+            return false
         }
 
         let eventTap = KeyboardEventTap(
@@ -668,7 +673,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if eventTap.start() {
             keyboardEventTap = eventTap
             DiagnosticsLog.shared.record("keyboard-event-tap-started")
+            return true
         }
+
+        DiagnosticsLog.shared.record("keyboard-event-tap-start-failed")
+        return false
     }
 
     private func keyboardEventTapSnapshot() -> KeyboardEventTapSnapshot {
@@ -1408,6 +1417,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionInvalidatedByUserKeyDown = false
         keyboardEventTap?.resetPassthroughObservation()
         updateKeyboardEventTapSnapshot()
+        guard startKeyboardEventTapIfPossible() else {
+            setSuggestionDecision("Blocked: keyboard capture unavailable")
+            hideSuggestion(reason: "keyboard-capture-unavailable")
+            return
+        }
+
         lastCaretRect = placement.anchorRect
         lastTextLineRect = placement.textLineRect
         lastClippingRect = placement.clippingRect
@@ -1466,7 +1481,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(learningAdjustment.metadata) { current, _ in current }
             .merging(placement.metadata) { current, _ in current }
         )
-        startKeyboardEventTapIfPossible()
         updateKeyboardEventTapSnapshot()
     }
 

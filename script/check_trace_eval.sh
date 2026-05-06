@@ -10,13 +10,15 @@ MAX_WORD_PRESENTATIONS="${AUTOCOMPLETE_LAB_TRACE_MAX_WORD_PRESENTATIONS:-1}"
 MAX_PHRASE_VISIBLE_WORDS="${AUTOCOMPLETE_LAB_TRACE_MAX_PHRASE_VISIBLE_WORDS:-5}"
 MAX_WORD_VISIBLE_WORDS="${AUTOCOMPLETE_LAB_TRACE_MAX_WORD_VISIBLE_WORDS:-1}"
 REQUIRE_CONFIDENT_PLACEMENT="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_CONFIDENT_PLACEMENT:-0}"
+MIN_USEFUL_RATE="${AUTOCOMPLETE_LAB_TRACE_MIN_USEFUL_RATE:-}"
+MAX_REPEATED_UNACCEPTED="${AUTOCOMPLETE_LAB_TRACE_MAX_REPEATED_UNACCEPTED:-}"
 
 if [[ ! -f "$TRACE_PATH" ]]; then
   echo "trace log missing: $TRACE_PATH" >&2
   exit 1
 fi
 
-python3 - "$TRACE_PATH" "$START_LINE" "$REQUIRE_APP" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" "$REQUIRE_CONFIDENT_PLACEMENT" <<'PY'
+python3 - "$TRACE_PATH" "$START_LINE" "$REQUIRE_APP" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" "$REQUIRE_CONFIDENT_PLACEMENT" "$MIN_USEFUL_RATE" "$MAX_REPEATED_UNACCEPTED" <<'PY'
 import json
 import sys
 from collections import Counter, defaultdict
@@ -30,6 +32,8 @@ max_word_presentations = int(sys.argv[6])
 max_phrase_visible_words = int(sys.argv[7])
 max_word_visible_words = int(sys.argv[8])
 require_confident_placement = sys.argv[9].lower() in {"1", "true", "yes", "on"}
+min_useful_rate = int(sys.argv[10]) if sys.argv[10] else None
+max_repeated_unaccepted = int(sys.argv[11]) if sys.argv[11] else None
 events = []
 with open(path, "r", encoding="utf-8") as handle:
     for line_number, line in enumerate(handle, start=1):
@@ -84,6 +88,7 @@ if not latencies:
 
 performance_failures = []
 placement_failures = []
+annoyance_failures = []
 if enforce_performance:
     presentations_by_id = defaultdict(list)
     for event in presented:
@@ -201,6 +206,10 @@ print(f"Actionable suppressed: {sum(1 for event in events if event.get('type') =
 print(f"Insertion failures: {types['insertionFailed']}")
 accept_rate = 0 if not presented_ids else round((len(accepted_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
 useful_rate = 0 if not presented_ids else round((len(useful_suggestion_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
+if min_useful_rate is not None and useful_rate < min_useful_rate:
+    annoyance_failures.append(
+        f"useful rate {useful_rate}% is below required {min_useful_rate}%"
+    )
 print(f"Accept rate: {accept_rate}%")
 print(f"Useful rate: {useful_rate}%")
 print(f"p50 latency: {percentile(latencies, 0.50)}")
@@ -271,6 +280,10 @@ print("Top repeated unaccepted suggestions:")
 if repeated_unaccepted:
     for count, mode, displayed, top_app, top_app_count, suggestion_id in repeated_unaccepted[:5]:
         print(f"  {count}x {mode}: {displayed} | app {top_app} {top_app_count}/{count} (example {suggestion_id})")
+        if max_repeated_unaccepted is not None and count > max_repeated_unaccepted:
+            annoyance_failures.append(
+                f"{count}x repeated unaccepted {mode} suggestion exceeds limit {max_repeated_unaccepted}: {displayed} (example {suggestion_id})"
+            )
 else:
     print("  none")
 print("Placement confidence by band:")
@@ -323,4 +336,6 @@ if performance_failures:
     raise SystemExit("typing performance guardrail failed: " + "; ".join(performance_failures))
 if placement_failures:
     raise SystemExit("placement confidence guardrail failed: " + "; ".join(placement_failures))
+if annoyance_failures:
+    raise SystemExit("suggestion annoyance guardrail failed: " + "; ".join(annoyance_failures))
 PY

@@ -94,6 +94,15 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("tation next", after: "dic", mode: .wordCompletion) == nil)
     }
 
+    @Test("Suppresses punctuation in word completion suffixes")
+    func suppressesPunctuationInWordCompletionSuffixes() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("ing.", after: "walk", mode: .wordCompletion) == nil)
+        #expect(cleaner.clean("ing,", after: "walk", mode: .wordCompletion) == nil)
+        #expect(cleaner.clean("ing", after: "walk", mode: .wordCompletion)?.visibleText == "ing")
+    }
+
     @Test("Suppresses suggestions that parrot earlier field text")
     func suppressesSuggestionsThatParrotEarlierFieldText() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)

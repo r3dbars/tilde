@@ -138,4 +138,13 @@ struct CompletionPromptBuilderTests {
 
         #expect(prompt.user.contains("Can we make this work."))
     }
+
+    @Test("Prompt starts next sentence after sentence boundary")
+    func promptStartsNextSentenceAfterSentenceBoundary() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "Can we make this work."))
+
+        #expect(prompt.system.contains("Start the next sentence naturally"))
+        #expect(!prompt.system.contains("Continue the current sentence"))
+    }
 }

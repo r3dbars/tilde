@@ -23,13 +23,24 @@ struct SuggestionRepetitionSuppressorTests {
         #expect(suppressor.shouldSuppress("ng", mode: .wordCompletion))
     }
 
-    @Test("does not suppress substantial word completions")
-    func doesNotSuppressSubstantialWordCompletions() {
+    @Test("suppresses repeated substantial word completion misses")
+    func suppressesRepeatedSubstantialWordCompletionMisses() {
         var suppressor = SuggestionRepetitionSuppressor(missThreshold: 1)
 
         suppressor.recordMiss("tation", mode: .wordCompletion)
 
-        #expect(!suppressor.shouldSuppress("tation", mode: .wordCompletion))
+        #expect(suppressor.shouldSuppress("tation", mode: .wordCompletion))
+    }
+
+    @Test("does not suppress invalid word completion text")
+    func doesNotSuppressInvalidWordCompletionText() {
+        var suppressor = SuggestionRepetitionSuppressor(missThreshold: 1)
+
+        suppressor.recordMiss("two words", mode: .wordCompletion)
+        suppressor.recordMiss("ing.", mode: .wordCompletion)
+
+        #expect(!suppressor.shouldSuppress("two words", mode: .wordCompletion))
+        #expect(!suppressor.shouldSuppress("ing.", mode: .wordCompletion))
     }
 
     @Test("acceptance clears repeated phrase misses")
