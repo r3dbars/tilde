@@ -64,6 +64,37 @@ struct SyntheticCaretEstimatorTests {
         #expect(caret.maxY <= 332)
     }
 
+    @Test("Keeps negative-origin synthetic carets inside focused bounds")
+    func keepsNegativeOriginSyntheticCaretsInsideFocusedBounds() throws {
+        let elementRect = CGRect(x: -1900, y: 81, width: 713, height: 105)
+        let windowRect = CGRect(x: -1924, y: 57, width: 761, height: 153)
+        let caret = try #require(SyntheticCaretEstimator.caretRect(
+            textBeforeCursor: String(repeating: "typing ", count: 84),
+            elementRect: elementRect,
+            windowRect: windowRect,
+            lineHeight: 20,
+            widthOfText: fixedWidth
+        ))
+
+        #expect(caret.minX >= elementRect.minX)
+        #expect(caret.maxX <= elementRect.maxX)
+        #expect(caret.minY >= windowRect.minY)
+        #expect(caret.maxY <= windowRect.maxY)
+    }
+
+    @Test("Rejects element and window rects from different coordinate spaces")
+    func rejectsMixedCoordinateSpaces() {
+        let caret = SyntheticCaretEstimator.caretRect(
+            textBeforeCursor: "Can we",
+            elementRect: CGRect(x: -1900, y: 81, width: 713, height: 105),
+            windowRect: CGRect(x: 400, y: 400, width: 761, height: 153),
+            lineHeight: 20,
+            widthOfText: fixedWidth
+        )
+
+        #expect(caret == nil)
+    }
+
     private func fixedWidth(_ text: String) -> CGFloat {
         CGFloat(text.count * 10)
     }

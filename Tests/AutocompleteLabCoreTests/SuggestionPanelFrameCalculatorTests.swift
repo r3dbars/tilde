@@ -44,6 +44,24 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(frame.maxX <= 1304)
     }
 
+    @Test("Keeps inline ghost text inside negative-origin editor bounds")
+    func keepsInlineGhostTextInsideNegativeOriginEditorBounds() {
+        let screenFrame = CGRect(x: -1920, y: 300, width: 1920, height: 1080)
+        let clippingFrame = CGRect(x: -1900, y: 1194, width: 713, height: 105)
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            caretRect: CGRect(x: -1380, y: 1195, width: 0, height: 20),
+            textLineRect: CGRect(x: -1380, y: 1195, width: 0, height: 20),
+            textSize: CGSize(width: 180, height: 20),
+            screenFrame: screenFrame,
+            clippingFrame: clippingFrame
+        )
+
+        #expect(frame.minX >= clippingFrame.minX)
+        #expect(frame.maxX <= clippingFrame.maxX)
+        #expect(frame.minY >= screenFrame.minY)
+        #expect(frame.maxY <= screenFrame.maxY)
+    }
+
     @Test("Keeps panel valid on narrow screens")
     func keepsPanelValidOnNarrowScreens() {
         let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(

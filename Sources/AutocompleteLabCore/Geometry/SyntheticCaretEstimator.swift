@@ -17,6 +17,9 @@ public enum SyntheticCaretEstimator {
         guard elementRect.width > 80, elementRect.height > 20 else {
             return nil
         }
+        guard Self.hasSharedCoordinateSpace(elementRect: elementRect, windowRect: windowRect) else {
+            return nil
+        }
 
         let lineHeight = max(rawLineHeight, 20)
         let maxLineWidth = max(40, elementRect.width - (horizontalPadding * 2))
@@ -40,12 +43,12 @@ public enum SyntheticCaretEstimator {
             elementRect: elementRect,
             windowRect: windowRect
         )
+        let lowerX = elementRect.minX + horizontalPadding
+        let upperX = max(lowerX, elementRect.maxX - horizontalPadding)
+        let preferredX = lowerX + currentLineWidth + inlineGap
 
         return CGRect(
-            x: min(
-                elementRect.minX + horizontalPadding + currentLineWidth + inlineGap,
-                elementRect.maxX - horizontalPadding
-            ),
+            x: min(max(preferredX, lowerX), upperX),
             y: y,
             width: 0,
             height: caretHeight
@@ -97,5 +100,33 @@ public enum SyntheticCaretEstimator {
         }
 
         return min(max(preferredY, boundedMinY), boundedMaxY)
+    }
+
+    private static func hasSharedCoordinateSpace(elementRect: CGRect, windowRect: CGRect?) -> Bool {
+        guard let windowRect else {
+            return true
+        }
+
+        guard elementRect.isFinitePlacementRect,
+              windowRect.isFinitePlacementRect else {
+            return false
+        }
+
+        let tolerance: CGFloat = 24
+        return windowRect
+            .insetBy(dx: -tolerance, dy: -tolerance)
+            .intersects(elementRect)
+    }
+}
+
+private extension CGRect {
+    var isFinitePlacementRect: Bool {
+        minX.isFinite
+            && minY.isFinite
+            && maxX.isFinite
+            && maxY.isFinite
+            && width.isFinite
+            && height.isFinite
+            && !isNull
     }
 }
