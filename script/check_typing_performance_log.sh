@@ -9,13 +9,14 @@ MAX_P95_MICROS="${AUTOCOMPLETE_LAB_EVENT_TAP_MAX_P95_MICROS:-8000}"
 MAX_POLL_P95_MS="${AUTOCOMPLETE_LAB_FOCUSED_TEXT_POLL_MAX_P95_MS:-80}"
 MAX_POLL_SAMPLE_MS="${AUTOCOMPLETE_LAB_FOCUSED_TEXT_POLL_MAX_MS:-120}"
 REQUIRE_SAMPLES="${AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES:-0}"
+REQUIRE_POLL_SAMPLES="${AUTOCOMPLETE_LAB_FOCUSED_TEXT_POLL_REQUIRE_SAMPLES:-0}"
 
 if [[ ! -f "$LOG_PATH" ]]; then
   echo "diagnostics log missing: $LOG_PATH" >&2
   exit 1
 fi
 
-python3 - "$LOG_PATH" "$START_LINE" "$LINE_LIMIT" "$MAX_SAMPLE_MICROS" "$MAX_P95_MICROS" "$MAX_POLL_P95_MS" "$MAX_POLL_SAMPLE_MS" "$REQUIRE_SAMPLES" <<'PY'
+python3 - "$LOG_PATH" "$START_LINE" "$LINE_LIMIT" "$MAX_SAMPLE_MICROS" "$MAX_P95_MICROS" "$MAX_POLL_P95_MS" "$MAX_POLL_SAMPLE_MS" "$REQUIRE_SAMPLES" "$REQUIRE_POLL_SAMPLES" <<'PY'
 import sys
 
 path = sys.argv[1]
@@ -26,6 +27,7 @@ max_p95_micros = int(sys.argv[5])
 max_poll_p95_ms = int(sys.argv[6])
 max_poll_sample_ms = int(sys.argv[7])
 required_samples = int(sys.argv[8] or "0")
+required_poll_samples = int(sys.argv[9] or "0")
 
 
 def fields_from(parts):
@@ -45,6 +47,18 @@ def int_field(fields, key):
     try:
         return int(value)
     except ValueError:
+        return None
+
+
+def required_int_field(fields, key, line_number, event, malformed_events):
+    value = fields.get(key)
+    if value is None:
+        malformed_events.append(f"line {line_number} {event} missing {key}")
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        malformed_events.append(f"line {line_number} {event} invalid {key}={value}")
         return None
 
 
@@ -86,6 +100,7 @@ summaries = []
 poll_slow_markers = []
 poll_summaries = []
 disabled_events = []
+malformed_events = []
 
 for line_number, line in selected:
     parts = line.split()
@@ -96,7 +111,13 @@ for line_number, line in selected:
     fields = fields_from(parts[2:])
 
     if event == "keyboard-event-tap-latency":
-        duration = int_field(fields, "durationMicros")
+        duration = required_int_field(
+            fields,
+            "durationMicros",
+            line_number,
+            event,
+            malformed_events,
+        )
         if duration is None:
             continue
         raw_samples.append(
@@ -117,14 +138,17 @@ for line_number, line in selected:
             }
         )
     elif event == "keyboard-event-tap-latency-summary":
+        count = required_int_field(fields, "count", line_number, event, malformed_events)
+        p95 = required_int_field(fields, "p95Micros", line_number, event, malformed_events)
+        max_micros = required_int_field(fields, "maxMicros", line_number, event, malformed_events)
         summary = {
             "line": line_number,
             "reason": fields.get("reason", "unknown"),
-            "count": int_field(fields, "count") or 0,
+            "count": count or 0,
             "p50": int_field(fields, "p50Micros"),
-            "p95": int_field(fields, "p95Micros"),
+            "p95": p95,
             "p99": int_field(fields, "p99Micros"),
-            "max": int_field(fields, "maxMicros"),
+            "max": max_micros,
         }
         summaries.append(summary)
     elif event == "keyboard-event-tap-disabled":
@@ -142,19 +166,35 @@ for line_number, line in selected:
             }
         )
     elif event == "focused-text-poll-latency-summary":
+        count = required_int_field(fields, "count", line_number, event, malformed_events)
+        p95 = required_int_field(
+            fields,
+            "p95Milliseconds",
+            line_number,
+            event,
+            malformed_events,
+        )
+        max_milliseconds = required_int_field(
+            fields,
+            "maxMilliseconds",
+            line_number,
+            event,
+            malformed_events,
+        )
         poll_summaries.append(
             {
                 "line": line_number,
-                "count": int_field(fields, "count") or 0,
+                "count": count or 0,
                 "p50": int_field(fields, "p50Milliseconds"),
-                "p95": int_field(fields, "p95Milliseconds"),
-                "max": int_field(fields, "maxMilliseconds"),
+                "p95": p95,
+                "max": max_milliseconds,
             }
         )
 
 raw_values = [item["duration"] for item in raw_samples]
 summary_sample_count = sum(item["count"] for item in summaries)
 total_sample_evidence = len(raw_samples) + summary_sample_count
+poll_summary_sample_count = sum(item["count"] for item in poll_summaries)
 
 print(f"Typing performance log: {path}")
 print(f"Start line: {start_line}")
@@ -175,7 +215,7 @@ print(f"Slow latency markers: {len(slow_markers)}")
 print(f"Tap disabled events: {len(disabled_events)}")
 print(
     "Focused text poll windows: "
-    f"n={len(poll_summaries)} samples={sum(item['count'] for item in poll_summaries)}"
+    f"n={len(poll_summaries)} samples={poll_summary_sample_count}"
 )
 if poll_summaries:
     poll_p95 = [item["p95"] for item in poll_summaries if item["p95"] is not None]
@@ -186,25 +226,32 @@ print(f"Focused text poll slow markers: {len(poll_slow_markers)}")
 
 failures = []
 
+failures.extend(malformed_events)
+
 if required_samples > 0 and total_sample_evidence < required_samples:
     failures.append(
-        f"expected at least {required_samples} event tap latency samples, found {total_sample_evidence}"
+        f"expected at least {required_samples} event tap latency samples, found {total_sample_evidence}; type in a focused text field after the start line"
+    )
+
+if required_poll_samples > 0 and poll_summary_sample_count < required_poll_samples:
+    failures.append(
+        f"expected at least {required_poll_samples} focused text poll latency samples, found {poll_summary_sample_count}; keep a text field focused long enough to collect poll timing"
     )
 
 for item in raw_samples:
     if item["duration"] > max_sample_micros:
         failures.append(
-            f"{line_label(item)} raw event tap latency {item['duration']}us exceeds {max_sample_micros}us"
+            f"{line_label(item)} raw event tap latency {item['duration']}us exceeds {max_sample_micros}us key={item['key']} decision={item['decision']}"
         )
 
 for item in summaries:
     if item["p95"] is not None and item["p95"] > max_p95_micros:
         failures.append(
-            f"{line_label(item)} event tap p95 {item['p95']}us exceeds {max_p95_micros}us"
+            f"{line_label(item)} event tap p95 {item['p95']}us exceeds {max_p95_micros}us reason={item['reason']}"
         )
     if item["max"] is not None and item["max"] > max_sample_micros:
         failures.append(
-            f"{line_label(item)} event tap max {item['max']}us exceeds {max_sample_micros}us"
+            f"{line_label(item)} event tap max {item['max']}us exceeds {max_sample_micros}us reason={item['reason']}"
         )
 
 for item in slow_markers:

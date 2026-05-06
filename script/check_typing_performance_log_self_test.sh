@@ -19,6 +19,7 @@ EOF
 
 AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
 AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES=3 \
+AUTOCOMPLETE_LAB_FOCUSED_TEXT_POLL_REQUIRE_SAMPLES=3 \
   script/check_typing_performance_log.sh >"$TMP_DIR/pass.txt"
 
 if ! grep -F "Raw event tap latency: n=2" "$TMP_DIR/pass.txt" >/dev/null; then
@@ -42,6 +43,54 @@ fi
 if ! grep -F "Focused text poll windows: n=1 samples=3" "$TMP_DIR/pass.txt" >/dev/null; then
   echo "typing performance self-test did not summarize focused text poll windows" >&2
   cat "$TMP_DIR/pass.txt" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-05-06T10:00:00Z keyboard-event-tap-latency decision=consume durationMicros=500 key=tab
+EOF
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+   AUTOCOMPLETE_LAB_FOCUSED_TEXT_POLL_REQUIRE_SAMPLES=1 \
+   script/check_typing_performance_log.sh >"$TMP_DIR/poll-required-fail.txt" 2>&1; then
+  echo "typing performance self-test expected missing focused-text poll samples to fail" >&2
+  cat "$TMP_DIR/poll-required-fail.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "expected at least 1 focused text poll latency samples, found 0" "$TMP_DIR/poll-required-fail.txt" >/dev/null; then
+  echo "typing performance self-test did not explain missing focused-text poll samples" >&2
+  cat "$TMP_DIR/poll-required-fail.txt" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-05-06T10:00:00Z keyboard-event-tap-latency decision=consume durationMicros=fast key=tab
+2026-05-06T10:00:01Z keyboard-event-tap-latency-summary count=3 maxMicros=900 p50Micros=500 reason=stop
+2026-05-06T10:00:02Z focused-text-poll-latency-summary count=3 maxMilliseconds=12 p50Milliseconds=4
+EOF
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" script/check_typing_performance_log.sh >"$TMP_DIR/malformed.txt" 2>&1; then
+  echo "typing performance self-test expected malformed latency diagnostics to fail" >&2
+  cat "$TMP_DIR/malformed.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "keyboard-event-tap-latency invalid durationMicros=fast" "$TMP_DIR/malformed.txt" >/dev/null; then
+  echo "typing performance self-test did not catch invalid raw latency diagnostics" >&2
+  cat "$TMP_DIR/malformed.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "keyboard-event-tap-latency-summary missing p95Micros" "$TMP_DIR/malformed.txt" >/dev/null; then
+  echo "typing performance self-test did not catch malformed event-tap summaries" >&2
+  cat "$TMP_DIR/malformed.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "focused-text-poll-latency-summary missing p95Milliseconds" "$TMP_DIR/malformed.txt" >/dev/null; then
+  echo "typing performance self-test did not catch malformed focused-text poll summaries" >&2
+  cat "$TMP_DIR/malformed.txt" >&2
   exit 1
 fi
 
