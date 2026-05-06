@@ -1752,6 +1752,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "visibleWords": String(suggestion.visibleWordCount),
                 "anchorRect": compactRectDescription(placement.anchorRect),
                 "textLineRect": placement.textLineRect.map(compactRectDescription) ?? "none",
+                "suggestionPanelRect": panelRect.map(compactRectDescription) ?? "none",
                 "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none",
                 "screenshotCaptureRect": screenshotCapture.rectDescription
             ]
@@ -1770,7 +1771,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "visibleChars": String(suggestion.visibleText.count),
                 "visibleWords": String(suggestion.visibleWordCount),
                 "suggestionID": suggestionID,
-                "latencyMilliseconds": String(latencyMilliseconds)
+                "latencyMilliseconds": String(latencyMilliseconds),
+                "anchorRect": compactRectDescription(placement.anchorRect),
+                "textLineRect": placement.textLineRect.map(compactRectDescription) ?? "none",
+                "suggestionPanelRect": panelRect.map(compactRectDescription) ?? "none",
+                "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none",
+                "screenshotCaptureRect": screenshotCapture.rectDescription
             ]
             .merging(learningAdjustment.metadata) { current, _ in current }
             .merging(placement.metadata) { current, _ in current }

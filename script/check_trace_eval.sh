@@ -3,6 +3,7 @@ set -euo pipefail
 
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
 START_LINE="${AUTOCOMPLETE_LAB_TRACE_START_LINE:-0}"
+END_LINE="${AUTOCOMPLETE_LAB_TRACE_END_LINE:-}"
 REQUIRE_APP="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP:-}"
 ENFORCE_PERFORMANCE="${AUTOCOMPLETE_LAB_TRACE_ENFORCE_PERFORMANCE:-0}"
 MAX_PHRASE_PRESENTATIONS="${AUTOCOMPLETE_LAB_TRACE_MAX_PHRASE_PRESENTATIONS:-3}"
@@ -10,6 +11,7 @@ MAX_WORD_PRESENTATIONS="${AUTOCOMPLETE_LAB_TRACE_MAX_WORD_PRESENTATIONS:-1}"
 MAX_PHRASE_VISIBLE_WORDS="${AUTOCOMPLETE_LAB_TRACE_MAX_PHRASE_VISIBLE_WORDS:-5}"
 MAX_WORD_VISIBLE_WORDS="${AUTOCOMPLETE_LAB_TRACE_MAX_WORD_VISIBLE_WORDS:-1}"
 REQUIRE_CONFIDENT_PLACEMENT="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_CONFIDENT_PLACEMENT:-0}"
+REQUIRE_VISUAL_EVIDENCE="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE:-0}"
 MIN_USEFUL_RATE="${AUTOCOMPLETE_LAB_TRACE_MIN_USEFUL_RATE:-}"
 MAX_REPEATED_UNACCEPTED="${AUTOCOMPLETE_LAB_TRACE_MAX_REPEATED_UNACCEPTED:-}"
 
@@ -18,27 +20,31 @@ if [[ ! -f "$TRACE_PATH" ]]; then
   exit 1
 fi
 
-python3 - "$TRACE_PATH" "$START_LINE" "$REQUIRE_APP" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" "$REQUIRE_CONFIDENT_PLACEMENT" "$MIN_USEFUL_RATE" "$MAX_REPEATED_UNACCEPTED" <<'PY'
+python3 - "$TRACE_PATH" "$START_LINE" "$END_LINE" "$REQUIRE_APP" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" "$REQUIRE_CONFIDENT_PLACEMENT" "$REQUIRE_VISUAL_EVIDENCE" "$MIN_USEFUL_RATE" "$MAX_REPEATED_UNACCEPTED" <<'PY'
 import json
 import sys
 from collections import Counter, defaultdict
 
 path = sys.argv[1]
 start_line = int(sys.argv[2] or "0")
-require_app = sys.argv[3]
-enforce_performance = sys.argv[4].lower() in {"1", "true", "yes", "on"}
-max_phrase_presentations = int(sys.argv[5])
-max_word_presentations = int(sys.argv[6])
-max_phrase_visible_words = int(sys.argv[7])
-max_word_visible_words = int(sys.argv[8])
-require_confident_placement = sys.argv[9].lower() in {"1", "true", "yes", "on"}
-min_useful_rate = int(sys.argv[10]) if sys.argv[10] else None
-max_repeated_unaccepted = int(sys.argv[11]) if sys.argv[11] else None
+end_line = int(sys.argv[3]) if sys.argv[3] else None
+require_app = sys.argv[4]
+enforce_performance = sys.argv[5].lower() in {"1", "true", "yes", "on"}
+max_phrase_presentations = int(sys.argv[6])
+max_word_presentations = int(sys.argv[7])
+max_phrase_visible_words = int(sys.argv[8])
+max_word_visible_words = int(sys.argv[9])
+require_confident_placement = sys.argv[10].lower() in {"1", "true", "yes", "on"}
+require_visual_evidence = sys.argv[11].lower() in {"1", "true", "yes", "on"}
+min_useful_rate = int(sys.argv[12]) if sys.argv[12] else None
+max_repeated_unaccepted = int(sys.argv[13]) if sys.argv[13] else None
 events = []
 with open(path, "r", encoding="utf-8") as handle:
     for line_number, line in enumerate(handle, start=1):
         if line_number <= start_line:
             continue
+        if end_line is not None and line_number > end_line:
+            break
         line = line.strip()
         if not line:
             continue
@@ -64,8 +70,11 @@ insertion_verified = [
     if event.get("type") == "insertionVerified"
 ]
 presented_by_id = {}
+presentations_by_id = defaultdict(list)
 for event in presented:
     suggestion_id = event.get("suggestionID")
+    if suggestion_id:
+        presentations_by_id[suggestion_id].append(event)
     if suggestion_id and suggestion_id not in presented_by_id:
         presented_by_id[suggestion_id] = event
 accepted_ids = {event.get("suggestionID") for event in accepted if event.get("suggestionID")}
@@ -98,6 +107,7 @@ if not latencies:
 
 performance_failures = []
 placement_failures = []
+visual_evidence_failures = []
 annoyance_failures = []
 insertion_failures = []
 
@@ -150,11 +160,6 @@ if unrecovered_insertion_failures:
     )
 
 if enforce_performance:
-    presentations_by_id = defaultdict(list)
-    for event in presented:
-        suggestion_id = event.get("suggestionID") or "unknown"
-        presentations_by_id[suggestion_id].append(event)
-
     for suggestion_id, suggestion_events in sorted(presentations_by_id.items()):
         first = suggestion_events[0]
         mode = first.get("requestMode") or "unknown"
@@ -183,6 +188,22 @@ if enforce_performance:
 
 placement_bands = Counter()
 self_healing_actions = Counter()
+visual_evidence_count = 0
+
+def missing_visual_evidence_parts(event):
+    metadata = event.get("metadata") or {}
+    missing_parts = []
+
+    if not event.get("screenshotPath"):
+        missing_parts.append("screenshotPath")
+
+    for key in ("anchorRect", "suggestionPanelRect", "screenshotCaptureRect", "placementConfidenceBand"):
+        value = metadata.get(key)
+        if value is None or str(value).strip() in {"", "none"}:
+            missing_parts.append(key)
+
+    return missing_parts
+
 for event in presented:
     metadata = event.get("metadata") or {}
     band = metadata.get("placementConfidenceBand")
@@ -202,6 +223,21 @@ for event in presented:
             placement_failures.append(
                 f"{suggestion_id}: placement confidence {band} ({score})"
             )
+
+if require_visual_evidence:
+    for suggestion_id, suggestion_events in sorted(presentations_by_id.items()):
+        missing_parts_by_event = [
+            missing_visual_evidence_parts(event)
+            for event in suggestion_events
+        ]
+        if any(not parts for parts in missing_parts_by_event):
+            visual_evidence_count += 1
+            continue
+
+        best_missing_parts = min(missing_parts_by_event, key=len)
+        visual_evidence_failures.append(
+            f"{suggestion_id}: missing " + ", ".join(best_missing_parts)
+        )
 
 accept_by_mode = defaultdict(lambda: [0, 0])
 accept_by_app = defaultdict(lambda: [0, 0])
@@ -254,6 +290,8 @@ repeated_unaccepted.sort(key=lambda item: (-item[0], item[1], item[2]))
 
 print(f"Trace: {path}")
 print(f"Start line: {start_line}")
+if end_line is not None:
+    print(f"End line: {end_line}")
 print(f"Events: {len(events)}")
 print(f"Presented: {len(presented_by_id)}")
 print(f"Accepted keypresses: {len(accepted)}")
@@ -360,6 +398,8 @@ if self_healing_actions:
         print(f"  {action}: {count}")
 else:
     print("  none")
+if require_visual_evidence:
+    print(f"Visual evidence complete: {visual_evidence_count}/{len(presentations_by_id)}")
 
 if require_app:
     app_events = [event for event in events if event.get("appBundleIdentifier") == require_app]
@@ -404,6 +444,8 @@ if performance_failures:
     raise SystemExit("typing performance guardrail failed: " + "; ".join(performance_failures))
 if placement_failures:
     raise SystemExit("placement confidence guardrail failed: " + "; ".join(placement_failures))
+if visual_evidence_failures:
+    raise SystemExit("visual evidence guardrail failed: " + "; ".join(visual_evidence_failures))
 if annoyance_failures:
     raise SystemExit("suggestion annoyance guardrail failed: " + "; ".join(annoyance_failures))
 PY
