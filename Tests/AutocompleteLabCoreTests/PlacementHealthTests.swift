@@ -138,6 +138,30 @@ struct PlacementHealthTests {
         #expect(presentation.reason == .healthy)
     }
 
+    @Test("Keeps non-detached mirror placement on the caret")
+    func keepsNonDetachedMirrorPlacementOnCaret() {
+        let caret = CGRect(x: 320, y: 260, width: 0, height: 22)
+        let plan = PlacementHealth.plan(
+            requestedRenderMode: .floatingMirror,
+            fallbackRenderMode: .floatingMirror,
+            caretRect: caret,
+            elementRect: CGRect(x: 100, y: 200, width: 500, height: 180),
+            windowRect: CGRect(x: 80, y: 160, width: 560, height: 300),
+            textLineRect: nil,
+            allowsDetachedSuggestions: false
+        )
+
+        guard case let .present(presentation) = plan else {
+            Issue.record("Expected placement to present")
+            return
+        }
+
+        #expect(presentation.renderMode == .floatingMirror)
+        #expect(presentation.anchorRect == caret)
+        #expect(presentation.anchorSource == .caret)
+        #expect(presentation.reason == .healthy)
+    }
+
     @Test("Suppresses floating mirror when all anchors are unusable")
     func suppressesMirrorWhenAllAnchorsAreUnusable() {
         let plan = PlacementHealth.plan(

@@ -144,8 +144,18 @@ public enum PlacementHealth {
             ))
 
         case .floatingMirror:
-            if !allowsDetachedSuggestions, validCaret == nil {
-                return suppress(requestedRenderMode, reason: .detachedSuggestionDisabled)
+            if !allowsDetachedSuggestions {
+                guard let validCaret else {
+                    return suppress(requestedRenderMode, reason: .detachedSuggestionDisabled)
+                }
+
+                return mirrorPresentation(
+                    requestedRenderMode: requestedRenderMode,
+                    anchorRect: validCaret,
+                    anchorSource: .caret,
+                    clippingRect: clippingRect,
+                    reason: .healthy
+                )
             }
 
             if let validElement {

@@ -4,13 +4,18 @@ set -euo pipefail
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
 START_LINE="${AUTOCOMPLETE_LAB_TRACE_START_LINE:-0}"
 REQUIRE_APP="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP:-}"
+ENFORCE_PERFORMANCE="${AUTOCOMPLETE_LAB_TRACE_ENFORCE_PERFORMANCE:-0}"
+MAX_PHRASE_PRESENTATIONS="${AUTOCOMPLETE_LAB_TRACE_MAX_PHRASE_PRESENTATIONS:-3}"
+MAX_WORD_PRESENTATIONS="${AUTOCOMPLETE_LAB_TRACE_MAX_WORD_PRESENTATIONS:-1}"
+MAX_PHRASE_VISIBLE_WORDS="${AUTOCOMPLETE_LAB_TRACE_MAX_PHRASE_VISIBLE_WORDS:-5}"
+MAX_WORD_VISIBLE_WORDS="${AUTOCOMPLETE_LAB_TRACE_MAX_WORD_VISIBLE_WORDS:-1}"
 
 if [[ ! -f "$TRACE_PATH" ]]; then
   echo "trace log missing: $TRACE_PATH" >&2
   exit 1
 fi
 
-python3 - "$TRACE_PATH" "$START_LINE" "$REQUIRE_APP" <<'PY'
+python3 - "$TRACE_PATH" "$START_LINE" "$REQUIRE_APP" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" <<'PY'
 import json
 import sys
 from collections import Counter, defaultdict
@@ -18,6 +23,11 @@ from collections import Counter, defaultdict
 path = sys.argv[1]
 start_line = int(sys.argv[2] or "0")
 require_app = sys.argv[3]
+enforce_performance = sys.argv[4].lower() in {"1", "true", "yes", "on"}
+max_phrase_presentations = int(sys.argv[5])
+max_word_presentations = int(sys.argv[6])
+max_phrase_visible_words = int(sys.argv[7])
+max_word_visible_words = int(sys.argv[8])
 events = []
 with open(path, "r", encoding="utf-8") as handle:
     for line_number, line in enumerate(handle, start=1):
@@ -69,6 +79,39 @@ if not presented:
     missing.append("suggestionPresented")
 if not latencies:
     missing.append("latencyMilliseconds")
+
+performance_failures = []
+if enforce_performance:
+    presentations_by_id = defaultdict(list)
+    for event in presented:
+        suggestion_id = event.get("suggestionID") or "unknown"
+        presentations_by_id[suggestion_id].append(event)
+
+    for suggestion_id, suggestion_events in sorted(presentations_by_id.items()):
+        first = suggestion_events[0]
+        mode = first.get("requestMode") or "unknown"
+        limit = max_word_presentations if mode == "wordCompletion" else max_phrase_presentations
+        if len(suggestion_events) > limit:
+            performance_failures.append(
+                f"{suggestion_id}: {mode} presented {len(suggestion_events)} times (limit {limit})"
+            )
+
+    for event in presented:
+        metadata = event.get("metadata") or {}
+        visible_words = metadata.get("visibleWords")
+        if visible_words is None:
+            continue
+        try:
+            visible_words = int(visible_words)
+        except (TypeError, ValueError):
+            continue
+
+        mode = event.get("requestMode") or "unknown"
+        limit = max_word_visible_words if mode == "wordCompletion" else max_phrase_visible_words
+        if visible_words > limit:
+            performance_failures.append(
+                f"{event.get('suggestionID') or 'unknown'}: {mode} showed {visible_words} words (limit {limit})"
+            )
 
 accept_by_mode = defaultdict(lambda: [0, 0])
 accept_by_app = defaultdict(lambda: [0, 0])
@@ -239,4 +282,6 @@ if require_app:
 
 if missing:
     raise SystemExit("missing required trace coverage: " + ", ".join(missing))
+if performance_failures:
+    raise SystemExit("typing performance guardrail failed: " + "; ".join(performance_failures))
 PY

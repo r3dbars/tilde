@@ -68,6 +68,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentCompletionRequest: CompletionRequest?
     private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
     private var currentSuggestionID: String?
+    private var currentSuggestionAppBundleIdentifier: String?
+    private var currentSuggestionFieldIdentity: FocusedFieldIdentity?
     private var currentSuggestionRequestMode: CompletionRequestMode?
     private var currentSuggestionTextBeforeCursor: String?
     private var currentSuggestionDisplayedText: String?
@@ -609,39 +611,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let eventTap = KeyboardEventTap(
             handler: { [weak self] key, isAutorepeat, didObservePassthroughKeyDown in
-                var handled = false
-
-                if Thread.isMainThread {
-                    handled = MainActor.assumeIsolated {
-                        self?.handleAutocompleteKey(
-                            key,
-                            isAutorepeat: isAutorepeat,
-                            didObservePassthroughKeyDown: didObservePassthroughKeyDown
-                        ) ?? false
-                    }
-                } else {
-                    DispatchQueue.main.sync {
-                        handled = MainActor.assumeIsolated {
-                            self?.handleAutocompleteKey(
-                                key,
-                                isAutorepeat: isAutorepeat,
-                                didObservePassthroughKeyDown: didObservePassthroughKeyDown
-                            ) ?? false
-                        }
-                    }
-                }
-
-                return handled
+                self?.handleAutocompleteKey(
+                    key,
+                    isAutorepeat: isAutorepeat,
+                    didObservePassthroughKeyDown: didObservePassthroughKeyDown
+                ) ?? false
             },
             passthroughKeyDownObserver: { [weak self] in
                 self?.observePassthroughTypingKeyDown()
             }
         )
+        eventTap.updateSnapshot(keyboardEventTapSnapshot())
 
         if eventTap.start() {
             keyboardEventTap = eventTap
             DiagnosticsLog.shared.record("keyboard-event-tap-started")
         }
+    }
+
+    private func keyboardEventTapSnapshot() -> KeyboardEventTapSnapshot {
+        KeyboardEventTapSnapshot(
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+            supportsOneWordAcceptance: currentProfile?.supportsOneWordAcceptance == true,
+            supportsFullAcceptance: currentProfile?.supportsFullAcceptance == true,
+            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown
+        )
+    }
+
+    private func updateKeyboardEventTapSnapshot() {
+        keyboardEventTap?.updateSnapshot(keyboardEventTapSnapshot())
     }
 
     private func scheduleKeyboardEventTapStopIfIdle() {
@@ -710,6 +708,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
+        guard focusedFieldMatchesCurrentSuggestion() else {
+            setSuggestionDecision("Blocked: focus changed")
+            hideSuggestion(reason: "focus-changed")
+            recordKeyboardAction(
+                key: key,
+                action: .passThrough,
+                handled: false,
+                reason: "focus-changed"
+            )
+            return false
+        }
+
         if currentSuggestionInvalidatedByUserKeyDown {
             setSuggestionDecision("Blocked: stale suggestion passed through")
             hideSuggestion(reason: "stale-after-keydown")
@@ -751,7 +761,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionRepetitionSuppressor.recordAcceptance(
                 acceptedText,
                 mode: currentSuggestionRequestMode,
-                scope: currentProfile?.bundleIdentifier ?? ""
+                scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
             )
             recordRawAcceptance(action: action, acceptedText: acceptedText)
             setSuggestionDecision("Accepted: next word")
@@ -783,7 +793,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionRepetitionSuppressor.recordAcceptance(
                 acceptedText,
                 mode: currentSuggestionRequestMode,
-                scope: currentProfile?.bundleIdentifier ?? ""
+                scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
             )
             recordRawAcceptance(action: action, acceptedText: acceptedText)
             setSuggestionDecision("Accepted: full suggestion")
@@ -808,6 +818,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func focusedFieldMatchesCurrentSuggestion() -> Bool {
+        guard let currentSuggestionAppBundleIdentifier,
+              let currentSuggestionFieldIdentity,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == currentSuggestionAppBundleIdentifier,
+              let profile = profileStore.profile(for: frontmostApp.bundleIdentifier),
+              let rawContext = accessibilityClient.focusedTextContext(
+                  allowDescendantTextFallback: profile.allowsDescendantTextFallback
+              ),
+              !rawContext.isSecure else {
+            return false
+        }
+
+        let context = presentationAdjustedContext(rawContext, app: frontmostApp, profile: profile)
+        return fieldIdentity(
+            app: frontmostApp,
+            context: context,
+            profile: profile
+        ) == currentSuggestionFieldIdentity
+    }
+
     private func recordKeyboardAction(
         key: AutocompleteKey,
         action: KeyboardAction,
@@ -817,7 +848,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.record(
             "keyboard-action",
             metadata: [
-                "app": currentProfile?.bundleIdentifier ?? "unknown",
+                "app": currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? "unknown",
                 "key": key.diagnosticName,
                 "action": action.diagnosticName,
                 "handled": String(handled),
@@ -1323,11 +1354,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionSession.present(suggestion)
         setSuggestionDecision("Shown: \(triggerReason) \(latencyMilliseconds)ms")
         currentSuggestionID = suggestionID
+        currentSuggestionAppBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
+        currentSuggestionFieldIdentity = fieldIdentity
         currentSuggestionRequestMode = request.mode
         currentSuggestionTextBeforeCursor = request.textBeforeCursor
         currentSuggestionDisplayedText = suggestion.visibleText
         currentSuggestionInvalidatedByUserKeyDown = false
         keyboardEventTap?.resetPassthroughObservation()
+        updateKeyboardEventTapSnapshot()
         lastCaretRect = placement.anchorRect
         lastTextLineRect = placement.textLineRect
         lastClippingRect = placement.clippingRect
@@ -1361,6 +1395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "effectiveRenderMode": placement.renderMode.rawValue,
                 "visibleChars": String(suggestion.visibleText.count),
+                "visibleWords": String(suggestion.visibleWordCount),
                 "anchorRect": compactRectDescription(placement.anchorRect),
                 "textLineRect": placement.textLineRect.map(compactRectDescription) ?? "none",
                 "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none"
@@ -1378,6 +1413,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "requestMode": request.mode.rawValue,
                 "traceID": String(suggestionID.prefix(8)),
                 "visibleChars": String(suggestion.visibleText.count),
+                "visibleWords": String(suggestion.visibleWordCount),
                 "suggestionID": suggestionID,
                 "latencyMilliseconds": String(latencyMilliseconds)
             ]
@@ -1385,6 +1421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(placement.metadata) { current, _ in current }
         )
         startKeyboardEventTapIfPossible()
+        updateKeyboardEventTapSnapshot()
     }
 
     private func placementHealthPlan(
@@ -1583,17 +1620,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func recordRawAcceptance(action: KeyboardAction, acceptedText: String) {
-        guard let profile = currentProfile else {
+        guard let appBundleIdentifier = currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier else {
             return
         }
 
         RawAutocompleteTraceLog.shared.recordAcceptance(
             action: action.diagnosticName,
-            appBundleIdentifier: profile.bundleIdentifier,
+            appBundleIdentifier: appBundleIdentifier,
             acceptedText: acceptedText,
             remainingVisibleText: suggestionSession.visibleSuggestion?.visibleText,
             suggestionID: currentSuggestionID ?? "",
-            fieldIdentity: currentFieldIdentity?.traceDescription ?? "",
+            fieldIdentity: currentSuggestionFieldIdentity?.traceDescription
+                ?? currentFieldIdentity?.traceDescription
+                ?? "",
             requestMode: currentSuggestionRequestMode?.rawValue ?? ""
         )
     }
@@ -1614,6 +1653,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             style: lastTextStyle,
             renderMode: lastRenderMode ?? .inlineAdjacent
         )
+        updateKeyboardEventTapSnapshot()
     }
 
     private func repositionVisibleSuggestion(
@@ -1778,7 +1818,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionRepetitionSuppressor.recordMiss(
                 displayedText,
                 mode: currentSuggestionRequestMode,
-                scope: currentProfile?.bundleIdentifier ?? ""
+                scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
             )
             hideSuggestion(reason: "typed-over")
         }
@@ -1787,6 +1827,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func hideSuggestion(reason: String = "hidden") {
         if suggestionSession.hasVisibleSuggestion,
            let suggestionID = currentSuggestionID {
+            let appBundleIdentifier = currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
+            let fieldIdentityDescription = currentSuggestionFieldIdentity?.traceDescription
+                ?? currentFieldIdentity?.traceDescription
+                ?? ""
             let outcome: String
             if reason.hasPrefix("accepted") {
                 outcome = "accepted"
@@ -1803,15 +1847,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 suggestionRepetitionSuppressor.recordMiss(
                     displayedText,
                     mode: currentSuggestionRequestMode,
-                    scope: currentProfile?.bundleIdentifier ?? ""
+                    scope: appBundleIdentifier
                 )
             }
 
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionHidden,
                 suggestionID: suggestionID,
-                appBundleIdentifier: currentProfile?.bundleIdentifier ?? "",
-                fieldIdentity: currentFieldIdentity?.traceDescription ?? "",
+                appBundleIdentifier: appBundleIdentifier,
+                fieldIdentity: fieldIdentityDescription,
                 requestMode: currentSuggestionRequestMode?.rawValue ?? "",
                 displayedText: displayedText,
                 outcome: outcome,
@@ -1822,6 +1866,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         suggestionSession.dismiss()
         currentSuggestionID = nil
+        currentSuggestionAppBundleIdentifier = nil
+        currentSuggestionFieldIdentity = nil
         currentSuggestionRequestMode = nil
         currentSuggestionTextBeforeCursor = nil
         currentSuggestionDisplayedText = nil
@@ -1833,6 +1879,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextStyle = nil
         lastRenderMode = nil
         suggestionPanel.hide()
+        updateKeyboardEventTapSnapshot()
         scheduleKeyboardEventTapStopIfIdle()
     }
 
@@ -1899,6 +1946,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        if suggestionSession.hasVisibleSuggestion {
+            hideSuggestion(reason: "focus-changed")
+        }
         invalidatePendingSuggestionRequest()
 
         if let currentFieldIdentity {
@@ -1912,6 +1962,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func clearFocusedFieldState() {
+        if suggestionSession.hasVisibleSuggestion {
+            hideSuggestion(reason: "focus-lost")
+        }
         invalidatePendingSuggestionRequest()
 
         if let currentFieldIdentity {
