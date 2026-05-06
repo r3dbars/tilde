@@ -268,6 +268,46 @@ if ! grep -F "missing-place: missing placementConfidenceBand" /tmp/autocomplete-
 fi
 
 cat >"$BAD_TRACE_FILE" <<'JSONL'
+{"type":"suggestionPresented","suggestionID":"visual-good","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":80,"screenshotPath":"/tmp/visual-good.png","metadata":{"anchorRect":"x=100,y=200,w=0,h=22","suggestionPanelRect":"x=100,y=200,w=120,h=22","screenshotCaptureRect":"x=90,y=180,w=180,h=60","placementConfidenceBand":"medium"}}
+{"type":"suggestionPresented","suggestionID":"visual-stream","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","triggerReason":"model-stream","latencyMilliseconds":90,"metadata":{"anchorRect":"x=100,y=200,w=0,h=22","placementConfidenceBand":"medium"}}
+{"type":"suggestionPresented","suggestionID":"visual-stream","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":120,"screenshotPath":"/tmp/visual-stream.png","metadata":{"anchorRect":"x=100,y=200,w=0,h=22","suggestionPanelRect":"x=100,y=200,w=120,h=22","screenshotCaptureRect":"x=90,y=180,w=180,h=60","placementConfidenceBand":"medium"}}
+JSONL
+
+AUTOCOMPLETE_LAB_TRACE_PATH="$BAD_TRACE_FILE" \
+AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE=1 \
+  script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-visual-evidence.txt
+
+if ! grep -F "Visual evidence complete: 2/2" /tmp/autocomplete-trace-eval-visual-evidence.txt >/dev/null; then
+  echo "trace eval self-test did not accept screenshot-backed visual evidence" >&2
+  cat /tmp/autocomplete-trace-eval-visual-evidence.txt >&2
+  exit 1
+fi
+
+cat >"$BAD_TRACE_FILE" <<'JSONL'
+{"type":"suggestionPresented","suggestionID":"visual-missing","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":80,"screenshotPath":"/tmp/visual-missing.png","metadata":{"anchorRect":"x=100,y=200,w=0,h=22","placementConfidenceBand":"medium"}}
+JSONL
+
+if AUTOCOMPLETE_LAB_TRACE_PATH="$BAD_TRACE_FILE" \
+   AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE=1 \
+   script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-visual-evidence-fail.txt 2>&1; then
+  echo "trace eval self-test expected visual evidence guardrails to fail" >&2
+  cat /tmp/autocomplete-trace-eval-visual-evidence-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "visual evidence guardrail failed" /tmp/autocomplete-trace-eval-visual-evidence-fail.txt >/dev/null; then
+  echo "trace eval self-test did not explain visual evidence guardrail failures" >&2
+  cat /tmp/autocomplete-trace-eval-visual-evidence-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "visual-missing: missing suggestionPanelRect, screenshotCaptureRect" /tmp/autocomplete-trace-eval-visual-evidence-fail.txt >/dev/null; then
+  echo "trace eval self-test did not report missing visual geometry metadata" >&2
+  cat /tmp/autocomplete-trace-eval-visual-evidence-fail.txt >&2
+  exit 1
+fi
+
+cat >"$BAD_TRACE_FILE" <<'JSONL'
 {"type":"suggestionPresented","suggestionID":"stuck","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","latencyMilliseconds":0}
 {"type":"suggestionAccepted","suggestionID":"stuck","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","acceptedText":"ing"}
 {"type":"insertionFailed","suggestionID":"stuck","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","reason":"unchanged"}
@@ -313,6 +353,23 @@ AUTOCOMPLETE_LAB_TRACE_START_LINE=3 \
 if ! grep -F "Start line: 3" /tmp/autocomplete-trace-eval-self-test-slice.txt >/dev/null; then
   echo "trace eval self-test did not honor AUTOCOMPLETE_LAB_TRACE_START_LINE" >&2
   cat /tmp/autocomplete-trace-eval-self-test-slice.txt >&2
+  exit 1
+fi
+
+AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
+AUTOCOMPLETE_LAB_TRACE_START_LINE=3 \
+AUTOCOMPLETE_LAB_TRACE_END_LINE=5 \
+  script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-self-test-bounded-slice.txt
+
+if ! grep -F "End line: 5" /tmp/autocomplete-trace-eval-self-test-bounded-slice.txt >/dev/null; then
+  echo "trace eval self-test did not honor AUTOCOMPLETE_LAB_TRACE_END_LINE" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-bounded-slice.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Events: 2" /tmp/autocomplete-trace-eval-self-test-bounded-slice.txt >/dev/null; then
+  echo "trace eval self-test did not bound the trace slice" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-bounded-slice.txt >&2
   exit 1
 fi
 

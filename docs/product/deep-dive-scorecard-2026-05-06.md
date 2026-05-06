@@ -31,7 +31,7 @@ install/repair and better shortcut controls before it feels fully productized.
 | Acceptance reliability | 9/10 | TextEdit and Chrome fixtures verify Tab plus full accept. Codex and Claude desktop have previous manual proof. Notes and Claude Code still need refreshed proof. |
 | Visual caret alignment | 8/10 | TextEdit and Chrome fixtures now have screenshot-backed proof. Synthetic caret placement is no longer scored as high-confidence real AX geometry. Real Codex, Obsidian, Notes, and Claude Code visual proof is still incomplete. |
 | Self-healing behavior | 8.9/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, applies only explicit trusted visual offsets, and manual nudges now move the visible ghost immediately. It does not yet auto-detect offsets from pixels. |
-| Screenshot tracing | 9.2/10 | Screen Recording is preflighted, capture runs off the hot path, screenshots include editor bounds plus ghost text, and traces/logs now include the screenshot capture rect. |
+| Screenshot tracing | 9.3/10 | Screen Recording is preflighted, capture runs off the hot path, screenshots include editor bounds plus ghost text, and traces/logs now include capture rect plus rendered panel rect. |
 | TextEdit support | 9.5/10 | Fresh screenshot-backed run shows ghost text aligned after the caret and two verified accepts. |
 | Notes support | 6.5/10 | Profile is safer than before, but title/body/checklist proof is still stale and rich-text placement has not been re-shot. |
 | Chrome textarea support | 9/10 | Fresh full-frame screenshot and two verified accepts. |
@@ -79,13 +79,16 @@ install/repair and better shortcut controls before it feels fully productized.
 - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit`: passed with two verified accepts and screenshot capture.
 - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh chrome --fixture all`: passed for textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixtures.
 - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh chrome --fixture monaco-like`: passed after the final Monaco gap adjustment.
-- `./script/smoke_test.sh`: passed after the synthetic-caret confidence and screenshot-capture-rect changes, including model asset, trace eval, typing-performance, real-app smoke self-test, visual evidence, and package preflight checks. Latest focused-text poll p95 was 2ms, max was 3ms, with no slow markers.
+- `./script/smoke_test.sh`: passed after the visual-evidence telemetry change, including model asset, trace eval, typing-performance, real-app smoke self-test, visual evidence, and package preflight checks. Latest focused-text poll p95 was 3ms, max was 4ms, with no slow markers.
+- `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit`: passed on a fresh app launch with two verified accepts and screenshot tracing.
+- `AUTOCOMPLETE_LAB_TRACE_START_LINE=20143 AUTOCOMPLETE_LAB_TRACE_END_LINE=20158 AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP=com.apple.TextEdit AUTOCOMPLETE_LAB_TRACE_REQUIRE_CONFIDENT_PLACEMENT=1 AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE=1 ./script/check_trace_eval.sh`: passed with `Visual evidence complete: 2/2`, high placement confidence, and p90 suggestion latency of 113ms.
 - `./script/manual_smoke_status.sh --strict`: failed honestly on Notes title/body/checklist and Claude Code insertion proof gaps, and separately reports Obsidian, Codex, Apple Notes, Claude Code, and Claude desktop screenshot proof gaps.
 - `./script/check_visual_placement_evidence_self_test.sh`: passed, including missing, empty, invalid, too-small, unreferenced, and pending strict screenshot failure cases.
 - `./script/check_visual_placement_evidence.sh`: passed with six verified visual-placement screenshots and reports five pending real-app screenshot audits.
 - `./script/check_visual_placement_evidence.sh --require-all`: failed honestly on the five pending real-app screenshot audits.
 - `swift test --filter CompatibilityLearningTests`: passed, covering trusted manual visual offsets and untrusted stale-offset rejection.
 - `swift test --filter 'PlacementHealthTests|CompatibilityLearningTests|VisualPlacementGeometryCorrectionPolicyTests'`: passed after synthetic caret confidence and visual-offset trust hardening.
+- `./script/check_trace_eval_self_test.sh`: passed, including strict visual-evidence guardrails for screenshot path, anchor rect, rendered panel rect, capture rect, and placement confidence.
 - `git diff --check`: passed.
 - `swift build`: passed after the screenshot trace capture-rect changes.
 
@@ -121,6 +124,14 @@ install/repair and better shortcut controls before it feels fully productized.
 - Generic presentation observations can no longer make visual offsets trusted;
   only manual visual nudges and future screenshot visual corrections can.
 - Screenshot traces now carry the capture rect in trace metadata and diagnostics.
+- Suggestion presentation traces now carry the rendered panel rect, and
+  diagnostics keep geometry-shaped keys readable instead of redacting them as
+  text.
+- Trace evaluation now has an opt-in strict visual-evidence gate that fails a
+  screenshot-backed pass unless screenshot path, anchor rect, rendered panel
+  rect, capture rect, and placement confidence are all present.
+- Trace evaluation can now bound a proof slice with `AUTOCOMPLETE_LAB_TRACE_END_LINE`,
+  so later app activity cannot pollute a completed real-app proof run.
 - A 15-minute automation now checks this scorecard and keeps looping when any
   category is below 10/10.
 
