@@ -27,7 +27,8 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.mail")?.allowsDescendantTextFallback == true)
         #expect(store.profile(for: "com.apple.mail")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.google.Chrome")?.displayName == "Chrome")
-        #expect(store.profile(for: "com.google.Chrome")?.renderMode == .floatingMirror)
+        #expect(store.profile(for: "com.google.Chrome")?.renderMode == .inlineAdjacent)
+        #expect(store.profile(for: "com.google.Chrome")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .keyEvents)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.openai.codex")?.displayName == "Codex")
@@ -83,7 +84,7 @@ struct CompatibilityProfileTests {
     func profilesExposeDebugSummaries() throws {
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
 
-        #expect(profile.debugSummary.contains("primary render=floatingMirror"))
+        #expect(profile.debugSummary.contains("primary render=inlineAdjacent"))
         #expect(profile.debugSummary.contains("insert=keyEvents"))
         #expect(profile.debugSummary.contains("fallback render=floatingMirror"))
         #expect(profile.debugSummary.contains("insert=axValueReplacement"))
@@ -148,6 +149,11 @@ struct CompatibilityProfileTests {
             supportsInlineSuggestions: false,
             hasMirrorAnchor: true
         ) == .floatingMirror)
+        #expect(RenderModePlan.effectiveMode(
+            for: chrome,
+            supportsInlineSuggestions: true,
+            hasMirrorAnchor: true
+        ) == .inlineAdjacent)
         #expect(RenderModePlan.effectiveMode(
             for: chrome,
             supportsInlineSuggestions: false,

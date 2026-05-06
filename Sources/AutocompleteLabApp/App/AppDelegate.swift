@@ -107,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionTextBeforeCursor: String?
     private var currentSuggestionDisplayedText: String?
     private var currentSuggestionInvalidatedByUserKeyDown = false
+    private var scheduledScreenshotSuggestionIDs: Set<String> = []
     private var recentWordMemory = RecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var lastStatusLine: String?
@@ -713,7 +714,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard supportsSyntheticTextAreaCaret(for: app.bundleIdentifier),
               promptTextAreaMatch(for: app.bundleIdentifier, context: context).canSuggest,
               context.caretRect == nil,
-              let syntheticCaret = syntheticTextAreaCaretRect(for: context) else {
+              let syntheticCaret = syntheticTextAreaCaretRect(
+                for: context,
+                bundleIdentifier: app.bundleIdentifier
+              ) else {
             return context
         }
 
@@ -747,6 +751,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func supportsSyntheticTextAreaCaret(for bundleIdentifier: String) -> Bool {
         PromptEditorFingerprintPolicy.dogfoodBundleIdentifiers.contains(bundleIdentifier)
             || bundleIdentifier == "md.obsidian"
+            || bundleIdentifier == "com.google.Chrome"
     }
 
     private struct PromptTextAreaMatch {
@@ -768,7 +773,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return PromptTextAreaMatch(canSuggest: decision.canSuggest, reason: decision.reason)
     }
 
-    private func syntheticTextAreaCaretRect(for context: FocusedTextContext) -> CGRect? {
+    private func syntheticTextAreaCaretRect(
+        for context: FocusedTextContext,
+        bundleIdentifier: String
+    ) -> CGRect? {
         guard context.role == "AXTextArea",
               let elementRect = context.elementRect,
               elementRect.width > 80,
@@ -776,7 +784,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
-        let font = context.textStyle?.font ?? NSFont.systemFont(ofSize: 18)
+        let tuning = syntheticTextAreaTuning(for: context, bundleIdentifier: bundleIdentifier)
+        let font = tuning.font ?? syntheticTextAreaFont(for: context, bundleIdentifier: bundleIdentifier)
         let lineHeight = max(font.ascender - font.descender + font.leading, 20)
 
         return SyntheticCaretEstimator.caretRect(
@@ -784,8 +793,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             elementRect: elementRect,
             windowRect: context.windowRect,
             lineHeight: lineHeight,
+            verticalPadding: tuning.verticalPadding,
+            inlineGap: tuning.inlineGap,
             widthOfText: { width(of: $0, font: font) }
         )
+    }
+
+    private struct SyntheticTextAreaTuning {
+        let font: NSFont?
+        let verticalPadding: CGFloat
+        let inlineGap: CGFloat
+    }
+
+    private func syntheticTextAreaTuning(
+        for context: FocusedTextContext,
+        bundleIdentifier: String
+    ) -> SyntheticTextAreaTuning {
+        guard bundleIdentifier == "com.google.Chrome" else {
+            return SyntheticTextAreaTuning(font: nil, verticalPadding: 4, inlineGap: 8)
+        }
+
+        let searchable = context.fingerprint.searchableText
+        if searchable.contains("monaco") {
+            return SyntheticTextAreaTuning(font: nil, verticalPadding: 4, inlineGap: 44)
+        }
+
+        if searchable.contains("prosemirror") {
+            return SyntheticTextAreaTuning(
+                font: NSFont.systemFont(ofSize: 18),
+                verticalPadding: 14,
+                inlineGap: 8
+            )
+        }
+
+        if usesChromeRichEditorSyntheticTuning(for: context, bundleIdentifier: bundleIdentifier) {
+            return SyntheticTextAreaTuning(font: nil, verticalPadding: 14, inlineGap: 20)
+        }
+
+        return SyntheticTextAreaTuning(font: nil, verticalPadding: 4, inlineGap: 8)
+    }
+
+    private func syntheticTextAreaFont(
+        for context: FocusedTextContext,
+        bundleIdentifier: String
+    ) -> NSFont {
+        guard let textStyle = context.textStyle else {
+            return NSFont.systemFont(ofSize: 18)
+        }
+
+        return textStyle.font
+    }
+
+    private func usesChromeRichEditorSyntheticTuning(
+        for context: FocusedTextContext,
+        bundleIdentifier: String
+    ) -> Bool {
+        guard bundleIdentifier == "com.google.Chrome" else {
+            return false
+        }
+
+        let searchable = context.fingerprint.searchableText
+        let richEditorTerms = [
+            "codemirror",
+            "contenteditable",
+            "editor-like",
+            "monaco",
+            "prosemirror",
+            "rich text editor"
+        ]
+        return richEditorTerms.contains { searchable.contains($0) }
     }
 
     private func width(of text: String, font: NSFont) -> CGFloat {
@@ -1329,11 +1405,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 for: context.textBeforeCursor,
                 recentWords: recentWordMemory.words
             ) {
-                let screenshotPath = captureTraceScreenshot(
-                    near: context.elementRect ?? context.windowRect ?? context.caretRect,
-                    suggestionID: suggestionID,
-                    bundleIdentifier: appBundleIdentifier
-                )
                 presentSuggestion(
                     fastSuggestion,
                     suggestionID: suggestionID,
@@ -1343,8 +1414,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     fieldIdentity: fieldIdentity,
                     renderMode: renderMode,
                     latencyMilliseconds: 0,
-                    triggerReason: "fast-word-completion",
-                    screenshotPath: screenshotPath
+                    triggerReason: "fast-word-completion"
                 )
                 return
             }
@@ -1423,8 +1493,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 fieldIdentity: fieldIdentity,
                                 renderMode: renderMode,
                                 latencyMilliseconds: latencyMilliseconds,
-                                triggerReason: "model-stream",
-                                screenshotPath: ""
+                                triggerReason: "model-stream"
                             )
                         }
                     }
@@ -1531,11 +1600,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         self.hideSuggestion()
                         return
                     }
-                    let screenshotPath = self.captureTraceScreenshot(
-                        near: context.elementRect ?? context.windowRect ?? context.caretRect,
-                        suggestionID: suggestionID,
-                        bundleIdentifier: appBundleIdentifier
-                    )
                     self.presentSuggestion(
                         suggestion,
                         suggestionID: suggestionID,
@@ -1545,8 +1609,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         fieldIdentity: fieldIdentity,
                         renderMode: renderMode,
                         latencyMilliseconds: latencyMilliseconds,
-                        triggerReason: "model-result",
-                        screenshotPath: screenshotPath
+                        triggerReason: "model-result"
                     )
                     self.streamingPresentationStates[suggestionID] = nil
                 }
@@ -1568,8 +1631,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fieldIdentity: FocusedFieldIdentity,
         renderMode: SuggestionRenderMode,
         latencyMilliseconds: Int,
-        triggerReason: String,
-        screenshotPath: String
+        triggerReason: String
     ) {
         let storedLearningAdjustment = compatibilityLearningStore.engine().adjustment(
             for: profile.bundleIdentifier,
@@ -1645,13 +1707,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastClippingRect = placement.clippingRect
         lastTextStyle = context.textStyle
         lastRenderMode = placement.renderMode
-        suggestionPanel.show(
+        let panelRect = suggestionPanel.show(
             text: suggestion.visibleText,
             near: placement.anchorRect,
             alignedTo: placement.renderMode == .inlineAdjacent ? placement.textLineRect : nil,
             boundedBy: placement.clippingRect,
             style: context.textStyle,
             renderMode: placement.renderMode
+        )
+        let screenshotPath = captureTraceScreenshot(
+            around: [
+                placement.anchorRect,
+                placement.textLineRect,
+                panelRect,
+                placement.clippingRect
+            ].compactMap { $0 },
+            suggestionID: suggestionID,
+            bundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+            triggerReason: triggerReason,
+            appScreenshotTracingEnabled: learningAdjustment.shouldCaptureScreenshot
         )
         compatibilityLearningStore.recordObservation(
             for: profile.bundleIdentifier,
@@ -1718,45 +1792,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func captureTraceScreenshot(
-        near rect: CGRect?,
+        around rects: [CGRect],
         suggestionID: String,
-        bundleIdentifier: String
+        bundleIdentifier: String,
+        triggerReason: String,
+        appScreenshotTracingEnabled: Bool
     ) -> String {
-        let appScreenshotTracingEnabled = compatibilityLearningStore
-            .profile(for: bundleIdentifier)?
-            .screenshotTracingEnabled == true
         guard (RawAutocompleteTraceLog.shared.screenshotTracingEnabled || appScreenshotTracingEnabled),
-              let rect else {
+              triggerReason != "model-stream",
+              let captureRect = ScreenshotCaptureRegion.enclosing(rects) else {
+            return ""
+        }
+        guard scheduledScreenshotSuggestionIDs.insert(suggestionID).inserted else {
             return ""
         }
 
         let folderURL = RawAutocompleteTraceLog.shared.screenshotFolderURL
         let screenshotURL = folderURL.appendingPathComponent("\(suggestionID).png")
 
-        do {
-            try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
-            let paddedRect = rect.insetBy(dx: -24, dy: -24)
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-            process.arguments = [
-                "-x",
-                "-R\(Int(paddedRect.origin.x)),\(Int(paddedRect.origin.y)),\(Int(paddedRect.width)),\(Int(paddedRect.height))",
-                screenshotURL.path
-            ]
-            try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0,
-                  FileManager.default.fileExists(atPath: screenshotURL.path) else {
-                return ""
-            }
-            compatibilityLearningStore.recordObservation(
-                for: bundleIdentifier,
-                reason: "screenshot-captured"
-            )
-            return screenshotURL.path
-        } catch {
-            return ""
-        }
+        ScreenshotTraceCapture.shared.capture(
+            rect: captureRect,
+            to: screenshotURL,
+            bundleIdentifier: bundleIdentifier
+        )
+        return screenshotURL.path
     }
 
     private func traceGeometryMetadata(

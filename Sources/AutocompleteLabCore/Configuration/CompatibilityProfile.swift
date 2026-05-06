@@ -169,11 +169,11 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.google.Chrome",
             displayName: "Chrome",
-            renderMode: .floatingMirror,
+            renderMode: .inlineAdjacent,
             insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .axValueReplacement,
-            notes: "Yellow browser target. Prefer key-event insertion across textarea and contenteditable surfaces because rich browser editors can report AX replacement success without keeping cursor verification stable. Chrome can report zero-height caret bounds, so use mirror anchoring."
+            notes: "Yellow browser target. Prefer synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback. Prefer key-event insertion across textarea and contenteditable surfaces because rich browser editors can report AX replacement success without keeping cursor verification stable."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.openai.codex",

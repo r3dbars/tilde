@@ -212,6 +212,31 @@ wait_for_frontmost_app() {
   exit 1
 }
 
+assert_frontmost_app() {
+  local expected="$1"
+  local label="$2"
+  local frontmost
+  frontmost="$(osascript -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
+  if [[ "$frontmost" != "$expected" ]]; then
+    echo "$label lost focus before accept. Expected frontmost app '$expected', got '${frontmost:-unknown}'." >&2
+    exit 1
+  fi
+}
+
+screenshot_trace_requested() {
+  [[ "${AUTOCOMPLETE_LAB_SCREENSHOT_TRACE:-}" =~ ^(1|true|yes|on)$ ]]
+}
+
+wait_for_screenshot_capture_if_enabled() {
+  local start_line="$1"
+  local bundle_id="$2"
+  local label="$3"
+
+  if screenshot_trace_requested; then
+    wait_for_log_pattern "$start_line" "screenshot-captured .*app=$bundle_id" "$label screenshot" 8
+  fi
+}
+
 press_key_code() {
   local key_code="$1"
 
@@ -238,6 +263,19 @@ tell application "System Events"
 end tell
 APPLESCRIPT
   wait_for_frontmost_app "Google Chrome" 5
+}
+
+focus_textedit_smoke_editor() {
+  osascript >/dev/null <<'APPLESCRIPT'
+tell application "TextEdit" to activate
+delay 0.1
+tell application "System Events"
+  tell process "TextEdit"
+    set frontmost to true
+  end tell
+end tell
+APPLESCRIPT
+  wait_for_frontmost_app "TextEdit" 5
 }
 
 chrome_fixture_html() {
@@ -494,6 +532,9 @@ end tell
 APPLESCRIPT
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit suggestion"
+  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
+  assert_frontmost_app "TextEdit" "TextEdit"
+  focus_textedit_smoke_editor
   press_key_code 48
   wait_for_log_fields "$start_line" "TextEdit Tab acceptance" 12 \
     "keyboard-action" \
@@ -502,6 +543,8 @@ APPLESCRIPT
     "action=acceptNextWord" \
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit first verified insertion"
+  assert_frontmost_app "TextEdit" "TextEdit"
+  focus_textedit_smoke_editor
   press_key_code 50
 
   sleep 1
@@ -555,6 +598,8 @@ end tell
 APPLESCRIPT
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
+  wait_for_screenshot_capture_if_enabled "$start_line" "com.google.Chrome" "Chrome $fixture"
+  assert_frontmost_app "Google Chrome" "Chrome $fixture"
   focus_chrome_smoke_editor
   press_key_code 48
   wait_for_log_fields "$start_line" "Chrome $fixture Tab acceptance" 12 \
@@ -564,6 +609,7 @@ APPLESCRIPT
     "action=acceptNextWord" \
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.google.Chrome .*result=verified" "Chrome $fixture first verified insertion"
+  assert_frontmost_app "Google Chrome" "Chrome $fixture"
   focus_chrome_smoke_editor
   press_key_code 50
 
