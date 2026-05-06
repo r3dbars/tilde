@@ -10,18 +10,23 @@ final class SettingsWindowController: NSObject {
     private let runtimeActionLabel = NSTextField(labelWithString: "")
     private let runtimeTargetLabel = NSTextField(labelWithString: "")
     private let modelDirectoryLabel = NSTextField(labelWithString: "")
+    private let controlLabel = NSTextField(labelWithString: "")
+    private let togglePauseButton = NSButton(title: "Pause Suggestions", target: nil, action: nil)
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
     private let requestPermission: () -> Void
     private let openAccessibilitySettings: () -> Void
+    private let toggleSuggestionsPaused: () -> Void
 
     init(
         requestPermission: @escaping () -> Void,
-        openAccessibilitySettings: @escaping () -> Void
+        openAccessibilitySettings: @escaping () -> Void,
+        toggleSuggestionsPaused: @escaping () -> Void
     ) {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
+        self.toggleSuggestionsPaused = toggleSuggestionsPaused
 
-        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 392))
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 428))
         window = NSWindow(
             contentRect: contentView.frame,
             styleMask: [.titled, .closable],
@@ -39,12 +44,14 @@ final class SettingsWindowController: NSObject {
 
     func show(
         isTrusted: Bool,
+        suggestionsPaused: Bool,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
         modelDirectoryPath: String
     ) {
         refresh(
             isTrusted: isTrusted,
+            suggestionsPaused: suggestionsPaused,
             runtimeReport: runtimeReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath
@@ -56,18 +63,25 @@ final class SettingsWindowController: NSObject {
 
     func refresh(
         isTrusted: Bool,
+        suggestionsPaused: Bool,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
         modelDirectoryPath: String
     ) {
         permissionLabel.stringValue = isTrusted ? "Accessibility: granted" : "Accessibility: needed"
+        controlLabel.stringValue = suggestionsPaused ? "Global control: paused" : "Global control: on"
+        togglePauseButton.title = suggestionsPaused ? "Resume Suggestions" : "Pause Suggestions"
         runtimeLabel.stringValue = "Local model: \(runtimeReport.summary)"
         runtimeDetailLabel.stringValue = runtimeReport.detail.map { "Detail: \($0)" } ?? ""
         runtimeDetailLabel.isHidden = runtimeReport.detail == nil
         runtimeActionLabel.stringValue = "Next: \(runtimeReport.action.displayName)"
         runtimeTargetLabel.stringValue = "Runtime target: \(runtimeTargetSummary)"
         modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
-        firstRunLabel.stringValue = onboardingText(isTrusted: isTrusted, runtimeReport: runtimeReport)
+        firstRunLabel.stringValue = onboardingText(
+            isTrusted: isTrusted,
+            suggestionsPaused: suggestionsPaused,
+            runtimeReport: runtimeReport
+        )
     }
 
     private func buildContent(in contentView: NSView) {
@@ -96,6 +110,7 @@ final class SettingsWindowController: NSObject {
         modelDirectoryLabel.lineBreakMode = .byTruncatingMiddle
         modelDirectoryLabel.maximumNumberOfLines = 1
         modelDirectoryLabel.preferredMaxLayoutWidth = 360
+        controlLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         firstRunLabel.font = NSFont.systemFont(ofSize: 12)
         firstRunLabel.textColor = .secondaryLabelColor
         firstRunLabel.lineBreakMode = .byWordWrapping
@@ -110,6 +125,9 @@ final class SettingsWindowController: NSObject {
             action: #selector(openAccessibilitySettingsPane)
         )
         openSettingsButton.bezelStyle = .rounded
+        togglePauseButton.target = self
+        togglePauseButton.action = #selector(togglePause)
+        togglePauseButton.bezelStyle = .rounded
 
         let screenRecording = NSButton(checkboxWithTitle: "Screen Recording", target: nil, action: nil)
         screenRecording.isEnabled = false
@@ -131,6 +149,8 @@ final class SettingsWindowController: NSObject {
             runtimeActionLabel,
             runtimeTargetLabel,
             modelDirectoryLabel,
+            controlLabel,
+            togglePauseButton,
             firstRunLabel,
             screenRecording,
             clipboardFallback,
@@ -148,9 +168,17 @@ final class SettingsWindowController: NSObject {
         ])
     }
 
-    private func onboardingText(isTrusted: Bool, runtimeReport: RuntimeReadinessReport) -> String {
+    private func onboardingText(
+        isTrusted: Bool,
+        suggestionsPaused: Bool,
+        runtimeReport: RuntimeReadinessReport
+    ) -> String {
         if !isTrusted {
             return "First run: grant Accessibility, then return here. The app only reads the active text field locally."
+        }
+
+        if suggestionsPaused {
+            return "Paused: resume when you are ready to test suggestions again."
         }
 
         if !runtimeReport.isReady {
@@ -168,5 +196,10 @@ final class SettingsWindowController: NSObject {
     @objc
     private func openAccessibilitySettingsPane() {
         openAccessibilitySettings()
+    }
+
+    @objc
+    private func togglePause() {
+        toggleSuggestionsPaused()
     }
 }
