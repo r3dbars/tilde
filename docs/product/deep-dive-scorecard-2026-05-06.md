@@ -30,7 +30,7 @@ install/repair and better shortcut controls before it feels fully productized.
 | Keyboard capture safety | 9.5/10 | Capture starts only while a suggestion is visible, passes ordinary typing through, and the real-app smoke now asserts the target app stays frontmost before accept. |
 | Acceptance reliability | 9/10 | TextEdit and Chrome fixtures verify Tab plus full accept. Codex and Claude desktop have previous manual proof. Notes and Claude Code still need refreshed proof. |
 | Visual caret alignment | 8/10 | TextEdit and Chrome fixtures now have screenshot-backed proof. Real Codex, Obsidian, Notes, and Claude Code visual proof is still incomplete. |
-| Self-healing behavior | 8.5/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, and records placement evidence. It does not yet auto-correct offsets from screenshots. |
+| Self-healing behavior | 8.7/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, and now applies trusted visual offsets to synthetic-caret apps. It does not yet auto-detect offsets from pixels. |
 | Screenshot tracing | 9/10 | Screen Recording is preflighted, capture runs off the hot path, and screenshots now include editor bounds plus ghost text. |
 | TextEdit support | 9.5/10 | Fresh screenshot-backed run shows ghost text aligned after the caret and two verified accepts. |
 | Notes support | 6.5/10 | Profile is safer than before, but title/body/checklist proof is still stale and rich-text placement has not been re-shot. |
@@ -50,7 +50,7 @@ install/repair and better shortcut controls before it feels fully productized.
 | Onboarding | 8/10 | Settings explains runtime readiness, but model install/repair is still not fully in-app. |
 | User control | 8.5/10 | Pause, current-app enablement, privacy controls, and full-accept toggle exist; shortcut editing is still thin. |
 | Diagnostics | 9.5/10 | Placement, event-tap latency, focused poll latency, insertion, trace, screenshot, and smoke logs are strong. |
-| Automated tests | 9.5/10 | `swift test` passes 243 tests and smoke script self-tests are green. |
+| Automated tests | 9.5/10 | `swift test` passes 245 tests and smoke script self-tests are green. |
 | Real-app smoke | 8.5/10 | TextEdit and Chrome fixtures are green on the current build. Notes and Claude Code remain honest gaps. |
 | Release readiness | 8/10 | Packaging is in decent shape, but notarization/stapling and beta onboarding still need a final product pass. |
 | Architecture | 8.5/10 | Core policy and geometry are tested; AppDelegate still owns too much orchestration. |
@@ -73,16 +73,17 @@ install/repair and better shortcut controls before it feels fully productized.
 
 ## Latest Proof
 
-- `swift test`: 243 tests passed.
+- `swift test`: 245 tests passed.
 - `bash -n script/real_app_smoke.sh script/manual_smoke_session.sh script/manual_smoke_self_test.sh`: passed.
 - `./script/manual_smoke_self_test.sh`: passed.
 - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit`: passed with two verified accepts and screenshot capture.
 - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh chrome --fixture all`: passed for textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixtures.
 - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh chrome --fixture monaco-like`: passed after the final Monaco gap adjustment.
-- `./script/smoke_test.sh`: passed, including model asset, trace eval, typing-performance, real-app smoke self-test, and package preflight checks.
+- `./script/smoke_test.sh`: passed after the trusted-offset change, including model asset, trace eval, typing-performance, real-app smoke self-test, visual evidence, and package preflight checks.
 - `./script/manual_smoke_status.sh --strict`: failed honestly on Notes title/body/checklist and Claude Code proof gaps.
 - `./script/check_visual_placement_evidence_self_test.sh`: passed, including missing, empty, invalid, too-small, and unreferenced screenshot failure cases.
 - `./script/check_visual_placement_evidence.sh`: passed with six verified visual-placement screenshots.
+- `swift test --filter CompatibilityLearningTests`: passed, covering trusted manual visual offsets and untrusted stale-offset rejection.
 
 ## What Changed In This Pass
 
@@ -104,6 +105,8 @@ install/repair and better shortcut controls before it feels fully productized.
   fixtures, not from private prompts or user work.
 - Visual-placement evidence now has an executable repo check that fails on
   missing, empty, invalid, too-small, or unreferenced screenshots.
+- Trusted learned visual offsets now apply to synthetic-caret apps such as
+  Codex, Obsidian, and Chrome; untrusted stale offsets are still ignored.
 - A 15-minute automation now checks this scorecard and keeps looping when any
   category is below 10/10.
 
@@ -111,8 +114,8 @@ install/repair and better shortcut controls before it feels fully productized.
 
 1. Run fresh screenshot-backed audits for Codex, Obsidian, Notes, Claude desktop,
    and Claude Code with disposable text only.
-2. Build actual screenshot-driven self-healing: detect visible offset, write a
-   per-app compatibility adjustment, rerun smoke, and keep the proof.
+2. Build automatic screenshot-driven self-healing: detect visible offset from
+   pixels, write a trusted per-app correction, rerun smoke, and keep the proof.
 3. Test real production Monaco, ProseMirror, and CodeMirror apps, not just local
    fixtures.
 4. Build a fully in-app model install/repair flow.

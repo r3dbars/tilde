@@ -38,6 +38,18 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         abs(xOffset) > 0.01 || abs(yOffset) > 0.01
     }
 
+    public var hasTrustedVisualAdjustment: Bool {
+        guard hasVisualAdjustment else {
+            return false
+        }
+
+        if lastReason == "manual-visual-nudge" || lastReason == "screenshot-visual-correction" {
+            return true
+        }
+
+        return confidence >= 0.6 && observations >= 3
+    }
+
     public var debugSummary: String {
         let render = renderModeOverride?.rawValue ?? "profile"
         return "offset=(\(Self.format(xOffset)), \(Self.format(yOffset))), render=\(render), screenshots=\(screenshotTracingEnabled), observations=\(observations), confidence=\(Self.format(confidence))"
@@ -82,11 +94,21 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
         )
     }
 
+    public var trustedVisualOffsetOnly: CompatibilityLearningAdjustment {
+        guard let profile,
+              !profile.hasTrustedVisualAdjustment else {
+            return self
+        }
+
+        return withoutVisualOffset
+    }
+
     public var metadata: [String: String] {
         guard let profile else {
             return [
                 "learningApplied": "false",
-                "learningRenderMode": effectiveRenderMode.rawValue
+                "learningRenderMode": effectiveRenderMode.rawValue,
+                "learningVisualOffsetTrusted": "false"
             ]
         }
 
@@ -95,6 +117,7 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
             "learningRenderMode": effectiveRenderMode.rawValue,
             "learningXOffset": String(format: "%.1f", Double(profile.xOffset)),
             "learningYOffset": String(format: "%.1f", Double(profile.yOffset)),
+            "learningVisualOffsetTrusted": String(profile.hasTrustedVisualAdjustment),
             "learningConfidence": String(format: "%.2f", profile.confidence),
             "learningObservations": String(profile.observations),
             "learningScreenshotTracing": String(profile.screenshotTracingEnabled)
