@@ -8,13 +8,18 @@ APP="${1:-}"
 DRY_RUN=0
 MANUAL_GATE=0
 SKIP_BUILD="${AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD:-0}"
+CHROME_FIXTURE="${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-textarea}"
+CHROME_FIXTURE_WAS_SET=0
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome|codex|claude-code> [--dry-run] [--manual-gate] [--skip-build]
+Usage: script/real_app_smoke.sh <textedit|chrome|codex|claude-code> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|all>]
 
 Runs a real app smoke pass where it is safe to automate. Codex and Claude Code
 are manual-gated so this script never types into an agent prompt by surprise.
+
+Chrome defaults to the textarea fixture. Use --fixture all to run every local
+Chrome browser/editor fixture with one app build.
 EOF
 }
 
@@ -29,6 +34,19 @@ while (($#)); do
       ;;
     --skip-build)
       SKIP_BUILD=1
+      ;;
+    --fixture)
+      shift
+      if (($# == 0)); then
+        usage >&2
+        exit 2
+      fi
+      CHROME_FIXTURE="$1"
+      CHROME_FIXTURE_WAS_SET=1
+      ;;
+    --fixture=*)
+      CHROME_FIXTURE="${1#--fixture=}"
+      CHROME_FIXTURE_WAS_SET=1
       ;;
     -h|--help)
       usage
@@ -50,6 +68,22 @@ case "$APP" in
     exit 2
     ;;
 esac
+
+case "$CHROME_FIXTURE" in
+  textarea|contenteditable|editor-like|all)
+    ;;
+  *)
+    echo "Unknown Chrome fixture: $CHROME_FIXTURE" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
+if [[ "$APP" != "chrome" && "$CHROME_FIXTURE_WAS_SET" == "1" ]]; then
+  echo "--fixture is only supported for the Chrome smoke pass." >&2
+  usage >&2
+  exit 2
+fi
 
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
@@ -140,6 +174,77 @@ end tell
 APPLESCRIPT
 }
 
+chrome_fixture_html() {
+  local fixture="${1:-$CHROME_FIXTURE}"
+
+  case "$fixture" in
+    textarea)
+      cat <<'HTML'
+<!doctype html>
+<meta charset="utf-8">
+<title>Autocomplete Lab Chrome Textarea Smoke</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
+<textarea data-smoke-editor autofocus aria-label="Smoke textarea" style="font: 18px -apple-system; width: 720px; height: 180px; margin: 80px;"></textarea>
+<script>
+window.focusSmokeEditor = function () {
+  const editor = document.querySelector("[data-smoke-editor]");
+  editor.focus();
+  editor.setSelectionRange(editor.value.length, editor.value.length);
+};
+window.addEventListener("load", window.focusSmokeEditor);
+</script>
+HTML
+      ;;
+    contenteditable)
+      cat <<'HTML'
+<!doctype html>
+<meta charset="utf-8">
+<title>Autocomplete Lab Chrome Contenteditable Smoke</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
+<main data-smoke-editor role="textbox" aria-label="Smoke rich text editor" contenteditable="true" spellcheck="false" style="font: 18px -apple-system; width: 720px; min-height: 180px; margin: 80px; padding: 12px; border: 1px solid #bbb; outline: none;"></main>
+<script>
+window.focusSmokeEditor = function () {
+  const editor = document.querySelector("[data-smoke-editor]");
+  editor.focus();
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+window.addEventListener("load", window.focusSmokeEditor);
+</script>
+HTML
+      ;;
+    editor-like)
+      cat <<'HTML'
+<!doctype html>
+<meta charset="utf-8">
+<title>Autocomplete Lab Chrome Editor-Like Smoke</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
+<div class="cm-editor" role="application" aria-label="Local editor-like smoke fixture" style="display: grid; grid-template-columns: 48px 1fr; font: 18px -apple-system; width: 720px; min-height: 180px; margin: 80px; border: 1px solid #bbb;">
+  <div aria-hidden="true" style="padding-top: 14px; border-right: 1px solid #ddd; background: #f5f5f2; color: #777; font: 14px Menlo, monospace; text-align: center;">1</div>
+  <div data-smoke-editor class="cm-content" role="textbox" aria-label="CodeMirror-style editor" aria-multiline="true" contenteditable="true" spellcheck="false" style="min-height: 160px; padding: 12px; outline: none; white-space: pre-wrap; overflow-wrap: anywhere;"></div>
+</div>
+<script>
+window.focusSmokeEditor = function () {
+  const editor = document.querySelector("[data-smoke-editor]");
+  editor.focus();
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+window.addEventListener("load", window.focusSmokeEditor);
+</script>
+HTML
+      ;;
+  esac
+}
+
 describe_plan() {
   echo "Real app smoke: $APP"
   echo "Diagnostics log: $LOG_PATH"
@@ -149,7 +254,12 @@ describe_plan() {
       echo "Plan: build/relaunch AutocompleteLab, open a disposable TextEdit file, type a test fragment, then validate logs and traces."
       ;;
     chrome)
-      echo "Plan: build/relaunch AutocompleteLab, open a disposable Chrome textarea, type a test fragment, then validate logs and traces."
+      echo "Chrome fixture: $CHROME_FIXTURE"
+      if [[ "$CHROME_FIXTURE" == "all" ]]; then
+        echo "Plan: build/relaunch AutocompleteLab, then run disposable Chrome textarea, contenteditable, and editor-like local fixtures."
+      else
+        echo "Plan: build/relaunch AutocompleteLab, open a disposable Chrome $CHROME_FIXTURE fixture, type a test fragment, then validate logs and traces."
+      fi
       ;;
     codex|claude-code)
       echo "Plan: manual-gated prompt smoke. The script prints the checklist and validates after you run it."
@@ -217,30 +327,20 @@ APPLESCRIPT
     ./script/manual_smoke_session.sh textedit --check
 }
 
-run_chrome() {
-  if ! osascript -e 'id of application "Google Chrome"' >/dev/null 2>&1; then
-    echo "Google Chrome is not installed or not scriptable on this machine." >&2
-    exit 1
-  fi
-
-  build_if_needed
-
+run_chrome_fixture() {
+  local fixture="$1"
   local start_line trace_start_line tmp_dir html_file
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
   tmp_dir="$(mktemp -d)"
-  html_file="$tmp_dir/autocomplete-lab-chrome-smoke.html"
+  html_file="$tmp_dir/autocomplete-lab-chrome-$fixture-smoke.html"
   trap 'rm -rf "$tmp_dir"' RETURN
 
-  cat >"$html_file" <<'HTML'
-<!doctype html>
-<meta charset="utf-8">
-<title>Autocomplete Lab Chrome Smoke</title>
-<textarea autofocus style="font: 18px -apple-system; width: 720px; height: 180px; margin: 80px;"></textarea>
-<script>document.querySelector("textarea").focus();</script>
-HTML
+  chrome_fixture_html "$fixture" >"$html_file"
 
   local chrome_url="file://$html_file"
+
+  echo "Running Chrome fixture: $fixture"
 
   osascript >/dev/null <<APPLESCRIPT
 tell application "Google Chrome"
@@ -249,6 +349,12 @@ tell application "Google Chrome"
   set URL of active tab of front window to "$chrome_url"
 end tell
 delay 1.2
+tell application "Google Chrome"
+  try
+    tell active tab of front window to execute javascript "window.focusSmokeEditor && window.focusSmokeEditor();"
+  end try
+end tell
+delay 0.2
 tell application "System Events"
   tell process "Google Chrome"
     set frontmost to true
@@ -266,21 +372,39 @@ tell application "System Events"
 end tell
 APPLESCRIPT
 
-  wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome suggestion"
+  wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
   press_key_code 48
-  wait_for_log_fields "$start_line" "Chrome Tab acceptance" 12 \
+  wait_for_log_fields "$start_line" "Chrome $fixture Tab acceptance" 12 \
     "keyboard-action" \
     "app=com.google.Chrome" \
     "key=tab" \
     "action=acceptNextWord" \
     "handled=true"
-  wait_for_log_pattern "$start_line" "insert-verification .*app=com.google.Chrome .*result=verified" "Chrome first verified insertion"
+  wait_for_log_pattern "$start_line" "insert-verification .*app=com.google.Chrome .*result=verified" "Chrome $fixture first verified insertion"
   press_key_code 50
 
   sleep 1
+  AUTOCOMPLETE_LAB_CHROME_FIXTURE="$fixture" \
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
     AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/manual_smoke_session.sh chrome --check
+}
+
+run_chrome() {
+  if ! osascript -e 'id of application "Google Chrome"' >/dev/null 2>&1; then
+    echo "Google Chrome is not installed or not scriptable on this machine." >&2
+    exit 1
+  fi
+
+  build_if_needed
+
+  if [[ "$CHROME_FIXTURE" == "all" ]]; then
+    run_chrome_fixture textarea
+    run_chrome_fixture contenteditable
+    run_chrome_fixture editor-like
+  else
+    run_chrome_fixture "$CHROME_FIXTURE"
+  fi
 }
 
 describe_plan
