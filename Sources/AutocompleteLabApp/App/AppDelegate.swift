@@ -104,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionTextBeforeCursor: String?
     private var currentSuggestionDisplayedText: String?
     private var currentSuggestionInvalidatedByUserKeyDown = false
-    private var recentAcceptedWords: [String] = []
+    private var recentWordMemory = RecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var lastStatusLine: String?
     private var lastSuggestionDecision = "Starting"
@@ -1274,7 +1274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if requestMode == .wordCompletion {
             if let fastSuggestion = wordCompletionRanker.suggestion(
                 for: context.textBeforeCursor,
-                recentWords: recentAcceptedWords
+                recentWords: recentWordMemory.words
             ) {
                 let screenshotPath = captureTraceScreenshot(
                     near: context.elementRect ?? context.windowRect ?? context.caretRect,
@@ -2043,14 +2043,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func rememberRecentWords(_ words: [String]) {
-        guard !words.isEmpty else {
-            return
-        }
-
-        recentAcceptedWords.append(contentsOf: words)
-        if recentAcceptedWords.count > 500 {
-            recentAcceptedWords.removeFirst(recentAcceptedWords.count - 500)
-        }
+        recentWordMemory.remember(words)
     }
 
     private func recordTypedOverSuggestionIfNeeded(

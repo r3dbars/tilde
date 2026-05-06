@@ -55,14 +55,14 @@ fixtures.
 | Onboarding | 8/10 | Settings now gives stage-specific model guidance and runtime actions; model install/repair is still not fully in-app. |
 | User control | 9/10 | Settings exposes pause, current-app enablement, disabled-app count, enable-all, privacy controls, and a full-accept shortcut toggle. |
 | Diagnostics | 9/10 | Strong placement, latency, insertion, trace, recovered-insertion, and manual proof logs. |
-| Automated tests | 9/10 | 228 Swift tests pass, plus script self-tests for smoke, model asset, trace eval, and typing-performance guards. |
+| Automated tests | 9/10 | 231 Swift tests pass, plus script self-tests for smoke, model asset, trace eval, and typing-performance guards. |
 | Real-app smoke | 9/10 | TextEdit, Obsidian, Codex, Claude desktop, and five Chrome shapes are green; Notes split rich-text proof and Claude Code remain pending. |
 | Release readiness | 7/10 | Signing identity and preferred MLX model are ready, but `NOTARYTOOL_PROFILE` is missing and model distribution is not self-contained. |
-| Architecture | 8/10 | Core boundaries are solid, and polling-pause timing moved into a tested core type; AppDelegate still needs larger service extraction. |
+| Architecture | 8/10 | Core boundaries are solid, and polling-pause timing plus recent-word memory moved into tested core types; AppDelegate still needs larger service extraction. |
 
 ## Latest Proof
 
-- `swift test`: 228 tests passed.
+- `swift test`: 231 tests passed.
 - `./script/real_app_smoke.sh chrome --fixture all`: textarea, contenteditable,
   editor-like, Monaco-like, and ProseMirror-like all passed with two verified
   accepts each.
@@ -145,6 +145,8 @@ fixtures.
   while Tab remains the next-word accept key.
 - Notes now uses key-event insertion only and the manual smoke gate requires
   separate title, body, and checklist proof labels.
+- Recent accepted/completed word memory moved out of AppDelegate into a tested
+  core type.
 
 ## Next Highest-Leverage Work
 
