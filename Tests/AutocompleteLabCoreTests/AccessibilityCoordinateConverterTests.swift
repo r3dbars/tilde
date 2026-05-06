@@ -32,30 +32,32 @@ struct AccessibilityCoordinateConverterTests {
 
     @Test("Converts accessibility rects on negative-origin screens")
     func convertsNegativeOriginScreenRects() {
-        let screenFrame = CGRect(x: -1920, y: 300, width: 1920, height: 1080)
+        let mainScreenHeight: CGFloat = 878
+        let screenFrame = CGRect(x: -2560, y: 303, width: 2560, height: 1440)
         let accessibilityRect = CGRect(x: -1380, y: 165, width: 0, height: 20)
         let appKitRect = AccessibilityCoordinateConverter.appKitRect(
             fromAccessibilityRect: accessibilityRect,
-            in: screenFrame
+            screenHeight: mainScreenHeight
         )
         let roundTripRect = AccessibilityCoordinateConverter.accessibilityRect(
             fromAppKitRect: appKitRect,
-            in: screenFrame
+            screenHeight: mainScreenHeight
         )
 
         #expect(appKitRect.minX == -1380)
-        #expect(appKitRect.minY == 1195)
+        #expect(appKitRect.minY == 693)
         #expect(screenFrame.contains(CGPoint(x: appKitRect.midX, y: appKitRect.midY)))
         #expect(roundTripRect == accessibilityRect)
     }
 
     @Test("Builds non-empty probe rects for zero-width carets")
     func buildsProbeRectForZeroWidthCarets() {
-        let screenFrame = CGRect(x: -1920, y: 0, width: 1920, height: 1080)
+        let mainScreenHeight: CGFloat = 878
+        let screenFrame = CGRect(x: -2560, y: 303, width: 2560, height: 1440)
         let caretRect = CGRect(x: -1380, y: 165, width: 0, height: 20)
         let probeRect = AccessibilityCoordinateConverter.appKitProbeRect(
             fromAccessibilityRect: caretRect,
-            in: screenFrame
+            screenHeight: mainScreenHeight
         )
 
         #expect(probeRect.width == 1)

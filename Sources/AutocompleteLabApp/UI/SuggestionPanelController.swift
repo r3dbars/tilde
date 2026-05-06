@@ -21,7 +21,7 @@ final class SuggestionPanelController {
             defer: false
         )
         panel.isFloatingPanel = true
-        panel.level = .floating
+        panel.level = .statusBar
         panel.backgroundColor = NSColor.clear
         panel.isOpaque = false
         panel.hasShadow = false
@@ -88,20 +88,21 @@ final class SuggestionPanelController {
         )
         let screen = screen(containing: anchorRect) ?? NSScreen.main
         let screenFrame = screen?.frame ?? .zero
+        let screenHeight = Self.accessibilityScreenHeight()
         let appKitAnchorRect = AccessibilityCoordinateConverter.appKitRect(
             fromAccessibilityRect: anchorRect,
-            in: screenFrame
+            screenHeight: screenHeight
         )
         let appKitTextLineRect = textLineRect.map {
             AccessibilityCoordinateConverter.appKitRect(
                 fromAccessibilityRect: $0,
-                in: screenFrame
+                screenHeight: screenHeight
             )
         }
         let appKitClippingRect = clippingRect.map {
             AccessibilityCoordinateConverter.appKitRect(
                 fromAccessibilityRect: $0,
-                in: screenFrame
+                screenHeight: screenHeight
             )
         }
         let frame: CGRect
@@ -130,7 +131,7 @@ final class SuggestionPanelController {
 
         let accessibilityFrame = AccessibilityCoordinateConverter.accessibilityRect(
             fromAppKitRect: frame,
-            in: screenFrame
+            screenHeight: screenHeight
         )
 
         let shouldRefresh = !panel.isVisible || SuggestionPanelFrameCalculator.shouldRefreshPresentation(
@@ -155,7 +156,7 @@ final class SuggestionPanelController {
             renderMode: renderMode,
             textInsets: textInsets
         )
-        panel.setFrame(frame, display: wasVisible, animate: false)
+        panel.setFrame(frame, display: true, animate: false)
         DiagnosticsLog.shared.record(
             "suggestion-panel-frame",
             metadata: [
@@ -185,26 +186,27 @@ final class SuggestionPanelController {
     }
 
     private func screen(containing accessibilityRect: CGRect) -> NSScreen? {
-        NSScreen.screens.first { screen in
+        let screenHeight = Self.accessibilityScreenHeight()
+        return NSScreen.screens.first { screen in
             let probeRect = AccessibilityCoordinateConverter.appKitProbeRect(
                 fromAccessibilityRect: accessibilityRect,
-                in: screen.frame
+                screenHeight: screenHeight
             )
 
             return screen.frame.intersects(probeRect)
         }
     }
 
-    private func textColor(matching foregroundColor: NSColor?, renderMode: SuggestionRenderMode) -> NSColor {
+    private static func accessibilityScreenHeight() -> CGFloat {
+        NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 0
+    }
+
+    private func textColor(matching _: NSColor?, renderMode: SuggestionRenderMode) -> NSColor {
         switch renderMode {
         case .floatingMirror:
             return NSColor.labelColor
         case .inlineAdjacent:
-            guard let foregroundColor else {
-                return NSColor.secondaryLabelColor.withAlphaComponent(0.74)
-            }
-
-            return Self.inlineGhostColor(matching: foregroundColor)
+            return NSColor(calibratedWhite: 0.58, alpha: 0.82)
         case .disabled:
             return NSColor.secondaryLabelColor
         }
@@ -246,18 +248,6 @@ final class SuggestionPanelController {
         case .disabled:
             return .zero
         }
-    }
-
-    private static func inlineGhostColor(matching foregroundColor: NSColor) -> NSColor {
-        guard let rgbColor = foregroundColor.usingColorSpace(.sRGB) else {
-            return NSColor.secondaryLabelColor.withAlphaComponent(0.74)
-        }
-
-        let luminance = (0.2126 * rgbColor.redComponent)
-            + (0.7152 * rgbColor.greenComponent)
-            + (0.0722 * rgbColor.blueComponent)
-        let alpha: CGFloat = luminance > 0.55 ? 0.48 : 0.42
-        return rgbColor.withAlphaComponent(alpha)
     }
 
     private func compactFrameDescription(_ rect: CGRect) -> String {

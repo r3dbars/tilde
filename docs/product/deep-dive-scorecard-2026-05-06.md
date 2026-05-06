@@ -29,7 +29,7 @@ install/repair and better shortcut controls before it feels fully productized.
 | Normal typing passthrough | 9.5/10 | Event-tap summaries remain in microseconds and focused-text polling stays in low milliseconds in the latest runs. |
 | Keyboard capture safety | 9.5/10 | Capture starts only while a suggestion is visible, passes ordinary typing through, and the real-app smoke now asserts the target app stays frontmost before accept. |
 | Acceptance reliability | 9/10 | TextEdit and Chrome fixtures verify Tab plus full accept. Codex and Claude desktop have previous manual proof. Notes has only partial current evidence, and Claude Code still needs refreshed proof. |
-| Visual caret alignment | 8/10 | TextEdit and Chrome fixtures now have screenshot-backed proof. Synthetic caret placement is no longer scored as high-confidence real AX geometry. Real Codex, Obsidian, Notes title/body/checklist, and Claude Code visual proof is still incomplete. |
+| Visual caret alignment | 8.5/10 | TextEdit, Chrome fixtures, and a disposable Codex prompt now have screenshot-backed proof. Synthetic caret placement is still medium confidence and Obsidian, Notes title/body/checklist, Claude Code, and Claude desktop visual proof is incomplete. |
 | Self-healing behavior | 8.9/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, applies only explicit trusted visual offsets, and manual nudges now move the visible ghost immediately. It does not yet auto-detect offsets from pixels. |
 | Screenshot tracing | 9.3/10 | Screen Recording is preflighted, capture runs off the hot path, screenshots include editor bounds plus ghost text, and traces/logs now include capture rect plus rendered panel rect. |
 | TextEdit support | 9.5/10 | Fresh screenshot-backed run shows ghost text aligned after the caret and two verified accepts. |
@@ -40,7 +40,7 @@ install/repair and better shortcut controls before it feels fully productized.
 | Chrome Monaco-like support | 8.5/10 | Fresh pass verifies insertion; visual is readable and near the caret, but still needs real Monaco proof. |
 | Chrome ProseMirror-like support | 9/10 | Fresh full-frame screenshot and two verified accepts. |
 | Obsidian support | 8/10 | Prior synthetic caret proof exists, but it needs a fresh screenshot-backed visual audit. |
-| Codex support | 7.5/10 | Prior insertion proof exists, but the user reports Codex placement still feels off and we do not have a safe fresh screenshot audit committed. |
+| Codex support | 8.5/10 | Fresh disposable prompt screenshot shows visible inline placement on the side display after the coordinate and render-level fixes. It still needs a recorder-grade visual pass with insertion in the same slice before it can be scored higher. |
 | Claude Code support | 4/10 | Profile exists, but there is still no safe live prompt proof. |
 | Claude desktop support | 8.5/10 | Prior manual proof exists, but it needs a fresh visual audit with the new screenshot loop. |
 | Output relevance | 9/10 | Prompt labels, instruction echoes, assistant filler, punctuation suffixes, and parroting are suppressed before display. |
@@ -66,7 +66,7 @@ install/repair and better shortcut controls before it feels fully productized.
 | Chrome Monaco-like | 8.5/10 | [chrome-monaco-like.png](visual-placement-screenshots/chrome-monaco-like.png) | Ghost is readable and close to the caret in a dark editor. | Needs real Monaco proof and a slightly cleaner visual gap. |
 | Chrome ProseMirror-like | 9/10 | [chrome-prosemirror-like.png](visual-placement-screenshots/chrome-prosemirror-like.png) | Ghost is readable and inline with the editing line. | Needs real production ProseMirror proof. |
 | Obsidian | 8/10 | Pending fresh screenshot | Prior synthetic caret proof passes, and Obsidian is profiled. | Needs screenshot-backed proof in a disposable vault note. |
-| Codex | 7.5/10 | Pending safe screenshot | AX value replacement proof exists. | User reports the visual placement still feels wrong; needs a safe prompt screenshot audit. |
+| Codex | 8.5/10 | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Disposable prompt screenshot shows the ghost visible on the same line after the caret on a negative-origin side display. | Needs a recorder-grade visual pass with Tab/full accept in the same trace slice. |
 | Apple Notes title | 6.5/10 | Pending title screenshot | Partial current Notes evidence exists from a disposable note. | Needs `script/manual_smoke_session.sh notes-title --visual` with two verified accepts. |
 | Apple Notes body | 6.5/10 | Pending body screenshot | Safer insertion stance exists. | Needs `script/manual_smoke_session.sh notes-body --visual` with two verified accepts. |
 | Apple Notes checklist | 6.5/10 | Pending checklist screenshot | Safer insertion stance exists. | Needs `script/manual_smoke_session.sh notes-checklist --visual` with two verified accepts. |
@@ -84,11 +84,12 @@ install/repair and better shortcut controls before it feels fully productized.
 - `./script/smoke_test.sh`: passed after the visual-evidence telemetry change, including model asset, trace eval, typing-performance, real-app smoke self-test, visual evidence, and package preflight checks. Latest focused-text poll p95 was 3ms, max was 4ms, with no slow markers.
 - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit`: passed on a fresh app launch with two verified accepts and screenshot tracing.
 - `AUTOCOMPLETE_LAB_TRACE_START_LINE=20143 AUTOCOMPLETE_LAB_TRACE_END_LINE=20158 AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP=com.apple.TextEdit AUTOCOMPLETE_LAB_TRACE_REQUIRE_CONFIDENT_PLACEMENT=1 AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE=1 ./script/check_trace_eval.sh`: passed with `Visual evidence complete: 2/2`, high placement confidence, and p90 suggestion latency of 113ms.
+- Live Codex disposable prompt probe: screenshot `visual-placement-screenshots/codex-inline.png` shows visible inline ghost text after the caret on the negative-origin side display; focused poll p95 was 5ms and event-tap p95 stayed in microseconds during the probe.
 - Parent handoff: a disposable Notes note produced screenshot-backed suggestion presentation and at least one verified Tab insertion, but this is not enough to mark title/body/checklist complete.
-- `./script/manual_smoke_status.sh --strict`: failed honestly on Notes title/body/checklist and Claude Code insertion proof gaps, and separately reports Obsidian, Codex, Apple Notes title/body/checklist, Claude Code, and Claude desktop screenshot proof gaps.
+- `./script/manual_smoke_status.sh --strict`: failed honestly on Notes title/body/checklist and Claude Code insertion proof gaps, and separately reports Obsidian, Apple Notes title/body/checklist, Claude Code, and Claude desktop screenshot proof gaps.
 - `./script/check_visual_placement_evidence_self_test.sh`: passed, including missing, empty, invalid, too-small, unreferenced, and pending strict screenshot failure cases.
-- `./script/check_visual_placement_evidence.sh`: passed with six verified visual-placement screenshots and reports five pending real-app screenshot audits.
-- `./script/check_visual_placement_evidence.sh --require-all`: failed honestly on the five pending real-app screenshot audits.
+- `./script/check_visual_placement_evidence.sh`: passed with seven verified visual-placement screenshots and reports six pending real-app screenshot audits.
+- `./script/check_visual_placement_evidence.sh --require-all`: failed honestly on the six pending real-app screenshot audits.
 - `swift test --filter CompatibilityLearningTests`: passed, covering trusted manual visual offsets and untrusted stale-offset rejection.
 - `swift test --filter 'PlacementHealthTests|CompatibilityLearningTests|VisualPlacementGeometryCorrectionPolicyTests'`: passed after synthetic caret confidence and visual-offset trust hardening.
 - `./script/check_trace_eval_self_test.sh`: passed, including strict visual-evidence guardrails for screenshot path, anchor rect, rendered panel rect, capture rect, and placement confidence.
@@ -144,8 +145,9 @@ install/repair and better shortcut controls before it feels fully productized.
 
 ## Remaining Gaps
 
-1. Run fresh screenshot-backed audits for Codex, Obsidian, Notes title/body/checklist,
-   Claude desktop, and Claude Code with disposable text only.
+1. Run recorder-grade screenshot-backed audits for Obsidian, Notes title/body/checklist,
+   Claude desktop, and Claude Code with disposable text only. Codex has visual proof
+   now, but still needs Tab/full-accept proof in the same strict visual trace slice.
 2. Build automatic screenshot-driven self-healing: detect visible offset from
    pixels, write a trusted per-app correction, rerun smoke, and keep the proof.
 3. Test real production Monaco, ProseMirror, and CodeMirror apps, not just local
