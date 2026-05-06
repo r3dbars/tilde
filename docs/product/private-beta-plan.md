@@ -20,7 +20,11 @@ That creates:
 - `dist/private-beta/session-report.md`
 - `dist/private-beta/checksums.txt`
 
-If the model check fails, fix the local app-owned asset before packaging:
+If the model check fails on a tester machine, open Autocomplete Lab Settings
+and use the Local model action. Settings shows the expected model folder and
+keeps suggestions off until the model is valid.
+
+Developer fallback:
 
 ```bash
 python3 -m pip install --user huggingface_hub
@@ -63,7 +67,7 @@ Stop the beta if:
 - a suggestion appears over sensitive text,
 - Tab becomes unreliable,
 - the local model falls back to mock output,
-- the app needs manual model/server setup,
+- the app needs a separate model server,
 - `./script/check_model_asset.py` fails on the tester machine,
 - raw text or screenshot logging turns on without explicit local opt-in.
 
