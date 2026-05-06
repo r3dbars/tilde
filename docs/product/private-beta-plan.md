@@ -6,6 +6,7 @@ trust.
 Run this before inviting anyone:
 
 ```bash
+./script/check_model_asset.py
 ./script/beta_readiness.sh
 ```
 
@@ -14,9 +15,18 @@ That creates:
 - `dist/AutocompleteLab.zip`
 - `dist/private-beta/README.md`
 - `dist/private-beta/install-checklist.md`
+- `dist/private-beta/model-asset.md`
 - `dist/private-beta/feedback-log.md`
 - `dist/private-beta/session-report.md`
 - `dist/private-beta/checksums.txt`
+
+If the model check fails, fix the local app-owned asset before packaging:
+
+```bash
+python3 -m pip install --user huggingface_hub
+./script/download_mlx_model.py --model qwen35-4b
+./script/check_model_asset.py
+```
 
 ## Test Shape
 
@@ -53,6 +63,7 @@ Stop the beta if:
 - Tab becomes unreliable,
 - the local model falls back to mock output,
 - the app needs manual model/server setup,
+- `./script/check_model_asset.py` fails on the tester machine,
 - raw text or screenshot logging turns on without explicit local opt-in.
 
 ## After Each Session

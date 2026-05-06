@@ -54,6 +54,12 @@ case "$MODE" in
     else
       echo "Notary profile: missing (set NOTARYTOOL_PROFILE to submit)"
     fi
+
+    if ./script/check_model_asset.py --quiet; then
+      echo "Preferred MLX model: ready"
+    else
+      echo "Preferred MLX model: missing or invalid (run ./script/check_model_asset.py)"
+    fi
     exit 0
     ;;
   archive)
@@ -62,6 +68,8 @@ case "$MODE" in
       echo "Run script/package_release.sh --check to inspect local prerequisites." >&2
       exit 1
     fi
+
+    ./script/check_model_asset.py
 
     AUTOCOMPLETE_LAB_BUILD_CONFIGURATION=release \
       SIGN_IDENTITY="$developer_id" \
