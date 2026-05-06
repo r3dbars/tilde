@@ -177,6 +177,12 @@ open_app() {
     launchctl unsetenv AUTOCOMPLETE_LAB_SCREENSHOT_TRACE >/dev/null 2>&1 || true
   fi
 
+  if [[ "${AUTOCOMPLETE_LAB_RAW_TRACE:-}" =~ ^(1|true|yes|on|0|false|no|off)$ ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_RAW_TRACE "$AUTOCOMPLETE_LAB_RAW_TRACE"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_RAW_TRACE >/dev/null 2>&1 || true
+  fi
+
   if [[ -n "${AUTOCOMPLETE_LAB_MODEL:-}" ]]; then
     launchctl setenv AUTOCOMPLETE_LAB_MODEL "$AUTOCOMPLETE_LAB_MODEL"
   else

@@ -12,6 +12,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     private let decoder = JSONDecoder()
     private let pauseDefaultsKey = "AutocompleteLabTracePaused"
     private let screenshotDefaultsKey = "AutocompleteLabScreenshotTraceEnabled"
+    private let rawContentDefaultsKey = "AutocompleteLabRawTraceContentEnabled"
 
     private init() {
         logURL = FileManager.default
@@ -49,6 +50,23 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         }
 
         return true
+    }
+
+    var rawContentTracingEnabled: Bool {
+        let value = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_RAW_TRACE"] ?? ""
+        if ["1", "true", "yes", "on"].contains(value.lowercased()) {
+            return true
+        }
+
+        if ["0", "false", "no", "off"].contains(value.lowercased()) {
+            return false
+        }
+
+        return UserDefaults.standard.bool(forKey: rawContentDefaultsKey)
+    }
+
+    func setRawContentTracingEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: rawContentDefaultsKey)
     }
 
     var isPaused: Bool {
@@ -159,6 +177,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             return
         }
 
+        let rawContentEnabled = rawContentTracingEnabled
         let event = AutocompleteTraceEvent(
             timestamp: ISO8601DateFormatter().string(from: Date()),
             sessionID: sessionID,
@@ -168,20 +187,50 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             fieldIdentity: fieldIdentity,
             requestMode: requestMode,
             triggerReason: triggerReason,
-            textBeforeCursor: textBeforeCursor,
-            textAfterCursor: textAfterCursor,
-            systemPrompt: systemPrompt,
-            userPrompt: userPrompt,
-            rawOutput: rawOutput,
-            cleanedVisibleText: cleanedVisibleText,
-            displayedText: displayedText,
-            acceptedText: acceptedText,
-            remainingVisibleText: remainingVisibleText,
+            textBeforeCursor: AutocompleteTracePrivacyFilter.textValue(
+                textBeforeCursor,
+                rawContentEnabled: rawContentEnabled
+            ),
+            textAfterCursor: AutocompleteTracePrivacyFilter.textValue(
+                textAfterCursor,
+                rawContentEnabled: rawContentEnabled
+            ),
+            systemPrompt: AutocompleteTracePrivacyFilter.textValue(
+                systemPrompt,
+                rawContentEnabled: rawContentEnabled
+            ),
+            userPrompt: AutocompleteTracePrivacyFilter.textValue(
+                userPrompt,
+                rawContentEnabled: rawContentEnabled
+            ),
+            rawOutput: AutocompleteTracePrivacyFilter.textValue(
+                rawOutput,
+                rawContentEnabled: rawContentEnabled
+            ),
+            cleanedVisibleText: AutocompleteTracePrivacyFilter.textValue(
+                cleanedVisibleText,
+                rawContentEnabled: rawContentEnabled
+            ),
+            displayedText: AutocompleteTracePrivacyFilter.textValue(
+                displayedText,
+                rawContentEnabled: rawContentEnabled
+            ),
+            acceptedText: AutocompleteTracePrivacyFilter.textValue(
+                acceptedText,
+                rawContentEnabled: rawContentEnabled
+            ),
+            remainingVisibleText: AutocompleteTracePrivacyFilter.textValue(
+                remainingVisibleText,
+                rawContentEnabled: rawContentEnabled
+            ),
             latencyMilliseconds: latencyMilliseconds,
             outcome: outcome,
             reason: reason,
             screenshotPath: screenshotPath,
-            metadata: metadata
+            metadata: AutocompleteTracePrivacyFilter.metadata(
+                metadata,
+                rawContentEnabled: rawContentEnabled
+            )
         )
 
         queue.async { [logURL, encoder] in

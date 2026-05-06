@@ -20,6 +20,7 @@ public enum DiagnosticsMetadataRedactor {
             "completion",
             "suggestion",
             "selected",
+            "typed",
             "value"
         ].contains { normalized.contains($0) }
     }

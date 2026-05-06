@@ -257,6 +257,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        guard profile.canPresentSuggestions, !profile.isSensitive else {
+            clearFocusedFieldState()
+            hideSuggestion()
+            return
+        }
+
         guard let rawContext = accessibilityClient.focusedTextContext(
             allowDescendantTextFallback: profile.allowsDescendantTextFallback
         ), !rawContext.isSecure else {
