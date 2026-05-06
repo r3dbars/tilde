@@ -55,6 +55,18 @@ if ! grep -F "Chrome fixture: contenteditable" "$TMP_DIR/chrome-contenteditable-
   exit 1
 fi
 
+script/real_app_smoke.sh notes --dry-run >"$TMP_DIR/notes.txt"
+if ! grep -F "manual-gated disposable Notes smoke" "$TMP_DIR/notes.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Notes manual gate" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh obsidian --dry-run >"$TMP_DIR/obsidian.txt"
+if ! grep -F "manual-gated disposable Obsidian smoke" "$TMP_DIR/obsidian.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Obsidian manual gate" >&2
+  exit 1
+fi
+
 if script/real_app_smoke.sh chrome --fixture unknown --dry-run >/dev/null 2>&1; then
   echo "real app smoke self-test expected unknown Chrome fixtures to fail" >&2
   exit 1
@@ -94,6 +106,26 @@ fi
 
 if ! grep -F "requires --manual-gate" "$TMP_DIR/codex-fail.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the Codex safety gate" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh notes >/dev/null 2>"$TMP_DIR/notes-fail.txt"; then
+  echo "real app smoke self-test expected Notes to require --manual-gate" >&2
+  exit 1
+fi
+
+if ! grep -F "private Apple Notes content" "$TMP_DIR/notes-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Notes safety gate" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh obsidian >/dev/null 2>"$TMP_DIR/obsidian-fail.txt"; then
+  echo "real app smoke self-test expected Obsidian to require --manual-gate" >&2
+  exit 1
+fi
+
+if ! grep -F "private Obsidian vault" "$TMP_DIR/obsidian-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Obsidian safety gate" >&2
   exit 1
 fi
 

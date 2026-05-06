@@ -2,28 +2,33 @@
 
 This is the repeatable check for whether suggestions show up in the right app box without making typing feel bad.
 
-Run the safe automated passes:
+Run the safe automated passes with screenshot tracing:
 
 ```bash
-script/real_app_smoke.sh textedit
-script/real_app_smoke.sh chrome
-script/real_app_smoke.sh chrome --fixture contenteditable
-script/real_app_smoke.sh chrome --fixture editor-like
-script/real_app_smoke.sh chrome --fixture monaco-like
-script/real_app_smoke.sh chrome --fixture prosemirror-like
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture editor-like
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-like
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-like
 ```
 
 Run all local Chrome browser/editor fixtures with one build:
 
 ```bash
-script/real_app_smoke.sh chrome --fixture all
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all
 ```
 
-Run agent prompt passes only with a manual gate:
+Run private-content and agent-prompt passes only with a manual gate:
 
 ```bash
-script/real_app_smoke.sh codex --manual-gate
-script/real_app_smoke.sh claude-code --manual-gate
+AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-title AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes --manual-gate
+AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-body AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes --manual-gate
+AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-checklist AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate
 ```
 
 What this proves:
@@ -33,10 +38,14 @@ What this proves:
 - a suggestion is shown with the expected render mode
 - Tab and the full-accept key are handled only while a suggestion is visible
 - insertion is verified in diagnostics and traces
+- strict screenshot trace evidence can be required with `--visual` through the
+  manual recorder or by setting `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1`
 - Chrome works in plain textareas, contenteditable fields, editor-like nested
   contenteditables, Monaco-like editors, and ProseMirror-like editors
 
-The Codex and Claude Code checks are manual-gated because auto-typing into an agent prompt is too risky.
+Notes, Obsidian, Codex, Claude desktop, and Claude Code checks are manual-gated.
+Do not use real notes, vault content, or live prompts for proof. Use disposable
+smoke text only, and never press Enter in an agent prompt pass.
 
 All Chrome fixtures are local and dependency-free. The Monaco-like and
 ProseMirror-like fixtures copy the DOM shape and focus behavior those editors

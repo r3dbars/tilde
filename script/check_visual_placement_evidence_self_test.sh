@@ -15,6 +15,11 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 mkdir -p "$TMP_DIR/visual-placement-screenshots"
 cp "$SOURCE_IMAGE" "$TMP_DIR/visual-placement-screenshots/good.png"
+cat >"$TMP_DIR/visual-placement-screenshots/checklist.md" <<'MARKDOWN'
+# Test Checklist
+
+Use disposable screenshots only.
+MARKDOWN
 GOOD_OUTPUT="$TMP_DIR/good-output.txt"
 MISSING_OUTPUT="$TMP_DIR/missing-output.txt"
 ORPHAN_OUTPUT="$TMP_DIR/orphan-output.txt"
@@ -91,6 +96,12 @@ fi
 
 if ! grep -F "Codex: Pending safe screenshot - next: Needs a safe prompt screenshot audit." "$PENDING_OUTPUT" >/dev/null; then
   echo "visual evidence self-test did not make the pending Codex proof actionable" >&2
+  cat "$PENDING_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "Safe capture checklist: visual-placement-screenshots/checklist.md" "$PENDING_OUTPUT" >/dev/null; then
+  echo "visual evidence self-test did not point pending proof at the safe capture checklist" >&2
   cat "$PENDING_OUTPUT" >&2
   exit 1
 fi

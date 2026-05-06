@@ -40,6 +40,7 @@ fi
 
 SCORECARD_DIR="$(cd "$(dirname "$SCORECARD_PATH")" && pwd)"
 VISUAL_DIR="$SCORECARD_DIR/visual-placement-screenshots"
+CHECKLIST_PATH="$VISUAL_DIR/checklist.md"
 
 declare -a links=()
 while IFS= read -r link; do
@@ -147,6 +148,9 @@ if (( pending_visual_rows > 0 )); then
   for pending in "${pending_visuals[@]}"; do
     echo "- $pending" >&2
   done
+  if [[ -f "$CHECKLIST_PATH" ]]; then
+    echo "Safe capture checklist: ${CHECKLIST_PATH#$SCORECARD_DIR/}" >&2
+  fi
 
   if (( REQUIRE_ALL == 1 )); then
     failures=$((failures + pending_visual_rows))

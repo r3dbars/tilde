@@ -2,10 +2,9 @@
 
 Use this after `./script/smoke_test.sh` when checking real app behavior.
 
-For a repeatable local record, run `script/manual_smoke_session.sh <app>` before
-each app pass. It prints the steps, waits while you test, then validates the
-new diagnostics and matching JSONL trace coverage for suggestion presentation,
-acceptance, and insertion verification.
+For a repeatable local record, use `script/real_app_smoke.sh <app>` when it is
+listed below. It builds/relaunches the app, prints the safe steps, waits while
+you test, then validates the new diagnostics and matching JSONL trace coverage.
 Successful runs are recorded in `docs/product/manual-smoke-runs.md`.
 Run `script/manual_smoke_status.sh` to see insertion proof and separate
 screenshot-backed placement proof. Use `script/manual_smoke_status.sh --strict`
@@ -30,7 +29,11 @@ also lists the current scorecard rows that are still below 10/10.
 
 ## TextEdit
 
-Recorder: `script/manual_smoke_session.sh textedit`
+Recorder:
+
+```bash
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit
+```
 
 - Type `Can we`.
 - Confirm a suggestion appears.
@@ -40,13 +43,16 @@ Recorder: `script/manual_smoke_session.sh textedit`
 
 ## Notes
 
-Recorder: `script/manual_smoke_session.sh notes`
+Recorder:
+
+```bash
+AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-title AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes --manual-gate
+AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-body AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes --manual-gate
+AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-checklist AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes --manual-gate
+```
 
 - Use the existing autocomplete smoke note.
-- Run three separate passes:
-  `AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-title script/manual_smoke_session.sh notes`,
-  `AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-body script/manual_smoke_session.sh notes`,
-  and `AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-checklist script/manual_smoke_session.sh notes`.
+- Do not let automation create, delete, or search private notes.
 - Test title-only text with `Can we`.
 - Test body text with `Autocomplete smoke` on line one and `Can we` on line two.
 - Toggle Checklist and test a checklist row.
@@ -54,9 +60,14 @@ Recorder: `script/manual_smoke_session.sh notes`
 
 ## Obsidian
 
-Recorder: `script/manual_smoke_session.sh obsidian`
+Recorder:
 
-- Use a disposable note.
+```bash
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate
+```
+
+- Use a disposable vault note only.
+- Do not point the proof pass at real vault content.
 - Type a partial word like `dicta`.
 - Confirm the mirror suggestion is anchored to the caret, not the whole editor.
 - Accept one word, then full visible text.
@@ -64,7 +75,11 @@ Recorder: `script/manual_smoke_session.sh obsidian`
 
 ## Chrome
 
-Recorder: `script/manual_smoke_session.sh chrome`
+Recorder:
+
+```bash
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all
+```
 
 - Use a local fixture page: textarea, contenteditable, editor-like,
   Monaco-like, or ProseMirror-like.
@@ -74,12 +89,15 @@ Recorder: `script/manual_smoke_session.sh chrome`
   uses key events with AX value replacement as fallback.
 - Press Tab and expect `Can we make` without focus leaving the editor.
 - Confirm verification succeeds.
-- For proof rows, run `script/real_app_smoke.sh chrome --fixture all`; each
-  fixture records its own proof label.
+- Each fixture records its own proof label.
 
 ## Codex
 
-Recorder: `script/manual_smoke_session.sh codex`
+Recorder:
+
+```bash
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
+```
 
 - Focus the Codex message box without submitting.
 - Type a harmless local test fragment like `Can we make this`.
@@ -90,9 +108,28 @@ Recorder: `script/manual_smoke_session.sh codex`
 
 ## Claude Code
 
-Recorder: `script/manual_smoke_session.sh claude-code`
+Recorder:
+
+```bash
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate
+```
 
 - Focus the Claude Code prompt without submitting.
+- Type a harmless local test fragment like `Can we make this`.
+- Confirm a suggestion appears near the prompt or in a stable mirror position.
+- Press Tab and expect the next word/suffix to insert without submitting.
+- Full visible accept is disabled for this profile until a safe live prompt pass proves it.
+- Do not press Enter as part of the smoke pass.
+
+## Claude Desktop
+
+Recorder:
+
+```bash
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate
+```
+
+- Focus the Claude prompt without submitting.
 - Type a harmless local test fragment like `Can we make this`.
 - Confirm a suggestion appears near the prompt or in a stable mirror position.
 - Press Tab and expect the next word/suffix to insert without submitting.

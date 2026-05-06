@@ -4,6 +4,13 @@ This file is append-only proof for real app passes.
 
 Only mark app-specific TODO items green after a run is recorded here.
 
+Notes proof is surface-specific now: `notes-title`, `notes-body`, and
+`notes-checklist` must each have their own row. The older generic Notes row is
+historical evidence only.
+
+When a trace slice says `visual strict-complete`, strict screenshot evidence was
+required and passed. Rows without that marker are insertion proof only.
+
 | Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
 | --- | --- | --- | --- | ---: | --- | --- | --- |
 | 2026-04-26T12:46:01Z | TextEdit | `com.apple.TextEdit` | `default` | 2 | `inlineAdjacent|floatingMirror` | lines 3037+ in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 137+ in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl` |
