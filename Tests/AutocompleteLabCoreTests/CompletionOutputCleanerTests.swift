@@ -64,6 +64,18 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("Next words:", after: "Let's") == nil)
     }
 
+    @Test("Suppresses prompt instruction echoes")
+    func suppressesPromptInstructionEchoes() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("Before cursor: hello and w", after: "hello and w") == nil)
+        #expect(cleaner.clean("Inline autocomplete. Return only the continuation.", after: "Can we") == nil)
+        #expect(cleaner.clean("Return only the next few words.", after: "Can we") == nil)
+        #expect(cleaner.clean("No spaces or punctuation.", after: "hel", mode: .wordCompletion) == nil)
+        #expect(cleaner.clean("Continue the current sentence naturally.", after: "Can we") == nil)
+        #expect(cleaner.clean("Start the next sentence if needed.", after: "We shipped it.") == nil)
+    }
+
     @Test("Trims repeated typed prefix from real model output")
     func trimsRepeatedTypedPrefix() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)

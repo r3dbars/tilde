@@ -58,6 +58,20 @@ struct CompletionQualityEvalTests {
                 expectedVisibleText: " keep moving"
             ),
             EvalCase(
+                name: "before cursor prompt echo blocked",
+                rawOutput: "Before cursor: hello and w",
+                textBeforeCursor: "hello and w",
+                mode: .wordCompletion,
+                expectedVisibleText: nil
+            ),
+            EvalCase(
+                name: "inline autocomplete instruction blocked",
+                rawOutput: "Inline autocomplete. Return only the continuation.",
+                textBeforeCursor: "Can we",
+                mode: .phraseContinuation,
+                expectedVisibleText: nil
+            ),
+            EvalCase(
                 name: "earlier context repeat blocked",
                 rawOutput: "know you are ready",
                 textBeforeCursor: "I know you are\n\nHey how are you",

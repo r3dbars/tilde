@@ -91,7 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 120
     private let postInsertionPollPauseMilliseconds = 220
-    private var focusedTextPollingPausedUntil: Date?
+    private var focusedTextPollingPause = FocusedTextPollingPause()
     private var suggestionsPaused = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -315,7 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if isFocusedTextPollingPausedForTyping() {
+        if focusedTextPollingPause.isPaused(now: Date()) {
             setSuggestionDecision("Waiting: typing")
             return
         }
@@ -567,19 +567,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func isFocusedTextPollingPausedForTyping(now: Date = Date()) -> Bool {
-        guard let focusedTextPollingPausedUntil else {
-            return false
-        }
-
-        if focusedTextPollingPausedUntil > now {
-            return true
-        }
-
-        self.focusedTextPollingPausedUntil = nil
-        return false
-    }
-
     private func shouldSuppressDetachedSuggestion(
         profile: CompatibilityProfile,
         context: FocusedTextContext,
@@ -800,8 +787,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func observePassthroughTypingKeyDown() {
-        focusedTextPollingPausedUntil = Date().addingTimeInterval(
-            TimeInterval(postTypingPollPauseMilliseconds) / 1000
+        focusedTextPollingPause.pause(
+            now: Date(),
+            durationMilliseconds: postTypingPollPauseMilliseconds
         )
 
         guard suggestionSession.hasVisibleSuggestion else {
@@ -1830,8 +1818,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         if result.succeeded {
-            focusedTextPollingPausedUntil = Date().addingTimeInterval(
-                TimeInterval(postInsertionPollPauseMilliseconds) / 1000
+            focusedTextPollingPause.pause(
+                now: Date(),
+                durationMilliseconds: postInsertionPollPauseMilliseconds
             )
         }
 

@@ -2,14 +2,14 @@
 
 This is the current rating after the trust-first hardening, browser editor
 compatibility pass, Codex/Claude dogfood pass, Obsidian synthetic-caret pass,
-and typing-performance pass.
+typing-performance pass, cleaner hardening, and polling-pause extraction.
 
 Scale: 10 means beta-ready for normal people. 5 means promising but still easy
 to break or annoy users.
 
 ## Executive Rating
 
-Overall: 9.0/10.
+Overall: 9.1/10.
 
 The app is no longer just a neat lab build. It now has real proof across
 TextEdit, Notes, Obsidian, Codex, Claude desktop, and five Chrome editor shapes:
@@ -46,21 +46,21 @@ fixtures.
 | Codex support | 9/10 | Live AppleScript-gated proof passes Tab plus full accept with caret-anchored placement and verified AX insertion. Computer Use remains blocked from inspecting Codex directly. |
 | Claude Code support | 4/10 | Profile exists, but there is still no safe live prompt proof for the Claude Code surface. |
 | Claude desktop support | 9/10 | Live proof now passes Tab plus full accept. Cursor repair and post-insert polling pause handle Electron selection drift. |
-| Output relevance | 8/10 | Prompts and cleaners are short and local; echo, punctuation suffixes, and assistant filler are suppressed. |
+| Output relevance | 9/10 | Prompt labels, instruction echoes, assistant filler, punctuation suffixes, and context parroting are suppressed before display. |
 | Word completion quality | 9/10 | Fast ranker path is useful, partial accept keeps remaining text alive, and repeated misses are suppressed. |
 | Non-annoyance | 9/10 | Esc, typed-over tracking, repetition suppression, pause control, and insertion recovery all reduce bad loops. |
 | Privacy | 8/10 | Local-first, secure fields suppressed, diagnostics redact text by default; raw trace and screenshots remain opt-in. |
 | Onboarding | 7/10 | Permission flow and settings exist, but first-run model readiness still needs a normal-user path. |
 | User control | 8/10 | Per-app disable and global pause/resume exist; visible multi-app management is still missing. |
 | Diagnostics | 9/10 | Strong placement, latency, insertion, trace, recovered-insertion, and manual proof logs. |
-| Automated tests | 9/10 | 217 Swift tests pass, plus script self-tests for smoke, model asset, trace eval, and typing-performance guards. |
+| Automated tests | 9/10 | 222 Swift tests pass, plus script self-tests for smoke, model asset, trace eval, and typing-performance guards. |
 | Real-app smoke | 9/10 | TextEdit, Notes, Obsidian, Codex, Claude desktop, and five Chrome shapes are green; Claude Code remains pending. |
 | Release readiness | 7/10 | Signing identity and preferred MLX model are ready, but `NOTARYTOOL_PROFILE` is missing and model distribution is not self-contained. |
-| Architecture | 7/10 | Core boundaries are solid; AppDelegate is still too large and should be split into focused services. |
+| Architecture | 8/10 | Core boundaries are solid, and polling-pause timing moved into a tested core type; AppDelegate still needs larger service extraction. |
 
 ## Latest Proof
 
-- `swift test`: 217 tests passed.
+- `swift test`: 222 tests passed.
 - `./script/real_app_smoke.sh chrome --fixture all`: textarea, contenteditable,
   editor-like, Monaco-like, and ProseMirror-like all passed with two verified
   accepts each.
@@ -75,6 +75,9 @@ fixtures.
   `placementConfidenceBand=high`, `hasCaretRect=true`, and event-tap p95 132us.
 - `AUTOCOMPLETE_LAB_LOG_START_LINE=53058 AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES=10 ./script/check_typing_performance_log.sh`:
   p95 63us, p99/max 101us, zero slow markers, zero tap-disabled events.
+- Focused cleaner and architecture tests passed:
+  `FocusedTextPollingPauseTests`, `CompletionOutputCleanerTests`, and
+  `CompletionQualityEvalTests`.
 - `AUTOCOMPLETE_LAB_LOG_START_LINE=53357 AUTOCOMPLETE_LAB_LOG_LINES=260 ./script/check_diagnostics_log.sh`:
   launch/status diagnostics verified after a fresh relaunch.
 - `./script/check_model_asset.py`: Qwen3.5 4B MLX asset ready at the app-owned
@@ -115,6 +118,14 @@ fixtures.
   not full green proof. A green Obsidian row now requires two verified accepts.
 - Obsidian, Codex, Claude Code, and Claude desktop smoke checks now require
   caret-anchored high-confidence placement with `hasCaretRect=true`.
+- Diagnostics line formatting now runs on the diagnostics queue, so event-tap
+  and panel callers avoid timestamp creation, metadata sorting, and redaction
+  work on the caller path.
+- Focused-text polling pauses moved out of AppDelegate into a small tested core
+  type.
+- Completion cleaning now blocks prompt scaffolding echoes such as
+  `Before cursor:`, `Inline autocomplete`, `Return only`, and related
+  instruction text before anything is shown to the user.
 
 ## Next Highest-Leverage Work
 
