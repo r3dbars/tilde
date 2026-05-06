@@ -328,6 +328,18 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             }
 
             if event.type == .suggestionPresented,
+               event.metadata["placementSelfHealingApplied"] == "true" {
+                let reason = event.metadata["placementHealthReason"] ?? "unknown"
+                add(
+                    key: "Placement self-healed in \(event.appBundleIdentifier)",
+                    event: event,
+                    cause: "Placement recovered from \(reason) before showing the suggestion.",
+                    category: "renderer/caret bug",
+                    buckets: &buckets
+                )
+            }
+
+            if event.type == .suggestionPresented,
                let latencyMilliseconds = event.latencyMilliseconds,
                latencyMilliseconds >= 1_000 {
                 add(

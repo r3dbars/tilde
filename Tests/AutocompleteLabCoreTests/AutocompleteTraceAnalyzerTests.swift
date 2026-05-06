@@ -143,6 +143,17 @@ struct AutocompleteTraceAnalyzerTests {
                     "effectiveRenderMode": "floatingMirror",
                     "hasCaretRect": "false"
                 ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "three",
+                appBundleIdentifier: "com.apple.TextEdit",
+                displayedText: " world",
+                metadata: [
+                    "effectiveRenderMode": "floatingMirror",
+                    "placementSelfHealingApplied": "true",
+                    "placementHealthReason": "caret-outside-focused-bounds"
+                ]
             )
         ]
 
@@ -150,6 +161,7 @@ struct AutocompleteTraceAnalyzerTests {
 
         #expect(summary.topMisses.contains { $0.title == "Detached suggestions suppressed in md.obsidian" })
         #expect(summary.topMisses.contains { $0.title == "Detached suggestion shown in md.obsidian" })
+        #expect(summary.topMisses.contains { $0.title == "Placement self-healed in com.apple.TextEdit" })
         #expect(summary.topMisses.allSatisfy { $0.fixCategory == "renderer/caret bug" })
     }
 
