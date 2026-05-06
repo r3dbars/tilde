@@ -73,12 +73,12 @@ EOF
   cat >"$INSTALL_PATH" <<'EOF'
 # Install Checklist
 
-1. Run `./script/check_model_asset.py` on the test Mac.
-2. If it fails, run `./script/download_mlx_model.py --model qwen35-4b`.
-3. Unzip `AutocompleteLab.zip`.
-4. Open `AutocompleteLab.app`.
-5. Grant Accessibility when macOS asks.
-6. Confirm the menu bar item says the model is ready.
+1. Unzip `AutocompleteLab.zip`.
+2. Open `AutocompleteLab.app`.
+3. Grant Accessibility when macOS asks.
+4. Open Settings from the menu bar item.
+5. If the local model is not ready, use the Local model action and follow the shown model folder path.
+6. Confirm Settings says the model is ready.
 7. Open TextEdit and type a normal sentence.
 8. Use Tab for one-word accept.
 9. Use the key above Tab for full accept.
@@ -109,6 +109,8 @@ Verify it:
 \`\`\`
 
 Fix a missing or invalid model:
+
+Open Autocomplete Lab Settings and use the Local model action. Developer fallback:
 
 \`\`\`bash
 python3 -m pip install --user huggingface_hub

@@ -149,6 +149,8 @@ fixtures.
   core type.
 - Release packaging now has a stricter Developer ID bundle check, optional
   notary-profile-required preflight, and post-staple zip verification.
+- Model-check failures and private beta docs now route normal testers to the
+  app Settings model action before developer terminal commands.
 
 ## Next Highest-Leverage Work
 

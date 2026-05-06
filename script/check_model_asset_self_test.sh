@@ -25,6 +25,12 @@ if ! grep -F "model asset check failed: missing Qwen3.5 4B MLX model" "$MISSING_
   exit 1
 fi
 
+if ! grep -F "Open Autocomplete Lab Settings and use the Local model action." "$MISSING_OUTPUT" >/dev/null; then
+  echo "model asset self-test did not point testers to the in-app model action" >&2
+  cat "$MISSING_OUTPUT" >&2
+  exit 1
+fi
+
 if ! grep -F "./script/download_mlx_model.py --model qwen35-4b" "$MISSING_OUTPUT" >/dev/null; then
   echo "model asset self-test did not print the download fix" >&2
   cat "$MISSING_OUTPUT" >&2
