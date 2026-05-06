@@ -11,7 +11,7 @@ to break or annoy users.
 
 ## Executive Rating
 
-Overall: 9.3/10.
+Overall: 9.4/10.
 
 The app is no longer just a neat lab build. It now has real proof across
 TextEdit, Notes, Obsidian, Codex, Claude desktop, and five Chrome editor shapes:
@@ -53,9 +53,9 @@ fixtures.
 | Non-annoyance | 9/10 | Esc, typed-over tracking, repetition suppression, pause control, and insertion recovery all reduce bad loops. |
 | Privacy | 9/10 | Local-first, secure fields suppressed, diagnostics redact text by default, and Settings exposes trace pause, raw text, screenshots, paths, and delete-local-logs controls. |
 | Onboarding | 8/10 | Settings now gives stage-specific model guidance and runtime actions; model install/repair is still not fully in-app. |
-| User control | 9/10 | Settings exposes pause, current-app enablement, disabled-app count, and enable-all; shortcut remapping is still missing. |
+| User control | 9/10 | Settings exposes pause, current-app enablement, disabled-app count, enable-all, privacy controls, and a full-accept shortcut toggle. |
 | Diagnostics | 9/10 | Strong placement, latency, insertion, trace, recovered-insertion, and manual proof logs. |
-| Automated tests | 9/10 | 225 Swift tests pass, plus script self-tests for smoke, model asset, trace eval, and typing-performance guards. |
+| Automated tests | 9/10 | 227 Swift tests pass, plus script self-tests for smoke, model asset, trace eval, and typing-performance guards. |
 | Real-app smoke | 9/10 | TextEdit, Notes, Obsidian, Codex, Claude desktop, and five Chrome shapes are green; Claude Code remains pending. |
 | Release readiness | 7/10 | Signing identity and preferred MLX model are ready, but `NOTARYTOOL_PROFILE` is missing and model distribution is not self-contained. |
 | Architecture | 8/10 | Core boundaries are solid, and polling-pause timing moved into a tested core type; AppDelegate still needs larger service extraction. |
@@ -141,6 +141,8 @@ fixtures.
 - Settings now exposes local privacy controls that were previously buried in
   Diagnostics: pause trace logging, raw text tracing, screenshot tracing, and
   local log deletion.
+- Settings now lets users switch full accept between Backtick and Option-Tab,
+  while Tab remains the next-word accept key.
 
 ## Next Highest-Leverage Work
 
@@ -148,6 +150,7 @@ fixtures.
 2. Test real production Monaco and ProseMirror surfaces, not just local
    dependency-free fixtures.
 3. Build a fully in-app model install/repair flow.
-4. Add shortcut controls for accept-next-word and accept-all behavior.
+4. Add a fuller shortcut editor if beta users need more than the Backtick /
+   Option-Tab full-accept toggle.
 5. Split AppDelegate into focused services around polling, insertion,
    verification, and tracing.
