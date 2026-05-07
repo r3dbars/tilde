@@ -25,6 +25,9 @@ require_pattern() {
 require_file "Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift" "Blocks secure or suppressed fields" "secure-field activation coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift" "Blocks suggestions in the middle of existing text" "middle-of-line activation coverage"
+require_file "Tests/AutocompleteLabCoreTests/AXFieldClassifierTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/AXFieldClassifierTests.swift" "Classifies search and URL fields" "field-kind classifier coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/AXFieldClassifierTests.swift" "Classifies form fields" "unsafe form-field coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/KeyboardActionRouterTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/KeyboardActionRouterTests.swift" "Option Tab passes through" "Option+Tab passthrough coverage"
@@ -52,6 +55,8 @@ require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift
 require_file "Tests/AutocompleteLabCoreTests/AcceptanceSurvivalClassifierTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/AcceptanceSurvivalClassifierTests.swift" "Classifies exact kept text" "accepted-and-kept exact survival coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/AcceptanceSurvivalClassifierTests.swift" "Classifies immediate deletes as rejected" "accepted-and-kept rejection coverage"
+require_file "Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift" "summarizes field-kind slices" "field-kind trace slice coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Suppresses low value one word phrase completions" "model-output cleanup coverage"

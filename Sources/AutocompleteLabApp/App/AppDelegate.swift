@@ -54,6 +54,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastRenderMode: SuggestionRenderMode?
     private var currentFieldIdentity: FocusedFieldIdentity?
     private var currentProfile: CompatibilityProfile?
+    private var currentFieldKind: AXFieldKind = .unknown
+    private var currentFieldKindReason: String = "unknown"
     private var lastTextSnapshot: FocusedTextSnapshot?
     private var lastRequestedTextBeforeCursor: String?
     private var suppressedFieldIdentities: Set<FocusedFieldIdentity> = []
@@ -263,13 +265,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let rawContext = accessibilityClient.focusedTextContext(
             allowDescendantTextFallback: profile.allowsDescendantTextFallback
-        ), !rawContext.isSecure else {
+        ) else {
             clearFocusedFieldState()
             currentProfile = profile
             hideSuggestion()
             return
         }
         let context = presentationAdjustedContext(rawContext, app: frontmostApp, profile: profile)
+        currentFieldKind = context.fieldKind
+        currentFieldKindReason = context.fieldKindReason
 
         let fieldIdentity = fieldIdentity(
             app: frontmostApp,
@@ -340,10 +344,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             isSecure: context.isSecure,
-            isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity)
+            isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
+            fieldKind: context.fieldKind
         )
 
         guard activationDecision.canSuggest else {
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: UUID().uuidString,
+                appBundleIdentifier: profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity.traceDescription,
+                requestMode: activationDecision.requestMode?.rawValue ?? "none",
+                triggerReason: "activation-policy",
+                textBeforeCursor: context.textBeforeCursor,
+                textAfterCursor: context.textAfterCursor,
+                reason: activationDecision.blockReasonDescription,
+                metadata: [
+                    "fieldKind": context.fieldKind.rawValue,
+                    "fieldKindReason": context.fieldKindReason
+                ]
+            )
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
@@ -482,6 +502,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textLineRect: syntheticCaret,
             textStyle: context.textStyle,
             isSecure: context.isSecure,
+            fieldKind: context.fieldKind,
+            fieldKindReason: context.fieldKindReason,
             capabilities: capabilities
         )
     }
@@ -794,6 +816,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             suggestionID: currentSuggestionID,
             acceptanceID: "",
+            fieldKind: currentFieldKind,
+            fieldKindReason: currentFieldKindReason,
             requestMode: currentSuggestionRequestMode,
             retryCount: 0
         )
@@ -881,6 +905,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             profile: baseline.profile,
                             suggestionID: baseline.suggestionID,
                             acceptanceID: baseline.acceptanceID,
+                            fieldKind: baseline.fieldKind,
+                            fieldKindReason: baseline.fieldKindReason,
                             requestMode: baseline.requestMode,
                             retryCount: baseline.retryCount + 1
                         )
@@ -904,6 +930,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     reason: "insert-verification-failed",
                     metadata: [
                         "acceptanceID": baseline.acceptanceID,
+                        "fieldKind": baseline.fieldKind.rawValue,
+                        "fieldKindReason": baseline.fieldKindReason,
                         "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                         "currentBeforeChars": String(context.textBeforeCursor.count)
                     ]
@@ -924,7 +952,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 acceptedText: acceptedText,
                 outcome: "verified",
                 metadata: [
-                    "acceptanceID": baseline.acceptanceID
+                    "acceptanceID": baseline.acceptanceID,
+                    "fieldKind": baseline.fieldKind.rawValue,
+                    "fieldKindReason": baseline.fieldKindReason
                 ]
             )
             beginAcceptanceSurvivalTracking(
@@ -951,7 +981,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requestMode: baseline.requestMode?.rawValue ?? "",
             acceptedText: acceptedText,
             acceptedAt: Date(),
-            profile: baseline.profile
+            profile: baseline.profile,
+            fieldKind: baseline.fieldKind,
+            fieldKindReason: baseline.fieldKindReason
         )
         acceptanceSurvivalTrackers[baseline.acceptanceID] = tracker
         acceptanceSurvivalTasks[baseline.acceptanceID]?.cancel()
@@ -1040,6 +1072,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requestMode: tracker.requestMode,
             metadata: measurement.traceMetadata.merging([
                 "acceptanceID": tracker.acceptanceID,
+                "fieldKind": tracker.fieldKind.rawValue,
+                "fieldKindReason": tracker.fieldKindReason,
                 "acceptedChars": String(tracker.acceptedText.count),
                 "acceptedWords": String(tracker.acceptedText.split(whereSeparator: \.isWhitespace).count)
             ]) { current, _ in current }
@@ -1116,6 +1150,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textAfterCursor: request.textAfterCursor,
             metadata: [
                 "renderMode": renderMode.rawValue,
+                "fieldKind": context.fieldKind.rawValue,
+                "fieldKindReason": context.fieldKindReason,
                 "delayMilliseconds": String(delayMilliseconds)
             ]
         )
@@ -1156,7 +1192,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textAfterCursor: request.textAfterCursor,
                 reason: "no-fast-word-candidate",
                 metadata: [
-                    "renderMode": renderMode.rawValue
+                    "renderMode": renderMode.rawValue,
+                    "fieldKind": context.fieldKind.rawValue,
+                    "fieldKindReason": context.fieldKindReason
                 ]
             )
             hideSuggestion()
@@ -1233,7 +1271,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             textBeforeCursor: request.textBeforeCursor,
                             textAfterCursor: request.textAfterCursor,
                             latencyMilliseconds: latencyMilliseconds,
-                            reason: "empty-suggestion"
+                            reason: "empty-suggestion",
+                            metadata: traceGeometryMetadata(context: context, renderMode: renderMode)
                         )
                         self.recordSuggestionEvent(
                             "suggestion-blocked",
@@ -1260,7 +1299,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             cleanedVisibleText: suggestion.visibleText,
                             displayedText: suggestion.visibleText,
                             latencyMilliseconds: latencyMilliseconds,
-                            reason: "missing-anchor"
+                            reason: "missing-anchor",
+                            metadata: traceGeometryMetadata(context: context, renderMode: renderMode)
                         )
                         self.recordSuggestionEvent(
                             "suggestion-blocked",
@@ -1285,7 +1325,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         textAfterCursor: request.textAfterCursor,
                         cleanedVisibleText: suggestion.visibleText,
                         displayedText: suggestion.visibleText,
-                        latencyMilliseconds: latencyMilliseconds
+                        latencyMilliseconds: latencyMilliseconds,
+                        metadata: traceGeometryMetadata(context: context, renderMode: renderMode)
                     )
                     guard !self.suggestionRepetitionSuppressor.shouldSuppress(
                         suggestion.visibleText,
@@ -1304,7 +1345,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             cleanedVisibleText: suggestion.visibleText,
                             displayedText: suggestion.visibleText,
                             latencyMilliseconds: latencyMilliseconds,
-                            reason: "repeated-miss"
+                            reason: "repeated-miss",
+                            metadata: traceGeometryMetadata(context: context, renderMode: renderMode)
                         )
                         self.hideSuggestion()
                         return
@@ -1376,7 +1418,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textAfterCursor: request.textAfterCursor,
                 displayedText: suggestion.visibleText,
                 latencyMilliseconds: latencyMilliseconds,
-                reason: "missing-anchor"
+                reason: "missing-anchor",
+                metadata: traceGeometryMetadata(context: context, renderMode: effectiveRenderMode)
             )
             return
         }
@@ -1490,6 +1533,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> [String: String] {
         [
             "effectiveRenderMode": renderMode.rawValue,
+            "fieldKind": context.fieldKind.rawValue,
+            "fieldKindReason": context.fieldKindReason,
+            "fieldKindSuppressed": String(context.fieldKind.suppressesSuggestionsByDefault),
             "hasCaretRect": String(context.caretRect != nil),
             "hasElementRect": String(context.elementRect != nil),
             "hasWindowRect": String(context.windowRect != nil),
@@ -1508,6 +1554,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         safeMetadata["renderMode"] = profile.renderMode.rawValue
         safeMetadata["insertionMode"] = profile.insertionMode.rawValue
         safeMetadata["fieldIdentityMode"] = profile.fieldIdentityMode.rawValue
+        safeMetadata["fieldKind"] = context.fieldKind.rawValue
+        safeMetadata["fieldKindReason"] = context.fieldKindReason
+        safeMetadata["fieldKindSuppressed"] = String(context.fieldKind.suppressesSuggestionsByDefault)
         safeMetadata["role"] = context.role ?? "unknown"
         safeMetadata["subrole"] = context.subrole ?? "none"
         safeMetadata["beforeChars"] = String(context.textBeforeCursor.count)
@@ -1636,6 +1685,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             remainingVisibleText: suggestionSession.visibleSuggestion?.visibleText,
             suggestionID: currentSuggestionID ?? "",
             fieldIdentity: currentFieldIdentity?.traceDescription ?? "",
+            fieldKind: currentFieldKind,
+            fieldKindReason: currentFieldKindReason,
             requestMode: currentSuggestionRequestMode?.rawValue ?? ""
         )
 
@@ -1937,6 +1988,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         currentFieldIdentity = nil
+        currentFieldKind = .unknown
+        currentFieldKindReason = "unknown"
         lastTextSnapshot = nil
         lastRequestedTextBeforeCursor = nil
         suggestionBlockLogGate.reset()
@@ -2269,6 +2322,8 @@ private struct InsertionVerificationBaseline: Equatable {
     let profile: CompatibilityProfile
     let suggestionID: String?
     var acceptanceID: String
+    let fieldKind: AXFieldKind
+    let fieldKindReason: String
     let requestMode: CompletionRequestMode?
     let retryCount: Int
 }
@@ -2282,6 +2337,8 @@ private struct AcceptanceSurvivalTracker: Equatable {
     let acceptedText: String
     let acceptedAt: Date
     let profile: CompatibilityProfile
+    let fieldKind: AXFieldKind
+    let fieldKindReason: String
     var deletedWithinTwoSeconds: Bool = false
 }
 

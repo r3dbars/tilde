@@ -60,6 +60,9 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let acceptRateByMode: [String: Double]
     public let usefulRateByApp: [String: Double]
     public let usefulRateByMode: [String: Double]
+    public let presentedByFieldKind: [String: Int]
+    public let acceptedAndKeptByFieldKind: [String: Int]
+    public let suppressedByFieldKind: [String: Int]
     public let suppressedByReason: [String: Int]
     public let suppressedByApp: [String: Int]
     public let suppressedByMode: [String: Int]
@@ -99,6 +102,9 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         acceptRateByMode: [String: Double] = [:],
         usefulRateByApp: [String: Double] = [:],
         usefulRateByMode: [String: Double] = [:],
+        presentedByFieldKind: [String: Int] = [:],
+        acceptedAndKeptByFieldKind: [String: Int] = [:],
+        suppressedByFieldKind: [String: Int] = [:],
         suppressedByReason: [String: Int] = [:],
         suppressedByApp: [String: Int] = [:],
         suppressedByMode: [String: Int] = [:],
@@ -137,6 +143,9 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.acceptRateByMode = acceptRateByMode
         self.usefulRateByApp = usefulRateByApp
         self.usefulRateByMode = usefulRateByMode
+        self.presentedByFieldKind = presentedByFieldKind
+        self.acceptedAndKeptByFieldKind = acceptedAndKeptByFieldKind
+        self.suppressedByFieldKind = suppressedByFieldKind
         self.suppressedByReason = suppressedByReason
         self.suppressedByApp = suppressedByApp
         self.suppressedByMode = suppressedByMode
@@ -239,6 +248,12 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 outcomeIDs: usefulIDs,
                 key: \.requestMode
             ),
+            presentedByFieldKind: counts(Array(firstPresentedByID.values), key: fieldKind),
+            acceptedAndKeptByFieldKind: counts(
+                acceptedTextEdited.filter(isAcceptedAndKeptEvent),
+                key: fieldKind
+            ),
+            suppressedByFieldKind: counts(suppressed, key: fieldKind),
             suppressedByReason: countsByReason(suppressed),
             suppressedByApp: counts(suppressed, key: \.appBundleIdentifier),
             suppressedByMode: counts(suppressed, key: \.requestMode),
@@ -262,6 +277,11 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         counts(events) { event in
             event.reason.isEmpty ? "unknown" : event.reason
         }
+    }
+
+    private func fieldKind(_ event: AutocompleteTraceEvent) -> String {
+        let kind = event.metadata["fieldKind"] ?? ""
+        return kind.isEmpty ? "unknown" : kind
     }
 
     private func acceptanceIdentifier(_ event: AutocompleteTraceEvent) -> String {
