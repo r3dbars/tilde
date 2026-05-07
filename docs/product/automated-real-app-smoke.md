@@ -23,9 +23,9 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture al
 Run private-content and agent-prompt passes only with a manual gate:
 
 ```bash
-AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-title AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes --manual-gate
-AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-body AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes --manual-gate
-AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-checklist AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate
@@ -49,8 +49,11 @@ What this proves:
 Notes, Obsidian, Codex, Claude desktop, and Claude Code checks are manual-gated.
 Do not use real notes, vault content, or live prompts for proof. Use disposable
 smoke text only, and never press Enter in an agent prompt pass. Codex, Claude
-desktop, and Claude Code use one-word accept proof until no-submit full accept
-is separately proven.
+desktop, and Claude Code require one-word no-submit proof before graduation.
+Prompt-app full accept stays disabled until separate full-accept no-submit proof
+exists.
+For Notes, `notes-title`, `notes-body`, and `notes-checklist` are separate
+proof targets. A generic `notes` run is only a picker and does not count.
 
 All Chrome fixtures are local and dependency-free. The Monaco-like and
 ProseMirror-like fixtures copy the DOM shape and focus behavior those editors

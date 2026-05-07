@@ -177,6 +177,15 @@ struct CompatibilityProfileTests {
         #expect(claudeCode.canPresentSuggestions == true)
         #expect(claude.supportsOneWordAcceptance == true)
         #expect(claude.supportsFullAcceptance == false)
+
+        for promptProfile in [codex, claudeCode, claude] {
+            #expect(promptProfile.supportReason.contains("one-word no-submit proof"))
+            #expect(promptProfile.notes.contains("Requires one-word no-submit proof"))
+            #expect(promptProfile.notes.contains("separate full-accept no-submit proof"))
+            #expect(promptProfile.supportsOneWordAcceptance == true)
+            #expect(promptProfile.supportsFullAcceptance == false)
+            #expect(promptProfile.allowsDetachedSuggestions == false)
+        }
     }
 
     @Test("Insertion mode plans can skip failed primary modes")

@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 APP="${1:-}"
+REQUESTED_APP="$APP"
+NOTES_SESSION_APP=""
 DRY_RUN=0
 MANUAL_GATE=0
 SKIP_BUILD="${AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD:-0}"
@@ -13,11 +15,14 @@ CHROME_FIXTURE_WAS_SET=0
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|chat-like|all>]
+Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|chat-like|all>]
 
 Runs a real app smoke pass where it is safe to automate. Notes, Obsidian,
 Codex, Claude Code, and Claude desktop are manual-gated so this script never
 types into private notes, vaults, or agent prompts by surprise.
+
+Notes proof must use notes-title, notes-body, or notes-checklist. A generic
+notes run only prints the surface picker and does not record proof.
 
 Chrome defaults to the textarea fixture. Use --fixture chat-like to prove
 Tab/full-accept do not submit a chat-style composer. Use --fixture all to run
@@ -63,6 +68,21 @@ while (($#)); do
 done
 
 case "$APP" in
+  notes-title)
+    APP="notes"
+    NOTES_SESSION_APP="notes-title"
+    ;;
+  notes-body)
+    APP="notes"
+    NOTES_SESSION_APP="notes-body"
+    ;;
+  notes-checklist)
+    APP="notes"
+    NOTES_SESSION_APP="notes-checklist"
+    ;;
+esac
+
+case "$APP" in
   textedit|chrome|notes|obsidian|codex|claude-code|claude)
     ;;
   *)
@@ -89,6 +109,7 @@ fi
 
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
+DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.autocomplete-lab}"
 declare -a SMOKE_TMP_DIRS=()
 
 cleanup_smoke_tmp_dirs() {
@@ -254,6 +275,66 @@ manual_gate_reason() {
       echo "it focuses user content"
       ;;
   esac
+}
+
+accept_all_shortcut() {
+  local configured="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-}"
+  if [[ -z "$configured" ]]; then
+    configured="$(defaults read "$DEFAULTS_DOMAIN" AcceptAllShortcut 2>/dev/null || true)"
+  fi
+
+  case "$configured" in
+    optionTab)
+      printf 'optionTab\n'
+      ;;
+    backtick|"")
+      printf 'backtick\n'
+      ;;
+    *)
+      echo "Unknown accept-all shortcut '$configured'; expected backtick or optionTab." >&2
+      exit 2
+      ;;
+  esac
+}
+
+press_accept_all_shortcut() {
+  case "$(accept_all_shortcut)" in
+    optionTab)
+      osascript <<'APPLESCRIPT'
+tell application "System Events"
+  key code 48 using option down
+end tell
+APPLESCRIPT
+      ;;
+    backtick)
+      press_key_code 50
+      ;;
+  esac
+}
+
+notes_session_app() {
+  if [[ -n "$NOTES_SESSION_APP" ]]; then
+    printf '%s\n' "$NOTES_SESSION_APP"
+    return 0
+  fi
+
+  case "${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-}" in
+    notes-title|notes-body|notes-checklist)
+      printf '%s\n' "$AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL"
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+print_notes_surface_commands() {
+  cat <<'EOF'
+Choose one Notes surface:
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
+EOF
 }
 
 press_key_code() {
@@ -620,7 +701,14 @@ describe_plan() {
       fi
       ;;
     notes)
-      echo "Plan: manual-gated disposable Notes smoke. The script prints the checklist and validates after you run it."
+      local notes_app notes_surface
+      if notes_app="$(notes_session_app)"; then
+        notes_surface="${notes_app#notes-}"
+        echo "Plan: manual-gated Apple Notes $notes_surface proof. The script validates only that surface after you run it."
+      else
+        echo "Plan: choose a manual-gated Apple Notes surface before recording proof."
+        print_notes_surface_commands
+      fi
       echo "Safety: pass --manual-gate to continue. Use only the disposable autocomplete smoke note."
       ;;
     obsidian)
@@ -628,8 +716,8 @@ describe_plan() {
       echo "Safety: pass --manual-gate to continue. Use only a disposable vault note."
       ;;
     codex|claude-code|claude)
-      echo "Plan: manual-gated prompt smoke. The script prints the checklist and validates after you run it."
-      echo "Safety: pass --manual-gate to continue."
+      echo "Plan: manual-gated prompt smoke. The script validates one-word Tab accept without submit after you run it."
+      echo "Safety: pass --manual-gate to continue. Do not press Enter; full accept waits for separate full-accept no-submit proof."
       ;;
   esac
 }
@@ -644,12 +732,21 @@ build_if_needed() {
 
 run_manual_gated() {
   if [[ "$MANUAL_GATE" != "1" ]]; then
-    echo "$APP real smoke requires --manual-gate because $(manual_gate_reason)." >&2
+    echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
     exit 2
   fi
 
+  local manual_app="$APP"
+  if [[ "$APP" == "notes" ]]; then
+    if ! manual_app="$(notes_session_app)"; then
+      echo "Notes real smoke cannot record a generic Notes proof." >&2
+      print_notes_surface_commands >&2
+      exit 2
+    fi
+  fi
+
   build_if_needed
-  ./script/manual_smoke_session.sh "$APP"
+  ./script/manual_smoke_session.sh "$manual_app"
 }
 
 run_textedit() {
@@ -690,12 +787,22 @@ APPLESCRIPT
     "action=acceptNextWord" \
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit first verified insertion"
+  local full_start_line full_accept_key
+  full_accept_key="$(accept_all_shortcut)"
   assert_frontmost_app "TextEdit" "TextEdit"
   focus_textedit_smoke_editor
-  press_key_code 50
+  full_start_line="$(line_count "$LOG_PATH")"
+  press_accept_all_shortcut
+  wait_for_log_fields "$full_start_line" "TextEdit full acceptance" 12 \
+    "keyboard-action" \
+    "app=com.apple.TextEdit" \
+    "key=$full_accept_key" \
+    "action=acceptAllVisible" \
+    "handled=true"
 
   sleep 1
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
+    AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
     AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/manual_smoke_session.sh textedit --check
 }
@@ -759,9 +866,18 @@ APPLESCRIPT
   if [[ "$fixture" == "chat-like" ]]; then
     assert_chrome_chat_fixture_not_submitted "Tab acceptance"
   fi
+  local full_start_line full_accept_key
+  full_accept_key="$(accept_all_shortcut)"
   focus_chrome_smoke_editor
   assert_frontmost_app "Google Chrome" "Chrome $fixture"
-  press_key_code 50
+  full_start_line="$(line_count "$LOG_PATH")"
+  press_accept_all_shortcut
+  wait_for_log_fields "$full_start_line" "Chrome $fixture full acceptance" 12 \
+    "keyboard-action" \
+    "app=com.google.Chrome" \
+    "key=$full_accept_key" \
+    "action=acceptAllVisible" \
+    "handled=true"
 
   if [[ "$fixture" == "chat-like" ]]; then
     assert_chrome_chat_fixture_not_submitted "full acceptance"
@@ -769,6 +885,7 @@ APPLESCRIPT
 
   sleep 1
   AUTOCOMPLETE_LAB_CHROME_FIXTURE="$fixture" \
+  AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
     AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/manual_smoke_session.sh chrome --check

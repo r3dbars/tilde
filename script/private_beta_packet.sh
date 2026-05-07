@@ -106,7 +106,7 @@ EOF
 6. Confirm Settings says the model is ready.
 7. Open TextEdit and type a normal sentence.
 8. Use Tab for one-word accept.
-9. Use the key above Tab for full accept.
+9. Use the key above Tab for full accept only in non-prompt apps where the profile allows it.
 10. Press Esc if a suggestion feels wrong.
 
 Stop the test if suggestions feel distracting, appear in the wrong app, or

@@ -27,8 +27,9 @@ app, focused-text AX reads now run through a serial off-main reader,
 raw/screenshot debug capture now expires from Settings, lab/debug
 vocabulary was removed from the global word list, Chrome chat-like no-submit
 now has screenshot-backed proof, prompt-app full accept is disabled until
-no-submit proof exists, app-specific slow AX reads cool down without blocking
-typing, app support status is visible in Settings and the menu, Diagnostics
+separate full-accept no-submit proof exists, app-specific slow AX reads cool
+down without blocking typing, TextEdit now has a live typing soak where event
+tap p95 stayed at 35us, app support status is visible in Settings and the menu, Diagnostics
 separates key-capture health from AX-poll health, and Settings now reads more
 like a Mac utility.
 
@@ -52,9 +53,9 @@ unsure. Wrong-place text is worse than no suggestion.
 
 | Category | Weight | Current | Target | Why |
 | --- | ---: | ---: | ---: | --- |
-| Typing must feel untouched | 15 | 91 | 100 | Event tap is fast, performance checks use a fresh bounded window, slow poll summaries throttle polling, AX insertion no longer has fixed sleeps, focused-text AX reads now run through the serial off-main reader, repeated slow app-specific AX reads cool down suggestions for only that app, and the checker/UI separate hard key latency from off-main AX warnings. Live long-form typing proof in the worst apps is still needed. |
+| Typing must feel untouched | 15 | 92 | 100 | Live TextEdit soak proves event tap p95 max 35us, p99 max 95us, max 161us over 600 samples with zero slow markers and zero tap disable events. Slow AX polling is off the hot key path but still warned in the same run, with p95 max 59ms and max 209ms, so worst-app AX proof remains open. |
 | Visual placement and caret alignment | 18 | 64 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, and Chrome chat-like now has proof. Notes, Obsidian, Claude Code, and Claude desktop are still the blocker. |
-| Acceptance safety | 10 | 90 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, and prompt-app full accept is disabled until no-submit proof exists. Prompt-app one-word no-submit proof is still incomplete. |
+| Acceptance safety | 10 | 90 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Prompt-app one-word no-submit proof is still incomplete. |
 | Cross-app reliability | 10 | 70 | 100 | The proof matrix now has 8 screenshot rows and the app exposes green/yellow/diagnostics-only/unsupported status. Many real apps are still yellow or pending screenshot proof. |
 | Native macOS visual feel | 8 | 80 | 100 | Settings moved toward native sections, checkboxes, clearer privacy/app controls, support status, "why hidden" copy, and calmer menu copy. Diagnostics and onboarding still need polish. |
 | Privacy and permissions trust | 9 | 93 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, and raw/screenshot debug capture now expires when enabled from the app UI. Stronger plain-language warnings remain open. |
@@ -86,7 +87,7 @@ Weighted score: 82/100.
 
 ## Category 1: Typing Must Feel Untouched
 
-Current score: 91/100.
+Current score: 92/100.
 
 Native target: the user cannot tell the app is running unless a suggestion is
 visible.
@@ -109,6 +110,8 @@ visible.
 - [x] Typing performance checks treat event-tap latency as the hard guard and report off-main AX poll slowness separately.
 - [x] Slow app-specific AX calls should disable suggestions temporarily for that app.
 - [x] Diagnostics should distinguish event-tap latency from AX polling latency in the UI.
+- [x] Live TextEdit soak proves the event-tap key path stays in microseconds while typing.
+- [ ] Focused-text AX polling should stay below the warning threshold during long active typing so diagnostics do not show 200ms-class off-main reads.
 
 ### Acceptance Bar
 
