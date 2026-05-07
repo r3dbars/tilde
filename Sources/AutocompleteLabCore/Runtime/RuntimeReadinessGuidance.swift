@@ -6,11 +6,11 @@ public struct RuntimeReadinessGuidance: Equatable, Sendable {
     public init(report: RuntimeReadinessReport) {
         switch report.stage {
         case .downloadNeeded:
-            message = "Model missing: open the model folder and install the app-owned MLX model there. Do not start Ollama, llama.cpp, or a separate model server. Suggestions stay off until this is ready."
+            message = "Model missing: open the model folder and install the app-owned MLX model there. Click again after adding files to recheck. Do not start Ollama, llama.cpp, or a separate model server. Suggestions stay off until this is ready."
             actionTitle = "Open Model Folder"
             isActionEnabled = true
         case .repairNeeded:
-            message = "Model repair needed: open the model folder and replace the incomplete app-owned MLX files. Do not start Ollama, llama.cpp, or a separate model server. Suggestions stay off until the folder is valid."
+            message = "Model repair needed: open the model folder and replace the incomplete app-owned MLX files. Click again after replacing files to recheck. Do not start Ollama, llama.cpp, or a separate model server. Suggestions stay off until the folder is valid."
             actionTitle = "Open Model Folder"
             isActionEnabled = true
         case .runtimeUnavailable:
