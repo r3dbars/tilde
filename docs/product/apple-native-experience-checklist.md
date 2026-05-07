@@ -153,6 +153,7 @@ cheap, even if the model output is good.
 - [x] Trace eval now surfaces panel-frame failures, inline clipping, placement health reasons, and screenshot-file evidence.
 - [x] Chrome chat-like no-submit fixture has live screenshot-backed no-submit proof.
 - [x] Unproven Notes and prompt-app profiles are mirror-first until current screenshot/no-submit proof exists.
+- [x] Visible or pending suggestions are dropped when the display layout changes.
 - [ ] Obsidian needs fresh screenshot-backed placement proof.
 - [ ] Apple Notes title needs screenshot-backed proof.
 - [ ] Apple Notes body needs screenshot-backed proof.
