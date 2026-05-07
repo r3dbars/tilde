@@ -85,6 +85,91 @@ struct CompletionCandidateRankerTests {
         #expect(ranked.first?.suggestion.visibleText == " a clean migration step")
     }
 
+    @Test("Email profile penalizes invented commitments")
+    func emailProfilePenalizesInventedCommitments() {
+        let ranker = CompletionCandidateRanker()
+        let suggestions = [
+            CompletionSuggestion(text: " checking the draft first", maxVisibleWords: 8),
+            CompletionSuggestion(text: " scheduling a meeting tomorrow", maxVisibleWords: 8)
+        ]
+
+        let ranked = ranker.ranked(
+            suggestions,
+            mode: .phraseContinuation,
+            textBeforeCursor: "Thanks for sending this over. I will start by",
+            behaviorProfileID: .email
+        )
+
+        #expect(ranked.first?.suggestion.visibleText == " checking the draft first")
+    }
+
+    @Test("Coding profile penalizes invented blocks and imports")
+    func codingProfilePenalizesInventedBlocksAndImports() {
+        let ranker = CompletionCandidateRanker()
+        let suggestions = [
+            CompletionSuggestion(text: " appending the value", maxVisibleWords: 8),
+            CompletionSuggestion(text: " import Foundation", maxVisibleWords: 8),
+            CompletionSuggestion(text: " func rebuildEverything()", maxVisibleWords: 8)
+        ]
+
+        let ranked = ranker.ranked(
+            suggestions,
+            mode: .phraseContinuation,
+            textBeforeCursor: "items.",
+            behaviorProfileID: .coding
+        )
+
+        #expect(ranked.first?.suggestion.visibleText == " appending the value")
+        #expect(ranked.dropFirst().map(\.suggestion.visibleText).contains(" import Foundation"))
+        #expect(ranked.dropFirst().map(\.suggestion.visibleText).contains(" func rebuildEverything()"))
+    }
+
+    @Test("Prompt app profile suppresses submit-like actions")
+    func promptAppProfileSuppressesSubmitLikeActions() {
+        let ranker = CompletionCandidateRanker()
+        let suggestions = [
+            CompletionSuggestion(text: " keep it local", maxVisibleWords: 8),
+            CompletionSuggestion(text: " press Enter to send", maxVisibleWords: 8)
+        ]
+
+        let ranked = ranker.ranked(
+            suggestions,
+            mode: .phraseContinuation,
+            textBeforeCursor: "Can you make the proof",
+            behaviorProfileID: .aiChat
+        )
+        let submitSelection = ranker.selection(
+            [CompletionSuggestion(text: " press Enter to send", maxVisibleWords: 8)],
+            mode: .phraseContinuation,
+            behaviorProfileID: .aiChat
+        )
+
+        #expect(ranked.first?.suggestion.visibleText == " keep it local")
+        #expect(submitSelection.suggestion == nil)
+        #expect(submitSelection.suppressionReason == .lowTopScore)
+    }
+
+    @Test("Suppressed field profiles keep generated text below the display threshold")
+    func suppressedFieldProfilesKeepGeneratedTextBelowDisplayThreshold() {
+        let ranker = CompletionCandidateRanker()
+
+        let formSelection = ranker.selection(
+            [CompletionSuggestion(text: " Justin", maxVisibleWords: 8)],
+            mode: .phraseContinuation,
+            behaviorProfileID: .forms
+        )
+        let searchSelection = ranker.selection(
+            [CompletionSuggestion(text: " autocomplete", maxVisibleWords: 8)],
+            mode: .phraseContinuation,
+            behaviorProfileID: .search
+        )
+
+        #expect(formSelection.suggestion == nil)
+        #expect(searchSelection.suggestion == nil)
+        #expect(formSelection.suppressionReason == .lowTopScore)
+        #expect(searchSelection.suppressionReason == .lowTopScore)
+    }
+
     @Test("Word mode prefers short alphabetic suffixes")
     func wordModePrefersShortAlphabeticSuffixes() {
         let ranker = CompletionCandidateRanker()

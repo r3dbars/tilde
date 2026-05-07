@@ -49,13 +49,19 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
     public func ranked(
         _ suggestions: [CompletionSuggestion],
         mode: CompletionRequestMode,
-        textBeforeCursor: String? = nil
+        textBeforeCursor: String? = nil,
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil
     ) -> [RankedCompletionCandidate] {
         suggestions
             .map { suggestion in
                 RankedCompletionCandidate(
                     suggestion: suggestion,
-                    score: score(suggestion, mode: mode, textBeforeCursor: textBeforeCursor)
+                    score: score(
+                        suggestion,
+                        mode: mode,
+                        textBeforeCursor: textBeforeCursor,
+                        behaviorProfileID: behaviorProfileID
+                    )
                 )
             }
             .sorted {
@@ -70,17 +76,29 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
     public func best(
         _ suggestions: [CompletionSuggestion],
         mode: CompletionRequestMode,
-        textBeforeCursor: String? = nil
+        textBeforeCursor: String? = nil,
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil
     ) -> CompletionSuggestion? {
-        selection(suggestions, mode: mode, textBeforeCursor: textBeforeCursor).suggestion
+        selection(
+            suggestions,
+            mode: mode,
+            textBeforeCursor: textBeforeCursor,
+            behaviorProfileID: behaviorProfileID
+        ).suggestion
     }
 
     public func selection(
         _ suggestions: [CompletionSuggestion],
         mode: CompletionRequestMode,
-        textBeforeCursor: String? = nil
+        textBeforeCursor: String? = nil,
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil
     ) -> CompletionCandidateSelection {
-        let rankedCandidates = ranked(suggestions, mode: mode, textBeforeCursor: textBeforeCursor)
+        let rankedCandidates = ranked(
+            suggestions,
+            mode: mode,
+            textBeforeCursor: textBeforeCursor,
+            behaviorProfileID: behaviorProfileID
+        )
 
         guard let topCandidate = rankedCandidates.first else {
             return CompletionCandidateSelection(
@@ -121,7 +139,8 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
     private func score(
         _ suggestion: CompletionSuggestion,
         mode: CompletionRequestMode,
-        textBeforeCursor: String?
+        textBeforeCursor: String?,
+        behaviorProfileID: AutocompleteBehaviorProfileID?
     ) -> Double {
         let visibleText = suggestion.visibleText.trimmingCharacters(in: .whitespacesAndNewlines)
         let wordCount = suggestion.visibleWordCount
@@ -144,6 +163,11 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
             score += localContextAlignmentScore(visibleText, textBeforeCursor: textBeforeCursor)
             score -= unsupportedCommitmentPenalty(visibleText, textBeforeCursor: textBeforeCursor)
             score -= genericFillerPenalty(visibleText)
+            score -= behaviorProfilePenalty(
+                visibleText,
+                behaviorProfileID: behaviorProfileID,
+                textBeforeCursor: textBeforeCursor
+            )
         }
 
         if visibleText.count <= CompletionSuggestion.defaultMaxVisibleCharacters {
@@ -240,6 +264,82 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         return words.isDisjoint(with: fillerWords) ? 0 : 0.22
     }
 
+    private func behaviorProfilePenalty(
+        _ text: String,
+        behaviorProfileID: AutocompleteBehaviorProfileID?,
+        textBeforeCursor: String?
+    ) -> Double {
+        guard let behaviorProfileID else {
+            return 0
+        }
+
+        switch behaviorProfileID {
+        case .email:
+            return emailCommitmentPenalty(text, textBeforeCursor: textBeforeCursor)
+        case .coding:
+            return codingSyntaxPenalty(text, textBeforeCursor: textBeforeCursor)
+        case .aiChat:
+            return promptAppActionPenalty(text)
+        case .forms, .search:
+            return formOrSearchPenalty(text)
+        case .casualChat, .notes, .docsProse, .bullets:
+            return 0
+        }
+    }
+
+    private func emailCommitmentPenalty(_ text: String, textBeforeCursor: String?) -> Double {
+        let words = Set(contentWords(in: text))
+        let riskyWords: Set<String> = [
+            "attachment", "attachments", "call", "deadline", "meeting",
+            "proposal", "schedule", "scheduled", "tomorrow", "today"
+        ]
+        var penalty = words.isDisjoint(with: riskyWords) ? 0 : 0.28
+        penalty += unsupportedCommitmentPenalty(text, textBeforeCursor: textBeforeCursor) * 0.5
+        return min(0.45, penalty)
+    }
+
+    private func codingSyntaxPenalty(_ text: String, textBeforeCursor: String?) -> Double {
+        let normalized = normalizedPhrase(text)
+        let blockStarters = [
+            "class ", "enum ", "func ", "function ", "import ", "let ",
+            "struct ", "var "
+        ]
+        if blockStarters.contains(where: { normalized.hasPrefix($0) }) {
+            return 0.35
+        }
+
+        if text.contains("\n") {
+            return 0.30
+        }
+
+        let candidateIdentifiers = codeIdentifiers(in: text)
+        let contextIdentifiers = Set(codeIdentifiers(in: textBeforeCursor ?? ""))
+        let unsupportedIdentifiers = candidateIdentifiers.filter { identifier in
+            !contextIdentifiers.contains(identifier) && identifier.count > 3
+        }
+
+        return unsupportedIdentifiers.isEmpty ? 0 : min(0.30, Double(unsupportedIdentifiers.count) * 0.10)
+    }
+
+    private func promptAppActionPenalty(_ text: String) -> Double {
+        let normalized = normalizedPhrase(text)
+        let submitPhrases = [
+            "press enter", "press return", "run the command", "send it",
+            "submit it", "hit enter", "hit return"
+        ]
+        if submitPhrases.contains(where: { normalized.contains($0) }) {
+            return 0.60
+        }
+
+        let words = Set(contentWords(in: text))
+        let submitWords: Set<String> = ["enter", "return", "run", "send", "submit"]
+        return words.isDisjoint(with: submitWords) ? 0 : 0.35
+    }
+
+    private func formOrSearchPenalty(_ text: String) -> Double {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0 : 0.60
+    }
+
     private func sentencePlanningDriftPenalty(_ text: String) -> Double {
         let normalized = normalizedPhrase(text)
         let planningPrefixes = [
@@ -289,6 +389,18 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
             .map(String.init)
             .filter { !Self.stopWords.contains($0) && $0.count > 2 }
+    }
+
+    private func codeIdentifiers(in text: String) -> [String] {
+        text
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "_" })
+            .map(String.init)
+            .filter { token in
+                guard let first = token.first else {
+                    return false
+                }
+                return first.isLetter || first == "_"
+            }
     }
 
     private func normalizedPhrase(_ text: String) -> String {
