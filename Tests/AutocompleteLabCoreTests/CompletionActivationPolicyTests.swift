@@ -8,13 +8,13 @@ struct CompletionActivationPolicyTests {
         let policy = CompletionActivationPolicy()
 
         #expect(policy.canSuggest(
-            textBeforeCursor: "I think this ",
+            textBeforeCursor: "I think this should ",
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: false
         ))
         #expect(policy.decision(
-            textBeforeCursor: "I think this ",
+            textBeforeCursor: "I think this should ",
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: false
@@ -26,7 +26,7 @@ struct CompletionActivationPolicyTests {
         let policy = CompletionActivationPolicy()
 
         #expect(policy.canSuggest(
-            textBeforeCursor: "I think this",
+            textBeforeCursor: "I think this should",
             textAfterCursor: "   \nnext line",
             isSecure: false,
             isFieldSuppressed: false
@@ -156,12 +156,38 @@ struct CompletionActivationPolicyTests {
         ) == .allow(.wordCompletion))
     }
 
+    @Test("Blocks complete-looking words and short phrase contexts")
+    func blocksCompleteLookingWordsAndShortPhraseContexts() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "I think",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.unfinishedWord))
+
+        #expect(policy.decision(
+            textBeforeCursor: "I think ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.tooLittleContext))
+
+        #expect(policy.decision(
+            textBeforeCursor: "I think this through ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.phraseContinuation))
+    }
+
     @Test("Does not treat punctuation as word completion")
     func doesNotTreatPunctuationAsWordCompletion() {
         let policy = CompletionActivationPolicy()
 
         #expect(policy.decision(
-            textBeforeCursor: "the thing.",
+            textBeforeCursor: "I finished the thing.",
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: false
@@ -185,6 +211,56 @@ struct CompletionActivationPolicyTests {
             isSecure: false,
             isFieldSuppressed: false
         ) == .allow(.phraseContinuation))
+    }
+
+    @Test("Blocks short chat-like phrase bursts")
+    func blocksShortChatLikePhraseBursts() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "hi there ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.tooLittleContext))
+
+        #expect(policy.decision(
+            textBeforeCursor: "ok sounds good ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.tooLittleContext))
+    }
+
+    @Test("Blocks tiny form-like phrase contexts")
+    func blocksTinyFormLikePhraseContexts() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "First name: ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.tooLittleContext))
+
+        #expect(policy.decision(
+            textBeforeCursor: "Shipping address ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.tooLittleContext))
+    }
+
+    @Test("Allows safe word completion in short contexts")
+    func allowsSafeWordCompletionInShortContexts() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "First na",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.wordCompletion))
     }
 
     @Test("Blocks common complete one word context")

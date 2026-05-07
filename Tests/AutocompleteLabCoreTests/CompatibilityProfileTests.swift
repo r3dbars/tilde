@@ -80,8 +80,8 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.apple.Safari")?.supportLevel == .diagnosticsOnly)
         #expect(store.profile(for: "com.tinyspeck.slackmacgap")?.appFamily == .electron)
-        #expect(store.profile(for: "com.microsoft.VSCode")?.anchorLadder == [.none])
-        #expect(store.profile(for: "com.todesktop.230313mzl4w4u92")?.renderMode == .disabled)
+        #expect(store.profiles["com.microsoft.VSCode"]?.anchorLadder == [.none])
+        #expect(store.profiles["com.todesktop.230313mzl4w4u92"]?.renderMode == .disabled)
     }
 
     @Test("Denylisted apps are never allowed")
@@ -91,6 +91,41 @@ struct CompatibilityProfileTests {
         #expect(!store.allows(bundleIdentifier: "com.apple.Terminal"))
         #expect(!store.allows(bundleIdentifier: "com.1password.1password"))
         #expect(!store.allows(bundleIdentifier: "com.apple.Passwords"))
+    }
+
+    @Test("Raw-control developer apps are denylisted by default")
+    func rawControlDeveloperAppsAreDenylisted() {
+        let store = CompatibilityProfileStore.mvp
+        let highRiskBundleIdentifiers = [
+            "com.apple.dt.Xcode",
+            "com.microsoft.VSCode",
+            "com.microsoft.VSCodeInsiders",
+            "com.visualstudio.code.oss",
+            "com.todesktop.230313mzl4w4u92",
+            "com.exafunction.windsurf",
+            "com.jetbrains.intellij",
+            "com.jetbrains.AppCode",
+            "com.jetbrains.CLion",
+            "com.jetbrains.PyCharm",
+            "com.jetbrains.WebStorm",
+            "com.jetbrains.RubyMine",
+            "com.jetbrains.goland",
+            "com.jetbrains.datagrip",
+            "com.jetbrains.phpstorm",
+            "com.jetbrains.rider",
+            "com.jetbrains.DataSpell",
+            "com.jetbrains.aqua",
+            "com.jetbrains.gateway",
+            "dev.warp.Warp",
+            "com.mitchellh.ghostty",
+            "net.kovidgoyal.kitty",
+            "org.alacritty"
+        ]
+
+        for bundleIdentifier in highRiskBundleIdentifiers {
+            #expect(store.supportStatus(for: bundleIdentifier) == .denylisted)
+            #expect(!store.allows(bundleIdentifier: bundleIdentifier))
+        }
     }
 
     @Test("Unknown apps are not globally enabled during the MVP")
