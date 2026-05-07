@@ -92,6 +92,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 
 - [x] Add a pre-accept suggestion snapshot guard for app, process, field, selected text, and before/after cursor text.
 - [x] Trace `wrong-app-or-field-before-accept` as a severe do-not-ship blocker.
+- [x] Add secure-field, unsupported-app, and screenshot/raw-text separation privacy tests.
 - [x] Track insertion verification success rate in analyzer summaries.
 - [x] Show insertion verification success in Diagnostics.
 - [x] Print insertion verification success from `check_trace_eval.sh`.
