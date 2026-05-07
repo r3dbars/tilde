@@ -30,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
-    private let screenshotTraceCapturePolicy = ScreenshotTraceCapturePolicy()
+    private var traceScreenshotCapture = TraceScreenshotCaptureCoordinator()
     private let focusedTextUpdateSourcePolicy = FocusedTextUpdateSourcePolicy()
     private let focusedTextPollingCadencePolicy = FocusPollingCadencePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
@@ -135,8 +135,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionTextBeforeCursor: String?
     private var currentSuggestionDisplayedText: String?
     private var currentSuggestionInvalidatedByUserKeyDown = false
-    private var scheduledScreenshotSuggestionIDs: Set<String> = []
-    private let maxScheduledScreenshotSuggestionIDs = 256
     private var recentWordMemory = ScopedRecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var lastStatusLine: String?
@@ -2419,7 +2417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let screenshotCapture = captureTraceScreenshot(
+        let screenshotCapture = traceScreenshotCapture.capture(
             around: [
                 placement.anchorRect,
                 placement.textLineRect,
@@ -2566,47 +2564,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return PlacementTrustPolicy(
             allowsLowConfidencePlacement: isGreenProfile || hasTrustedVisualAdjustment,
             allowsSyntheticCaretPlacement: isGreenProfile || hasTrustedVisualAdjustment
-        )
-    }
-
-    private func captureTraceScreenshot(
-        around rects: [CGRect],
-        suggestionID: String,
-        bundleIdentifier: String,
-        triggerReason: String,
-        appScreenshotTracingEnabled: Bool
-    ) -> TraceScreenshotCapture {
-        guard let captureRect = ScreenshotCaptureRegion.enclosing(rects) else {
-            return .none
-        }
-
-        if scheduledScreenshotSuggestionIDs.count >= maxScheduledScreenshotSuggestionIDs {
-            scheduledScreenshotSuggestionIDs.removeAll(keepingCapacity: true)
-        }
-
-        let globalScreenshotTracingEnabled = RawAutocompleteTraceLog.shared.screenshotTracingEnabled
-        guard screenshotTraceCapturePolicy.shouldCapture(
-            triggerReason: triggerReason,
-            globalScreenshotTracingEnabled: globalScreenshotTracingEnabled,
-            appScreenshotTracingEnabled: appScreenshotTracingEnabled,
-            hasCaptureRegion: true,
-            hasAlreadyCapturedSuggestionID: scheduledScreenshotSuggestionIDs.contains(suggestionID)
-        ) else {
-            return .none
-        }
-        scheduledScreenshotSuggestionIDs.insert(suggestionID)
-
-        let folderURL = RawAutocompleteTraceLog.shared.screenshotFolderURL
-        let screenshotURL = folderURL.appendingPathComponent("\(suggestionID).png")
-
-        ScreenshotTraceCapture.shared.capture(
-            rect: captureRect,
-            to: screenshotURL,
-            bundleIdentifier: bundleIdentifier
-        )
-        return TraceScreenshotCapture(
-            path: screenshotURL.path,
-            rectDescription: compactRectDescription(captureRect)
         )
     }
 
@@ -3688,13 +3645,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func quit() {
         NSApp.terminate(nil)
     }
-}
-
-private struct TraceScreenshotCapture {
-    let path: String
-    let rectDescription: String
-
-    static let none = TraceScreenshotCapture(path: "", rectDescription: "none")
 }
 
 private extension AppDelegate {
