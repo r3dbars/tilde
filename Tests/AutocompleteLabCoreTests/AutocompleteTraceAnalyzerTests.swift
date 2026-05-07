@@ -325,6 +325,34 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.annoyanceScore > 0)
     }
 
+    @Test("summarizes field-kind slices")
+    func summarizesFieldKindSlices() {
+        let events = [
+            event(.suggestionPresented, suggestionID: "one", metadata: ["fieldKind": "multilineCompose"]),
+            event(.suggestionPresented, suggestionID: "two", metadata: ["fieldKind": "singlelineCompose"]),
+            event(.suggestionSuppressed, suggestionID: "three", reason: "blockedFieldKind", metadata: ["fieldKind": "form"]),
+            event(.suggestionSuppressed, suggestionID: "four", reason: "blockedFieldKind", metadata: ["fieldKind": "search"]),
+            event(
+                .acceptedTextEdited,
+                suggestionID: "one",
+                metadata: [
+                    "fieldKind": "multilineCompose",
+                    "checkpoint": "10s",
+                    "survivalClass": "exactKept",
+                    "strongAcceptedAndKept": "true"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.presentedByFieldKind["multilineCompose"] == 1)
+        #expect(summary.presentedByFieldKind["singlelineCompose"] == 1)
+        #expect(summary.suppressedByFieldKind["form"] == 1)
+        #expect(summary.suppressedByFieldKind["search"] == 1)
+        #expect(summary.acceptedAndKeptByFieldKind["multilineCompose"] == 1)
+    }
+
     private func event(
         _ type: AutocompleteTraceEventType,
         suggestionID: String,

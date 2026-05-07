@@ -21,6 +21,8 @@ struct FocusedTextContext: Equatable {
     let textLineRect: CGRect?
     let textStyle: FocusedTextStyle?
     let isSecure: Bool
+    let fieldKind: AXFieldKind
+    let fieldKindReason: String
     let capabilities: FocusedTextCapabilities
 }
 
@@ -46,6 +48,8 @@ struct FocusedTextDiagnostics: Equatable {
     let role: String?
     let subrole: String?
     let isSecure: Bool
+    let fieldKind: AXFieldKind
+    let fieldKindReason: String
     let textBeforeCursorLength: Int
     let textAfterCursorLength: Int
     let selectedRangeDescription: String
@@ -62,6 +66,8 @@ struct FocusedTextDiagnostics: Equatable {
         Role: \(role ?? "unknown")
         Subrole: \(subrole ?? "none")
         Secure: \(isSecure)
+        Field kind: \(fieldKind.rawValue)
+        Field kind reason: \(fieldKindReason)
         Selected range: \(selectedRangeDescription)
         Text before cursor: \(textBeforeCursorLength) chars
         Text after cursor: \(textAfterCursorLength) chars
@@ -170,6 +176,50 @@ final class AccessibilityClient {
         let isSecure = isSecureTextElement(focusedElement)
         let role = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
         let subrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
+        let title = copyAttribute(focusedElement, attribute: kAXTitleAttribute) as? String
+        let placeholder = copyAttribute(focusedElement, attribute: "AXPlaceholderValue") as? String
+        let windowTitle = containingWindowTitle(for: focusedElement, processIdentifier: app.processIdentifier)
+        let classifier = AXFieldClassifier()
+        let preliminaryClassification = classifier.classification(for: AXFieldClassifierInput(
+            role: role,
+            subrole: subrole,
+            title: title,
+            placeholder: placeholder,
+            windowTitle: windowTitle,
+            isSecure: isSecure
+        ))
+
+        if preliminaryClassification.suppressesSuggestionsByDefault {
+            let selectedRange = selectedTextRange(in: focusedElement)
+            let caretRect = selectedRange.flatMap {
+                AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
+            }
+            let elementRect = elementBounds(for: focusedElement)
+            let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
+
+            return FocusedTextContext(
+                elementIdentifier: Int(CFHash(focusedElement)),
+                role: role,
+                subrole: subrole,
+                textBeforeCursor: "",
+                textAfterCursor: "",
+                caretRect: caretRect,
+                elementRect: elementRect,
+                windowRect: windowRect,
+                textLineRect: nil,
+                textStyle: nil,
+                isSecure: isSecure,
+                fieldKind: preliminaryClassification.kind,
+                fieldKindReason: preliminaryClassification.reason,
+                capabilities: FocusedTextCapabilities(
+                    canReadValue: false,
+                    canReadSelectedTextRange: selectedRange != nil,
+                    canReadBoundsForRange: caretRect != nil,
+                    canReadAttributedText: false,
+                    canSetSelectedText: false
+                )
+            )
+        }
 
         guard let text = editableText(
             in: focusedElement,
@@ -185,6 +235,18 @@ final class AccessibilityClient {
             text,
             utf16Offset: selectedRange?.location ?? text.utf16.count
         )
+        let fieldClassification = classifier.classification(for: AXFieldClassifierInput(
+            role: role,
+            subrole: subrole,
+            title: title,
+            placeholder: placeholder,
+            windowTitle: windowTitle,
+            isSecure: isSecure,
+            textBeforeCursorLength: textSlice.textBeforeCursor.count,
+            textAfterCursorLength: textSlice.textAfterCursor.count,
+            selectedTextLength: selectedRange?.length ?? 0,
+            lineCount: lineCount(in: text)
+        ))
         let caretRect = selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
         }
@@ -222,6 +284,8 @@ final class AccessibilityClient {
             textLineRect: textLineRect,
             textStyle: textStyle,
             isSecure: isSecure,
+            fieldKind: fieldClassification.kind,
+            fieldKindReason: fieldClassification.reason,
             capabilities: capabilities
         )
     }
@@ -297,7 +361,20 @@ final class AccessibilityClient {
 
         let role = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
         let subrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
-        let text = editableText(
+        let title = copyAttribute(focusedElement, attribute: kAXTitleAttribute) as? String
+        let placeholder = copyAttribute(focusedElement, attribute: "AXPlaceholderValue") as? String
+        let windowTitle = containingWindowTitle(for: focusedElement, processIdentifier: app.processIdentifier)
+        let classifier = AXFieldClassifier()
+        let preliminaryClassification = classifier.classification(for: AXFieldClassifierInput(
+            role: role,
+            subrole: subrole,
+            title: title,
+            placeholder: placeholder,
+            windowTitle: windowTitle,
+            isSecure: isSecureTextElement(focusedElement)
+        ))
+        let shouldAvoidTextRead = preliminaryClassification.suppressesSuggestionsByDefault
+        let text = shouldAvoidTextRead ? nil : editableText(
             in: focusedElement,
             role: role,
             processIdentifier: app.processIdentifier,
@@ -307,12 +384,24 @@ final class AccessibilityClient {
         let textSlice = text.map {
             CursorTextSplitter.split($0, utf16Offset: selectedRange?.location ?? $0.utf16.count)
         }
+        let fieldClassification = shouldAvoidTextRead ? preliminaryClassification : classifier.classification(for: AXFieldClassifierInput(
+            role: role,
+            subrole: subrole,
+            title: title,
+            placeholder: placeholder,
+            windowTitle: windowTitle,
+            isSecure: isSecureTextElement(focusedElement),
+            textBeforeCursorLength: textSlice?.textBeforeCursor.count ?? 0,
+            textAfterCursorLength: textSlice?.textAfterCursor.count ?? 0,
+            selectedTextLength: selectedRange?.length ?? 0,
+            lineCount: text.map { lineCount(in: $0) } ?? 0
+        ))
         let caretRect = selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
         }
         let elementRect = elementBounds(for: focusedElement)
         let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
-        let textLineRect = selectedRange.flatMap {
+        let textLineRect = shouldAvoidTextRead ? nil : selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(
                 textLineBounds(
                     for: focusedElement,
@@ -322,15 +411,23 @@ final class AccessibilityClient {
                 )
             )
         }
-        let textStyle = selectedRange.flatMap {
+        let textStyle = shouldAvoidTextRead ? nil : selectedRange.flatMap {
             focusedTextStyle(in: focusedElement, textLength: text?.utf16.count ?? 0, range: $0)
         }
-        let capabilities = textCapabilities(
-            for: focusedElement,
-            selectedRange: selectedRange,
-            caretRect: caretRect,
-            textStyle: textStyle
-        )
+        let capabilities = shouldAvoidTextRead
+            ? FocusedTextCapabilities(
+                canReadValue: false,
+                canReadSelectedTextRange: selectedRange != nil,
+                canReadBoundsForRange: caretRect != nil,
+                canReadAttributedText: false,
+                canSetSelectedText: false
+            )
+            : textCapabilities(
+                for: focusedElement,
+                selectedRange: selectedRange,
+                caretRect: caretRect,
+                textStyle: textStyle
+            )
         let attributeDump = focusedElementAttributeDump(for: focusedElement)
 
         return FocusedTextDiagnostics(
@@ -339,6 +436,8 @@ final class AccessibilityClient {
             role: role,
             subrole: subrole,
             isSecure: isSecureTextElement(focusedElement),
+            fieldKind: fieldClassification.kind,
+            fieldKindReason: fieldClassification.reason,
             textBeforeCursorLength: textSlice?.textBeforeCursor.count ?? 0,
             textAfterCursorLength: textSlice?.textAfterCursor.count ?? 0,
             selectedRangeDescription: selectedRange.map { "location=\($0.location), length=\($0.length)" } ?? "missing",
@@ -568,6 +667,12 @@ final class AccessibilityClient {
         }
 
         return range
+    }
+
+    private func lineCount(in text: String) -> Int {
+        max(1, text.reduce(1) { count, character in
+            character.isNewline ? count + 1 : count
+        })
     }
 
     private func caretBounds(for element: AXUIElement, range: CFRange) -> CGRect? {

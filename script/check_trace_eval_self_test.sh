@@ -5,10 +5,10 @@ TRACE_FILE="$(mktemp)"
 trap 'rm -f "$TRACE_FILE"' EXIT
 
 cat >"$TRACE_FILE" <<'JSONL'
-{"type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0}
+{"type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"fieldKind":"multilineCompose"}}
 {"type":"suggestionAccepted","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at"}
 {"type":"insertionVerified","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at"}
-{"type":"acceptedTextEdited","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","metadata":{"checkpoint":"10s","survivalClass":"exactKept","tokenRecall":"1.000","normalizedEditDistance":"0.000","strongAcceptedAndKept":"true"}}
+{"type":"acceptedTextEdited","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","metadata":{"fieldKind":"multilineCompose","checkpoint":"10s","survivalClass":"exactKept","tokenRecall":"1.000","normalizedEditDistance":"0.000","strongAcceptedAndKept":"true"}}
 {"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","latencyMilliseconds":120}
 {"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","latencyMilliseconds":220}
 {"type":"suggestionPresented","suggestionID":"three","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":" I   think so. ","latencyMilliseconds":80}
@@ -26,8 +26,8 @@ cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionHidden","suggestionID":"nine","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","outcome":"typed-through"}
 {"type":"suggestionHidden","suggestionID":"ten","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","outcome":"typed-through"}
 {"type":"suggestionHidden","suggestionID":"eleven","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","outcome":"typed-through"}
-{"type":"suggestionSuppressed","suggestionID":"twelve","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"is","reason":"repeated-miss"}
-{"type":"suggestionSuppressed","suggestionID":"thirteen","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"e","reason":"repeated-miss"}
+{"type":"suggestionSuppressed","suggestionID":"twelve","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"is","reason":"repeated-miss","metadata":{"fieldKind":"form"}}
+{"type":"suggestionSuppressed","suggestionID":"thirteen","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"e","reason":"repeated-miss","metadata":{"fieldKind":"search"}}
 {"type":"suggestionSuppressed","suggestionID":"fourteen","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","reason":"no-fast-word-candidate"}
 JSONL
 
@@ -133,6 +133,24 @@ fi
 
 if ! grep -F "wordCompletion: 100% (4/4)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not report useful rate by mode" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "multilineCompose: 1" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report field-kind slices" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "form: 1" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report suppressed form fields" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "search: 1" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report suppressed search fields" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
   exit 1
 fi

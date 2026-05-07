@@ -117,6 +117,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         remainingVisibleText: String?,
         suggestionID: String = "",
         fieldIdentity: String = "",
+        fieldKind: AXFieldKind = .unknown,
+        fieldKindReason: String = "unknown",
         requestMode: String = ""
     ) {
         guard isEnabled else {
@@ -135,6 +137,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             metadata: [
                 "acceptanceID": acceptanceID,
                 "acceptMode": acceptMode,
+                "fieldKind": fieldKind.rawValue,
+                "fieldKindReason": fieldKindReason,
                 "acceptedChars": String(acceptedText.count),
                 "acceptedWords": String(acceptedText.split(whereSeparator: \.isWhitespace).count)
             ]
@@ -320,6 +324,9 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             .joined(separator: "\n")
         let suppressedApps = sortedCountList(summary.suppressedByApp)
         let suppressedModes = sortedCountList(summary.suppressedByMode)
+        let presentedFieldKinds = sortedCountList(summary.presentedByFieldKind)
+        let acceptedAndKeptFieldKinds = sortedCountList(summary.acceptedAndKeptByFieldKind)
+        let suppressedFieldKinds = sortedCountList(summary.suppressedByFieldKind)
         let actionableSuppressedApps = sortedCountList(summary.actionableSuppressedByApp)
         let actionableSuppressedModes = sortedCountList(summary.actionableSuppressedByMode)
         let annoyanceSignals = sortedCountList(summary.annoyanceSignalCounts)
@@ -370,12 +377,18 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           <ul>\(usefulAppRates)</ul>
           <h2>Useful rate by mode</h2>
           <ul>\(usefulModeRates)</ul>
+          <h2>Presented by field kind</h2>
+          <ul>\(presentedFieldKinds)</ul>
+          <h2>Accepted and kept by field kind</h2>
+          <ul>\(acceptedAndKeptFieldKinds)</ul>
           <h2>Suppressed by reason</h2>
           <ul>\(suppressedReasons)</ul>
           <h2>Suppressed by app</h2>
           <ul>\(suppressedApps)</ul>
           <h2>Suppressed by mode</h2>
           <ul>\(suppressedModes)</ul>
+          <h2>Suppressed by field kind</h2>
+          <ul>\(suppressedFieldKinds)</ul>
           <h2>Actionable suppressed by app</h2>
           <ul>\(actionableSuppressedApps)</ul>
           <h2>Actionable suppressed by mode</h2>

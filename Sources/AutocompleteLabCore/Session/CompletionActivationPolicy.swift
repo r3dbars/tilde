@@ -26,6 +26,7 @@ public enum CompletionActivationDecision: Equatable, Sendable {
 public enum CompletionActivationBlockReason: String, Equatable, Sendable {
     case secureField
     case suppressedField
+    case blockedFieldKind
     case tooLittleContext
     case middleOfLine
     case unfinishedWord
@@ -50,13 +51,15 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         textBeforeCursor: String,
         textAfterCursor: String,
         isSecure: Bool,
-        isFieldSuppressed: Bool
+        isFieldSuppressed: Bool,
+        fieldKind: AXFieldKind = .unknown
     ) -> Bool {
         decision(
             textBeforeCursor: textBeforeCursor,
             textAfterCursor: textAfterCursor,
             isSecure: isSecure,
-            isFieldSuppressed: isFieldSuppressed
+            isFieldSuppressed: isFieldSuppressed,
+            fieldKind: fieldKind
         ).canSuggest
     }
 
@@ -64,14 +67,19 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         textBeforeCursor: String,
         textAfterCursor: String,
         isSecure: Bool,
-        isFieldSuppressed: Bool
+        isFieldSuppressed: Bool,
+        fieldKind: AXFieldKind = .unknown
     ) -> CompletionActivationDecision {
-        if isSecure {
+        if isSecure || fieldKind == .secure {
             return .block(.secureField)
         }
 
         if isFieldSuppressed {
             return .block(.suppressedField)
+        }
+
+        if fieldKind.suppressesSuggestionsByDefault {
+            return .block(.blockedFieldKind)
         }
 
         let trimmedContext = textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines)

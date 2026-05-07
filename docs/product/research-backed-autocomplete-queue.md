@@ -75,16 +75,16 @@ The north star is simple: a build is better only when accepted text survives, wr
 
 ## P0 - Field Targeting
 
-- [ ] Add `AXFieldClassifier`.
-- [ ] Classify field kind as multiline compose, singleline compose, search, form, secure, URL, unknown.
-- [ ] Use AX role, subrole, title, placeholder, selected range, line count, and window hints.
-- [ ] Suppress search, URL, password, short form, address, phone, payment-like, and secure fields by default.
-- [ ] Emit `fieldKind` on request, presentation, suppression, accept, insert, and survival events.
-- [ ] Add field-kind counts to Diagnostics.
-- [ ] Add field-kind slices to trace eval.
-- [ ] Add tests for secure/search/url/form/singleline/multiline classification.
-- [ ] Add an override path for safe singleline compose fields.
-- [ ] Add a "why blocked" line for field classifier suppressions.
+- [x] Add `AXFieldClassifier`.
+- [x] Classify field kind as multiline compose, singleline compose, search, form, secure, URL, unknown.
+- [x] Use AX role, subrole, title, placeholder, selected range, line count, and window hints.
+- [x] Suppress search, URL, password, short form, address, phone, payment-like, and secure fields by default.
+- [x] Emit `fieldKind` on request, presentation, suppression, accept, insert, and survival events.
+- [x] Add field-kind counts to Diagnostics.
+- [x] Add field-kind slices to trace eval.
+- [x] Add tests for secure/search/url/form/singleline/multiline classification.
+- [x] Add an override path for safe singleline compose fields.
+- [x] Add a "why blocked" line for field classifier suppressions.
 
 ## P0 - Insertion, Tab, And Focus Trust
 

@@ -68,6 +68,22 @@ accepted_and_kept_suggestion_ids = {
     for event in accepted_text_edited
     if kept_event(event) and event.get("suggestionID")
 }
+
+def field_kind(event):
+    metadata = event.get("metadata") or {}
+    return metadata.get("fieldKind") or "unknown"
+
+presented_field_kinds = Counter(field_kind(event) for event in presented_by_id.values())
+accepted_and_kept_field_kinds = Counter(
+    field_kind(event)
+    for event in accepted_text_edited
+    if kept_event(event)
+)
+suppressed_field_kinds = Counter(
+    field_kind(event)
+    for event in events
+    if event.get("type") == "suggestionSuppressed"
+)
 typed_through_ids = {
     event.get("suggestionID")
     for event in events
@@ -201,6 +217,18 @@ print("Useful rate by app:")
 for app, (useful_count, shown_count) in sorted(useful_by_app.items()):
     rate = 0 if shown_count == 0 else round((useful_count / shown_count) * 100)
     print(f"  {app}: {rate}% ({useful_count}/{shown_count})")
+print("Presented by field kind:")
+if presented_field_kinds:
+    for kind, count in presented_field_kinds.most_common():
+        print(f"  {kind}: {count}")
+else:
+    print("  none")
+print("Accepted and kept by field kind:")
+if accepted_and_kept_field_kinds:
+    for kind, count in accepted_and_kept_field_kinds.most_common():
+        print(f"  {kind}: {count}")
+else:
+    print("  none")
 print("Suppressed by reason:")
 suppressed_events = [
     event for event in events
@@ -231,6 +259,12 @@ suppressed_modes = Counter(event.get("requestMode") or "unknown" for event in su
 if suppressed_modes:
     for mode, count in suppressed_modes.most_common():
         print(f"  {mode}: {count}")
+else:
+    print("  none")
+print("Suppressed by field kind:")
+if suppressed_field_kinds:
+    for kind, count in suppressed_field_kinds.most_common():
+        print(f"  {kind}: {count}")
 else:
     print("  none")
 print("Actionable suppressed by app:")
