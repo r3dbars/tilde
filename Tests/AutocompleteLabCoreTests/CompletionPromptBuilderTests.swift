@@ -277,6 +277,59 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.user.contains("Hey how are you"))
     }
 
+    @Test("Prompt includes prior sentence when current fragment is short")
+    func promptIncludesPriorSentenceForShortFragment() {
+        let builder = CompletionPromptBuilder(
+            maxContextCharacters: 300,
+            maxCurrentParagraphCharacters: 220,
+            maxCurrentSentenceCharacters: 120
+        )
+        let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: """
+        The beta keeps typed text local. That means
+        """))
+
+        #expect(prompt.user.contains("The beta keeps typed text local. That means"))
+    }
+
+    @Test("Prompt caps context by token budget")
+    func promptCapsContextByTokenBudget() throws {
+        let builder = CompletionPromptBuilder(
+            maxContextCharacters: 1_000,
+            maxContextTokens: 48,
+            maxCurrentParagraphCharacters: 1_000,
+            maxCurrentSentenceCharacters: 1_000
+        )
+        let words = (1...80).map { "word\($0)" }.joined(separator: " ")
+        let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: words))
+        let context = try #require(prompt.user.contextBetweenCursorHeaderAndPromptSuffix)
+
+        #expect(builder.maxContextTokens == 48)
+        #expect(context.split(whereSeparator: { $0.isWhitespace }).count == 48)
+        #expect(!context.contains("word1"))
+        #expect(context.contains("word80"))
+    }
+
+    @Test("Sentence mode can borrow previous paragraph for a tiny new paragraph")
+    func sentenceModeBorrowsPreviousParagraphForTinyNewParagraph() {
+        let builder = CompletionPromptBuilder(
+            maxContextCharacters: 300,
+            maxContextTokens: 48,
+            maxCurrentParagraphCharacters: 220,
+            maxCurrentSentenceCharacters: 120
+        )
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: """
+            The launch note is about local autocomplete and privacy-first tracing.
+
+            This
+            """,
+            mode: .sentenceContinuation
+        ))
+
+        #expect(prompt.user.contains("The launch note is about local autocomplete"))
+        #expect(prompt.user.contains("This"))
+    }
+
     @Test("Prompt keeps current paragraph when sentence ends at cursor")
     func promptKeepsParagraphWhenSentenceEndsAtCursor() {
         let builder = CompletionPromptBuilder(
@@ -361,5 +414,16 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("next 3 words or fewer"))
         #expect(prompt.system.contains("Behavior profile: email"))
         #expect(prompt.system.contains("Do not invent commitments"))
+    }
+}
+
+private extension String {
+    var contextBetweenCursorHeaderAndPromptSuffix: String? {
+        guard let headerRange = range(of: "Before cursor:\n"),
+              let suffixRange = range(of: "\n\nNext words:") ?? range(of: "\n\nSuffix:") else {
+            return nil
+        }
+
+        return String(self[headerRange.upperBound..<suffixRange.lowerBound])
     }
 }

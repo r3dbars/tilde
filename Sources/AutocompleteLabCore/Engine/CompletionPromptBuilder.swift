@@ -11,28 +11,31 @@ public struct CompletionPrompt: Equatable, Sendable {
 }
 
 public struct CompletionPromptBuilder: Equatable, Sendable {
-    public static let promptStyleIdentifier = "tiny-continuation-v1"
+    public static let promptStyleIdentifier = "tiny-continuation-v2"
     public static let noSuggestionToken = "<NO_SUGGESTION>"
 
     public let maxContextCharacters: Int
+    public let maxContextTokens: Int
     public let maxCurrentParagraphCharacters: Int
     public let maxCurrentSentenceCharacters: Int
     public let maxVisibleWords: Int
 
     public init(
         maxContextCharacters: Int = 360,
+        maxContextTokens: Int = 72,
         maxCurrentParagraphCharacters: Int = 220,
         maxCurrentSentenceCharacters: Int = 160,
         maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords
     ) {
         self.maxContextCharacters = max(80, maxContextCharacters)
+        self.maxContextTokens = min(96, max(48, maxContextTokens))
         self.maxCurrentParagraphCharacters = max(80, maxCurrentParagraphCharacters)
         self.maxCurrentSentenceCharacters = max(80, maxCurrentSentenceCharacters)
         self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
     }
 
     public func prompt(for request: CompletionRequest) -> CompletionPrompt {
-        let context = promptContext(from: request.textBeforeCursor)
+        let context = promptContext(from: request.textBeforeCursor, mode: request.mode)
         let behaviorProfile = behaviorProfile(for: request)
 
         if request.mode == .wordCompletion {
@@ -127,30 +130,129 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         }
     }
 
-    private func promptContext(from textBeforeCursor: String) -> String {
+    private func promptContext(from textBeforeCursor: String, mode: CompletionRequestMode) -> String {
         let nearbyContext = String(textBeforeCursor.suffix(maxContextCharacters))
-        let currentParagraph = nearbyContext
-            .components(separatedBy: "\n\n")
+        let paragraphs = nearbyContext.components(separatedBy: "\n\n")
+        let currentParagraph = paragraphs
             .last?
             .trimmingCharacters(in: .newlines) ?? nearbyContext
-        let currentSentence = currentSentenceFragment(in: currentParagraph)
+        let previousParagraph = paragraphs
+            .dropLast()
+            .last?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let sentenceContext = sentenceContext(in: currentParagraph)
+        var pieces: [String] = []
 
-        return String(currentSentence.suffix(maxCurrentSentenceCharacters))
+        if shouldIncludePreviousParagraph(
+            previousParagraph,
+            currentFragment: sentenceContext.current,
+            previousSentence: sentenceContext.previous,
+            mode: mode
+        ) {
+            pieces.append(String(previousParagraph?.suffix(maxCurrentSentenceCharacters) ?? ""))
+        }
+
+        if shouldIncludePreviousSentence(
+            sentenceContext.previous,
+            currentFragment: sentenceContext.current,
+            mode: mode
+        ) {
+            pieces.append(sentenceContext.previous ?? "")
+        }
+
+        pieces.append(sentenceContext.current)
+
+        return trimContext(pieces.joined(separator: " "))
     }
 
-    private func currentSentenceFragment(in text: String) -> String {
-        guard let boundary = text.lastIndex(where: { $0.isSentenceBoundary }) else {
-            return String(text.suffix(maxCurrentParagraphCharacters))
+    private func sentenceContext(in text: String) -> (previous: String?, current: String) {
+        let paragraph = String(text.suffix(maxCurrentParagraphCharacters))
+        let fragments = sentenceFragments(in: paragraph)
+
+        guard let current = fragments.last else {
+            return (nil, paragraph.trimmingCharacters(in: .whitespacesAndNewlines))
         }
 
-        let fragment = text[text.index(after: boundary)...]
+        return (
+            fragments.dropLast().last.map { String($0.suffix(maxCurrentSentenceCharacters)) },
+            String(current.suffix(maxCurrentSentenceCharacters))
+        )
+    }
+
+    private func sentenceFragments(in text: String) -> [String] {
+        var fragments: [String] = []
+        var startIndex = text.startIndex
+
+        for index in text.indices where text[index].isSentenceBoundary {
+            let endIndex = text.index(after: index)
+            let fragment = text[startIndex..<endIndex]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !fragment.isEmpty {
+                fragments.append(String(fragment))
+            }
+            startIndex = endIndex
+        }
+
+        let tail = text[startIndex...]
             .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !fragment.isEmpty else {
-            return String(text.suffix(maxCurrentParagraphCharacters))
+        if !tail.isEmpty {
+            fragments.append(String(tail))
         }
 
-        return fragment
+        return fragments
+    }
+
+    private func shouldIncludePreviousSentence(
+        _ previousSentence: String?,
+        currentFragment: String,
+        mode: CompletionRequestMode
+    ) -> Bool {
+        guard previousSentence?.isEmpty == false else {
+            return false
+        }
+
+        if mode == .sentenceContinuation {
+            return true
+        }
+
+        return contentTokenCount(in: currentFragment) <= 2
+    }
+
+    private func shouldIncludePreviousParagraph(
+        _ previousParagraph: String?,
+        currentFragment: String,
+        previousSentence: String?,
+        mode: CompletionRequestMode
+    ) -> Bool {
+        guard mode == .sentenceContinuation,
+              previousSentence == nil,
+              previousParagraph?.isEmpty == false else {
+            return false
+        }
+
+        return contentTokenCount(in: currentFragment) <= 2
+    }
+
+    private func trimContext(_ text: String) -> String {
+        let characterTrimmed = String(text.suffix(maxContextCharacters))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let words = characterTrimmed
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+
+        guard words.count > maxContextTokens else {
+            return characterTrimmed
+        }
+
+        return words
+            .suffix(maxContextTokens)
+            .joined(separator: " ")
+    }
+
+    private func contentTokenCount(in text: String) -> Int {
+        text.components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .count
     }
 }
 

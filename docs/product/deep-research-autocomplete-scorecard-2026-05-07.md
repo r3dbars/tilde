@@ -172,7 +172,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Display score | 86 | Live display score includes utility, style fit, context fit, user affinity, risk, repetition, instability, accepted-and-kept probability, and trace metadata. Candidate count, top score, score margin, and suppression reason are logged at runtime. | Replace heuristic components with learned estimates and use fresh traces to tune thresholds. |
 | Accept-and-keep probability threshold | 86 | Durable learning now gates by app, field kind, mode, and behavior profile after enough evidence, with 14-day half-life decay, and Settings can clear learned suggestion state without deleting logs. | Prove thresholds with fresh real-app traces and expose tuning controls. |
 | Candidate generation | 80 | Phrase/sentence prompts ask for 1-3 candidates; `CompletionOutputCleaner.cleanCandidates` strips list prefixes, filters unsafe/sentinel lines, dedupes, and context-aware `CompletionCandidateRanker` picks only high-score/high-margin candidates while penalizing unsupported names/dates and generic filler. | Prove real model outputs produce useful candidate sets and tune score/margin thresholds from traces. |
-| Context budget | 76 | Prompt uses bounded recent context from current sentence/paragraph. | Use 48-96 tokens plus prior sentence/paragraph only when useful. |
+| Context budget | 84 | Prompt context now uses a 48-96 token budget, keeps the current local fragment, borrows the prior sentence when the current fragment is tiny or sentence mode needs it, and borrows the prior paragraph only for tiny sentence-mode starts. | Tune the usefulness rules against fresh real-model traces and add document-title context without storing raw text. |
 | Metadata in prompt | 89 | App bundle, field kind, request mode, behavior profile, aggregate accepted-kept style sketch, trace-safe partial-word shape, and trace-safe current-line list shape now affect prompt/generation/scoring/tracing. | Include document title and privacy-safe accepted-kept suffix features. |
 | Hard `<NO_SUGGESTION>` path | 86 | Word/phrase/sentence prompts include `<NO_SUGGESTION>` guidance, and cleaner suppresses direct sentinels plus prompt-echo sentinel lines. | Prove sentinel behavior in fresh real model traces. |
 | Privacy-first tracing | 92 | Raw content is redacted by default, raw/screenshot capture is opt-in with expiry, line/list shape metadata avoids item text, and Settings can clear learned suggestion state separately from local logs. | Store prefix hashes and make compact style/learning features inspectable. |
@@ -437,6 +437,9 @@ these are true.
    planning drift, while local terms get a small tie breaker.
 26. Done: make app-level Tab next-word acceptance discard residual visible
    text so follow-on words require a fresh scored request.
+27. Done: upgrade prompt context from character-only current-sentence trimming
+   to a 48-96 token local window that can borrow prior sentence/paragraph
+   context only when it is likely to help.
 
 ## Goal Status
 
