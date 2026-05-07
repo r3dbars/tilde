@@ -389,6 +389,54 @@ APPLESCRIPT
   wait_for_frontmost_app "TextEdit" 5
 }
 
+focus_textedit_document_path() {
+  local document_path="$1"
+  osascript >/dev/null <<APPLESCRIPT
+tell application "TextEdit"
+  activate
+  repeat with currentWindow in windows
+    try
+      if (path of document of currentWindow) is "$document_path" then
+        set index of currentWindow to 1
+        exit repeat
+      end if
+    end try
+  end repeat
+end tell
+APPLESCRIPT
+  focus_textedit_smoke_editor
+}
+
+wait_for_textedit_front_document_contains() {
+  local expected_text="$1"
+  local label="$2"
+  local timeout_seconds="${3:-8}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    local contains_text
+    contains_text="$(osascript <<APPLESCRIPT
+tell application "TextEdit"
+  if not (exists document 1) then
+    return "no"
+  end if
+  if ((text of document 1) as string) contains "$expected_text" then
+    return "yes"
+  end if
+  return "no"
+end tell
+APPLESCRIPT
+)"
+    if [[ "$contains_text" == "yes" ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for $label to land in TextEdit." >&2
+  exit 1
+}
+
 close_textedit_smoke_documents() {
   osascript >/dev/null <<'APPLESCRIPT'
 tell application "TextEdit"
@@ -785,7 +833,7 @@ run_manual_gated() {
 }
 
 run_textedit() {
-  local runtime_start_line start_line trace_start_line tmp_dir tmp_file
+  local runtime_start_line start_line trace_start_line stable_start_line tmp_dir tmp_file expected_text
   runtime_start_line="$(line_count "$LOG_PATH")"
 
   build_if_needed
@@ -794,21 +842,23 @@ run_textedit() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
   tmp_dir="$(make_tmp_dir)"
-  tmp_file="$tmp_dir/autocomplete-lab-textedit-smoke.txt"
+  tmp_file="$tmp_dir/autocomplete-lab-textedit-smoke-$$.txt"
 
   close_textedit_smoke_documents
   : >"$tmp_file"
   osascript >/dev/null <<APPLESCRIPT
 tell application "TextEdit"
   activate
-  open POSIX file "$tmp_file"
+  set smokeDocument to open POSIX file "$tmp_file"
+  set text of smokeDocument to ""
 end tell
 APPLESCRIPT
   sleep 1
-  focus_textedit_smoke_editor
+  focus_textedit_document_path "$tmp_file"
 
   case "$TEXTEDIT_SESSION_APP" in
     textedit-multiline)
+      expected_text="Can we make this feel "
       osascript <<'APPLESCRIPT'
 tell application "TextEdit" to activate
 delay 0.4
@@ -822,6 +872,7 @@ end tell
 APPLESCRIPT
       ;;
     textedit-wrapped)
+      expected_text="This is a disposable autocomplete smoke paragraph"
       osascript <<'APPLESCRIPT'
 tell application "TextEdit" to activate
 delay 0.4
@@ -838,6 +889,7 @@ end tell
 APPLESCRIPT
       ;;
     *)
+      expected_text="Can we make this feel "
       osascript <<'APPLESCRIPT'
 tell application "TextEdit" to activate
 delay 0.4
@@ -850,10 +902,12 @@ APPLESCRIPT
       ;;
   esac
 
-  wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit suggestion"
-  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
+  wait_for_textedit_front_document_contains "$expected_text" "scripted TextEdit text"
+  stable_start_line="$(line_count "$LOG_PATH")"
+  wait_for_log_pattern "$stable_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit stable suggestion"
+  wait_for_screenshot_capture_if_enabled "$stable_start_line" "com.apple.TextEdit" "TextEdit"
   assert_frontmost_app "TextEdit" "TextEdit"
-  focus_textedit_smoke_editor
+  focus_textedit_document_path "$tmp_file"
   press_key_code 48
   wait_for_log_fields "$start_line" "TextEdit Tab acceptance" 12 \
     "keyboard-action" \
@@ -865,7 +919,7 @@ APPLESCRIPT
   local full_start_line full_accept_key
   full_accept_key="$(accept_all_shortcut)"
   assert_frontmost_app "TextEdit" "TextEdit"
-  focus_textedit_smoke_editor
+  focus_textedit_document_path "$tmp_file"
   full_start_line="$(line_count "$LOG_PATH")"
   press_accept_all_shortcut
   wait_for_log_fields "$full_start_line" "TextEdit full acceptance" 12 \

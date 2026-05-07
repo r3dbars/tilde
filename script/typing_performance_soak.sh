@@ -15,6 +15,7 @@ MIN_EVENT_TAP_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_EVENT_TAP_SAMPLES:-100}"
 MIN_AX_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_AX_SAMPLES:-0}"
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
 declare -a SOAK_TMP_DIRS=()
+SOAK_OSASCRIPT_PID=""
 
 usage() {
   cat <<'EOF'
@@ -32,7 +33,31 @@ cleanup_soak_tmp_dirs() {
   fi
 }
 
-trap cleanup_soak_tmp_dirs EXIT
+close_textedit_soak_documents() {
+  osascript >/dev/null <<'APPLESCRIPT'
+tell application "TextEdit"
+  repeat with currentDocument in (documents as list)
+    try
+      if (name of currentDocument) contains "autocomplete-lab-typing-soak" then
+        close currentDocument saving no
+      end if
+    end try
+  end repeat
+end tell
+APPLESCRIPT
+}
+
+cleanup_soak() {
+  if [[ -n "$SOAK_OSASCRIPT_PID" ]] && kill -0 "$SOAK_OSASCRIPT_PID" 2>/dev/null; then
+    kill "$SOAK_OSASCRIPT_PID" 2>/dev/null || true
+  fi
+
+  close_textedit_soak_documents || true
+  cleanup_soak_tmp_dirs
+}
+
+trap cleanup_soak EXIT
+trap 'trap - INT TERM; cleanup_soak; exit 130' INT TERM
 
 make_tmp_dir() {
   local tmp_dir
@@ -176,10 +201,11 @@ type_textedit_fixture() {
   generate_soak_text "$TARGET_CHARS" >"$text_file"
   : >"$target_file"
 
+  close_textedit_soak_documents
   open -a TextEdit "$target_file"
   sleep 1
 
-  osascript <<APPLESCRIPT
+  osascript <<APPLESCRIPT &
 set soakText to read POSIX file "$text_file" as «class utf8»
 set soakChunkSize to $CHUNK_SIZE
 set soakDelay to $delay
@@ -207,6 +233,9 @@ with timeout of $timeout_seconds seconds
   end tell
 end timeout
 APPLESCRIPT
+  SOAK_OSASCRIPT_PID=$!
+  wait "$SOAK_OSASCRIPT_PID"
+  SOAK_OSASCRIPT_PID=""
 }
 
 run_checker() {
