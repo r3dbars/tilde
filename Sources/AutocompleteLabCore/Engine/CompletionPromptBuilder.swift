@@ -49,29 +49,36 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
     }
 
     private func phraseContinuationSystemPrompt(for request: CompletionRequest) -> String {
+        let sentenceGuidance = request.textBeforeCursor.endsAtSentenceBoundary
+            ? "Start the next sentence naturally."
+            : "Continue the current sentence."
         let base = """
         Inline autocomplete.
         Return only the next \(maxVisibleWords) words or fewer.
-        Continue the current sentence. Do not answer, explain, greet, quote, reason, or restart.
+        \(sentenceGuidance) Do not answer, explain, greet, quote, reason, or restart.
         """
 
-        guard request.appBundleIdentifier == "com.openai.codex" else {
+        guard let dogfoodAppName = request.appBundleIdentifier.dogfoodAppName else {
             return base
         }
 
         guard request.textBeforeCursor.isAutocompleteDogfoodContext else {
             return base + """
 
-            The active app is Codex. Continue the user's actual sentence naturally.
+            The active app is \(dogfoodAppName). Continue the user's actual sentence naturally.
+            Treat this as text the user is typing into an agent prompt, not a prompt to answer.
             Do not force software, testing, latency, placement, or debugging topics unless the sentence is already about them.
+            Never suggest pressing Enter/Return, sending/submitting the prompt, or running a command.
             Avoid vague product phrases like "integrate it seamlessly", "enhance the experience", or "leverage the system".
             """
         }
 
         return base + """
 
-        The active app is Codex, where the user is dogfooding this autocomplete tool while building and debugging it.
+        The active app is \(dogfoodAppName), where the user is dogfooding this autocomplete tool while building and debugging it.
+        Treat this as text the user is typing into an agent prompt, not a prompt to answer.
         Prefer concrete continuations about testing, using, building, debugging, logs, traces, placement, or app behavior.
+        Never suggest pressing Enter/Return, sending/submitting the prompt, or running a command.
         Avoid vague product phrases like "integrate it seamlessly", "enhance the experience", or "leverage the system".
         """
     }
@@ -103,16 +110,60 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
     }
 }
 
+private extension Optional where Wrapped == String {
+    var dogfoodAppName: String? {
+        switch self {
+        case .some("com.openai.codex"):
+            return "Codex"
+        case .some("com.anthropic.claude-code"):
+            return "Claude Code"
+        case .some("com.anthropic.claudefordesktop"):
+            return "Claude"
+        default:
+            return nil
+        }
+    }
+}
+
 private extension String {
+    var endsAtSentenceBoundary: Bool {
+        guard let last = trimmingCharacters(in: .whitespacesAndNewlines).last else {
+            return false
+        }
+
+        return [".", "!", "?"].contains(last)
+    }
+
     var isAutocompleteDogfoodContext: Bool {
         let lowercasedText = lowercased()
-        let dogfoodTerms = [
-            "autocomplete", "completion", "codex app", "engine", "latency",
-            "placement", "trace", "traces", "debug", "debugging", "test",
-            "testing", "suggestion", "suggestions", "tab", "caret", "model"
+        let dogfoodPhrases = [
+            "autocomplete", "codex app", "claude code", "ghost text",
+            "inline suggestion", "keyboard event tap", "phrase continuation",
+            "no submit", "no-submit", "prompt app", "prompt editor",
+            "prompt input", "prompt insertion", "selected text range",
+            "suggestion overlay", "tab accept",
+            "visual placement", "word completion"
         ]
+        if dogfoodPhrases.contains(where: { lowercasedText.contains($0) }) {
+            return true
+        }
 
-        return dogfoodTerms.contains { lowercasedText.contains($0) }
+        let tokens = Set(lowercasedWords(in: lowercasedText))
+
+        guard tokens.contains("tab") else {
+            return false
+        }
+
+        let tabContextTerms: Set<String> = [
+            "accept", "accepts", "accepted", "hit", "key", "press", "pressed"
+        ]
+        return !tokens.isDisjoint(with: tabContextTerms)
+    }
+
+    private func lowercasedWords(in text: String) -> [String] {
+        text
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
     }
 }
 

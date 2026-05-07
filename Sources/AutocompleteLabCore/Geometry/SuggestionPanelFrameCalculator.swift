@@ -23,6 +23,21 @@ public enum SuggestionPanelFrameCalculator {
             || abs(previousFrame.height - nextFrame.height) > movementTolerance
     }
 
+    public static func isUsableInlineGhostFrame(
+        _ frame: CGRect,
+        minimumVisibleWidth: CGFloat = 24
+    ) -> Bool {
+        frame.minX.isFinite
+            && frame.minY.isFinite
+            && frame.maxX.isFinite
+            && frame.maxY.isFinite
+            && frame.width.isFinite
+            && frame.height.isFinite
+            && !frame.isNull
+            && frame.width >= minimumVisibleWidth
+            && frame.height >= 1
+    }
+
     public static func inlineGhostFrame(
         caretRect: CGRect,
         textLineRect: CGRect? = nil,
@@ -35,10 +50,10 @@ public enum SuggestionPanelFrameCalculator {
         let lineRect = textLineRect ?? caretRect
         let height = max(lineRect.height, textSize.height)
         let horizontalBounds = horizontalBounds(screenFrame: screenFrame, clippingFrame: clippingFrame)
+        let verticalBounds = verticalBounds(screenFrame: screenFrame, clippingFrame: clippingFrame)
         let preferredWidth = textSize.width + 6
-        let preferredX = clampedOrigin(
-            preferred: caretRect.maxX,
-            length: min(minimumWidth, horizontalBounds.upper - horizontalBounds.lower),
+        let preferredX = inlineOriginAfterCaret(
+            caretX: caretRect.maxX,
             lowerBound: horizontalBounds.lower,
             upperBound: horizontalBounds.upper
         )
@@ -56,8 +71,8 @@ public enum SuggestionPanelFrameCalculator {
             y: clampedOrigin(
                 preferred: preferredY,
                 length: height,
-                lowerBound: screenFrame.minY + 4,
-                upperBound: screenFrame.maxY - 4
+                lowerBound: verticalBounds.lower,
+                upperBound: verticalBounds.upper
             ),
             width: width,
             height: height
@@ -73,6 +88,7 @@ public enum SuggestionPanelFrameCalculator {
         maximumWidth: CGFloat = 420
     ) -> CGRect {
         let horizontalBounds = horizontalBounds(screenFrame: screenFrame, clippingFrame: clippingFrame)
+        let verticalBounds = verticalBounds(screenFrame: screenFrame, clippingFrame: clippingFrame)
         let width = panelWidth(
             preferredWidth: textSize.width + 10,
             minimumWidth: minimumWidth,
@@ -96,8 +112,8 @@ public enum SuggestionPanelFrameCalculator {
             y: clampedOrigin(
                 preferred: preferredY,
                 length: height,
-                lowerBound: screenFrame.minY + 4,
-                upperBound: screenFrame.maxY - 4
+                lowerBound: verticalBounds.lower,
+                upperBound: verticalBounds.upper
             ),
             width: width,
             height: height
@@ -146,6 +162,23 @@ public enum SuggestionPanelFrameCalculator {
         return (lower, max(lower + 1, upper))
     }
 
+    private static func verticalBounds(
+        screenFrame: CGRect,
+        clippingFrame: CGRect?,
+        verticalMargin: CGFloat = 4
+    ) -> (lower: CGFloat, upper: CGFloat) {
+        let screenLower = screenFrame.minY + verticalMargin
+        let screenUpper = screenFrame.maxY - verticalMargin
+
+        guard let clippingFrame else {
+            return (screenLower, max(screenLower + 1, screenUpper))
+        }
+
+        let lower = max(screenLower, clippingFrame.minY + verticalMargin)
+        let upper = min(screenUpper, clippingFrame.maxY - verticalMargin)
+        return (lower, max(lower + 1, upper))
+    }
+
     private static func clampedOrigin(
         preferred: CGFloat,
         length: CGFloat,
@@ -154,5 +187,14 @@ public enum SuggestionPanelFrameCalculator {
     ) -> CGFloat {
         let maxOrigin = max(lowerBound, upperBound - length)
         return min(max(preferred, lowerBound), maxOrigin)
+    }
+
+    private static func inlineOriginAfterCaret(
+        caretX: CGFloat,
+        lowerBound: CGFloat,
+        upperBound: CGFloat
+    ) -> CGFloat {
+        let lastUsableOrigin = max(lowerBound, upperBound - 1)
+        return min(max(caretX, lowerBound), lastUsableOrigin)
     }
 }

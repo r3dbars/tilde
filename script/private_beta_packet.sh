@@ -10,6 +10,7 @@ README_PATH="$PACKET_DIR/README.md"
 INSTALL_PATH="$PACKET_DIR/install-checklist.md"
 FEEDBACK_PATH="$PACKET_DIR/feedback-log.md"
 SESSION_REPORT_PATH="$PACKET_DIR/session-report.md"
+MODEL_ASSET_PATH="$PACKET_DIR/model-asset.md"
 CHECKSUM_PATH="$PACKET_DIR/checksums.txt"
 
 cd "$ROOT_DIR"
@@ -22,6 +23,8 @@ create   Create a local private-beta packet beside dist/AutocompleteLab.zip.
 --check  Validate that the packet exists and points at the current archive.
 
 This script only writes local files. It never uploads or sends beta data.
+By default it requires the archive to contain a Developer ID signed app. Set
+AUTOCOMPLETE_LAB_PRIVATE_BETA_REQUIRE_RELEASE_SIGNATURE=0 only for local script tests.
 EOF
 }
 
@@ -37,8 +40,32 @@ require_archive() {
   fi
 }
 
+check_archive_app() {
+  local verify_dir app_path
+  verify_dir="$(mktemp -d)"
+
+  ditto -x -k "$ARCHIVE_PATH" "$verify_dir"
+  app_path="$verify_dir/AutocompleteLab.app"
+
+  if [[ ! -d "$app_path" ]]; then
+    rm -rf "$verify_dir"
+    echo "archive does not contain AutocompleteLab.app" >&2
+    exit 1
+  fi
+
+  if [[ "${AUTOCOMPLETE_LAB_PRIVATE_BETA_REQUIRE_RELEASE_SIGNATURE:-1}" == "1" ]]; then
+    ./script/check_app_bundle.sh --release "$app_path"
+  else
+    ./script/check_app_bundle.sh "$app_path"
+  fi
+
+  rm -rf "$verify_dir"
+}
+
 create_packet() {
   require_archive
+  ./script/check_model_asset.py
+  check_archive_app
   mkdir -p "$PACKET_DIR"
 
   local sha
@@ -59,6 +86,7 @@ sanity check, not the main product loop.
 Useful commands:
 
 \`\`\`bash
+./script/check_model_asset.py
 ./script/beta_readiness.sh
 ./script/manual_smoke_status.sh --require-all
 ./script/check_trace_eval.sh
@@ -73,14 +101,47 @@ EOF
 1. Unzip `AutocompleteLab.zip`.
 2. Open `AutocompleteLab.app`.
 3. Grant Accessibility when macOS asks.
-4. Confirm the menu bar item says the model is ready.
-5. Open TextEdit and type a normal sentence.
-6. Use Tab for one-word accept.
-7. Use the key above Tab for full accept.
-8. Press Esc if a suggestion feels wrong.
+4. Open Settings from the menu bar item.
+5. If the local model is not ready, use the Local model action and follow the shown model folder path.
+6. Confirm Settings says the model is ready.
+7. Open TextEdit and type a normal sentence.
+8. Use Tab for one-word accept.
+9. Use the key above Tab for full accept only in non-prompt apps where the profile allows it.
+10. Press Esc if a suggestion feels wrong.
 
 Stop the test if suggestions feel distracting, appear in the wrong app, or
 insert text somewhere surprising.
+EOF
+
+  local expected_model_path
+  expected_model_path="$(./script/check_model_asset.py --print-path)"
+
+  cat >"$MODEL_ASSET_PATH" <<EOF
+# Model Asset Check
+
+The private beta is not ready if the app falls back to mock output.
+
+Expected model:
+
+\`\`\`text
+$expected_model_path
+\`\`\`
+
+Verify it:
+
+\`\`\`bash
+./script/check_model_asset.py
+\`\`\`
+
+Fix a missing or invalid model:
+
+Open Autocomplete Lab Settings and use the Local model action. Developer fallback:
+
+\`\`\`bash
+python3 -m pip install --user huggingface_hub
+./script/download_mlx_model.py --model qwen35-4b
+./script/check_model_asset.py
+\`\`\`
 EOF
 
   cat >"$FEEDBACK_PATH" <<'EOF'
@@ -128,8 +189,15 @@ EOF
 
 check_packet() {
   require_archive
+  check_archive_app
 
-  for path in "$README_PATH" "$INSTALL_PATH" "$FEEDBACK_PATH" "$SESSION_REPORT_PATH" "$CHECKSUM_PATH"; do
+  ./script/check_model_asset.py --quiet || {
+    echo "preferred MLX model is missing or invalid" >&2
+    echo "Run ./script/check_model_asset.py for the exact fix." >&2
+    exit 1
+  }
+
+  for path in "$README_PATH" "$INSTALL_PATH" "$MODEL_ASSET_PATH" "$FEEDBACK_PATH" "$SESSION_REPORT_PATH" "$CHECKSUM_PATH"; do
     if [[ ! -s "$path" ]]; then
       echo "missing beta packet file: $path" >&2
       exit 1

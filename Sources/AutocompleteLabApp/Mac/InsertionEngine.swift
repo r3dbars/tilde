@@ -20,12 +20,16 @@ final class InsertionEngine {
         self.clipboardFallbackEnabled = clipboardFallbackEnabled
     }
 
-    func insert(_ text: String, profile: CompatibilityProfile) -> InsertionResult {
+    func insert(
+        _ text: String,
+        profile: CompatibilityProfile,
+        skipping skippedModes: Set<InsertionMode> = []
+    ) -> InsertionResult {
         guard !text.isEmpty else {
             return InsertionResult(succeeded: false, mode: profile.insertionMode, message: "No text to insert.")
         }
 
-        for mode in InsertionModePlan.modes(for: profile) {
+        for mode in InsertionModePlan.modes(for: profile, skipping: skippedModes) {
             if let result = attempt(text, mode: mode) {
                 return result
             }

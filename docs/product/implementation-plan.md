@@ -4,7 +4,7 @@
 
 This should feel like one Mac app.
 
-The user should not start Ollama, llama.cpp, or any model server. Gemma 4 E2B is the MVP model target, but the runtime must be owned by the app.
+The user should not start Ollama, llama.cpp, or any model server. Qwen3.5 4B is the MVP model target. MLX is the app-owned runtime.
 
 ## Fast Path
 
@@ -14,7 +14,7 @@ The user should not start Ollama, llama.cpp, or any model server. Gemma 4 E2B is
 4. Add tested accept/dismiss behavior.
 5. Add event-tap key capture for `Tab`, backtick, and `Esc`.
 6. Add Accessibility insertion.
-7. Bootstrap embedded Gemma 4 E2B runtime options, starting with MLX and keeping LiteRT-LM as the fallback candidate.
+7. Bootstrap the embedded Qwen3.5 4B MLX runtime, keeping LiteRT-LM as the fallback candidate.
 8. Swap the mock engine for the real local engine.
 
 ## Latency Target

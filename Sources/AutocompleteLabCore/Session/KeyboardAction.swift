@@ -43,6 +43,53 @@ public enum AutocompleteKey: Equatable, Sendable {
     }
 }
 
+public enum AcceptAllShortcut: String, CaseIterable, Equatable, Sendable {
+    case backtick
+    case optionTab
+
+    public var autocompleteKey: AutocompleteKey {
+        switch self {
+        case .backtick:
+            .backtick
+        case .optionTab:
+            .optionTab
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .backtick:
+            "Backtick"
+        case .optionTab:
+            "Option-Tab"
+        }
+    }
+
+    public var next: AcceptAllShortcut {
+        switch self {
+        case .backtick:
+            .optionTab
+        case .optionTab:
+            .backtick
+        }
+    }
+}
+
+public struct KeyboardShortcutConfiguration: Equatable, Sendable {
+    public var acceptAllShortcut: AcceptAllShortcut
+
+    public init(acceptAllShortcut: AcceptAllShortcut = .backtick) {
+        self.acceptAllShortcut = acceptAllShortcut
+    }
+
+    public static let `default` = KeyboardShortcutConfiguration()
+
+    public init(persistedAcceptAllShortcutRawValue: String?) {
+        self.acceptAllShortcut = persistedAcceptAllShortcutRawValue
+            .flatMap(AcceptAllShortcut.init(rawValue:)) ?? .backtick
+    }
+}
+
 public enum AutocompletePhysicalKey: Equatable, Sendable {
     case tab
     case backtick
@@ -100,7 +147,11 @@ public struct AutocompleteKeyMapper: Equatable, Sendable {
 }
 
 public struct KeyboardActionRouter: Equatable, Sendable {
-    public init() {}
+    public var shortcutConfiguration: KeyboardShortcutConfiguration
+
+    public init(shortcutConfiguration: KeyboardShortcutConfiguration = .default) {
+        self.shortcutConfiguration = shortcutConfiguration
+    }
 
     public func action(for key: AutocompleteKey, hasVisibleSuggestion: Bool) -> KeyboardAction {
         guard hasVisibleSuggestion else {
@@ -111,9 +162,9 @@ public struct KeyboardActionRouter: Equatable, Sendable {
         case .tab:
             return .acceptNextWord
         case .optionTab:
-            return .passThrough
+            return shortcutConfiguration.acceptAllShortcut == .optionTab ? .acceptAllVisible : .passThrough
         case .backtick:
-            return .acceptAllVisible
+            return shortcutConfiguration.acceptAllShortcut == .backtick ? .acceptAllVisible : .passThrough
         case .escape:
             return .dismiss
         case .other:
