@@ -10,22 +10,21 @@ Repo state graded: `codex/deep-research-scorecard` at `46ee5f4`, based on
 
 Baseline deep research score: **78/100**.
 
-Current implementation score after the current build pass: **85/100**.
+Current implementation score after the current build pass: **86/100**.
 
 This is a strong prototype with real engineering depth. It has local MLX
 runtime support, app compatibility profiles, privacy-safe tracing defaults,
 one-suggestion UI, next-word Tab acceptance, insertion verification, stale
 request cancellation, and a serious proof harness.
 
-It is not yet magical by the research bar. The biggest misses are:
+It is not yet magical by the research bar. The biggest remaining misses are:
 
-- The trigger gate is still too eager compared with the research timings.
+- Trigger timing now uses researched delays, but still needs fresh replay proof
+  and accepted-and-kept tuning.
 - Phrase and sentence quality rely mostly on prompt plus cleaner, not a real
   utility/ranking stack.
-- Accepted-and-kept and annoyance loops exist in core/reporting code, but the
-  live app path does not appear to close those loops yet.
-- Field-kind classification exists, but the main activation call does not pass
-  field kind into the policy.
+- Candidate generation is still mostly one model result, not 3-5 ranked
+  candidates.
 - Cross-app proof is honest but incomplete for Notes, Obsidian, Codex, Claude
   Code, Claude desktop, and real production editors.
 
@@ -49,6 +48,9 @@ Pass 1 shipped these improvements:
 - One-line visible suggestion cap under 42 characters.
 - Core behavior profiles for casual chat, email, notes, coding, docs/prose,
   bullets, forms, search, and AI chat, with prompt guidance tests.
+- Live behavior-profile metadata now flows through `CompletionRequest`, prompt
+  resolution, runtime length/token caps, display scoring, and raw trace
+  metadata.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -57,9 +59,8 @@ Remaining high-impact gaps:
 - Display score is heuristic; it does not yet use real accepted-and-kept
   probability or multi-candidate ranking.
 - Sentence mode is still a stricter boundary path, not a full first-class lane.
-- Behavior profiles now exist in core, but live profile wiring is partial:
-  AppDelegate and `CompletionRequest` still do not pass field-kind or selected
-  profile metadata through the full generation/scoring path.
+- Behavior profiles now affect the live generation/scoring path, but still need
+  screenshot-backed app slices and per-profile acceptance proof.
 - Replay-first real-app proof is still missing. The command exists, but the
   current local trace corpus fails the proof gate because it predates display
   scoring, kept-horizon events, and researched trigger delays.
@@ -318,9 +319,8 @@ these are true.
 5. Done: add typed-over and Esc prefix-family cooldowns.
 6. Done: add `<NO_SUGGESTION>` prompt/cleaner path.
 7. Done: add display-score object and trace score components.
-8. Partial: add behavior profile enum and start with notes, bullets,
-   docs/prose, AI chat. Core profiles and tests exist; live wiring is still
-   partial.
+8. Done: add behavior profile enum and start with notes, bullets, docs/prose,
+   AI chat, then wire profile metadata into live generation/scoring/tracing.
 9. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
    checklist acceptance/proof slices are still missing.
 10. Partial: build the replay-first proof command. The command exists; a fresh
@@ -333,7 +333,7 @@ every scored item reaches 100/100.
 
 Baseline status: **78/100**.
 
-Current implementation status: **85/100**. Not complete.
+Current implementation status: **86/100**. Not complete.
 
 Replay proof status:
 

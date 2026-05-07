@@ -57,7 +57,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         for request: CompletionRequest,
         behaviorProfile: AutocompleteBehaviorProfile
     ) -> String {
-        let effectiveMaxVisibleWords = min(maxVisibleWords, behaviorProfile.maxVisibleWords)
+        let effectiveMaxVisibleWords = min(maxVisibleWords, request.maxVisibleWords, behaviorProfile.maxVisibleWords)
         let sentenceGuidance = request.textBeforeCursor.endsAtSentenceBoundary
             ? "Start the next sentence naturally."
             : "Continue the current sentence."
@@ -98,9 +98,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
     }
 
     private func behaviorProfile(for request: CompletionRequest) -> AutocompleteBehaviorProfile {
-        AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
-            appBundleIdentifier: request.appBundleIdentifier
-        ))
+        request.behaviorProfile
     }
 
     private func promptContext(from textBeforeCursor: String) -> String {

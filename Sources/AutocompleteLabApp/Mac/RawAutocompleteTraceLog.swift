@@ -219,6 +219,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             "cleanedWordCount": String(cleanedSuggestion?.visibleWordCount ?? 0),
             "emptyResult": String(cleanedSuggestion == nil)
         ]
+        metadata.merge(request.behaviorProfileTraceMetadata) { current, _ in current }
         if let latencyMilliseconds {
             metadata["totalGenerationLatencyMilliseconds"] = String(latencyMilliseconds)
         }
