@@ -59,6 +59,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quietCurrentField: { [weak self] in
             self?.quietCurrentFieldFromControl()
         },
+        copyProofCommand: { [weak self] command in
+            self?.copyProofCommandToPasteboard(command)
+        },
         enableAllApps: { [weak self] in
             self?.enableAllDisabledApps()
         },
@@ -2897,6 +2900,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             app: app,
             profile: app.flatMap { profileStore.profile(for: $0.bundleIdentifier) },
             appEnabled: app.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
+        )
+    }
+
+    private func copyProofCommandToPasteboard(_ command: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(command, forType: .string)
+        DiagnosticsLog.shared.record(
+            "proof-command-copied",
+            metadata: [
+                "app": settingsCurrentAppState.bundleIdentifier ?? "none"
+            ]
         )
     }
 

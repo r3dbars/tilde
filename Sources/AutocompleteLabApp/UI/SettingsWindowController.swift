@@ -133,6 +133,60 @@ struct SettingsCurrentAppState: Equatable {
         return "Safety: \(supportStatus.userFacingSafetySummary)"
     }
 
+    var proofGuideText: String {
+        guard let bundleIdentifier else {
+            return "Proof: choose a writing app first."
+        }
+
+        switch bundleIdentifier {
+        case "com.apple.TextEdit":
+            return "Proof: copies the disposable TextEdit smoke command."
+        case "com.apple.Notes":
+            return "Proof: use only a disposable note; title, body, and checklist need separate passes."
+        case "md.obsidian":
+            return "Proof: use a disposable vault note."
+        case "com.google.Chrome":
+            return "Proof: copies the local Chrome fixture smoke command."
+        case "com.openai.codex", "com.anthropic.claude-code", "com.anthropic.claudefordesktop":
+            return "Proof: use a harmless prompt fragment; press Tab only, never Enter."
+        default:
+            return "Proof: no proof flow for this app yet."
+        }
+    }
+
+    var proofCommandText: String? {
+        guard let bundleIdentifier else {
+            return nil
+        }
+
+        switch bundleIdentifier {
+        case "com.apple.TextEdit":
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit"
+        case "com.apple.Notes":
+            return [
+                "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate",
+                "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate",
+                "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate"
+            ].joined(separator: "\n")
+        case "md.obsidian":
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate"
+        case "com.google.Chrome":
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all"
+        case "com.openai.codex":
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+        case "com.anthropic.claude-code":
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
+        case "com.anthropic.claudefordesktop":
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
+        default:
+            return nil
+        }
+    }
+
+    var canCopyProofCommand: Bool {
+        proofCommandText != nil
+    }
+
     var toggleTitle: String {
         canToggle ? "Allow suggestions in this app" : "Suggestions unavailable in this app"
     }
@@ -264,6 +318,7 @@ final class SettingsWindowController: NSObject {
     private let currentAppModeLabel = NSTextField(labelWithString: "")
     private let currentAppAcceptanceLabel = NSTextField(labelWithString: "")
     private let currentAppSafetyLabel = NSTextField(labelWithString: "")
+    private let currentAppProofLabel = NSTextField(labelWithString: "")
     private let disabledAppsLabel = NSTextField(labelWithString: "")
     private let suggestionDecisionLabel = NSTextField(labelWithString: "")
     private let toggleMirrorModeButton = NSButton(
@@ -273,6 +328,11 @@ final class SettingsWindowController: NSObject {
     )
     private let quietCurrentFieldButton = NSButton(
         title: "Quiet Current Field",
+        target: nil,
+        action: nil
+    )
+    private let copyProofCommandButton = NSButton(
+        title: "Copy Proof Command",
         target: nil,
         action: nil
     )
@@ -313,6 +373,7 @@ final class SettingsWindowController: NSObject {
     private let toggleCurrentApp: () -> Void
     private let toggleMirrorMode: () -> Void
     private let quietCurrentField: () -> Void
+    private let copyProofCommand: (String) -> Void
     private let enableAllApps: () -> Void
     private let toggleTracingPaused: () -> Void
     private let toggleRawContentTracing: () -> Void
@@ -320,6 +381,7 @@ final class SettingsWindowController: NSObject {
     private let deleteLocalLogs: () -> Void
     private let cycleAcceptAllShortcut: () -> Void
     private var currentRuntimeAction: RuntimeReadinessAction = .none
+    private var currentProofCommand: String?
 
     init(
         requestPermission: @escaping () -> Void,
@@ -329,6 +391,7 @@ final class SettingsWindowController: NSObject {
         toggleCurrentApp: @escaping () -> Void,
         toggleMirrorMode: @escaping () -> Void,
         quietCurrentField: @escaping () -> Void,
+        copyProofCommand: @escaping (String) -> Void,
         enableAllApps: @escaping () -> Void,
         toggleTracingPaused: @escaping () -> Void,
         toggleRawContentTracing: @escaping () -> Void,
@@ -343,6 +406,7 @@ final class SettingsWindowController: NSObject {
         self.toggleCurrentApp = toggleCurrentApp
         self.toggleMirrorMode = toggleMirrorMode
         self.quietCurrentField = quietCurrentField
+        self.copyProofCommand = copyProofCommand
         self.enableAllApps = enableAllApps
         self.toggleTracingPaused = toggleTracingPaused
         self.toggleRawContentTracing = toggleRawContentTracing
@@ -350,7 +414,7 @@ final class SettingsWindowController: NSObject {
         self.deleteLocalLogs = deleteLocalLogs
         self.cycleAcceptAllShortcut = cycleAcceptAllShortcut
 
-        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 720))
+        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 760))
         contentView.material = .contentBackground
         contentView.blendingMode = .behindWindow
         contentView.state = .active
@@ -363,7 +427,7 @@ final class SettingsWindowController: NSObject {
         window.title = "Autocomplete Lab"
         window.contentView = contentView
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 540, height: 660)
+        window.contentMinSize = NSSize(width: 540, height: 700)
         window.isMovableByWindowBackground = true
 
         super.init()
@@ -434,6 +498,9 @@ final class SettingsWindowController: NSObject {
         currentAppModeLabel.stringValue = currentApp.modeText
         currentAppAcceptanceLabel.stringValue = currentApp.acceptanceText
         currentAppSafetyLabel.stringValue = currentApp.safetyText
+        currentAppProofLabel.stringValue = currentApp.proofGuideText
+        currentProofCommand = currentApp.proofCommandText
+        copyProofCommandButton.isEnabled = currentApp.canCopyProofCommand
         toggleMirrorModeButton.title = currentApp.mirrorModeTitle
         toggleMirrorModeButton.state = currentApp.isMirrorForced ? .on : .off
         toggleMirrorModeButton.isEnabled = currentApp.canToggleMirrorMode
@@ -492,6 +559,7 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(currentAppModeLabel)
         configureSecondaryLabel(currentAppAcceptanceLabel)
         configureSecondaryLabel(currentAppSafetyLabel)
+        configureSecondaryLabel(currentAppProofLabel)
         configureSecondaryLabel(disabledAppsLabel)
         configureSecondaryLabel(suggestionDecisionLabel)
         privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
@@ -529,6 +597,10 @@ final class SettingsWindowController: NSObject {
         quietCurrentFieldButton.action = #selector(quietCurrentFieldControl)
         quietCurrentFieldButton.bezelStyle = .rounded
         quietCurrentFieldButton.toolTip = "Hides suggestions for this field until focus changes."
+        copyProofCommandButton.target = self
+        copyProofCommandButton.action = #selector(copyProofCommandControl)
+        copyProofCommandButton.bezelStyle = .rounded
+        copyProofCommandButton.toolTip = "Copies the exact local smoke command for this app."
         enableAllAppsButton.target = self
         enableAllAppsButton.action = #selector(enableAllAppsControl)
         enableAllAppsButton.bezelStyle = .rounded
@@ -586,9 +658,10 @@ final class SettingsWindowController: NSObject {
                     currentAppModeLabel,
                     currentAppAcceptanceLabel,
                     currentAppSafetyLabel,
+                    currentAppProofLabel,
                     toggleMirrorModeButton,
                     toggleCurrentAppButton,
-                    quietCurrentFieldButton,
+                    makeButtonRow([copyProofCommandButton, quietCurrentFieldButton]),
                     makeButtonRow([disabledAppsLabel, enableAllAppsButton])
                 ]
             ),
@@ -706,6 +779,15 @@ final class SettingsWindowController: NSObject {
     @objc
     private func quietCurrentFieldControl() {
         quietCurrentField()
+    }
+
+    @objc
+    private func copyProofCommandControl() {
+        guard let currentProofCommand else {
+            return
+        }
+
+        copyProofCommand(currentProofCommand)
     }
 
     @objc
