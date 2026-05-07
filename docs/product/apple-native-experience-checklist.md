@@ -375,12 +375,12 @@ Native target: setup feels like a normal Mac utility, not a developer tool.
 - [x] App can reveal expected model folder.
 - [x] Accessibility settings link exists.
 - [x] Settings now explains current app support, local diagnostics, and raw/screenshot capture states more plainly.
-- [ ] First run should explain Accessibility in one short paragraph.
-- [ ] Screen Recording should be explained only when screenshot proof is enabled.
+- [x] First run should explain Accessibility in one short paragraph.
+- [x] Screen Recording should be explained only when screenshot proof is enabled.
 - [ ] Local model install/repair should be fully in-app.
 - [ ] The app should start disabled until the user enables a test app.
-- [ ] First success should happen in TextEdit.
-- [ ] Onboarding should never ask users to test in private notes first.
+- [x] First success should happen in TextEdit.
+- [x] Onboarding should never ask users to test in private notes first.
 
 ## Category 11: Evidence And QA Loop
 
