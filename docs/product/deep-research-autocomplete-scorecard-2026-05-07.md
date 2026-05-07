@@ -124,6 +124,10 @@ Pass 1 shipped these improvements:
   real-app slice.
 - `script/autocomplete_trace_replay_self_test.sh` proves the CLI and
   `trace_mark --replay` skip stale rows and honor frozen slice bounds.
+- Screenshot placement now has a pure pixel offset detector that can identify
+  bounded ghost/panel drift, reject blank or low-contrast images, reject
+  excessive outliers, and feed the existing trusted visual correction policy.
+  Live auto-apply still waits for fresh real-app screenshot proof.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -528,6 +532,9 @@ these are true.
 43. Done: add a replay CLI self-test that fails an unsliced stale fixture,
    passes the fresh slice, checks frozen bounds, and covers `trace_mark
    --replay`.
+44. Done: add a pure screenshot pixel offset detector with synthetic image
+   tests and visual correction trust-gate coverage. Pending: wire live
+   screenshot auto-apply only after recorder-grade screenshot proof.
 
 ## Goal Status
 
