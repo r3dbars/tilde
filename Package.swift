@@ -15,6 +15,10 @@ let package = Package(
         .executable(
             name: "AutocompleteLab",
             targets: ["AutocompleteLabApp"]
+        ),
+        .executable(
+            name: "AutocompleteTraceReplay",
+            targets: ["AutocompleteTraceReplay"]
         )
     ],
     dependencies: [
@@ -54,6 +58,10 @@ let package = Package(
                 "Runtime/AGENTS.md",
                 "UI/AGENTS.md"
             ]
+        ),
+        .executableTarget(
+            name: "AutocompleteTraceReplay",
+            dependencies: ["AutocompleteLabCore"]
         ),
         .testTarget(
             name: "AutocompleteLabCoreTests",
