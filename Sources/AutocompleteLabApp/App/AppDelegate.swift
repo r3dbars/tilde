@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let pollingCadencePolicy = FocusPollingCadencePolicy()
     private let insertionVerification = InsertionVerification()
     private let insertionRetryPolicy = InsertionRetryPolicy()
+    private let insertionVerificationScheduler = InsertionVerificationScheduler()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
@@ -60,7 +61,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suppressedFieldIdentities: Set<FocusedFieldIdentity> = []
     private var disabledBundleIdentifiers: Set<String> = []
     private var debounceTask: Task<Void, Never>?
-    private var insertionVerificationTask: Task<Void, Never>?
     private var runtimeWarmTask: Task<Void, Never>?
     private var suggestionRequestGate = SuggestionRequestGate()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
@@ -99,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         DiagnosticsLog.shared.record("terminate")
         debounceTask?.cancel()
-        insertionVerificationTask?.cancel()
+        insertionVerificationScheduler.cancel()
         runtimeWarmTask?.cancel()
         invalidatePendingSuggestionRequest()
         modelRuntime.cancel()
@@ -757,10 +757,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        insertionVerificationTask?.cancel()
-        insertionVerificationTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(140))
-            guard !Task.isCancelled else {
+        insertionVerificationScheduler.schedule { [weak self] in
+            guard let self else {
                 return
             }
 
