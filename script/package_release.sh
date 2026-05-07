@@ -99,6 +99,9 @@ case "$MODE" in
       --wait
     xcrun stapler staple "$APP_BUNDLE"
     spctl --assess --type execute --verbose=4 "$APP_BUNDLE"
+    rm -f "$ZIP_PATH"
+    ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP_PATH"
+    echo "Stapled release archive recreated: $ZIP_PATH"
     ;;
   *)
     usage >&2

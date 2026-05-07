@@ -55,20 +55,20 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 - [ ] Capture `AXVisibleCharacterRange`.
 - [ ] Capture `AXInsertionPointLineNumber`.
-- [ ] Capture supported AX attributes and parameterized attributes as a compact capability snapshot.
+- [x] Capture supported AX attributes and parameterized attributes as a compact capability snapshot.
 - [ ] Record AX errors by attribute without raw text.
 - [ ] Record AX timeout/cannot-complete errors.
-- [ ] Validate caret rect against element rect.
-- [ ] Validate caret rect against window rect.
+- [x] Validate caret rect against element rect.
+- [x] Validate caret rect against window rect.
 - [ ] Validate caret rect against current screen frame after coordinate conversion.
-- [ ] Validate text line rect against element/window rect.
+- [x] Validate text line rect against element/window rect.
 - [ ] Reject jumps that move too far from the previous caret while text did not change.
 - [ ] Reject stale caret rects after scroll or focus churn.
 - [ ] Add a short geometry history per field.
 - [ ] Add reason codes: zeroHeight, nonfinite, outsideElement, outsideWindow, offScreen, stale, jumpedTooFar, missingBounds.
-- [ ] Add tests for zero-width caret rects.
-- [ ] Add tests for browser zero-height caret rects.
-- [ ] Add tests for outside-field and outside-window rects.
+- [x] Add tests for zero-width caret rects.
+- [x] Add tests for browser zero-height caret rects.
+- [x] Add tests for outside-field and outside-window rects.
 - [ ] Add tests for stale geometry rejection.
 - [ ] Add tests for wrapped line rect validation.
 - [ ] Add tests for visible range mismatch.
@@ -84,8 +84,8 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [ ] Register for window moved/resized changes.
 - [ ] Reclassify from scratch on focus changes.
 - [ ] Re-read geometry on selection/value/window changes.
-- [ ] Keep bounded polling as a recovery layer.
-- [ ] Use active polling only while a suggestion is visible.
+- [x] Keep bounded polling as a recovery layer.
+- [x] Use active polling only while a suggestion is visible.
 - [ ] Use watch polling for flaky apps only.
 - [ ] Add trace metadata for update source: observer, activePoll, watchPoll, idlePoll, manualRefresh.
 - [ ] Add diagnostics for observer registration failures.
@@ -104,7 +104,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Add per-mode retry policy for AX value replacement.
 - [x] Add per-mode retry policy for key events.
 - [x] Keep clipboard fallback opt-in only.
-- [ ] Never use clipboard fallback for sensitive profiles.
+- [x] Never use clipboard fallback for sensitive profiles.
 - [x] Add insertion failure trace buckets by app and mode.
 - [ ] Add tests for Notes-style AX no-op success.
 - [ ] Add tests for Chrome-style value replacement.
@@ -141,7 +141,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Add Cursor diagnostics profile.
 - [ ] Add Atlas diagnostics profile once focused AX is reliable.
 - [x] Keep Mail compose diagnostics-only.
-- [ ] Add explicit unsupported records for high-risk apps.
+- [x] Add explicit unsupported records for high-risk apps.
 - [x] Add tests for profile defaults.
 - [x] Add tests that unknown apps remain blocked.
 
@@ -170,14 +170,14 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [ ] Make first-run model install a real in-app action.
 - [ ] Add "Install local model" to settings when the model folder is missing.
 - [ ] Add "Retry model load" after install or repair.
-- [ ] Show clear missing/repair/ready states in plain language.
+- [x] Show clear missing/repair/ready states in plain language.
 - [x] Update runtime docs to Qwen3.5 4B as the default.
 - [x] Remove stale Gemma default copy from README and research docs.
 - [x] State the macOS 26 requirement clearly in beta docs.
 - [ ] Decide whether macOS target can be lowered.
-- [ ] Bundle or install the model in an app-owned path.
-- [ ] Never require Ollama, llama.cpp, or a user-started server.
-- [ ] Add a beta gate that fails if the app is running mock fallback.
+- [x] Bundle or install the model in an app-owned path.
+- [x] Never require Ollama, llama.cpp, or a user-started server.
+- [x] Add a beta gate that fails if the app is running mock fallback.
 - [ ] Add latency proof for current default model.
 
 ## P1: Manual QA And Proof
@@ -196,7 +196,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [ ] Add Chrome contenteditable smoke.
 - [ ] Add Obsidian CodeMirror smoke.
 - [ ] Add Codex prompt smoke.
-- [ ] Add unsupported-app smoke.
+- [x] Add unsupported-app smoke.
 - [ ] Add no-Accessibility-permission smoke.
 
 ## P1: Trace Analysis
@@ -212,7 +212,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Add summary by app and update source.
 - [x] Add summary by app and AX failure reason.
 - [ ] Add `script/geometry_trace_report.py`.
-- [ ] Extend `script/check_trace_eval.sh` to enforce geometry proof.
+- [x] Extend `script/check_trace_eval.sh` to enforce geometry proof.
 - [x] Export a short local HTML report for manual review.
 
 ## P1: AppDelegate Refactor
@@ -238,20 +238,20 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P2: Packaging And Beta
 
-- [ ] Recreate the zip after stapling during notarized packaging.
-- [ ] Add beta packet proof for app version, git commit, model state, smoke state, and checksum.
-- [ ] Add "known unsupported apps" to beta notes.
-- [ ] Add feedback questions: helped, interrupted, broke trust, wrong app, too slow.
-- [ ] Add a one-command beta readiness report.
-- [ ] Add a private beta stop condition checklist.
-- [ ] Add rollback instructions.
+- [x] Recreate the zip after stapling during notarized packaging.
+- [x] Add beta packet proof for app version, git commit, model state, smoke state, and checksum.
+- [x] Add "known unsupported apps" to beta notes.
+- [x] Add feedback questions: helped, interrupted, broke trust, wrong app, too slow.
+- [x] Add a one-command beta readiness report.
+- [x] Add a private beta stop condition checklist.
+- [x] Add rollback instructions.
 
 ## Stop Conditions
 
 - [ ] Stop beta if insertion happens in the wrong app.
 - [ ] Stop beta if a suggestion appears in a sensitive field.
-- [ ] Stop beta if Tab is captured without a visible suggestion.
-- [ ] Stop beta if model setup requires a separate server.
-- [ ] Stop beta if the app falls back to mock runtime.
+- [x] Stop beta if Tab is captured without a visible suggestion.
+- [x] Stop beta if model setup requires a separate server.
+- [x] Stop beta if the app falls back to mock runtime.
 - [ ] Stop beta if the panel frequently detaches from the typing location.
-- [ ] Stop beta if users cannot understand why suggestions are missing.
+- [x] Stop beta if users cannot understand why suggestions are missing.
