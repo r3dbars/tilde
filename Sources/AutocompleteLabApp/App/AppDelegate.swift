@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wordBoundaryDelayMilliseconds: 0,
         pauseDelayMilliseconds: 15
     )
-    private let modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
+    private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
     private var completionLengthConfiguration: CompletionLengthConfiguration {
         modelRuntimeBundle.lengthConfiguration
     }
@@ -414,6 +414,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.applyRuntimeState(state)
             }
         }
+    }
+
+    private func reloadModelRuntime(reason: String) {
+        runtimeWarmTask?.cancel()
+        invalidatePendingSuggestionRequest()
+        hideSuggestion(reason: "runtime-reload")
+
+        modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
+        engine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
+        currentRuntimeState = .unavailable(reason: "rechecking model")
+
+        var metadata = modelRuntimeBundle.diagnosticsMetadata
+        metadata["reason"] = reason
+        DiagnosticsLog.shared.record("runtime-bootstrap", metadata: metadata)
+        refreshRuntimeChrome()
+        warmModelRuntime()
     }
 
     private func applyRuntimeState(_ state: LocalRuntimeState) {
@@ -3796,8 +3812,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch action {
         case .revealModelFolder:
             revealModelFolder()
+            reloadModelRuntime(reason: "model-folder-action")
         case .retry:
-            warmModelRuntime()
+            reloadModelRuntime(reason: "retry-action")
         case .wait, .none:
             break
         }
