@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
     )
-    private let accessibilityObserverRouter = AccessibilityObserverEventRouter()
+    private let accessibilityObserverCoordinator = AccessibilityObserverCoordinator()
     private let diagnosticsWindow = DiagnosticsWindowController()
     private lazy var settingsWindow = SettingsWindowController(
         requestPermission: { [weak self] in
@@ -599,8 +599,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && profile?.isSensitive == false
             && appEnabled
         let usesObserverUpdates = frontmostApp.map {
-            profile?.supportsObserverUpdates == true
-                && accessibilityObserver.isTracking(processIdentifier: $0.processIdentifier)
+            accessibilityObserverCoordinator.usesObserverUpdates(
+                profile: profile,
+                isTrackingFocusedApp: accessibilityObserver.isTracking(processIdentifier: $0.processIdentifier)
+            )
         } ?? false
 
         return focusedTextUpdateSourcePolicy.pollingSource(
@@ -828,7 +830,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for app: RunningApplicationInfo,
         profile: CompatibilityProfile
     ) {
-        guard profile.supportsObserverUpdates else {
+        guard accessibilityObserverCoordinator.observationMode(for: profile) == .observeFocusedApp else {
             accessibilityObserver.stopTrackingAll()
             return
         }
@@ -841,19 +843,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleAccessibilityObserverEvent(_ event: AccessibilityObserverEvent) {
-        guard let frontmostApp = accessibilityClient.frontmostApplication(),
-              frontmostApp.processIdentifier == event.processIdentifier else {
+        guard let frontmostApp = accessibilityClient.frontmostApplication() else {
             return
         }
 
-        let action = accessibilityObserverRouter.route(event.kind)
+        guard let decision = accessibilityObserverCoordinator.eventDecision(
+            for: event,
+            frontmostProcessIdentifier: frontmostApp.processIdentifier
+        ) else {
+            return
+        }
+
         DiagnosticsLog.shared.record(
             "accessibility-observer-event",
-            metadata: event.metadata
-                .merging(["route": action.rawValue]) { current, _ in current }
+            metadata: decision.metadata
         )
 
-        switch action {
+        switch decision.action {
         case .reclassifyFocusedContext:
             clearFocusedFieldState(hideReason: "observer-focus-changed")
         case .refreshFocusedGeometry:
