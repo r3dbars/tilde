@@ -103,12 +103,16 @@ struct CommandContextPanelState: Equatable {
         case .denylisted:
             return "Path: off for blocked app"
         case .unsupported:
-            return "Path: copy fallback only; inline stays off"
+            return "Path: selected-text copy fallback only; inline stays off"
         }
     }
 
     var privacyText: String {
-        "Privacy: runs only when you press Suggest, uses the local model, and copies only when you press Copy."
+        if case .unsupported = supportStatus {
+            return "Privacy: unsupported apps require selected text, use the local model, and copy only when you press Copy."
+        }
+
+        return "Privacy: runs only when you press Suggest, uses the local model, and copies only when you press Copy."
     }
 
     var normalTypingText: String {
@@ -179,6 +183,11 @@ struct CommandContextPanelState: Equatable {
 
         if context.isSecure {
             return "Secure fields stay off."
+        }
+
+        if case .unsupported = supportStatus,
+           context.selectedTextLength == 0 {
+            return "Select text first; unsupported apps do not read the whole field."
         }
 
         guard context.hasRequestText else {

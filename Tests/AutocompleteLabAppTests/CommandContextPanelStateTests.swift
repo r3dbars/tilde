@@ -4,8 +4,8 @@ import AutocompleteLabCore
 
 @Suite("Command context panel state")
 struct CommandContextPanelStateTests {
-    @Test("Unsupported apps use copy fallback without enabling inline")
-    func unsupportedAppsUseCopyFallbackWithoutEnablingInline() {
+    @Test("Unsupported apps require selected-text copy fallback")
+    func unsupportedAppsRequireSelectedTextCopyFallback() {
         let state = CommandContextPanelState(
             appDisplayName: "Atlas",
             bundleIdentifier: "com.openai.atlas",
@@ -18,11 +18,41 @@ struct CommandContextPanelStateTests {
             statusMessage: ""
         )
 
-        #expect(state.pathText == "Path: copy fallback only; inline stays off")
+        #expect(state.pathText == "Path: selected-text copy fallback only; inline stays off")
         #expect(state.contextText.contains("current field, 24 chars before cursor"))
-        #expect(state.canRequestSuggestion)
+        #expect(!state.canRequestSuggestion)
         #expect(state.canCopySuggestion)
+        #expect(
+            state.privacyText
+                == "Privacy: unsupported apps require selected text, use the local model, and copy only when you press Copy."
+        )
         #expect(state.normalTypingText == "Normal typing: untouched; this opens only from the menu or Settings.")
+        #expect(
+            state.requestUnavailableReason
+                == "Select text first; unsupported apps do not read the whole field."
+        )
+        #expect(
+            state.statusText
+                == "Not ready: Select text first; unsupported apps do not read the whole field."
+        )
+    }
+
+    @Test("Unsupported apps can suggest from selected text")
+    func unsupportedAppsCanSuggestFromSelectedText() {
+        let state = CommandContextPanelState(
+            appDisplayName: "Atlas",
+            bundleIdentifier: "com.openai.atlas",
+            supportStatus: .unsupported,
+            isAppEnabled: false,
+            runtimeReport: readyRuntime,
+            context: selectedContext,
+            suggestionText: " next step",
+            isLoading: false,
+            statusMessage: ""
+        )
+
+        #expect(state.canRequestSuggestion)
+        #expect(state.contextText.contains("selected text, 18 chars"))
         #expect(state.statusText == "Ready: press Suggest. Copy writes to clipboard only.")
     }
 
@@ -143,6 +173,17 @@ private let editableContext = CommandContextSnapshot(
     textBeforeCursorLength: 24,
     textAfterCursorLength: 0,
     selectedTextLength: 0,
+    isSecure: false,
+    fieldKind: .multilineCompose,
+    canInsertWithAccessibility: true,
+    hasCaretBounds: true,
+    hasFieldBounds: true
+)
+
+private let selectedContext = CommandContextSnapshot(
+    textBeforeCursorLength: 24,
+    textAfterCursorLength: 0,
+    selectedTextLength: 18,
     isSecure: false,
     fieldKind: .multilineCompose,
     canInsertWithAccessibility: true,
