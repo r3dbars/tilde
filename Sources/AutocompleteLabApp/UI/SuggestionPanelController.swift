@@ -116,6 +116,21 @@ final class SuggestionPanelController {
                 screenFrame: screenFrame,
                 clippingFrame: appKitClippingRect
             )
+            guard SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(frame) else {
+                hide()
+                DiagnosticsLog.shared.record(
+                    "suggestion-panel-frame-suppressed",
+                    metadata: [
+                        "reason": "inline-width-too-small",
+                        "renderMode": renderMode.rawValue,
+                        "anchor": compactFrameDescription(anchorRect),
+                        "frame": compactFrameDescription(frame),
+                        "clipping": clippingRect.map(compactFrameDescription) ?? "none",
+                        "screen": compactFrameDescription(screenFrame)
+                    ]
+                )
+                return nil
+            }
 
         case .floatingMirror:
             frame = SuggestionPanelFrameCalculator.floatingMirrorFrame(

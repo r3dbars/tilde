@@ -1769,14 +1769,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastClippingRect = placement.clippingRect
         lastTextStyle = context.textStyle
         lastRenderMode = placement.renderMode
-        let panelRect = suggestionPanel.show(
+        guard let panelRect = suggestionPanel.show(
             text: suggestion.visibleText,
             near: placement.anchorRect,
             alignedTo: placement.renderMode == .inlineAdjacent ? placement.textLineRect : nil,
             boundedBy: placement.clippingRect,
             style: context.textStyle,
             renderMode: placement.renderMode
-        )
+        ) else {
+            let reason = "panel-frame-unusable"
+            setSuggestionDecision("Blocked: \(reason)")
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: suggestionID,
+                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity.traceDescription,
+                requestMode: request.mode.rawValue,
+                triggerReason: triggerReason,
+                textBeforeCursor: request.textBeforeCursor,
+                textAfterCursor: request.textAfterCursor,
+                displayedText: suggestion.visibleText,
+                latencyMilliseconds: latencyMilliseconds,
+                reason: reason,
+                metadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode)
+                    .merging(learningAdjustment.metadata) { current, _ in current }
+                    .merging(placement.metadata) { current, _ in current }
+            )
+            recordSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                metadata: [
+                    "reason": reason
+                ]
+                .merging(learningAdjustment.metadata) { current, _ in current }
+                .merging(placement.metadata) { current, _ in current }
+            )
+            hideSuggestion(reason: reason)
+            return
+        }
         let screenshotCapture = captureTraceScreenshot(
             around: [
                 placement.anchorRect,
@@ -1812,7 +1843,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "visibleWords": String(suggestion.visibleWordCount),
                 "anchorRect": compactRectDescription(placement.anchorRect),
                 "textLineRect": placement.textLineRect.map(compactRectDescription) ?? "none",
-                "suggestionPanelRect": panelRect.map(compactRectDescription) ?? "none",
+                "suggestionPanelRect": compactRectDescription(panelRect),
                 "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none",
                 "screenshotCaptureRect": screenshotCapture.rectDescription
             ]
@@ -1834,7 +1865,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "latencyMilliseconds": String(latencyMilliseconds),
                 "anchorRect": compactRectDescription(placement.anchorRect),
                 "textLineRect": placement.textLineRect.map(compactRectDescription) ?? "none",
-                "suggestionPanelRect": panelRect.map(compactRectDescription) ?? "none",
+                "suggestionPanelRect": compactRectDescription(panelRect),
                 "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none",
                 "screenshotCaptureRect": screenshotCapture.rectDescription
             ]
@@ -2065,14 +2096,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         currentSuggestionDisplayedText = suggestion.visibleText
-        suggestionPanel.show(
+        guard suggestionPanel.show(
             text: suggestion.visibleText,
             near: caretRect,
             alignedTo: lastTextLineRect,
             boundedBy: lastClippingRect,
             style: lastTextStyle,
             renderMode: lastRenderMode ?? .inlineAdjacent
-        )
+        ) != nil else {
+            hideSuggestion(reason: "panel-frame-unusable")
+            return
+        }
         updateKeyboardEventTapSnapshot()
     }
 
