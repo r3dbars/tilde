@@ -59,7 +59,7 @@ struct SettingsCurrentAppState: Equatable {
             return "Current app: \(displayName) is \(supportStatus.supportLevel.menuName)"
         }
 
-        return "Current app: \(displayName) is \(supportStatus.supportLevel.menuName) and \(isEnabled ? "allowed" : "blocked")"
+        return "Current app: \(displayName) is \(supportStatus.supportLevel.menuName) and \(isEnabled ? "on" : "off")"
     }
 
     var detailText: String {
@@ -75,7 +75,7 @@ struct SettingsCurrentAppState: Equatable {
             return "\(supportStatus.userFacingReason) Suggestions are on for this app."
         }
 
-        return "\(supportStatus.userFacingReason) Suggestions are blocked by your app list."
+        return "\(supportStatus.userFacingReason) Suggestions are off for this app. Turn them on only where you want to test."
     }
 
     var modeText: String {

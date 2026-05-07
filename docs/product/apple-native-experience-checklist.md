@@ -67,7 +67,7 @@ unsure. Wrong-place text is worse than no suggestion.
 | Suggestion quality | 8 | 87 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, learned word completion is app-scoped, dogfood prompts are stricter, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
 | Failure restraint | 8 | 90 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, stale geometry suppresses display, too-narrow inline placement suppresses instead of showing a sliver, event-tap disablement fails closed, prompt full accept requires proof, placement uncertainty now hides stale ghosts and feeds field quiet mode, active quiet mode is visible in Diagnostics, and unsupported apps explain their stance. Real-app proof remains open. |
 | User control | 6 | 100 | 100 | Settings and the menu now expose pause, current-field silence, app blocking, support status, per-app render mode, force-mirror override, an app-proof starter, privacy diagnostics, temporary raw/screenshot capture, local log deletion, direct accept-all shortcut editing, and why the last suggestion was hidden. |
-| Onboarding and setup | 4 | 92 | 100 | Settings explains Accessibility in one short paragraph, only mentions Screen Recording when screenshot capture is on, points first success at TextEdit, and now installs or repairs the app-owned MLX model in-app with progress, cancellation, failure retry, validation, and runtime warmup. The remaining setup gap is default app enablement and plainer offline/model-host recovery copy. |
+| Onboarding and setup | 4 | 96 | 100 | Settings explains Accessibility in one short paragraph, only mentions Screen Recording when screenshot capture is on, starts fresh installs with suggestion-capable apps off, points first success at enabling TextEdit, and installs or repairs the local model in-app with plain no-model-server recovery copy, progress, cancellation, failure retry, validation, and runtime warmup. A guided post-enable proof pass remains open. |
 | Evidence and QA loop | 4 | 98 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
 
 Weighted score: 84/100.
@@ -368,7 +368,7 @@ Native target: a user can understand and control the app in 20 seconds.
 
 ## Category 10: Onboarding And Setup
 
-Current score: 92/100.
+Current score: 96/100.
 
 Native target: setup feels like a normal Mac utility, not a developer tool.
 
@@ -381,10 +381,10 @@ Native target: setup feels like a normal Mac utility, not a developer tool.
 - [x] First run should explain Accessibility in one short paragraph.
 - [x] Screen Recording should be explained only when screenshot proof is enabled.
 - [x] Local model install/repair should be fully in-app.
-- [ ] The app should start disabled until the user enables a test app.
+- [x] The app should start disabled until the user enables a test app.
 - [x] Model install should be cancellable from Settings.
 - [x] Failed model installs should leave a retry path.
-- [ ] Offline/model-host install errors should have plainer recovery copy.
+- [x] Offline/model-host install errors should have plainer recovery copy.
 - [x] First success should happen in TextEdit.
 - [x] Onboarding should never ask users to test in private notes first.
 

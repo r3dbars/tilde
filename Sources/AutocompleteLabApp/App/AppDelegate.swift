@@ -165,6 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let slowFocusedTextPollLatencyMilliseconds = 80
     private var focusedTextPollingPause = FocusedTextPollingPause()
     private var suggestionsPaused = false
+    private var appEnablementSetupCompleted = true
     private var keyboardShortcutConfiguration = KeyboardShortcutConfiguration.default
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -507,7 +508,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .downloadNeeded, .repairNeeded, .runtimeUnavailable, .failed:
             return true
         case .warming, .ready:
-            return false
+            return !appEnablementSetupCompleted
         }
     }
 
@@ -4848,6 +4849,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         selection.set(app.bundleIdentifier, disabled: shouldDisable)
         disabledBundleIdentifiers = selection.bundleIdentifiers
 
+        if !shouldDisable {
+            markAppEnablementSetupCompleted()
+        }
+
         if shouldDisable {
             let context = currentAnnoyanceContext(appBundleIdentifier: app.bundleIdentifier)
                 ?? annoyanceContext(
@@ -4971,6 +4976,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let disabledCount = selection.count
         selection.clear()
         disabledBundleIdentifiers = selection.bundleIdentifiers
+        markAppEnablementSetupCompleted()
         persistDisabledApps()
 
         let frontmostApp = targetAppForControls()
@@ -5124,6 +5130,10 @@ private extension AppDelegate {
         "SuggestionsPaused"
     }
 
+    static var appEnablementSetupCompletedDefaultsKey: String {
+        "AppEnablementSetupCompleted"
+    }
+
     static var acceptAllShortcutDefaultsKey: String {
         "AcceptAllShortcut"
     }
@@ -5148,10 +5158,28 @@ private extension AppDelegate {
     }
 
     func loadDisabledApps() {
-        let persisted = UserDefaults.standard.stringArray(forKey: Self.disabledAppsDefaultsKey) ?? []
+        let defaults = UserDefaults.standard
+        let disabledAppsKeyExists = defaults.object(forKey: Self.disabledAppsDefaultsKey) != nil
+        let setupKeyExists = defaults.object(forKey: Self.appEnablementSetupCompletedDefaultsKey) != nil
+
+        if disabledAppsKeyExists {
+            let persisted = defaults.stringArray(forKey: Self.disabledAppsDefaultsKey) ?? []
+            disabledBundleIdentifiers = DisabledAppSelection(
+                persistedBundleIdentifiers: persisted
+            ).bundleIdentifiers
+            appEnablementSetupCompleted = setupKeyExists
+                ? defaults.bool(forKey: Self.appEnablementSetupCompletedDefaultsKey)
+                : true
+            defaults.set(appEnablementSetupCompleted, forKey: Self.appEnablementSetupCompletedDefaultsKey)
+            return
+        }
+
         disabledBundleIdentifiers = DisabledAppSelection(
-            persistedBundleIdentifiers: persisted
+            defaultOffProfileStore: profileStore
         ).bundleIdentifiers
+        appEnablementSetupCompleted = false
+        defaults.set(false, forKey: Self.appEnablementSetupCompletedDefaultsKey)
+        persistDisabledApps()
     }
 
     func persistDisabledApps() {
@@ -5160,6 +5188,15 @@ private extension AppDelegate {
             selection.persistedBundleIdentifiers,
             forKey: Self.disabledAppsDefaultsKey
         )
+    }
+
+    func markAppEnablementSetupCompleted() {
+        guard !appEnablementSetupCompleted else {
+            return
+        }
+
+        appEnablementSetupCompleted = true
+        UserDefaults.standard.set(true, forKey: Self.appEnablementSetupCompletedDefaultsKey)
     }
 
     func loadKeyboardShortcutConfiguration() {

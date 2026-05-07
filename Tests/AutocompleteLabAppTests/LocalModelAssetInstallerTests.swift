@@ -32,4 +32,20 @@ struct LocalModelAssetInstallerTests {
             try await installer.install()
         }
     }
+
+    @Test("Installer errors use plain recovery copy")
+    func installerErrorsUsePlainRecoveryCopy() {
+        #expect(
+            LocalModelAssetInstallerError.missingSource(model: "qwen35-9b").errorDescription
+                == "This model cannot be installed in the app yet: qwen35-9b. Open the model folder or choose the default model."
+        )
+        #expect(
+            LocalModelAssetInstallerError.invalidRepository("bad repo").errorDescription
+                == "The model download address is invalid: bad repo."
+        )
+        #expect(
+            LocalModelAssetInstallerError.invalidAfterInstall("missing config.json").errorDescription
+                == "The downloaded model files still look incomplete: missing config.json."
+        )
+    }
 }

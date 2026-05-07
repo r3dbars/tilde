@@ -97,6 +97,9 @@ Pass 1 shipped these improvements:
 - Diagnostics export now creates a redacted privacy bundle with a manifest,
   checklist, redacted JSONL, survival report, visual calibration report, and
   HTML report instead of exposing raw trace rows through the export path.
+- Fresh installs now start with suggestion-capable apps off, keep Settings open
+  until a test app is enabled, and use plainer local-model recovery copy that
+  says Ollama or another model server is not needed.
 - Prompt/context metadata now includes trace-safe partial-word shape: counts,
   casing, digits, hyphen, and apostrophe only.
 - Accepted insertions now arm a one-step Command-Z restore path for the same

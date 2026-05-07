@@ -63,4 +63,17 @@ struct DisabledAppSelectionTests {
         #expect(selection.isEmpty)
         #expect(selection.persistedBundleIdentifiers == [])
     }
+
+    @Test("Fresh install default off includes only suggestion capable apps")
+    func freshInstallDefaultOffIncludesOnlySuggestionCapableApps() {
+        let selection = DisabledAppSelection(defaultOffProfileStore: .mvp)
+
+        #expect(selection.contains("com.apple.TextEdit"))
+        #expect(selection.contains("com.apple.Notes"))
+        #expect(selection.contains("md.obsidian"))
+        #expect(selection.contains("com.google.Chrome"))
+        #expect(!selection.contains("com.apple.mail"))
+        #expect(!selection.contains("com.apple.Safari"))
+        #expect(!selection.contains("com.apple.Passwords"))
+    }
 }

@@ -59,7 +59,7 @@ struct RuntimePolicyTests {
 
         #expect(report.stage == .runtimeUnavailable)
         #expect(report.summary == "runtime unavailable (MLX); fallback: ready (mock)")
-        #expect(report.detail == "MLX runtime is not linked yet")
+        #expect(report.detail == "This build is missing its local model engine. A separate model server will not fix it.")
         #expect(report.action == .none)
         #expect(!report.isReady)
         #expect(!report.allowsSuggestions)
@@ -76,7 +76,7 @@ struct RuntimePolicyTests {
 
         #expect(missingReport.stage == .downloadNeeded)
         #expect(missingReport.summary == "download needed (Qwen3.5 4B); fallback: ready (mock)")
-        #expect(missingReport.detail == "Expected MLX model folder at /tmp/gemma")
+        #expect(missingReport.detail == "The local model is not installed yet. Expected folder: /tmp/gemma")
         #expect(missingReport.action == .installModel)
 
         let invalidPlan = RuntimeBootstrapPlan(
@@ -87,7 +87,7 @@ struct RuntimePolicyTests {
 
         #expect(invalidReport.stage == .repairNeeded)
         #expect(invalidReport.summary == "model folder needs repair; fallback: ready (mock)")
-        #expect(invalidReport.detail == "/tmp/gemma: missing config.json")
+        #expect(invalidReport.detail == "The local model folder is incomplete: missing config.json. Folder: /tmp/gemma")
         #expect(invalidReport.action == .repairModel)
 
         let unsupportedSourcePlan = RuntimeBootstrapPlan(
@@ -140,10 +140,10 @@ struct RuntimePolicyTests {
 
         #expect(missing.actionTitle == "Install Model")
         #expect(missing.isActionEnabled)
-        #expect(missing.message.contains("Model missing"))
+        #expect(missing.message.contains("You do not need Ollama or a model server"))
         #expect(repair.actionTitle == "Repair Model")
         #expect(repair.isActionEnabled)
-        #expect(repair.message.contains("Model repair needed"))
+        #expect(repair.message.contains("local model files look incomplete"))
         #expect(warming.actionTitle == "Warming...")
         #expect(!warming.isActionEnabled)
         #expect(failed.actionTitle == "Retry Model")
