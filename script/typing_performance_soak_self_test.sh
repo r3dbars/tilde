@@ -41,6 +41,12 @@ if ! grep -F "AX warnings: separate non-fatal lane" "$TMP_DIR/default.txt" >/dev
   exit 1
 fi
 
+if ! grep -F "Primer: require a TextEdit suggestion before long typing" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain the TextEdit suggestion primer" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
 if ! grep -F "TextEdit enablement: already allowed" "$TMP_DIR/default.txt" >/dev/null; then
   echo "typing soak self-test did not report TextEdit enablement state" >&2
   cat "$TMP_DIR/default.txt" >&2
