@@ -10,7 +10,9 @@ struct CompletionPromptBuilderTests {
 
         #expect(prompt.system.contains("next 5 words or fewer"))
         #expect(prompt.system.contains("Inline autocomplete"))
+        #expect(prompt.system.contains("boring connective tissue"))
         #expect(prompt.system.contains("Do not answer, explain"))
+        #expect(prompt.system.contains("Do not brainstorm, rewrite"))
         #expect(prompt.system.contains("reason"))
         #expect(prompt.user.contains("Before cursor:\nI think we should"))
         #expect(prompt.user.hasSuffix("Next words:"))

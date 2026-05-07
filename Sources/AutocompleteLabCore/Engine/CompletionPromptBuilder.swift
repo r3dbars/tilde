@@ -52,7 +52,9 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let base = """
         Inline autocomplete.
         Return only the next \(maxVisibleWords) words or fewer.
+        Prefer boring connective tissue, names, repeated local terms, closers, and the next few words the user was already likely to type.
         Continue the current sentence. Do not answer, explain, greet, quote, reason, or restart.
+        Do not brainstorm, rewrite, introduce a new topic, or complete the user's whole thought.
         """
 
         guard request.appBundleIdentifier == "com.openai.codex" else {
