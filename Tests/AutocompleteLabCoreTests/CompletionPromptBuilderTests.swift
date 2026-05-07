@@ -37,6 +37,26 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("integrate it seamlessly"))
     }
 
+    @Test("Prompt includes aggregate kept style sketch")
+    func promptIncludesAggregateKeptStyleSketch() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Can we make this",
+            acceptedTextStyleSketch: AcceptedTextStyleSketch(
+                sampleCount: 3,
+                averageWordCount: 2.6,
+                terminalPunctuationRate: 0.8,
+                lowercaseStartRate: 0.7,
+                questionEndingRate: 0
+            )
+        ))
+
+        #expect(prompt.system.contains("Recent kept style sketch"))
+        #expect(prompt.system.contains("avg 2.60 words"))
+        #expect(prompt.system.contains("usually terminal punctuation"))
+        #expect(!prompt.system.contains("make this simpler"))
+    }
+
     @Test("Codex prompt does not force dogfood topics into normal writing")
     func codexPromptDoesNotForceDogfoodTopicsIntoNormalWriting() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)

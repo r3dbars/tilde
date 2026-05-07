@@ -59,6 +59,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
     ) -> String {
         let effectiveMaxVisibleWords = min(maxVisibleWords, request.maxVisibleWords, behaviorProfile.maxVisibleWords)
         let sentenceGuidance = sentenceGuidance(for: request)
+        let styleGuidance = request.acceptedTextStyleSketch?.promptGuidance ?? ""
         let modeGuidance = request.mode == .sentenceContinuation
             ? "Sentence mode: start only the next sentence's first few words. Require higher confidence and return <NO_SUGGESTION> when the next sentence is not obvious."
             : "Phrase mode: continue only the current local thought."
@@ -68,6 +69,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         Each candidate must be only the next \(effectiveMaxVisibleWords) words or fewer.
         Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, chatty, or likely to answer the prompt instead of continuing it.
         Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens.
+        \(styleGuidance)
         \(behaviorProfile.promptGuidance.joined(separator: "\n"))
         \(modeGuidance)
         Prefer boring connective tissue, names, repeated local terms, closers, and the next few words the user was already likely to type.

@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionPresentationGate = SuggestionPresentationGate()
     private let displayScorePolicy = DisplayScorePolicy()
     private var acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
+    private var acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
     private let annoyanceSuppressor = AnnoyanceSuppressorActor()
     private let screenshotTraceCapturePolicy = ScreenshotTraceCapturePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
@@ -149,6 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadDisabledApps()
         loadKeyboardShortcutConfiguration()
         loadAcceptedAndKeptLearning()
+        loadAcceptedTextStyleMemory()
         configureStatusItem()
         DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
@@ -2065,6 +2067,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 behaviorProfileID: result.tracker.behaviorProfileID
             )
         )
+        if outcome == .kept {
+            acceptedTextStyleMemory.recordKeptText(
+                result.tracker.acceptedText,
+                key: AcceptedTextStyleMemoryKey(
+                    appBundleIdentifier: result.tracker.appBundleIdentifier,
+                    fieldKind: result.tracker.fieldKind,
+                    behaviorProfileID: result.tracker.behaviorProfileID
+                )
+            )
+            persistAcceptedTextStyleMemory()
+        }
         persistAcceptedAndKeptLearning()
         return signal
     }
@@ -2086,12 +2099,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appBundleIdentifier: appBundleIdentifier,
             fieldKind: fieldClassification.kind
         ))
+        let acceptedTextStyleSketch = acceptedTextStyleMemory.sketch(
+            for: AcceptedTextStyleMemoryKey(
+                appBundleIdentifier: appBundleIdentifier,
+                fieldKind: fieldClassification.kind,
+                behaviorProfileID: behaviorProfile.id
+            )
+        )
         let request = CompletionRequest(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             appBundleIdentifier: appBundleIdentifier,
             fieldKind: fieldClassification.kind,
             behaviorProfileID: behaviorProfile.id,
+            acceptedTextStyleSketch: acceptedTextStyleSketch,
             maxVisibleWords: completionLengthConfiguration.maxVisibleWords,
             mode: requestMode,
             suggestionID: suggestionID
@@ -4418,6 +4439,10 @@ private extension AppDelegate {
         "AcceptedAndKeptLearning"
     }
 
+    static var acceptedTextStyleMemoryDefaultsKey: String {
+        "AcceptedTextStyleMemory"
+    }
+
     func loadPauseState() {
         suggestionsPaused = UserDefaults.standard.bool(forKey: Self.suggestionsPausedDefaultsKey)
     }
@@ -4475,6 +4500,27 @@ private extension AppDelegate {
         UserDefaults.standard.set(
             data,
             forKey: Self.acceptedAndKeptLearningDefaultsKey
+        )
+    }
+
+    func loadAcceptedTextStyleMemory() {
+        guard let data = UserDefaults.standard.data(forKey: Self.acceptedTextStyleMemoryDefaultsKey),
+              let store = AcceptedTextStyleMemoryStore(jsonData: data) else {
+            acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
+            return
+        }
+
+        acceptedTextStyleMemory = store
+    }
+
+    func persistAcceptedTextStyleMemory() {
+        guard let data = acceptedTextStyleMemory.jsonData() else {
+            return
+        }
+
+        UserDefaults.standard.set(
+            data,
+            forKey: Self.acceptedTextStyleMemoryDefaultsKey
         )
     }
 }
