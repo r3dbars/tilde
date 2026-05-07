@@ -79,6 +79,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        if let textBeforeCursor,
+           restartsCurrentSentence(withoutPromptEchoLabel, after: textBeforeCursor) {
+            return nil
+        }
+
         let normalizedSuggestion = mode == .wordCompletion ? withoutPromptEchoLabel : ensureLeadingSpace(withoutPromptEchoLabel)
         let trimmedSuggestion: String
         if let textBeforeCursor {
@@ -300,6 +305,24 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         return contextWords.windows(ofCount: leadPhrase.count).contains(leadPhrase)
+    }
+
+    private func restartsCurrentSentence(_ suggestion: String, after textBeforeCursor: String) -> Bool {
+        let currentSentenceWords = normalizedWords(in: currentSentence(in: textBeforeCursor))
+        let suggestionWords = normalizedWords(in: suggestion)
+
+        guard currentSentenceWords.count > 3,
+              suggestionWords.count >= 3 else {
+            return false
+        }
+
+        return Array(currentSentenceWords.prefix(3)) == Array(suggestionWords.prefix(3))
+    }
+
+    private func currentSentence(in text: String) -> String {
+        let separators = CharacterSet(charactersIn: ".!?\n")
+        let components = text.components(separatedBy: separators)
+        return components.last ?? text
     }
 
     private func normalizedWords(in text: String) -> [String] {
