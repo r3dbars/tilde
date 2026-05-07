@@ -93,6 +93,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        if mode == .phraseContinuation,
+           isAdviceOrToneDriftPhrase(suggestion.visibleText) {
+            return nil
+        }
+
         return suggestion
     }
 
@@ -170,6 +175,17 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return words.allSatisfy { Self.lowSignalWords.contains($0) }
     }
 
+    private func isAdviceOrToneDriftPhrase(_ text: String) -> Bool {
+        let words = normalizedWords(in: text)
+        guard words.count >= 2 else {
+            return false
+        }
+
+        return Self.adviceOrToneDriftStarters.contains { starter in
+            words.starts(with: starter)
+        }
+    }
+
     private func repeatsEarlierContext(_ suggestion: String, after textBeforeCursor: String) -> Bool {
         let suggestionWords = normalizedWords(in: suggestion)
         guard suggestionWords.count >= 3 else {
@@ -222,6 +238,26 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "sort of",
         "there are",
         "there is"
+    ]
+
+    private static let adviceOrToneDriftStarters: Set<[String]> = [
+        ["a", "good", "way"],
+        ["absolutely"],
+        ["great", "question"],
+        ["happy", "to", "help"],
+        ["i", "love", "this"],
+        ["i", "recommend"],
+        ["i", "suggest"],
+        ["it", "is", "important"],
+        ["it's", "important"],
+        ["one", "thing", "to", "consider"],
+        ["seamless", "experience"],
+        ["sounds", "great"],
+        ["the", "best", "way"],
+        ["this", "is", "a", "great"],
+        ["this", "is", "exciting"],
+        ["you", "may", "want"],
+        ["you", "might", "want"]
     ]
 }
 

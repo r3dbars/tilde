@@ -56,6 +56,36 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("ship this today", after: "We should")?.visibleText == " ship this today")
     }
 
+    @Test("Suppresses advice shaped new idea starters")
+    func suppressesAdviceShapedNewIdeaStarters() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("you might want to try this", after: "Maybe") == nil)
+        #expect(cleaner.clean("The best way to do this is", after: "I think") == nil)
+        #expect(cleaner.clean("it is important to remember", after: "Also") == nil)
+        #expect(cleaner.clean("One thing to consider is", after: "For launch") == nil)
+    }
+
+    @Test("Suppresses tone drift and salesy filler")
+    func suppressesToneDriftAndSalesyFiller() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("Great question, I would start", after: "So") == nil)
+        #expect(cleaner.clean("I love this idea because", after: "Honestly") == nil)
+        #expect(cleaner.clean("happy to help with that", after: "I am") == nil)
+        #expect(cleaner.clean("seamless experience for everyone", after: "Make it a") == nil)
+    }
+
+    @Test("Allows normal short continuations around gated words")
+    func allowsNormalShortContinuationsAroundGatedWords() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("to try this today", after: "You might want")?.visibleText == " to try this today")
+        #expect(cleaner.clean("is to keep it tiny", after: "The best way")?.visibleText == " is to keep it tiny")
+        #expect(cleaner.clean("matters more than polish", after: "This is important because")?.visibleText == " matters more than polish")
+        #expect(cleaner.clean("smooth and fast", after: "Make it feel")?.visibleText == " smooth and fast")
+    }
+
     @Test("Clamps oversized visible word requests")
     func clampsOversizedVisibleWordRequests() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 20)
