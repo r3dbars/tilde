@@ -366,7 +366,11 @@ Replay proof status:
 
 - Command: `swift run AutocompleteTraceReplay
   /Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`
-- Result on the current local trace corpus: proof gate **failed**, as expected
-  for stale pre-pass traces.
-- Key failures: trigger delay coverage 3%, display score coverage 0%, kept
-  horizon events 0.
+- Result on the current local trace corpus after `2811d50`: proof gate
+  **failed**, as expected for stale pre-pass traces.
+- Key failures: trigger delay coverage 3% (183/7171), display score coverage
+  0% (0/6405), candidate selection coverage 0% (0/3997), kept horizon events
+  0.
+- Useful proof still present in the stale corpus: 25,064 events, 3,261
+  presented suggestions, 289 stale cancellations, 6 app latency slices, 2 mode
+  latency slices, and 970 annoyance signals.
