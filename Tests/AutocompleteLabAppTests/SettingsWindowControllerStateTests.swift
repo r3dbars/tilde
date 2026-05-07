@@ -31,6 +31,12 @@ struct SettingsWindowControllerStateTests {
         #expect(!allowed.isMirrorForced)
         #expect(allowed.mirrorModeTitle == "Force mirror mode")
         #expect(!allowed.canQuietCurrentField)
+        #expect(allowed.proofGuideText == "Proof: copies the disposable TextEdit smoke command.")
+        #expect(
+            allowed.proofCommandText
+                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit"
+        )
+        #expect(allowed.canCopyProofCommand)
         #expect(allowed.toggleTitle == "Allow suggestions in this app")
         #expect(allowed.menuToggleTitle == "Disable TextEdit")
         #expect(allowed.blockedAppsText == "Blocked apps: none")
@@ -57,6 +63,19 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(!blocked.canToggleMirrorMode)
         #expect(blocked.mirrorModeTitle == "Force mirror mode")
+        #expect(
+            blocked.proofGuideText
+                == "Proof: use only a disposable note; title, body, and checklist need separate passes."
+        )
+        #expect(
+            blocked.proofCommandText
+                == [
+                    "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate",
+                    "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate",
+                    "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate"
+                ].joined(separator: "\n")
+        )
+        #expect(blocked.canCopyProofCommand)
         #expect(blocked.menuToggleTitle == "Enable Notes")
         #expect(blocked.blockedAppsText == "Blocked apps: 2")
         #expect(blocked.canToggle)
@@ -83,6 +102,9 @@ struct SettingsWindowControllerStateTests {
         #expect(diagnosticsOnly.safetyText == "Safety: Suggestions stay off here.")
         #expect(!diagnosticsOnly.canToggleMirrorMode)
         #expect(diagnosticsOnly.menuToggleTitle == "Suggestions unavailable in Mail")
+        #expect(diagnosticsOnly.proofGuideText == "Proof: no proof flow for this app yet.")
+        #expect(diagnosticsOnly.proofCommandText == nil)
+        #expect(!diagnosticsOnly.canCopyProofCommand)
         #expect(!diagnosticsOnly.canToggle)
 
         let unsupported = SettingsCurrentAppState(
@@ -103,6 +125,9 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(!unsupported.canToggleMirrorMode)
         #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Atlas")
+        #expect(unsupported.proofGuideText == "Proof: no proof flow for this app yet.")
+        #expect(unsupported.proofCommandText == nil)
+        #expect(!unsupported.canCopyProofCommand)
         #expect(!unsupported.canToggle)
 
         let missing = SettingsCurrentAppState(
@@ -120,6 +145,9 @@ struct SettingsWindowControllerStateTests {
         #expect(missing.safetyText == "Safety: choose a writing app first")
         #expect(!missing.canToggleMirrorMode)
         #expect(missing.menuToggleTitle == "Toggle Current App")
+        #expect(missing.proofGuideText == "Proof: choose a writing app first.")
+        #expect(missing.proofCommandText == nil)
+        #expect(!missing.canCopyProofCommand)
         #expect(!missing.canToggle)
     }
 
@@ -161,7 +189,67 @@ struct SettingsWindowControllerStateTests {
             codex.safetyText
                 == "Safety: Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Full accept stays off until no-submit proof exists."
         )
+        #expect(
+            codex.proofGuideText
+                == "Proof: use a harmless prompt fragment; press Tab only, never Enter."
+        )
+        #expect(
+            codex.proofCommandText
+                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+        )
+        #expect(codex.canCopyProofCommand)
         #expect(!codex.canToggleMirrorMode)
+    }
+
+    @Test("Proof commands cover manual-gated target apps")
+    func proofCommandsCoverManualGatedTargetApps() {
+        let store = CompatibilityProfileStore.mvp
+        let obsidian = SettingsCurrentAppState(
+            displayName: "Obsidian",
+            bundleIdentifier: "md.obsidian",
+            supportStatus: store.supportStatus(for: "md.obsidian"),
+            isEnabled: true,
+            disabledAppCount: 0
+        )
+        let chrome = SettingsCurrentAppState(
+            displayName: "Chrome",
+            bundleIdentifier: "com.google.Chrome",
+            supportStatus: store.supportStatus(for: "com.google.Chrome"),
+            isEnabled: true,
+            disabledAppCount: 0
+        )
+        let claudeCode = SettingsCurrentAppState(
+            displayName: "Claude Code",
+            bundleIdentifier: "com.anthropic.claude-code",
+            supportStatus: store.supportStatus(for: "com.anthropic.claude-code"),
+            isEnabled: true,
+            disabledAppCount: 0
+        )
+        let claude = SettingsCurrentAppState(
+            displayName: "Claude",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
+            supportStatus: store.supportStatus(for: "com.anthropic.claudefordesktop"),
+            isEnabled: true,
+            disabledAppCount: 0
+        )
+
+        #expect(obsidian.proofGuideText == "Proof: use a disposable vault note.")
+        #expect(
+            obsidian.proofCommandText
+                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate"
+        )
+        #expect(
+            chrome.proofCommandText
+                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all"
+        )
+        #expect(
+            claudeCode.proofCommandText
+                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
+        )
+        #expect(
+            claude.proofCommandText
+                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
+        )
     }
 
     @Test("Accessibility permission copy says what the app reads and keeps local")

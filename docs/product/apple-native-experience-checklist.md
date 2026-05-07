@@ -361,7 +361,7 @@ Native target: a user can understand and control the app in 20 seconds.
 - [x] User should be able to force mirror mode for an app.
 - [x] User should be able to disable suggestions for current field/session.
 - [x] User should see why a suggestion is hidden without reading logs.
-- [ ] A "make this app safe" flow should guide proof collection.
+- [x] A "make this app safe" flow should guide proof collection by copying the exact disposable/manual smoke commands from Settings.
 
 ## Category 10: Onboarding And Setup
 
@@ -441,6 +441,7 @@ Native target: every claim has proof.
 - [x] Add user-forced mirror mode for inline profiles with mirror fallback.
 - [x] Add user-controlled current-field quieting.
 - [x] Add "why disabled" text.
+- [x] Add Settings proof-command guidance for target apps.
 
 ### Pass 4: Add Native Fallback Surface
 
