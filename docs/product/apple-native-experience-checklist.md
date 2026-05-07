@@ -32,7 +32,8 @@ down without blocking typing, TextEdit now has a live typing soak where event
 tap p95 stayed at 35us, app support status is visible in Settings and the menu, Diagnostics
 separates key-capture health from AX-poll health, placement confidence is
 visible without suggestion text, placement uncertainty hides stale ghosts and
-feeds quiet mode, and Settings now reads more like a Mac utility.
+feeds quiet mode, active quiet mode is visible in Diagnostics, and Settings now
+reads more like a Mac utility.
 
 The largest miss is still visual placement proof in real apps. Ghost text can
 still be unproven in Notes, Obsidian, Claude Code, Claude desktop, and real
@@ -61,7 +62,7 @@ unsure. Wrong-place text is worse than no suggestion.
 | Native macOS visual feel | 8 | 80 | 100 | Settings moved toward native sections, checkboxes, clearer privacy/app controls, support status, "why hidden" copy, and calmer menu copy. Diagnostics and onboarding still need polish. |
 | Privacy and permissions trust | 9 | 93 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, and raw/screenshot debug capture now expires when enabled from the app UI. Stronger plain-language warnings remain open. |
 | Suggestion quality | 8 | 87 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, learned word completion is app-scoped, dogfood prompts are stricter, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
-| Failure restraint | 8 | 88 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, stale geometry suppresses display, event-tap disablement fails closed, prompt full accept requires proof, placement uncertainty now hides stale ghosts and feeds field quiet mode, and unsupported apps explain their stance. Real-app proof remains open. |
+| Failure restraint | 8 | 89 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, stale geometry suppresses display, event-tap disablement fails closed, prompt full accept requires proof, placement uncertainty now hides stale ghosts and feeds field quiet mode, active quiet mode is visible in Diagnostics, and unsupported apps explain their stance. Real-app proof remains open. |
 | User control | 6 | 88 | 100 | Settings now exposes pause, app blocking, support status, privacy diagnostics, temporary raw/screenshot capture, local log deletion, shortcut state, and why the last suggestion was hidden. Per-app modes remain open. |
 | Onboarding and setup | 4 | 73 | 100 | Settings is clearer, but first-run permission flow and model install/repair are still not one calm native flow. |
 | Evidence and QA loop | 4 | 98 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
@@ -322,7 +323,7 @@ like an assistant trying to talk.
 
 ## Category 8: Failure Restraint
 
-Current score: 88/100.
+Current score: 89/100.
 
 Native target: when the app is unsure, the user feels nothing.
 
