@@ -60,12 +60,12 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [ ] Record AX timeout/cannot-complete errors.
 - [x] Validate caret rect against element rect.
 - [x] Validate caret rect against window rect.
-- [ ] Validate caret rect against current screen frame after coordinate conversion.
+- [x] Validate caret rect against current screen frame after coordinate conversion.
 - [x] Validate text line rect against element/window rect.
 - [ ] Reject jumps that move too far from the previous caret while text did not change.
 - [ ] Reject stale caret rects after scroll or focus churn.
 - [ ] Add a short geometry history per field.
-- [ ] Add reason codes: zeroHeight, nonfinite, outsideElement, outsideWindow, offScreen, stale, jumpedTooFar, missingBounds.
+- [x] Add reason codes: zeroHeight, nonfinite, outsideElement, outsideWindow, offScreen, stale, jumpedTooFar, missingBounds.
 - [x] Add tests for zero-width caret rects.
 - [x] Add tests for browser zero-height caret rects.
 - [x] Add tests for outside-field and outside-window rects.
@@ -93,7 +93,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P0: Insertion Safety
 
-- [ ] Carry the actual insertion mode used into verification.
+- [x] Carry the actual insertion mode used into verification.
 - [x] Verify same frontmost app before marking insertion success.
 - [x] Verify same focused field identity before marking insertion success.
 - [x] Detect AX "success" with unchanged text.
@@ -185,11 +185,11 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [ ] Refresh Codex dogfood manual smoke proof.
 - [ ] Require manual smoke proof from the current commit or current archive.
 - [ ] Add smoke rows for anchor source: caret, line, field, window, off.
-- [ ] Add "wrong app insertion" as a hard fail.
-- [ ] Add "Tab stolen with no visible suggestion" as a hard fail.
-- [ ] Add "Esc does not calm the field" as a hard fail.
-- [ ] Add "suggestion shown over sensitive field" as a hard fail.
-- [ ] Add "detached bubble over whole editor" as a hard fail unless explicitly allowed.
+- [x] Add "wrong app insertion" as a hard fail.
+- [x] Add "Tab stolen with no visible suggestion" as a hard fail.
+- [x] Add "Esc does not calm the field" as a hard fail.
+- [x] Add "suggestion shown over sensitive field" as a hard fail.
+- [x] Add "detached bubble over whole editor" as a hard fail unless explicitly allowed.
 - [ ] Add TextEdit multiline/wrapped-line smoke.
 - [ ] Add Notes rich-text smoke.
 - [ ] Add Chrome textarea smoke.
@@ -219,7 +219,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 - [ ] Extract presentation policy out of `AppDelegate`.
 - [ ] Extract observer coordination out of `AppDelegate`.
-- [ ] Extract insertion verification scheduling out of `AppDelegate`.
+- [x] Extract insertion verification scheduling out of `AppDelegate`.
 - [ ] Extract trace screenshot capture out of `AppDelegate`.
 - [ ] Extract compatibility learning actions out of `AppDelegate`.
 - [ ] Keep `AppDelegate` mostly as wiring.
@@ -227,10 +227,10 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P2: Self-Healing Compatibility
 
-- [ ] Turn manual nudges into adapter recommendations.
+- [x] Turn manual nudges into adapter recommendations.
 - [ ] Add confidence thresholds for "learning should become code".
-- [ ] Add a local report that lists apps with repeated visual nudges.
-- [ ] Add a local report that lists apps with repeated detached suppression.
+- [x] Add a local report that lists apps with repeated visual nudges.
+- [x] Add a local report that lists apps with repeated detached suppression.
 - [ ] Add fixture-based visual calibration tests.
 - [ ] Explore ScreenCaptureKit for local screenshot capture.
 - [ ] Explore Vision-based caret/suggestion alignment only as a dogfood tool.
@@ -248,10 +248,10 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## Stop Conditions
 
-- [ ] Stop beta if insertion happens in the wrong app.
-- [ ] Stop beta if a suggestion appears in a sensitive field.
+- [x] Stop beta if insertion happens in the wrong app.
+- [x] Stop beta if a suggestion appears in a sensitive field.
 - [x] Stop beta if Tab is captured without a visible suggestion.
 - [x] Stop beta if model setup requires a separate server.
 - [x] Stop beta if the app falls back to mock runtime.
-- [ ] Stop beta if the panel frequently detaches from the typing location.
+- [x] Stop beta if the panel frequently detaches from the typing location.
 - [x] Stop beta if users cannot understand why suggestions are missing.
