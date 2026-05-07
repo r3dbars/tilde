@@ -94,9 +94,10 @@ evidence-backed score should stay lower until those rows are closed.
   accept-key focus mismatches as `wrong-app-or-field-before-accept` severe
   do-not-ship blockers; suppresses phrase continuation during fast typing
   bursts while leaving word completion available; and gates low-confidence
-  suggestions before display. Focused policy and trace tests pass; full smoke
-  status should still be treated as pending until the current branch completes
-  the normal validation stack.
+  suggestions before display. Added privacy tests for secure fields,
+  unsupported apps, and screenshot/raw-text separation. `swift test` passed 437
+  tests, and `./script/smoke_test.sh` passed, including bundle and diagnostics
+  log checks.
 - Five-agent continuation pass: prompt-app safety hardening, strict visual proof
   gates, focused-text AX-health cooldown, Notes/Obsidian proof triage, and
   Apple-native polish ranking all completed on branch
