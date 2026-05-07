@@ -29,6 +29,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let visibleSuggestionOutcomePolicy = VisibleSuggestionOutcomePolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
     private let suggestionPresentationPolicy = SuggestionPresentationPolicy()
+    private lazy var focusedTextSuggestionPlanner = FocusedTextSuggestionPlanner(
+        activationPolicy: activationPolicy,
+        triggerPolicy: triggerPolicy,
+        presentationPolicy: suggestionPresentationPolicy
+    )
     private var traceScreenshotCapture = TraceScreenshotCaptureCoordinator()
     private var suggestionDiagnostics = SuggestionDiagnosticsRecorder()
     private let focusedTextUpdateSourcePolicy = FocusedTextUpdateSourcePolicy()
@@ -730,143 +735,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         transitionToField(fieldIdentity)
 
-        let snapshot = FocusedTextSnapshot(
+        let plan = focusedTextSuggestionPlanner.plan(
+            context: context,
+            profile: profile,
             fieldIdentity: fieldIdentity,
-            textBeforeCursor: context.textBeforeCursor,
-            textAfterCursor: context.textAfterCursor
+            lastTextSnapshot: lastTextSnapshot,
+            hasVisibleSuggestion: visibleSuggestionState.hasVisibleSuggestion,
+            runtimeReport: runtimeReadinessReport,
+            isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
+            lastRequestedTextBeforeCursor: lastRequestedTextBeforeCursor,
+            effectiveRenderMode: { baseRenderMode in
+                compatibilityLearningStore.engine()
+                    .adjustment(for: profile.bundleIdentifier, profileRenderMode: baseRenderMode)
+                    .effectiveRenderMode
+            }
         )
 
-        guard snapshot != lastTextSnapshot else {
-            setSuggestionDecision(
-                visibleSuggestionState.hasVisibleSuggestion
-                    ? "Shown: tracking current field"
-                    : "Ready: waiting for text change"
-            )
+        switch plan {
+        case let .unchanged(plan):
+            setSuggestionDecision(plan.decisionText)
             repositionVisibleSuggestion(context: context, profile: profile)
             return
-        }
 
-        recordTypedOverSuggestionIfNeeded(
-            newTextBeforeCursor: context.textBeforeCursor,
-            fieldIdentity: fieldIdentity,
-            profile: profile
-        )
-        rememberTypedWordsIfNeeded(
-            previousSnapshot: lastTextSnapshot,
-            currentSnapshot: snapshot,
-            appBundleIdentifier: frontmostApp.bundleIdentifier
-        )
-        hideStaleSuggestionIfNeeded(
-            newTextBeforeCursor: context.textBeforeCursor,
-            fieldIdentity: fieldIdentity
-        )
-
-        lastTextSnapshot = snapshot
-        invalidatePendingSuggestionRequest()
-
-        guard profile.canPresentSuggestions else {
-            setSuggestionDecision("Blocked: profile diagnostics only")
+        case let .blocked(plan):
+            prepareChangedFocusedTextSnapshot(
+                plan.snapshot,
+                context: context,
+                fieldIdentity: fieldIdentity,
+                profile: profile,
+                appBundleIdentifier: frontmostApp.bundleIdentifier
+            )
+            setSuggestionDecision(plan.decisionText)
             suggestionDiagnostics.recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
                 profile: profile,
                 fieldIdentity: fieldIdentity,
-                metadata: [
-                    "reason": "profile-diagnostics-only"
-                ]
+                metadata: plan.metadata
             )
-            hideSuggestion()
+            if let hideReason = plan.hideReason {
+                hideSuggestion(reason: hideReason)
+            } else {
+                hideSuggestion()
+            }
             return
-        }
 
-        let runtimeReport = runtimeReadinessReport
-        guard runtimeReport.allowsSuggestions else {
-            setSuggestionDecision("Blocked: runtime \(runtimeReport.stage.rawValue)")
-            suggestionDiagnostics.recordBlockedSuggestionEvent(
-                "suggestion-blocked",
+        case let .presentationSuppressed(plan):
+            prepareChangedFocusedTextSnapshot(
+                plan.snapshot,
                 context: context,
-                profile: profile,
                 fieldIdentity: fieldIdentity,
-                metadata: [
-                    "reason": "runtime-not-ready",
-                    "readinessStage": runtimeReport.stage.rawValue
-                ]
-            )
-            hideSuggestion()
-            return
-        }
-
-        let activationDecision = activationPolicy.decision(
-            textBeforeCursor: context.textBeforeCursor,
-            textAfterCursor: context.textAfterCursor,
-            isSecure: context.isSecure,
-            selectedTextLength: context.selectedTextLength,
-            isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity)
-        )
-
-        guard activationDecision.canSuggest else {
-            setSuggestionDecision("Blocked: \(activationDecision.blockReasonDescription)")
-            suggestionDiagnostics.recordBlockedSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
                 profile: profile,
-                fieldIdentity: fieldIdentity,
-                metadata: [
-                    "reason": activationDecision.blockReasonDescription
-                ]
+                appBundleIdentifier: frontmostApp.bundleIdentifier
             )
-            hideSuggestion(reason: "activation-\(activationDecision.blockReasonDescription)")
-            return
-        }
-
-        let presentationCapabilities = SuggestionPresentationCapabilities(
-            supportsInlineSuggestions: context.capabilities.supportsInlineSuggestions,
-            hasElementRect: context.elementRect != nil,
-            hasWindowRect: context.windowRect != nil,
-            hasCaretRect: context.caretRect != nil
-        )
-        let baseRenderMode = suggestionPresentationPolicy.baseRenderMode(
-            for: profile,
-            capabilities: presentationCapabilities
-        )
-
-        guard let baseRenderMode else {
-            setSuggestionDecision("Blocked: missing inline capabilities")
-            suggestionDiagnostics.recordBlockedSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                fieldIdentity: fieldIdentity,
-                metadata: [
-                    "reason": "missing-inline-capabilities"
-                ]
-            )
-            hideSuggestion()
-            return
-        }
-        let renderMode = compatibilityLearningStore.engine()
-            .adjustment(for: profile.bundleIdentifier, profileRenderMode: baseRenderMode)
-            .effectiveRenderMode
-
-        if let suppressionReason = suggestionPresentationPolicy.suppressionReason(
-            profile: profile,
-            renderMode: renderMode,
-            capabilities: presentationCapabilities
-        ) {
-            setSuggestionDecision("Blocked: detached suggestion disabled")
+            setSuggestionDecision(plan.decisionText)
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
                 suggestionID: UUID().uuidString,
                 appBundleIdentifier: profile.bundleIdentifier,
                 fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: (activationDecision.requestMode ?? .phraseContinuation).rawValue,
+                requestMode: plan.requestMode.rawValue,
                 triggerReason: "policy",
                 textBeforeCursor: context.textBeforeCursor,
                 textAfterCursor: context.textAfterCursor,
-                reason: suppressionReason.rawValue,
+                reason: plan.reason.rawValue,
                 metadata: suggestionDiagnostics.traceGeometryMetadata(
                     context: context,
-                    renderMode: renderMode,
+                    renderMode: plan.renderMode,
                     updateSource: updateSource
                 )
             )
@@ -876,50 +811,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 profile: profile,
                 fieldIdentity: fieldIdentity,
                 metadata: [
-                    "reason": suppressionReason.rawValue
+                    "reason": plan.reason.rawValue
                 ]
             )
             hideSuggestion()
             return
-        }
 
-        let triggerDecision = triggerPolicy.decision(
-            previousTextBeforeCursor: lastRequestedTextBeforeCursor,
-            currentTextBeforeCursor: context.textBeforeCursor
-        )
-
-        guard case let .request(delayMilliseconds) = triggerDecision else {
-            if visibleSuggestionState.hasVisibleSuggestion {
-                setSuggestionDecision("Shown: waiting for cadence")
+        case let .cadenceWait(plan):
+            prepareChangedFocusedTextSnapshot(
+                plan.snapshot,
+                context: context,
+                fieldIdentity: fieldIdentity,
+                profile: profile,
+                appBundleIdentifier: frontmostApp.bundleIdentifier
+            )
+            setSuggestionDecision(plan.decisionText)
+            if plan.shouldRepositionVisibleSuggestion {
                 repositionVisibleSuggestion(context: context, profile: profile)
                 return
             }
 
-            setSuggestionDecision("Waiting: cadence policy")
-            suggestionDiagnostics.recordSuggestionEvent(
-                "suggestion-trigger-skipped",
-                context: context,
-                profile: profile,
-                metadata: [
-                    "reason": "cadence-policy"
-                ]
-            )
+            if plan.shouldRecordTriggerSkipped {
+                suggestionDiagnostics.recordSuggestionEvent(
+                    "suggestion-trigger-skipped",
+                    context: context,
+                    profile: profile,
+                    metadata: [
+                        "reason": "cadence-policy"
+                    ]
+                )
+            }
             hideSuggestion()
             return
-        }
 
-        let requestMode = activationDecision.requestMode ?? .phraseContinuation
-        setSuggestionDecision("Queued: \(requestMode.rawValue)")
-        scheduleSuggestion(
-            context: context,
-            profile: profile,
-            appBundleIdentifier: frontmostApp.bundleIdentifier,
+        case let .request(plan):
+            prepareChangedFocusedTextSnapshot(
+                plan.snapshot,
+                context: context,
+                fieldIdentity: fieldIdentity,
+                profile: profile,
+                appBundleIdentifier: frontmostApp.bundleIdentifier
+            )
+            setSuggestionDecision("Queued: \(plan.requestMode.rawValue)")
+            scheduleSuggestion(
+                context: context,
+                profile: profile,
+                appBundleIdentifier: frontmostApp.bundleIdentifier,
+                fieldIdentity: fieldIdentity,
+                renderMode: plan.renderMode,
+                delayMilliseconds: plan.delayMilliseconds,
+                requestMode: plan.requestMode,
+                updateSource: updateSource
+            )
+        }
+    }
+
+    private func prepareChangedFocusedTextSnapshot(
+        _ snapshot: FocusedTextSnapshot,
+        context: FocusedTextContext,
+        fieldIdentity: FocusedFieldIdentity,
+        profile: CompatibilityProfile,
+        appBundleIdentifier: String
+    ) {
+        recordTypedOverSuggestionIfNeeded(
+            newTextBeforeCursor: context.textBeforeCursor,
             fieldIdentity: fieldIdentity,
-            renderMode: renderMode,
-            delayMilliseconds: delayMilliseconds,
-            requestMode: requestMode,
-            updateSource: updateSource
+            profile: profile
         )
+        rememberTypedWordsIfNeeded(
+            previousSnapshot: lastTextSnapshot,
+            currentSnapshot: snapshot,
+            appBundleIdentifier: appBundleIdentifier
+        )
+        hideStaleSuggestionIfNeeded(
+            newTextBeforeCursor: context.textBeforeCursor,
+            fieldIdentity: fieldIdentity
+        )
+
+        lastTextSnapshot = snapshot
+        invalidatePendingSuggestionRequest()
     }
 
     private func allowFocusedTextAXRead(for bundleIdentifier: String) -> Bool {
