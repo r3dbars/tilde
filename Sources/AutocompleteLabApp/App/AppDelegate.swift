@@ -88,6 +88,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         cycleAcceptAllShortcut: { [weak self] in
             self?.cycleAcceptAllShortcut()
+        },
+        setAcceptAllShortcut: { [weak self] shortcut in
+            self?.setAcceptAllShortcut(shortcut)
         }
     )
 
@@ -4562,14 +4565,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func cycleAcceptAllShortcut() {
-        keyboardShortcutConfiguration.acceptAllShortcut = keyboardShortcutConfiguration.acceptAllShortcut.next
+        setAcceptAllShortcut(keyboardShortcutConfiguration.acceptAllShortcut.next)
+    }
+
+    private func setAcceptAllShortcut(_ shortcut: AcceptAllShortcut) {
+        keyboardShortcutConfiguration.acceptAllShortcut = shortcut
         persistKeyboardShortcutConfiguration()
         updateKeyboardEventTapSnapshot()
         DiagnosticsLog.shared.record(
             "keyboard-shortcut-control",
             metadata: [
                 "surface": "settings",
-                "acceptAllShortcut": keyboardShortcutConfiguration.acceptAllShortcut.rawValue
+                "acceptAllShortcut": shortcut.rawValue
             ]
         )
         refreshRuntimeChrome()

@@ -150,13 +150,13 @@ Baseline scorecard from the initial audit:
 | Context and prompt hygiene | 9 | 73 | 6.6 | Context is small and local, but lacks field metadata, style sketch, recent kept suffixes, and a hard `<NO_SUGGESTION>` prompt path. |
 | Output shape and cleanup | 8 | 88 | 7.0 | Cleaner is one of the strongest parts of the app. |
 | Local runtime and latency | 10 | 84 | 8.4 | App-owned MLX runtime, warm model, streaming, timing slices; no KV/session cache and default length is still a little long. |
-| Ghost text UX and controls | 10 | 91 | 9.1 | One suggestion, Tab next word, full accept when allowed, Esc dismiss, stale hiding, current-field/session silence, per-app force-mirror control, and app-level Command-Z restore for accepted insertions. |
+| Ghost text UX and controls | 10 | 92 | 9.2 | One suggestion, Tab next word, full accept when allowed, direct accept-all shortcut editing, Esc dismiss, stale hiding, current-field/session silence, per-app force-mirror control, and app-level Command-Z restore for accepted insertions. |
 | Mode profiles and cross-app safety | 10 | 76 | 7.6 | Strong app profiles and a user-visible per-app mirror override now exist, but behavior modes are not first-class for email, notes, bullets, docs, code, forms, search, and AI chat. |
 | Learning, annoyance, accepted-and-kept loop | 12 | 65 | 7.8 | Metrics and core types exist; live app wiring appears incomplete. |
 | Metrics, replay, and proof gates | 5 | 85 | 4.3 | Trace/report scripts are strong, and Settings can now start per-app screenshot proof from the current app; true replay-first real-app rig is still missing. |
 | Architecture and tests | 2 | 91 | 1.8 | Good policy/test structure, though AppDelegate still owns too much orchestration. |
 
-Weighted total: **79.1/100**, rounded to **79/100**.
+Weighted total: **79.2/100**, rounded to **79/100**.
 
 ## Exact Research Items
 
@@ -478,6 +478,8 @@ these are true.
    learning render-mode override and a `renderModeChanged` trace event.
 37. Done: add a Settings app-proof starter that enables temporary per-app
    screenshot tracing and opens Diagnostics for the current profiled app.
+38. Done: add direct Settings editing for the accept-all shortcut while keeping
+   the existing quick cycle button.
 
 ## Goal Status
 
