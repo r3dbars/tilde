@@ -18,12 +18,13 @@ public enum AutocompleteTraceEventType: String, Codable, Equatable, Sendable {
 }
 
 public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
     public static let currentPrivacyVersion = 1
 
     public let id: String
     public let schemaVersion: Int
     public let privacyVersion: Int
+    public let experimentArm: String
     public let timestamp: String
     public let sessionID: String
     public let suggestionID: String
@@ -51,6 +52,7 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
         case id
         case schemaVersion
         case privacyVersion
+        case experimentArm
         case timestamp
         case sessionID
         case suggestionID
@@ -79,6 +81,7 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
         id: String = UUID().uuidString,
         schemaVersion: Int = AutocompleteTraceEvent.currentSchemaVersion,
         privacyVersion: Int = AutocompleteTraceEvent.currentPrivacyVersion,
+        experimentArm: String = AutocompleteExperimentArm.length3Word.rawValue,
         timestamp: String,
         sessionID: String,
         suggestionID: String,
@@ -105,6 +108,7 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
         self.id = id
         self.schemaVersion = schemaVersion
         self.privacyVersion = privacyVersion
+        self.experimentArm = experimentArm
         self.timestamp = timestamp
         self.sessionID = sessionID
         self.suggestionID = suggestionID
@@ -134,6 +138,8 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
         id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
         schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
         privacyVersion = try container.decodeIfPresent(Int.self, forKey: .privacyVersion) ?? 0
+        experimentArm = try container.decodeIfPresent(String.self, forKey: .experimentArm)
+            ?? AutocompleteExperimentArm.length3Word.rawValue
         timestamp = try container.decode(String.self, forKey: .timestamp)
         sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID) ?? ""
         suggestionID = try container.decodeIfPresent(String.self, forKey: .suggestionID) ?? ""
@@ -163,6 +169,7 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
         try container.encode(id, forKey: .id)
         try container.encode(schemaVersion, forKey: .schemaVersion)
         try container.encode(privacyVersion, forKey: .privacyVersion)
+        try container.encode(experimentArm, forKey: .experimentArm)
         try container.encode(timestamp, forKey: .timestamp)
         try container.encode(sessionID, forKey: .sessionID)
         try container.encode(suggestionID, forKey: .suggestionID)

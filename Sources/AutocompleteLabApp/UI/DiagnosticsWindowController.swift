@@ -137,8 +137,13 @@ final class DiagnosticsWindowController {
         ))
         sections.append(acceptRateBucketsText(title: "Accept rate by app", buckets: traceSummary.acceptRateByApp))
         sections.append(acceptRateBucketsText(title: "Accept rate by mode", buckets: traceSummary.acceptRateByMode))
+        sections.append(acceptRateBucketsText(title: "Accept rate by experiment arm", buckets: traceSummary.acceptRateByExperimentArm))
         sections.append(acceptRateBucketsText(title: "Useful rate by app", buckets: traceSummary.usefulRateByApp))
         sections.append(acceptRateBucketsText(title: "Useful rate by mode", buckets: traceSummary.usefulRateByMode))
+        sections.append(acceptRateBucketsText(title: "Useful rate by experiment arm", buckets: traceSummary.usefulRateByExperimentArm))
+        sections.append(countBucketsText(title: "Presented by experiment arm", buckets: traceSummary.presentedByExperimentArm))
+        sections.append(countBucketsText(title: "Accepted and kept by experiment arm", buckets: traceSummary.acceptedAndKeptByExperimentArm))
+        sections.append(countBucketsText(title: "Suppressed by experiment arm", buckets: traceSummary.suppressedByExperimentArm))
         sections.append(countBucketsText(title: "Presented by field kind", buckets: traceSummary.presentedByFieldKind))
         sections.append(countBucketsText(title: "Accepted and kept by field kind", buckets: traceSummary.acceptedAndKeptByFieldKind))
         sections.append(countBucketsText(title: "Suppressed by reason", buckets: traceSummary.suppressedByReason))
@@ -279,7 +284,7 @@ final class DiagnosticsWindowController {
         return """
         Recent trace events:
         \(events.suffix(16).map {
-            "  \($0.timestamp) \($0.type.rawValue) mode=\($0.requestMode) app=\($0.appBundleIdentifier) shown=\($0.displayedText) accepted=\($0.acceptedText) reason=\($0.reason) latency=\(Self.latency($0.latencyMilliseconds))"
+            "  \($0.timestamp) \($0.type.rawValue) arm=\($0.experimentArm) mode=\($0.requestMode) app=\($0.appBundleIdentifier) shown=\($0.displayedText) accepted=\($0.acceptedText) reason=\($0.reason) latency=\(Self.latency($0.latencyMilliseconds))"
         }.joined(separator: "\n"))
         """
     }

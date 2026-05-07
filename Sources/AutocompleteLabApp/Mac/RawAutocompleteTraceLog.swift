@@ -12,6 +12,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     private let decoder = JSONDecoder()
     private let pauseDefaultsKey = "AutocompleteLabTracePaused"
     private let screenshotDefaultsKey = "AutocompleteLabScreenshotTraceEnabled"
+    private var experimentArmName = ""
+    private var runtimeMetadata: [String: String] = [:]
 
     private init() {
         logURL = FileManager.default
@@ -24,6 +26,17 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
 
     var currentSessionID: String {
         sessionID
+    }
+
+    var experimentArm: String {
+        get {
+            queue.sync { experimentArmName }
+        }
+        set {
+            queue.sync {
+                experimentArmName = newValue
+            }
+        }
     }
 
     var folderURL: URL {
@@ -77,6 +90,15 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
 
     func setScreenshotTracingEnabled(_ enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: screenshotDefaultsKey)
+    }
+
+    func configureRuntimeMetadata(_ metadata: [String: String]) {
+        queue.sync {
+            runtimeMetadata = metadata
+            if let experimentArm = metadata["experimentArm"], !experimentArm.isEmpty {
+                experimentArmName = experimentArm
+            }
+        }
     }
 
     func recordModelResult(
@@ -171,7 +193,21 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             return
         }
 
+        let traceConfiguration = queue.sync {
+            let resolvedExperimentArm = experimentArmName.isEmpty
+                ? AutocompleteExperimentArm.length3Word.rawValue
+                : experimentArmName
+            var mergedMetadata = runtimeMetadata
+            for (key, value) in metadata {
+                mergedMetadata[key] = value
+            }
+            mergedMetadata["experimentArm"] = resolvedExperimentArm
+
+            return (experimentArm: resolvedExperimentArm, metadata: mergedMetadata)
+        }
+
         let event = AutocompleteTraceEvent(
+            experimentArm: traceConfiguration.experimentArm,
             timestamp: ISO8601DateFormatter().string(from: Date()),
             sessionID: sessionID,
             suggestionID: suggestionID,
@@ -193,7 +229,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             outcome: outcome,
             reason: reason,
             screenshotPath: screenshotPath,
-            metadata: metadata
+            metadata: traceConfiguration.metadata
         )
 
         queue.async { [logURL, encoder] in
@@ -282,6 +318,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             <tr>
               <td>\(escape(event.timestamp))</td>
               <td>\(escape(event.type.rawValue))</td>
+              <td>\(escape(event.experimentArm))</td>
               <td>\(escape(event.requestMode))</td>
               <td>\(escape(event.appBundleIdentifier))</td>
               <td>\(escape(event.displayedText))</td>
@@ -312,6 +349,14 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             .sorted { $0.key < $1.key }
             .map { "<li><code>\(escape($0.key))</code>: \(Int(($0.value * 100).rounded()))%</li>" }
             .joined(separator: "\n")
+        let armRates = summary.acceptRateByExperimentArm
+            .sorted { $0.key < $1.key }
+            .map { "<li><code>\(escape($0.key))</code>: \(Int(($0.value * 100).rounded()))%</li>" }
+            .joined(separator: "\n")
+        let usefulArmRates = summary.usefulRateByExperimentArm
+            .sorted { $0.key < $1.key }
+            .map { "<li><code>\(escape($0.key))</code>: \(Int(($0.value * 100).rounded()))%</li>" }
+            .joined(separator: "\n")
         let suppressedReasons = summary.suppressedByReason
             .sorted { lhs, rhs in
                 if lhs.value == rhs.value {
@@ -324,6 +369,9 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             .joined(separator: "\n")
         let suppressedApps = sortedCountList(summary.suppressedByApp)
         let suppressedModes = sortedCountList(summary.suppressedByMode)
+        let presentedArms = sortedCountList(summary.presentedByExperimentArm)
+        let acceptedAndKeptArms = sortedCountList(summary.acceptedAndKeptByExperimentArm)
+        let suppressedArms = sortedCountList(summary.suppressedByExperimentArm)
         let presentedFieldKinds = sortedCountList(summary.presentedByFieldKind)
         let acceptedAndKeptFieldKinds = sortedCountList(summary.acceptedAndKeptByFieldKind)
         let suppressedFieldKinds = sortedCountList(summary.suppressedByFieldKind)
@@ -373,10 +421,20 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           <ul>\(appRates)</ul>
           <h2>Accept rate by mode</h2>
           <ul>\(modeRates)</ul>
+          <h2>Accept rate by experiment arm</h2>
+          <ul>\(armRates)</ul>
           <h2>Useful rate by app</h2>
           <ul>\(usefulAppRates)</ul>
           <h2>Useful rate by mode</h2>
           <ul>\(usefulModeRates)</ul>
+          <h2>Useful rate by experiment arm</h2>
+          <ul>\(usefulArmRates)</ul>
+          <h2>Presented by experiment arm</h2>
+          <ul>\(presentedArms)</ul>
+          <h2>Accepted and kept by experiment arm</h2>
+          <ul>\(acceptedAndKeptArms)</ul>
+          <h2>Suppressed by experiment arm</h2>
+          <ul>\(suppressedArms)</ul>
           <h2>Presented by field kind</h2>
           <ul>\(presentedFieldKinds)</ul>
           <h2>Accepted and kept by field kind</h2>
@@ -399,7 +457,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           <ol>\(misses)</ol>
           <h2>Recent events</h2>
           <table>
-            <thead><tr><th>Time</th><th>Type</th><th>Mode</th><th>App</th><th>Shown</th><th>Accepted</th><th>Reason</th><th>Screenshot</th><th>Latency ms</th></tr></thead>
+            <thead><tr><th>Time</th><th>Type</th><th>Arm</th><th>Mode</th><th>App</th><th>Shown</th><th>Accepted</th><th>Reason</th><th>Screenshot</th><th>Latency ms</th></tr></thead>
             <tbody>\(rows)</tbody>
           </table>
         </body>

@@ -151,16 +151,16 @@ The north star is simple: a build is better only when accepted text survives, wr
 
 ## P1 - Experiments
 
-- [ ] Add `experimentArm` to trace events.
-- [ ] Persist the current experiment arm locally.
-- [ ] Add a first-class 1-word vs 3-word suggestion-length experiment.
+- [x] Add `experimentArm` to trace events.
+- [x] Persist the current experiment arm locally.
+- [x] Add a first-class 1-word vs 3-word suggestion-length experiment.
 - [x] Stop treating 8-10 word suggestions as the default beta posture.
-- [ ] Add config capture for visible word count, token cap, model, prompt style, debounce, render mode, and acceptance mode.
+- [x] Add config capture for visible word count, token cap, model, prompt style, debounce, render mode, and acceptance mode.
 - [ ] Add within-user crossover helpers.
 - [ ] Counterbalance experiment order across testers.
 - [ ] Mark tiny-sample results as directional, not winners.
 - [ ] Add guardrail checks for annoyance, p95 latency, insertion success, duplicate rate, and app disable rate.
-- [ ] Add experiment slices to trace eval and Diagnostics.
+- [x] Add experiment slices to trace eval and Diagnostics.
 - [ ] Add a one-command local experiment report.
 
 ## P1 - Model Quality
@@ -171,7 +171,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [ ] Add confidence/coverage threshold experiments.
 - [ ] Track empty-result rate and blocked pre-render reason.
 - [ ] Add model-result latency buckets: first token, first visible, total generation.
-- [ ] Add p95 latency gates to `CompletionRuntimeBenchmark`.
+- [x] Add p95 latency gates to `CompletionRuntimeBenchmark`.
 - [x] Add p95 to `script/model_latency_report.py`.
 - [ ] Add model alias parity between runtime, docs, and download helper.
 - [ ] Move model acquisition into app/beta package so testers do not run Python.

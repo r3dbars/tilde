@@ -4,13 +4,14 @@ set -euo pipefail
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
 START_LINE="${AUTOCOMPLETE_LAB_TRACE_START_LINE:-0}"
 REQUIRE_APP="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP:-}"
+REQUIRE_EXPERIMENT_ARM="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_EXPERIMENT_ARM:-}"
 
 if [[ ! -f "$TRACE_PATH" ]]; then
   echo "trace log missing: $TRACE_PATH" >&2
   exit 1
 fi
 
-python3 - "$TRACE_PATH" "$START_LINE" "$REQUIRE_APP" <<'PY'
+python3 - "$TRACE_PATH" "$START_LINE" "$REQUIRE_APP" "$REQUIRE_EXPERIMENT_ARM" <<'PY'
 import json
 import sys
 from collections import Counter, defaultdict
@@ -18,6 +19,7 @@ from collections import Counter, defaultdict
 path = sys.argv[1]
 start_line = int(sys.argv[2] or "0")
 require_app = sys.argv[3]
+require_experiment_arm = sys.argv[4]
 events = []
 with open(path, "r", encoding="utf-8") as handle:
     for line_number, line in enumerate(handle, start=1):
@@ -73,14 +75,29 @@ def field_kind(event):
     metadata = event.get("metadata") or {}
     return metadata.get("fieldKind") or "unknown"
 
+def experiment_arm(event):
+    metadata = event.get("metadata") or {}
+    return event.get("experimentArm") or metadata.get("experimentArm") or "unknown"
+
 presented_field_kinds = Counter(field_kind(event) for event in presented_by_id.values())
 accepted_and_kept_field_kinds = Counter(
     field_kind(event)
     for event in accepted_text_edited
     if kept_event(event)
 )
+presented_experiment_arms = Counter(experiment_arm(event) for event in presented_by_id.values())
+accepted_and_kept_experiment_arms = Counter(
+    experiment_arm(event)
+    for event in accepted_text_edited
+    if kept_event(event)
+)
 suppressed_field_kinds = Counter(
     field_kind(event)
+    for event in events
+    if event.get("type") == "suggestionSuppressed"
+)
+suppressed_experiment_arms = Counter(
+    experiment_arm(event)
     for event in events
     if event.get("type") == "suggestionSuppressed"
 )
@@ -113,23 +130,29 @@ if not latencies:
 
 accept_by_mode = defaultdict(lambda: [0, 0])
 accept_by_app = defaultdict(lambda: [0, 0])
+accept_by_experiment_arm = defaultdict(lambda: [0, 0])
 useful_by_mode = defaultdict(lambda: [0, 0])
 useful_by_app = defaultdict(lambda: [0, 0])
+useful_by_experiment_arm = defaultdict(lambda: [0, 0])
 for event in presented_by_id.values():
     accept_by_mode[event.get("requestMode") or "unknown"][1] += 1
     accept_by_app[event.get("appBundleIdentifier") or "unknown"][1] += 1
+    accept_by_experiment_arm[experiment_arm(event)][1] += 1
     useful_by_mode[event.get("requestMode") or "unknown"][1] += 1
     useful_by_app[event.get("appBundleIdentifier") or "unknown"][1] += 1
+    useful_by_experiment_arm[experiment_arm(event)][1] += 1
 for suggestion_id in accepted_ids:
     event = presented_by_id.get(suggestion_id)
     if event:
         accept_by_mode[event.get("requestMode") or "unknown"][0] += 1
         accept_by_app[event.get("appBundleIdentifier") or "unknown"][0] += 1
+        accept_by_experiment_arm[experiment_arm(event)][0] += 1
 for suggestion_id in useful_suggestion_ids:
     event = presented_by_id.get(suggestion_id)
     if event:
         useful_by_mode[event.get("requestMode") or "unknown"][0] += 1
         useful_by_app[event.get("appBundleIdentifier") or "unknown"][0] += 1
+        useful_by_experiment_arm[experiment_arm(event)][0] += 1
 
 def normalized_suggestion(text):
     return " ".join((text or "").lower().split()).strip()
@@ -209,6 +232,10 @@ print("Accept rate by app:")
 for app, (accepted_count, shown_count) in sorted(accept_by_app.items()):
     rate = 0 if shown_count == 0 else round((accepted_count / shown_count) * 100)
     print(f"  {app}: {rate}% ({accepted_count}/{shown_count})")
+print("Accept rate by experiment arm:")
+for arm, (accepted_count, shown_count) in sorted(accept_by_experiment_arm.items()):
+    rate = 0 if shown_count == 0 else round((accepted_count / shown_count) * 100)
+    print(f"  {arm}: {rate}% ({accepted_count}/{shown_count})")
 print("Useful rate by mode:")
 for mode, (useful_count, shown_count) in sorted(useful_by_mode.items()):
     rate = 0 if shown_count == 0 else round((useful_count / shown_count) * 100)
@@ -217,6 +244,22 @@ print("Useful rate by app:")
 for app, (useful_count, shown_count) in sorted(useful_by_app.items()):
     rate = 0 if shown_count == 0 else round((useful_count / shown_count) * 100)
     print(f"  {app}: {rate}% ({useful_count}/{shown_count})")
+print("Useful rate by experiment arm:")
+for arm, (useful_count, shown_count) in sorted(useful_by_experiment_arm.items()):
+    rate = 0 if shown_count == 0 else round((useful_count / shown_count) * 100)
+    print(f"  {arm}: {rate}% ({useful_count}/{shown_count})")
+print("Presented by experiment arm:")
+if presented_experiment_arms:
+    for arm, count in presented_experiment_arms.most_common():
+        print(f"  {arm}: {count}")
+else:
+    print("  none")
+print("Accepted and kept by experiment arm:")
+if accepted_and_kept_experiment_arms:
+    for arm, count in accepted_and_kept_experiment_arms.most_common():
+        print(f"  {arm}: {count}")
+else:
+    print("  none")
 print("Presented by field kind:")
 if presented_field_kinds:
     for kind, count in presented_field_kinds.most_common():
@@ -259,6 +302,12 @@ suppressed_modes = Counter(event.get("requestMode") or "unknown" for event in su
 if suppressed_modes:
     for mode, count in suppressed_modes.most_common():
         print(f"  {mode}: {count}")
+else:
+    print("  none")
+print("Suppressed by experiment arm:")
+if suppressed_experiment_arms:
+    for arm, count in suppressed_experiment_arms.most_common():
+        print(f"  {arm}: {count}")
 else:
     print("  none")
 print("Suppressed by field kind:")
@@ -318,6 +367,14 @@ if require_app:
         missing.append(f"{require_app}: insertionVerified")
     if app_failed:
         missing.append(f"{require_app}: no insertionFailed")
+
+if require_experiment_arm:
+    arm_presented = [
+        event for event in presented
+        if experiment_arm(event) == require_experiment_arm
+    ]
+    if not arm_presented:
+        missing.append(f"{require_experiment_arm}: suggestionPresented")
 
 if missing:
     raise SystemExit("missing required trace coverage: " + ", ".join(missing))

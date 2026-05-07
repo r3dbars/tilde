@@ -353,8 +353,49 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.acceptedAndKeptByFieldKind["multilineCompose"] == 1)
     }
 
+    @Test("summarizes experiment arm slices")
+    func summarizesExperimentArmSlices() {
+        let events = [
+            event(.suggestionPresented, experimentArm: "length_1_word", suggestionID: "one"),
+            event(.suggestionAccepted, experimentArm: "length_1_word", suggestionID: "one"),
+            event(
+                .acceptedTextEdited,
+                experimentArm: "length_1_word",
+                suggestionID: "one",
+                metadata: [
+                    "checkpoint": "10s",
+                    "survivalClass": "exactKept",
+                    "strongAcceptedAndKept": "true"
+                ]
+            ),
+            event(.suggestionPresented, experimentArm: "length_3_word", suggestionID: "two"),
+            event(.suggestionPresented, experimentArm: "length_3_word", suggestionID: "three"),
+            event(.suggestionHidden, experimentArm: "length_3_word", suggestionID: "three", outcome: "typed-through"),
+            event(.suggestionSuppressed, experimentArm: "length_1_word", suggestionID: "four", reason: "repeated-miss"),
+            event(
+                .suggestionSuppressed,
+                experimentArm: "",
+                suggestionID: "five",
+                reason: "repeated-miss",
+                metadata: ["experimentArm": "metadata_arm"]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.acceptRateByExperimentArm["length_1_word"] == 1.0)
+        #expect(summary.acceptRateByExperimentArm["length_3_word"] == 0)
+        #expect(summary.usefulRateByExperimentArm["length_3_word"] == 0.5)
+        #expect(summary.presentedByExperimentArm["length_1_word"] == 1)
+        #expect(summary.presentedByExperimentArm["length_3_word"] == 2)
+        #expect(summary.acceptedAndKeptByExperimentArm["length_1_word"] == 1)
+        #expect(summary.suppressedByExperimentArm["length_1_word"] == 1)
+        #expect(summary.suppressedByExperimentArm["metadata_arm"] == 1)
+    }
+
     private func event(
         _ type: AutocompleteTraceEventType,
+        experimentArm: String = "length_3_word",
         suggestionID: String,
         timestamp: String = "2026-04-26T00:00:00Z",
         appBundleIdentifier: String = "com.apple.TextEdit",
@@ -369,6 +410,7 @@ struct AutocompleteTraceAnalyzerTests {
         metadata: [String: String] = [:]
     ) -> AutocompleteTraceEvent {
         AutocompleteTraceEvent(
+            experimentArm: experimentArm,
             timestamp: timestamp,
             sessionID: "session",
             suggestionID: suggestionID,
