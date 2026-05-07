@@ -17,39 +17,39 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P0: Trust And Safety
 
-- [ ] Make raw trace capture opt-in by default.
-- [ ] Add explicit trace privacy modes: `lab`, `dogfood`, `beta`, `customer`.
-- [ ] In beta/customer mode, never persist `textBeforeCursor`, `textAfterCursor`, raw model output, displayed suggestion text, or accepted text.
-- [ ] Keep counts, app bundle id, role, geometry state, latency, and reason codes in redacted traces.
-- [ ] Add a redacted trace event type in core.
-- [ ] Add tests that redacted traces keep useful metadata but drop typed text.
-- [ ] Disable screenshot tracing outside lab/dogfood mode.
-- [ ] Require a visible local toggle before screenshot tracing can start.
-- [ ] Add a diagnostic banner when raw tracing is enabled.
+- [x] Make raw trace capture opt-in by default.
+- [x] Add explicit trace privacy modes: `lab`, `dogfood`, `beta`, `customer`.
+- [x] In beta/customer mode, never persist `textBeforeCursor`, `textAfterCursor`, raw model output, displayed suggestion text, or accepted text.
+- [x] Keep counts, app bundle id, role, geometry state, latency, and reason codes in redacted traces.
+- [x] Add a redacted trace event type in core.
+- [x] Add tests that redacted traces keep useful metadata but drop typed text.
+- [x] Disable screenshot tracing outside lab/dogfood mode.
+- [x] Require a visible local toggle before screenshot tracing can start.
+- [x] Add a diagnostic banner when raw tracing is enabled.
 - [ ] Expand sensitive app denylist beyond Terminal and password managers.
-- [ ] Suppress in Mail compose until a safe adapter exists.
+- [x] Suppress in Mail compose until a safe adapter exists.
 - [ ] Suppress in payment, password, API key, and token-looking fields when detectable.
-- [ ] Suppress in unknown apps by default.
+- [x] Suppress in unknown apps by default.
 - [ ] Add a "why no suggestion" reason for sensitive suppression.
-- [ ] Add tests for sensitive profiles having no insertion modes.
-- [ ] Add tests for trace redaction of diagnostics metadata.
+- [x] Add tests for sensitive profiles having no insertion modes.
+- [x] Add tests for trace redaction of diagnostics metadata.
 
 ## P0: First-Class Anchor Ladder
 
-- [ ] Add `SuggestionAnchorSource`: caret, line, field, window, none.
-- [ ] Add `SuggestionAnchorQuality`: trusted, usableFallback, diagnosticsOnly, invalid.
-- [ ] Replace bare `RenderModePlan.anchorRect` with a decision object that includes source, quality, reason, and rect.
-- [ ] Prefer caret mode when selected range and bounds validate.
-- [ ] Add line mode when insertion line or text line bounds are good but caret is missing.
-- [ ] Add field mode when element bounds are good but caret is not.
-- [ ] Add window mode only for explicit invocation or diagnostics.
-- [ ] Keep off mode as the default for no trustworthy text context.
-- [ ] Treat detached whole-editor anchors as a bug unless the profile allows them.
-- [ ] Add tests for caret, line, field, window, and off decisions.
-- [ ] Add tests for profiles that disallow detached field/window suggestions.
-- [ ] Add trace metadata for anchor source, anchor quality, and fallback reason.
-- [ ] Show anchor source in diagnostics.
-- [ ] Update the compatibility matrix with anchor source and proof state.
+- [x] Add `SuggestionAnchorSource`: caret, line, field, window, none.
+- [x] Add `SuggestionAnchorQuality`: trusted, usableFallback, diagnosticsOnly, invalid.
+- [x] Replace bare `RenderModePlan.anchorRect` with a decision object that includes source, quality, reason, and rect.
+- [x] Prefer caret mode when selected range and bounds validate.
+- [x] Add line mode when insertion line or text line bounds are good but caret is missing.
+- [x] Add field mode when element bounds are good but caret is not.
+- [x] Add window mode only for explicit invocation or diagnostics.
+- [x] Keep off mode as the default for no trustworthy text context.
+- [x] Treat detached whole-editor anchors as a bug unless the profile allows them.
+- [x] Add tests for caret, line, field, window, and off decisions.
+- [x] Add tests for profiles that disallow detached field/window suggestions.
+- [x] Add trace metadata for anchor source, anchor quality, and fallback reason.
+- [x] Show anchor source in diagnostics.
+- [x] Update the compatibility matrix with anchor source and proof state.
 
 ## P0: AX Geometry Validation
 
@@ -94,21 +94,21 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 ## P0: Insertion Safety
 
 - [ ] Carry the actual insertion mode used into verification.
-- [ ] Verify same frontmost app before marking insertion success.
-- [ ] Verify same focused field identity before marking insertion success.
-- [ ] Detect AX "success" with unchanged text.
-- [ ] Detect partial insertion.
-- [ ] Detect duplicated insertion.
-- [ ] Detect accepted text inserted at the wrong cursor location.
-- [ ] Add per-mode retry policy for AX selected text.
-- [ ] Add per-mode retry policy for AX value replacement.
-- [ ] Add per-mode retry policy for key events.
-- [ ] Keep clipboard fallback opt-in only.
+- [x] Verify same frontmost app before marking insertion success.
+- [x] Verify same focused field identity before marking insertion success.
+- [x] Detect AX "success" with unchanged text.
+- [x] Detect partial insertion.
+- [x] Detect duplicated insertion.
+- [x] Detect accepted text inserted at the wrong cursor location.
+- [x] Add per-mode retry policy for AX selected text.
+- [x] Add per-mode retry policy for AX value replacement.
+- [x] Add per-mode retry policy for key events.
+- [x] Keep clipboard fallback opt-in only.
 - [ ] Never use clipboard fallback for sensitive profiles.
-- [ ] Add insertion failure trace buckets by app and mode.
+- [x] Add insertion failure trace buckets by app and mode.
 - [ ] Add tests for Notes-style AX no-op success.
 - [ ] Add tests for Chrome-style value replacement.
-- [ ] Add tests for retry exhaustion.
+- [x] Add tests for retry exhaustion.
 
 ## P0: Suggestion Quality
 
@@ -171,9 +171,9 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [ ] Add "Install local model" to settings when the model folder is missing.
 - [ ] Add "Retry model load" after install or repair.
 - [ ] Show clear missing/repair/ready states in plain language.
-- [ ] Update runtime docs to Qwen3.5 4B as the default.
-- [ ] Remove stale Gemma default copy from README and research docs.
-- [ ] State the macOS 26 requirement clearly in beta docs.
+- [x] Update runtime docs to Qwen3.5 4B as the default.
+- [x] Remove stale Gemma default copy from README and research docs.
+- [x] State the macOS 26 requirement clearly in beta docs.
 - [ ] Decide whether macOS target can be lowered.
 - [ ] Bundle or install the model in an app-owned path.
 - [ ] Never require Ollama, llama.cpp, or a user-started server.
@@ -201,19 +201,19 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P1: Trace Analysis
 
-- [ ] Add top miss bucket for caret unavailable.
-- [ ] Add top miss bucket for caret invalid.
-- [ ] Add top miss bucket for field anchor used.
-- [ ] Add top miss bucket for window anchor used.
-- [ ] Add top miss bucket for observer missed update.
-- [ ] Add top miss bucket for poll recovered update.
-- [ ] Add summary by app and anchor quality.
-- [ ] Add summary by app and insertion mode.
-- [ ] Add summary by app and update source.
-- [ ] Add summary by app and AX failure reason.
+- [x] Add top miss bucket for caret unavailable.
+- [x] Add top miss bucket for caret invalid.
+- [x] Add top miss bucket for field anchor used.
+- [x] Add top miss bucket for window anchor used.
+- [x] Add top miss bucket for observer missed update.
+- [x] Add top miss bucket for poll recovered update.
+- [x] Add summary by app and anchor quality.
+- [x] Add summary by app and insertion mode.
+- [x] Add summary by app and update source.
+- [x] Add summary by app and AX failure reason.
 - [ ] Add `script/geometry_trace_report.py`.
 - [ ] Extend `script/check_trace_eval.sh` to enforce geometry proof.
-- [ ] Export a short local HTML report for manual review.
+- [x] Export a short local HTML report for manual review.
 
 ## P1: AppDelegate Refactor
 

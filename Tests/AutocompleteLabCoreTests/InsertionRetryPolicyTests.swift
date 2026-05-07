@@ -16,6 +16,8 @@ struct InsertionRetryPolicyTests {
         let policy = InsertionRetryPolicy(maxRetryCount: 1)
 
         #expect(!policy.shouldRetry(result: .partial, insertionMode: .keyEvents, retryCount: 0))
+        #expect(!policy.shouldRetry(result: .duplicatedAcceptedText, insertionMode: .keyEvents, retryCount: 0))
+        #expect(!policy.shouldRetry(result: .insertedAtWrongLocation, insertionMode: .keyEvents, retryCount: 0))
         #expect(!policy.shouldRetry(result: .changedUnexpectedly, insertionMode: .keyEvents, retryCount: 0))
         #expect(!policy.shouldRetry(result: .verified, insertionMode: .keyEvents, retryCount: 0))
         #expect(!policy.shouldRetry(result: .unchanged, insertionMode: .axSelectedText, retryCount: 0))

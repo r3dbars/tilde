@@ -90,8 +90,10 @@ final class DiagnosticsWindowController {
         traceSummary: AutocompleteTraceSummary,
         recentTraceEvents: [AutocompleteTraceEvent],
         tracePath: String,
+        tracePrivacySummary: String,
         tracingPaused: Bool,
         screenshotTracingEnabled: Bool,
+        anchorDecisionSummary: String?,
         compatibilityLearningPath: String,
         compatibilityLearningProfile: CompatibilityLearningProfile?,
         refreshAction: @escaping () -> Void,
@@ -125,9 +127,13 @@ final class DiagnosticsWindowController {
         sections.append("Model folder: \(modelDirectoryPath)")
         sections.append("Compatibility: \(compatibilityStatus.summary)")
         sections.append("Current app enabled: \(appEnabled)")
+        if let anchorDecisionSummary {
+            sections.append("Anchor: \(anchorDecisionSummary)")
+        }
         sections.append(traceSummaryText(
             traceSummary,
             tracePath: tracePath,
+            tracePrivacySummary: tracePrivacySummary,
             tracingPaused: tracingPaused,
             screenshotTracingEnabled: screenshotTracingEnabled,
             compatibilityLearningPath: compatibilityLearningPath,
@@ -142,6 +148,14 @@ final class DiagnosticsWindowController {
         sections.append(countBucketsText(title: "Suppressed by mode", buckets: traceSummary.suppressedByMode))
         sections.append(countBucketsText(title: "Actionable suppressed by app", buckets: traceSummary.actionableSuppressedByApp))
         sections.append(countBucketsText(title: "Actionable suppressed by mode", buckets: traceSummary.actionableSuppressedByMode))
+        sections.append(nestedCountBucketsText(title: "Anchor quality by app", buckets: traceSummary.anchorQualityByApp))
+        sections.append(nestedCountBucketsText(title: "Insertion mode by app", buckets: traceSummary.insertionModeByApp))
+        sections.append(nestedCountBucketsText(
+            title: "Insertion failures by app and mode",
+            buckets: traceSummary.insertionFailuresByAppAndMode
+        ))
+        sections.append(nestedCountBucketsText(title: "Update source by app", buckets: traceSummary.updateSourceByApp))
+        sections.append(nestedCountBucketsText(title: "AX failure reason by app", buckets: traceSummary.axFailureReasonByApp))
         sections.append(topMissesText(traceSummary.topMisses))
 
         if let profile {
@@ -179,6 +193,7 @@ final class DiagnosticsWindowController {
     private func traceSummaryText(
         _ summary: AutocompleteTraceSummary,
         tracePath: String,
+        tracePrivacySummary: String,
         tracingPaused: Bool,
         screenshotTracingEnabled: Bool,
         compatibilityLearningPath: String,
@@ -187,8 +202,10 @@ final class DiagnosticsWindowController {
         """
         Trace eval:
           path: \(tracePath)
+          privacy: \(tracePrivacySummary)
           tracing: \(tracingPaused ? "paused" : "on")
           screenshot tracing: \(screenshotTracingEnabled ? "on" : "off")
+          raw mode warning: \(tracePrivacySummary.contains("raw") ? "typed text may be persisted locally" : "typed text is redacted")
           compatibility learning: \(compatibilityLearningPath)
           current learned adapter: \(compatibilityLearningProfile?.debugSummary ?? "none")
           events: \(summary.totalEvents)
@@ -210,11 +227,11 @@ final class DiagnosticsWindowController {
 
     private func topMissesText(_ misses: [AutocompleteTraceMiss]) -> String {
         guard !misses.isEmpty else {
-            return "Top 5 misses: none yet"
+            return "Top 10 misses: none yet"
         }
 
         return """
-        Top 5 misses:
+        Top 10 misses:
         \(misses.enumerated().map { index, miss in
             "  \(index + 1). \(miss.title) | count=\(miss.count) | app=\(miss.appBundleIdentifier.isEmpty ? "unknown" : miss.appBundleIdentifier) | mode=\(miss.requestMode.isEmpty ? "unknown" : miss.requestMode) | fix=\(miss.fixCategory) | cause=\(miss.suggestedCause) | example=\(miss.exampleSuggestionID)"
         }.joined(separator: "\n"))
@@ -250,6 +267,34 @@ final class DiagnosticsWindowController {
         }.map { key, value in
             "  \(key): \(value)"
         }.joined(separator: "\n"))
+        """
+    }
+
+    private func nestedCountBucketsText(title: String, buckets: [String: [String: Int]]) -> String {
+        guard !buckets.isEmpty else {
+            return "\(title): none yet"
+        }
+
+        let lines = buckets
+            .sorted { $0.key < $1.key }
+            .flatMap { app, values in
+                values
+                    .sorted { lhs, rhs in
+                        if lhs.value == rhs.value {
+                            return lhs.key < rhs.key
+                        }
+
+                        return lhs.value > rhs.value
+                    }
+                    .map { key, value in
+                        "  \(app): \(key)=\(value)"
+                    }
+            }
+            .joined(separator: "\n")
+
+        return """
+        \(title):
+        \(lines)
         """
     }
 

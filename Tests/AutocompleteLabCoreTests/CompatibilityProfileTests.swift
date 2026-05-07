@@ -89,6 +89,19 @@ struct CompatibilityProfileTests {
         #expect(InsertionModePlan.modes(for: mail) == [])
     }
 
+    @Test("Sensitive profiles have no insertion surface")
+    func sensitiveProfilesHaveNoInsertionSurface() throws {
+        let sensitiveProfiles = CompatibilityProfileStore.mvp.profiles.values.filter(\.isSensitive)
+        #expect(!sensitiveProfiles.isEmpty)
+
+        for profile in sensitiveProfiles {
+            #expect(profile.renderMode == .disabled)
+            #expect(profile.insertionMode == .disabled)
+            #expect(InsertionModePlan.modes(for: profile).isEmpty)
+            #expect(!profile.canPresentSuggestions)
+        }
+    }
+
     @Test("Render mode plans fall back to mirror when inline bounds are unavailable")
     func renderModePlansFallbackToMirrorWhenInlineBoundsAreUnavailable() throws {
         let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))

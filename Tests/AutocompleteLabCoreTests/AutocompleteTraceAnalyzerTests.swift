@@ -182,6 +182,116 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(!summary.topMisses.contains { $0.title == "Slow suggestion: wordCompletion" })
     }
 
+    @Test("flags geometry and observer update misses from metadata and reason")
+    func flagsGeometryAndObserverMisses() {
+        let events = [
+            event(
+                .suggestionSuppressed,
+                suggestionID: "caret-unavailable",
+                appBundleIdentifier: "com.apple.Notes",
+                reason: "missing-caret"
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "caret-invalid",
+                appBundleIdentifier: "com.google.Chrome",
+                reason: "caret-invalid",
+                metadata: ["geometryReason": "zeroHeight"]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "field-anchor",
+                appBundleIdentifier: "md.obsidian",
+                metadata: [
+                    "anchorSource": "field",
+                    "hasCaretRect": "false",
+                    "hasElementRect": "true"
+                ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "window-anchor",
+                appBundleIdentifier: "com.openai.codex",
+                metadata: ["anchorSource": "window"]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "observer-missed",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: [
+                    "expectedUpdateSource": "observer",
+                    "updateSource": "watchPoll"
+                ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "poll-recovered",
+                appBundleIdentifier: "com.apple.TextEdit",
+                reason: "poll-recovered-update",
+                metadata: ["pollRecoveredUpdate": "true"]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Caret unavailable in com.apple.Notes"
+                && miss.fixCategory == "renderer/caret bug"
+        })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Caret invalid in com.google.Chrome"
+                && miss.suggestedCause.contains("zeroheight")
+        })
+        #expect(summary.topMisses.contains { $0.title == "Field anchor used in md.obsidian" })
+        #expect(summary.topMisses.contains { $0.title == "Window anchor used in com.openai.codex" })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Observer missed update in com.apple.TextEdit"
+                && miss.fixCategory == "observer/update bug"
+        })
+        #expect(summary.topMisses.contains { $0.title == "Poll recovered update in com.apple.TextEdit" })
+    }
+
+    @Test("summarizes diagnostic metadata by app")
+    func summarizesDiagnosticMetadataByApp() {
+        let events = [
+            event(
+                .suggestionPresented,
+                suggestionID: "anchor",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: [
+                    "anchorQuality": "trusted",
+                    "profileInsertionMode": "axSelectedText",
+                    "updateSource": "observer"
+                ]
+            ),
+            event(
+                .insertionFailed,
+                suggestionID: "insert",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: ["actualInsertionMode": "keyEvents"]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "ax",
+                appBundleIdentifier: "com.google.Chrome",
+                metadata: [
+                    "geometryReason": "zeroHeight",
+                    "refreshSource": "watchPoll"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.anchorQualityByApp["com.apple.TextEdit"]?["trusted"] == 1)
+        #expect(summary.insertionModeByApp["com.apple.TextEdit"]?["axSelectedText"] == 1)
+        #expect(summary.insertionModeByApp["com.apple.TextEdit"]?["keyEvents"] == 1)
+        #expect(summary.insertionFailuresByAppAndMode["com.apple.TextEdit"]?["keyEvents"] == 1)
+        #expect(summary.updateSourceByApp["com.apple.TextEdit"]?["observer"] == 1)
+        #expect(summary.updateSourceByApp["com.google.Chrome"]?["watchPoll"] == 1)
+        #expect(summary.axFailureReasonByApp["com.google.Chrome"]?["zeroHeight"] == 1)
+    }
+
     @Test("flags repeated unaccepted suggestions")
     func flagsRepeatedUnacceptedSuggestions() {
         let events = [

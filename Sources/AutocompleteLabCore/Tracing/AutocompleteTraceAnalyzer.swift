@@ -52,6 +52,11 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let suppressedByMode: [String: Int]
     public let actionableSuppressedByApp: [String: Int]
     public let actionableSuppressedByMode: [String: Int]
+    public let anchorQualityByApp: [String: [String: Int]]
+    public let insertionModeByApp: [String: [String: Int]]
+    public let insertionFailuresByAppAndMode: [String: [String: Int]]
+    public let updateSourceByApp: [String: [String: Int]]
+    public let axFailureReasonByApp: [String: [String: Int]]
     public let topMisses: [AutocompleteTraceMiss]
 
     public init(
@@ -78,6 +83,11 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         suppressedByMode: [String: Int] = [:],
         actionableSuppressedByApp: [String: Int] = [:],
         actionableSuppressedByMode: [String: Int] = [:],
+        anchorQualityByApp: [String: [String: Int]] = [:],
+        insertionModeByApp: [String: [String: Int]] = [:],
+        insertionFailuresByAppAndMode: [String: [String: Int]] = [:],
+        updateSourceByApp: [String: [String: Int]] = [:],
+        axFailureReasonByApp: [String: [String: Int]] = [:],
         topMisses: [AutocompleteTraceMiss]
     ) {
         self.totalEvents = totalEvents
@@ -103,6 +113,11 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.suppressedByMode = suppressedByMode
         self.actionableSuppressedByApp = actionableSuppressedByApp
         self.actionableSuppressedByMode = actionableSuppressedByMode
+        self.anchorQualityByApp = anchorQualityByApp
+        self.insertionModeByApp = insertionModeByApp
+        self.insertionFailuresByAppAndMode = insertionFailuresByAppAndMode
+        self.updateSourceByApp = updateSourceByApp
+        self.axFailureReasonByApp = axFailureReasonByApp
         self.topMisses = topMisses
     }
 }
@@ -168,6 +183,24 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             suppressedByMode: counts(suppressed, key: \.requestMode),
             actionableSuppressedByApp: counts(actionableSuppressed, key: \.appBundleIdentifier),
             actionableSuppressedByMode: counts(actionableSuppressed, key: \.requestMode),
+            anchorQualityByApp: countsByAppAndMetadata(events, keys: ["anchorQuality", "caretQuality", "geometryQuality"]),
+            insertionModeByApp: countsByAppAndMetadata(
+                events,
+                keys: ["actualInsertionMode", "profileInsertionMode", "insertionMode"]
+            ),
+            insertionFailuresByAppAndMode: countsByAppAndMetadata(
+                insertionFailures,
+                keys: ["actualInsertionMode", "profileInsertionMode", "insertionMode"],
+                fallback: \.requestMode
+            ),
+            updateSourceByApp: countsByAppAndMetadata(
+                events,
+                keys: ["updateSource", "refreshSource", "geometryUpdateSource"]
+            ),
+            axFailureReasonByApp: countsByAppAndMetadata(
+                events,
+                keys: ["axFailureReason", "geometryReason", "caretInvalidReason"]
+            ),
             topMisses: topMisses(from: events)
         )
     }
@@ -197,6 +230,26 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             return bucket.isEmpty ? "unknown" : bucket
         }
         .mapValues(\.count)
+    }
+
+    private func countsByAppAndMetadata(
+        _ events: [AutocompleteTraceEvent],
+        keys: [String],
+        fallback: ((AutocompleteTraceEvent) -> String)? = nil
+    ) -> [String: [String: Int]] {
+        var result: [String: [String: Int]] = [:]
+
+        for event in events {
+            let bucket = rawMetadataValue(event, keys: keys) ?? fallback?(event)
+            guard let bucket, !bucket.isEmpty else {
+                continue
+            }
+
+            let app = event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
+            result[app, default: [:]][bucket, default: 0] += 1
+        }
+
+        return result
     }
 
     private func isActionableSuppression(_ event: AutocompleteTraceEvent) -> Bool {
@@ -327,6 +380,66 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 )
             }
 
+            if isCaretUnavailable(event) {
+                add(
+                    key: "Caret unavailable in \(appName(for: event))",
+                    event: event,
+                    cause: "No caret anchor was available, so the app had to suppress the suggestion or fall back to a less precise anchor.",
+                    category: "renderer/caret bug",
+                    buckets: &buckets
+                )
+            }
+
+            if isCaretInvalid(event) {
+                add(
+                    key: "Caret invalid in \(appName(for: event))",
+                    event: event,
+                    cause: "Caret geometry was rejected by validation. Reason: \(geometryReason(for: event)).",
+                    category: "renderer/caret bug",
+                    buckets: &buckets
+                )
+            }
+
+            if anchorSource(for: event) == "field" {
+                add(
+                    key: "Field anchor used in \(appName(for: event))",
+                    event: event,
+                    cause: "The suggestion used the focused field bounds instead of a caret or line anchor.",
+                    category: "renderer/caret bug",
+                    buckets: &buckets
+                )
+            }
+
+            if anchorSource(for: event) == "window" {
+                add(
+                    key: "Window anchor used in \(appName(for: event))",
+                    event: event,
+                    cause: "The suggestion used window bounds, which is only safe for diagnostics or explicit invocation.",
+                    category: "renderer/caret bug",
+                    buckets: &buckets
+                )
+            }
+
+            if isObserverMissedUpdate(event) {
+                add(
+                    key: "Observer missed update in \(appName(for: event))",
+                    event: event,
+                    cause: "A poll or fallback refresh noticed a change that the Accessibility observer should have delivered.",
+                    category: "observer/update bug",
+                    buckets: &buckets
+                )
+            }
+
+            if isPollRecoveredUpdate(event) {
+                add(
+                    key: "Poll recovered update in \(appName(for: event))",
+                    event: event,
+                    cause: "Polling recovered the typing or geometry state after an observer miss.",
+                    category: "observer/update bug",
+                    buckets: &buckets
+                )
+            }
+
             if event.type == .suggestionPresented,
                let latencyMilliseconds = event.latencyMilliseconds,
                latencyMilliseconds >= 1_000 {
@@ -359,8 +472,133 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
                 return lhs.count > rhs.count
             }
-            .prefix(5)
+            .prefix(10)
             .map { $0 }
+    }
+
+    private func isCaretUnavailable(_ event: AutocompleteTraceEvent) -> Bool {
+        metadataValue(event, keys: ["hasCaretRect", "caretAvailable"]) == "false"
+            || reasonContains(event, "caret-unavailable")
+            || reasonContains(event, "missing-caret")
+            || reasonContains(event, "missing-anchor")
+    }
+
+    private func isCaretInvalid(_ event: AutocompleteTraceEvent) -> Bool {
+        metadataValue(event, keys: ["anchorQuality", "caretQuality", "geometryQuality"]) == "invalid"
+            || metadataValue(event, keys: ["caretInvalid", "invalidCaret"]) == "true"
+            || reasonContains(event, "caret-invalid")
+            || invalidGeometryReasons.contains(geometryReason(for: event))
+    }
+
+    private var invalidGeometryReasons: Set<String> {
+        [
+            "zeroheight",
+            "nonfinite",
+            "outsideelement",
+            "outsidewindow",
+            "offscreen",
+            "stale",
+            "jumpedtoofar",
+            "missingbounds"
+        ]
+    }
+
+    private func anchorSource(for event: AutocompleteTraceEvent) -> String {
+        if let source = metadataValue(
+            event,
+            keys: ["anchorSource", "effectiveAnchorSource", "fallbackAnchorSource", "suggestionAnchorSource"]
+        ) {
+            return source
+        }
+
+        if reasonContains(event, "field-anchor") {
+            return "field"
+        }
+
+        if reasonContains(event, "window-anchor") {
+            return "window"
+        }
+
+        if event.type == .suggestionPresented,
+           event.metadata["effectiveRenderMode"] == "floatingMirror",
+           event.metadata["hasCaretRect"] == "false" {
+            if event.metadata["hasElementRect"] == "true" {
+                return "field"
+            }
+
+            if event.metadata["hasWindowRect"] == "true" {
+                return "window"
+            }
+        }
+
+        return ""
+    }
+
+    private func isObserverMissedUpdate(_ event: AutocompleteTraceEvent) -> Bool {
+        metadataValue(event, keys: ["observerMissedUpdate", "observerMissed"]) == "true"
+            || reasonContains(event, "observer-missed")
+            || (
+                metadataValue(event, keys: ["expectedUpdateSource", "expectedSource"]) == "observer"
+                    && updateSource(for: event).contains("poll")
+            )
+    }
+
+    private func isPollRecoveredUpdate(_ event: AutocompleteTraceEvent) -> Bool {
+        metadataValue(event, keys: ["pollRecoveredUpdate", "pollRecovered"]) == "true"
+            || reasonContains(event, "poll-recovered")
+            || (
+                updateSource(for: event).contains("poll")
+                    && isObserverMissedUpdate(event)
+            )
+    }
+
+    private func updateSource(for event: AutocompleteTraceEvent) -> String {
+        metadataValue(event, keys: ["updateSource", "refreshSource", "geometryUpdateSource"]) ?? ""
+    }
+
+    private func geometryReason(for event: AutocompleteTraceEvent) -> String {
+        let reason = metadataValue(
+            event,
+            keys: ["geometryReason", "anchorReason", "fallbackReason", "caretInvalidReason", "axFailureReason"]
+        ) ?? event.reason
+
+        return normalizedToken(reason)
+    }
+
+    private func metadataValue(_ event: AutocompleteTraceEvent, keys: [String]) -> String? {
+        for key in keys {
+            if let value = event.metadata[key]?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty {
+                return normalizedToken(value)
+            }
+        }
+
+        return nil
+    }
+
+    private func rawMetadataValue(_ event: AutocompleteTraceEvent, keys: [String]) -> String? {
+        for key in keys {
+            if let value = event.metadata[key]?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty {
+                return value
+            }
+        }
+
+        return nil
+    }
+
+    private func reasonContains(_ event: AutocompleteTraceEvent, _ token: String) -> Bool {
+        normalizedToken(event.reason).contains(normalizedToken(token))
+    }
+
+    private func normalizedToken(_ text: String) -> String {
+        text
+            .lowercased()
+            .filter { $0.isLetter || $0.isNumber }
+    }
+
+    private func appName(for event: AutocompleteTraceEvent) -> String {
+        event.appBundleIdentifier.isEmpty ? "unknown app" : event.appBundleIdentifier
     }
 
     private func addRepeatedUnacceptedSuggestions(
