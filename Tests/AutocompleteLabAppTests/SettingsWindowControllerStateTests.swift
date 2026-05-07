@@ -116,12 +116,12 @@ struct SettingsWindowControllerStateTests {
         )
 
         #expect(unsupported.statusText == "Current app: Atlas is unsupported")
-        #expect(unsupported.detailText == "No compatibility profile yet. Suggestions stay off here.")
+        #expect(unsupported.detailText == "No compatibility profile yet. Suggestions are intentionally off until this app is tested.")
         #expect(unsupported.modeText == "Mode: not tested yet")
         #expect(unsupported.acceptanceText == "Acceptance: off here")
         #expect(
             unsupported.safetyText
-                == "Safety: Suggestions stay off until this app has a compatibility profile."
+                == "Safety: Suggestions are intentionally off until this app has a compatibility profile."
         )
         #expect(!unsupported.canToggleMirrorMode)
         #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Atlas")

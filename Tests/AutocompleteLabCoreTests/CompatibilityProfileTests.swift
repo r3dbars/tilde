@@ -171,6 +171,7 @@ struct CompatibilityProfileTests {
         let diagnosticsOnly = store.supportStatus(for: "com.apple.mail")
         #expect(diagnosticsOnly.supportLevel == .diagnosticsOnly)
         #expect(diagnosticsOnly.userFacingSummary == "Diagnostics-only: Mail")
+        #expect(diagnosticsOnly.userFacingUnavailableText == "Suggestions stay off here.")
         #expect(diagnosticsOnly.menuText(appDisplayName: "Mail", isEnabled: true) == "Mail diagnostics-only")
         #expect(!diagnosticsOnly.canToggleSuggestions)
 
@@ -178,6 +179,7 @@ struct CompatibilityProfileTests {
         #expect(unsupported.supportLevel == .unsupported)
         #expect(unsupported.userFacingSummary == "Unsupported: not tested yet")
         #expect(unsupported.userFacingReason == "No compatibility profile yet.")
+        #expect(unsupported.userFacingUnavailableText == "Suggestions are intentionally off until this app is tested.")
         #expect(unsupported.menuText(appDisplayName: "Atlas", isEnabled: true) == "Atlas unsupported")
         #expect(!unsupported.canToggleSuggestions)
     }
@@ -265,7 +267,7 @@ struct CompatibilityProfileTests {
         #expect(mailStatus.userFacingSafetySummary == "Suggestions stay off here.")
         #expect(
             unsupportedStatus.userFacingSafetySummary
-                == "Suggestions stay off until this app has a compatibility profile."
+                == "Suggestions are intentionally off until this app has a compatibility profile."
         )
     }
 

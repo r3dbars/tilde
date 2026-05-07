@@ -529,6 +529,17 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
         }
     }
 
+    public var userFacingUnavailableText: String {
+        switch self {
+        case .supported:
+            return "Suggestions stay off here."
+        case .denylisted:
+            return "Suggestions are intentionally off here."
+        case .unsupported:
+            return "Suggestions are intentionally off until this app is tested."
+        }
+    }
+
     public var userFacingSafetySummary: String {
         switch self {
         case let .supported(profile):
@@ -536,7 +547,7 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
         case .denylisted:
             return "Suggestions stay off because this kind of app can expose secrets or shell input."
         case .unsupported:
-            return "Suggestions stay off until this app has a compatibility profile."
+            return "Suggestions are intentionally off until this app has a compatibility profile."
         }
     }
 
