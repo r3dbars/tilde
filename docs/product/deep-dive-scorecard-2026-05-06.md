@@ -321,6 +321,9 @@ evidence-backed score should stay lower until those rows are closed.
 - Learned visual offsets now carry app-version, screen-layout, and field-shape
   scope; the live app strips the offset when any of those proof conditions
   change.
+- Repeated placement uncertainty is now field-scoped: after the threshold is
+  reached, the current field is suppressed so the app stops retrying unsafe
+  placement until focus changes or a clean placement resets the count.
 
 ## Remaining Gaps
 
