@@ -632,8 +632,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             let verificationBaseline = insertionVerificationBaseline()
-            guard let acceptedText = suggestionSession.nextWordAcceptance(),
-                  insertAcceptedText(acceptedText) else {
+            guard let acceptedText = suggestionSession.nextWordAcceptance() else {
+                recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
+                return false
+            }
+
+            let insertionResult = insertAcceptedText(acceptedText)
+            guard insertionResult.succeeded else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return false
             }
@@ -651,7 +656,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 hideSuggestion(reason: "accepted-next-word-final")
             }
-            scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
+            scheduleInsertionVerification(
+                acceptedText: acceptedText,
+                baseline: verificationBaseline?.withActualInsertionMode(insertionResult.mode)
+            )
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
             return true
@@ -663,8 +671,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             let verificationBaseline = insertionVerificationBaseline()
-            guard let acceptedText = suggestionSession.allVisibleAcceptance(),
-                  insertAcceptedText(acceptedText) else {
+            guard let acceptedText = suggestionSession.allVisibleAcceptance() else {
+                recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
+                return false
+            }
+
+            let insertionResult = insertAcceptedText(acceptedText)
+            guard insertionResult.succeeded else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return false
             }
@@ -678,7 +691,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             recordRawAcceptance(action: action, acceptedText: acceptedText)
             hideSuggestion(reason: "accepted-all")
-            scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
+            scheduleInsertionVerification(
+                acceptedText: acceptedText,
+                baseline: verificationBaseline?.withActualInsertionMode(insertionResult.mode)
+            )
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
             return true
@@ -745,6 +761,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             suggestionID: currentSuggestionID,
             requestMode: currentSuggestionRequestMode,
+            actualInsertionMode: nil,
             retryCount: 0
         )
     }
@@ -770,6 +787,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "insert-verification",
                     metadata: [
                         "app": baseline.profile.bundleIdentifier,
+                        "actualInsertionMode": baseline.verificationInsertionMode.rawValue,
+                        "profileInsertionMode": baseline.profile.insertionMode.rawValue,
                         "result": "missing-context"
                     ]
                 )
@@ -807,7 +826,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard result.isVerified else {
                 if insertionRetryPolicy.shouldRetry(
                     result: result,
-                    insertionMode: baseline.profile.insertionMode,
+                    insertionMode: baseline.verificationInsertionMode,
                     retryCount: baseline.retryCount
                 ) {
                     DiagnosticsLog.shared.record(
@@ -815,18 +834,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         metadata: [
                             "app": baseline.profile.bundleIdentifier,
                             "acceptedChars": String(acceptedText.count),
+                            "actualInsertionMode": baseline.verificationInsertionMode.rawValue,
+                            "profileInsertionMode": baseline.profile.insertionMode.rawValue,
                             "retryCount": String(baseline.retryCount + 1),
                             "result": String(describing: result)
                         ]
                     )
 
-                    if insertAcceptedText(acceptedText) {
+                    let retryInsertionResult = insertAcceptedText(acceptedText)
+                    if retryInsertionResult.succeeded {
                         let retryBaseline = InsertionVerificationBaseline(
                             fieldIdentity: baseline.fieldIdentity,
                             previousTextBeforeCursor: baseline.previousTextBeforeCursor,
                             profile: baseline.profile,
                             suggestionID: baseline.suggestionID,
                             requestMode: baseline.requestMode,
+                            actualInsertionMode: retryInsertionResult.mode,
                             retryCount: baseline.retryCount + 1
                         )
                         scheduleInsertionVerification(acceptedText: acceptedText, baseline: retryBaseline)
@@ -844,6 +867,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     outcome: String(describing: result),
                     reason: "insert-verification-failed",
                     metadata: [
+                        "actualInsertionMode": baseline.verificationInsertionMode.rawValue,
                         "profileInsertionMode": baseline.profile.insertionMode.rawValue,
                         "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                         "currentBeforeChars": String(context.textBeforeCursor.count)
@@ -865,6 +889,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 acceptedText: acceptedText,
                 outcome: "verified",
                 metadata: [
+                    "actualInsertionMode": baseline.verificationInsertionMode.rawValue,
                     "profileInsertionMode": baseline.profile.insertionMode.rawValue
                 ]
             )
@@ -1440,9 +1465,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hasher.combine(Int(rect.height.rounded()))
     }
 
-    private func insertAcceptedText(_ acceptedText: String) -> Bool {
+    private func insertAcceptedText(_ acceptedText: String) -> InsertionResult {
         guard let profile = currentProfile else {
-            return accessibilityClient.insertText(acceptedText)
+            let succeeded = accessibilityClient.insertText(acceptedText)
+            return InsertionResult(
+                succeeded: succeeded,
+                mode: .axSelectedText,
+                message: succeeded ? "Inserted via AX selected text." : "AX selected text insertion failed."
+            )
         }
 
         let result = insertionEngine.insert(acceptedText, profile: profile)
@@ -1455,7 +1485,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
 
-        return result.succeeded
+        return result
     }
 
     private func recordRawAcceptance(action: KeyboardAction, acceptedText: String) {
@@ -2111,7 +2141,24 @@ private struct InsertionVerificationBaseline: Equatable {
     let profile: CompatibilityProfile
     let suggestionID: String?
     let requestMode: CompletionRequestMode?
+    let actualInsertionMode: InsertionMode?
     let retryCount: Int
+
+    var verificationInsertionMode: InsertionMode {
+        actualInsertionMode ?? profile.insertionMode
+    }
+
+    func withActualInsertionMode(_ mode: InsertionMode) -> InsertionVerificationBaseline {
+        InsertionVerificationBaseline(
+            fieldIdentity: fieldIdentity,
+            previousTextBeforeCursor: previousTextBeforeCursor,
+            profile: profile,
+            suggestionID: suggestionID,
+            requestMode: requestMode,
+            actualInsertionMode: mode,
+            retryCount: retryCount
+        )
+    }
 }
 
 private extension CompletionActivationDecision {
