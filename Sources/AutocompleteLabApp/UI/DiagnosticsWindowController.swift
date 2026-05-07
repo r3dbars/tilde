@@ -557,6 +557,7 @@ struct SuggestionLearningDiagnostics: Equatable {
             acceptedAndKeptText(title: "Accepted-kept by app", buckets: summary.acceptedAndKeptRateByApp),
             acceptedAndKeptText(title: "Accepted-kept by mode", buckets: summary.acceptedAndKeptRateByRequestMode),
             countBucketsText(title: "Annoyance signals", buckets: summary.annoyanceSignalCounts),
+            recentQuietModeText,
             recentDisplayAffinityText,
             recentRepeatedMissText,
             recentPrefixCooldownText,
@@ -580,6 +581,24 @@ struct SuggestionLearningDiagnostics: Equatable {
         let samples = event.metadata["displayScoreAcceptedAndKeptSamples"] ?? "0"
         let threshold = event.metadata["displayScoreAcceptedAndKeptThreshold"] ?? "n/a"
         return "Current display affinity: probability=\(probability), samples=\(samples), threshold=\(threshold)"
+    }
+
+    private var recentQuietModeText: String {
+        guard let event = latestEvent(containingAny: [
+            "quietMode",
+            "quietReason",
+            "quietScore",
+            "annoyanceSignal"
+        ]) else {
+            return "Quiet mode: no recent quiet-mode metadata"
+        }
+
+        let mode = event.metadata["quietMode"] ?? "unknown"
+        let signal = event.metadata["annoyanceSignal"] ?? "unknown"
+        let reason = event.metadata["quietReason"] ?? event.metadata["annoyanceReason"] ?? "unknown"
+        let score = event.metadata["quietScore"] ?? event.metadata["annoyanceFieldScore"] ?? "unknown"
+        let until = event.metadata["quietUntil"].map { ", until=\($0)" } ?? ""
+        return "Quiet mode: scope=\(mode), signal=\(signal), reason=\(reason), score=\(score)\(until)"
     }
 
     private var recentRepeatedMissText: String {

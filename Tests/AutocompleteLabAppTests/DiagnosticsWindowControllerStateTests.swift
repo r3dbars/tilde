@@ -177,6 +177,13 @@ struct DiagnosticsWindowControllerStateTests {
                     "prefixCooldownEscalated": "true"
                 ]),
                 event(metadata: [
+                    "quietMode": "field",
+                    "annoyanceSignal": "caretGeometryFailed",
+                    "quietReason": "caretGeometryFailed",
+                    "quietScore": "0.600",
+                    "quietUntil": "2026-05-07T00:15:00Z"
+                ]),
+                event(metadata: [
                     "styleSketchSamples": "4",
                     "styleSketchAverageWords": "2.50",
                     "styleSketchTerminalPunctuationRate": "0.75",
@@ -193,6 +200,7 @@ struct DiagnosticsWindowControllerStateTests {
         #expect(diagnostics.text.contains("probability=0.82, samples=7, threshold=0.60"))
         #expect(diagnostics.text.contains("score=1.25/2.00, suppressed=false, lifetime=840ms"))
         #expect(diagnostics.text.contains("duration=60000ms, familyTokens=3, escalated=true"))
+        #expect(diagnostics.text.contains("scope=field, signal=caretGeometryFailed, reason=caretGeometryFailed, score=0.600, until=2026-05-07T00:15:00Z"))
         #expect(diagnostics.text.contains("samples=4, avgWords=2.50"))
     }
 
@@ -219,6 +227,7 @@ struct DiagnosticsWindowControllerStateTests {
 
         #expect(diagnostics.text.contains("Accepted-kept by app: none yet"))
         #expect(diagnostics.text.contains("Annoyance signals: none yet"))
+        #expect(diagnostics.text.contains("Quiet mode: no recent quiet-mode metadata"))
         #expect(diagnostics.text.contains("Repeated miss state: no recent miss-score metadata"))
         #expect(diagnostics.text.contains("Prefix cooldown: no recent cooldown metadata"))
         #expect(diagnostics.text.contains("Style sketch: no recent aggregate style metadata"))
