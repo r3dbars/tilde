@@ -22,7 +22,23 @@ MLX_METALLIB="$ROOT_DIR/.build/mlx-metal/default.metallib"
 
 cd "$ROOT_DIR"
 
-pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+stop_running_apps() {
+  local app_process_pattern
+  local pid
+
+  app_process_pattern="/[${APP_NAME:0:1}]${APP_NAME:1}.app/Contents/MacOS/$APP_NAME"
+  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    kill "$pid" >/dev/null 2>&1 || true
+  done < <(pgrep -f "$app_process_pattern" 2>/dev/null || true)
+}
+
+current_bundle_is_running() {
+  pgrep -f "^$APP_BINARY$" >/dev/null 2>&1
+}
+
+stop_running_apps
 
 find_signing_identity() {
   if [[ -n "${SIGN_IDENTITY:-}" ]]; then
@@ -234,7 +250,7 @@ case "$MODE" in
   --verify|verify)
     open_app
     for _ in {1..30}; do
-      if pgrep -x "$APP_NAME" >/dev/null; then
+      if current_bundle_is_running; then
         exit 0
       fi
       sleep 1

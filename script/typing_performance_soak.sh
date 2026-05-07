@@ -11,10 +11,11 @@ STRICT_AX="${AUTOCOMPLETE_LAB_SOAK_STRICT_AX:-0}"
 TARGET_CHARS="${AUTOCOMPLETE_LAB_SOAK_CHARS:-1200}"
 CHUNK_SIZE="${AUTOCOMPLETE_LAB_SOAK_CHUNK_SIZE:-5}"
 DELAY_MS="${AUTOCOMPLETE_LAB_SOAK_DELAY_MS:-120}"
+KEY_DELAY_US="${AUTOCOMPLETE_LAB_SOAK_KEY_DELAY_US:-3000}"
 MIN_EVENT_TAP_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_EVENT_TAP_SAMPLES:-100}"
 MIN_AX_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_AX_SAMPLES:-0}"
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
-SEGMENT_CHARS="${AUTOCOMPLETE_LAB_SOAK_SEGMENT_CHARS:-1200}"
+SEGMENT_CHARS="${AUTOCOMPLETE_LAB_SOAK_SEGMENT_CHARS:-250}"
 DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.autocomplete-lab}"
 PAUSE_DEFAULTS_KEY="SuggestionsPaused"
 PAUSE_DEFAULTS_WAS_PREPARED=0
@@ -22,6 +23,8 @@ PAUSE_DEFAULTS_PREVIOUS_EXISTS=0
 PAUSE_DEFAULTS_PREVIOUS=""
 SOAK_EXPECTED_TEXT_FILE=""
 SOAK_ACTUAL_TEXT_FILE=""
+SOAK_TARGET_TEXT_FILE=""
+SOAK_TARGET_DOCUMENT_NAME=""
 SOAK_TYPING_START_LINE=""
 TEMP_ENABLE_ENV_KEY="AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
 TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED=0
@@ -30,7 +33,7 @@ declare -a SOAK_TMP_DIRS=()
 
 usage() {
   cat <<'EOF'
-Usage: script/typing_performance_soak.sh [--dry-run] [--skip-build] [--strict-ax] [--characters N] [--chunk-size N] [--delay-ms N] [--require-event-tap-samples N] [--require-ax-samples N]
+Usage: script/typing_performance_soak.sh [--dry-run] [--skip-build] [--strict-ax] [--characters N] [--chunk-size N] [--delay-ms N] [--key-delay-us N] [--require-event-tap-samples N] [--require-ax-samples N]
 
 Runs a safe TextEdit typing soak with built-in neutral fixture text, then checks
 diagnostics for keyboard event-tap latency. Focused-text AX polling is reported
@@ -39,6 +42,10 @@ EOF
 }
 
 cleanup_soak() {
+  if [[ -n "$SOAK_TARGET_DOCUMENT_NAME" ]]; then
+    close_textedit_document "$SOAK_TARGET_DOCUMENT_NAME" >/dev/null 2>&1 || true
+  fi
+
   if ((${#SOAK_TMP_DIRS[@]})); then
     rm -rf "${SOAK_TMP_DIRS[@]}"
   fi
@@ -125,18 +132,6 @@ computed_typing_budget_seconds() {
   echo "$((chunk_count * (DELAY_MS + 80) / 1000 + 180))"
 }
 
-computed_segment_typing_budget_seconds() {
-  local segment_length="$1"
-  local chunk_count
-  chunk_count="$(((segment_length + CHUNK_SIZE - 1) / CHUNK_SIZE))"
-  echo "$((chunk_count * (DELAY_MS + 80) / 1000 + 60))"
-}
-
-delay_seconds() {
-  local millis="$1"
-  printf '%d.%03d\n' "$((millis / 1000))" "$((millis % 1000))"
-}
-
 verify_typed_text() {
   local expected_file="$1"
   local actual_file="$2"
@@ -166,17 +161,41 @@ PY
 }
 
 prepare_textedit_document() {
+  local target_file="$1"
+  local target_name
   local attempt
+  target_name="$(basename "$target_file")"
 
   for attempt in 1 2; do
-    if osascript >/dev/null <<'APPLESCRIPT'
+    open -a TextEdit "$target_file"
+    if osascript - "$target_name" >/dev/null <<'APPLESCRIPT'
+on run argv
+  set targetName to item 1 of argv
+
 with timeout of 20 seconds
-  tell application "TextEdit"
-    activate
-    make new document
-    set text of front document to ""
+  tell application "TextEdit" to activate
+  tell application "System Events"
+    repeat 40 times
+      tell process "TextEdit"
+        if exists window targetName then exit repeat
+      end tell
+      delay 0.1
+    end repeat
+
+    tell process "TextEdit"
+      if not (exists window targetName) then error "missing TextEdit soak window " & targetName
+      set frontmost to true
+      perform action "AXRaise" of window targetName
+      delay 0.1
+      if exists text area 1 of scroll area 1 of window targetName then
+        click text area 1 of scroll area 1 of window targetName
+      end if
+      keystroke "a" using {command down}
+      key code 51
+    end tell
   end tell
 end timeout
+end run
 APPLESCRIPT
     then
       return 0
@@ -193,48 +212,34 @@ APPLESCRIPT
 
 capture_typed_text() {
   local actual_file="$1"
-  local clipboard_file="$2"
+  local target_name="$2"
 
-  if capture_typed_text_with_textedit_timeout "$actual_file" 45; then
+  if capture_typed_text_with_textedit_timeout "$actual_file" "$target_name" 45; then
     return 0
   fi
 
-  echo "TextEdit document read timed out; falling back to UI copy verification." >&2
-  pbpaste >"$clipboard_file" 2>/dev/null || : >"$clipboard_file"
-  osascript >/dev/null <<'APPLESCRIPT'
-with timeout of 20 seconds
-  tell application "System Events"
-    tell process "TextEdit"
-      set frontmost to true
-      if exists text area 1 of scroll area 1 of front window then
-        click text area 1 of scroll area 1 of front window
-      end if
-      keystroke "a" using {command down}
-      delay 0.2
-      keystroke "c" using {command down}
-      delay 0.4
-    end tell
-  end tell
-end timeout
-APPLESCRIPT
-  pbpaste >"$actual_file"
-  pbcopy <"$clipboard_file" || true
+  echo "TextEdit document read timed out." >&2
+  return 1
 }
 
 capture_typed_text_with_textedit_timeout() {
   local actual_file="$1"
-  local timeout_seconds="$2"
+  local target_name="$2"
+  local timeout_seconds="$3"
   local pid deadline
 
-  osascript >/dev/null <<APPLESCRIPT &
-set outputFile to POSIX file "$actual_file"
-tell application "TextEdit"
-  set docText to text of front document
-end tell
-set fileRef to open for access outputFile with write permission
-set eof of fileRef to 0
-write docText to fileRef as «class utf8»
-close access fileRef
+  osascript - "$target_name" >/dev/null <<APPLESCRIPT &
+on run argv
+  set targetName to item 1 of argv
+  set outputFile to POSIX file "$actual_file"
+  tell application "TextEdit"
+    set docText to text of document targetName
+  end tell
+  set fileRef to open for access outputFile with write permission
+  set eof of fileRef to 0
+  write docText to fileRef as «class utf8»
+  close access fileRef
+end run
 APPLESCRIPT
   pid=$!
   deadline=$((SECONDS + timeout_seconds))
@@ -251,30 +256,78 @@ APPLESCRIPT
   wait "$pid"
 }
 
+close_textedit_document() {
+  local target_name="$1"
+  local pid deadline
+
+  osascript - "$target_name" >/dev/null <<'APPLESCRIPT' &
+on run argv
+  set targetName to item 1 of argv
+  tell application "TextEdit"
+    if exists document targetName then
+      close document targetName saving no
+    end if
+  end tell
+end run
+APPLESCRIPT
+  pid=$!
+  deadline=$((SECONDS + 5))
+
+  while kill -0 "$pid" 2>/dev/null; do
+    if ((SECONDS >= deadline)); then
+      kill "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      echo "Warning: timed out closing TextEdit soak document: $target_name" >&2
+      return 1
+    fi
+    sleep 0.2
+  done
+
+  wait "$pid"
+}
+
 focus_textedit_document() {
-  osascript >/dev/null <<'APPLESCRIPT'
+  local target_name="$1"
+
+  osascript - "$target_name" >/dev/null <<'APPLESCRIPT'
+on run argv
+  set targetName to item 1 of argv
+
 with timeout of 20 seconds
+  tell application "TextEdit" to activate
   tell application "System Events"
-    repeat 20 times
-      if exists process "TextEdit" then exit repeat
+    repeat 50 times
+      if exists process "TextEdit" then
+        tell process "TextEdit"
+          set frontmost to true
+          if exists window targetName then
+            perform action "AXRaise" of window targetName
+            if exists text area 1 of scroll area 1 of window targetName then
+              click text area 1 of scroll area 1 of window targetName
+            end if
+          end if
+        end tell
+      end if
+
+      delay 0.05
+      if (name of first application process whose frontmost is true) is "TextEdit" then
+        tell process "TextEdit"
+          if exists window targetName then return
+        end tell
+      end if
       delay 0.1
     end repeat
-    tell process "TextEdit"
-      set frontmost to true
-      if exists text area 1 of scroll area 1 of front window then
-        click text area 1 of scroll area 1 of front window
-      end if
-    end tell
+    error "TextEdit soak target did not become frontmost: " & targetName
   end tell
 end timeout
+end run
 APPLESCRIPT
 }
 
-type_text_with_system_events() {
+type_text_with_cgevents() {
   local text_file="$1"
-  local delay text total_length offset segment segment_file segment_length segment_dir
+  local text total_length offset segment segment_file segment_length segment_dir
 
-  delay="$(delay_seconds "$DELAY_MS")"
   text="$(<"$text_file")"
   total_length="${#text}"
   offset=0
@@ -285,41 +338,58 @@ type_text_with_system_events() {
     segment_file="$segment_dir/segment-$offset.txt"
     printf '%s' "$segment" >"$segment_file"
     segment_length="${#segment}"
-    type_text_segment_with_system_events "$segment_file" "$segment_length" "$delay"
+    focus_textedit_document "$SOAK_TARGET_DOCUMENT_NAME"
+    type_text_segment_with_cgevents "$segment_file"
     offset=$((offset + segment_length))
     sleep 0.3
   done
 }
 
-type_text_segment_with_system_events() {
+type_text_segment_with_cgevents() {
   local text_file="$1"
-  local segment_length="$2"
-  local delay="$3"
-  local timeout_seconds
 
-  timeout_seconds="$(computed_segment_typing_budget_seconds "$segment_length")"
+  swift - "$text_file" "$CHUNK_SIZE" "$DELAY_MS" "$KEY_DELAY_US" <<'SWIFT'
+import ApplicationServices
+import Foundation
 
-  osascript - "$text_file" "$CHUNK_SIZE" "$delay" "$timeout_seconds" <<'APPLESCRIPT'
-on run argv
-  set textFile to item 1 of argv
-  set soakText to read POSIX file textFile as «class utf8»
-  set soakChunkSize to item 2 of argv as integer
-  set soakDelay to item 3 of argv as real
-  set timeoutSeconds to item 4 of argv as integer
+guard CommandLine.arguments.count == 5,
+      let chunkSize = Int(CommandLine.arguments[2]),
+      let delayMilliseconds = Int(CommandLine.arguments[3]),
+      let keyDelayMicroseconds = useconds_t(CommandLine.arguments[4]),
+      chunkSize > 0,
+      delayMilliseconds >= 0 else {
+    FileHandle.standardError.write(Data("invalid CGEvent typing arguments\n".utf8))
+    exit(2)
+}
 
-  with timeout of timeoutSeconds seconds
-    tell application "System Events"
-      repeat with chunkStart from 1 to (length of soakText) by soakChunkSize
-        set chunkEnd to chunkStart + soakChunkSize - 1
-        if chunkEnd > (length of soakText) then set chunkEnd to (length of soakText)
-        tell process "TextEdit" to set frontmost to true
-        keystroke (text chunkStart thru chunkEnd of soakText)
-        if soakDelay > 0 then delay soakDelay
-      end repeat
-    end tell
-  end timeout
-end run
-APPLESCRIPT
+let textPath = CommandLine.arguments[1]
+let text = try String(contentsOfFile: textPath, encoding: .utf8)
+let source = CGEventSource(stateID: .hidSystemState)
+source?.localEventsSuppressionInterval = 0
+let delayMicros = useconds_t(delayMilliseconds * 1_000)
+
+var typedScalars = 0
+for scalar in text.unicodeScalars {
+    var units = Array(String(scalar).utf16)
+    guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+        FileHandle.standardError.write(Data("failed to create CGEvent\n".utf8))
+        exit(1)
+    }
+
+    keyDown.keyboardSetUnicodeString(stringLength: units.count, unicodeString: &units)
+    keyDown.post(tap: .cghidEventTap)
+    keyUp.post(tap: .cghidEventTap)
+
+    typedScalars += 1
+    if keyDelayMicroseconds > 0 {
+        usleep(keyDelayMicroseconds)
+    }
+    if typedScalars % chunkSize == 0 && delayMicros > 0 {
+        usleep(delayMicros)
+    }
+}
+SWIFT
 }
 
 generate_soak_text() {
@@ -428,7 +498,7 @@ prepare_temporary_suggestions_resume() {
 
 describe_plan() {
   echo "Safe typing performance soak"
-  echo "Target app: disposable TextEdit document"
+  echo "Target app: disposable TextEdit .txt file"
   echo "Diagnostics log: $LOG_PATH"
   echo "Safety: temporarily enables TextEdit only for this proof pass"
   echo "Safety: temporarily resumes suggestions and restores the previous pause state"
@@ -438,12 +508,11 @@ describe_plan() {
     echo "Build: ./script/build_and_run.sh --verify"
   fi
   echo "Synthetic text: $TARGET_CHARS generated chars from a built-in neutral fixture"
-  echo "Typed text proof: exact TextEdit document match required"
-  echo "Clipboard fallback: used only if direct TextEdit read fails"
-  echo "Typing driver: System Events key chunks"
-  echo "Typing batches: up to $SEGMENT_CHARS chars per AppleScript process"
+  echo "Typed text proof: exact named TextEdit document match required"
+  echo "Typing driver: CGEvent Unicode key events after target-window focus"
+  echo "Typing batches: up to $SEGMENT_CHARS chars per Swift process"
   echo "AX warmup: waits for a focused-text poll summary before typing"
-  echo "Typing: $CHUNK_SIZE-char chunks with ${DELAY_MS}ms delay"
+  echo "Typing: $CHUNK_SIZE-char chunks with ${DELAY_MS}ms delay and ${KEY_DELAY_US}us key spacing"
   echo "Typing duration budget: $(computed_typing_budget_seconds)s"
   echo "Event tap proof: require at least $MIN_EVENT_TAP_SAMPLES samples"
   if is_truthy "$STRICT_AX"; then
@@ -455,22 +524,25 @@ describe_plan() {
 }
 
 type_textedit_fixture() {
-  local tmp_dir text_file actual_file clipboard_file
+  local tmp_dir text_file actual_file target_file
   tmp_dir="$(make_tmp_dir)"
   text_file="$tmp_dir/autocomplete-lab-typing-soak-input.txt"
   actual_file="$tmp_dir/autocomplete-lab-typing-soak-actual.txt"
-  clipboard_file="$tmp_dir/autocomplete-lab-typing-soak-clipboard.txt"
+  target_file="$tmp_dir/autocomplete-lab-typing-soak-target.txt"
   SOAK_EXPECTED_TEXT_FILE="$text_file"
   SOAK_ACTUAL_TEXT_FILE="$actual_file"
+  SOAK_TARGET_TEXT_FILE="$target_file"
+  SOAK_TARGET_DOCUMENT_NAME="$(basename "$target_file")"
   generate_soak_text "$TARGET_CHARS" >"$text_file"
-  prepare_textedit_document
-  focus_textedit_document
+  : >"$target_file"
+  prepare_textedit_document "$SOAK_TARGET_TEXT_FILE"
+  focus_textedit_document "$SOAK_TARGET_DOCUMENT_NAME"
   sleep 1
   wait_for_focused_text_poll_summary_after_line "$(line_count "$LOG_PATH")" 15
   SOAK_TYPING_START_LINE="$(line_count "$LOG_PATH")"
-  type_text_with_system_events "$text_file"
+  type_text_with_cgevents "$text_file"
   sleep 2
-  capture_typed_text "$SOAK_ACTUAL_TEXT_FILE" "$clipboard_file"
+  capture_typed_text "$SOAK_ACTUAL_TEXT_FILE" "$SOAK_TARGET_DOCUMENT_NAME"
   verify_typed_text "$SOAK_EXPECTED_TEXT_FILE" "$SOAK_ACTUAL_TEXT_FILE"
 }
 
@@ -533,6 +605,17 @@ while (($#)); do
     --delay-ms=*)
       DELAY_MS="${1#--delay-ms=}"
       ;;
+    --key-delay-us)
+      shift
+      if (($# == 0)); then
+        usage >&2
+        exit 2
+      fi
+      KEY_DELAY_US="$1"
+      ;;
+    --key-delay-us=*)
+      KEY_DELAY_US="${1#--key-delay-us=}"
+      ;;
     --require-event-tap-samples)
       shift
       if (($# == 0)); then
@@ -589,6 +672,7 @@ esac
 require_positive_int "$TARGET_CHARS" "--characters"
 require_positive_int "$CHUNK_SIZE" "--chunk-size"
 require_non_negative_int "$DELAY_MS" "--delay-ms"
+require_non_negative_int "$KEY_DELAY_US" "--key-delay-us"
 require_non_negative_int "$MIN_EVENT_TAP_SAMPLES" "--require-event-tap-samples"
 require_non_negative_int "$MIN_AX_SAMPLES" "--require-ax-samples"
 require_positive_int "$SEGMENT_CHARS" "AUTOCOMPLETE_LAB_SOAK_SEGMENT_CHARS"
