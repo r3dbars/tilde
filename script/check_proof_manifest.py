@@ -198,8 +198,6 @@ def verify_manifest(
     head = current_commit()
     if require_current_commit and head and manifest_commit != head:
         failures.append(f"sourceCommit is {manifest_commit or 'missing'}; expected current HEAD {head}")
-    elif head and manifest_commit and manifest_commit != head:
-        warnings.append(f"sourceCommit {manifest_commit[:12]} is not current HEAD {head[:12]}")
 
     surfaces = manifest.get("surfaces")
     if not isinstance(surfaces, list) or not surfaces:
