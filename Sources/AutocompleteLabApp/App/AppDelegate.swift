@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let insertionRetryPolicy = InsertionRetryPolicy()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
+    private let visibleSuggestionOutcomePolicy = VisibleSuggestionOutcomePolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
     private let suggestionPresentationPolicy = SuggestionPresentationPolicy()
     private var traceScreenshotCapture = TraceScreenshotCaptureCoordinator()
@@ -2699,19 +2700,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let fieldIdentityDescription = visibleSuggestionState.fieldIdentity?.traceDescription
                 ?? currentFieldIdentity?.traceDescription
                 ?? ""
-            let outcome: String
-            if reason.hasPrefix("accepted") {
-                outcome = "accepted"
-            } else if reason == "typed-through-visible-prefix" {
-                outcome = "typed-through"
-            } else if reason == "typed-over" {
-                outcome = "typed-over"
-            } else {
-                outcome = "ignored"
-            }
+            let outcome = visibleSuggestionOutcomePolicy.outcome(forHideReason: reason)
             let displayedText = visibleSuggestionState.displayedText ?? visibleSuggestionState.visibleSuggestion?.visibleText ?? ""
 
-            if outcome == "ignored" {
+            if outcome.recordsRepeatedMiss {
                 suggestionRepetitionSuppressor.recordMiss(
                     displayedText,
                     mode: visibleSuggestionState.requestMode,
@@ -2726,7 +2718,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 fieldIdentity: fieldIdentityDescription,
                 requestMode: visibleSuggestionState.requestMode?.rawValue ?? "",
                 displayedText: displayedText,
-                outcome: outcome,
+                outcome: outcome.rawValue,
                 reason: reason
             )
             setSuggestionDecision("Hidden: \(reason)")
