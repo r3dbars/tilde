@@ -66,8 +66,8 @@ public struct CompletionModelPolicy: Equatable, Sendable {
         model: .qwen35FourB,
         runtimeOwnership: .appOwnedEmbedded,
         minimumMemoryGB: 16,
-        maxGeneratedTokens: 16,
-        maxVisibleWords: 10,
+        maxGeneratedTokens: 10,
+        maxVisibleWords: 5,
         debounceMilliseconds: 15,
         targetLatencyMilliseconds: 50,
         reasoningEnabled: false
@@ -115,10 +115,19 @@ public struct CompletionLengthConfiguration: Equatable, Sendable {
     }
 
     public static func fromEnvironment(_ environment: [String: String]) -> CompletionLengthConfiguration {
-        CompletionLengthConfiguration(
-            maxVisibleWords: parsedInt(environment["AUTOCOMPLETE_LAB_VISIBLE_WORDS"])
-                ?? CompletionModelPolicy.mvp.maxVisibleWords,
-            maxGeneratedTokens: parsedInt(environment["AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS"])
+        let visibleWords = parsedInt(environment["AUTOCOMPLETE_LAB_VISIBLE_WORDS"])
+        let generatedTokens = parsedInt(environment["AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS"])
+
+        guard let visibleWords else {
+            return CompletionLengthConfiguration(
+                maxVisibleWords: CompletionModelPolicy.mvp.maxVisibleWords,
+                maxGeneratedTokens: generatedTokens ?? CompletionModelPolicy.mvp.maxGeneratedTokens
+            )
+        }
+
+        return CompletionLengthConfiguration(
+            maxVisibleWords: visibleWords,
+            maxGeneratedTokens: generatedTokens
         )
     }
 

@@ -17,4 +17,15 @@ struct KeyboardCapturePolicyTests {
 
         #expect(!policy.shouldCaptureKeys(isTrustedForAccessibility: false, hasVisibleSuggestion: true))
     }
+
+    @Test("Does not capture keys while suggestions are globally paused")
+    func doesNotCaptureKeysWhileGloballyPaused() {
+        let policy = KeyboardCapturePolicy()
+
+        #expect(!policy.shouldCaptureKeys(
+            isTrustedForAccessibility: true,
+            hasVisibleSuggestion: true,
+            controlState: .paused
+        ))
+    }
 }

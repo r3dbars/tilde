@@ -6,7 +6,7 @@ public enum SuggestionRenderMode: String, Codable, Equatable, Sendable {
     case disabled
 }
 
-public enum InsertionMode: String, Equatable, Sendable {
+public enum InsertionMode: String, Equatable, Hashable, Sendable {
     case axSelectedText
     case axValueReplacement
     case axThenKeyEvents
@@ -20,9 +20,44 @@ public enum FocusedFieldIdentityMode: String, Equatable, Sendable {
     case stableBounds
 }
 
+public enum CompatibilitySupportLevel: String, Equatable, Sendable {
+    case green
+    case yellow
+    case diagnosticsOnly
+    case unsupported
+
+    public var displayName: String {
+        switch self {
+        case .green:
+            return "Green"
+        case .yellow:
+            return "Yellow"
+        case .diagnosticsOnly:
+            return "Diagnostics-only"
+        case .unsupported:
+            return "Unsupported"
+        }
+    }
+
+    public var menuName: String {
+        switch self {
+        case .green:
+            return "green"
+        case .yellow:
+            return "yellow"
+        case .diagnosticsOnly:
+            return "diagnostics-only"
+        case .unsupported:
+            return "unsupported"
+        }
+    }
+}
+
 public struct CompatibilityProfile: Equatable, Sendable {
     public let bundleIdentifier: String
     public let displayName: String
+    public let supportLevel: CompatibilitySupportLevel
+    public let supportReason: String
     public let renderMode: SuggestionRenderMode
     public let insertionMode: InsertionMode
     public let fallbackRenderMode: SuggestionRenderMode?
@@ -40,6 +75,8 @@ public struct CompatibilityProfile: Equatable, Sendable {
     public init(
         bundleIdentifier: String,
         displayName: String,
+        supportLevel: CompatibilitySupportLevel,
+        supportReason: String,
         renderMode: SuggestionRenderMode,
         insertionMode: InsertionMode,
         fallbackRenderMode: SuggestionRenderMode? = nil,
@@ -56,6 +93,8 @@ public struct CompatibilityProfile: Equatable, Sendable {
     ) {
         self.bundleIdentifier = bundleIdentifier
         self.displayName = displayName
+        self.supportLevel = supportLevel
+        self.supportReason = supportReason
         self.renderMode = renderMode
         self.insertionMode = insertionMode
         self.fallbackRenderMode = fallbackRenderMode
@@ -125,6 +164,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.apple.TextEdit",
             displayName: "TextEdit",
+            supportLevel: .green,
+            supportReason: "Verified inline suggestions and native text insertion.",
             renderMode: .inlineAdjacent,
             insertionMode: .axSelectedText,
             fallbackRenderMode: .floatingMirror,
@@ -134,15 +175,20 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.apple.Notes",
             displayName: "Notes",
+            supportLevel: .yellow,
+            supportReason: "Rich text can drift; display can fall back to floating, and insertion fails closed.",
             renderMode: .inlineAdjacent,
             insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
-            fallbackInsertionMode: .axSelectedText,
-            notes: "Green/yellow rich-text target. Notes can report AX selected-text insertion success without moving the caret, so prefer verified key-event insertion."
+            fallbackInsertionMode: .disabled,
+            allowsDetachedSuggestions: false,
+            notes: "Yellow rich-text target. Use key events only, fail closed on unchanged verification, and suppress detached mirror placement until fresh title/body/checklist proof exists because Notes can report AX selected-text insertion success without moving the caret."
         ),
         CompatibilityProfile(
             bundleIdentifier: "md.obsidian",
             displayName: "Obsidian",
+            supportLevel: .yellow,
+            supportReason: "Electron editors can hide caret bounds, so this uses floating or synthetic placement.",
             renderMode: .floatingMirror,
             insertionMode: .axThenKeyEvents,
             fallbackRenderMode: .floatingMirror,
@@ -150,11 +196,13 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             fieldIdentityMode: .stableBounds,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Yellow Electron target. Prefer capability probing, mirror-style placement, and verified AX before synthetic key insertion. Do not show detached suggestions when CodeMirror hides caret bounds."
+            notes: "Yellow Electron target. Prefer capability probing, synthetic text-area caret placement, and verified AX before synthetic key insertion. Do not show detached suggestions when CodeMirror hides usable caret bounds."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.apple.mail",
             displayName: "Mail",
+            supportLevel: .diagnosticsOnly,
+            supportReason: "Mail compose is sensitive and insertion is not proven.",
             renderMode: .disabled,
             insertionMode: .disabled,
             fallbackRenderMode: .disabled,
@@ -169,23 +217,57 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.google.Chrome",
             displayName: "Chrome",
-            renderMode: .floatingMirror,
-            insertionMode: .axValueReplacement,
+            supportLevel: .yellow,
+            supportReason: "Browser editors vary; display can fall back to floating and insertion can fall back to AX.",
+            renderMode: .inlineAdjacent,
+            insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
-            fallbackInsertionMode: .keyEvents,
-            notes: "Yellow browser target. Verified on a local textarea with AXTextArea, selected range, and settable selected text. Chrome can report zero-height caret bounds, so use mirror anchoring."
+            fallbackInsertionMode: .axValueReplacement,
+            notes: "Yellow browser target. Prefer synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback. Prefer key-event insertion across textarea and contenteditable surfaces because rich browser editors can report AX replacement success without keeping cursor verification stable."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.openai.codex",
             displayName: "Codex",
+            supportLevel: .yellow,
+            supportReason: "Dogfood prompt support still needs one-word no-submit proof before it is green.",
+            renderMode: .inlineAdjacent,
+            insertionMode: .axValueReplacement,
+            fallbackRenderMode: .floatingMirror,
+            fallbackInsertionMode: .keyEvents,
+            fieldIdentityMode: .stableBounds,
+            supportsFullAcceptance: false,
+            suppressesAfterInsertionFailure: false,
+            allowsDetachedSuggestions: false,
+            notes: "Dogfood target. Prefer caret-bound inline suggestions and AX value replacement in the prompt editor. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
+        ),
+        CompatibilityProfile(
+            bundleIdentifier: "com.anthropic.claude-code",
+            displayName: "Claude Code",
+            supportLevel: .yellow,
+            supportReason: "Prompt insertion requires one-word no-submit proof and stays limited to next-word accept until full accept is separately proven safe.",
             renderMode: .inlineAdjacent,
             insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .axThenKeyEvents,
             fieldIdentityMode: .stableBounds,
+            supportsFullAcceptance: false,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Dogfood target. Prefer caret-bound inline suggestions when the prompt editor exposes bounds. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions."
+            notes: "Dogfood target. Prefer caret-bound inline suggestions when the prompt editor exposes bounds. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
+        ),
+        CompatibilityProfile(
+            bundleIdentifier: "com.anthropic.claudefordesktop",
+            displayName: "Claude",
+            supportLevel: .yellow,
+            supportReason: "Composer placement still needs one-word no-submit proof before it is green.",
+            renderMode: .inlineAdjacent,
+            insertionMode: .axValueReplacement,
+            fallbackRenderMode: .floatingMirror,
+            fieldIdentityMode: .stableBounds,
+            supportsFullAcceptance: false,
+            suppressesAfterInsertionFailure: false,
+            allowsDetachedSuggestions: false,
+            notes: "Dogfood target for Claude desktop. Prefer prompt-bound inline suggestions when the composer exposes bounds; otherwise use mirror placement without showing detached whole-window suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
         )
     ])
 
@@ -203,11 +285,20 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
     case denylisted
     case unsupported
 
+    public var supportLevel: CompatibilitySupportLevel {
+        switch self {
+        case let .supported(profile):
+            return profile.supportLevel
+        case .denylisted, .unsupported:
+            return .unsupported
+        }
+    }
+
     public var summary: String {
         switch self {
         case let .supported(profile):
             if profile.canPresentSuggestions {
-                return "supported: \(profile.displayName)"
+                return "\(profile.supportLevel.menuName): \(profile.displayName)"
             }
 
             return "diagnostics only: \(profile.displayName)"
@@ -215,6 +306,49 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
             return "blocked: denylisted app"
         case .unsupported:
             return "blocked: no MVP compatibility profile"
+        }
+    }
+
+    public var userFacingSummary: String {
+        switch self {
+        case let .supported(profile):
+            return "\(profile.supportLevel.displayName): \(profile.displayName)"
+        case .denylisted:
+            return "Unsupported: blocked app"
+        case .unsupported:
+            return "Unsupported: not tested yet"
+        }
+    }
+
+    public var userFacingReason: String {
+        switch self {
+        case let .supported(profile):
+            return profile.supportReason
+        case .denylisted:
+            return "Blocked because this kind of app can expose secrets or shell input."
+        case .unsupported:
+            return "No compatibility profile yet."
+        }
+    }
+
+    public var canToggleSuggestions: Bool {
+        guard case let .supported(profile) = self else {
+            return false
+        }
+
+        return profile.canPresentSuggestions && !profile.isSensitive
+    }
+
+    public func menuText(appDisplayName: String, isEnabled: Bool) -> String {
+        switch self {
+        case let .supported(profile):
+            guard profile.canPresentSuggestions, !profile.isSensitive else {
+                return "\(appDisplayName) \(profile.supportLevel.menuName)"
+            }
+
+            return "\(appDisplayName) \(profile.supportLevel.menuName) \(isEnabled ? "on" : "off")"
+        case .denylisted, .unsupported:
+            return "\(appDisplayName) unsupported"
         }
     }
 }

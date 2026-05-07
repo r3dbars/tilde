@@ -17,6 +17,23 @@ struct KeyboardActionRouterTests {
         #expect(router.action(for: .optionTab, hasVisibleSuggestion: true) == .passThrough)
     }
 
+    @Test("Option Tab can accept all visible text when selected")
+    func optionTabCanAcceptAllVisibleTextWhenSelected() {
+        let router = KeyboardActionRouter(
+            shortcutConfiguration: KeyboardShortcutConfiguration(acceptAllShortcut: .optionTab)
+        )
+
+        #expect(router.action(for: .optionTab, hasVisibleSuggestion: true) == .acceptAllVisible)
+        #expect(router.action(for: .backtick, hasVisibleSuggestion: true) == .passThrough)
+    }
+
+    @Test("Other keys pass through even when a suggestion is visible")
+    func otherKeysPassThrough() {
+        let router = KeyboardActionRouter()
+
+        #expect(router.action(for: .other, hasVisibleSuggestion: true) == .passThrough)
+    }
+
     @Test("Backtick accepts all visible text when a suggestion is visible")
     func backtickAcceptsAllVisibleText() {
         let router = KeyboardActionRouter()

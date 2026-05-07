@@ -91,6 +91,49 @@ struct RuntimePolicyTests {
         #expect(invalidReport.action == .revealModelFolder)
     }
 
+    @Test("Runtime readiness guidance gives stage-specific setup actions")
+    func runtimeReadinessGuidanceGivesStageSpecificSetupActions() {
+        let missing = RuntimeReadinessGuidance(
+            report: RuntimeReadinessReport(
+                stage: .downloadNeeded,
+                summary: "download needed",
+                action: .revealModelFolder
+            )
+        )
+        let warming = RuntimeReadinessGuidance(
+            report: RuntimeReadinessReport(
+                stage: .warming,
+                summary: "warming",
+                action: .wait
+            )
+        )
+        let failed = RuntimeReadinessGuidance(
+            report: RuntimeReadinessReport(
+                stage: .failed,
+                summary: "failed",
+                action: .retry
+            )
+        )
+        let ready = RuntimeReadinessGuidance(
+            report: RuntimeReadinessReport(
+                stage: .ready,
+                summary: "ready",
+                action: .none,
+                isReady: true
+            )
+        )
+
+        #expect(missing.actionTitle == "Open Model Folder")
+        #expect(missing.isActionEnabled)
+        #expect(missing.message.contains("Model missing"))
+        #expect(warming.actionTitle == "Warming...")
+        #expect(!warming.isActionEnabled)
+        #expect(failed.actionTitle == "Retry Model")
+        #expect(failed.isActionEnabled)
+        #expect(ready.actionTitle == "Ready")
+        #expect(!ready.isActionEnabled)
+    }
+
     @Test("Runtime readiness report marks native runtime ready")
     func runtimeReadinessReportMarksNativeReady() {
         let plan = RuntimeBootstrapPlan(
@@ -146,6 +189,9 @@ struct RuntimePolicyTests {
         #expect(manifest.model == .qwen35FourB)
         #expect(manifest.runtimeCandidate == .mlx)
         #expect(manifest.cacheDirectoryName.contains("Qwen35FourB"))
+        #expect(manifest.source?.repoID == "mlx-community/Qwen3.5-4B-MLX-4bit")
+        #expect(manifest.source?.allowPatterns.contains("*.safetensors") == true)
+        #expect(manifest.source?.estimatedBytes == 3_030_000_000)
         #expect(manifest.requiredFileNames.contains("config.json"))
         #expect(manifest.requiredModelFileExtension == "safetensors")
         #expect(!manifest.requiresVisionLanguageFactory)
