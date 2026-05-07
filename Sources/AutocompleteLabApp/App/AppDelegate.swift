@@ -3895,12 +3895,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func cancelModelAssetInstall() {
+        guard let modelInstallTask else {
+            return
+        }
+
+        modelInstallStatusText = "Model install: canceling..."
+        DiagnosticsLog.shared.record("model-install-cancel-requested")
+        modelInstallTask.cancel()
+        refreshRuntimeChrome()
+    }
+
     private func performRuntimeAction(_ action: RuntimeReadinessAction) {
         switch action {
         case .installModel:
             startModelAssetInstall(reason: "install-action")
         case .repairModel:
             startModelAssetInstall(reason: "repair-action")
+        case .cancelModelInstall:
+            cancelModelAssetInstall()
         case .revealModelFolder:
             revealModelFolder()
             reloadModelRuntime(reason: "model-folder-action")

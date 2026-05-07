@@ -447,6 +447,40 @@ struct SettingsFirstRunState: Equatable {
     }
 }
 
+struct SettingsRuntimeControlState: Equatable {
+    let report: RuntimeReadinessReport
+    let guidance: RuntimeReadinessGuidance
+    let installStatus: String?
+    let installInProgress: Bool
+
+    init(
+        report: RuntimeReadinessReport,
+        installStatus: String?,
+        installInProgress: Bool
+    ) {
+        self.report = report
+        self.guidance = RuntimeReadinessGuidance(report: report)
+        self.installStatus = installStatus
+        self.installInProgress = installInProgress
+    }
+
+    var action: RuntimeReadinessAction {
+        installInProgress ? .cancelModelInstall : report.action
+    }
+
+    var actionLabelText: String {
+        "Next step: \(action.displayName)"
+    }
+
+    var actionButtonTitle: String {
+        installInProgress ? "Cancel Install" : guidance.actionTitle
+    }
+
+    var isActionEnabled: Bool {
+        installInProgress || guidance.isActionEnabled
+    }
+}
+
 @MainActor
 final class SettingsWindowController: NSObject {
     private let window: NSWindow
@@ -662,7 +696,11 @@ final class SettingsWindowController: NSObject {
             suggestionsPaused: suggestionsPaused,
             pace: suggestionPace
         )
-        let guidance = RuntimeReadinessGuidance(report: runtimeReport)
+        let runtimeControl = SettingsRuntimeControlState(
+            report: runtimeReport,
+            installStatus: runtimeInstallStatus,
+            installInProgress: runtimeInstallInProgress
+        )
         let permission = SettingsPermissionState(isTrusted: isTrusted)
         permissionLabel.stringValue = permission.statusText
         permissionDetailLabel.stringValue = permission.detailText
@@ -674,12 +712,12 @@ final class SettingsWindowController: NSObject {
         runtimeLabel.stringValue = "Local model: \(runtimeReport.summary)"
         runtimeDetailLabel.stringValue = runtimeReport.detail ?? ""
         runtimeDetailLabel.isHidden = runtimeReport.detail == nil
-        runtimeActionLabel.stringValue = "Next step: \(runtimeReport.action.displayName)"
-        runtimeInstallStatusLabel.stringValue = runtimeInstallStatus ?? ""
-        runtimeInstallStatusLabel.isHidden = runtimeInstallStatus == nil
-        runtimeActionButton.title = guidance.actionTitle
-        runtimeActionButton.isEnabled = guidance.isActionEnabled && !runtimeInstallInProgress
-        currentRuntimeAction = runtimeReport.action
+        runtimeActionLabel.stringValue = runtimeControl.actionLabelText
+        runtimeInstallStatusLabel.stringValue = runtimeControl.installStatus ?? ""
+        runtimeInstallStatusLabel.isHidden = runtimeControl.installStatus == nil
+        runtimeActionButton.title = runtimeControl.actionButtonTitle
+        runtimeActionButton.isEnabled = runtimeControl.isActionEnabled
+        currentRuntimeAction = runtimeControl.action
         runtimeTargetLabel.stringValue = "Runtime target: \(runtimeTargetSummary)"
         modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
         currentAppLabel.stringValue = currentApp.statusText

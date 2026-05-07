@@ -379,6 +379,36 @@ struct SettingsWindowControllerStateTests {
         )
     }
 
+    @Test("Runtime install control can cancel in-progress setup and retry failures")
+    func runtimeInstallControlCanCancelAndRetry() {
+        let missingModelReport = RuntimeReadinessReport(
+            stage: .downloadNeeded,
+            summary: "download needed",
+            action: .installModel
+        )
+
+        let installing = SettingsRuntimeControlState(
+            report: missingModelReport,
+            installStatus: "Model install: downloading 25%",
+            installInProgress: true
+        )
+
+        #expect(installing.action == .cancelModelInstall)
+        #expect(installing.actionLabelText == "Next step: Cancel Model Install")
+        #expect(installing.actionButtonTitle == "Cancel Install")
+        #expect(installing.isActionEnabled)
+
+        let failed = SettingsRuntimeControlState(
+            report: missingModelReport,
+            installStatus: "Model install failed: network unavailable",
+            installInProgress: false
+        )
+
+        #expect(failed.action == .installModel)
+        #expect(failed.actionButtonTitle == "Install Model")
+        #expect(failed.isActionEnabled)
+    }
+
     @Test("Accessibility permission copy says what the app reads and keeps local")
     func accessibilityPermissionCopySaysWhatTheAppReadsAndKeepsLocal() {
         let needed = SettingsPermissionState(isTrusted: false)
