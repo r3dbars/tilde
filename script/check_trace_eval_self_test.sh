@@ -308,6 +308,67 @@ if ! grep -F "visual-missing: missing suggestionPanelRect, screenshotCaptureRect
 fi
 
 cat >"$BAD_TRACE_FILE" <<'JSONL'
+{"type":"suggestionPresented","suggestionID":"fallback-place","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":80,"metadata":{"effectiveRenderMode":"floatingMirror","placementRequestedRenderMode":"inlineAdjacent","placementEffectiveRenderMode":"floatingMirror","placementHealthReason":"missing-caret","placementSelfHealingApplied":"true","placementSelfHealingAction":"fallback-floating-mirror","placementAnchorSource":"element","placementConfidenceBand":"low","placementConfidenceScore":"0.40"}}
+{"type":"suggestionPresented","suggestionID":"inline-clipped","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":90,"metadata":{"effectiveRenderMode":"inlineAdjacent","visibleChars":"20","anchorRect":"x=372,y=220,w=0,h=20","suggestionPanelRect":"x=372,y=220,w=28,h=20","clippingRect":"x=20,y=180,w=380,h=80","placementHealthReason":"healthy","placementSelfHealingAction":"none","placementConfidenceBand":"high"}}
+{"type":"suggestionSuppressed","suggestionID":"panel-suppressed","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","reason":"panel-frame-unusable","metadata":{"effectiveRenderMode":"inlineAdjacent","placementRequestedRenderMode":"inlineAdjacent","placementEffectiveRenderMode":"inlineAdjacent","placementHealthReason":"healthy","placementSelfHealingAction":"none","placementConfidenceBand":"high"}}
+{"type":"suggestionHidden","suggestionID":"panel-hidden","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","reason":"panel-frame-unusable"}
+{"type":"suggestionHidden","suggestionID":"stale","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","reason":"stale-after-keydown"}
+{"type":"suggestionHidden","suggestionID":"focus","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","reason":"focus-changed"}
+{"type":"suggestionHidden","suggestionID":"placement-hidden","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","reason":"placement-missing-caret"}
+JSONL
+
+AUTOCOMPLETE_LAB_TRACE_PATH="$BAD_TRACE_FILE" \
+  script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-placement-reasons.txt
+
+if ! grep -F "Hidden by reason:" /tmp/autocomplete-trace-eval-placement-reasons.txt >/dev/null; then
+  echo "trace eval self-test did not report hidden reasons" >&2
+  cat /tmp/autocomplete-trace-eval-placement-reasons.txt >&2
+  exit 1
+fi
+
+if ! grep -F "stale-after-keydown: 1" /tmp/autocomplete-trace-eval-placement-reasons.txt >/dev/null; then
+  echo "trace eval self-test did not report stale hidden reasons" >&2
+  cat /tmp/autocomplete-trace-eval-placement-reasons.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Placement health reasons:" /tmp/autocomplete-trace-eval-placement-reasons.txt >/dev/null; then
+  echo "trace eval self-test did not report placement health reasons" >&2
+  cat /tmp/autocomplete-trace-eval-placement-reasons.txt >&2
+  exit 1
+fi
+
+if ! grep -F "missing-caret: 1" /tmp/autocomplete-trace-eval-placement-reasons.txt >/dev/null; then
+  echo "trace eval self-test did not report placement fallback reasons" >&2
+  cat /tmp/autocomplete-trace-eval-placement-reasons.txt >&2
+  exit 1
+fi
+
+if ! grep -F "fallback-floating-mirror reason=missing-caret inlineAdjacent->floatingMirror anchor=element: 1" /tmp/autocomplete-trace-eval-placement-reasons.txt >/dev/null; then
+  echo "trace eval self-test did not report placement fallback detail" >&2
+  cat /tmp/autocomplete-trace-eval-placement-reasons.txt >&2
+  exit 1
+fi
+
+if ! grep -F "com.openai.codex/panel-suppressed suggestionSuppressed mode=inlineAdjacent" /tmp/autocomplete-trace-eval-placement-reasons.txt >/dev/null; then
+  echo "trace eval self-test did not report suppressed unusable panel frames" >&2
+  cat /tmp/autocomplete-trace-eval-placement-reasons.txt >&2
+  exit 1
+fi
+
+if ! grep -F "com.openai.codex/inline-clipped: narrow 28px, edge right" /tmp/autocomplete-trace-eval-placement-reasons.txt >/dev/null; then
+  echo "trace eval self-test did not report inline clipping evidence" >&2
+  cat /tmp/autocomplete-trace-eval-placement-reasons.txt >&2
+  exit 1
+fi
+
+if ! grep -F "md.obsidian/placement-hidden (placement-missing-caret)" /tmp/autocomplete-trace-eval-placement-reasons.txt >/dev/null; then
+  echo "trace eval self-test did not report placement hidden mismatch reasons" >&2
+  cat /tmp/autocomplete-trace-eval-placement-reasons.txt >&2
+  exit 1
+fi
+
+cat >"$BAD_TRACE_FILE" <<'JSONL'
 {"type":"suggestionPresented","suggestionID":"stuck","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","latencyMilliseconds":0}
 {"type":"suggestionAccepted","suggestionID":"stuck","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","acceptedText":"ing"}
 {"type":"insertionFailed","suggestionID":"stuck","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","reason":"unchanged"}

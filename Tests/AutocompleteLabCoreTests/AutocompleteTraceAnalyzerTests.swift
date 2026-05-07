@@ -169,6 +169,136 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.topMisses.allSatisfy { $0.fixCategory == "renderer/caret bug" })
     }
 
+    @Test("flags panel frame, clipping, and placement fallback misses")
+    func flagsPanelFrameClippingAndPlacementFallbackMisses() {
+        let events = [
+            event(
+                .suggestionSuppressed,
+                suggestionID: "panel-suppressed",
+                appBundleIdentifier: "com.openai.codex",
+                requestMode: "phraseContinuation",
+                reason: "panel-frame-unusable",
+                metadata: [
+                    "effectiveRenderMode": "inlineAdjacent"
+                ]
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "panel-hidden",
+                appBundleIdentifier: "com.openai.codex",
+                requestMode: "phraseContinuation",
+                reason: "panel-frame-unusable"
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "inline-clipped",
+                appBundleIdentifier: "com.openai.codex",
+                requestMode: "phraseContinuation",
+                displayedText: "this suggestion is clipped",
+                metadata: [
+                    "effectiveRenderMode": "inlineAdjacent",
+                    "visibleChars": "26",
+                    "suggestionPanelRect": "x=372,y=220,w=28,h=20",
+                    "clippingRect": "x=20,y=180,w=380,h=80"
+                ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "fallback-place",
+                appBundleIdentifier: "md.obsidian",
+                requestMode: "phraseContinuation",
+                metadata: [
+                    "placementRequestedRenderMode": "inlineAdjacent",
+                    "placementEffectiveRenderMode": "floatingMirror",
+                    "placementHealthReason": "missing-caret",
+                    "placementSelfHealingApplied": "true",
+                    "placementSelfHealingAction": "fallback-floating-mirror",
+                    "placementAnchorSource": "element"
+                ]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "placement-suppressed",
+                appBundleIdentifier: "md.obsidian",
+                requestMode: "phraseContinuation",
+                reason: "missing-anchor",
+                metadata: [
+                    "placementHealthReason": "missing-anchor",
+                    "placementSelfHealingAction": "suppress"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Panel frame unusable in com.openai.codex"
+                && miss.suggestedCause.contains("inlineAdjacent panel frame")
+        })
+        #expect(summary.topMisses.contains { $0.title == "Panel frame became unusable in com.openai.codex" })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Inline placement clipped in com.openai.codex"
+                && miss.suggestedCause.contains("28 px")
+        })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Placement self-healed in md.obsidian"
+                && miss.suggestedCause.contains("fallback-floating-mirror")
+                && miss.suggestedCause.contains("inlineAdjacent to floatingMirror")
+        })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Placement suppressed in md.obsidian"
+                && miss.suggestedCause.contains("missing-anchor")
+        })
+    }
+
+    @Test("flags stale and focus mismatch hide reasons")
+    func flagsStaleAndFocusMismatchHideReasons() {
+        let events = [
+            event(
+                .suggestionPresented,
+                suggestionID: "field-move",
+                appBundleIdentifier: "com.apple.TextEdit",
+                fieldIdentity: "textedit-field",
+                displayedText: "tation"
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "field-move",
+                appBundleIdentifier: "com.openai.codex",
+                fieldIdentity: "codex-field",
+                displayedText: "tation",
+                reason: "focus-changed"
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "stale",
+                appBundleIdentifier: "com.openai.codex",
+                requestMode: "wordCompletion",
+                reason: "stale-after-keydown"
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "placement-hidden",
+                appBundleIdentifier: "md.obsidian",
+                reason: "placement-missing-caret"
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Suggestion hidden under a different field"
+                && miss.suggestedCause.contains("com.apple.TextEdit/textedit-field")
+                && miss.suggestedCause.contains("com.openai.codex/codex-field")
+        })
+        #expect(summary.topMisses.contains { $0.title == "Suggestion hidden after focus changed" })
+        #expect(summary.topMisses.contains { $0.title == "Stale suggestion passed through" })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Placement changed while suggestion was visible"
+                && miss.suggestedCause.contains("missing-caret")
+        })
+    }
+
     @Test("flags slow suggestions as latency misses")
     func flagsSlowSuggestions() {
         let events = [
