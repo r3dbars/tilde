@@ -8,6 +8,7 @@ struct SettingsCurrentAppState: Equatable {
     let isEnabled: Bool
     let disabledAppCount: Int
     let renderModeOverride: SuggestionRenderMode?
+    let canQuietCurrentField: Bool
 
     init(
         displayName: String,
@@ -15,7 +16,8 @@ struct SettingsCurrentAppState: Equatable {
         supportStatus: CompatibilitySupportStatus,
         isEnabled: Bool,
         disabledAppCount: Int,
-        renderModeOverride: SuggestionRenderMode? = nil
+        renderModeOverride: SuggestionRenderMode? = nil,
+        canQuietCurrentField: Bool = false
     ) {
         self.displayName = displayName
         self.bundleIdentifier = bundleIdentifier
@@ -23,6 +25,7 @@ struct SettingsCurrentAppState: Equatable {
         self.isEnabled = isEnabled
         self.disabledAppCount = disabledAppCount
         self.renderModeOverride = renderModeOverride
+        self.canQuietCurrentField = canQuietCurrentField
     }
 
     var canToggle: Bool {
@@ -268,6 +271,11 @@ final class SettingsWindowController: NSObject {
         target: nil,
         action: nil
     )
+    private let quietCurrentFieldButton = NSButton(
+        title: "Quiet Current Field",
+        target: nil,
+        action: nil
+    )
     private let toggleCurrentAppButton = NSButton(
         checkboxWithTitle: "Allow suggestions in this app",
         target: nil,
@@ -304,6 +312,7 @@ final class SettingsWindowController: NSObject {
     private let performRuntimeAction: (RuntimeReadinessAction) -> Void
     private let toggleCurrentApp: () -> Void
     private let toggleMirrorMode: () -> Void
+    private let quietCurrentField: () -> Void
     private let enableAllApps: () -> Void
     private let toggleTracingPaused: () -> Void
     private let toggleRawContentTracing: () -> Void
@@ -319,6 +328,7 @@ final class SettingsWindowController: NSObject {
         performRuntimeAction: @escaping (RuntimeReadinessAction) -> Void,
         toggleCurrentApp: @escaping () -> Void,
         toggleMirrorMode: @escaping () -> Void,
+        quietCurrentField: @escaping () -> Void,
         enableAllApps: @escaping () -> Void,
         toggleTracingPaused: @escaping () -> Void,
         toggleRawContentTracing: @escaping () -> Void,
@@ -332,6 +342,7 @@ final class SettingsWindowController: NSObject {
         self.performRuntimeAction = performRuntimeAction
         self.toggleCurrentApp = toggleCurrentApp
         self.toggleMirrorMode = toggleMirrorMode
+        self.quietCurrentField = quietCurrentField
         self.enableAllApps = enableAllApps
         self.toggleTracingPaused = toggleTracingPaused
         self.toggleRawContentTracing = toggleRawContentTracing
@@ -426,6 +437,7 @@ final class SettingsWindowController: NSObject {
         toggleMirrorModeButton.title = currentApp.mirrorModeTitle
         toggleMirrorModeButton.state = currentApp.isMirrorForced ? .on : .off
         toggleMirrorModeButton.isEnabled = currentApp.canToggleMirrorMode
+        quietCurrentFieldButton.isEnabled = currentApp.canQuietCurrentField
         toggleCurrentAppButton.title = currentApp.toggleTitle
         toggleCurrentAppButton.state = currentApp.isEnabled ? .on : .off
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
@@ -513,6 +525,10 @@ final class SettingsWindowController: NSObject {
         toggleMirrorModeButton.target = self
         toggleMirrorModeButton.action = #selector(toggleMirrorModeControl)
         toggleMirrorModeButton.toolTip = "Forces this app to use the safer mirror surface instead of inline placement."
+        quietCurrentFieldButton.target = self
+        quietCurrentFieldButton.action = #selector(quietCurrentFieldControl)
+        quietCurrentFieldButton.bezelStyle = .rounded
+        quietCurrentFieldButton.toolTip = "Hides suggestions for this field until focus changes."
         enableAllAppsButton.target = self
         enableAllAppsButton.action = #selector(enableAllAppsControl)
         enableAllAppsButton.bezelStyle = .rounded
@@ -572,6 +588,7 @@ final class SettingsWindowController: NSObject {
                     currentAppSafetyLabel,
                     toggleMirrorModeButton,
                     toggleCurrentAppButton,
+                    quietCurrentFieldButton,
                     makeButtonRow([disabledAppsLabel, enableAllAppsButton])
                 ]
             ),
@@ -684,6 +701,11 @@ final class SettingsWindowController: NSObject {
     @objc
     private func toggleMirrorModeControl() {
         toggleMirrorMode()
+    }
+
+    @objc
+    private func quietCurrentFieldControl() {
+        quietCurrentField()
     }
 
     @objc

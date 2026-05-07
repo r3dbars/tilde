@@ -30,6 +30,7 @@ struct SettingsWindowControllerStateTests {
         #expect(allowed.canToggleMirrorMode)
         #expect(!allowed.isMirrorForced)
         #expect(allowed.mirrorModeTitle == "Force mirror mode")
+        #expect(!allowed.canQuietCurrentField)
         #expect(allowed.toggleTitle == "Allow suggestions in this app")
         #expect(allowed.menuToggleTitle == "Disable TextEdit")
         #expect(allowed.blockedAppsText == "Blocked apps: none")
@@ -131,7 +132,8 @@ struct SettingsWindowControllerStateTests {
             supportStatus: store.supportStatus(for: "com.apple.TextEdit"),
             isEnabled: true,
             disabledAppCount: 0,
-            renderModeOverride: .floatingMirror
+            renderModeOverride: .floatingMirror,
+            canQuietCurrentField: true
         )
 
         #expect(forced.modeText == "Mode: mirror forced")
@@ -139,6 +141,7 @@ struct SettingsWindowControllerStateTests {
         #expect(forced.canToggleMirrorMode)
         #expect(forced.isMirrorForced)
         #expect(forced.mirrorModeTitle == "Force mirror mode")
+        #expect(forced.canQuietCurrentField)
     }
 
     @Test("Prompt apps show full accept is off for safety")
