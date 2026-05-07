@@ -12,6 +12,7 @@ public struct CompletionPrompt: Equatable, Sendable {
 
 public struct CompletionPromptBuilder: Equatable, Sendable {
     public static let promptStyleIdentifier = "tiny-continuation-v1"
+    public static let noSuggestionToken = "<NO_SUGGESTION>"
 
     public let maxContextCharacters: Int
     public let maxCurrentParagraphCharacters: Int
@@ -38,6 +39,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
                 system: """
                 Inline word completion.
                 Return only the missing suffix for the current word.
+                Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, or the suffix would complete the wrong word.
                 No spaces, punctuation, quotes, reasoning, or extra words.
                 """,
                 user: "Before cursor:\n\(context)\n\nSuffix:"
@@ -57,6 +59,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let base = """
         Inline autocomplete.
         Return only the next \(maxVisibleWords) words or fewer.
+        Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, chatty, or likely to answer the prompt instead of continuing it.
         Prefer boring connective tissue, names, repeated local terms, closers, and the next few words the user was already likely to type.
         \(sentenceGuidance) Do not answer, explain, greet, quote, reason, or restart.
         Do not brainstorm, rewrite, introduce a new topic, or complete the user's whole thought.

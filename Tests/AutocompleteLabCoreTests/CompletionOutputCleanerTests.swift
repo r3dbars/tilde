@@ -100,6 +100,18 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("Start the next sentence if needed.", after: "We shipped it.") == nil)
     }
 
+    @Test("Suppresses no suggestion sentinel outputs")
+    func suppressesNoSuggestionSentinelOutputs() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("<NO_SUGGESTION>", after: "Can we") == nil)
+        #expect(cleaner.clean("<no_suggestion>", after: "Can we") == nil)
+        #expect(cleaner.clean("`<NO_SUGGESTION>`", after: "Can we") == nil)
+        #expect(cleaner.clean("Next words: <NO_SUGGESTION>", after: "Can we") == nil)
+        #expect(cleaner.clean("Suffix: '<no_suggestion>'", after: "dic", mode: .wordCompletion) == nil)
+        #expect(cleaner.clean("<think>no confident suffix</think><NO_SUGGESTION>", after: "dic", mode: .wordCompletion) == nil)
+    }
+
     @Test("Trims repeated typed prefix from real model output")
     func trimsRepeatedTypedPrefix() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
