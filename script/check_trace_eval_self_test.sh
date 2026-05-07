@@ -125,6 +125,18 @@ if ! grep -F "Insertion verification success: 100%" /tmp/autocomplete-trace-eval
   exit 1
 fi
 
+if ! grep -F "Support state by app:" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not print support states" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "com.apple.TextEdit: experimental" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not mark low-sample TextEdit traces as experimental" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
 if ! grep -F "com.openai.codex: 67% (6/9)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not report useful rate by app" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
@@ -244,6 +256,21 @@ fi
 if ! grep -F "missing_arm: suggestionPresented" /tmp/autocomplete-trace-eval-self-test-arm-fail.txt >/dev/null; then
   echo "trace eval self-test did not explain the missing experiment arm" >&2
   cat /tmp/autocomplete-trace-eval-self-test-arm-fail.txt >&2
+  exit 1
+fi
+
+if AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
+   AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP="com.apple.TextEdit" \
+   AUTOCOMPLETE_LAB_TRACE_REQUIRE_SUPPORT_STATE="caveated" \
+   script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-self-test-support-fail.txt 2>&1; then
+  echo "trace eval self-test expected the support-state gate to fail" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-support-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "com.apple.TextEdit: support state experimental below caveated" /tmp/autocomplete-trace-eval-self-test-support-fail.txt >/dev/null; then
+  echo "trace eval self-test did not explain the low support state" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-support-fail.txt >&2
   exit 1
 fi
 

@@ -154,6 +154,7 @@ final class DiagnosticsWindowController {
         sections.append(countBucketsText(title: "Actionable suppressed by mode", buckets: traceSummary.actionableSuppressedByMode))
         sections.append(countBucketsText(title: "Annoyance signals", buckets: traceSummary.annoyanceSignalCounts))
         sections.append(topMissesText(traceSummary.topMisses))
+        sections.append(supportStateText(recentTraceEvents))
 
         if let profile {
             sections.append(
@@ -240,6 +241,20 @@ final class DiagnosticsWindowController {
         Top 5 misses:
         \(misses.enumerated().map { index, miss in
             "  \(index + 1). \(miss.title) | count=\(miss.count) | app=\(miss.appBundleIdentifier.isEmpty ? "unknown" : miss.appBundleIdentifier) | mode=\(miss.requestMode.isEmpty ? "unknown" : miss.requestMode) | fix=\(miss.fixCategory) | cause=\(miss.suggestedCause) | example=\(miss.exampleSuggestionID)"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func supportStateText(_ events: [AutocompleteTraceEvent]) -> String {
+        let evaluations = CompatibilitySupportEvaluator().evaluations(for: events)
+        guard !evaluations.isEmpty else {
+            return "Support state by app: none yet"
+        }
+
+        return """
+        Support state by app:
+        \(evaluations.map { evaluation in
+            "  \(evaluation.bundleIdentifier): \(evaluation.state.rawValue) shown=\(evaluation.presentedCount) kept=\(Self.percent(evaluation.acceptedAndKeptShownRate)) insert=\(Self.percent(evaluation.insertionVerificationSuccessRate)) p95=\(Self.latency(evaluation.p95LatencyMilliseconds)) annoyance=\(Self.decimal(evaluation.annoyanceScore))"
         }.joined(separator: "\n"))
         """
     }

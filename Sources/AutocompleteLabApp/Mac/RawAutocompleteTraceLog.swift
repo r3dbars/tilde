@@ -378,6 +378,12 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         let actionableSuppressedApps = sortedCountList(summary.actionableSuppressedByApp)
         let actionableSuppressedModes = sortedCountList(summary.actionableSuppressedByMode)
         let annoyanceSignals = sortedCountList(summary.annoyanceSignalCounts)
+        let supportStates = CompatibilitySupportEvaluator()
+            .evaluations(for: events)
+            .map { evaluation in
+                "<tr><td><code>\(escape(evaluation.bundleIdentifier))</code></td><td>\(escape(evaluation.state.rawValue))</td><td>\(evaluation.presentedCount)</td><td>\(Int((evaluation.acceptedAndKeptShownRate * 100).rounded()))%</td><td>\(Int((evaluation.insertionVerificationSuccessRate * 100).rounded()))%</td><td>\(evaluation.p95LatencyMilliseconds.map { "\($0)ms" } ?? "n/a")</td><td>\(String(format: "%.2f", evaluation.annoyanceScore))</td></tr>"
+            }
+            .joined(separator: "\n")
 
         return """
         <!doctype html>
@@ -453,6 +459,11 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           <ul>\(actionableSuppressedModes)</ul>
           <h2>Annoyance signals</h2>
           <ul>\(annoyanceSignals)</ul>
+          <h2>Support state by app</h2>
+          <table>
+            <thead><tr><th>App</th><th>State</th><th>Shown</th><th>Kept</th><th>Insert</th><th>p95</th><th>Annoyance</th></tr></thead>
+            <tbody>\(supportStates)</tbody>
+          </table>
           <h2>Top 5 misses</h2>
           <ol>\(misses)</ol>
           <h2>Recent events</h2>
