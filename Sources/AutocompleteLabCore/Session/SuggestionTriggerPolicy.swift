@@ -51,7 +51,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         }
 
         if currentTextBeforeCursor.count < previousTextBeforeCursor.count {
-            return .request(delayMilliseconds: pauseDelayMilliseconds)
+            return .skip
         }
 
         let changedCount = currentTextBeforeCursor.count - previousTextBeforeCursor.count

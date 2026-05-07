@@ -9,7 +9,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords
     ) {
         self.minimumVisibleWords = max(1, minimumVisibleWords)
-        self.maxVisibleWords = max(1, maxVisibleWords)
+        self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
     }
 
     public func clean(_ rawOutput: String) -> CompletionSuggestion? {
@@ -88,6 +88,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        if mode == .phraseContinuation,
+           isLowSignalPhrase(suggestion.visibleText) {
+            return nil
+        }
+
         return suggestion
     }
 
@@ -152,6 +157,19 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return Self.lowValueSingleWordPhrases.contains(word)
     }
 
+    private func isLowSignalPhrase(_ text: String) -> Bool {
+        let words = normalizedWords(in: text)
+        guard words.count >= 2 else {
+            return false
+        }
+
+        if Self.lowSignalPhraseStarters.contains(Array(words.prefix(2)).joined(separator: " ")) {
+            return true
+        }
+
+        return words.allSatisfy { Self.lowSignalWords.contains($0) }
+    }
+
     private func repeatsEarlierContext(_ suggestion: String, after textBeforeCursor: String) -> Bool {
         let suggestionWords = normalizedWords(in: suggestion)
         guard suggestionWords.count >= 3 else {
@@ -184,6 +202,26 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "a", "an", "and", "are", "as", "at", "be", "but", "for", "if",
         "in", "is", "it", "of", "on", "or", "so", "the", "to", "was",
         "were", "with"
+    ]
+
+    private static let lowSignalWords: Set<String> = [
+        "a", "an", "and", "are", "as", "at", "be", "been", "being", "but",
+        "by", "can", "could", "do", "does", "for", "from", "had", "has",
+        "have", "he", "her", "here", "him", "his", "i", "if", "in", "is",
+        "it", "its", "just", "may", "maybe", "might", "of", "on", "or",
+        "our", "probably", "really", "she", "should", "so", "some", "that",
+        "the", "their", "there", "they", "this", "to", "very", "was", "we",
+        "were", "will", "with", "would", "you", "your"
+    ]
+
+    private static let lowSignalPhraseStarters: Set<String> = [
+        "i guess",
+        "i think",
+        "it would",
+        "kind of",
+        "sort of",
+        "there are",
+        "there is"
     ]
 }
 

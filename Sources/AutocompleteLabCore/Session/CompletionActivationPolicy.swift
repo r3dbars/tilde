@@ -35,15 +35,18 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
     public let minimumContextCharacters: Int
     public let minimumContextWords: Int
     public let minimumWordCompletionCharacters: Int
+    public let maximumWordCompletionCharacters: Int
 
     public init(
         minimumContextCharacters: Int = 3,
         minimumContextWords: Int = 2,
-        minimumWordCompletionCharacters: Int = 2
+        minimumWordCompletionCharacters: Int = 2,
+        maximumWordCompletionCharacters: Int = 4
     ) {
         self.minimumContextCharacters = max(1, minimumContextCharacters)
         self.minimumContextWords = max(1, minimumContextWords)
         self.minimumWordCompletionCharacters = max(1, minimumWordCompletionCharacters)
+        self.maximumWordCompletionCharacters = max(self.minimumWordCompletionCharacters, maximumWordCompletionCharacters)
     }
 
     public func canSuggest(
@@ -117,6 +120,7 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             .lowercased()
 
         guard normalized.count >= minimumWordCompletionCharacters,
+              normalized.count <= maximumWordCompletionCharacters,
               normalized.allSatisfy({ $0.isLetter }) else {
             return false
         }
