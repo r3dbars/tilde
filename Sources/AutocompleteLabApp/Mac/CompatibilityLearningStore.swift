@@ -54,6 +54,17 @@ final class CompatibilityLearningStore: @unchecked Sendable {
         }
     }
 
+    func setRenderModeOverride(_ mode: SuggestionRenderMode?, for bundleIdentifier: String) {
+        update(
+            bundleIdentifier: bundleIdentifier,
+            reason: mode == .floatingMirror ? "mirror-mode-forced" : "profile-mode-restored"
+        ) { profile in
+            profile.renderModeOverride = mode
+            profile.observations += 1
+            profile.confidence = min(1, max(profile.confidence, 0.25))
+        }
+    }
+
     func updateOffset(x: Double, y: Double, for bundleIdentifier: String, reason: String) {
         update(bundleIdentifier: bundleIdentifier, reason: reason) { profile in
             profile.xOffset = x

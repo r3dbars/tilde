@@ -53,6 +53,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleCurrentApp: { [weak self] in
             self?.toggleCurrentApp()
         },
+        toggleMirrorMode: { [weak self] in
+            self?.toggleMirrorModeForCurrentApp()
+        },
         enableAllApps: { [weak self] in
             self?.enableAllDisabledApps()
         },
@@ -342,7 +345,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             bundleIdentifier: app.bundleIdentifier,
             supportStatus: profileStore.supportStatus(for: app.bundleIdentifier),
             isEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier),
-            disabledAppCount: disabledBundleIdentifiers.count
+            disabledAppCount: disabledBundleIdentifiers.count,
+            renderModeOverride: compatibilityLearningStore.profile(for: app.bundleIdentifier)?.renderModeOverride
         )
     }
 
@@ -2747,7 +2751,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 bundleIdentifier: $0.bundleIdentifier,
                 supportStatus: supportStatus,
                 isEnabled: appEnabled,
-                disabledAppCount: disabledBundleIdentifiers.count
+                disabledAppCount: disabledBundleIdentifiers.count,
+                renderModeOverride: compatibilityLearningStore.profile(for: $0.bundleIdentifier)?.renderModeOverride
             )
         }
         let statusLine = statusMenuTitle(
@@ -3304,6 +3309,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             app: frontmostApp,
             profile: frontmostApp.flatMap { profileStore.profile(for: $0.bundleIdentifier) },
             appEnabled: frontmostApp.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
+        )
+    }
+
+    @objc
+    private func toggleMirrorModeForCurrentApp() {
+        guard let app = targetAppForControls(),
+              let profile = profileStore.profile(for: app.bundleIdentifier),
+              profile.canPresentSuggestions,
+              !profile.isSensitive else {
+            return
+        }
+
+        let currentOverride = compatibilityLearningStore.profile(for: app.bundleIdentifier)?.renderModeOverride
+        guard currentOverride == .floatingMirror
+            || (profile.renderMode == .inlineAdjacent && profile.fallbackRenderMode == .floatingMirror) else {
+            return
+        }
+
+        let nextOverride: SuggestionRenderMode? = currentOverride == .floatingMirror ? nil : .floatingMirror
+        compatibilityLearningStore.setRenderModeOverride(nextOverride, for: app.bundleIdentifier)
+        hideSuggestion(reason: nextOverride == .floatingMirror ? "mirror-mode-forced" : "profile-mode-restored")
+
+        DiagnosticsLog.shared.record(
+            "app-render-mode-control",
+            metadata: [
+                "app": app.bundleIdentifier,
+                "renderModeOverride": nextOverride?.rawValue ?? "profile"
+            ]
+        )
+        updateStatusMenu(
+            app: app,
+            profile: profile,
+            appEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier)
         )
     }
 
