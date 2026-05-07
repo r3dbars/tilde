@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import AutocompleteLabCore
 
@@ -60,6 +61,24 @@ struct SuggestionRepetitionSuppressorTests {
         #expect(suppressor.shouldSuppress("keep going", mode: .phraseContinuation))
         suppressor.recordAcceptance("keep going", mode: .phraseContinuation)
         #expect(!suppressor.shouldSuppress("keep going", mode: .phraseContinuation))
+    }
+
+    @Test("miss scores decay by half life")
+    func missScoresDecayByHalfLife() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        var suppressor = SuggestionRepetitionSuppressor(
+            missThreshold: 1,
+            missHalfLifeSeconds: 60
+        )
+
+        suppressor.recordMiss("keep going", mode: .phraseContinuation, now: start)
+
+        #expect(suppressor.shouldSuppress("keep going", mode: .phraseContinuation, now: start))
+        #expect(!suppressor.shouldSuppress(
+            "keep going",
+            mode: .phraseContinuation,
+            now: start.addingTimeInterval(61)
+        ))
     }
 
     @Test("miss suppression is scoped by app")
