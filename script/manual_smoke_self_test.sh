@@ -25,6 +25,10 @@ write_passing_log() {
 2026-04-26T08:00:04Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=backtick reason=accepted
 2026-04-26T08:00:04Z insert app=$bundle_id success=true mode=axSelectedText
 2026-04-26T08:00:05Z insert-verification app=$bundle_id result=verified acceptedChars=12 previousBeforeChars=11 currentBeforeChars=23
+2026-04-26T08:00:06Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode
+2026-04-26T08:00:07Z keyboard-action action=dismiss app=$bundle_id handled=true key=escape reason=dismissed
+2026-04-26T08:00:07Z field-suppressed app=$bundle_id reason=escape
+2026-04-26T08:00:08Z suggestion-blocked app=$bundle_id reason=suppressedField
 EOF
 }
 
@@ -38,6 +42,8 @@ write_passing_trace() {
 {"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","latencyMilliseconds":110,"metadata":{"anchorSource":"caret","anchorQuality":"trusted","anchorReason":"caretBoundsTrusted","anchorCanPresent":"true","anchorRect":"10,20,0,18","hasCaretRect":"true"}}
 {"type":"suggestionAccepted","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","acceptedText":" this work"}
 {"type":"insertionVerified","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","acceptedText":" this work"}
+{"type":"suggestionPresented","suggestionID":"three","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","latencyMilliseconds":80,"metadata":{"anchorSource":"caret","anchorQuality":"trusted","anchorReason":"caretBoundsTrusted","anchorCanPresent":"true","anchorRect":"10,20,0,18","hasCaretRect":"true"}}
+{"type":"suggestionHidden","suggestionID":"three","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","outcome":"ignored","reason":"escape"}
 EOF
 }
 
@@ -243,6 +249,114 @@ fi
 
 if ! grep -F 'failed TextEdit trace eval coverage' "$FAILURE_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not explain missing trace eval coverage" >&2
+  exit 1
+fi
+
+write_passing_log "com.apple.TextEdit" "inlineAdjacent"
+write_passing_trace "com.apple.TextEdit"
+cat >>"$LOG_PATH" <<'EOF'
+2026-04-26T08:00:09Z insert app=com.apple.Notes success=true mode=axSelectedText
+EOF
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh textedit --check >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected a failed pass for wrong-app insertion" >&2
+  exit 1
+fi
+
+if ! grep -F 'wrong-app insertion' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not explain wrong-app insertion" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-04-26T08:00:00Z keyboard-action action=acceptNextWord app=com.apple.TextEdit handled=true key=tab reason=accepted
+EOF
+: >"$TRACE_PATH"
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh textedit --check >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected a failed pass for Tab capture without a suggestion" >&2
+  exit 1
+fi
+
+if ! grep -F 'Tab stolen with no visible suggestion' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not explain Tab capture without a suggestion" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-04-26T08:00:00Z suggestion-presented app=com.apple.TextEdit effectiveRenderMode=inlineAdjacent role=AXSecureTextField
+EOF
+: >"$TRACE_PATH"
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh textedit --check >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected a failed pass for a sensitive-field suggestion" >&2
+  exit 1
+fi
+
+if ! grep -F 'suggestion shown over sensitive field' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not explain sensitive-field suggestion" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-04-26T08:00:00Z suggestion-presented anchorCanPresent=false app=com.apple.TextEdit effectiveRenderMode=floatingMirror
+EOF
+: >"$TRACE_PATH"
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh textedit --check >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected a failed pass for a detached bubble" >&2
+  exit 1
+fi
+
+if ! grep -F 'detached bubble over whole editor' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not explain detached-bubble presentation" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-04-26T08:00:00Z suggestion-presented app=com.apple.TextEdit effectiveRenderMode=inlineAdjacent
+2026-04-26T08:00:01Z keyboard-action action=acceptNextWord app=com.apple.TextEdit handled=true key=tab reason=accepted
+2026-04-26T08:00:01Z insert app=com.apple.TextEdit success=true mode=axSelectedText
+2026-04-26T08:00:02Z insert-verification app=com.apple.TextEdit result=verified acceptedChars=5 previousBeforeChars=6 currentBeforeChars=11
+2026-04-26T08:00:03Z suggestion-presented app=com.apple.TextEdit effectiveRenderMode=inlineAdjacent
+2026-04-26T08:00:04Z keyboard-action action=acceptAllVisible app=com.apple.TextEdit handled=true key=backtick reason=accepted
+2026-04-26T08:00:04Z insert app=com.apple.TextEdit success=true mode=axSelectedText
+2026-04-26T08:00:05Z insert-verification app=com.apple.TextEdit result=verified acceptedChars=12 previousBeforeChars=11 currentBeforeChars=23
+EOF
+write_passing_trace "com.apple.TextEdit"
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh textedit --check >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected a failed pass without Esc calming proof" >&2
+  exit 1
+fi
+
+if ! grep -F 'Esc handled by autocomplete' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not explain missing Esc calming proof" >&2
   exit 1
 fi
 
