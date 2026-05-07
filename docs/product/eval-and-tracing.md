@@ -87,6 +87,34 @@ Use the command-line checker for repeatable proof:
 
 By default, this also enforces geometry proof for every shown suggestion: `anchorSource`, `anchorQuality`, `anchorReason`, `anchorCanPresent`, and a concrete anchor rect must be present and internally consistent. Set `AUTOCOMPLETE_LAB_TRACE_REQUIRE_GEOMETRY_PROOF=0` only when reviewing old trace slices.
 
+Use the self-healing compatibility report when local dogfood traces start
+showing app-specific placement trouble:
+
+```bash
+./script/compatibility_self_healing_report.py
+```
+
+It reads only these local files:
+
+```text
+~/Library/Logs/AutocompleteLab/traces.jsonl
+~/Library/Application Support/AutocompleteLab/compatibility-learning.json
+```
+
+The report lists apps with repeated visual nudges and apps with repeated
+`detached-suggestion-disabled` suppressions, then gives the smallest adapter
+recommendation. It does not turn on screenshots, run visual calibration, or
+capture new typing data.
+
+For a clean app-specific slice:
+
+```bash
+START_LINE=$(wc -l < "$HOME/Library/Logs/AutocompleteLab/traces.jsonl" | tr -d ' ')
+# do the manual app pass
+AUTOCOMPLETE_LAB_TRACE_START_LINE=$START_LINE \
+  ./script/compatibility_self_healing_report.py
+```
+
 Compare local model latency after a trial launch:
 
 ```bash
