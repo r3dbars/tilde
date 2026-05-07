@@ -45,16 +45,22 @@ public struct SuggestionRepetitionMissRecord: Equatable, Sendable {
 
 public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
     public let missThreshold: Int
-    private var missCounts: [String: Double] = [:]
+    public let missHalfLifeSeconds: TimeInterval
+    private var missCounts: [String: SuggestionRepetitionMissBucket] = [:]
 
-    public init(missThreshold: Int = 2) {
+    public init(
+        missThreshold: Int = 2,
+        missHalfLifeSeconds: TimeInterval = 20 * 60
+    ) {
         self.missThreshold = max(1, missThreshold)
+        self.missHalfLifeSeconds = max(1, missHalfLifeSeconds)
     }
 
     public func shouldSuppress(
         _ text: String,
         mode: CompletionRequestMode,
-        scope: String = ""
+        scope: String = "",
+        now: Date = Date()
     ) -> Bool {
         guard shouldTrackMisses(for: text, mode: mode) else {
             return false
@@ -65,14 +71,15 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
             return false
         }
 
-        return (missCounts[key] ?? 0) >= Double(missThreshold)
+        return reachesThreshold(missCounts[key]?.score(at: now, halfLifeSeconds: missHalfLifeSeconds) ?? 0)
     }
 
     @discardableResult
     public mutating func recordMiss(
         _ text: String,
         mode: CompletionRequestMode?,
-        scope: String = ""
+        scope: String = "",
+        now: Date = Date()
     ) -> SuggestionRepetitionMissRecord? {
         recordWeightedMiss(
             text,
@@ -80,7 +87,8 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
             scope: scope,
             kind: "miss",
             weight: 1.0,
-            lifetimeMilliseconds: nil
+            lifetimeMilliseconds: nil,
+            now: now
         )
     }
 
@@ -89,7 +97,8 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
         _ text: String,
         mode: CompletionRequestMode?,
         scope: String = "",
-        lifetimeMilliseconds: Int? = nil
+        lifetimeMilliseconds: Int? = nil,
+        now: Date = Date()
     ) -> SuggestionRepetitionMissRecord? {
         recordWeightedMiss(
             text,
@@ -97,7 +106,8 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
             scope: scope,
             kind: "ignored",
             weight: ignoredMissWeight(lifetimeMilliseconds: lifetimeMilliseconds),
-            lifetimeMilliseconds: lifetimeMilliseconds
+            lifetimeMilliseconds: lifetimeMilliseconds,
+            now: now
         )
     }
 
@@ -129,7 +139,8 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
         scope: String,
         kind: String,
         weight: Double,
-        lifetimeMilliseconds: Int?
+        lifetimeMilliseconds: Int?,
+        now: Date
     ) -> SuggestionRepetitionMissRecord? {
         guard let mode,
               shouldTrackMisses(for: text, mode: mode) else {
@@ -142,14 +153,15 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
         }
 
         let safeWeight = max(0, weight)
-        missCounts[key, default: 0] += safeWeight
-        let total = missCounts[key] ?? 0
+        let decayedTotal = missCounts[key]?.score(at: now, halfLifeSeconds: missHalfLifeSeconds) ?? 0
+        let total = decayedTotal + safeWeight
+        missCounts[key] = SuggestionRepetitionMissBucket(score: total, updatedAt: now)
         return SuggestionRepetitionMissRecord(
             kind: kind,
             weight: safeWeight,
             total: total,
             threshold: Double(missThreshold),
-            suppressed: total >= Double(missThreshold),
+            suppressed: reachesThreshold(total),
             lifetimeMilliseconds: lifetimeMilliseconds
         )
     }
@@ -213,5 +225,19 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
         default:
             return 0.50
         }
+    }
+
+    private func reachesThreshold(_ score: Double) -> Bool {
+        score + 0.0001 >= Double(missThreshold)
+    }
+}
+
+private struct SuggestionRepetitionMissBucket: Equatable, Sendable {
+    let score: Double
+    let updatedAt: Date
+
+    func score(at now: Date, halfLifeSeconds: TimeInterval) -> Double {
+        let elapsedSeconds = max(0, now.timeIntervalSince(updatedAt))
+        return score * pow(0.5, elapsedSeconds / halfLifeSeconds)
     }
 }

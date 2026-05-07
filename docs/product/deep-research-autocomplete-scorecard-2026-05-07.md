@@ -197,8 +197,8 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Search profile | 82 | Search field kind maps to a suppressed-by-default search profile with full accept disabled. | Proven across browser/native search fields. |
 | AI chat profile | 82 | Codex/Claude profiles are conservative, one-word biased, block submit/run/Enter suggestions, and disable full accept. | Same-slice visual plus one-word no-submit proof for Codex, Claude Code, Claude desktop. |
 | Accepted-and-kept learning | 84 | Live survival events update a persisted app/field/mode/profile learning store that feeds display policy and decays with a 14-day half-life. | Add diagnostics controls and fresh proof slices. |
-| Typed-over learning | 74 | Typed-over trace and repetition miss exist. | Prefix-family cooldown plus decay and threshold updates. |
-| Ignored learning | 76 | Ignored hides now record a weak repetition signal scaled by visible lifetime, with trace-safe weight/total metadata, instead of counting exactly like typed-over rejection. | Prove thresholds with fresh real-app traces and separate passive ignored from explicit dismiss in diagnostics. |
+| Typed-over learning | 82 | Typed-over trace, 5s prefix-family cooldown, and repeated-miss suppression exist; repeated-miss scores now decay by half-life instead of poisoning a prefix indefinitely. | Prove thresholds with fresh real-app traces and expose current miss score in diagnostics. |
+| Ignored learning | 80 | Ignored hides now record a weak repetition signal scaled by visible lifetime, with trace-safe weight/total metadata and the same decaying repeated-miss bucket. | Prove thresholds with fresh real-app traces and separate passive ignored from explicit dismiss in diagnostics. |
 | Esc learning | 82 | Esc dismiss now records annoyance, suppresses eligible fields until blur, starts a 15s app/field/mode/prefix cooldown, and repeated Esc on the same prefix escalates to 60s with trace metadata. | Prove real-app thresholds and make repeated-dismiss state visible in diagnostics. |
 | Style memory | 88 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, and question rates with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, and Settings can clear it with the other learned suggestion state. | Add user controls to inspect the style sketch and tune it with fresh real-app traces. |
 | Annoyance index | 82 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, and quiets field/app/global scopes. | Make quiet-mode decisions easier to inspect in diagnostics and prove thresholds with fresh traces. |
@@ -430,6 +430,8 @@ these are true.
    trace-safe instead of treating it like typed-over rejection.
 23. Done: escalate repeated Esc dismissals from the 15s prefix cooldown to a
    trace-visible 60s cooldown on the same app/field/mode/prefix.
+24. Done: add half-life decay to repeated-miss suppression so typed-over and
+   ignored miss learning ages out instead of permanently poisoning a prefix.
 
 ## Goal Status
 
