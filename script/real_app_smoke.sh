@@ -920,6 +920,7 @@ APPLESCRIPT
   full_accept_key="$(accept_all_shortcut)"
   assert_frontmost_app "TextEdit" "TextEdit"
   focus_textedit_document_path "$tmp_file"
+  sleep 0.5
   full_start_line="$(line_count "$LOG_PATH")"
   press_accept_all_shortcut
   wait_for_log_fields "$full_start_line" "TextEdit full acceptance" 12 \
@@ -999,6 +1000,7 @@ APPLESCRIPT
   full_accept_key="$(accept_all_shortcut)"
   focus_chrome_smoke_editor
   assert_frontmost_app "Google Chrome" "Chrome $fixture"
+  sleep 0.5
   full_start_line="$(line_count "$LOG_PATH")"
   press_accept_all_shortcut
   wait_for_log_fields "$full_start_line" "Chrome $fixture full acceptance" 12 \
