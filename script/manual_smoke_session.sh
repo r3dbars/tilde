@@ -139,7 +139,9 @@ case "$APP" in
 
     case "$NOTES_SURFACE" in
       "")
-        STEPS=$'- Open the disposable autocomplete smoke note.\n- Record three separate Notes passes:\n  - `script/manual_smoke_session.sh notes-title --visual`\n  - `script/manual_smoke_session.sh notes-body --visual`\n  - `script/manual_smoke_session.sh notes-checklist --visual`\n- Title, body, and checklist rows are separate proof. A generic Notes row does not count.'
+        PROOF_LABEL="choose-notes-surface"
+        SESSION_NAME="Notes surface selector"
+        STEPS=$'- Open the disposable autocomplete smoke note.\n- Record three separate Notes passes:\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate`\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`\n- Title, body, and checklist rows are separate proof. A generic Notes row does not count.'
         ;;
       title)
         PROOF_LABEL="notes-title"
@@ -210,14 +212,22 @@ SESSION_NAME="${SESSION_NAME:-$DISPLAY_NAME}"
 REPORT_APP_NAME="${REPORT_APP_NAME:-$DISPLAY_NAME}"
 
 if [[ "$APP" == "notes" && -z "$NOTES_SURFACE" && "$MODE" != "--print" ]]; then
-  echo "Notes proof needs a specific surface: notes-title, notes-body, or notes-checklist." >&2
-  echo "Example: script/manual_smoke_session.sh notes-title --visual" >&2
+  echo "Notes proof cannot be recorded as a generic Notes pass." >&2
+  echo "Choose one surface: notes-title, notes-body, or notes-checklist." >&2
+  echo "Example: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate" >&2
   exit 2
 fi
 
 echo "Manual smoke: $SESSION_NAME"
 echo "Bundle: $BUNDLE_ID"
 echo "Proof: $PROOF_LABEL"
+if [[ "$APP" == "notes" ]]; then
+  if [[ -n "$NOTES_SURFACE" ]]; then
+    echo "Notes surface: $NOTES_SURFACE"
+  else
+    echo "Notes surface: choose title, body, or checklist"
+  fi
+fi
 if (( STRICT_VISUAL_EVIDENCE == 1 )); then
   echo "Visual trace: strict screenshot evidence required"
 else
@@ -305,7 +315,7 @@ require_line_with_fields() {
   local count
   count="$(count_line_with_fields "$@")"
   if [[ "$count" == "0" ]]; then
-    echo "missing $DISPLAY_NAME diagnostics: $label" >&2
+    echo "missing $SESSION_NAME diagnostics: $label" >&2
     echo "log: $LOG_PATH" >&2
     print_failure_summary
     exit 1
@@ -317,7 +327,7 @@ require_pattern() {
   local label="$2"
 
   if ! grep -E "$pattern" <<<"$SCAN_LINES" >/dev/null; then
-    echo "missing $DISPLAY_NAME diagnostics: $label" >&2
+    echo "missing $SESSION_NAME diagnostics: $label" >&2
     echo "log: $LOG_PATH" >&2
     print_failure_summary
     exit 1
@@ -329,7 +339,7 @@ reject_pattern() {
   local label="$2"
 
   if grep -E "$pattern" <<<"$SCAN_LINES" >/dev/null; then
-    echo "failed $DISPLAY_NAME diagnostics: $label" >&2
+    echo "failed $SESSION_NAME diagnostics: $label" >&2
     echo "log: $LOG_PATH" >&2
     print_failure_summary
     exit 1
@@ -353,7 +363,7 @@ require_trusted_prompt_placement() {
     "hasCaretRect=true")"
 
   if (( real_caret_count == 0 && synthetic_caret_count == 0 )); then
-    echo "missing $DISPLAY_NAME diagnostics: trusted caret or synthetic-caret placement" >&2
+    echo "missing $SESSION_NAME diagnostics: trusted caret or synthetic-caret placement" >&2
     echo "log: $LOG_PATH" >&2
     print_failure_summary
     exit 1
@@ -448,7 +458,7 @@ require_pattern "insert-verification .*app=$BUNDLE_ID .*result=verified" "verifi
 
 VERIFIED_COUNT="$(grep -E "insert-verification .*app=$BUNDLE_ID .*result=verified" <<<"$SCAN_LINES" | wc -l | tr -d ' ')"
 if (( VERIFIED_COUNT < MIN_VERIFIED_ACCEPTS )); then
-  echo "expected at least $MIN_VERIFIED_ACCEPTS verified accept(s) for $DISPLAY_NAME, saw $VERIFIED_COUNT" >&2
+  echo "expected at least $MIN_VERIFIED_ACCEPTS verified accept(s) for $SESSION_NAME, saw $VERIFIED_COUNT" >&2
   echo "log: $LOG_PATH" >&2
   print_failure_summary
   exit 1

@@ -42,9 +42,9 @@ fi
 
 declare -a APPS=(
   "TextEdit|TextEdit|com.apple.TextEdit|full|default|script/manual_smoke_session.sh textedit --visual"
-  "Notes title|Notes|com.apple.Notes|full|notes-title|script/manual_smoke_session.sh notes-title --visual"
-  "Notes body|Notes|com.apple.Notes|full|notes-body|script/manual_smoke_session.sh notes-body --visual"
-  "Notes checklist|Notes|com.apple.Notes|full|notes-checklist|script/manual_smoke_session.sh notes-checklist --visual"
+  "Notes title|Notes|com.apple.Notes|full|notes-title|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate"
+  "Notes body|Notes|com.apple.Notes|full|notes-body|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate"
+  "Notes checklist|Notes|com.apple.Notes|full|notes-checklist|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate"
   "Obsidian|Obsidian|md.obsidian|full|default|script/manual_smoke_session.sh obsidian --visual"
   "Chrome textarea|Chrome|com.google.Chrome|full|textarea|script/manual_smoke_session.sh chrome --visual"
   "Chrome contenteditable|Chrome|com.google.Chrome|full|contenteditable|AUTOCOMPLETE_LAB_CHROME_FIXTURE=contenteditable script/manual_smoke_session.sh chrome --visual"

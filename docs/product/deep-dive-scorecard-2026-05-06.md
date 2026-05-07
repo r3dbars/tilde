@@ -45,7 +45,7 @@ evidence-backed score should stay lower until those rows are closed.
 | Self-healing behavior | 8.9/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, applies only explicit trusted visual offsets, and manual nudges now move the visible ghost immediately. It does not yet auto-detect offsets from pixels. |
 | Screenshot tracing | 9.4/10 | Screen Recording is preflighted, capture runs off the hot path, screenshots include editor bounds plus ghost text, traces/logs include capture rect plus rendered panel rect, and capture now has a backlog guard plus timeout. |
 | TextEdit support | 9.5/10 | Fresh screenshot-backed run shows ghost text aligned after the caret and two verified accepts. |
-| Notes support | 6.5/10 | Profile is safer than before. A disposable Notes note produced partial screenshot/Tab evidence, but title/body/checklist are not recorder-grade yet. |
+| Notes support | 6.5/10 | Profile is safer than before. A disposable Notes note produced partial screenshot/Tab evidence, but title/body/checklist are separate proof targets and none are recorder-grade yet. |
 | Chrome textarea support | 9/10 | Fresh full-frame screenshot and two verified accepts. |
 | Chrome contenteditable support | 9/10 | Fresh full-frame screenshot and two verified accepts. |
 | Chrome editor-like support | 9/10 | Fresh full-frame screenshot and two verified accepts. |
@@ -81,9 +81,9 @@ evidence-backed score should stay lower until those rows are closed.
 | Chrome chat-like no-submit | 9/10 | [chrome-chat-like.png](visual-placement-screenshots/chrome-chat-like.png) | Ghost is inline after the caret, Tab and full accept verified, and the local submit counter stayed at zero. | Pending: real prompt/chat-app no-submit proof before broad enablement. |
 | Obsidian | 8/10 | Pending fresh screenshot | Prior synthetic caret proof passes, and Obsidian is profiled. | Needs screenshot-backed proof in a disposable vault note. |
 | Codex | 8.5/10 | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Disposable prompt screenshot shows the ghost visible on the same line after the caret on a negative-origin side display. | Pending: needs a recorder-grade visual pass with one-word accept and no-submit proof in the same trace slice. |
-| Apple Notes title | 6.5/10 | Pending title screenshot | Partial current Notes evidence exists from a disposable note. | Needs `script/manual_smoke_session.sh notes-title --visual` with two verified accepts. |
-| Apple Notes body | 6.5/10 | Pending body screenshot | Safer insertion stance exists. | Needs `script/manual_smoke_session.sh notes-body --visual` with two verified accepts. |
-| Apple Notes checklist | 6.5/10 | Pending checklist screenshot | Safer insertion stance exists. | Needs `script/manual_smoke_session.sh notes-checklist --visual` with two verified accepts. |
+| Apple Notes title | 6.5/10 | Pending title screenshot | Partial generic Notes evidence exists from a disposable note, but it does not close title proof. | Needs `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate` with two verified accepts. |
+| Apple Notes body | 6.5/10 | Pending body screenshot | Safer insertion stance exists, but body proof cannot borrow title or generic Notes evidence. | Needs `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate` with two verified accepts. |
+| Apple Notes checklist | 6.5/10 | Pending checklist screenshot | Safer insertion stance exists, but checklist proof needs its own caret and insertion pass. | Needs `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate` with two verified accepts. |
 | Claude Code | 4/10 | Pending safe prompt proof | Profile exists. | Needs a safe live prompt smoke before it can be scored high. |
 | Claude desktop | 8.4/10 | Pending fresh screenshot | Prior manual proof passed. | Needs screenshot-backed placement audit and no-submit proof on current renderer. |
 
@@ -149,7 +149,7 @@ evidence-backed score should stay lower until those rows are closed.
 - Full smoke pass after hardening: `./script/smoke_test.sh` passed. Fresh diagnostics from line 64151 scanned 240 focused-text poll samples with p95 max 2ms, max 3ms, zero slow markers, and zero skipped polls.
 - `script/beta_readiness.sh` now includes `./script/check_visual_placement_evidence.sh --require-all`, so beta readiness cannot pass while screenshot proof rows are still pending.
 - Local chat-like Chrome fixture was added to prove Tab/full accept does not submit a chat-style composer. This is the safe precursor to Codex/Claude no-submit proof, not a substitute for real prompt-app proof.
-- Parent handoff: a disposable Notes note produced screenshot-backed suggestion presentation and at least one verified Tab insertion, but this is not enough to mark title/body/checklist complete.
+- Parent handoff: a disposable Notes note produced screenshot-backed suggestion presentation and at least one verified Tab insertion, but this is generic historical evidence only. It is not enough to mark title/body/checklist complete.
 - `./script/manual_smoke_status.sh --strict`: now shows Chrome chat-like no-submit as passed and fails honestly on both missing insertion proof and pending screenshot proof. The current blockers remain Notes title/body/checklist, Claude Code insertion proof, and Obsidian/Notes/Claude Code/Claude desktop screenshot proof.
 - `./script/check_visual_placement_evidence_self_test.sh`: passed, including missing, empty, invalid, too-small, unreferenced, and pending strict screenshot failure cases.
 - `./script/check_visual_placement_evidence.sh`: passed with eight verified visual-placement screenshots and reports six pending screenshot audits.
@@ -198,8 +198,9 @@ evidence-backed score should stay lower until those rows are closed.
 - Trace evaluation now has an opt-in strict visual-evidence gate that fails a
   screenshot-backed pass unless screenshot path, anchor rect, rendered panel
   rect, capture rect, and placement confidence are all present.
-- Manual Notes proof now uses first-class title/body/checklist recorder targets;
-  generic Notes rows are historical evidence only and do not close those gaps.
+- Manual Notes proof now uses first-class `notes-title`, `notes-body`, and
+  `notes-checklist` recorder targets; generic Notes rows are historical
+  evidence only and do not close those gaps.
 - Manual recorder rows only claim strict screenshot evidence when strict trace
   visual evidence was required and passed.
 - Trace evaluation can now bound a proof slice with `AUTOCOMPLETE_LAB_TRACE_END_LINE`,
@@ -274,9 +275,13 @@ evidence-backed score should stay lower until those rows are closed.
 ## Remaining Gaps
 
 1. Run recorder-grade screenshot-backed audits for Obsidian, Notes title/body/checklist,
-   Claude desktop, and Claude Code with disposable text only. Codex has visual proof
-   now, but still needs one-word accept/no-submit proof in the same strict visual
-   trace slice.
+   Claude desktop, and Claude Code with disposable text only. Run Notes as
+   three explicit surface commands:
+   `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`,
+   `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate`,
+   and `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`.
+   Codex has visual proof now, but still needs one-word accept/no-submit proof
+   in the same strict visual trace slice.
 2. Build automatic screenshot-driven self-healing: detect visible offset from
    pixels, write a trusted per-app correction, rerun smoke, and keep the proof.
 3. Test real production Monaco, ProseMirror, and CodeMirror apps, not just local
