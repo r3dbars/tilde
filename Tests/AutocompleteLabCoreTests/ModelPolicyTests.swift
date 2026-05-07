@@ -3,15 +3,15 @@ import Testing
 
 @Suite("Model policy")
 struct ModelPolicyTests {
-    @Test("MVP uses an app-owned Qwen MLX model with reasoning off")
+    @Test("MVP uses an app-owned Qwen MLX model with calmer defaults")
     func mvpPolicy() {
         let policy = CompletionModelPolicy.mvp
 
         #expect(policy.model == .qwen35FourB)
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)
-        #expect(policy.maxGeneratedTokens == 16)
-        #expect(policy.maxVisibleWords == 10)
+        #expect(policy.maxGeneratedTokens == 10)
+        #expect(policy.maxVisibleWords == 4)
         #expect(policy.maxVisibleWords >= CompletionModelPolicy.minimumVisibleWords)
         #expect(policy.maxVisibleWords <= CompletionModelPolicy.maximumVisibleWords)
     }
@@ -40,7 +40,7 @@ struct ModelPolicyTests {
         )
 
         #expect(tiny.maxVisibleWords == 1)
-        #expect(huge.maxVisibleWords == 10)
+        #expect(huge.maxVisibleWords == 7)
     }
 
     @Test("Model policy accepts only tiny autocomplete-sized visible output")
@@ -50,9 +50,8 @@ struct ModelPolicyTests {
         #expect(policy.allowsVisibleWordCount(1))
         #expect(policy.allowsVisibleWordCount(2))
         #expect(policy.allowsVisibleWordCount(3))
-        #expect(policy.allowsVisibleWordCount(6))
-        #expect(policy.allowsVisibleWordCount(10))
-        #expect(!policy.allowsVisibleWordCount(11))
+        #expect(policy.allowsVisibleWordCount(4))
+        #expect(!policy.allowsVisibleWordCount(5))
     }
 
     @Test("Completion length configuration reads environment overrides")
@@ -68,9 +67,9 @@ struct ModelPolicyTests {
         #expect(short.maxVisibleWords == 3)
         #expect(short.maxGeneratedTokens == 9)
         #expect(short.displaySummary == "3 words / 9 tokens")
-        #expect(long.maxVisibleWords == 10)
+        #expect(long.maxVisibleWords == 7)
         #expect(long.maxGeneratedTokens == 32)
-        #expect(long.displaySummary == "10 words / 32 tokens")
+        #expect(long.displaySummary == "7 words / 32 tokens")
     }
 
     @Test("M5 with 128 GB is supported")

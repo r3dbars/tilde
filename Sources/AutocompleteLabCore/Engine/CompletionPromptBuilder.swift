@@ -25,7 +25,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         self.maxContextCharacters = max(80, maxContextCharacters)
         self.maxCurrentParagraphCharacters = max(80, maxCurrentParagraphCharacters)
         self.maxCurrentSentenceCharacters = max(80, maxCurrentSentenceCharacters)
-        self.maxVisibleWords = max(1, maxVisibleWords)
+        self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
     }
 
     public func prompt(for request: CompletionRequest) -> CompletionPrompt {

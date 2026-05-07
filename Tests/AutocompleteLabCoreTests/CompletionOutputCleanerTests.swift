@@ -47,6 +47,24 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("enhance the experience") == nil)
     }
 
+    @Test("Suppresses low signal phrase completions")
+    func suppressesLowSignalPhraseCompletions() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("that it would be", after: "I think") == nil)
+        #expect(cleaner.clean("I guess we could", after: "Maybe") == nil)
+        #expect(cleaner.clean("ship this today", after: "We should")?.visibleText == " ship this today")
+    }
+
+    @Test("Clamps oversized visible word requests")
+    func clampsOversizedVisibleWordRequests() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 20)
+        let suggestion = cleaner.clean("one two three four five six seven eight nine")
+
+        #expect(cleaner.maxVisibleWords == 7)
+        #expect(suggestion?.visibleText == " one two three four five six seven")
+    }
+
     @Test("Uses only first line")
     func usesOnlyFirstLine() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)

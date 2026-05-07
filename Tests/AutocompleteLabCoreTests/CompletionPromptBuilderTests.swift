@@ -53,6 +53,15 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.user.hasSuffix("Suffix:"))
     }
 
+    @Test("Prompt clamps oversized visible word requests")
+    func promptClampsOversizedVisibleWordRequests() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 20)
+        let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
+
+        #expect(builder.maxVisibleWords == 7)
+        #expect(prompt.system.contains("next 7 words or fewer"))
+    }
+
     @Test("Prompt trims long context from the left")
     func promptTrimsLongContext() {
         let builder = CompletionPromptBuilder(

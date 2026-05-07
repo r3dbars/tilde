@@ -112,6 +112,25 @@ struct CompletionActivationPolicyTests {
         ) == .allow(.wordCompletion))
     }
 
+    @Test("Blocks complete-looking words until a boundary")
+    func blocksCompleteLookingWordsUntilBoundary() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "I think",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.unfinishedWord))
+
+        #expect(policy.decision(
+            textBeforeCursor: "I think ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.phraseContinuation))
+    }
+
     @Test("Does not treat punctuation as word completion")
     func doesNotTreatPunctuationAsWordCompletion() {
         let policy = CompletionActivationPolicy()

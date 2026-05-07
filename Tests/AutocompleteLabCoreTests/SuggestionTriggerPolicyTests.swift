@@ -17,13 +17,13 @@ struct SuggestionTriggerPolicyTests {
         #expect(!policy.shouldRequestSuggestion(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I think"))
     }
 
-    @Test("Typing and deletion request refreshed suggestions")
-    func typingAndDeletionRequestRefreshes() {
+    @Test("Typing requests refreshed suggestions, deletion stays quiet")
+    func typingRequestsRefreshesAndDeletionStaysQuiet() {
         let policy = SuggestionTriggerPolicy(charactersBeforePauseRequest: 4)
 
         #expect(policy.shouldRequestSuggestion(previousTextBeforeCursor: "I thin", currentTextBeforeCursor: "I think"))
         #expect(policy.shouldRequestSuggestion(previousTextBeforeCursor: "I", currentTextBeforeCursor: "I think"))
-        #expect(policy.shouldRequestSuggestion(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I thin"))
+        #expect(!policy.shouldRequestSuggestion(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I thin"))
     }
 
     @Test("Natural boundaries trigger quickly")
