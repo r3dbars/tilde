@@ -115,10 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var disabledBundleIdentifiers: Set<String> = []
     private var debounceTask: Task<Void, Never>?
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
-    private var isFocusedTextPollInFlight = false
-    private var latestFocusedTextReadRequestID: UInt64?
-    private var pendingFocusedTextUpdateSource: FocusedTextUpdateSource?
-    private var nextScheduledFocusedTextPollAt = Date.distantPast
+    private var focusedTextPollLifecycle = FocusedTextPollLifecycle()
     private var focusedTextAXHealthState = FocusedTextAXHealthState()
     private var focusedTextPollLatencyStats = FocusedTextPollLatencyStats()
     private var focusedTextPollSkipStats = FocusedTextPollSkipStats()
@@ -251,13 +248,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func pollFocusedTextFromTimer() {
         let updateSource = scheduledFocusedTextUpdateSource()
         let now = Date()
-        guard now >= nextScheduledFocusedTextPollAt else {
+        guard focusedTextPollLifecycle.shouldRunScheduledPoll(
+            source: updateSource,
+            now: now,
+            interval: focusedTextPollInterval(for: updateSource)
+        ) else {
             return
         }
 
-        nextScheduledFocusedTextPollAt = now.addingTimeInterval(
-            focusedTextPollInterval(for: updateSource)
-        )
         pollFocusedTextIfIdle(source: updateSource)
     }
 
@@ -468,11 +466,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func pollFocusedTextIfIdle(source updateSource: FocusedTextUpdateSource) {
-        guard !isFocusedTextPollInFlight else {
-            pendingFocusedTextUpdateSource = focusedTextUpdateSourcePolicy.coalesced(
-                pendingFocusedTextUpdateSource,
-                with: updateSource
-            )
+        let beginDecision = focusedTextPollLifecycle.beginPoll(source: updateSource)
+        guard beginDecision.shouldStart,
+              let startedAt = beginDecision.startedAt else {
             if let notice = focusedTextPollSkipStats.recordSkippedInFlight(now: Date()) {
                 DiagnosticsLog.shared.record(
                     "focused-text-poll-skipped",
@@ -486,8 +482,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        isFocusedTextPollInFlight = true
-        let startedAt = DispatchTime.now().uptimeNanoseconds
         var completesAsync = false
         pollFocusedText(
             startedAt: startedAt,
@@ -500,16 +494,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func finishFocusedTextPoll(startedAt: UInt64) {
-        let endedAt = DispatchTime.now().uptimeNanoseconds
-        let durationMilliseconds = Int((endedAt - startedAt) / 1_000_000)
-        let pendingUpdateSource = pendingFocusedTextUpdateSource
-        pendingFocusedTextUpdateSource = nil
-        isFocusedTextPollInFlight = false
-        latestFocusedTextReadRequestID = nil
-        recordFocusedTextPollLatency(durationMilliseconds)
+        let finish = focusedTextPollLifecycle.finishPoll(startedAt: startedAt)
+        recordFocusedTextPollLatency(finish.durationMilliseconds)
         recordFocusedTextPollSkipSummaryIfNeeded()
 
-        if let pendingUpdateSource {
+        if let pendingUpdateSource = finish.pendingUpdateSource {
             pollFocusedTextIfIdle(source: pendingUpdateSource)
         }
     }
@@ -593,7 +582,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
         }
-        latestFocusedTextReadRequestID = requestID
+        focusedTextPollLifecycle.recordReadRequestID(requestID)
         completesAsync = true
     }
 
@@ -607,7 +596,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             finishFocusedTextPoll(startedAt: startedAt)
         }
 
-        guard latestFocusedTextReadRequestID == result.requestID else {
+        guard focusedTextPollLifecycle.isLatestReadRequest(result.requestID) else {
             DiagnosticsLog.shared.record(
                 "focused-text-ax-read-dropped",
                 metadata: [
@@ -702,7 +691,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             break
         }
 
-        nextScheduledFocusedTextPollAt = Date()
+        focusedTextPollLifecycle.requestImmediatePoll()
         pollFocusedTextIfIdle(source: .observer)
     }
 
