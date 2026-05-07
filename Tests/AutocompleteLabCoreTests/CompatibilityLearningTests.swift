@@ -135,6 +135,95 @@ struct CompatibilityLearningTests {
         #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "true")
     }
 
+    @Test("Learning expires trusted visual offsets when visual scope changes")
+    func expiresTrustedVisualOffsetsWhenVisualScopeChanges() {
+        let originalScope = CompatibilityLearningVisualScope(
+            appVersion: "com.example.Editor:1.0:10",
+            screen: "1440x900@200",
+            fieldShape: "role=AXTextArea;element=w=600,h=300"
+        )
+        let changedScope = CompatibilityLearningVisualScope(
+            appVersion: "com.example.Editor:1.1:11",
+            screen: "1440x900@200",
+            fieldShape: "role=AXTextArea;element=w=600,h=300"
+        )
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "com.example.Editor",
+            xOffset: 8,
+            yOffset: -2,
+            visualScope: originalScope,
+            lastReason: "manual-visual-nudge"
+        )
+        let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+        let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
+
+        let matchingAdjustment = engine.adjustment(
+            for: profile.bundleIdentifier,
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly(matching: originalScope)
+        let changedAdjustment = engine.adjustment(
+            for: profile.bundleIdentifier,
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly(matching: changedScope)
+
+        #expect(matchingAdjustment.adjusted(rect) == CGRect(x: 108, y: 198, width: 0, height: 20))
+        #expect(matchingAdjustment.metadata["learningVisualOffsetTrusted"] == "true")
+        #expect(changedAdjustment.adjusted(rect) == rect)
+        #expect(changedAdjustment.metadata["learningVisualOffsetTrusted"] == "false")
+    }
+
+    @Test("Learning expires trusted visual offsets when current visual scope is missing")
+    func expiresTrustedVisualOffsetsWhenCurrentVisualScopeIsMissing() {
+        let storedScope = CompatibilityLearningVisualScope(
+            appVersion: "com.example.Editor:1.0:10",
+            screen: "1440x900@200",
+            fieldShape: "role=AXTextArea;element=w=600,h=300"
+        )
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "com.example.Editor",
+            xOffset: 8,
+            yOffset: -2,
+            visualScope: storedScope,
+            lastReason: "screenshot-visual-correction"
+        )
+        let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+        let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
+
+        let adjustment = engine.adjustment(
+            for: profile.bundleIdentifier,
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly(matching: nil)
+
+        #expect(adjustment.adjusted(rect) == rect)
+        #expect(adjustment.metadata["learningXOffset"] == "0.0")
+        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "false")
+    }
+
+    @Test("Unscoped trusted visual offsets do not apply in scoped live mode")
+    func unscopedTrustedVisualOffsetsDoNotApplyInScopedLiveMode() {
+        let currentScope = CompatibilityLearningVisualScope(
+            appVersion: "com.example.Editor:1.0:10",
+            screen: "1440x900@200",
+            fieldShape: "role=AXTextArea;element=w=600,h=300"
+        )
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "com.example.Editor",
+            xOffset: 8,
+            yOffset: -2,
+            lastReason: "screenshot-visual-correction"
+        )
+        let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+        let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
+
+        let adjustment = engine.adjustment(
+            for: profile.bundleIdentifier,
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly(matching: currentScope)
+
+        #expect(adjustment.adjusted(rect) == rect)
+        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "false")
+    }
+
     @Test("Missing learning profile leaves geometry alone")
     func missingProfileLeavesGeometryAlone() {
         let engine = CompatibilityLearningEngine()

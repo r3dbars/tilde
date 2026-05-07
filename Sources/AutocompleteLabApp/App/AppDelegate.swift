@@ -125,6 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionID: String?
     private var currentSuggestionAppBundleIdentifier: String?
     private var currentSuggestionFieldIdentity: FocusedFieldIdentity?
+    private var currentSuggestionVisualScope: CompatibilityLearningVisualScope?
     private var currentSuggestionRequestMode: CompletionRequestMode?
     private var currentSuggestionTextBeforeCursor: String?
     private var currentSuggestionDisplayedText: String?
@@ -1036,6 +1037,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         PromptEditorFingerprintPolicy.dogfoodBundleIdentifiers.contains(bundleIdentifier)
             || bundleIdentifier == "md.obsidian"
             || bundleIdentifier == "com.google.Chrome"
+    }
+
+    private func compatibilityVisualScope(
+        bundleIdentifier: String,
+        context: FocusedTextContext
+    ) -> CompatibilityLearningVisualScope {
+        CompatibilityLearningVisualScope(
+            appVersion: appVersionFingerprint(bundleIdentifier: bundleIdentifier),
+            screen: screenLayoutFingerprint(),
+            fieldShape: fieldShapeFingerprint(context: context)
+        )
+    }
+
+    private func appVersionFingerprint(bundleIdentifier: String) -> String {
+        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier),
+              let bundle = Bundle(url: appURL) else {
+            return "\(bundleIdentifier):unknown"
+        }
+
+        let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let build = bundle.object(forInfoDictionaryKey: kCFBundleVersionKey as String) as? String
+        return "\(bundleIdentifier):\(version ?? "unknown"):\(build ?? "unknown")"
+    }
+
+    private func screenLayoutFingerprint() -> String {
+        NSScreen.screens
+            .map { screen in
+                let frame = screen.frame
+                let scale = Int((screen.backingScaleFactor * 100).rounded())
+                let x = Int(frame.minX.rounded())
+                let y = Int(frame.minY.rounded())
+                let width = Int(frame.width.rounded())
+                let height = Int(frame.height.rounded())
+                return "\(x),\(y),\(width)x\(height)@\(scale)"
+            }
+            .sorted()
+            .joined(separator: "|")
+    }
+
+    private func fieldShapeFingerprint(context: FocusedTextContext) -> String {
+        [
+            "role=\(context.role ?? "unknown")",
+            "subrole=\(context.subrole ?? "none")",
+            "element=\(rectSizeFingerprint(context.elementRect))",
+            "window=\(rectSizeFingerprint(context.windowRect))",
+            "line=\(rectSizeFingerprint(context.textLineRect))",
+            "synthetic=\(context.caretIsSynthetic)"
+        ].joined(separator: ";")
+    }
+
+    private func rectSizeFingerprint(_ rect: CGRect?) -> String {
+        guard let rect else {
+            return "missing"
+        }
+
+        return "w=\(Int(rect.width.rounded())),h=\(Int(rect.height.rounded()))"
     }
 
     private struct PromptTextAreaMatch {
@@ -2016,13 +2073,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let storedLearningAdjustment = compatibilityLearningStore.engine().adjustment(
+        let presentationBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
+        let visualScope = compatibilityVisualScope(
+            bundleIdentifier: presentationBundleIdentifier,
+            context: context
+        )
+        let learningAdjustment = compatibilityLearningStore.engine().adjustment(
             for: profile.bundleIdentifier,
             profileRenderMode: renderMode
-        )
-        let learningAdjustment = supportsSyntheticTextAreaCaret(for: profile.bundleIdentifier)
-            ? storedLearningAdjustment.trustedVisualOffsetOnly
-            : storedLearningAdjustment
+        ).trustedVisualOffsetOnly(matching: visualScope)
         let placementPlan = placementHealthPlan(
             context: context,
             profile: profile,
@@ -2116,8 +2175,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionSession.present(suggestion)
         setSuggestionDecision("Shown: \(triggerReason) \(latencyMilliseconds)ms")
         currentSuggestionID = suggestionID
-        currentSuggestionAppBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
+        currentSuggestionAppBundleIdentifier = presentationBundleIdentifier
         currentSuggestionFieldIdentity = fieldIdentity
+        currentSuggestionVisualScope = visualScope
         currentSuggestionRequestMode = request.mode
         currentSuggestionTextBeforeCursor = request.textBeforeCursor
         currentSuggestionDisplayedText = suggestion.visibleText
@@ -2507,13 +2567,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let storedLearningAdjustment = compatibilityLearningStore.engine().adjustment(
+        let visualScope = compatibilityVisualScope(
+            bundleIdentifier: profile.bundleIdentifier,
+            context: context
+        )
+        let learningAdjustment = compatibilityLearningStore.engine().adjustment(
             for: profile.bundleIdentifier,
             profileRenderMode: renderMode
-        )
-        let learningAdjustment = supportsSyntheticTextAreaCaret(for: profile.bundleIdentifier)
-            ? storedLearningAdjustment.trustedVisualOffsetOnly
-            : storedLearningAdjustment
+        ).trustedVisualOffsetOnly(matching: visualScope)
         let placementPlan = placementHealthPlan(
             context: context,
             profile: profile,
@@ -2542,6 +2603,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastClippingRect = placement.clippingRect
         lastTextStyle = context.textStyle
         lastRenderMode = placement.renderMode
+        currentSuggestionVisualScope = visualScope
         refreshVisibleSuggestion()
     }
 
@@ -2727,6 +2789,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionID = nil
         currentSuggestionAppBundleIdentifier = nil
         currentSuggestionFieldIdentity = nil
+        currentSuggestionVisualScope = nil
         currentSuggestionRequestMode = nil
         currentSuggestionTextBeforeCursor = nil
         currentSuggestionDisplayedText = nil
@@ -3263,7 +3326,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        compatibilityLearningStore.nudgeOffset(dx: dx, dy: dy, for: bundleIdentifier)
+        compatibilityLearningStore.nudgeOffset(
+            dx: dx,
+            dy: dy,
+            for: bundleIdentifier,
+            visualScope: currentSuggestionVisualScope
+        )
         let appliedToVisibleSuggestion = applyVisibleSuggestionNudge(dx: dx, dy: dy, bundleIdentifier: bundleIdentifier)
         DiagnosticsLog.shared.record(
             "compatibility-learning-nudge",
