@@ -165,6 +165,8 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [ ] Test menu bar focus changes.
 - [ ] Test window dragging while suggestion is visible.
 
+Manual proof blocker evidence: `./script/manual_smoke_status.sh --strict` still fails these as live UI proof gaps. The panel has automated coverage for level, screen/frame tracing, multi-display conversion, click-through mode, and full-screen/all-spaces collection behavior, but fullscreen, Spaces, Stage Manager, menu bar focus, and window dragging still need real macOS passes. Interactive picker mode remains held until explicitly requested.
+
 ## P1: Runtime And First Run
 
 - [x] Make first-run model install a real in-app action.
@@ -198,6 +200,8 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Add Codex prompt smoke.
 - [x] Add unsupported-app smoke.
 - [x] Add no-Accessibility-permission smoke.
+
+Manual proof blocker evidence: `./script/manual_smoke_status.sh --strict` reports Codex as pending current one-word no-submit proof, and reports 16 required app passes as stale or pending against the current build proof. Do not raise support grades until fresh recorder rows exist in `docs/product/manual-smoke-runs.md`.
 
 ## P1: Trace Analysis
 
