@@ -36,6 +36,10 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.actionableSuppressedByApp["com.apple.TextEdit"] == 2)
         #expect(summary.actionableSuppressedByMode["wordCompletion"] == 2)
         #expect(summary.insertionFailureCount == 1)
+        #expect(summary.annoyanceCounters["hidden-ignored"] == nil)
+        #expect(summary.annoyanceCounters["insertion-failed"] == 1)
+        #expect(summary.annoyanceCounters["repeated-suppression"] == 2)
+        #expect(summary.doNotShipCounters["insertion-failed"] == 1)
         #expect(summary.acceptRate == 1.0 / 3.0)
         #expect(summary.usefulRate == 2.0 / 3.0)
         #expect(summary.acceptRateByApp["com.apple.TextEdit"] == 1.0 / 3.0)
@@ -224,6 +228,105 @@ struct AutocompleteTraceAnalyzerTests {
         let summary = AutocompleteTraceAnalyzer().summary(for: events)
 
         #expect(!summary.topMisses.contains { $0.title == "Repeated unaccepted: ng" })
+    }
+
+    @Test("exposes annoyance counters from trace misses")
+    func exposesAnnoyanceCounters() {
+        let events = [
+            event(.suggestionPresented, suggestionID: "one", displayedText: "maybe"),
+            event(.suggestionHidden, suggestionID: "one", displayedText: "maybe", outcome: "ignored", reason: "escape"),
+            event(.suggestionPresented, suggestionID: "two", displayedText: "ship it"),
+            event(
+                .suggestionTypedOver,
+                suggestionID: "two",
+                displayedText: "ship it",
+                metadata: ["typedSuffix": "skip"]
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "two",
+                displayedText: "ship it",
+                outcome: "typed-over",
+                reason: "typed-over",
+                metadata: ["visibleMilliseconds": "320"]
+            ),
+            event(.insertionFailed, suggestionID: "three", reason: "insert-verification-failed"),
+            event(.suggestionSuppressed, suggestionID: "four", reason: "repeated-miss"),
+            event(.suggestionSuppressed, suggestionID: "five", reason: "app-disabled"),
+            event(.suggestionSuppressed, suggestionID: "six", reason: "unsupported-app"),
+            event(.suggestionSuppressed, suggestionID: "seven", reason: "sensitive-field"),
+            event(.suggestionSuppressed, suggestionID: "eight", reason: "detached-suggestion-disabled"),
+            event(.suggestionPresented, suggestionID: "nine", requestMode: "phraseContinuation", displayedText: "I think so."),
+            event(.suggestionPresented, suggestionID: "ten", requestMode: "phraseContinuation", displayedText: " i think so. "),
+            event(.suggestionPresented, suggestionID: "eleven", requestMode: "phraseContinuation", displayedText: "i think so.")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.annoyanceCounters["escape-snooze"] == 1)
+        #expect(summary.annoyanceCounters["hidden-ignored"] == 1)
+        #expect(summary.annoyanceCounters["hidden-typed-over"] == 1)
+        #expect(summary.annoyanceCounters["typed-over"] == 1)
+        #expect(summary.annoyanceCounters["insertion-failed"] == 1)
+        #expect(summary.annoyanceCounters["repeated-suppression"] == 1)
+        #expect(summary.annoyanceCounters["quick-hide-under-500ms"] == 1)
+        #expect(summary.annoyanceCounters["app-disabled"] == 1)
+        #expect(summary.annoyanceCounters["unsupported-suppression"] == 1)
+        #expect(summary.annoyanceCounters["sensitive-suppression"] == 1)
+        #expect(summary.annoyanceCounters["detached-suppression"] == 1)
+        #expect(summary.annoyanceCounters["repeated-unaccepted"] == 3)
+    }
+
+    @Test("exposes do-not-ship counters")
+    func exposesDoNotShipCounters() {
+        let events = [
+            event(.suggestionPresented, suggestionID: "one", displayedText: "nope", latency: 40, reason: "unsupported-app"),
+            event(
+                .suggestionPresented,
+                suggestionID: "two",
+                displayedText: "secret",
+                latency: 70,
+                metadata: ["isSecure": "true"]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "three",
+                appBundleIdentifier: "com.apple.mail",
+                displayedText: "compose",
+                latency: 90,
+                metadata: ["isSensitive": "true"]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "four",
+                displayedText: "floating",
+                latency: 1_200,
+                metadata: [
+                    "effectiveRenderMode": "floatingMirror",
+                    "hasCaretRect": "false"
+                ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "five",
+                displayedText: "mocked",
+                latency: 1_400,
+                metadata: ["runtimeCandidate": "mock"]
+            ),
+            event(.insertionFailed, suggestionID: "six", reason: "insert-verification-failed")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.p95LatencyMilliseconds == 1_400)
+        #expect(summary.doNotShipCounters["insertion-failed"] == 1)
+        #expect(summary.doNotShipCounters["unsupported-app-presentation"] == 1)
+        #expect(summary.doNotShipCounters["secure-field-presentation"] == 1)
+        #expect(summary.doNotShipCounters["sensitive-field-presentation"] == 1)
+        #expect(summary.doNotShipCounters["detached-suggestion-shown"] == 1)
+        #expect(summary.doNotShipCounters["mock-runtime-fallback"] == 1)
+        #expect(summary.doNotShipCounters["slow-p95"] == 1)
+        #expect(summary.topMisses.contains { $0.fixCategory == "do-not-ship" })
     }
 
     private func event(
