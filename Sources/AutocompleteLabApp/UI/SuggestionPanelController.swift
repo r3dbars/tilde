@@ -12,6 +12,7 @@ struct SuggestionPanelWindowConfiguration: Equatable {
         collectionBehavior: [.canJoinAllSpaces, .fullScreenAuxiliary]
     )
 
+    @MainActor
     func apply(to panel: NSPanel) {
         panel.level = level
         panel.ignoresMouseEvents = ignoresMouseEvents
