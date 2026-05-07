@@ -3,14 +3,14 @@
 Source research:
 `/Users/redbars/Library/Caches/com.apple.SwiftUI.Drag-9DB841D4-8068-4044-B0CF-B2F61B9E12BB/deep-research-report (5).md`
 
-Repo state graded: `codex/deep-research-scorecard` after the score-margin
+Repo state graded: `codex/deep-research-scorecard` after the replay-gated
 candidate-selection pass, based on `origin/main`.
 
 ## Executive Grade
 
 Baseline deep research score: **78/100**.
 
-Current implementation score after the current build pass: **91/100**.
+Current implementation score after the current build pass: **92/100**.
 
 This is a strong prototype with real engineering depth. It has local MLX
 runtime support, app compatibility profiles, privacy-safe tracing defaults,
@@ -64,6 +64,8 @@ Pass 1 shipped these improvements:
   `cleanedCandidateCount`.
 - Candidate selection now suppresses low-score or low-margin results and logs
   top score, score margin, and suppression reason in diagnostics/raw traces.
+- Replay proof now requires candidate-selection metadata coverage in model
+  results, so stale traces fail this new ranking proof gate.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -79,7 +81,8 @@ Remaining high-impact gaps:
   screenshot-backed app slices and per-profile acceptance proof.
 - Replay-first real-app proof is still missing. The command exists, but the
   current local trace corpus fails the proof gate because it predates display
-  scoring, kept-horizon events, and researched trigger delays.
+  scoring, candidate-selection metadata, kept-horizon events, and researched
+  trigger delays.
 - Cross-app proof rows still need fresh screenshot-backed acceptance slices.
 
 ## Research Bar
@@ -172,7 +175,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Esc learning | 70 | Field suppression exists. | Very strong prefix/mode negative with 15s cooldown and longer repeated-dismiss decay. |
 | Style memory | 45 | App-scoped recent word memory exists. | Durable local style sketch from accepted-and-kept suggestions with 14-day half-life. |
 | Annoyance index | 82 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, and quiets field/app/global scopes. | Make quiet-mode decisions easier to inspect in diagnostics and prove thresholds with fresh traces. |
-| Replay-first test rig | 68 | Trace eval and smoke scripts exist. | One rig that replays recorded real app sessions with caret, screenshots, accepts, kept horizon, and latency. |
+| Replay-first test rig | 74 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. | Replay recorded real app sessions with caret, screenshots, accepts, kept horizon, and latency after every app/runtime change. |
 | Cross-app proof honesty | 90 | App proof matrix explicitly keeps failing rows non-A until evidence exists. | Close every pending proof row and make stale proof fail automatically. |
 
 ## Baseline Evidence Notes
@@ -344,9 +347,10 @@ these are true.
 9. Done: add conservative multiline candidate cleaning/ranking and runtime
    candidate-count trace metadata.
 10. Done: add candidate top-score and score-margin suppression/trace metadata.
-11. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
+11. Done: make replay proof require candidate-selection metadata.
+12. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
    checklist acceptance/proof slices are still missing.
-12. Partial: build the replay-first proof command. The command exists; a fresh
+13. Partial: build the replay-first proof command. The command exists; a fresh
    post-pass trace proof still has to pass.
 
 ## Goal Status
@@ -356,7 +360,7 @@ every scored item reaches 100/100.
 
 Baseline status: **78/100**.
 
-Current implementation status: **91/100**. Not complete.
+Current implementation status: **92/100**. Not complete.
 
 Replay proof status:
 

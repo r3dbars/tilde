@@ -37,6 +37,8 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
     public let triggerDelayCoveredCount: Int
     public let displayScoreCandidateCount: Int
     public let displayScoreCoveredCount: Int
+    public let candidateSelectionCandidateCount: Int
+    public let candidateSelectionCoveredCount: Int
     public let staleCancellationCount: Int
     public let keptHorizonEventCount: Int
     public let keptFinalHorizonEventCount: Int
@@ -53,6 +55,10 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
         rate(displayScoreCoveredCount, displayScoreCandidateCount)
     }
 
+    public var candidateSelectionCoverageRate: Double {
+        rate(candidateSelectionCoveredCount, candidateSelectionCandidateCount)
+    }
+
     public var passesReplayProofGate: Bool {
         requirements.allSatisfy(\.passed)
     }
@@ -66,6 +72,7 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
             "- accepted-and-kept: \(summary.acceptedAndKeptCount)",
             "- trigger delay coverage: \(Self.percent(triggerDelayCoverageRate)) (\(triggerDelayCoveredCount)/\(triggerRequestCount))",
             "- display score coverage: \(Self.percent(displayScoreCoverageRate)) (\(displayScoreCoveredCount)/\(displayScoreCandidateCount))",
+            "- candidate selection coverage: \(Self.percent(candidateSelectionCoverageRate)) (\(candidateSelectionCoveredCount)/\(candidateSelectionCandidateCount))",
             "- stale cancellations: \(staleCancellationCount)",
             "- kept horizon events: \(keptHorizonEventCount)",
             "- final kept horizon events: \(keptFinalHorizonEventCount)",
@@ -123,6 +130,8 @@ public struct AutocompleteTraceReplay: Sendable {
         let triggerDelayCoveredCount = requests.filter(hasResearchedTriggerDelay).count
         let displayCandidates = displayScoreCandidateEvents(in: events)
         let displayCovered = displayCandidates.filter(hasDisplayScoreMetadata)
+        let modelResults = events.filter { $0.type == .modelResult }
+        let candidateSelectionCovered = modelResults.filter(hasCandidateSelectionMetadata)
         let acceptedTextEdited = events.filter { $0.type == .acceptedTextEdited }
         let finalHorizonEvents = acceptedTextEdited.filter(isFinalKeptHorizonEvent)
         let staleCancellations = events.filter(isStaleCancellation)
@@ -152,6 +161,11 @@ public struct AutocompleteTraceReplay: Sendable {
                 detail: "\(displayCovered.count)/\(displayCandidates.count) display candidates include score metadata"
             ),
             TraceReplayRequirement(
+                name: "candidate selection replay",
+                passed: !modelResults.isEmpty && candidateSelectionCovered.count == modelResults.count,
+                detail: "\(candidateSelectionCovered.count)/\(modelResults.count) model results include candidate selection metadata"
+            ),
+            TraceReplayRequirement(
                 name: "kept horizon replay",
                 passed: !acceptedTextEdited.isEmpty && !finalHorizonEvents.isEmpty,
                 detail: "\(acceptedTextEdited.count) survival events, \(finalHorizonEvents.count) final horizon events"
@@ -179,6 +193,8 @@ public struct AutocompleteTraceReplay: Sendable {
             triggerDelayCoveredCount: triggerDelayCoveredCount,
             displayScoreCandidateCount: displayCandidates.count,
             displayScoreCoveredCount: displayCovered.count,
+            candidateSelectionCandidateCount: modelResults.count,
+            candidateSelectionCoveredCount: candidateSelectionCovered.count,
             staleCancellationCount: staleCancellations.count,
             keptHorizonEventCount: acceptedTextEdited.count,
             keptFinalHorizonEventCount: finalHorizonEvents.count,
@@ -213,6 +229,13 @@ public struct AutocompleteTraceReplay: Sendable {
             && event.metadata["displayScoreRisk"] != nil
             && event.metadata["displayScoreAcceptedAndKeptProbability"] != nil
             && event.metadata["displayScoreAcceptedAndKeptSamples"] != nil
+    }
+
+    private func hasCandidateSelectionMetadata(_ event: AutocompleteTraceEvent) -> Bool {
+        event.metadata["cleanedCandidateCount"] != nil
+            && event.metadata["candidateTopScore"] != nil
+            && event.metadata["candidateScoreMargin"] != nil
+            && event.metadata["candidateSuppressionReason"] != nil
     }
 
     private func hasResearchedTriggerDelay(_ event: AutocompleteTraceEvent) -> Bool {
