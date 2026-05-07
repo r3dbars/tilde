@@ -12,9 +12,14 @@ script/typing_performance_endurance_soak.sh --dry-run >"$TMP_DIR/default.txt"
 for expected in \
   "Typing endurance soak" \
   "Duration target: 10 minute(s)" \
-  "Computed text: 100000 generated chars" \
-  "Underlying command: script/typing_performance_soak.sh --characters 100000 --chunk-size 20 --delay-ms 120 --require-event-tap-samples 500 --require-ax-samples 0" \
-  "Synthetic text: 100000 generated chars from a built-in neutral fixture"; do
+  "Computed text: 12000 generated chars" \
+  "Underlying command: script/typing_performance_soak.sh --characters 12000 --chunk-size 5 --delay-ms 250 --require-event-tap-samples 250 --require-ax-samples 0" \
+  "Synthetic text: 12000 generated chars from a built-in neutral fixture" \
+  "Typed text proof: exact TextEdit document match required" \
+  "Clipboard fallback: used only if direct TextEdit read fails" \
+  "Typing driver: System Events key chunks" \
+  "Typing batches: up to 1200 chars per AppleScript process" \
+  "AX warmup: waits for a focused-text poll summary before typing"; do
   if ! grep -F "$expected" "$TMP_DIR/default.txt" >/dev/null; then
     echo "endurance soak self-test missing default output: $expected" >&2
     cat "$TMP_DIR/default.txt" >&2

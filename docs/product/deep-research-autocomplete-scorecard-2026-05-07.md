@@ -26,6 +26,9 @@ It is not yet magical by the research bar. The biggest remaining misses are:
   margin suppression, but still needs real model proof and learned utility.
 - Cross-app proof is honest but incomplete for Notes, Obsidian, Codex, Claude
   Code, Claude desktop, and real production editors.
+- Normal typing proof improved with an exact 1,200-character strict TextEdit
+  endurance pass, but the live 10-minute wrapper is still a harness blocker and
+  is not counted as complete.
 
 The repo's existing Apple-native score is **86/100**. This score is lower
 because it grades against the research definition of "magical autocomplete,"
@@ -93,6 +96,11 @@ Pass 1 shipped these improvements:
   punctuation, sentence punctuation, newline, and bullet-line starts.
 - Ambient generation is now hard-capped at 16 generated tokens even when env
   overrides request more.
+- The typing endurance harness now uses typing-like chunks, exact TextEdit text
+  verification, temporary TextEdit enablement, temporary pause-state restore,
+  AX warmup flushing, and segmented System Events batches. A strict 1-minute
+  pass verified 1,200 exact characters with clean key latency; the 10-minute
+  unattended wrapper still needs to complete cleanly.
 - Inline placement now suppresses when less than one useful word can fit after
   the caret, so near-edge fields hide instead of showing clipped slivers.
 - Diagnostics export now creates a redacted privacy bundle with a manifest,
