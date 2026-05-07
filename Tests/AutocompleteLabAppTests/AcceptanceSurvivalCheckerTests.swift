@@ -84,7 +84,8 @@ struct AcceptanceSurvivalCheckerTests {
             acceptedAt: Date(timeIntervalSince1970: 1_000),
             profile: profile,
             fieldKind: .multilineCompose,
-            fieldKindReason: "role:AXTextArea"
+            fieldKindReason: "role:AXTextArea",
+            behaviorProfileID: .docsProse
         )
     }
 }

@@ -155,5 +155,6 @@ struct AcceptanceSurvivalTracker: Equatable, Sendable {
     let profile: CompatibilityProfile
     let fieldKind: AXFieldKind
     let fieldKindReason: String
+    let behaviorProfileID: AutocompleteBehaviorProfileID
     var deletedWithinTwoSeconds: Bool = false
 }

@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
     private let displayScorePolicy = DisplayScorePolicy()
+    private var acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
     private let annoyanceSuppressor = AnnoyanceSuppressorActor()
     private let screenshotTraceCapturePolicy = ScreenshotTraceCapturePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
@@ -1635,6 +1636,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
         let fieldClassification = currentSuggestionFieldClassification
+        let fieldKind = fieldClassification?.kind ?? .unknown
+        let behaviorProfileID = currentCompletionRequest?.behaviorProfile.id
+            ?? AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
+                appBundleIdentifier: profile.bundleIdentifier,
+                fieldKind: fieldKind
+            )).id
 
         return InsertionVerificationBaseline(
             fieldIdentity: currentFieldIdentity,
@@ -1645,8 +1652,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             acceptanceID: acceptanceID,
             acceptedAt: acceptedAt,
             acceptMode: acceptMode,
-            fieldKind: fieldClassification?.kind ?? .unknown,
+            fieldKind: fieldKind,
             fieldKindReason: fieldClassification?.reason ?? "unknown",
+            behaviorProfileID: behaviorProfileID,
             retryCount: 0
         )
     }
@@ -1741,6 +1749,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             acceptMode: baseline.acceptMode,
                             fieldKind: baseline.fieldKind,
                             fieldKindReason: baseline.fieldKindReason,
+                            behaviorProfileID: baseline.behaviorProfileID,
                             retryCount: baseline.retryCount + 1
                         )
                         scheduleInsertionVerification(acceptedText: acceptedText, baseline: retryBaseline)
@@ -1771,6 +1780,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "acceptMode": baseline.acceptMode,
                         "fieldKind": baseline.fieldKind.rawValue,
                         "fieldKindReason": baseline.fieldKindReason,
+                        "behaviorProfile": baseline.behaviorProfileID.rawValue,
                         "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                         "currentBeforeChars": String(context.textBeforeCursor.count)
                     ]
@@ -1820,7 +1830,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "acceptanceID": baseline.acceptanceID,
                     "acceptMode": baseline.acceptMode,
                     "fieldKind": baseline.fieldKind.rawValue,
-                    "fieldKindReason": baseline.fieldKindReason
+                    "fieldKindReason": baseline.fieldKindReason,
+                    "behaviorProfile": baseline.behaviorProfileID.rawValue
                 ]
             )
             let tracker = AcceptanceSurvivalTracker(
@@ -1835,7 +1846,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 acceptedAt: baseline.acceptedAt,
                 profile: baseline.profile,
                 fieldKind: baseline.fieldKind,
-                fieldKindReason: baseline.fieldKindReason
+                fieldKindReason: baseline.fieldKindReason,
+                behaviorProfileID: baseline.behaviorProfileID
             )
             startAcceptanceSurvivalTracking(tracker)
         }
@@ -1971,6 +1983,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         metadata["acceptMode"] = result.tracker.acceptMode
         metadata["fieldKind"] = result.tracker.fieldKind.rawValue
         metadata["fieldKindReason"] = result.tracker.fieldKindReason
+        metadata["behaviorProfile"] = result.tracker.behaviorProfileID.rawValue
+        if let learningSignal = recordAcceptedAndKeptLearningIfNeeded(result) {
+            metadata.merge(learningSignal.traceMetadata) { current, _ in current }
+        }
         if let finishReason = result.finishReason {
             metadata["finishReason"] = finishReason
         }
@@ -2019,6 +2035,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             outcome: result.measurement.survivalClass.rawValue,
             reason: "accepted-then-deleted",
             metadata: metadata
+        )
+    }
+
+    private func recordAcceptedAndKeptLearningIfNeeded(
+        _ result: AcceptanceSurvivalCheckResult
+    ) -> AcceptedAndKeptLearningSignal? {
+        guard let requestMode = CompletionRequestMode(rawValue: result.tracker.requestMode) else {
+            return nil
+        }
+
+        let outcome: AcceptedAndKeptLearningOutcome
+        if result.shouldRecordAcceptedThenDeleted {
+            outcome = .rejected
+        } else if result.measurement.checkpoint.isFinalMetricCheckpoint,
+                  !result.measurement.deletedWithinTwoSeconds {
+            outcome = result.measurement.isFinalAcceptedAndKept ? .kept : .rejected
+        } else {
+            return nil
+        }
+
+        return acceptedAndKeptLearning.record(
+            outcome,
+            key: AcceptedAndKeptLearningKey(
+                appBundleIdentifier: result.tracker.appBundleIdentifier,
+                fieldKind: result.tracker.fieldKind,
+                requestMode: requestMode,
+                behaviorProfileID: result.tracker.behaviorProfileID
+            )
         )
     }
 
@@ -2817,6 +2861,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let behaviorProfile = request.behaviorProfile
         let visibleWordCount = suggestion.visibleWordCount
         let visibleCharacterCount = suggestion.visibleText.count
+        let acceptedAndKeptSignal = acceptedAndKeptLearning.signal(
+            for: AcceptedAndKeptLearningKey(
+                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+                fieldKind: requestFieldKind,
+                requestMode: request.mode,
+                behaviorProfileID: behaviorProfile.id
+            )
+        )
 
         return DisplayScore(
             utility: displayUtility(
@@ -2830,7 +2882,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 behaviorProfile: behaviorProfile
             ),
             contextFit: displayContextFit(request: request, context: context),
-            userAffinity: displayUserAffinity(mode: request.mode, triggerReason: triggerReason),
+            userAffinity: displayUserAffinity(
+                mode: request.mode,
+                triggerReason: triggerReason,
+                acceptedAndKeptSignal: acceptedAndKeptSignal
+            ),
             risk: displayRisk(
                 fieldKind: requestFieldKind,
                 profile: profile,
@@ -2846,7 +2902,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 context: context,
                 triggerReason: triggerReason,
                 latencyMilliseconds: latencyMilliseconds
-            )
+            ),
+            acceptedAndKeptProbability: acceptedAndKeptSignal.probability,
+            acceptedAndKeptSampleCount: acceptedAndKeptSignal.sampleCount
         )
     }
 
@@ -2923,20 +2981,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func displayUserAffinity(
         mode: CompletionRequestMode,
-        triggerReason: String
+        triggerReason: String,
+        acceptedAndKeptSignal: AcceptedAndKeptLearningSignal
     ) -> Double {
+        let base: Double
         if triggerReason == "fast-word-completion" {
-            return 0.25
+            base = 0.25
+        } else {
+            switch mode {
+            case .wordCompletion:
+                base = 0.20
+            case .sentenceContinuation:
+                base = 0.10
+            case .phraseContinuation:
+                base = 0.15
+            }
         }
 
-        switch mode {
-        case .wordCompletion:
-            return 0.20
-        case .sentenceContinuation:
-            return 0.10
-        case .phraseContinuation:
-            return 0.15
-        }
+        return displayComponent(base + acceptedAndKeptSignal.userAffinityAdjustment)
     }
 
     private func displayRisk(
@@ -4400,6 +4462,7 @@ private struct InsertionVerificationBaseline: Equatable {
     let acceptMode: String
     let fieldKind: AXFieldKind
     let fieldKindReason: String
+    let behaviorProfileID: AutocompleteBehaviorProfileID
     let retryCount: Int
 }
 

@@ -10,7 +10,7 @@ Repo state graded: `codex/deep-research-scorecard` at `46ee5f4`, based on
 
 Baseline deep research score: **78/100**.
 
-Current implementation score after the current build pass: **87/100**.
+Current implementation score after the current build pass: **88/100**.
 
 This is a strong prototype with real engineering depth. It has local MLX
 runtime support, app compatibility profiles, privacy-safe tracing defaults,
@@ -20,7 +20,7 @@ request cancellation, and a serious proof harness.
 It is not yet magical by the research bar. The biggest remaining misses are:
 
 - Trigger timing now uses researched delays, but still needs fresh replay proof
-  and accepted-and-kept tuning.
+  and proof that accepted-and-kept tuning improves real usage.
 - Phrase and sentence quality rely mostly on prompt plus cleaner, not a real
   utility/ranking stack.
 - Candidate generation is still mostly one model result, not 3-5 ranked
@@ -54,13 +54,19 @@ Pass 1 shipped these improvements:
 - Sentence continuation is now a first-class request mode with its own
   activation lane, prompt guidance, display threshold, streaming behavior, and
   replay delay gate.
+- Accepted-and-kept learning now feeds display-score user affinity and can
+  suppress low-probability app/field/mode/profile buckets after enough local
+  evidence.
+- Replay proof now requires accepted-and-kept probability metadata on display
+  scoring events.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
 Remaining high-impact gaps:
 
-- Display score is heuristic; it does not yet use real accepted-and-kept
-  probability or multi-candidate ranking.
+- Display score is still heuristic, but now uses live accepted-and-kept
+  probability. It still lacks durable decay/persistence and multi-candidate
+  ranking.
 - Sentence mode exists now, but still needs real-app proof that it does not
   drift into planning or take over the writer's next thought.
 - Behavior profiles now affect the live generation/scoring path, but still need
@@ -119,7 +125,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Gate, not timer | 64 | There is an eligibility path, stale request gate, repetition suppressor, and focus checks. | Add expected utility, user affinity, mode-aware cooldowns, and replayable pure trigger state. |
 | Within-word mode | 66 | Current word completion can request after 2 chars with 0ms delay. | 3+ letters, 90-140ms pause, no deletion in 250ms, casing/punctuation preservation. |
 | Phrase mode | 61 | Boundary requests can run with 0ms app delay. | 140-240ms after word boundary, no fresh paragraph start, phrase-specific display threshold. |
-| Sentence mode | 45 | No first-class mode. | New lane with 280-450ms delay and stricter accept-and-keep probability. |
+| Sentence mode | 70 | First-class `sentenceContinuation` mode exists with activation, prompt guidance, stricter display threshold, streaming behavior, and replay delay gate. | Real-app proof that it does not drift into planning or take over the writer's next thought. |
 | Line/paragraph start | 50 | Some activation and middle-of-line checks exist, but no explicit 2-content-word rule. | Suppress by default until 2 content words unless bullet/email mode strongly constrains continuation. |
 | After deletion | 70 | Deletion skips requests. | Add 250ms stabilization cooldown and feed deletion into the annoyance/learning loop. |
 | After accept | 82 | Tab accepts one word and leaves residual visible text. | Only one follow-on after accept unless recomputed and scored high; track accepted-and-kept. |
@@ -127,8 +133,8 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | After Esc dismissal | 70 | Esc suppresses current field until blur for profiles that allow it. | Add 15s app+field+prefix-family cooldown and repeated-dismissal escalation. |
 | App switch / caret move / selection change | 82 | Focus/app mismatch hides and selection is blocked. Mouse/caret moves are polling-based. | Immediate hide/cancel on focus, caret, mouse, and selection events where possible. |
 | Punctuation handling | 66 | Natural boundaries exist for whitespace and punctuation. | Separate comma/colon/close-paren/sentence/newline/bullet thresholds. |
-| Display score | 45 | No explicit live `displayScore = utility + styleFit + contextFit + userAffinity - risk - repetition - instability`. | Implement display score and log each component. |
-| Accept-and-keep probability threshold | 48 | Analyzer supports accepted-and-kept; live checker wiring appears incomplete. | Gate display on dynamic accepted-and-kept probability by app, field, mode, and boundary. |
+| Display score | 82 | Live display score includes utility, style fit, context fit, user affinity, risk, repetition, instability, accepted-and-kept probability, and trace metadata. | Replace heuristic components with learned estimates and multi-candidate score margins. |
+| Accept-and-keep probability threshold | 72 | In-memory learning now gates by app, field kind, mode, and behavior profile after enough evidence. | Persist/decay the model and prove thresholds with fresh real-app traces. |
 | Candidate generation | 35 | Runtime returns one cleaned suggestion; word completion picks one candidate. | Generate/rank 3-5 candidates or equivalent scored candidates, then show only stable top result. |
 | Context budget | 76 | Prompt uses bounded recent context from current sentence/paragraph. | Use 48-96 tokens plus prior sentence/paragraph only when useful. |
 | Metadata in prompt | 45 | App bundle is used mainly for dogfood prompt branches. | Include app, field type, document title, mode, partial word, style sketch, and up to 3 accepted-kept suffixes. |
@@ -154,7 +160,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Forms profile | 72 | Field classifier can suppress forms; activation does not pass field kind in main call. | Live form classifier wiring plus non-sensitive free-form exceptions only. |
 | Search profile | 70 | Classifier can suppress search; live wiring appears incomplete. | Search off by default, proven across browser/native search fields. |
 | AI chat profile | 78 | Codex/Claude profiles are conservative and full accept is disabled. | Same-slice visual plus one-word no-submit proof for Codex, Claude Code, Claude desktop. |
-| Accepted-and-kept learning | 52 | Classifier/checker/reporting exist; AppDelegate wiring appears absent. | Live 2s/10s/30s/blur/send survival events with thresholds feeding display policy. |
+| Accepted-and-kept learning | 78 | Live survival events now update an in-memory app/field/mode/profile learning store that feeds display policy. | Add durable half-life storage, diagnostics controls, and fresh proof slices. |
 | Typed-over learning | 74 | Typed-over trace and repetition miss exist. | Prefix-family cooldown plus decay and threshold updates. |
 | Ignored learning | 66 | Hidden/ignored events can record misses. | Separate weak negative, lifetime-aware, not just repetition miss. |
 | Esc learning | 70 | Field suppression exists. | Very strong prefix/mode negative with 15s cooldown and longer repeated-dismiss decay. |
@@ -337,7 +343,7 @@ every scored item reaches 100/100.
 
 Baseline status: **78/100**.
 
-Current implementation status: **87/100**. Not complete.
+Current implementation status: **88/100**. Not complete.
 
 Replay proof status:
 
