@@ -6,11 +6,11 @@ from pathlib import Path
 
 MODELS = {
     "qwen35-4b": {
-        "repo_id": "mlx-community/Qwen3.5-4B-4bit",
+        "repo_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
         "target": "Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit",
     },
     "qwen3.5-4b": {
-        "repo_id": "mlx-community/Qwen3.5-4B-4bit",
+        "repo_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
         "target": "Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit",
     },
     "qwen35-9b": {

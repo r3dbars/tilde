@@ -32,7 +32,7 @@ Sources:
 
 - [MLX Swift LM GitHub](https://github.com/ml-explore/mlx-swift-lm)
 - [MLX Swift LM package](https://github.com/ml-explore/mlx-swift-lm/blob/main/Package.swift)
-- [Qwen3.5 4B MLX model](https://huggingface.co/mlx-community/Qwen3.5-4B-4bit)
+- [Qwen3.5 4B MLX model](https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit)
 
 ## Other Local Trial Models
 

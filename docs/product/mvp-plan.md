@@ -33,27 +33,29 @@ The first prototype should feel like a quiet writing assist, not a chatbot.
 - accept the whole visible suggestion with backtick/tilde
 - dismiss with `Esc`
 - insert through AX selected text when possible
-- fall back to clipboard paste when needed
-- preserve clipboard when possible
+- fall back to synthetic key events when safer for the target app
+- keep clipboard fallback off unless a debug build explicitly opts in
 
 ### 3. Completion Engine
 
 - start with a mock/static completion engine
-- then use Gemma 4 E2B for real continuations
-- target M1 / 16 GB as the first supported hardware profile
+- then use Qwen3.5 4B for real continuations
+- target Apple Silicon / 16 GB as the first supported hardware profile
 - ship an app-owned local runtime so users do not start a separate model server
-- benchmark embedded runtime options before choosing the final engine
+- use MLX as the app-owned runtime
 - keep the model warm while the app is active
 - disable thinking/reasoning
 - keep output to 2-8 words
 - cap generation around 8-16 tokens
-- debounce typing around 150-250ms
+- keep normal typing passthrough immediate
+- debounce or delay only suggestion requests and floating presentation
 - hard cap latency target under 700ms for the first useful build
 
 ### 4. Private Beta
 
 - test with 3-5 people
 - log only local aggregate counters at first
+- require explicit local opt-in for raw text traces or debug screenshots
 - collect qualitative feedback manually
 
 ## Things To Watch

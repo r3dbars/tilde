@@ -63,6 +63,7 @@ public enum SyntheticCaretEligibility {
         guard canReadValue,
               canReadSelectedTextRange,
               let elementRect,
+              elementRect.isFinitePlacementRect,
               elementRect.width > 80,
               elementRect.height > 20 else {
             return nil
@@ -97,55 +98,91 @@ public enum SyntheticCaretEligibility {
 }
 
 public enum SyntheticCaretEstimator {
+    private static let maxMeasuredCharacters = 4_000
+
     public static func estimate(
         input: SyntheticCaretEstimateInput,
         widthOf: (String) -> CGFloat
     ) -> CGRect? {
-        guard input.elementRect.width > input.minimumElementWidth,
-              input.elementRect.height > input.minimumElementHeight,
-              input.lineHeight > 0 else {
+        caretRect(
+            textBeforeCursor: input.textBeforeCursor,
+            elementRect: input.elementRect,
+            windowRect: input.windowRect,
+            lineHeight: input.lineHeight,
+            horizontalPadding: input.horizontalPadding,
+            verticalPadding: input.verticalPadding,
+            baselineLiftFactor: input.baselineLiftRatio,
+            inlineGap: input.inlineGap,
+            inlineVerticalDropFactor: input.inlineVerticalDropRatio,
+            minimumLineWidth: input.minimumLineWidth,
+            minimumElementWidth: input.minimumElementWidth,
+            minimumElementHeight: input.minimumElementHeight,
+            widthOfText: widthOf
+        )
+    }
+
+    public static func caretRect(
+        textBeforeCursor: String,
+        elementRect: CGRect,
+        windowRect: CGRect?,
+        lineHeight rawLineHeight: CGFloat,
+        horizontalPadding: CGFloat = 18,
+        verticalPadding: CGFloat = 4,
+        baselineLiftFactor: CGFloat = 0.85,
+        inlineGap: CGFloat = 8,
+        inlineVerticalDropFactor: CGFloat = 0.85,
+        minimumLineWidth: CGFloat = 40,
+        minimumElementWidth: CGFloat = 80,
+        minimumElementHeight: CGFloat = 20,
+        widthOfText: (String) -> CGFloat
+    ) -> CGRect? {
+        guard elementRect.width > minimumElementWidth,
+              elementRect.height > minimumElementHeight,
+              rawLineHeight > 0 else {
+            return nil
+        }
+        guard Self.hasSharedCoordinateSpace(elementRect: elementRect, windowRect: windowRect) else {
             return nil
         }
 
-        let lineHeight = max(input.lineHeight, 16)
-        let maxLineWidth = max(
-            input.minimumLineWidth,
-            input.elementRect.width - (input.horizontalPadding * 2)
-        )
+        let lineHeight = max(rawLineHeight, 16)
+        let maxLineWidth = max(minimumLineWidth, elementRect.width - (horizontalPadding * 2))
         let visualLines = wrappedVisualLines(
-            for: input.textBeforeCursor,
+            for: boundedTextBeforeCursor(textBeforeCursor),
             maxLineWidth: maxLineWidth,
-            widthOf: widthOf
+            widthOfText: widthOfText
         )
         let currentLine = visualLines.last ?? ""
-        let currentLineWidth = min(widthOf(currentLine), maxLineWidth)
         let lineIndex = max(0, visualLines.count - 1)
-        let preferredY = input.elementRect.minY
-            + input.verticalPadding
-            - (lineHeight * input.baselineLiftRatio)
-            + (lineHeight * input.inlineVerticalDropRatio)
+        let currentLineWidth = min(widthOfText(currentLine), maxLineWidth)
+        let caretHeight = max(lineHeight, 16)
+        let preferredY = elementRect.minY
+            + verticalPadding
+            - (lineHeight * baselineLiftFactor)
+            + (lineHeight * inlineVerticalDropFactor)
             + (CGFloat(lineIndex) * lineHeight)
+        let y = clampedCaretY(
+            preferredY,
+            caretHeight: caretHeight,
+            elementRect: elementRect,
+            windowRect: windowRect
+        )
+        let lowerX = elementRect.minX + horizontalPadding
+        let upperX = max(lowerX, elementRect.maxX - horizontalPadding)
+        let preferredX = lowerX + currentLineWidth + inlineGap
 
         return CGRect(
-            x: min(
-                input.elementRect.minX + input.horizontalPadding + currentLineWidth + input.inlineGap,
-                input.elementRect.maxX - input.horizontalPadding
-            ),
-            y: clampedCaretY(
-                preferredY,
-                caretHeight: lineHeight,
-                elementRect: input.elementRect,
-                windowRect: input.windowRect
-            ),
+            x: min(max(preferredX, lowerX), upperX),
+            y: y,
             width: 0,
-            height: lineHeight
+            height: caretHeight
         )
     }
 
     public static func wrappedVisualLines(
         for text: String,
         maxLineWidth: CGFloat,
-        widthOf: (String) -> CGFloat
+        widthOfText: (String) -> CGFloat
     ) -> [String] {
         var lines: [String] = []
 
@@ -154,7 +191,7 @@ public enum SyntheticCaretEstimator {
 
             for character in paragraph {
                 let next = current + String(character)
-                if !current.isEmpty, widthOf(next) > maxLineWidth {
+                if !current.isEmpty, widthOfText(next) > maxLineWidth {
                     lines.append(current)
                     current = String(character)
                 } else {
@@ -168,7 +205,22 @@ public enum SyntheticCaretEstimator {
         return lines.isEmpty ? [""] : lines
     }
 
-    private static func clampedCaretY(
+    private static func boundedTextBeforeCursor(_ text: String) -> String {
+        guard text.count > maxMeasuredCharacters else {
+            return text
+        }
+
+        let paragraphStart = text.lastIndex(of: "\n").map { text.index(after: $0) } ?? text.startIndex
+        let currentParagraph = text[paragraphStart...]
+        guard currentParagraph.count > maxMeasuredCharacters else {
+            return String(currentParagraph)
+        }
+
+        let start = currentParagraph.index(currentParagraph.endIndex, offsetBy: -maxMeasuredCharacters)
+        return String(currentParagraph[start...])
+    }
+
+    public static func clampedCaretY(
         _ preferredY: CGFloat,
         caretHeight: CGFloat,
         elementRect: CGRect,
@@ -177,10 +229,7 @@ public enum SyntheticCaretEstimator {
         let boundingRect = windowRect ?? elementRect
         let upperPadding: CGFloat = 8
         let lowerPadding: CGFloat = 8
-        let minY = min(
-            elementRect.minY - (caretHeight * 1.25),
-            boundingRect.maxY - caretHeight - lowerPadding
-        )
+        let minY = min(elementRect.minY - (caretHeight * 1.25), boundingRect.maxY - caretHeight - lowerPadding)
         let maxY = max(elementRect.maxY + (caretHeight * 6), minY)
         let boundedMinY = max(boundingRect.minY + upperPadding, minY)
         let boundedMaxY = min(boundingRect.maxY - caretHeight - lowerPadding, maxY)
@@ -190,5 +239,33 @@ public enum SyntheticCaretEstimator {
         }
 
         return min(max(preferredY, boundedMinY), boundedMaxY)
+    }
+
+    private static func hasSharedCoordinateSpace(elementRect: CGRect, windowRect: CGRect?) -> Bool {
+        guard let windowRect else {
+            return true
+        }
+
+        guard elementRect.isFinitePlacementRect,
+              windowRect.isFinitePlacementRect else {
+            return false
+        }
+
+        let tolerance: CGFloat = 24
+        return windowRect
+            .insetBy(dx: -tolerance, dy: -tolerance)
+            .intersects(elementRect)
+    }
+}
+
+private extension CGRect {
+    var isFinitePlacementRect: Bool {
+        minX.isFinite
+            && minY.isFinite
+            && maxX.isFinite
+            && maxY.isFinite
+            && width.isFinite
+            && height.isFinite
+            && !isNull
     }
 }
