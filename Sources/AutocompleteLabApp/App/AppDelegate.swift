@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionPresentationGate = SuggestionPresentationGate()
     private let suggestionPresentationPolicy = SuggestionPresentationPolicy()
     private var traceScreenshotCapture = TraceScreenshotCaptureCoordinator()
+    private var suggestionDiagnostics = SuggestionDiagnosticsRecorder()
     private let focusedTextUpdateSourcePolicy = FocusedTextUpdateSourcePolicy()
     private let focusedTextPollingCadencePolicy = FocusPollingCadencePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
@@ -128,7 +129,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var focusedTextPollLatencyStats = FocusedTextPollLatencyStats()
     private var focusedTextPollSkipStats = FocusedTextPollSkipStats()
     private var suggestionRequestGate = SuggestionRequestGate()
-    private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
     private var currentCompletionRequest: CompletionRequest?
     private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
@@ -325,7 +325,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextSnapshot = nil
         lastRequestedTextBeforeCursor = nil
         invalidatePendingSuggestionRequest()
-        suggestionBlockLogGate.reset()
+        suggestionDiagnostics.resetBlockedSuggestionGate()
         setSuggestionDecision("Ready: runtime")
         DiagnosticsLog.shared.record(
             "runtime-ready-rearmed",
@@ -735,7 +735,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             clearFocusedFieldState(resetBlockLogGate: false)
             currentProfile = profile
             setSuggestionDecision("Blocked: \(promptMatch.reason)")
-            recordBlockedSuggestionEvent(
+            suggestionDiagnostics.recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: rawContext,
                 profile: profile,
@@ -792,7 +792,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard profile.canPresentSuggestions else {
             setSuggestionDecision("Blocked: profile diagnostics only")
-            recordBlockedSuggestionEvent(
+            suggestionDiagnostics.recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
                 profile: profile,
@@ -808,7 +808,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let runtimeReport = runtimeReadinessReport
         guard runtimeReport.allowsSuggestions else {
             setSuggestionDecision("Blocked: runtime \(runtimeReport.stage.rawValue)")
-            recordBlockedSuggestionEvent(
+            suggestionDiagnostics.recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
                 profile: profile,
@@ -832,7 +832,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard activationDecision.canSuggest else {
             setSuggestionDecision("Blocked: \(activationDecision.blockReasonDescription)")
-            recordBlockedSuggestionEvent(
+            suggestionDiagnostics.recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
                 profile: profile,
@@ -858,7 +858,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let baseRenderMode else {
             setSuggestionDecision("Blocked: missing inline capabilities")
-            recordBlockedSuggestionEvent(
+            suggestionDiagnostics.recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
                 profile: profile,
@@ -890,13 +890,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textBeforeCursor: context.textBeforeCursor,
                 textAfterCursor: context.textAfterCursor,
                 reason: suppressionReason.rawValue,
-                metadata: traceGeometryMetadata(
+                metadata: suggestionDiagnostics.traceGeometryMetadata(
                     context: context,
                     renderMode: renderMode,
                     updateSource: updateSource
                 )
             )
-            recordBlockedSuggestionEvent(
+            suggestionDiagnostics.recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
                 profile: profile,
@@ -922,7 +922,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             setSuggestionDecision("Waiting: cadence policy")
-            recordSuggestionEvent(
+            suggestionDiagnostics.recordSuggestionEvent(
                 "suggestion-trigger-skipped",
                 context: context,
                 profile: profile,
@@ -1812,7 +1812,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let requestTicket = suggestionRequestGate.issue(request: request)
         let requestStartedAt = Date()
         let fieldIdentityDescription = fieldIdentity.traceDescription
-        let updateSourceMetadata = traceUpdateSourceMetadata(updateSource)
+        let updateSourceMetadata = suggestionDiagnostics.traceUpdateSourceMetadata(updateSource)
 
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionRequested,
@@ -1858,7 +1858,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         ]
                         .merging(updateSourceMetadata) { current, _ in current }
                     )
-                    recordSuggestionEvent(
+                    suggestionDiagnostics.recordSuggestionEvent(
                         "suggestion-blocked",
                         context: context,
                         profile: profile,
@@ -1996,7 +1996,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             reason: "empty-suggestion",
                             metadata: updateSourceMetadata
                         )
-                        self.recordSuggestionEvent(
+                        self.suggestionDiagnostics.recordSuggestionEvent(
                             "suggestion-blocked",
                             context: context,
                             profile: profile,
@@ -2024,7 +2024,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             reason: "missing-anchor",
                             metadata: updateSourceMetadata
                         )
-                        self.recordSuggestionEvent(
+                        self.suggestionDiagnostics.recordSuggestionEvent(
                             "suggestion-blocked",
                             context: context,
                             profile: profile,
@@ -2128,13 +2128,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 displayedText: suggestion.visibleText,
                 latencyMilliseconds: latencyMilliseconds,
                 reason: reason,
-                metadata: traceGeometryMetadata(
+                metadata: suggestionDiagnostics.traceGeometryMetadata(
                     context: originalContext,
                     renderMode: renderMode,
                     updateSource: updateSource
                 )
             )
-            recordSuggestionEvent(
+            suggestionDiagnostics.recordSuggestionEvent(
                 "suggestion-blocked",
                 context: originalContext,
                 profile: profile,
@@ -2181,7 +2181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 displayedText: suggestion.visibleText,
                 latencyMilliseconds: latencyMilliseconds,
                 reason: suppression.reason.rawValue,
-                metadata: traceGeometryMetadata(
+                metadata: suggestionDiagnostics.traceGeometryMetadata(
                     context: context,
                     renderMode: learningAdjustment.effectiveRenderMode,
                     updateSource: updateSource
@@ -2189,7 +2189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     .merging(learningAdjustment.metadata) { current, _ in current }
                     .merging(suppression.metadata) { current, _ in current }
             )
-            recordSuggestionEvent(
+            suggestionDiagnostics.recordSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
                 profile: profile,
@@ -2230,7 +2230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 displayedText: suggestion.visibleText,
                 latencyMilliseconds: latencyMilliseconds,
                 reason: reason,
-                metadata: traceGeometryMetadata(
+                metadata: suggestionDiagnostics.traceGeometryMetadata(
                     context: context,
                     renderMode: placement.renderMode,
                     updateSource: updateSource
@@ -2238,7 +2238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     .merging(learningAdjustment.metadata) { current, _ in current }
                     .merging(placement.metadata) { current, _ in current }
             )
-            recordSuggestionEvent(
+            suggestionDiagnostics.recordSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
                 profile: profile,
@@ -2308,7 +2308,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none",
                 "screenshotCaptureRect": screenshotCapture.rectDescription
             ]
-            .merging(traceGeometryMetadata(
+            .merging(suggestionDiagnostics.traceGeometryMetadata(
                 context: context,
                 renderMode: placement.renderMode,
                 updateSource: updateSource
@@ -2317,7 +2317,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(placement.metadata) { current, _ in current }
             .merging(panelPresentation.traceMetadata) { current, _ in current }
         )
-        recordSuggestionEvent(
+        suggestionDiagnostics.recordSuggestionEvent(
             "suggestion-presented",
             context: context,
             profile: profile,
@@ -2417,107 +2417,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             allowsLowConfidencePlacement: isGreenProfile || hasTrustedVisualAdjustment,
             allowsSyntheticCaretPlacement: isGreenProfile || hasTrustedVisualAdjustment
         )
-    }
-
-    private func traceGeometryMetadata(
-        context: FocusedTextContext,
-        renderMode: SuggestionRenderMode,
-        updateSource: FocusedTextUpdateSource? = nil
-    ) -> [String: String] {
-        var metadata = [
-            "effectiveRenderMode": renderMode.rawValue,
-            "hasCaretRect": String(context.caretRect != nil),
-            "caretIsSynthetic": String(context.caretIsSynthetic),
-            "hasElementRect": String(context.elementRect != nil),
-            "hasWindowRect": String(context.windowRect != nil),
-            "visibleCharacterRange": context.visibleCharacterRange.map { "\($0.location):\($0.length)" } ?? "missing",
-            "insertionPointLineNumber": context.insertionPointLineNumber.map(String.init) ?? "missing",
-            "canReadBounds": String(context.capabilities.canReadBoundsForRange),
-            "canReadVisibleRange": String(context.capabilities.canReadVisibleCharacterRange),
-            "canReadInsertionLine": String(context.capabilities.canReadInsertionPointLineNumber),
-            "axReadErrorCount": String(context.axReadErrors.count),
-            "axCannotCompleteCount": String(context.axReadErrors.filter(\.isTimeoutOrCannotComplete).count)
-        ]
-
-        if let updateSource {
-            metadata.merge(traceUpdateSourceMetadata(updateSource)) { current, _ in current }
-        }
-
-        return metadata
-    }
-
-    private func traceUpdateSourceMetadata(_ updateSource: FocusedTextUpdateSource) -> [String: String] {
-        ["updateSource": updateSource.rawValue]
-    }
-
-    private func recordSuggestionEvent(
-        _ event: String,
-        context: FocusedTextContext,
-        profile: CompatibilityProfile,
-        metadata: [String: String] = [:]
-    ) {
-        var safeMetadata = metadata
-        safeMetadata["app"] = profile.bundleIdentifier
-        safeMetadata["renderMode"] = profile.renderMode.rawValue
-        safeMetadata["insertionMode"] = profile.insertionMode.rawValue
-        safeMetadata["fieldIdentityMode"] = profile.fieldIdentityMode.rawValue
-        safeMetadata["role"] = context.role ?? "unknown"
-        safeMetadata["subrole"] = context.subrole ?? "none"
-        safeMetadata["beforeChars"] = String(context.textBeforeCursor.count)
-        safeMetadata["afterChars"] = String(context.textAfterCursor.count)
-        safeMetadata["hasCaretRect"] = String(context.caretRect != nil)
-        safeMetadata["hasElementRect"] = String(context.elementRect != nil)
-        safeMetadata["hasWindowRect"] = String(context.windowRect != nil)
-        safeMetadata["canReadValue"] = String(context.capabilities.canReadValue)
-        safeMetadata["canReadRange"] = String(context.capabilities.canReadSelectedTextRange)
-        safeMetadata["canReadBounds"] = String(context.capabilities.canReadBoundsForRange)
-        safeMetadata["canSetSelectedText"] = String(context.capabilities.canSetSelectedText)
-        safeMetadata["canReadVisibleRange"] = String(context.capabilities.canReadVisibleCharacterRange)
-        safeMetadata["canReadInsertionLine"] = String(context.capabilities.canReadInsertionPointLineNumber)
-        safeMetadata["visibleCharacterRange"] = context.visibleCharacterRange.map { "\($0.location):\($0.length)" } ?? "missing"
-        safeMetadata["insertionPointLineNumber"] = context.insertionPointLineNumber.map(String.init) ?? "missing"
-        safeMetadata["axReadErrorCount"] = String(context.axReadErrors.count)
-        safeMetadata["axCannotCompleteCount"] = String(context.axReadErrors.filter(\.isTimeoutOrCannotComplete).count)
-
-        DiagnosticsLog.shared.record(event, metadata: safeMetadata)
-    }
-
-    private func recordBlockedSuggestionEvent(
-        _ event: String,
-        context: FocusedTextContext,
-        profile: CompatibilityProfile,
-        fieldIdentity: FocusedFieldIdentity,
-        metadata: [String: String] = [:]
-    ) {
-        let signature = blockedSuggestionSignature(
-            context: context,
-            profile: profile,
-            fieldIdentity: fieldIdentity,
-            metadata: metadata
-        )
-
-        guard suggestionBlockLogGate.shouldRecord(signature: signature) else {
-            return
-        }
-
-        recordSuggestionEvent(event, context: context, profile: profile, metadata: metadata)
-    }
-
-    private func blockedSuggestionSignature(
-        context: FocusedTextContext,
-        profile: CompatibilityProfile,
-        fieldIdentity: FocusedFieldIdentity,
-        metadata: [String: String]
-    ) -> String {
-        [
-            profile.bundleIdentifier,
-            String(fieldIdentity.processIdentifier),
-            String(fieldIdentity.elementIdentifier),
-            metadata["reason"] ?? "unknown",
-            metadata["readinessStage"] ?? "none",
-            String(context.textBeforeCursor.count),
-            String(context.textAfterCursor.count)
-        ].joined(separator: "|")
     }
 
     private func fieldIdentity(
@@ -2655,7 +2554,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard case let .present(placement) = placementPlan else {
             if case let .suppress(suppression) = placementPlan {
-                recordSuggestionEvent(
+                suggestionDiagnostics.recordSuggestionEvent(
                     "suggestion-hidden",
                     context: context,
                     profile: profile,
@@ -2964,7 +2863,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentFieldIdentity = fieldIdentity
         lastTextSnapshot = nil
         lastRequestedTextBeforeCursor = nil
-        suggestionBlockLogGate.reset()
+        suggestionDiagnostics.resetBlockedSuggestionGate()
     }
 
     private func clearFocusedFieldState(
@@ -2984,7 +2883,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextSnapshot = nil
         lastRequestedTextBeforeCursor = nil
         if resetBlockLogGate {
-            suggestionBlockLogGate.reset()
+            suggestionDiagnostics.resetBlockedSuggestionGate()
         }
     }
 
