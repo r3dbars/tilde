@@ -327,7 +327,7 @@ like an assistant trying to talk.
 - [ ] Suggestions should be less eager after repeated typed-over misses.
 - [ ] Different app modes should have different suggestion aggressiveness.
 - [x] User should be able to choose quiet, normal, or eager suggestions.
-- [ ] Dogfood agent prompts should avoid generic productivity filler.
+- [x] Dogfood agent prompts should avoid generic productivity filler.
 
 ## Category 8: Failure Restraint
 

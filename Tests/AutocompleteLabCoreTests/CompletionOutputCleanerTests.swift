@@ -71,6 +71,19 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("I'll bring snacks", after: "Tomorrow")?.visibleText == " I'll bring snacks")
     }
 
+    @Test("Suppresses generic productivity filler in agent prompts")
+    func suppressesGenericProductivityFillerInAgentPrompts() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("make this more productive", after: "Can you") == nil)
+        #expect(cleaner.clean("streamline the workflow for everyone", after: "Please fix") == nil)
+        #expect(cleaner.clean("boost productivity across the board", after: "Could you write") == nil)
+        #expect(
+            cleaner.clean("make this more productive", after: "Tomorrow we should")?.visibleText
+                == " make this more productive"
+        )
+    }
+
     @Test("Uses only first line")
     func usesOnlyFirstLine() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)

@@ -80,6 +80,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         if let textBeforeCursor,
+           looksLikeGenericAgentProductivityFiller(withoutPromptEchoLabel, after: textBeforeCursor) {
+            return nil
+        }
+
+        if let textBeforeCursor,
            restartsCurrentSentence(withoutPromptEchoLabel, after: textBeforeCursor) {
             return nil
         }
@@ -240,6 +245,19 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
         let nearbyContext = String(textBeforeCursor.suffix(180)).lowercased()
         return Self.promptRequestMarkers.contains(where: { nearbyContext.contains($0) })
+    }
+
+    private func looksLikeGenericAgentProductivityFiller(_ text: String, after textBeforeCursor: String) -> Bool {
+        let nearbyContext = String(textBeforeCursor.suffix(180)).lowercased()
+        guard Self.promptRequestMarkers.contains(where: { nearbyContext.contains($0) }) else {
+            return false
+        }
+
+        let normalizedCandidate = text
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return Self.genericAgentProductivityFillers.contains { normalizedCandidate.hasPrefix($0) }
     }
 
     private func ensureLeadingSpace(_ text: String) -> String {
@@ -418,6 +436,19 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "please ",
         "run ",
         "write "
+    ]
+
+    private static let genericAgentProductivityFillers: Set<String> = [
+        "boost productivity",
+        "enhance productivity",
+        "increase efficiency",
+        "make it more productive",
+        "make this more productive",
+        "optimize the workflow",
+        "save time and effort",
+        "streamline the process",
+        "streamline the workflow",
+        "work smarter"
     ]
 
     private static let lowSignalWords: Set<String> = [
