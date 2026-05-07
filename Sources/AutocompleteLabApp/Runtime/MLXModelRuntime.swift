@@ -237,7 +237,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         switch request.mode {
         case .wordCompletion:
             return min(3, request.behaviorProfile.maxGeneratedTokens)
-        case .phraseContinuation:
+        case .phraseContinuation, .sentenceContinuation:
             return min(lengthConfiguration.maxGeneratedTokens, request.behaviorProfile.maxGeneratedTokens)
         }
     }

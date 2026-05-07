@@ -93,7 +93,7 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
 
     private func shouldTrackMisses(for text: String, mode: CompletionRequestMode) -> Bool {
         switch mode {
-        case .phraseContinuation:
+        case .phraseContinuation, .sentenceContinuation:
             return true
         case .wordCompletion:
             return isWordSuffix(text)

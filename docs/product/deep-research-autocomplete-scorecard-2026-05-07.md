@@ -10,7 +10,7 @@ Repo state graded: `codex/deep-research-scorecard` at `46ee5f4`, based on
 
 Baseline deep research score: **78/100**.
 
-Current implementation score after the current build pass: **86/100**.
+Current implementation score after the current build pass: **87/100**.
 
 This is a strong prototype with real engineering depth. It has local MLX
 runtime support, app compatibility profiles, privacy-safe tracing defaults,
@@ -51,6 +51,9 @@ Pass 1 shipped these improvements:
 - Live behavior-profile metadata now flows through `CompletionRequest`, prompt
   resolution, runtime length/token caps, display scoring, and raw trace
   metadata.
+- Sentence continuation is now a first-class request mode with its own
+  activation lane, prompt guidance, display threshold, streaming behavior, and
+  replay delay gate.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -58,7 +61,8 @@ Remaining high-impact gaps:
 
 - Display score is heuristic; it does not yet use real accepted-and-kept
   probability or multi-candidate ranking.
-- Sentence mode is still a stricter boundary path, not a full first-class lane.
+- Sentence mode exists now, but still needs real-app proof that it does not
+  drift into planning or take over the writer's next thought.
 - Behavior profiles now affect the live generation/scoring path, but still need
   screenshot-backed app slices and per-profile acceptance proof.
 - Replay-first real-app proof is still missing. The command exists, but the
@@ -333,7 +337,7 @@ every scored item reaches 100/100.
 
 Baseline status: **78/100**.
 
-Current implementation status: **86/100**. Not complete.
+Current implementation status: **87/100**. Not complete.
 
 Replay proof status:
 

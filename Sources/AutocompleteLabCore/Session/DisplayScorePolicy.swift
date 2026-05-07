@@ -143,6 +143,7 @@ public enum DisplayScoreDecision: Equatable, Sendable {
 public struct DisplayScorePolicy: Equatable, Sendable {
     public let wordCompletionThreshold: Double
     public let phraseContinuationThreshold: Double
+    public let sentenceContinuationThreshold: Double
     public let highRiskThreshold: Double
     public let highRepetitionThreshold: Double
     public let highInstabilityThreshold: Double
@@ -150,6 +151,7 @@ public struct DisplayScorePolicy: Equatable, Sendable {
     public init(
         wordCompletionThreshold: Double = 0.60,
         phraseContinuationThreshold: Double = 1.00,
+        sentenceContinuationThreshold: Double = 1.20,
         highRiskThreshold: Double = 0.85,
         highRepetitionThreshold: Double = 0.85,
         highInstabilityThreshold: Double = 0.85
@@ -162,6 +164,10 @@ public struct DisplayScorePolicy: Equatable, Sendable {
             phraseContinuationThreshold,
             to: DisplayScore.scoreBounds
         )
+        self.sentenceContinuationThreshold = DisplayScore.bounded(
+            sentenceContinuationThreshold,
+            to: DisplayScore.scoreBounds
+        )
         self.highRiskThreshold = DisplayScore.bounded(highRiskThreshold, to: DisplayScore.componentBounds)
         self.highRepetitionThreshold = DisplayScore.bounded(highRepetitionThreshold, to: DisplayScore.componentBounds)
         self.highInstabilityThreshold = DisplayScore.bounded(highInstabilityThreshold, to: DisplayScore.componentBounds)
@@ -171,6 +177,8 @@ public struct DisplayScorePolicy: Equatable, Sendable {
         switch mode {
         case .wordCompletion:
             wordCompletionThreshold
+        case .sentenceContinuation:
+            sentenceContinuationThreshold
         case .phraseContinuation:
             phraseContinuationThreshold
         }

@@ -125,17 +125,17 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
-        if mode == .phraseContinuation,
+        if mode.isContinuation,
            isLowValueSingleWordPhrase(suggestion.visibleText) {
             return nil
         }
 
-        if mode == .phraseContinuation,
+        if mode.isContinuation,
            isLowSignalPhrase(suggestion.visibleText) {
             return nil
         }
 
-        if mode == .phraseContinuation,
+        if mode.isContinuation,
            isAdviceOrToneDriftPhrase(suggestion.visibleText) {
             return nil
         }

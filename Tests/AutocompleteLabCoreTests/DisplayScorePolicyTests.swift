@@ -93,8 +93,8 @@ struct DisplayScorePolicyTests {
         #expect(unstableDecision.metadata["displayScoreInstability"] == "0.90")
     }
 
-    @Test("word completion and phrase continuation use different thresholds")
-    func wordCompletionAndPhraseContinuationUseDifferentThresholds() {
+    @Test("word phrase and sentence modes use different thresholds")
+    func wordPhraseAndSentenceModesUseDifferentThresholds() {
         let policy = DisplayScorePolicy()
         let score = DisplayScore(
             utility: 0.45,
@@ -108,14 +108,19 @@ struct DisplayScorePolicyTests {
 
         let wordDecision = policy.decision(for: score, mode: .wordCompletion)
         let phraseDecision = policy.decision(for: score, mode: .phraseContinuation)
+        let sentenceDecision = policy.decision(for: score, mode: .sentenceContinuation)
 
         #expect(abs(score.finalScore - 0.80) < 0.0001)
         #expect(policy.threshold(for: .wordCompletion) == 0.60)
         #expect(policy.threshold(for: .phraseContinuation) == 1.00)
+        #expect(policy.threshold(for: .sentenceContinuation) == 1.20)
         #expect(wordDecision.shouldDisplay)
         #expect(wordDecision.metadata["displayScoreThreshold"] == "0.60")
         #expect(!phraseDecision.shouldDisplay)
         #expect(phraseDecision.metadata["displayScoreSuppressionReason"] == "below-threshold")
         #expect(phraseDecision.metadata["displayScoreThreshold"] == "1.00")
+        #expect(!sentenceDecision.shouldDisplay)
+        #expect(sentenceDecision.metadata["displayScoreSuppressionReason"] == "below-threshold")
+        #expect(sentenceDecision.metadata["displayScoreThreshold"] == "1.20")
     }
 }

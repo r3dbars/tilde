@@ -1511,7 +1511,14 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     }
 
     private func slowSuggestionThresholdMilliseconds(for requestMode: String) -> Int {
-        requestMode == "wordCompletion" ? 25 : 225
+        switch requestMode {
+        case CompletionRequestMode.wordCompletion.rawValue:
+            return 25
+        case CompletionRequestMode.sentenceContinuation.rawValue:
+            return 450
+        default:
+            return 225
+        }
     }
 
     private func suggestionLifecycleScopeChanged(

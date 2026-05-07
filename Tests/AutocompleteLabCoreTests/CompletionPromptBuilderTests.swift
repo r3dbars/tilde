@@ -232,6 +232,20 @@ struct CompletionPromptBuilderTests {
         #expect(!prompt.system.contains("Continue the current sentence"))
     }
 
+    @Test("Sentence continuation prompt uses explicit sentence mode guidance")
+    func sentenceContinuationPromptUsesExplicitSentenceModeGuidance() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Can we make this work.",
+            mode: .sentenceContinuation
+        ))
+
+        #expect(prompt.system.contains("Sentence mode: start only the next sentence's first few words"))
+        #expect(prompt.system.contains("Require higher confidence"))
+        #expect(prompt.system.contains("Start the next sentence naturally"))
+        #expect(!prompt.system.contains("Phrase mode: continue only the current local thought"))
+    }
+
     @Test("Prompt uses AI chat behavior profile from app metadata")
     func promptUsesAIChatBehaviorProfileFromAppMetadata() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
