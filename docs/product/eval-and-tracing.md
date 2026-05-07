@@ -4,7 +4,8 @@ This is the local tuning loop for making autocomplete better before it becomes c
 
 ## Local Tracing
 
-Tracing is local-only and enabled for the lab by default.
+Tracing is local-only and enabled for the lab by default. The default trace is
+redacted.
 
 Disable it for a run with:
 
@@ -12,19 +13,31 @@ Disable it for a run with:
 AUTOCOMPLETE_LAB_TRACE=0 ./script/build_and_run.sh
 ```
 
-The app writes JSONL to:
+The app writes redacted JSONL to:
 
 ```text
 ~/Library/Logs/AutocompleteLab/traces.jsonl
 ```
 
-Enable optional local screenshot traces with:
+Raw local debug traces are opt-in and written separately:
 
 ```bash
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/build_and_run.sh
+AUTOCOMPLETE_LAB_RAW_TRACE=1 ./script/build_and_run.sh
 ```
 
-Or turn screenshots on for only the current app from Diagnostics. Screenshot traces are stored beside the JSONL log and linked from the exported report.
+```text
+~/Library/Logs/AutocompleteLab/raw-traces.jsonl
+```
+
+Enable optional local screenshot traces only with raw debug tracing on:
+
+```bash
+AUTOCOMPLETE_LAB_RAW_TRACE=1 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/build_and_run.sh
+```
+
+Or turn screenshots on for only the current app from Diagnostics after enabling
+raw debug tracing. Screenshot traces are stored beside the JSONL logs and linked
+from raw debug events only, not from the redacted report.
 
 The app also keeps local compatibility learning here:
 
@@ -59,7 +72,12 @@ Each suggestion gets a `suggestionID` and emits lifecycle events:
 - `appDisabled`
 - `caretGeometryFailed`
 
-Events include app bundle id, request mode, field identity, prompt/output when available, displayed text, accepted text, outcome, reason, latency, screenshot path, caret/panel geometry, and compatibility-learning metadata.
+Default events include app bundle id, request mode, field identity, outcome,
+reason, latency, counts, lengths, field metadata, caret/panel geometry, and
+compatibility-learning metadata. Raw context, prompts, model output, displayed
+text, accepted text, remaining visible text, and screenshot paths are removed
+from the default trace. They are written only to `raw-traces.jsonl` when raw
+local debug tracing is explicitly enabled.
 
 The headline product metric is accepted-and-kept, not raw accept rate. Accepted text is compared at 2s, 10s, 30s, and field blur. Durable checkpoint events store survival class, token recall, edit distance, accepted length, and timing metadata. They should not need the current field text on disk.
 
@@ -80,7 +98,10 @@ Track these rates per app and request mode:
 - insertion verification success
 - insertion verification failures
 
-Use the in-app Diagnostics window for the quickest read. It shows recent trace events, top misses, accept rates by app/mode, pause/delete controls, screenshot tracing, current learned adapter state, and an HTML export.
+Use the in-app Diagnostics window for the quickest read. It shows recent
+redacted trace events, top misses, accept rates by app/mode, support state,
+pause/delete controls, raw debug state, screenshot tracing, current learned
+adapter state, and a redacted HTML export.
 
 Use the command-line checker for repeatable proof:
 
@@ -146,6 +167,6 @@ AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP=com.openai.codex \
 
 ## Current Product Boundary
 
-For the lab, raw local traces are useful because the user is tuning their own local model behavior.
-
-For a customer-facing app, keep raw tracing disabled by default and require a clear local-only debug toggle. Do not upload typed text, prompts, outputs, or accepted text without explicit user consent.
+For the lab, raw local traces can still be useful when tuning model behavior,
+but they are an explicit debug mode. Do not upload typed text, prompts, outputs,
+screenshots, or accepted text without explicit user consent.

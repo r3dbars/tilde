@@ -1571,7 +1571,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appScreenshotTracingEnabled = compatibilityLearningStore
             .profile(for: bundleIdentifier)?
             .screenshotTracingEnabled == true
-        guard (RawAutocompleteTraceLog.shared.screenshotTracingEnabled || appScreenshotTracingEnabled),
+        guard RawAutocompleteTraceLog.shared.rawDebugTracingEnabled,
+              (RawAutocompleteTraceLog.shared.screenshotTracingEnabled || appScreenshotTracingEnabled),
               let rect else {
             return ""
         }
@@ -2243,8 +2244,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recentTraceEvents: RawAutocompleteTraceLog.shared.recentEvents(limit: 48),
             tracePath: RawAutocompleteTraceLog.shared.path,
             tracingPaused: RawAutocompleteTraceLog.shared.isPaused,
-            screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled
-                || compatibilityLearningStore.profile(for: bundleIdentifier)?.screenshotTracingEnabled == true,
+            rawDebugTracingEnabled: RawAutocompleteTraceLog.shared.rawDebugTracingEnabled,
+            screenshotTracingEnabled: RawAutocompleteTraceLog.shared.rawDebugTracingEnabled
+                && (
+                    RawAutocompleteTraceLog.shared.screenshotTracingEnabled
+                        || compatibilityLearningStore.profile(for: bundleIdentifier)?.screenshotTracingEnabled == true
+                ),
             compatibilityLearningPath: compatibilityLearningStore.path,
             compatibilityLearningProfile: compatibilityLearningStore.profile(for: bundleIdentifier),
             quietModeSummary: currentQuietMode.summary,
@@ -2253,6 +2258,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             toggleTracingAction: { [weak self] in
                 self?.toggleTracing()
+            },
+            toggleRawDebugTracingAction: { [weak self] in
+                self?.toggleRawDebugTracing()
             },
             toggleScreenshotTracingAction: { [weak self] in
                 self?.toggleScreenshotTracing(for: bundleIdentifier)
@@ -2301,6 +2309,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.record(
             "trace-control",
             metadata: ["paused": String(nextPaused)]
+        )
+        showDiagnostics()
+    }
+
+    private func toggleRawDebugTracing() {
+        let enabled = !RawAutocompleteTraceLog.shared.rawDebugTracingEnabled
+        RawAutocompleteTraceLog.shared.setRawDebugTracingEnabled(enabled)
+        DiagnosticsLog.shared.record(
+            "raw-trace-control",
+            metadata: [
+                "enabled": String(enabled),
+                "rawPath": RawAutocompleteTraceLog.shared.rawPath
+            ]
         )
         showDiagnostics()
     }

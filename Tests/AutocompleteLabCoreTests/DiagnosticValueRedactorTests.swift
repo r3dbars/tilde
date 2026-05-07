@@ -31,6 +31,12 @@ struct DiagnosticValueRedactorTests {
                 value: "model leaked this"
             ) == "String(17 chars)"
         )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "selectedText",
+                value: "String(13 chars)"
+            ) == "String(13 chars)"
+        )
     }
 
     @Test("Diagnostics metadata keeps shape keys and flattens whitespace")

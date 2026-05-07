@@ -19,7 +19,7 @@ public enum AutocompleteTraceEventType: String, Codable, Equatable, Sendable {
 
 public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable {
     public static let currentSchemaVersion = 3
-    public static let currentPrivacyVersion = 1
+    public static let currentPrivacyVersion = 2
 
     public let id: String
     public let schemaVersion: Int
@@ -192,5 +192,58 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
         try container.encode(reason, forKey: .reason)
         try container.encode(screenshotPath, forKey: .screenshotPath)
         try container.encode(metadata, forKey: .metadata)
+    }
+
+    public func redactedForDefaultTrace() -> AutocompleteTraceEvent {
+        var safeMetadata = metadata.reduce(into: [String: String]()) { result, item in
+            result[item.key] = DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: item.key,
+                value: item.value
+            )
+        }
+
+        addLengthMetadata(value: textBeforeCursor, key: "textBeforeCursorChars", metadata: &safeMetadata)
+        addLengthMetadata(value: textAfterCursor, key: "textAfterCursorChars", metadata: &safeMetadata)
+        addLengthMetadata(value: systemPrompt, key: "systemPromptChars", metadata: &safeMetadata)
+        addLengthMetadata(value: userPrompt, key: "userPromptChars", metadata: &safeMetadata)
+        addLengthMetadata(value: rawOutput, key: "rawOutputChars", metadata: &safeMetadata)
+        addLengthMetadata(value: cleanedVisibleText, key: "cleanedVisibleTextChars", metadata: &safeMetadata)
+        addLengthMetadata(value: displayedText, key: "displayedTextChars", metadata: &safeMetadata)
+        addLengthMetadata(value: acceptedText, key: "acceptedTextChars", metadata: &safeMetadata)
+        addLengthMetadata(value: remainingVisibleText, key: "remainingVisibleTextChars", metadata: &safeMetadata)
+        if !screenshotPath.isEmpty {
+            safeMetadata["screenshotCaptured"] = "true"
+        }
+
+        return AutocompleteTraceEvent(
+            id: id,
+            schemaVersion: schemaVersion,
+            privacyVersion: AutocompleteTraceEvent.currentPrivacyVersion,
+            experimentArm: experimentArm,
+            timestamp: timestamp,
+            sessionID: sessionID,
+            suggestionID: suggestionID,
+            type: type,
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            requestMode: requestMode,
+            triggerReason: triggerReason,
+            latencyMilliseconds: latencyMilliseconds,
+            outcome: outcome,
+            reason: reason,
+            metadata: safeMetadata
+        )
+    }
+
+    private func addLengthMetadata(
+        value: String,
+        key: String,
+        metadata: inout [String: String]
+    ) {
+        guard !value.isEmpty else {
+            return
+        }
+
+        metadata[key] = String(value.count)
     }
 }
