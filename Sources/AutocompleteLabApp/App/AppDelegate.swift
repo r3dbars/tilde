@@ -14,7 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wordBoundaryDelayMilliseconds: 0,
         pauseDelayMilliseconds: 15
     )
-    private let modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
+    private let localModelInstaller = LocalModelInstaller()
+    private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
     private var completionLengthConfiguration: CompletionLengthConfiguration {
         modelRuntimeBundle.lengthConfiguration
     }
@@ -30,12 +31,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
     private let screenshotTraceCapturePolicy = ScreenshotTraceCapturePolicy()
+    private let focusedTextUpdateSourcePolicy = FocusedTextUpdateSourcePolicy()
+    private let focusedTextPollingCadencePolicy = FocusPollingCadencePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
     private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private let suggestionPanel = SuggestionPanelController()
     private lazy var focusedTextReader = SerialFocusedTextAXReader(accessibilityClient: accessibilityClient)
+    private lazy var accessibilityObserver = AccessibilityObserver(
+        eventHandler: { [weak self] event in
+            Task { @MainActor [weak self] in
+                self?.handleAccessibilityObserverEvent(event)
+            }
+        },
+        registrationFailureHandler: { failure in
+            DiagnosticsLog.shared.record(
+                "accessibility-observer-registration-failed",
+                metadata: failure.metadata
+            )
+        }
+    )
+    private let accessibilityObserverRouter = AccessibilityObserverEventRouter()
     private let diagnosticsWindow = DiagnosticsWindowController()
     private lazy var settingsWindow = SettingsWindowController(
         requestPermission: { [weak self] in
@@ -96,9 +113,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debounceTask: Task<Void, Never>?
     private var insertionVerificationTask: Task<Void, Never>?
     private var runtimeWarmTask: Task<Void, Never>?
+    private var modelInstallTask: Task<Void, Never>?
+    private var modelInstallProgress: LocalModelInstallProgress?
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private var isFocusedTextPollInFlight = false
     private var latestFocusedTextReadRequestID: UInt64?
+    private var pendingFocusedTextUpdateSource: FocusedTextUpdateSource?
+    private var nextScheduledFocusedTextPollAt = Date.distantPast
     private var focusedTextAXHealthState = FocusedTextAXHealthState()
     private var focusedTextPollLatencyStats = FocusedTextPollLatencyStats()
     private var focusedTextPollSkipStats = FocusedTextPollSkipStats()
@@ -147,19 +168,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if shouldShowSettingsForCurrentReadiness {
             showSettings()
         }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(frontmostApplicationDidChange(_:)),
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil
+        )
         startPolling()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         DiagnosticsLog.shared.record("terminate")
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
         debounceTask?.cancel()
         keyboardEventTapStopTask?.cancel()
         insertionVerificationTask?.cancel()
         runtimeWarmTask?.cancel()
+        modelInstallTask?.cancel()
         invalidatePendingSuggestionRequest()
         modelRuntime.cancel()
         pollTimer?.invalidate()
+        accessibilityObserver.stopTrackingAll()
         stopKeyboardEventTapNow(reason: "terminate")
+    }
+
+    @objc private func frontmostApplicationDidChange(_ notification: Notification) {
+        guard suggestionSession.hasVisibleSuggestion else {
+            return
+        }
+
+        let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        guard app?.bundleIdentifier != currentSuggestionAppBundleIdentifier else {
+            return
+        }
+
+        invalidatePendingSuggestionRequest()
+        hideSuggestion(reason: "app-blur")
     }
 
     private func configureStatusItem() {
@@ -209,11 +253,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startPolling() {
         let timer = Timer.scheduledTimer(withTimeInterval: focusedTextPollInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.pollFocusedTextIfIdle()
+                self?.pollFocusedTextFromTimer()
             }
         }
         timer.tolerance = focusedTextPollInterval / 2
         pollTimer = timer
+    }
+
+    private func pollFocusedTextFromTimer() {
+        let updateSource = scheduledFocusedTextUpdateSource()
+        let now = Date()
+        guard now >= nextScheduledFocusedTextPollAt else {
+            return
+        }
+
+        nextScheduledFocusedTextPollAt = now.addingTimeInterval(
+            focusedTextPollInterval(for: updateSource)
+        )
+        pollFocusedTextIfIdle(source: updateSource)
     }
 
     private func warmModelRuntime() {
@@ -257,6 +314,112 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ]
                 )
                 self?.applyRuntimeState(state)
+            }
+        }
+    }
+
+    private func reloadModelRuntime(reason: String) {
+        runtimeWarmTask?.cancel()
+        modelRuntime.cancel()
+        modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
+        engine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
+        currentRuntimeState = .unavailable(reason: reason)
+
+        var metadata = modelRuntimeBundle.diagnosticsMetadata
+        metadata["reason"] = reason
+        DiagnosticsLog.shared.record("runtime-bootstrap", metadata: metadata)
+        refreshRuntimeChrome()
+        warmModelRuntime()
+    }
+
+    private func installLocalModel(action: RuntimeReadinessAction) {
+        guard modelInstallTask == nil else {
+            return
+        }
+
+        let manifest = modelRuntimeBundle.bootstrapPlan.preferredAsset
+        let destination = modelRuntimeBundle.modelDirectoryURL
+        modelInstallProgress = LocalModelInstallProgress(completedUnitCount: 0, totalUnitCount: 0)
+        refreshRuntimeChrome()
+        DiagnosticsLog.shared.record(
+            "model-install-start",
+            metadata: [
+                "action": action.rawValue,
+                "model": manifest.model.rawValue,
+                "repo": manifest.source?.repoID ?? "",
+                "destination": destination.path
+            ]
+        )
+
+        let installer = localModelInstaller
+        modelInstallTask = Task { [weak self, installer, manifest, destination, action] in
+            do {
+                _ = try await installer.install(
+                    manifest: manifest,
+                    to: destination,
+                    progressHandler: { [weak self] progress in
+                        guard let self else {
+                            return
+                        }
+
+                        self.modelInstallProgress = progress
+                        self.refreshRuntimeChrome()
+                    }
+                )
+
+                await MainActor.run {
+                    guard let self else {
+                        return
+                    }
+
+                    DiagnosticsLog.shared.record(
+                        "model-install-complete",
+                        metadata: [
+                            "action": action.rawValue,
+                            "model": manifest.model.rawValue,
+                            "destination": destination.path
+                        ]
+                    )
+                    self.modelInstallTask = nil
+                    self.modelInstallProgress = nil
+                    self.reloadModelRuntime(reason: "model install complete")
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    guard let self else {
+                        return
+                    }
+
+                    DiagnosticsLog.shared.record(
+                        "model-install-cancelled",
+                        metadata: [
+                            "action": action.rawValue,
+                            "model": manifest.model.rawValue
+                        ]
+                    )
+                    self.modelInstallTask = nil
+                    self.modelInstallProgress = nil
+                    self.refreshRuntimeChrome()
+                }
+            } catch {
+                await MainActor.run {
+                    guard let self else {
+                        return
+                    }
+
+                    DiagnosticsLog.shared.record(
+                        "model-install-failed",
+                        metadata: [
+                            "action": action.rawValue,
+                            "model": manifest.model.rawValue,
+                            "reason": error.localizedDescription
+                        ]
+                    )
+                    self.modelInstallTask = nil
+                    self.modelInstallProgress = nil
+                    self.refreshRuntimeChrome()
+                    self.showSettings()
+                }
             }
         }
     }
@@ -319,7 +482,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var runtimeReadinessReport: RuntimeReadinessReport {
-        modelRuntimeBundle.bootstrapPlan.readinessReport(for: currentRuntimeState)
+        if let modelInstallProgress {
+            return RuntimeReadinessReport(
+                stage: .installing,
+                summary: "installing \(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) \(modelInstallProgress.percentageText)",
+                detail: "Downloading to \(modelDirectoryPath)",
+                action: .wait
+            )
+        }
+
+        return modelRuntimeBundle.bootstrapPlan.readinessReport(for: currentRuntimeState)
     }
 
     private var modelDirectoryPath: String {
@@ -408,7 +580,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch runtimeReadinessReport.stage {
         case .downloadNeeded, .repairNeeded, .runtimeUnavailable, .failed:
             return true
-        case .warming, .ready:
+        case .installing, .warming, .ready:
             return false
         }
     }
@@ -421,14 +593,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionControlPolicy.state(isPaused: suggestionsPaused)
     }
 
-    private func pollFocusedTextIfIdle() {
+    private func scheduledFocusedTextUpdateSource() -> FocusedTextUpdateSource {
+        let frontmostApp = accessibilityClient.frontmostApplication()
+        let profile = frontmostApp.flatMap { profileStore.profile(for: $0.bundleIdentifier) }
+        let appEnabled = frontmostApp.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
+        let hasSupportedProfile = profile?.canPresentSuggestions == true
+            && profile?.isSensitive == false
+            && appEnabled
+        let usesObserverUpdates = frontmostApp.map {
+            profile?.supportsObserverUpdates == true
+                && accessibilityObserver.isTracking(processIdentifier: $0.processIdentifier)
+        } ?? false
+
+        return focusedTextUpdateSourcePolicy.pollingSource(
+            isTrustedForAccessibility: accessibilityClient.isTrusted,
+            hasSupportedProfile: hasSupportedProfile,
+            usesObserverUpdates: usesObserverUpdates,
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+        )
+    }
+
+    private func focusedTextPollInterval(for updateSource: FocusedTextUpdateSource) -> TimeInterval {
+        guard accessibilityClient.isTrusted else {
+            return focusedTextPollingCadencePolicy.untrustedIntervalSeconds
+        }
+
+        switch updateSource {
+        case .observer, .manualRefresh:
+            return 0
+        case .activePoll:
+            return focusedTextPollingCadencePolicy.activeSuggestionIntervalSeconds
+        case .watchPoll:
+            return focusedTextPollingCadencePolicy.supportedTypingWatchIntervalSeconds
+        case .idlePoll:
+            return focusedTextPollingCadencePolicy.idleIntervalSeconds
+        }
+    }
+
+    private func pollFocusedTextIfIdle(source updateSource: FocusedTextUpdateSource) {
         guard !isFocusedTextPollInFlight else {
+            pendingFocusedTextUpdateSource = focusedTextUpdateSourcePolicy.coalesced(
+                pendingFocusedTextUpdateSource,
+                with: updateSource
+            )
             if let notice = focusedTextPollSkipStats.recordSkippedInFlight(now: Date()) {
                 DiagnosticsLog.shared.record(
                     "focused-text-poll-skipped",
                     metadata: [
                         "reason": "in-flight",
-                        "count": String(notice.count)
+                        "count": String(notice.count),
+                        "updateSource": updateSource.rawValue
                     ]
                 )
             }
@@ -438,7 +652,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isFocusedTextPollInFlight = true
         let startedAt = DispatchTime.now().uptimeNanoseconds
         var completesAsync = false
-        pollFocusedText(startedAt: startedAt, completesAsync: &completesAsync)
+        pollFocusedText(
+            startedAt: startedAt,
+            completesAsync: &completesAsync,
+            updateSource: updateSource
+        )
         if !completesAsync {
             finishFocusedTextPoll(startedAt: startedAt)
         }
@@ -447,13 +665,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func finishFocusedTextPoll(startedAt: UInt64) {
         let endedAt = DispatchTime.now().uptimeNanoseconds
         let durationMilliseconds = Int((endedAt - startedAt) / 1_000_000)
+        let pendingUpdateSource = pendingFocusedTextUpdateSource
+        pendingFocusedTextUpdateSource = nil
         isFocusedTextPollInFlight = false
         latestFocusedTextReadRequestID = nil
         recordFocusedTextPollLatency(durationMilliseconds)
         recordFocusedTextPollSkipSummaryIfNeeded()
+
+        if let pendingUpdateSource {
+            pollFocusedTextIfIdle(source: pendingUpdateSource)
+        }
     }
 
-    private func pollFocusedText(startedAt: UInt64, completesAsync: inout Bool) {
+    private func pollFocusedText(
+        startedAt: UInt64,
+        completesAsync: inout Bool,
+        updateSource: FocusedTextUpdateSource
+    ) {
         if case let .blocked(reason) = suggestionControlPolicy.suggestionAvailability(for: suggestionControlState) {
             setSuggestionDecision(reason.decisionText)
             let frontmostApp = accessibilityClient.frontmostApplication()
@@ -467,13 +695,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard accessibilityClient.isTrusted else {
+            accessibilityObserver.stopTrackingAll()
             setSuggestionDecision("Blocked: Accessibility permission missing")
             updateStatusMenu(app: nil, profile: nil, appEnabled: false)
             hideSuggestion()
             return
         }
 
-        if focusedTextPollingPause.isPaused(now: Date()) {
+        if focusedTextPollingPause.isPaused(now: Date()), !updateSource.bypassesTypingPause {
             setSuggestionDecision("Waiting: typing")
             return
         }
@@ -481,6 +710,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let activeApp = accessibilityClient.frontmostApplication()
         guard let frontmostApp = activeApp,
               let profile = profileStore.profile(for: frontmostApp.bundleIdentifier) else {
+            accessibilityObserver.stopTrackingAll()
             clearFocusedFieldState()
             currentProfile = nil
             setSuggestionDecision("Blocked: unsupported app")
@@ -495,16 +725,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateStatusMenu(app: frontmostApp, profile: profile, appEnabled: appEnabled)
 
         guard appEnabled else {
+            accessibilityObserver.stopTrackingAll()
             clearFocusedFieldState()
             setSuggestionDecision("Blocked: app disabled")
-            hideSuggestion()
+            hideSuggestion(reason: "app-disabled")
             return
         }
 
         guard profile.canPresentSuggestions, !profile.isSensitive else {
+            accessibilityObserver.stopTrackingAll()
             clearFocusedFieldState()
             setSuggestionDecision(profile.isSensitive ? "Blocked: sensitive app" : "Blocked: profile disabled")
-            hideSuggestion()
+            hideSuggestion(reason: profile.isSensitive ? "sensitive-app" : "profile-disabled")
             return
         }
 
@@ -515,12 +747,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let requestID = focusedTextReader.readFocusedTextContext(
             for: frontmostApp,
             allowDescendantTextFallback: profile.allowsDescendantTextFallback
-        ) { [weak self, profile, startedAt] result in
-            Task { @MainActor [weak self, profile, startedAt] in
+        ) { [weak self, profile, startedAt, updateSource] result in
+            Task { @MainActor [weak self, profile, startedAt, updateSource] in
                 self?.completeFocusedTextPoll(
                     result: result,
                     profile: profile,
-                    startedAt: startedAt
+                    startedAt: startedAt,
+                    updateSource: updateSource
                 )
             }
         }
@@ -531,7 +764,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func completeFocusedTextPoll(
         result: FocusedTextAXReadResult,
         profile: CompatibilityProfile,
-        startedAt: UInt64
+        startedAt: UInt64,
+        updateSource: FocusedTextUpdateSource
     ) {
         defer {
             finishFocusedTextPoll(startedAt: startedAt)
@@ -568,30 +802,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let activeApp = accessibilityClient.frontmostApplication(),
               activeApp.bundleIdentifier == result.app.bundleIdentifier,
               activeApp.processIdentifier == result.app.processIdentifier else {
+            accessibilityObserver.stopTrackingAll()
             setSuggestionDecision("Blocked: focus changed")
             hideSuggestion(reason: "focus-changed")
             return
         }
 
+        refreshAccessibilityObserverIfNeeded(for: result.app, profile: profile)
+
         guard let rawContext = result.context, !rawContext.isSecure else {
             clearFocusedFieldState()
             currentProfile = profile
             setSuggestionDecision("Blocked: no editable text field or secure field")
-            hideSuggestion()
+            hideSuggestion(reason: result.context?.isSecure == true ? "secure-field" : "missing-focused-context")
             return
         }
 
         processFocusedTextContext(
             rawContext,
             frontmostApp: result.app,
-            profile: profile
+            profile: profile,
+            updateSource: updateSource
         )
+    }
+
+    private func refreshAccessibilityObserverIfNeeded(
+        for app: RunningApplicationInfo,
+        profile: CompatibilityProfile
+    ) {
+        guard profile.supportsObserverUpdates else {
+            accessibilityObserver.stopTrackingAll()
+            return
+        }
+
+        accessibilityObserver.observe(
+            app: app,
+            focusedElement: accessibilityClient.focusedElementForObserver(for: app.processIdentifier),
+            focusedWindow: accessibilityClient.focusedWindowForObserver(for: app.processIdentifier)
+        )
+    }
+
+    private func handleAccessibilityObserverEvent(_ event: AccessibilityObserverEvent) {
+        guard let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.processIdentifier == event.processIdentifier else {
+            return
+        }
+
+        let action = accessibilityObserverRouter.route(event.kind)
+        DiagnosticsLog.shared.record(
+            "accessibility-observer-event",
+            metadata: event.metadata
+                .merging(["route": action.rawValue]) { current, _ in current }
+        )
+
+        switch action {
+        case .reclassifyFocusedContext:
+            clearFocusedFieldState(hideReason: "observer-focus-changed")
+        case .refreshFocusedGeometry:
+            break
+        }
+
+        nextScheduledFocusedTextPollAt = Date()
+        pollFocusedTextIfIdle(source: .observer)
     }
 
     private func processFocusedTextContext(
         _ rawContext: FocusedTextContext,
         frontmostApp: RunningApplicationInfo,
-        profile: CompatibilityProfile
+        profile: CompatibilityProfile,
+        updateSource: FocusedTextUpdateSource
     ) {
         let promptMatch = promptTextAreaMatch(
             for: frontmostApp.bundleIdentifier,
@@ -707,7 +986,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "reason": activationDecision.blockReasonDescription
                 ]
             )
-            hideSuggestion()
+            hideSuggestion(reason: "activation-\(activationDecision.blockReasonDescription)")
             return
         }
 
@@ -751,7 +1030,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textBeforeCursor: context.textBeforeCursor,
                 textAfterCursor: context.textAfterCursor,
                 reason: "detached-suggestion-disabled",
-                metadata: traceGeometryMetadata(context: context, renderMode: renderMode)
+                metadata: traceGeometryMetadata(
+                    context: context,
+                    renderMode: renderMode,
+                    updateSource: updateSource
+                )
             )
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
@@ -800,7 +1083,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: fieldIdentity,
             renderMode: renderMode,
             delayMilliseconds: delayMilliseconds,
-            requestMode: requestMode
+            requestMode: requestMode,
+            updateSource: updateSource
         )
     }
 
@@ -982,7 +1266,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             canReadSelectedTextRange: context.capabilities.canReadSelectedTextRange,
             canReadBoundsForRange: true,
             canReadAttributedText: context.capabilities.canReadAttributedText,
-            canSetSelectedText: context.capabilities.canSetSelectedText
+            canSetSelectedText: context.capabilities.canSetSelectedText,
+            canReadVisibleCharacterRange: context.capabilities.canReadVisibleCharacterRange,
+            canReadInsertionPointLineNumber: context.capabilities.canReadInsertionPointLineNumber
         )
 
         recordSyntheticCaretIfNeeded(syntheticCaret, context: context, profile: profile)
@@ -999,10 +1285,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             elementRect: context.elementRect,
             windowRect: context.windowRect,
             textLineRect: syntheticCaret,
+            visibleCharacterRange: context.visibleCharacterRange,
+            insertionPointLineNumber: context.insertionPointLineNumber,
             textStyle: context.textStyle,
             isSecure: context.isSecure,
             caretIsSynthetic: true,
-            capabilities: capabilities
+            capabilities: capabilities,
+            axReadErrors: context.axReadErrors
         )
     }
 
@@ -1654,7 +1943,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fieldIdentity: FocusedFieldIdentity,
         renderMode: SuggestionRenderMode,
         delayMilliseconds: Int,
-        requestMode: CompletionRequestMode
+        requestMode: CompletionRequestMode,
+        updateSource: FocusedTextUpdateSource
     ) {
         lastRequestedTextBeforeCursor = context.textBeforeCursor
 
@@ -1672,6 +1962,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let requestTicket = suggestionRequestGate.issue(request: request)
         let requestStartedAt = Date()
         let fieldIdentityDescription = fieldIdentity.traceDescription
+        let updateSourceMetadata = traceUpdateSourceMetadata(updateSource)
 
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionRequested,
@@ -1686,6 +1977,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "renderMode": renderMode.rawValue,
                 "delayMilliseconds": String(delayMilliseconds)
             ]
+            .merging(updateSourceMetadata) { current, _ in current }
         )
 
         if requestMode == .wordCompletion {
@@ -1714,6 +2006,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         metadata: [
                             "renderMode": renderMode.rawValue
                         ]
+                        .merging(updateSourceMetadata) { current, _ in current }
                     )
                     recordSuggestionEvent(
                         "suggestion-blocked",
@@ -1737,7 +2030,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     fieldIdentity: fieldIdentity,
                     renderMode: renderMode,
                     latencyMilliseconds: 0,
-                    triggerReason: "fast-word-completion"
+                    triggerReason: "fast-word-completion",
+                    updateSource: updateSource
                 )
                 return
             }
@@ -1755,6 +2049,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "renderMode": renderMode.rawValue
                 ]
+                .merging(updateSourceMetadata) { current, _ in current }
             )
             if suggestionSession.hasVisibleSuggestion {
                 setSuggestionDecision("Shown: no fast word replacement")
@@ -1816,7 +2111,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 fieldIdentity: fieldIdentity,
                                 renderMode: renderMode,
                                 latencyMilliseconds: latencyMilliseconds,
-                                triggerReason: "model-stream"
+                                triggerReason: "model-stream",
+                                updateSource: updateSource
                             )
                         }
                     }
@@ -1847,7 +2143,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             textBeforeCursor: request.textBeforeCursor,
                             textAfterCursor: request.textAfterCursor,
                             latencyMilliseconds: latencyMilliseconds,
-                            reason: "empty-suggestion"
+                            reason: "empty-suggestion",
+                            metadata: updateSourceMetadata
                         )
                         self.recordSuggestionEvent(
                             "suggestion-blocked",
@@ -1874,7 +2171,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             cleanedVisibleText: suggestion.visibleText,
                             displayedText: suggestion.visibleText,
                             latencyMilliseconds: latencyMilliseconds,
-                            reason: "missing-anchor"
+                            reason: "missing-anchor",
+                            metadata: updateSourceMetadata
                         )
                         self.recordSuggestionEvent(
                             "suggestion-blocked",
@@ -1899,7 +2197,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         textAfterCursor: request.textAfterCursor,
                         cleanedVisibleText: suggestion.visibleText,
                         displayedText: suggestion.visibleText,
-                        latencyMilliseconds: latencyMilliseconds
+                        latencyMilliseconds: latencyMilliseconds,
+                        metadata: updateSourceMetadata
                     )
                     guard !self.suggestionRepetitionSuppressor.shouldSuppress(
                         suggestion.visibleText,
@@ -1918,7 +2217,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             cleanedVisibleText: suggestion.visibleText,
                             displayedText: suggestion.visibleText,
                             latencyMilliseconds: latencyMilliseconds,
-                            reason: "repeated-miss"
+                            reason: "repeated-miss",
+                            metadata: updateSourceMetadata
                         )
                         self.hideSuggestion()
                         return
@@ -1932,7 +2232,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         fieldIdentity: fieldIdentity,
                         renderMode: renderMode,
                         latencyMilliseconds: latencyMilliseconds,
-                        triggerReason: "model-result"
+                        triggerReason: "model-result",
+                        updateSource: updateSource
                     )
                     self.streamingPresentationStates[suggestionID] = nil
                 }
@@ -1954,7 +2255,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fieldIdentity: FocusedFieldIdentity,
         renderMode: SuggestionRenderMode,
         latencyMilliseconds: Int,
-        triggerReason: String
+        triggerReason: String,
+        updateSource: FocusedTextUpdateSource
     ) {
         let originalContext = context
         let refreshedContext = refreshedPresentationContext(
@@ -1976,7 +2278,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 displayedText: suggestion.visibleText,
                 latencyMilliseconds: latencyMilliseconds,
                 reason: reason,
-                metadata: traceGeometryMetadata(context: originalContext, renderMode: renderMode)
+                metadata: traceGeometryMetadata(
+                    context: originalContext,
+                    renderMode: renderMode,
+                    updateSource: updateSource
+                )
             )
             recordSuggestionEvent(
                 "suggestion-blocked",
@@ -2025,7 +2331,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 displayedText: suggestion.visibleText,
                 latencyMilliseconds: latencyMilliseconds,
                 reason: suppression.reason.rawValue,
-                metadata: traceGeometryMetadata(context: context, renderMode: learningAdjustment.effectiveRenderMode)
+                metadata: traceGeometryMetadata(
+                    context: context,
+                    renderMode: learningAdjustment.effectiveRenderMode,
+                    updateSource: updateSource
+                )
                     .merging(learningAdjustment.metadata) { current, _ in current }
                     .merging(suppression.metadata) { current, _ in current }
             )
@@ -2039,6 +2349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(suppression.metadata) { current, _ in current }
             )
+            hideSuggestion(reason: "placement-\(suppression.reason.rawValue)")
             return
         }
 
@@ -2047,7 +2358,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastClippingRect = placement.clippingRect
         lastTextStyle = context.textStyle
         lastRenderMode = placement.renderMode
-        guard let panelRect = suggestionPanel.show(
+        guard let panelPresentation = suggestionPanel.show(
             text: suggestion.visibleText,
             near: placement.anchorRect,
             alignedTo: placement.renderMode == .inlineAdjacent ? placement.textLineRect : nil,
@@ -2069,7 +2380,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 displayedText: suggestion.visibleText,
                 latencyMilliseconds: latencyMilliseconds,
                 reason: reason,
-                metadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode)
+                metadata: traceGeometryMetadata(
+                    context: context,
+                    renderMode: placement.renderMode,
+                    updateSource: updateSource
+                )
                     .merging(learningAdjustment.metadata) { current, _ in current }
                     .merging(placement.metadata) { current, _ in current }
             )
@@ -2108,7 +2423,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             around: [
                 placement.anchorRect,
                 placement.textLineRect,
-                panelRect,
+                panelPresentation.accessibilityFrame,
                 placement.clippingRect
             ].compactMap { $0 },
             suggestionID: suggestionID,
@@ -2139,13 +2454,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "visibleWords": String(suggestion.visibleWordCount),
                 "anchorRect": compactRectDescription(placement.anchorRect),
                 "textLineRect": placement.textLineRect.map(compactRectDescription) ?? "none",
-                "suggestionPanelRect": compactRectDescription(panelRect),
+                "suggestionPanelRect": compactRectDescription(panelPresentation.accessibilityFrame),
                 "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none",
                 "screenshotCaptureRect": screenshotCapture.rectDescription
             ]
-            .merging(traceGeometryMetadata(context: context, renderMode: placement.renderMode)) { current, _ in current }
+            .merging(traceGeometryMetadata(
+                context: context,
+                renderMode: placement.renderMode,
+                updateSource: updateSource
+            )) { current, _ in current }
             .merging(learningAdjustment.metadata) { current, _ in current }
             .merging(placement.metadata) { current, _ in current }
+            .merging(panelPresentation.traceMetadata) { current, _ in current }
         )
         recordSuggestionEvent(
             "suggestion-presented",
@@ -2161,12 +2481,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "latencyMilliseconds": String(latencyMilliseconds),
                 "anchorRect": compactRectDescription(placement.anchorRect),
                 "textLineRect": placement.textLineRect.map(compactRectDescription) ?? "none",
-                "suggestionPanelRect": compactRectDescription(panelRect),
+                "suggestionPanelRect": compactRectDescription(panelPresentation.accessibilityFrame),
                 "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none",
                 "screenshotCaptureRect": screenshotCapture.rectDescription
             ]
             .merging(learningAdjustment.metadata) { current, _ in current }
             .merging(placement.metadata) { current, _ in current }
+            .merging(panelPresentation.traceMetadata) { current, _ in current }
         )
         updateKeyboardEventTapSnapshot()
     }
@@ -2291,16 +2612,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func traceGeometryMetadata(
         context: FocusedTextContext,
-        renderMode: SuggestionRenderMode
+        renderMode: SuggestionRenderMode,
+        updateSource: FocusedTextUpdateSource? = nil
     ) -> [String: String] {
-        [
+        var metadata = [
             "effectiveRenderMode": renderMode.rawValue,
             "hasCaretRect": String(context.caretRect != nil),
             "caretIsSynthetic": String(context.caretIsSynthetic),
             "hasElementRect": String(context.elementRect != nil),
             "hasWindowRect": String(context.windowRect != nil),
-            "canReadBounds": String(context.capabilities.canReadBoundsForRange)
+            "visibleCharacterRange": context.visibleCharacterRange.map { "\($0.location):\($0.length)" } ?? "missing",
+            "insertionPointLineNumber": context.insertionPointLineNumber.map(String.init) ?? "missing",
+            "canReadBounds": String(context.capabilities.canReadBoundsForRange),
+            "canReadVisibleRange": String(context.capabilities.canReadVisibleCharacterRange),
+            "canReadInsertionLine": String(context.capabilities.canReadInsertionPointLineNumber),
+            "axReadErrorCount": String(context.axReadErrors.count),
+            "axCannotCompleteCount": String(context.axReadErrors.filter(\.isTimeoutOrCannotComplete).count)
         ]
+
+        if let updateSource {
+            metadata.merge(traceUpdateSourceMetadata(updateSource)) { current, _ in current }
+        }
+
+        return metadata
+    }
+
+    private func traceUpdateSourceMetadata(_ updateSource: FocusedTextUpdateSource) -> [String: String] {
+        ["updateSource": updateSource.rawValue]
     }
 
     private func recordSuggestionEvent(
@@ -2325,6 +2663,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         safeMetadata["canReadRange"] = String(context.capabilities.canReadSelectedTextRange)
         safeMetadata["canReadBounds"] = String(context.capabilities.canReadBoundsForRange)
         safeMetadata["canSetSelectedText"] = String(context.capabilities.canSetSelectedText)
+        safeMetadata["canReadVisibleRange"] = String(context.capabilities.canReadVisibleCharacterRange)
+        safeMetadata["canReadInsertionLine"] = String(context.capabilities.canReadInsertionPointLineNumber)
+        safeMetadata["visibleCharacterRange"] = context.visibleCharacterRange.map { "\($0.location):\($0.length)" } ?? "missing"
+        safeMetadata["insertionPointLineNumber"] = context.insertionPointLineNumber.map(String.init) ?? "missing"
+        safeMetadata["axReadErrorCount"] = String(context.axReadErrors.count)
+        safeMetadata["axCannotCompleteCount"] = String(context.axReadErrors.filter(\.isTimeoutOrCannotComplete).count)
 
         DiagnosticsLog.shared.record(event, metadata: safeMetadata)
     }
@@ -2976,10 +3320,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func performRuntimeAction(_ action: RuntimeReadinessAction) {
         switch action {
+        case .installLocalModel, .repairLocalModel:
+            installLocalModel(action: action)
         case .revealModelFolder:
             revealModelFolder()
         case .retry:
-            warmModelRuntime()
+            reloadModelRuntime(reason: "manual retry")
         case .wait, .none:
             break
         }

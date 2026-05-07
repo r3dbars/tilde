@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 public enum AccessibilityTextBoundsPolicy {
-    public enum RejectionReason: String, CaseIterable, Codable, Equatable {
+    public enum RejectionReason: String, CaseIterable, Codable, Equatable, Sendable {
         case missingBounds
         case nonfinite
         case zeroHeight
@@ -11,9 +11,10 @@ public enum AccessibilityTextBoundsPolicy {
         case offScreen
         case stale
         case jumpedTooFar
+        case visibleRangeMismatch
     }
 
-    public struct Evaluation: Equatable {
+    public struct Evaluation: Equatable, Sendable {
         public let bounds: CGRect?
         public let rejectionReason: RejectionReason?
 
@@ -36,6 +37,8 @@ public enum AccessibilityTextBoundsPolicy {
         windowRect: CGRect? = nil,
         convertedScreenRect: CGRect? = nil,
         screenFrame: CGRect? = nil,
+        selectedRange: AccessibilityCharacterRange? = nil,
+        visibleCharacterRange: AccessibilityCharacterRange? = nil,
         tolerance: CGFloat = 24
     ) -> CGRect? {
         evaluateTextBounds(
@@ -44,6 +47,8 @@ public enum AccessibilityTextBoundsPolicy {
             windowRect: windowRect,
             convertedScreenRect: convertedScreenRect,
             screenFrame: screenFrame,
+            selectedRange: selectedRange,
+            visibleCharacterRange: visibleCharacterRange,
             tolerance: tolerance
         ).bounds
     }
@@ -54,6 +59,8 @@ public enum AccessibilityTextBoundsPolicy {
         windowRect: CGRect? = nil,
         convertedScreenRect: CGRect? = nil,
         screenFrame: CGRect? = nil,
+        selectedRange: AccessibilityCharacterRange? = nil,
+        visibleCharacterRange: AccessibilityCharacterRange? = nil,
         tolerance: CGFloat = 24
     ) -> Evaluation {
         guard let rect else {
@@ -90,7 +97,45 @@ public enum AccessibilityTextBoundsPolicy {
             }
         }
 
+        if let selectedRange,
+           let visibleCharacterRange,
+           !visibleCharacterRange.containsInsertionPoint(selectedRange.insertionLocation) {
+            return .rejected(.visibleRangeMismatch)
+        }
+
         return .usable(rect)
+    }
+
+    public static func evaluateTextLineBounds(
+        _ rect: CGRect?,
+        caretRect: CGRect?,
+        elementRect: CGRect? = nil,
+        windowRect: CGRect? = nil,
+        selectedRange: AccessibilityCharacterRange? = nil,
+        visibleCharacterRange: AccessibilityCharacterRange? = nil,
+        tolerance: CGFloat = 24
+    ) -> Evaluation {
+        let evaluation = evaluateTextBounds(
+            rect,
+            elementRect: elementRect,
+            windowRect: windowRect,
+            selectedRange: selectedRange,
+            visibleCharacterRange: visibleCharacterRange,
+            tolerance: tolerance
+        )
+
+        guard evaluation.isUsable,
+              let lineRect = evaluation.bounds,
+              let caretRect else {
+            return evaluation
+        }
+
+        let maxVerticalDistance = max(8, caretRect.height * 1.5)
+        guard abs(lineRect.midY - caretRect.midY) <= maxVerticalDistance else {
+            return .rejected(.stale)
+        }
+
+        return evaluation
     }
 
     private static func isPlausiblyInside(

@@ -15,17 +15,19 @@ The user should not start Ollama, llama.cpp, or any model server. Qwen3.5 4B is 
 5. Add event-tap key capture for `Tab`, backtick, and `Esc`.
 6. Add Accessibility insertion.
 7. Bootstrap the embedded Qwen3.5 4B MLX runtime, keeping LiteRT-LM as the fallback candidate.
-8. Swap the mock engine for the real local engine.
+8. Install or repair the app-owned MLX model from Settings when it is missing.
+9. Swap the mock engine for the real local engine.
 
 ## Latency Target
 
 - debounce typing: 150-250ms
-- model output: 2-8 words
-- generation cap: 8-16 tokens
+- model output: 1-3 visible words
+- generation cap: 9 tokens by default
 - prompt context cap: about 900 characters before the cursor
 - reasoning: off
 - target useful feel: under 700ms
 - stretch target: under 300ms after warmup
+- default-model proof: `./script/model_latency_report.py --default-model-proof`
 
 ## Test Rule
 

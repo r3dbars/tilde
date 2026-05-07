@@ -28,6 +28,7 @@ public enum LocalModelAssetState: Equatable, Sendable {
 public enum RuntimeReadinessStage: String, Equatable, Sendable {
     case downloadNeeded
     case repairNeeded
+    case installing
     case runtimeUnavailable
     case warming
     case ready
@@ -35,6 +36,8 @@ public enum RuntimeReadinessStage: String, Equatable, Sendable {
 }
 
 public enum RuntimeReadinessAction: String, Equatable, Sendable {
+    case installLocalModel
+    case repairLocalModel
     case revealModelFolder
     case wait
     case retry
@@ -42,6 +45,10 @@ public enum RuntimeReadinessAction: String, Equatable, Sendable {
 
     public var displayName: String {
         switch self {
+        case .installLocalModel:
+            return "Install Local Model"
+        case .repairLocalModel:
+            return "Repair Local Model"
         case .revealModelFolder:
             return "Reveal Model Folder"
         case .wait:
@@ -356,7 +363,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
                 stage: .downloadNeeded,
                 summary: fallbackSummary("download needed (\(preferredAsset.model.rawValue))", runtimeState: runtimeState),
                 detail: "Expected MLX model folder at \(expectedPath)",
-                action: .revealModelFolder
+                action: preferredAsset.source == nil ? .revealModelFolder : .installLocalModel
             )
 
         case let .invalid(path, reason):
@@ -364,7 +371,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
                 stage: .repairNeeded,
                 summary: fallbackSummary("model folder needs repair", runtimeState: runtimeState),
                 detail: "\(path): \(reason)",
-                action: .revealModelFolder
+                action: preferredAsset.source == nil ? .revealModelFolder : .repairLocalModel
             )
 
         case .available:

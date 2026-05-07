@@ -18,6 +18,10 @@ AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
   ./script/check_diagnostics_log.sh
 
 echo
+echo "== Default model latency proof =="
+./script/model_latency_report.py --default-model-proof
+
+echo
 echo "== Manual app proof =="
 ./script/manual_smoke_status.sh --require-all
 

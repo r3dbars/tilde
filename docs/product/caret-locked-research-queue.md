@@ -75,21 +75,21 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P0: Observer-First Updates
 
-- [ ] Add `AccessibilityObserver` in `Sources/AutocompleteLabApp/Mac`.
-- [ ] Create one `AXObserver` per tracked PID.
-- [ ] Register for focused UI element changes.
-- [ ] Register for selected text changes where the app supports it.
-- [ ] Register for value changes where the app supports it.
-- [ ] Register for focused window changes.
-- [ ] Register for window moved/resized changes.
-- [ ] Reclassify from scratch on focus changes.
-- [ ] Re-read geometry on selection/value/window changes.
+- [x] Add `AccessibilityObserver` in `Sources/AutocompleteLabApp/Mac`.
+- [x] Create one `AXObserver` per tracked PID.
+- [x] Register for focused UI element changes.
+- [x] Register for selected text changes where the app supports it.
+- [x] Register for value changes where the app supports it.
+- [x] Register for focused window changes.
+- [x] Register for window moved/resized changes.
+- [x] Reclassify from scratch on focus changes.
+- [x] Re-read geometry on selection/value/window changes.
 - [x] Keep bounded polling as a recovery layer.
 - [x] Use active polling only while a suggestion is visible.
-- [ ] Use watch polling for flaky apps only.
-- [ ] Add trace metadata for update source: observer, activePoll, watchPoll, idlePoll, manualRefresh.
-- [ ] Add diagnostics for observer registration failures.
-- [ ] Add tests for pure observer event routing if the AX wrapper can be abstracted.
+- [x] Use watch polling for flaky apps only.
+- [x] Add trace metadata for update source: observer, activePoll, watchPoll, idlePoll, manualRefresh.
+- [x] Add diagnostics for observer registration failures.
+- [x] Add tests for pure observer event routing if the AX wrapper can be abstracted.
 
 ## P0: Insertion Safety
 
@@ -147,17 +147,17 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P1: Panel And Window Polish
 
-- [ ] Trace panel level.
-- [ ] Trace screen id or screen frame.
-- [ ] Trace converted anchor rect and final AppKit frame.
-- [ ] Add multi-display tests for conversion math.
-- [ ] Test display left of primary.
-- [ ] Test display above primary.
-- [ ] Test Retina and non-Retina frame conversion.
-- [ ] Hide immediately on app blur.
-- [ ] Hide immediately when anchor quality downgrades to invalid.
-- [ ] Hide immediately when secure/sensitive state appears.
-- [ ] Keep click-through in suggesting mode.
+- [x] Trace panel level.
+- [x] Trace screen id or screen frame.
+- [x] Trace converted anchor rect and final AppKit frame.
+- [x] Add multi-display tests for conversion math.
+- [x] Test display left of primary.
+- [x] Test display above primary.
+- [x] Test Retina and non-Retina frame conversion.
+- [x] Hide immediately on app blur.
+- [x] Hide immediately when anchor quality downgrades to invalid.
+- [x] Hide immediately when secure/sensitive state appears.
+- [x] Keep click-through in suggesting mode.
 - [ ] Add an explicit interactive picker mode only if the user asks for it.
 - [ ] Test fullscreen apps.
 - [ ] Test Spaces changes.
@@ -167,18 +167,18 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P1: Runtime And First Run
 
-- [ ] Make first-run model install a real in-app action.
-- [ ] Add "Install local model" to settings when the model folder is missing.
-- [ ] Add "Retry model load" after install or repair.
+- [x] Make first-run model install a real in-app action.
+- [x] Add "Install local model" to settings when the model folder is missing.
+- [x] Add "Retry model load" after install or repair.
 - [x] Show clear missing/repair/ready states in plain language.
 - [x] Update runtime docs to Qwen3.5 4B as the default.
 - [x] Remove stale Gemma default copy from README and research docs.
-- [x] State the macOS 26 requirement clearly in beta docs.
-- [ ] Decide whether macOS target can be lowered.
+- [x] Lower and document the macOS target decision: macOS 14 or newer on Apple Silicon.
+- [x] Decide whether macOS target can be lowered.
 - [x] Bundle or install the model in an app-owned path.
 - [x] Never require Ollama, llama.cpp, or a user-started server.
 - [x] Add a beta gate that fails if the app is running mock fallback.
-- [ ] Add latency proof for current default model.
+- [x] Add latency proof for current default model.
 
 ## P1: Manual QA And Proof
 
