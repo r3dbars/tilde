@@ -62,10 +62,18 @@ if ! grep -F "Chrome fixture: contenteditable" "$TMP_DIR/chrome-contenteditable-
 fi
 
 script/real_app_smoke.sh notes --dry-run >"$TMP_DIR/notes.txt"
-if ! grep -F "manual-gated disposable Notes smoke" "$TMP_DIR/notes.txt" >/dev/null; then
-  echo "real app smoke self-test did not print the Notes manual gate" >&2
+if ! grep -F "choose a manual-gated Apple Notes surface" "$TMP_DIR/notes.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Notes surface picker" >&2
   exit 1
 fi
+
+for notes_surface in notes-title notes-body notes-checklist; do
+  script/real_app_smoke.sh "$notes_surface" --dry-run >"$TMP_DIR/$notes_surface.txt"
+  if ! grep -F "manual-gated Apple Notes ${notes_surface#notes-} proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
+    echo "real app smoke self-test did not print the $notes_surface proof plan" >&2
+    exit 1
+  fi
+done
 
 script/real_app_smoke.sh obsidian --dry-run >"$TMP_DIR/obsidian.txt"
 if ! grep -F "manual-gated disposable Obsidian smoke" "$TMP_DIR/obsidian.txt" >/dev/null; then
@@ -122,6 +130,21 @@ fi
 
 if ! grep -F "private Apple Notes content" "$TMP_DIR/notes-fail.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the Notes safety gate" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh notes --manual-gate >/dev/null 2>"$TMP_DIR/notes-generic-fail.txt"; then
+  echo "real app smoke self-test expected generic Notes proof to require a surface" >&2
+  exit 1
+fi
+
+if ! grep -F "Notes real smoke cannot record a generic Notes proof" "$TMP_DIR/notes-generic-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the generic Notes proof failure" >&2
+  exit 1
+fi
+
+if ! grep -F "script/real_app_smoke.sh notes-title --manual-gate" "$TMP_DIR/notes-generic-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Notes title command after generic proof failure" >&2
   exit 1
 fi
 

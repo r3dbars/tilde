@@ -176,6 +176,28 @@ run_passing_case claude-code "Claude Code" com.anthropic.claude-code 'inlineAdja
 run_passing_case claude Claude com.anthropic.claudefordesktop 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_strict_visual_case notes-title notes-title
 
+script/manual_smoke_session.sh notes --print >"$TMP_DIR/notes-picker.txt"
+if ! grep -F "Manual smoke: Notes surface selector" "$TMP_DIR/notes-picker.txt" >/dev/null; then
+  echo "manual smoke self-test did not print the Notes surface selector" >&2
+  exit 1
+fi
+
+if ! grep -F "Proof: choose-notes-surface" "$TMP_DIR/notes-picker.txt" >/dev/null; then
+  echo "manual smoke self-test did not label generic Notes as a surface picker" >&2
+  exit 1
+fi
+
+if ! grep -F "script/real_app_smoke.sh notes-title --manual-gate" "$TMP_DIR/notes-picker.txt" >/dev/null; then
+  echo "manual smoke self-test did not print the explicit Notes title real-app command" >&2
+  exit 1
+fi
+
+script/manual_smoke_session.sh notes-title --print >"$TMP_DIR/notes-title-print.txt"
+if ! grep -F "Notes surface: title" "$TMP_DIR/notes-title-print.txt" >/dev/null; then
+  echo "manual smoke self-test did not print the Notes title surface label" >&2
+  exit 1
+fi
+
 write_synthetic_passing_log "com.openai.codex" "inlineAdjacent"
 write_passing_trace "com.openai.codex"
 
@@ -219,10 +241,32 @@ if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
   exit 1
 fi
 
-if ! grep -F 'Notes proof needs a specific surface' "$FAILURE_OUTPUT" >/dev/null; then
+if ! grep -F 'Notes proof cannot be recorded as a generic Notes pass' "$FAILURE_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not explain missing Notes surface proof" >&2
   exit 1
 fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-04-26T08:00:00Z suggestion-presented app=com.apple.Notes effectiveRenderMode=floatingMirror placementAnchorSource=caret placementConfidenceBand=high hasCaretRect=true
+EOF
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh notes-body --check >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected Notes body diagnostics to fail without Tab proof" >&2
+  exit 1
+fi
+
+if ! grep -F 'missing Notes body diagnostics: Tab handled by autocomplete' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not label the Notes body diagnostics failure" >&2
+  exit 1
+fi
+
+write_passing_log "com.apple.Notes" "floatingMirror"
+write_passing_trace "com.apple.Notes"
 
 if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
   AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
@@ -409,6 +453,11 @@ for app_name in "Notes title" "Notes body" "Notes checklist"; do
     exit 1
   fi
 done
+
+if ! grep -F -- "Notes title: pending (run AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate)" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not print the explicit Notes title real-app status command" >&2
+  exit 1
+fi
 
 LIMITED_REPORT="$TMP_DIR/limited-manual-smoke-runs.md"
 cat >"$LIMITED_REPORT" <<'EOF'

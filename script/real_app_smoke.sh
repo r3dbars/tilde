@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 APP="${1:-}"
+REQUESTED_APP="$APP"
+NOTES_SESSION_APP=""
 DRY_RUN=0
 MANUAL_GATE=0
 SKIP_BUILD="${AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD:-0}"
@@ -13,11 +15,14 @@ CHROME_FIXTURE_WAS_SET=0
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|chat-like|all>]
+Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|chat-like|all>]
 
 Runs a real app smoke pass where it is safe to automate. Notes, Obsidian,
 Codex, Claude Code, and Claude desktop are manual-gated so this script never
 types into private notes, vaults, or agent prompts by surprise.
+
+Notes proof must use notes-title, notes-body, or notes-checklist. A generic
+notes run only prints the surface picker and does not record proof.
 
 Chrome defaults to the textarea fixture. Use --fixture chat-like to prove
 Tab/full-accept do not submit a chat-style composer. Use --fixture all to run
@@ -61,6 +66,21 @@ while (($#)); do
   esac
   shift
 done
+
+case "$APP" in
+  notes-title)
+    APP="notes"
+    NOTES_SESSION_APP="notes-title"
+    ;;
+  notes-body)
+    APP="notes"
+    NOTES_SESSION_APP="notes-body"
+    ;;
+  notes-checklist)
+    APP="notes"
+    NOTES_SESSION_APP="notes-checklist"
+    ;;
+esac
 
 case "$APP" in
   textedit|chrome|notes|obsidian|codex|claude-code|claude)
@@ -254,6 +274,31 @@ manual_gate_reason() {
       echo "it focuses user content"
       ;;
   esac
+}
+
+notes_session_app() {
+  if [[ -n "$NOTES_SESSION_APP" ]]; then
+    printf '%s\n' "$NOTES_SESSION_APP"
+    return 0
+  fi
+
+  case "${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-}" in
+    notes-title|notes-body|notes-checklist)
+      printf '%s\n' "$AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL"
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+print_notes_surface_commands() {
+  cat <<'EOF'
+Choose one Notes surface:
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
+EOF
 }
 
 press_key_code() {
@@ -620,7 +665,14 @@ describe_plan() {
       fi
       ;;
     notes)
-      echo "Plan: manual-gated disposable Notes smoke. The script prints the checklist and validates after you run it."
+      local notes_app notes_surface
+      if notes_app="$(notes_session_app)"; then
+        notes_surface="${notes_app#notes-}"
+        echo "Plan: manual-gated Apple Notes $notes_surface proof. The script validates only that surface after you run it."
+      else
+        echo "Plan: choose a manual-gated Apple Notes surface before recording proof."
+        print_notes_surface_commands
+      fi
       echo "Safety: pass --manual-gate to continue. Use only the disposable autocomplete smoke note."
       ;;
     obsidian)
@@ -644,12 +696,21 @@ build_if_needed() {
 
 run_manual_gated() {
   if [[ "$MANUAL_GATE" != "1" ]]; then
-    echo "$APP real smoke requires --manual-gate because $(manual_gate_reason)." >&2
+    echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
     exit 2
   fi
 
+  local manual_app="$APP"
+  if [[ "$APP" == "notes" ]]; then
+    if ! manual_app="$(notes_session_app)"; then
+      echo "Notes real smoke cannot record a generic Notes proof." >&2
+      print_notes_surface_commands >&2
+      exit 2
+    fi
+  fi
+
   build_if_needed
-  ./script/manual_smoke_session.sh "$APP"
+  ./script/manual_smoke_session.sh "$manual_app"
 }
 
 run_textedit() {

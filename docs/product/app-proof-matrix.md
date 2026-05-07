@@ -20,7 +20,9 @@ Grades are evidence grades, not product grades.
 | Chrome chat-like composer | A- | [chrome-chat-like.png](visual-placement-screenshots/chrome-chat-like.png) | 2 verified accepts with strict visual trace evidence; local submit counter stayed at zero | The local no-submit fixture is now screenshot-backed and proves Tab/full accept do not submit the disposable composer. | Still needs real prompt/chat app no-submit proof before broad enablement. |
 | Codex | B- | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Prior verified accepts exist in the manual smoke log | Real dogfood screenshot exists, and insertion has passed separately. Full accept is disabled until no-submit proof exists. | Needs one strict visual trace slice that proves screenshot, one-word accept, and no prompt submit together. |
 | Obsidian | C+ | Pending | 2 verified accepts exist; detached whole-editor anchors are also suppressed | The profile can work, but this is not screenshot-backed on the current renderer. | Needs a disposable vault note screenshot with same-slice accepts. |
-| Apple Notes | C | Pending for title, body, and checklist | Older generic Notes proof exists; current surface-specific rows are not complete | Notes is too easy to overclaim because title/body/checklist behave differently. | Needs separate screenshot-backed `notes-title`, `notes-body`, and `notes-checklist` passes. |
+| Apple Notes title | C | Pending title screenshot | Older generic Notes proof exists, but it is historical only. | The title field is its own proof target because it behaves differently from the body and checklist. | Needs `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`. |
+| Apple Notes body | C | Pending body screenshot | Older generic Notes proof exists, but it is historical only. | The body field is its own proof target and must not borrow the title/checklist result. | Needs `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate`. |
+| Apple Notes checklist | C | Pending checklist screenshot | Older generic Notes proof exists, but it is historical only. | Checklist rows are their own proof target because insertion and caret behavior can differ. | Needs `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`. |
 | Claude Code | D | Pending | Pending | Profile exists, but there is no safe live prompt proof yet. | Needs a manual-gated pass that proves Tab accepts without submitting. |
 | Claude desktop | B- | Pending fresh screenshot | Prior verified accepts exist in the manual smoke log | Prior manual proof passed, but it is not current screenshot-backed proof. Full accept is disabled until no-submit proof exists. | Needs a current screenshot-backed one-word prompt pass without submitting. |
 
@@ -28,7 +30,7 @@ Grades are evidence grades, not product grades.
 
 1. Run `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate` and keep one trace slice that proves visual placement plus one-word accept without submit.
 2. Run Obsidian against a disposable vault note only.
-3. Run Notes as three separate labels: `notes-title`, `notes-body`, and `notes-checklist`.
+3. Run Notes as three explicit surface commands: `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`, `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate`, and `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`.
 4. Run Claude Code with a harmless prompt fragment and no Enter key.
 5. Refresh Claude desktop with screenshot tracing and one-word accept without submit.
 6. Replace browser-editor fixture confidence with at least one real CodeMirror, Monaco, and ProseMirror proof pass.

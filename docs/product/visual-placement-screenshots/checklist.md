@@ -21,9 +21,9 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture al
 ## Manual-Gated Proof
 
 ```bash
-AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-title AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes --manual-gate
-AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-body AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes --manual-gate
-AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-checklist AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate
@@ -34,7 +34,7 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manua
 
 - Notes: automation must not create, delete, search, or choose private notes.
   Use the disposable autocomplete smoke note and run title, body, and checklist
-  as separate proof labels.
+  as separate proof labels. A generic `notes` run does not count.
 - Obsidian: automation must not open or scan a private vault. Use a disposable
   note and treat detached-suggestion suppression as safety evidence, not a full
   placement pass.
