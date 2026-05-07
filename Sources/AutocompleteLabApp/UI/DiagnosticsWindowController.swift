@@ -146,6 +146,11 @@ final class DiagnosticsWindowController {
             compatibilityLearningPath: compatibilityLearningPath,
             compatibilityLearningProfile: compatibilityLearningProfile
         ))
+        sections.append(dailySummaryText(traceSummary.dailySummaries))
+        sections.append(acceptanceFunnelText(traceSummary.acceptanceFunnel))
+        sections.append(annoyanceFunnelText(traceSummary.annoyanceFunnel))
+        sections.append(topFailureReasonsText(traceSummary.topFailureReasons))
+        sections.append(recommendedFixesText(traceSummary.recommendedFixes))
         sections.append(acceptRateBucketsText(title: "Accept rate by app", buckets: traceSummary.acceptRateByApp))
         sections.append(acceptRateBucketsText(title: "Accept rate by mode", buckets: traceSummary.acceptRateByMode))
         sections.append(acceptRateBucketsText(title: "Accept rate by experiment arm", buckets: traceSummary.acceptRateByExperimentArm))
@@ -243,11 +248,79 @@ final class DiagnosticsWindowController {
           caret geometry failures: \(summary.caretGeometryFailureCount)
           caret geometry failure rate: \(Self.percent(summary.caretGeometryFailureRate))
           annoyance score: \(String(format: "%.2f", summary.annoyanceScore))
+          accepted-kept headline: \(Self.percent(summary.acceptedAndKeptRateShown)) kept / shown
           accept rate: \(Self.percent(summary.acceptRate))
           useful rate: \(Self.percent(summary.usefulRate))
-          p50 latency: \(Self.latency(summary.p50LatencyMilliseconds))
-          p90 latency: \(Self.latency(summary.p90LatencyMilliseconds))
-          p95 latency: \(Self.latency(summary.p95LatencyMilliseconds))
+          first-visible p50 latency: \(Self.latency(summary.p50LatencyMilliseconds))
+          first-visible p90 latency: \(Self.latency(summary.p90LatencyMilliseconds))
+          first-visible p95 latency: \(Self.latency(summary.p95LatencyMilliseconds))
+          total-generation p50 latency: \(Self.latency(summary.modelResultP50LatencyMilliseconds))
+          total-generation p90 latency: \(Self.latency(summary.modelResultP90LatencyMilliseconds))
+          total-generation p95 latency: \(Self.latency(summary.modelResultP95LatencyMilliseconds))
+        """
+    }
+
+    private func dailySummaryText(_ summaries: [AutocompleteTraceDailySummary]) -> String {
+        guard !summaries.isEmpty else {
+            return "Daily summary: none yet"
+        }
+
+        return """
+        Daily summary:
+        \(summaries.prefix(7).map { summary in
+            "  \(summary.date): active=\(summary.activeWritingMinutes)m shown=\(summary.shown) accepted=\(summary.accepted) kept=\(summary.acceptedAndKept) p50=\(Self.latency(summary.p50LatencyMilliseconds)) p95=\(Self.latency(summary.p95LatencyMilliseconds)) severe=\(summary.severeFailures) pauses=\(summary.pauses) disables=\(summary.disables)"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func acceptanceFunnelText(_ funnel: AutocompleteAcceptanceFunnel) -> String {
+        """
+        Acceptance funnel:
+          requested: \(funnel.requested)
+          model returned: \(funnel.modelReturned)
+          shown: \(funnel.shown)
+          accepted: \(funnel.accepted)
+          kept at 10s: \(funnel.keptAt10Seconds)
+          kept at 30s/blur: \(funnel.keptAt30SecondsOrBlur)
+        """
+    }
+
+    private func annoyanceFunnelText(_ funnel: AutocompleteAnnoyanceFunnel) -> String {
+        """
+        Annoyance funnel:
+          shown: \(funnel.shown)
+          ignored: \(funnel.ignored)
+          typed over: \(funnel.typedOver)
+          Esc dismiss: \(funnel.escapeDismissed)
+          accepted then deleted: \(funnel.acceptedThenDeleted)
+          paused: \(funnel.paused)
+          disabled: \(funnel.disabled)
+        """
+    }
+
+    private func topFailureReasonsText(_ reasons: [AutocompleteTraceFailureReason]) -> String {
+        guard !reasons.isEmpty else {
+            return "Top failure reasons: none yet"
+        }
+
+        return """
+        Top failure reasons:
+        \(reasons.map { reason in
+            "  \(reason.title): count=\(reason.count) priority=\(reason.priority) category=\(reason.category)"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func recommendedFixesText(_ fixes: [AutocompleteRecommendedFix]) -> String {
+        guard !fixes.isEmpty else {
+            return "Recommended next fix: keep collecting clean accepted-and-kept proof"
+        }
+
+        return """
+        Recommended next fix:
+        \(fixes.map { fix in
+            "  \(fix.title): priority=\(fix.priority) reason=\(fix.reason)"
+        }.joined(separator: "\n"))
         """
     }
 

@@ -16,6 +16,7 @@ python3 - "$TRACE_PATH" "$START_LINE" "$REQUIRE_APP" "$REQUIRE_EXPERIMENT_ARM" "
 import json
 import sys
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 
 path = sys.argv[1]
 start_line = int(sys.argv[2] or "0")
@@ -127,6 +128,12 @@ latencies = sorted(
     for event in presented_by_id.values()
     if isinstance(event.get("latencyMilliseconds"), int)
 )
+model_result_latencies = sorted(
+    event["latencyMilliseconds"]
+    for event in events
+    if event.get("type") == "modelResult"
+    and isinstance(event.get("latencyMilliseconds"), int)
+)
 
 def percentile(values, fraction):
     if not values:
@@ -139,6 +146,63 @@ def percentile_int(values, fraction):
         return None
     index = min(len(values) - 1, round((len(values) - 1) * fraction))
     return values[index]
+
+def parse_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+def safe_int(value, default=999999999):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+def accepted_then_deleted(event):
+    metadata = event.get("metadata") or {}
+    return (
+        event.get("type") == "acceptedTextEdited"
+        and metadata.get("survivalClass") == "rejectedAfterAccept"
+        and (
+            safe_int(metadata.get("firstEditDelayMs")) <= 2000
+            or metadata.get("checkpoint") == "2s"
+        )
+    )
+
+def tab_conflict(event):
+    metadata = event.get("metadata") or {}
+    return (
+        event.get("reason") == "tab-conflict"
+        or event.get("outcome") == "tab-conflict"
+        or metadata.get("tabConflict") == "true"
+    )
+
+def focus_stealing(event):
+    metadata = event.get("metadata") or {}
+    return (
+        "focus-steal" in (event.get("reason") or "").lower()
+        or "focus-steal" in (event.get("outcome") or "").lower()
+        or metadata.get("focusStealing") == "true"
+    )
+
+def overlay_flicker(event):
+    metadata = event.get("metadata") or {}
+    return (
+        event.get("type") == "suggestionHidden"
+        and safe_int(metadata.get("lifetimeMs")) < 150
+    )
+
+def severe_failure(event):
+    metadata = event.get("metadata") or {}
+    return (
+        event.get("type") in {"insertionFailed", "appDisabled"}
+        or (event.get("type") == "caretGeometryFailed" and metadata.get("severe") == "true")
+        or metadata.get("focusStealing") == "true"
+        or metadata.get("tabConflict") == "true"
+    )
 
 state_rank = {
     "blocked": 0,
@@ -394,6 +458,94 @@ for (mode, displayed), signature_events in presented_by_signature.items():
         ))
 repeated_unaccepted.sort(key=lambda item: (-item[0], item[1], item[2]))
 
+duplicate_text_count = sum(
+    1 for event in events
+    if event.get("type") == "insertionFailed" and is_duplicate(event)
+)
+wrong_insertion_count = sum(
+    1 for event in events
+    if event.get("type") == "insertionFailed" and not is_duplicate(event)
+)
+tab_conflict_count = sum(1 for event in events if tab_conflict(event))
+focus_steal_count = sum(1 for event in events if focus_stealing(event))
+search_form_leakage_count = sum(
+    1 for event in presented_by_id.values()
+    if field_kind(event) in {"search", "form", "url", "secure"}
+)
+overlay_flicker_count = sum(1 for event in events if overlay_flicker(event))
+accepted_then_deleted_count = sum(1 for event in events if accepted_then_deleted(event))
+
+failure_reasons = [
+    ("Duplicate text", duplicate_text_count, 100, "insertion trust"),
+    ("Focus stealing", focus_steal_count, 95, "insertion trust"),
+    ("Insertion failed", wrong_insertion_count, 90, "insertion trust"),
+    ("Tab conflict", tab_conflict_count, 85, "keyboard trust"),
+    ("Search/form leakage", search_form_leakage_count, 80, "field targeting"),
+    ("Caret failed", len(caret_geometry_failures), 75, "renderer/caret"),
+    ("Overlay flicker", overlay_flicker_count, 60, "renderer/caret"),
+]
+failure_reasons = [item for item in failure_reasons if item[1] > 0]
+failure_reasons.sort(key=lambda item: (-item[1], -item[2], item[0]))
+
+recommended_fixes = []
+insertion_trust_count = duplicate_text_count + wrong_insertion_count + tab_conflict_count + focus_steal_count
+if insertion_trust_count:
+    recommended_fixes.append((
+        100,
+        "Fix insertion trust before model tuning",
+        f"{insertion_trust_count} duplicate, focus, wrong-insert, or Tab-conflict signal(s) found.",
+    ))
+if len(caret_geometry_failures) + types["insertionFailed"]:
+    recommended_fixes.append((
+        90,
+        "Fix caret or verification before prompt tuning",
+        f"{len(caret_geometry_failures)} caret failure(s) and {types['insertionFailed']} insertion verification failure(s) found.",
+    ))
+slow_suggestions = sum(1 for event in presented_by_id.values() if (event.get("latencyMilliseconds") or 0) >= 1000)
+first_visible_p95 = percentile_int(latencies, 0.95)
+if slow_suggestions or (first_visible_p95 or 0) >= 1000:
+    recommended_fixes.append((
+        80,
+        "Fix latency before length experiments",
+        f"first-visible p95 is {first_visible_p95 if first_visible_p95 is not None else 'unknown'}ms with {slow_suggestions} slow shown suggestion(s).",
+    ))
+if not recommended_fixes and presented_by_id and not accepted_and_kept_event_ids:
+    recommended_fixes.append((
+        50,
+        "Collect accepted-and-kept proof",
+        "suggestions were shown, but no accepted text survived a checkpoint yet.",
+    ))
+recommended_fixes.sort(key=lambda item: (-item[0], item[1]))
+
+daily = {}
+for event in events:
+    date = (event.get("timestamp") or "")[:10] or "unknown"
+    bucket = daily.setdefault(date, {"events": [], "dates": []})
+    bucket["events"].append(event)
+    parsed = parse_date(event.get("timestamp"))
+    if parsed:
+        bucket["dates"].append(parsed)
+requested_ids = {
+    event.get("suggestionID")
+    for event in events
+    if event.get("type") == "suggestionRequested" and event.get("suggestionID")
+}
+model_returned_ids = {
+    event.get("suggestionID")
+    for event in events
+    if event.get("type") == "modelResult" and event.get("suggestionID")
+}
+kept_at_10_ids = {
+    event.get("metadata", {}).get("acceptanceID") or event.get("suggestionID")
+    for event in accepted_text_edited
+    if kept_event(event) and (event.get("metadata") or {}).get("checkpoint") == "10s"
+}
+kept_at_30_or_blur_ids = {
+    event.get("metadata", {}).get("acceptanceID") or event.get("suggestionID")
+    for event in accepted_text_edited
+    if kept_event(event) and (event.get("metadata") or {}).get("checkpoint") in {"30s", "fieldBlur"}
+}
+
 print(f"Trace: {path}")
 print(f"Start line: {start_line}")
 print(f"Events: {len(events)}")
@@ -439,6 +591,72 @@ print(f"Insertion verification success: {verification_success}%")
 print(f"p50 latency: {percentile(latencies, 0.50)}")
 print(f"p90 latency: {percentile(latencies, 0.90)}")
 print(f"p95 latency: {percentile(latencies, 0.95)}")
+print(f"first-visible p50 latency: {percentile(latencies, 0.50)}")
+print(f"first-visible p90 latency: {percentile(latencies, 0.90)}")
+print(f"first-visible p95 latency: {percentile(latencies, 0.95)}")
+print(f"total-generation p50 latency: {percentile(model_result_latencies, 0.50)}")
+print(f"total-generation p90 latency: {percentile(model_result_latencies, 0.90)}")
+print(f"total-generation p95 latency: {percentile(model_result_latencies, 0.95)}")
+print("Acceptance funnel:")
+print(f"  requested: {len(requested_ids)}")
+print(f"  model returned: {len(model_returned_ids)}")
+print(f"  shown: {len(presented_by_id)}")
+print(f"  accepted: {len(accepted_ids.intersection(presented_ids))}")
+print(f"  kept at 10s: {len(kept_at_10_ids)}")
+print(f"  kept at 30s/blur: {len(kept_at_30_or_blur_ids)}")
+print("Annoyance funnel:")
+print(f"  shown: {len(presented_by_id)}")
+print(f"  ignored: {sum(1 for event in events if event.get('type') == 'suggestionHidden' and event.get('outcome') == 'ignored')}")
+print(f"  typed over: {types['suggestionTypedOver']}")
+print(f"  Esc dismiss: {sum(1 for event in events if event.get('type') == 'suggestionHidden' and event.get('reason') == 'escape')}")
+print(f"  accepted then deleted: {accepted_then_deleted_count}")
+print(f"  paused: {types['appPaused']}")
+print(f"  disabled: {types['appDisabled']}")
+print("Daily summary:")
+if daily:
+    for date, bucket in sorted(daily.items(), reverse=True)[:7]:
+        day_events = bucket["events"]
+        day_presented_by_id = {}
+        for event in day_events:
+            if event.get("type") == "suggestionPresented" and event.get("suggestionID") not in day_presented_by_id:
+                day_presented_by_id[event.get("suggestionID")] = event
+        day_latencies = sorted(
+            event.get("latencyMilliseconds")
+            for event in day_presented_by_id.values()
+            if isinstance(event.get("latencyMilliseconds"), int)
+        )
+        dates = sorted(bucket["dates"])
+        active_minutes = 0
+        if dates:
+            active_minutes = max(1, int(((dates[-1] - dates[0]).total_seconds() + 59) // 60))
+        day_kept = {
+            event.get("metadata", {}).get("acceptanceID") or event.get("suggestionID")
+            for event in day_events
+            if event.get("type") == "acceptedTextEdited" and kept_event(event)
+        }
+        print(
+            f"  {date}: active={active_minutes}m shown={len(day_presented_by_id)} "
+            f"accepted={sum(1 for event in day_events if event.get('type') == 'suggestionAccepted')} "
+            f"kept={len(day_kept)} p50={percentile(day_latencies, 0.50)} "
+            f"p95={percentile(day_latencies, 0.95)} "
+            f"severe={sum(1 for event in day_events if severe_failure(event))} "
+            f"pauses={sum(1 for event in day_events if event.get('type') == 'appPaused')} "
+            f"disables={sum(1 for event in day_events if event.get('type') == 'appDisabled')}"
+        )
+else:
+    print("  none")
+print("Top failure reasons:")
+if failure_reasons:
+    for title, count, priority, category in failure_reasons:
+        print(f"  {title}: count={count} priority={priority} category={category}")
+else:
+    print("  none")
+print("Recommended next fix:")
+if recommended_fixes:
+    for priority, title, reason in recommended_fixes:
+        print(f"  {title}: priority={priority} reason={reason}")
+else:
+    print("  keep collecting clean accepted-and-kept proof")
 print("Accept rate by mode:")
 for mode, (accepted_count, shown_count) in sorted(accept_by_mode.items()):
     rate = 0 if shown_count == 0 else round((accepted_count / shown_count) * 100)

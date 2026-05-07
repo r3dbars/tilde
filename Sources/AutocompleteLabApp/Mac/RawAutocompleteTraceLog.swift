@@ -425,6 +425,9 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         let caretFailuresByRenderMode = sortedCountList(summary.caretGeometryFailuresByRenderMode)
         let caretFailureRatesByRenderMode = sortedRateList(summary.caretGeometryFailureRateByRenderMode)
         let annoyanceSignals = sortedCountList(summary.annoyanceSignalCounts)
+        let dailySummaries = dailySummaryRows(summary.dailySummaries)
+        let topFailureReasons = failureReasonList(summary.topFailureReasons)
+        let recommendedFixes = recommendedFixList(summary.recommendedFixes)
         let supportStates = CompatibilitySupportEvaluator()
             .evaluations(for: events)
             .map { evaluation in
@@ -456,21 +459,51 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           <div class="grid">
             <div class="metric"><b>\(summary.totalEvents)</b>events</div>
             <div class="metric"><b>\(summary.presentedCount)</b>shown</div>
+            <div class="metric"><b>\(summary.acceptedAndKeptCount)</b>accepted kept</div>
+            <div class="metric"><b>\(Int((summary.acceptedAndKeptRateShown * 100).rounded()))%</b>kept / shown</div>
+            <div class="metric"><b>\(Int((summary.acceptedAndKeptRateAccepted * 100).rounded()))%</b>kept / accepted</div>
             <div class="metric"><b>\(summary.acceptedCount)</b>accepted</div>
-            <div class="metric"><b>\(summary.typedThroughCount)</b>typed through</div>
-            <div class="metric"><b>\(summary.typedOverCount)</b>typed over</div>
             <div class="metric"><b>\(summary.suppressedCount)</b>suppressed</div>
             <div class="metric"><b>\(summary.actionableSuppressedCount)</b>actionable suppressed</div>
             <div class="metric"><b>\(Int((summary.acceptRate * 100).rounded()))%</b>accept rate</div>
             <div class="metric"><b>\(Int((summary.usefulRate * 100).rounded()))%</b>useful rate</div>
-            <div class="metric"><b>\(summary.acceptedAndKeptCount)</b>accepted kept</div>
-            <div class="metric"><b>\(Int((summary.acceptedAndKeptRateShown * 100).rounded()))%</b>kept / shown</div>
-            <div class="metric"><b>\(Int((summary.acceptedAndKeptRateAccepted * 100).rounded()))%</b>kept / accepted</div>
+            <div class="metric"><b>\(summary.typedThroughCount)</b>typed through</div>
+            <div class="metric"><b>\(summary.typedOverCount)</b>typed over</div>
             <div class="metric"><b>\(Int((summary.tabAcceptShare * 100).rounded()))%</b>Tab accept share</div>
             <div class="metric"><b>\(Int((summary.insertionVerificationSuccessRate * 100).rounded()))%</b>verified inserts</div>
             <div class="metric"><b>\(Int((summary.caretGeometryFailureRate * 100).rounded()))%</b>caret failure rate</div>
             <div class="metric"><b>\(String(format: "%.2f", summary.annoyanceScore))</b>annoyance score</div>
+            <div class="metric"><b>\(summary.p95LatencyMilliseconds.map { "\($0)ms" } ?? "n/a")</b>first-visible p95</div>
+            <div class="metric"><b>\(summary.modelResultP95LatencyMilliseconds.map { "\($0)ms" } ?? "n/a")</b>total-generation p95</div>
           </div>
+          <h2>Recommended next fix</h2>
+          <ol>\(recommendedFixes)</ol>
+          <h2>Daily summary</h2>
+          <table>
+            <thead><tr><th>Date</th><th>Active</th><th>Shown</th><th>Accepted</th><th>Kept</th><th>p50</th><th>p95</th><th>Severe</th><th>Pauses</th><th>Disables</th></tr></thead>
+            <tbody>\(dailySummaries)</tbody>
+          </table>
+          <h2>Acceptance funnel</h2>
+          <ul>
+            <li>requested: \(summary.acceptanceFunnel.requested)</li>
+            <li>model returned: \(summary.acceptanceFunnel.modelReturned)</li>
+            <li>shown: \(summary.acceptanceFunnel.shown)</li>
+            <li>accepted: \(summary.acceptanceFunnel.accepted)</li>
+            <li>kept at 10s: \(summary.acceptanceFunnel.keptAt10Seconds)</li>
+            <li>kept at 30s/blur: \(summary.acceptanceFunnel.keptAt30SecondsOrBlur)</li>
+          </ul>
+          <h2>Annoyance funnel</h2>
+          <ul>
+            <li>shown: \(summary.annoyanceFunnel.shown)</li>
+            <li>ignored: \(summary.annoyanceFunnel.ignored)</li>
+            <li>typed over: \(summary.annoyanceFunnel.typedOver)</li>
+            <li>Esc dismiss: \(summary.annoyanceFunnel.escapeDismissed)</li>
+            <li>accepted then deleted: \(summary.annoyanceFunnel.acceptedThenDeleted)</li>
+            <li>paused: \(summary.annoyanceFunnel.paused)</li>
+            <li>disabled: \(summary.annoyanceFunnel.disabled)</li>
+          </ul>
+          <h2>Top failure reasons</h2>
+          <ul>\(topFailureReasons)</ul>
           <h2>Accept rate by app</h2>
           <ul>\(appRates)</ul>
           <h2>Accept rate by mode</h2>
@@ -556,6 +589,36 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             }
             .map { "<li><code>\(escape($0.key))</code>: \(Int(($0.value * 100).rounded()))%</li>" }
             .joined(separator: "\n")
+    }
+
+    private static func dailySummaryRows(_ summaries: [AutocompleteTraceDailySummary]) -> String {
+        guard !summaries.isEmpty else {
+            return "<tr><td colspan=\"10\">none yet</td></tr>"
+        }
+
+        return summaries.prefix(7).map { summary in
+            "<tr><td>\(escape(summary.date))</td><td>\(summary.activeWritingMinutes)m</td><td>\(summary.shown)</td><td>\(summary.accepted)</td><td>\(summary.acceptedAndKept)</td><td>\(summary.p50LatencyMilliseconds.map { "\($0)ms" } ?? "n/a")</td><td>\(summary.p95LatencyMilliseconds.map { "\($0)ms" } ?? "n/a")</td><td>\(summary.severeFailures)</td><td>\(summary.pauses)</td><td>\(summary.disables)</td></tr>"
+        }.joined(separator: "\n")
+    }
+
+    private static func failureReasonList(_ reasons: [AutocompleteTraceFailureReason]) -> String {
+        guard !reasons.isEmpty else {
+            return "<li>none yet</li>"
+        }
+
+        return reasons.map { reason in
+            "<li><strong>\(escape(reason.title))</strong> count=\(reason.count) priority=\(reason.priority) category=\(escape(reason.category))</li>"
+        }.joined(separator: "\n")
+    }
+
+    private static func recommendedFixList(_ fixes: [AutocompleteRecommendedFix]) -> String {
+        guard !fixes.isEmpty else {
+            return "<li>Keep collecting clean accepted-and-kept proof.</li>"
+        }
+
+        return fixes.map { fix in
+            "<li><strong>\(escape(fix.title))</strong> priority=\(fix.priority) reason=\(escape(fix.reason))</li>"
+        }.joined(separator: "\n")
     }
 
     private static func escape(_ value: String) -> String {

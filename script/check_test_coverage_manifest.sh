@@ -68,6 +68,7 @@ require_file "Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swif
 require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift" "summarizes field-kind slices" "field-kind trace slice coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift" "summarizes caret geometry failures" "caret failure trace slice coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift" "overlayFlicker" "overlay flicker trace coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift" "builds dashboard funnels" "dashboard funnel coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/SyntheticCaretEstimatorTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/SyntheticCaretEstimatorTests.swift" "Estimates caret position on the current wrapped line" "synthetic caret wrapping coverage"
