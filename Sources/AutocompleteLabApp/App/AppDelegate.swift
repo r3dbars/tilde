@@ -76,6 +76,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         deleteLocalLogs: { [weak self] in
             self?.deleteLocalPrivacyLogs()
         },
+        showPrivacyStatus: { [weak self] statusText in
+            self?.showPrivacyStatus(statusText)
+        },
         setAcceptAllShortcut: { [weak self] shortcut in
             self?.setAcceptAllShortcut(shortcut)
         },
@@ -3164,6 +3167,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if refreshSettings {
             refreshRuntimeChrome()
         }
+    }
+
+    private func showPrivacyStatus(_ statusText: String) {
+        let alert = NSAlert()
+        alert.messageText = "Privacy Status"
+        alert.informativeText = statusText
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+
+        DiagnosticsLog.shared.record(
+            "privacy-status-opened",
+            metadata: ["surface": "settings"]
+        )
     }
 
     private func setAcceptAllShortcut(_ shortcut: AcceptAllShortcut) {
