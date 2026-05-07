@@ -55,6 +55,30 @@ struct CompletionPromptBuilderTests {
         #expect(!prompt.system.contains("Prefer concrete continuations about testing"))
     }
 
+    @Test("Codex prompt keeps normal suggestion words out of dogfood mode")
+    func codexPromptKeepsNormalSuggestionWordsOutOfDogfoodMode() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let cases = [
+            "I have a suggestion for dinner and",
+            "Can you debug this paragraph without",
+            "Trace the outline back to"
+        ]
+
+        for textBeforeCursor in cases {
+            let prompt = builder.prompt(for: CompletionRequest(
+                textBeforeCursor: textBeforeCursor,
+                appBundleIdentifier: "com.openai.codex"
+            ))
+
+            #expect(
+                prompt.system.contains("Continue the user's actual sentence naturally"),
+                "Expected neutral dogfood-safe prompt for: \(textBeforeCursor)"
+            )
+            #expect(!prompt.system.contains("dogfooding this autocomplete tool"))
+            #expect(!prompt.system.contains("Prefer concrete continuations about testing"))
+        }
+    }
+
     @Test("Claude Code prompt uses dogfood guidance")
     func claudeCodePromptUsesDogfoodGuidance() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)

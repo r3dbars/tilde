@@ -117,6 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastSuggestionDecision = "Starting"
     private var lastSyntheticCaretDiagnosticSignature: String?
     private var lastEligibleTargetApp: RunningApplicationInfo?
+    private var lastObservedSettingsApp: RunningApplicationInfo?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
     private let focusedTextPollInterval: TimeInterval = 0.05
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
@@ -320,24 +321,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var settingsCurrentAppState: SettingsCurrentAppState {
-        guard let app = targetAppForControls() else {
+        guard let app = appForSettingsState else {
             return SettingsCurrentAppState(
                 displayName: "None",
                 bundleIdentifier: nil,
-                isSupported: false,
+                supportStatus: .unsupported,
                 isEnabled: false,
                 disabledAppCount: disabledBundleIdentifiers.count
             )
         }
 
-        let isSupported = profileStore.allows(bundleIdentifier: app.bundleIdentifier)
         return SettingsCurrentAppState(
             displayName: app.localizedName,
             bundleIdentifier: app.bundleIdentifier,
-            isSupported: isSupported,
+            supportStatus: profileStore.supportStatus(for: app.bundleIdentifier),
             isEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier),
             disabledAppCount: disabledBundleIdentifiers.count
         )
+    }
+
+    private var appForSettingsState: RunningApplicationInfo? {
+        if let app = accessibilityClient.frontmostApplication(),
+           app.bundleIdentifier != Bundle.main.bundleIdentifier {
+            return app
+        }
+
+        return lastObservedSettingsApp ?? targetAppForControls()
     }
 
     private func targetAppForControls() -> RunningApplicationInfo? {
@@ -367,7 +376,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SettingsPrivacyState(
             tracingPaused: RawAutocompleteTraceLog.shared.isPaused,
             rawContentTracingEnabled: RawAutocompleteTraceLog.shared.rawContentTracingEnabled,
+            rawContentTracingExpiresAt: RawAutocompleteTraceLog.shared.rawContentTracingExpiresAt,
             screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled,
+            screenshotTracingExpiresAt: RawAutocompleteTraceLog.shared.screenshotTracingExpiresAt,
             diagnosticsPath: DiagnosticsLog.shared.path,
             tracePath: RawAutocompleteTraceLog.shared.path
         )
@@ -2537,24 +2548,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile?,
         appEnabled: Bool
     ) {
+        if let app,
+           app.bundleIdentifier != Bundle.main.bundleIdentifier {
+            lastObservedSettingsApp = app
+        }
+
         let permission = accessibilityClient.isTrusted ? "AX ok" : "AX missing"
         let control = suggestionControlState.statusName
         let appName = app?.localizedName ?? "No app"
-        let profileName = profile?.displayName ?? "unsupported"
         let enabled = appEnabled ? "on" : "off"
-        let appStatus: String
-        if app == nil {
-            appStatus = appName
-        } else if profile == nil {
-            appStatus = "\(appName) unsupported"
-        } else {
-            appStatus = "\(appName) \(enabled)"
+        let supportStatus = app.map { profileStore.supportStatus(for: $0.bundleIdentifier) } ?? .unsupported
+        let profileName = app.map { _ in supportStatus.summary } ?? "none"
+        let appStatus = app.map {
+            supportStatus.menuText(appDisplayName: $0.localizedName, isEnabled: appEnabled)
+        } ?? appName
+        let appControlState = app.map {
+            SettingsCurrentAppState(
+                displayName: $0.localizedName,
+                bundleIdentifier: $0.bundleIdentifier,
+                supportStatus: supportStatus,
+                isEnabled: appEnabled,
+                disabledAppCount: disabledBundleIdentifiers.count
+            )
         }
         let statusLine = "Status: \(control) | \(permission) | \(appStatus) | \(lastSuggestionDecision)"
 
         statusMenuItem?.title = statusLine
         pauseSuggestionsMenuItem?.title = pauseSuggestionsTitle
-        toggleAppMenuItem?.title = app.map { appEnabled ? "Disable \($0.localizedName)" : "Enable \($0.localizedName)" } ?? "Toggle Current App"
+        toggleAppMenuItem?.title = appControlState?.menuToggleTitle ?? "Toggle Current App"
+        toggleAppMenuItem?.isEnabled = appControlState?.canToggle ?? false
         if settingsWindow.isShowing {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,
@@ -2778,7 +2800,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.exportTraceReport()
             },
             deleteTracesAction: { [weak self] in
-                RawAutocompleteTraceLog.shared.deleteAll()
+                self?.deleteLocalPrivacyLogs(refreshSettings: false)
                 self?.showDiagnostics()
             }
         )
@@ -2833,14 +2855,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func deleteLocalPrivacyLogs() {
+    private func deleteLocalPrivacyLogs(refreshSettings: Bool = true) {
         RawAutocompleteTraceLog.shared.deleteAll()
+        compatibilityLearningStore.disableScreenshotTracing()
         DiagnosticsLog.shared.deleteAll()
         DiagnosticsLog.shared.record(
             "local-privacy-logs-deleted",
-            metadata: ["surface": "settings"]
+            metadata: ["surface": refreshSettings ? "settings" : "diagnostics"]
         )
-        refreshRuntimeChrome()
+        if refreshSettings {
+            refreshRuntimeChrome()
+        }
     }
 
     private func cycleAcceptAllShortcut() {

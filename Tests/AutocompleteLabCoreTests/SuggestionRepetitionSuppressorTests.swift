@@ -14,6 +14,15 @@ struct SuggestionRepetitionSuppressorTests {
         #expect(suppressor.shouldSuppress(" what kind of laptop", mode: .phraseContinuation))
     }
 
+    @Test("normalizes spacing in repeated phrase misses")
+    func normalizesSpacingInRepeatedPhraseMisses() {
+        var suppressor = SuggestionRepetitionSuppressor(missThreshold: 1)
+
+        suppressor.recordMiss("what   kind\nof laptop", mode: .phraseContinuation)
+
+        #expect(suppressor.shouldSuppress("What kind of laptop?", mode: .phraseContinuation))
+    }
+
     @Test("suppresses tiny repeated word-completion misses")
     func suppressesTinyRepeatedWordCompletionMisses() {
         var suppressor = SuggestionRepetitionSuppressor(missThreshold: 1)

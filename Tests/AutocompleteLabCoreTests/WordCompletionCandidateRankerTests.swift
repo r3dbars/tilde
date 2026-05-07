@@ -31,7 +31,6 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "he")?.visibleText == "llo")
         #expect(ranker.suggestion(for: "It seems to be de")?.visibleText == "cent")
         #expect(ranker.suggestion(for: "I wa")?.visibleText == "nt")
-        #expect(ranker.suggestion(for: "This should be su")?.visibleText == "per")
         #expect(ranker.suggestion(for: "hey tr")?.visibleText == "ying")
     }
 
@@ -58,6 +57,15 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "Check diag") == nil)
         #expect(ranker.suggestion(for: "Review trac") == nil)
         #expect(ranker.suggestion(for: "Use trans") == nil)
+    }
+
+    @Test("default words avoid overly enthusiastic vocabulary")
+    func defaultWordsAvoidOverlyEnthusiasticVocabulary() {
+        let ranker = WordCompletionCandidateRanker()
+
+        #expect(ranker.suggestion(for: "That was fant") == nil)
+        #expect(ranker.suggestion(for: "This is gr") == nil)
+        #expect(ranker.suggestion(for: "That sounds su") == nil)
     }
 
     @Test("suppresses tiny recent suffixes until the fragment is strong")

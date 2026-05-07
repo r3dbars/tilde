@@ -93,7 +93,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         if mode == .wordCompletion,
-           !isValidWordCompletion(suggestion.visibleText) {
+           !isValidWordCompletion(
+                suggestion.visibleText,
+                rawCandidate: withoutPromptEchoLabel,
+                after: textBeforeCursor
+           ) {
             return nil
         }
 
@@ -112,9 +116,25 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
         return normalized.hasPrefix("okay, let's see")
             || normalized.hasPrefix("let's see")
+            || normalized.hasPrefix("as an ai")
+            || normalized.hasPrefix("happy to")
+            || normalized.hasPrefix("here's")
+            || normalized.hasPrefix("here is")
+            || normalized.hasPrefix("i can help")
+            || normalized.hasPrefix("i can't")
+            || normalized.hasPrefix("i cannot")
+            || normalized.hasPrefix("i can’t")
+            || normalized.hasPrefix("i'm here")
+            || normalized.hasPrefix("i am here")
+            || normalized.hasPrefix("it sounds like")
+            || normalized.hasPrefix("no problem")
             || normalized.hasPrefix("the user ")
             || normalized.hasPrefix("the user is ")
             || normalized.hasPrefix("user is ")
+            || normalized.hasPrefix("would you like")
+            || normalized.hasPrefix("you can ")
+            || normalized.hasPrefix("you could ")
+            || normalized.hasPrefix("you might ")
             || normalized.hasPrefix("assistant:")
             || normalized.hasPrefix("system:")
     }
@@ -176,14 +196,42 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return " " + text
     }
 
-    private func isValidWordCompletion(_ text: String) -> Bool {
+    private func isValidWordCompletion(
+        _ text: String,
+        rawCandidate: String,
+        after textBeforeCursor: String?
+    ) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               !trimmed.contains(where: { $0.isWhitespace }) else {
             return false
         }
 
-        return trimmed.allSatisfy { $0.isLetter }
+        guard trimmed.allSatisfy({ $0.isLetter }) else {
+            return false
+        }
+
+        guard let textBeforeCursor,
+              let fragment = trailingWordFragment(in: textBeforeCursor) else {
+            return true
+        }
+
+        let normalizedFragment = fragment.lowercased()
+        let normalizedRawCandidate = rawCandidate
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        guard !normalizedFragment.isEmpty,
+              !normalizedRawCandidate.isEmpty,
+              normalizedRawCandidate.allSatisfy({ $0.isLetter }) else {
+            return true
+        }
+
+        if normalizedRawCandidate.hasPrefix(normalizedFragment) {
+            return normalizedRawCandidate.count > normalizedFragment.count
+        }
+
+        return !Self.commonWholeWords.contains(normalizedRawCandidate)
     }
 
     private func isLowValueSingleWordPhrase(_ text: String) -> Bool {
@@ -224,6 +272,14 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             .filter { !$0.isEmpty }
     }
 
+    private func trailingWordFragment(in text: String) -> String? {
+        guard let last = text.last, last.isLetter else {
+            return nil
+        }
+
+        return text.split(whereSeparator: { !$0.isLetter }).last.map(String.init)
+    }
+
     private static let lowValueSingleWordPhrases: Set<String> = [
         "a", "an", "and", "are", "as", "at", "be", "but", "for", "i",
         "if", "in", "is", "it", "of", "on", "or", "so", "the", "to",
@@ -238,6 +294,9 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "suggestion:",
         "suffix:"
     ]
+
+    private static let commonWholeWords = Set(WordCompletionCandidateRanker.defaultWords)
+        .union(lowValueSingleWordPhrases)
 }
 
 private extension Array where Element: Equatable {

@@ -3,13 +3,13 @@ import ApplicationServices
 import AutocompleteLabCore
 import CoreGraphics
 
-struct RunningApplicationInfo: Equatable {
+struct RunningApplicationInfo: Equatable, Sendable {
     let bundleIdentifier: String
     let localizedName: String
     let processIdentifier: pid_t
 }
 
-struct FocusedTextContext: Equatable {
+struct FocusedTextContext: Equatable, Sendable {
     let elementIdentifier: Int
     let role: String?
     let subrole: String?
@@ -27,7 +27,7 @@ struct FocusedTextContext: Equatable {
     let capabilities: FocusedTextCapabilities
 }
 
-struct FocusedTextCapabilities: Equatable {
+struct FocusedTextCapabilities: Equatable, Sendable {
     let canReadValue: Bool
     let canReadSelectedTextRange: Bool
     let canReadBoundsForRange: Bool
@@ -43,7 +43,7 @@ struct FocusedTextCapabilities: Equatable {
     }
 }
 
-struct FocusedTextDiagnostics: Equatable {
+struct FocusedTextDiagnostics: Equatable, Sendable {
     let bundleIdentifier: String?
     let localizedAppName: String?
     let role: String?
@@ -88,7 +88,7 @@ struct FocusedTextDiagnostics: Equatable {
     }
 }
 
-struct FocusedElementAttributeDump: Equatable {
+struct FocusedElementAttributeDump: Equatable, Sendable {
     let attributes: [FocusedElementAttributeSummary]
     let parameterizedAttributes: [String]
 
@@ -113,13 +113,13 @@ struct FocusedElementAttributeDump: Equatable {
     }
 }
 
-struct FocusedElementAttributeSummary: Equatable {
+struct FocusedElementAttributeSummary: Equatable, Sendable {
     let name: String
     let valueSummary: String
     let isSettable: Bool
 }
 
-struct FocusedTextStyle: Equatable {
+struct FocusedTextStyle: Equatable, @unchecked Sendable {
     let fontName: String
     let fontSize: CGFloat
     let foregroundColor: NSColor?
@@ -129,7 +129,7 @@ struct FocusedTextStyle: Equatable {
     }
 }
 
-final class AccessibilityClient {
+final class AccessibilityClient: @unchecked Sendable {
     private let sensitiveTextFieldPolicy = SensitiveTextFieldPolicy()
 
     var isTrusted: Bool {
@@ -162,10 +162,20 @@ final class AccessibilityClient {
     }
 
     func focusedTextContext(allowDescendantTextFallback: Bool = false) -> FocusedTextContext? {
-        guard let app = NSWorkspace.shared.frontmostApplication else {
+        guard let app = frontmostApplication() else {
             return nil
         }
 
+        return focusedTextContext(
+            for: app,
+            allowDescendantTextFallback: allowDescendantTextFallback
+        )
+    }
+
+    func focusedTextContext(
+        for app: RunningApplicationInfo,
+        allowDescendantTextFallback: Bool = false
+    ) -> FocusedTextContext? {
         guard let focusedElement = focusedElement(for: app.processIdentifier) else {
             return nil
         }
