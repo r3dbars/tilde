@@ -23,7 +23,7 @@ The magic feeling we are testing:
 - backtick/tilde accepts the whole visible suggestion
 - `Esc` dismisses
 - local-only by default
-- default model target: Gemma 4 E2B on M1 / 16 GB
+- default model target: Qwen3.5 4B on Apple Silicon
 - starts with a small app allowlist
 
 Target apps for the first pass:
@@ -35,9 +35,9 @@ Target apps for the first pass:
 
 ## Model Decision
 
-Run the MVP on Gemma 4 E2B.
+Run the MVP on Qwen3.5 4B.
 
-The first supported hardware target is Apple Silicon M1 with 16 GB RAM. The app should not expose a broad model picker yet. The product question is whether the typing experience feels useful, so the model layer should stay boring: local, warm, short completions, and tuned for speed.
+The first beta target is macOS 26 on Apple Silicon. The app should not expose a broad model picker yet. The product question is whether the typing experience feels useful, so the model layer should stay boring: local, warm, short completions, and tuned for speed.
 
 Users should never need to start a model server. The model runtime is owned by the app. If a local server is used during development, it is only a private benchmark tool, not part of the product experience.
 

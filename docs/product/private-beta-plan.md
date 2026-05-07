@@ -18,6 +18,14 @@ That creates:
 - `dist/private-beta/session-report.md`
 - `dist/private-beta/checksums.txt`
 
+## First Run
+
+- Requires macOS 26 on Apple Silicon.
+- Qwen3.5 4B is the default local model.
+- First run should install or repair the app-owned model if it is missing.
+- Testers should not start Ollama, llama.cpp, or any separate server.
+- Do not invite testers if the app falls back to mock suggestions.
+
 ## Test Shape
 
 - 3-5 people.

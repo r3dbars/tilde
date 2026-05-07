@@ -2,15 +2,15 @@
 
 Current compatibility stance for the lab build.
 
-| App | Status | Render | Insert | Proof |
-| --- | --- | --- | --- | --- |
-| TextEdit | supported | inline, mirror fallback | AX selected text, value fallback | recorded manual smoke pass |
-| Notes | supported | inline, mirror fallback | key events, AX selected text fallback | recorded manual smoke pass |
-| Obsidian | supported only when caret bounds are available | mirror | AX then key events, key fallback | detached CodeMirror suggestions are suppressed because whole-editor anchors look wrong |
-| Chrome | supported for local text fields | mirror | AX value replacement, key fallback | recorded local textarea pass |
-| Codex | dogfood target | synthetic inline caret, no detached fallback | key events, AX fallback | pending manual smoke pass |
-| Mail | diagnostics only | disabled | disabled | blocked until safe compose adapter exists |
-| Atlas | unsupported | disabled | disabled | blocked until focused AX element is reliable |
+| App | Status | Render | Anchor source | Insert | Proof |
+| --- | --- | --- | --- | --- | --- |
+| TextEdit | supported | inline, mirror fallback | caret trusted, line/field fallback | AX selected text, value fallback | recorded manual smoke pass |
+| Notes | supported | inline, mirror fallback | caret trusted, line/field fallback | key events, AX selected text fallback | recorded manual smoke pass |
+| Obsidian | supported only when caret bounds are available | mirror | caret trusted; detached field/window anchors blocked | AX then key events, key fallback | detached CodeMirror suggestions are suppressed because whole-editor anchors look wrong |
+| Chrome | supported for local text fields | mirror | field fallback after browser caret rejection | AX value replacement, key fallback | recorded local textarea pass |
+| Codex | dogfood target | synthetic inline caret, no detached fallback | synthetic caret trusted; detached field/window anchors blocked | key events, AX fallback | pending manual smoke pass |
+| Mail | diagnostics only | disabled | off | disabled | blocked until safe compose adapter exists |
+| Atlas | unsupported | disabled | off | disabled | blocked until focused AX element is reliable |
 
 Run:
 

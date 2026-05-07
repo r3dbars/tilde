@@ -8,19 +8,18 @@ The product should own the model runtime. The user launches one Mac app and auto
 
 ## First Candidate: MLX
 
-MLX is the first practical runtime candidate for this Mac prototype because it is Apple Silicon native and can live behind the app-owned `ModelRuntime` boundary. LiteRT-LM stays tracked as the fallback candidate because it is Google's app/runtime path for Gemma edge models and has Gemma 4 support, including a `gemma-4-E2B-it-litert-lm` package path.
+MLX is the first practical runtime candidate for this Mac prototype because it is Apple Silicon native and can live behind the app-owned `ModelRuntime` boundary. Qwen3.5 4B is the documented default because it is the current low-latency quality target for short autocomplete completions. LiteRT-LM stays tracked as a fallback candidate for future app-owned packaging work.
 
 Sources:
 
 - [MLX Swift LM GitHub](https://github.com/ml-explore/mlx-swift-lm)
 - [MLX Swift LM package](https://github.com/ml-explore/mlx-swift-lm/blob/main/Package.swift)
-- [Gemma 4 launch post](https://blog.google/innovation-and-ai/technology/developers-tools/gemma-4/)
 
 ## Model Asset Format
 
 Use the MLX/Hugging Face directory format under:
 
-`~/Library/Application Support/AutocompleteLab/Models/Gemma4E2B/MLX/gemma-4-e2b-mlx`
+`~/Library/Application Support/AutocompleteLab/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit`
 
 The directory should contain at least:
 
@@ -28,7 +27,7 @@ The directory should contain at least:
 - tokenizer files such as `tokenizer.json` or `tokenizer_config.json`
 - one or more `.safetensors` weight files
 
-The likely first model repo is `mlx-community/gemma-4-e2b-it-4bit`, exposed by MLX Swift LM as `LLMRegistry.gemma4_e2b_it_4bit`.
+The default model repo is `mlx-community/Qwen3.5-4B-4bit`.
 
 ## Fallback Candidate: LiteRT-LM
 
@@ -43,8 +42,8 @@ Sources:
 
 - app-owned runtime
 - no user-managed server
-- Gemma 4 E2B
-- M1 / 16 GB first target
+- Qwen3.5 4B
+- macOS 26 on Apple Silicon for the private beta
 - reasoning off
 - 8-16 generated tokens
 - 2-8 visible words

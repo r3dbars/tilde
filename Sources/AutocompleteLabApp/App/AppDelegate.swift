@@ -401,11 +401,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let renderMode = compatibilityLearningStore.engine()
             .adjustment(for: profile.bundleIdentifier, profileRenderMode: baseRenderMode)
             .effectiveRenderMode
+        let currentAnchorDecision = anchorDecision(for: renderMode, profile: profile, context: context)
 
         if shouldSuppressDetachedSuggestion(
             profile: profile,
             context: context,
-            renderMode: renderMode
+            renderMode: renderMode,
+            anchorDecision: currentAnchorDecision
         ) {
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
@@ -416,8 +418,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 triggerReason: "policy",
                 textBeforeCursor: context.textBeforeCursor,
                 textAfterCursor: context.textAfterCursor,
-                reason: "detached-suggestion-disabled",
-                metadata: traceGeometryMetadata(context: context, renderMode: renderMode)
+                reason: currentAnchorDecision.reason.rawValue,
+                metadata: traceGeometryMetadata(
+                    context: context,
+                    renderMode: renderMode,
+                    anchorDecision: currentAnchorDecision
+                )
             )
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
@@ -464,11 +470,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func shouldSuppressDetachedSuggestion(
         profile: CompatibilityProfile,
         context: FocusedTextContext,
-        renderMode: SuggestionRenderMode
+        renderMode: SuggestionRenderMode,
+        anchorDecision: SuggestionAnchorDecision? = nil
     ) -> Bool {
-        renderMode == .floatingMirror
-            && context.caretRect == nil
-            && !profile.allowsDetachedSuggestions
+        let decision = anchorDecision ?? self.anchorDecision(for: renderMode, profile: profile, context: context)
+        return decision.reason == .detachedAnchorDisallowed
     }
 
     private func presentationAdjustedContext(
@@ -840,6 +846,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     outcome: String(describing: result),
                     reason: "insert-verification-failed",
                     metadata: [
+                        "profileInsertionMode": baseline.profile.insertionMode.rawValue,
                         "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                         "currentBeforeChars": String(context.textBeforeCursor.count)
                     ]
@@ -858,7 +865,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 fieldIdentity: baseline.fieldIdentity.traceDescription,
                 requestMode: baseline.requestMode?.rawValue ?? "",
                 acceptedText: acceptedText,
-                outcome: "verified"
+                outcome: "verified",
+                metadata: [
+                    "profileInsertionMode": baseline.profile.insertionMode.rawValue
+                ]
             )
         }
     }
@@ -887,6 +897,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let requestTicket = suggestionRequestGate.issue(request: request)
         let requestStartedAt = Date()
         let fieldIdentityDescription = fieldIdentity.traceDescription
+        let requestAnchorDecision = anchorDecision(for: renderMode, profile: profile, context: context)
 
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionRequested,
@@ -901,6 +912,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "renderMode": renderMode.rawValue,
                 "delayMilliseconds": String(delayMilliseconds)
             ]
+            .merging(anchorMetadata(requestAnchorDecision)) { current, _ in current }
         )
 
         if requestMode == .wordCompletion {
@@ -909,7 +921,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 recentWords: recentAcceptedWords
             ) {
                 let screenshotPath = captureTraceScreenshot(
-                    near: context.elementRect ?? context.windowRect ?? context.caretRect,
+                    near: requestAnchorDecision.rect,
                     suggestionID: suggestionID,
                     bundleIdentifier: appBundleIdentifier
                 )
@@ -999,12 +1011,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
 
-                    let anchorRect = RenderModePlan.anchorRect(
-                        for: renderMode,
-                        caretRect: context.caretRect,
-                        elementRect: context.elementRect,
-                        windowRect: context.windowRect
-                    )
+                    let anchorDecision = self.anchorDecision(for: renderMode, profile: profile, context: context)
                     guard let suggestion, !suggestion.isEmpty else {
                         RawAutocompleteTraceLog.shared.record(
                             type: .suggestionSuppressed,
@@ -1030,7 +1037,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
 
-                    guard anchorRect != nil else {
+                    guard anchorDecision.canPresent else {
                         RawAutocompleteTraceLog.shared.record(
                             type: .suggestionSuppressed,
                             suggestionID: suggestionID,
@@ -1043,15 +1050,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             cleanedVisibleText: suggestion.visibleText,
                             displayedText: suggestion.visibleText,
                             latencyMilliseconds: latencyMilliseconds,
-                            reason: "missing-anchor"
+                            reason: anchorDecision.reason.rawValue,
+                            metadata: self.traceGeometryMetadata(
+                                context: context,
+                                renderMode: renderMode,
+                                anchorDecision: anchorDecision
+                            )
                         )
                         self.recordSuggestionEvent(
                             "suggestion-blocked",
                             context: context,
                             profile: profile,
                             metadata: [
-                                "reason": "missing-anchor"
-                            ]
+                                "reason": anchorDecision.reason.rawValue
+                            ].merging(self.anchorMetadata(anchorDecision)) { current, _ in current }
                         )
                         self.hideSuggestion()
                         return
@@ -1068,7 +1080,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         textAfterCursor: request.textAfterCursor,
                         cleanedVisibleText: suggestion.visibleText,
                         displayedText: suggestion.visibleText,
-                        latencyMilliseconds: latencyMilliseconds
+                        latencyMilliseconds: latencyMilliseconds,
+                        metadata: self.anchorMetadata(anchorDecision)
                     )
                     guard !self.suggestionRepetitionSuppressor.shouldSuppress(
                         suggestion.visibleText,
@@ -1093,7 +1106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
                     let screenshotPath = self.captureTraceScreenshot(
-                        near: context.elementRect ?? context.windowRect ?? context.caretRect,
+                        near: anchorDecision.rect,
                         suggestionID: suggestionID,
                         bundleIdentifier: appBundleIdentifier
                     )
@@ -1138,16 +1151,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ? storedLearningAdjustment.withoutVisualOffset
             : storedLearningAdjustment
         let effectiveRenderMode = learningAdjustment.effectiveRenderMode
-        let anchorRect = learningAdjustment.adjusted(RenderModePlan.anchorRect(
-            for: effectiveRenderMode,
-            caretRect: context.caretRect,
-            elementRect: context.elementRect,
-            windowRect: context.windowRect
-        ))
+        let anchorDecision = anchorDecision(for: effectiveRenderMode, profile: profile, context: context)
+        let anchorRect = learningAdjustment.adjusted(anchorDecision.rect)
         let adjustedTextLineRect = learningAdjustment.adjusted(context.textLineRect)
         let adjustedClippingRect = context.elementRect ?? context.windowRect
 
-        guard let anchorRect else {
+        guard anchorDecision.canPresent, let anchorRect else {
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
                 suggestionID: suggestionID,
@@ -1159,7 +1168,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textAfterCursor: request.textAfterCursor,
                 displayedText: suggestion.visibleText,
                 latencyMilliseconds: latencyMilliseconds,
-                reason: "missing-anchor"
+                reason: anchorDecision.reason.rawValue,
+                metadata: traceGeometryMetadata(
+                    context: context,
+                    renderMode: effectiveRenderMode,
+                    anchorDecision: anchorDecision
+                )
             )
             return
         }
@@ -1202,11 +1216,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "effectiveRenderMode": effectiveRenderMode.rawValue,
                 "visibleChars": String(suggestion.visibleText.count),
+                "profileInsertionMode": profile.insertionMode.rawValue,
                 "anchorRect": compactRectDescription(anchorRect),
                 "textLineRect": adjustedTextLineRect.map(compactRectDescription) ?? "none",
                 "clippingRect": adjustedClippingRect.map(compactRectDescription) ?? "none"
             ]
-            .merging(traceGeometryMetadata(context: context, renderMode: effectiveRenderMode)) { current, _ in current }
+            .merging(traceGeometryMetadata(
+                context: context,
+                renderMode: effectiveRenderMode,
+                anchorDecision: anchorDecision
+            )) { current, _ in current }
             .merging(learningAdjustment.metadata) { current, _ in current }
         )
         recordSuggestionEvent(
@@ -1220,7 +1239,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "visibleChars": String(suggestion.visibleText.count),
                 "suggestionID": suggestionID,
                 "latencyMilliseconds": String(latencyMilliseconds)
-            ].merging(learningAdjustment.metadata) { current, _ in current }
+            ]
+            .merging(anchorMetadata(anchorDecision)) { current, _ in current }
+            .merging(learningAdjustment.metadata) { current, _ in current }
         )
         startKeyboardEventTapIfPossible()
     }
@@ -1233,7 +1254,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appScreenshotTracingEnabled = compatibilityLearningStore
             .profile(for: bundleIdentifier)?
             .screenshotTracingEnabled == true
-        guard (RawAutocompleteTraceLog.shared.screenshotTracingEnabled || appScreenshotTracingEnabled),
+        guard RawAutocompleteTraceLog.shared.allowsScreenshotTracing,
+              (RawAutocompleteTraceLog.shared.screenshotTracingEnabled || appScreenshotTracingEnabled),
               let rect else {
             return ""
         }
@@ -1269,14 +1291,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func traceGeometryMetadata(
         context: FocusedTextContext,
-        renderMode: SuggestionRenderMode
+        renderMode: SuggestionRenderMode,
+        anchorDecision: SuggestionAnchorDecision? = nil
     ) -> [String: String] {
-        [
+        var metadata = [
             "effectiveRenderMode": renderMode.rawValue,
+            "role": context.role ?? "unknown",
+            "subrole": context.subrole ?? "none",
             "hasCaretRect": String(context.caretRect != nil),
+            "hasTextLineRect": String(context.textLineRect != nil),
             "hasElementRect": String(context.elementRect != nil),
             "hasWindowRect": String(context.windowRect != nil),
             "canReadBounds": String(context.capabilities.canReadBoundsForRange)
+        ]
+
+        if let anchorDecision {
+            metadata.merge(anchorMetadata(anchorDecision)) { current, _ in current }
+        }
+
+        return metadata
+    }
+
+    private func anchorDecision(
+        for renderMode: SuggestionRenderMode,
+        profile: CompatibilityProfile,
+        context: FocusedTextContext
+    ) -> SuggestionAnchorDecision {
+        RenderModePlan.anchorDecision(
+            for: renderMode,
+            profile: profile,
+            caretRect: context.caretRect,
+            lineRect: context.textLineRect,
+            elementRect: context.elementRect,
+            windowRect: context.windowRect
+        )
+    }
+
+    private func anchorMetadata(_ decision: SuggestionAnchorDecision) -> [String: String] {
+        [
+            "anchorSource": decision.source.rawValue,
+            "anchorQuality": decision.quality.rawValue,
+            "anchorReason": decision.reason.rawValue,
+            "anchorCanPresent": String(decision.canPresent)
         ]
     }
 
@@ -1459,14 +1515,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ? storedLearningAdjustment.withoutVisualOffset
             : storedLearningAdjustment
         let effectiveRenderMode = learningAdjustment.effectiveRenderMode
-        let anchorRect = learningAdjustment.adjusted(RenderModePlan.anchorRect(
-            for: effectiveRenderMode,
-            caretRect: context.caretRect,
-            elementRect: context.elementRect,
-            windowRect: context.windowRect
-        ))
+        let anchorDecision = anchorDecision(for: effectiveRenderMode, profile: profile, context: context)
+        let anchorRect = learningAdjustment.adjusted(anchorDecision.rect)
 
-        guard let anchorRect else {
+        guard anchorDecision.canPresent, let anchorRect else {
             return
         }
 
@@ -1786,11 +1838,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let profile = app.flatMap { profileStore.profile(for: $0.bundleIdentifier) }
         let appEnabled = app.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
         let bundleIdentifier = app?.bundleIdentifier ?? ""
+        let focusedDiagnostics = accessibilityClient.focusedTextDiagnostics(
+            allowDescendantTextFallback: profile?.allowsDescendantTextFallback == true
+        )
 
         diagnosticsWindow.show(
-            diagnostics: accessibilityClient.focusedTextDiagnostics(
-                allowDescendantTextFallback: profile?.allowsDescendantTextFallback == true
-            ),
+            diagnostics: focusedDiagnostics,
             profile: profile,
             compatibilityStatus: compatibilityStatus,
             appEnabled: appEnabled,
@@ -1802,9 +1855,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             traceSummary: RawAutocompleteTraceLog.shared.summary(),
             recentTraceEvents: RawAutocompleteTraceLog.shared.recentEvents(limit: 48),
             tracePath: RawAutocompleteTraceLog.shared.path,
+            tracePrivacySummary: RawAutocompleteTraceLog.shared.privacySummary,
             tracingPaused: RawAutocompleteTraceLog.shared.isPaused,
-            screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled
-                || compatibilityLearningStore.profile(for: bundleIdentifier)?.screenshotTracingEnabled == true,
+            screenshotTracingEnabled: RawAutocompleteTraceLog.shared.allowsScreenshotTracing
+                && (
+                    RawAutocompleteTraceLog.shared.screenshotTracingEnabled
+                        || compatibilityLearningStore.profile(for: bundleIdentifier)?.screenshotTracingEnabled == true
+                ),
+            anchorDecisionSummary: anchorDiagnosticsSummary(
+                profile: profile,
+                diagnostics: focusedDiagnostics
+            ),
             compatibilityLearningPath: compatibilityLearningStore.path,
             compatibilityLearningProfile: compatibilityLearningStore.profile(for: bundleIdentifier),
             refreshAction: { [weak self] in
@@ -1827,6 +1888,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.showDiagnostics()
             }
         )
+    }
+
+    private func anchorDiagnosticsSummary(
+        profile: CompatibilityProfile?,
+        diagnostics: FocusedTextDiagnostics?
+    ) -> String? {
+        guard let profile, let diagnostics else {
+            return nil
+        }
+
+        guard let baseRenderMode = RenderModePlan.effectiveMode(
+            for: profile,
+            supportsInlineSuggestions: diagnostics.capabilities.supportsInlineSuggestions,
+            hasMirrorAnchor: diagnostics.elementRect != nil || diagnostics.windowRect != nil
+        ) else {
+            return "none / invalid / missing-inline-capabilities"
+        }
+
+        let renderMode = compatibilityLearningStore.engine()
+            .adjustment(for: profile.bundleIdentifier, profileRenderMode: baseRenderMode)
+            .effectiveRenderMode
+        let decision = RenderModePlan.anchorDecision(
+            for: renderMode,
+            profile: profile,
+            caretRect: diagnostics.caretRect,
+            lineRect: diagnostics.textLineRect,
+            elementRect: diagnostics.elementRect,
+            windowRect: diagnostics.windowRect
+        )
+
+        return "\(decision.source.rawValue) / \(decision.quality.rawValue) / \(decision.reason.rawValue) / canPresent=\(decision.canPresent)"
     }
 
     private func toggleTracing() {
