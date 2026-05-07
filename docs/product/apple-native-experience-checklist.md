@@ -339,7 +339,7 @@ Native target: when the app is unsure, the user feels nothing.
 - [x] Prompt apps should require no-submit proof before full accept.
 - [ ] Unsupported apps should not appear broken.
 - [ ] The app should never leave a ghost after focus moves.
-- [ ] The app should hide after repeated placement uncertainty in the same field.
+- [x] The app should hide after repeated placement uncertainty in the same field.
 
 ## Category 9: User Control
 

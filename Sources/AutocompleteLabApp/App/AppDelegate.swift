@@ -119,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var focusedTextPollSkipStats = FocusedTextPollSkipStats()
     private var suggestionRequestGate = SuggestionRequestGate()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
+    private var placementUncertaintySuppressor = PlacementUncertaintySuppressor()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
     private var currentCompletionRequest: CompletionRequest?
     private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
@@ -788,6 +789,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "reason": "detached-suggestion-disabled"
                 ]
+            )
+            _ = recordPlacementUncertainty(
+                reason: "detached-suggestion-disabled",
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                metadata: traceGeometryMetadata(context: context, renderMode: renderMode)
             )
             hideSuggestion()
             return
@@ -2124,6 +2132,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(suppression.metadata) { current, _ in current }
             )
+            let uncertainty = recordPlacementUncertainty(
+                reason: suppression.reason.rawValue,
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                metadata: learningAdjustment.metadata
+                    .merging(suppression.metadata) { current, _ in current }
+            )
+            hideSuggestion(
+                reason: uncertainty.shouldSuppressField
+                    ? "repeated-placement-uncertainty"
+                    : "placement-\(suppression.reason.rawValue)"
+            )
             return
         }
 
@@ -2168,10 +2189,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(placement.metadata) { current, _ in current }
             )
+            _ = recordPlacementUncertainty(
+                reason: reason,
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                metadata: learningAdjustment.metadata
+                    .merging(placement.metadata) { current, _ in current }
+            )
             hideSuggestion(reason: reason)
             return
         }
 
+        placementUncertaintySuppressor.reset(fieldIdentifier: fieldIdentity.traceDescription)
         suggestionSession.present(suggestion)
         setSuggestionDecision("Shown: \(triggerReason) \(latencyMilliseconds)ms")
         currentSuggestionID = suggestionID
@@ -2409,6 +2439,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.record(event, metadata: safeMetadata)
     }
 
+    @discardableResult
+    private func recordPlacementUncertainty(
+        reason: String,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        metadata: [String: String] = [:]
+    ) -> PlacementUncertaintyDecision {
+        let decision = placementUncertaintySuppressor.record(
+            reason: reason,
+            fieldIdentifier: fieldIdentity.traceDescription
+        )
+        var uncertaintyMetadata = metadata
+            .merging(decision.metadata) { current, _ in current }
+        uncertaintyMetadata["reason"] = reason
+
+        recordSuggestionEvent(
+            "placement-uncertainty",
+            context: context,
+            profile: profile,
+            metadata: uncertaintyMetadata
+        )
+
+        guard decision.shouldSuppressField else {
+            return decision
+        }
+
+        suppressedFieldIdentities.insert(fieldIdentity)
+        setSuggestionDecision("Blocked: repeated placement uncertainty")
+        var suppressionMetadata = uncertaintyMetadata
+        suppressionMetadata["reason"] = "repeated-placement-uncertainty"
+        recordSuggestionEvent(
+            "suggestion-blocked",
+            context: context,
+            profile: profile,
+            metadata: suppressionMetadata
+        )
+
+        return decision
+    }
+
     private func recordBlockedSuggestionEvent(
         _ event: String,
         context: FocusedTextContext,
@@ -2593,6 +2664,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     .merging(learningAdjustment.metadata) { current, _ in current }
                     .merging(suppression.metadata) { current, _ in current }
                 )
+                if let fieldIdentity = currentSuggestionFieldIdentity ?? currentFieldIdentity {
+                    _ = recordPlacementUncertainty(
+                        reason: suppression.reason.rawValue,
+                        context: context,
+                        profile: profile,
+                        fieldIdentity: fieldIdentity,
+                        metadata: learningAdjustment.metadata
+                            .merging(suppression.metadata) { current, _ in current }
+                    )
+                }
                 hideSuggestion(reason: "placement-\(suppression.reason.rawValue)")
             }
             return
@@ -2604,6 +2685,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextStyle = context.textStyle
         lastRenderMode = placement.renderMode
         currentSuggestionVisualScope = visualScope
+        if let currentSuggestionFieldIdentity {
+            placementUncertaintySuppressor.reset(fieldIdentifier: currentSuggestionFieldIdentity.traceDescription)
+        }
         refreshVisibleSuggestion()
     }
 
@@ -2996,6 +3080,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let currentFieldIdentity {
             suppressedFieldIdentities.remove(currentFieldIdentity)
+            placementUncertaintySuppressor.reset(fieldIdentifier: currentFieldIdentity.traceDescription)
         }
 
         currentFieldIdentity = fieldIdentity
@@ -3015,6 +3100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let currentFieldIdentity {
             suppressedFieldIdentities.remove(currentFieldIdentity)
+            placementUncertaintySuppressor.reset(fieldIdentifier: currentFieldIdentity.traceDescription)
         }
 
         currentFieldIdentity = nil
