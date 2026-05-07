@@ -103,10 +103,16 @@ struct CompatibilityLearningTests {
 
     @Test("Learning keeps manual visual nudges for synthetic caret apps")
     func keepsManualVisualNudges() {
+        let scope = CompatibilityLearningVisualScope(
+            appVersion: "com.openai.codex:1.0:10",
+            screen: "1440x900@200",
+            fieldShape: "role=AXTextArea;element=w=600,h=300"
+        )
         let profile = CompatibilityLearningProfile(
             bundleIdentifier: "com.openai.codex",
             xOffset: 6,
             yOffset: -4,
+            visualScope: scope,
             observations: 1,
             confidence: 0.35,
             lastReason: "manual-visual-nudge"
@@ -115,7 +121,7 @@ struct CompatibilityLearningTests {
         let adjustment = engine.adjustment(
             for: "com.openai.codex",
             profileRenderMode: .inlineAdjacent
-        ).trustedVisualOffsetOnly
+        ).trustedVisualOffsetOnly(matching: scope)
 
         let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
 
@@ -147,6 +153,34 @@ struct CompatibilityLearningTests {
 
     @Test("Learning keeps screenshot visual corrections")
     func keepsScreenshotVisualCorrections() {
+        let scope = CompatibilityLearningVisualScope(
+            appVersion: "md.obsidian:1.0:10",
+            screen: "1440x900@200",
+            fieldShape: "role=AXTextArea;element=w=600,h=300"
+        )
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "md.obsidian",
+            xOffset: -3,
+            yOffset: 8,
+            visualScope: scope,
+            observations: 4,
+            confidence: 0.7,
+            lastReason: "screenshot-visual-correction"
+        )
+        let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+        let adjustment = engine.adjustment(
+            for: "md.obsidian",
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly(matching: scope)
+
+        let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
+
+        #expect(adjustment.adjusted(rect) == CGRect(x: 97, y: 208, width: 0, height: 20))
+        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "true")
+    }
+
+    @Test("Learning ignores unscoped screenshot visual corrections")
+    func ignoresUnscopedScreenshotVisualCorrections() {
         let profile = CompatibilityLearningProfile(
             bundleIdentifier: "md.obsidian",
             xOffset: -3,
@@ -163,8 +197,8 @@ struct CompatibilityLearningTests {
 
         let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
 
-        #expect(adjustment.adjusted(rect) == CGRect(x: 97, y: 208, width: 0, height: 20))
-        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "true")
+        #expect(adjustment.adjusted(rect) == rect)
+        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "false")
     }
 
     @Test("Learning expires trusted visual offsets when visual scope changes")
@@ -321,6 +355,11 @@ struct CompatibilityLearningTests {
                     bundleIdentifier: notes.bundleIdentifier,
                     xOffset: 2,
                     yOffset: 0,
+                    visualScope: CompatibilityLearningVisualScope(
+                        appVersion: "com.apple.Notes:1.0:10",
+                        screen: "1440x900@200",
+                        fieldShape: "role=AXTextArea;element=w=600,h=300"
+                    ),
                     observations: 4,
                     confidence: 0.9,
                     lastReason: "screenshot-visual-correction"

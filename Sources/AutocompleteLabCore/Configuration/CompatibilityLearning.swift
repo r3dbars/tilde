@@ -65,7 +65,8 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
     }
 
     public var hasTrustedVisualAdjustment: Bool {
-        guard hasVisualAdjustment else {
+        guard hasVisualAdjustment,
+              visualScope != nil else {
             return false
         }
 
