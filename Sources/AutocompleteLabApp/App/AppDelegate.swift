@@ -3247,7 +3247,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func exportTraceReport() {
-        guard let reportURL = RawAutocompleteTraceLog.shared.exportHTMLReport() else {
+        guard let reportURL = RawAutocompleteTraceLog.shared.exportHTMLReport(),
+              let survivalReportURL = RawAutocompleteTraceLog.shared.exportRedactedSurvivalReport() else {
             DiagnosticsLog.shared.record("trace-report-export-failed")
             showDiagnostics()
             return
@@ -3256,7 +3257,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(reportURL)
         DiagnosticsLog.shared.record(
             "trace-report-exported",
-            metadata: ["path": reportURL.path]
+            metadata: [
+                "path": reportURL.path,
+                "survivalReportPath": survivalReportURL.path
+            ]
         )
         showDiagnostics()
     }
