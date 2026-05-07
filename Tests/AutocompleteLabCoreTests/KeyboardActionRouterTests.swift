@@ -45,8 +45,10 @@ struct KeyboardActionRouterTests {
     func keyboardDiagnosticsUseStableNames() {
         #expect(AutocompleteKey.tab.diagnosticName == "tab")
         #expect(AutocompleteKey.backtick.diagnosticName == "backtick")
+        #expect(AutocompleteKey.commandZ.diagnosticName == "commandZ")
         #expect(KeyboardAction.acceptNextWord.diagnosticName == "acceptNextWord")
         #expect(KeyboardAction.acceptAllVisible.diagnosticName == "acceptAllVisible")
+        #expect(KeyboardAction.undoAcceptedInsertion.diagnosticName == "undoAcceptedInsertion")
     }
 
     @Test("Keys pass through when no suggestion is visible")
@@ -57,5 +59,22 @@ struct KeyboardActionRouterTests {
         #expect(router.action(for: .optionTab, hasVisibleSuggestion: false) == .passThrough)
         #expect(router.action(for: .backtick, hasVisibleSuggestion: false) == .passThrough)
         #expect(router.action(for: .escape, hasVisibleSuggestion: false) == .passThrough)
+        #expect(router.action(for: .commandZ, hasVisibleSuggestion: false) == .passThrough)
+    }
+
+    @Test("Command Z undoes a pending accepted insertion")
+    func commandZUndoesPendingAcceptedInsertion() {
+        let router = KeyboardActionRouter()
+
+        #expect(router.action(
+            for: .commandZ,
+            hasVisibleSuggestion: false,
+            hasPendingAcceptedInsertionUndo: true
+        ) == .undoAcceptedInsertion)
+        #expect(router.action(
+            for: .commandZ,
+            hasVisibleSuggestion: true,
+            hasPendingAcceptedInsertionUndo: true
+        ) == .undoAcceptedInsertion)
     }
 }
