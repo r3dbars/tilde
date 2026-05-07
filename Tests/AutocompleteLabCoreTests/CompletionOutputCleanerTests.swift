@@ -122,6 +122,28 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("hello and welcome", after: "hello and w")?.visibleText == "elcome")
     }
 
+    @Test("Suppresses completions that duplicate the user's visible text")
+    func suppressesVisibleTextDuplicates() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean(
+            "Can we make this feel calmer",
+            after: "Can we make this feel calmer"
+        ) == nil)
+        #expect(cleaner.clean(
+            "make this feel calmer",
+            after: "Can we make this feel calmer"
+        ) == nil)
+        #expect(cleaner.clean(
+            "feel calmer",
+            after: "Can we make this feel calmer"
+        ) == nil)
+        #expect(cleaner.clean(
+            "and easier to trust",
+            after: "Can we make this feel calmer"
+        )?.visibleText == " and easier to trust")
+    }
+
     @Test("Allows one word phrase completions for snappy mode")
     func allowsOneWordPhraseCompletionsForSnappyMode() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)

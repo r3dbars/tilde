@@ -323,7 +323,7 @@ like an assistant trying to talk.
 - [x] Assistant-y prefixes like "as an AI", "happy to", "you could", and "would you like" are suppressed before display.
 - [x] Word-completion mode rejects unrelated whole-word completions.
 - [ ] Model should prefer suffixes over phrase restarts.
-- [ ] Suggestions should not duplicate the user's visible text.
+- [x] Suggestions should not duplicate the user's visible text.
 - [ ] Suggestions should be less eager after repeated typed-over misses.
 - [ ] Different app modes should have different suggestion aggressiveness.
 - [x] User should be able to choose quiet, normal, or eager suggestions.
