@@ -194,6 +194,7 @@ final class DiagnosticsWindowController {
                   suppress after failed insert: \(profile.suppressesAfterInsertionFailure)
                   sensitive: \(profile.isSensitive)
                   debug summary: \(profile.debugSummary)
+                  safety owner: \(profile.safetyOwnerNote)
                   notes: \(profile.notes)
                 """
             )
