@@ -72,6 +72,21 @@ reject_latest_launch_pattern() {
   fi
 }
 
+require_production_runtime_gate() {
+  require_latest_launch_line "runtime-bootstrap"
+  require_latest_launch_line "preferredCandidate=mlx"
+  require_latest_launch_line "activeCandidate=mlx"
+  require_latest_launch_line "allowsUserManagedServer=false"
+  require_latest_launch_line "readinessAction=none readinessStage=ready state=ready (MLX)"
+
+  reject_latest_launch_pattern '(^| )activeCandidate=mock($| )'
+  reject_latest_launch_pattern '(^| )candidate=mock($| )'
+  reject_latest_launch_pattern '(^| )state=.*mock'
+  reject_latest_launch_pattern '(^| )fallbackReason='
+  reject_latest_launch_pattern '(^| )(allowsUserManagedServer|userManagedServer)=true($| )'
+  reject_latest_launch_pattern '(Ollama|ollama|llama\.cpp|llama-cpp|user-started server|separate server|external server|model server)'
+}
+
 wait_for_latest_launch_ready() {
   local timeout_seconds="${AUTOCOMPLETE_LAB_READY_TIMEOUT_SECONDS:-60}"
   local deadline=$((SECONDS + timeout_seconds))
@@ -103,6 +118,24 @@ wait_for_latest_launch_ready() {
     if [[ -z "$LATEST_LAUNCH_LINES" ]]; then
       sleep 1
       continue
+    fi
+
+    if grep -E '(^| )activeCandidate=mock($| )' <<<"$LATEST_LAUNCH_LINES" >/dev/null; then
+      echo "latest launch is using mock runtime; beta requires ready MLX" >&2
+      echo "log: $LOG_PATH" >&2
+      exit 1
+    fi
+
+    if grep -E '(^| )(allowsUserManagedServer|userManagedServer)=true($| )' <<<"$LATEST_LAUNCH_LINES" >/dev/null; then
+      echo "latest launch allows a user-managed model server; beta requires app-owned MLX" >&2
+      echo "log: $LOG_PATH" >&2
+      exit 1
+    fi
+
+    if grep -E '(Ollama|ollama|llama\.cpp|llama-cpp|user-started server|separate server|external server|model server)' <<<"$LATEST_LAUNCH_LINES" >/dev/null; then
+      echo "latest launch references external model server setup; beta requires app-owned MLX" >&2
+      echo "log: $LOG_PATH" >&2
+      exit 1
     fi
 
     if grep -F "runtime-warm-failed" <<<"$LATEST_LAUNCH_LINES" >/dev/null; then
@@ -141,7 +174,7 @@ if [[ -n "${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-}" ]]; then
 fi
 
 if [[ "${AUTOCOMPLETE_LAB_REQUIRE_READY:-0}" == "1" ]]; then
-  require_latest_launch_line "runtime readinessAction=none readinessStage=ready state=ready (MLX)"
+  require_production_runtime_gate
   reject_latest_launch_pattern "runtime-warm-failed"
 fi
 
