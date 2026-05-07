@@ -274,17 +274,36 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         }
 
         switch behaviorProfileID {
+        case .casualChat:
+            return casualChatPenalty(text)
         case .email:
             return emailCommitmentPenalty(text, textBeforeCursor: textBeforeCursor)
+        case .notes:
+            return notesPenalty(text)
         case .coding:
             return codingSyntaxPenalty(text, textBeforeCursor: textBeforeCursor)
+        case .docsProse:
+            return docsProsePenalty(text)
+        case .bullets:
+            return bulletPenalty(text)
         case .aiChat:
             return promptAppActionPenalty(text)
         case .forms, .search:
             return formOrSearchPenalty(text)
-        case .casualChat, .notes, .docsProse, .bullets:
-            return 0
         }
+    }
+
+    private func casualChatPenalty(_ text: String) -> Double {
+        var penalty = text.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?") ? 0.30 : 0
+        let words = Set(contentWords(in: text))
+        let emotionalWords: Set<String> = [
+            "amazing", "anxious", "excited", "hate", "love", "sorry",
+            "terrible", "worried"
+        ]
+        if !words.isDisjoint(with: emotionalWords) {
+            penalty += 0.22
+        }
+        return min(0.42, penalty)
     }
 
     private func emailCommitmentPenalty(_ text: String, textBeforeCursor: String?) -> Double {
@@ -296,6 +315,24 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         var penalty = words.isDisjoint(with: riskyWords) ? 0 : 0.28
         penalty += unsupportedCommitmentPenalty(text, textBeforeCursor: textBeforeCursor) * 0.5
         return min(0.45, penalty)
+    }
+
+    private func notesPenalty(_ text: String) -> Double {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var penalty = 0.0
+        if trimmed.contains(where: { [".", "!", "?"].contains($0) }) {
+            penalty += 0.12
+        }
+
+        let words = Set(contentWords(in: text))
+        let floweryWords: Set<String> = [
+            "comprehensive", "delightful", "essentially", "impactful",
+            "meaningful", "significant", "strategic", "transformative"
+        ]
+        if !words.isDisjoint(with: floweryWords) {
+            penalty += 0.22
+        }
+        return min(0.34, penalty)
     }
 
     private func codingSyntaxPenalty(_ text: String, textBeforeCursor: String?) -> Double {
@@ -319,6 +356,32 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         }
 
         return unsupportedIdentifiers.isEmpty ? 0 : min(0.30, Double(unsupportedIdentifiers.count) * 0.10)
+    }
+
+    private func docsProsePenalty(_ text: String) -> Double {
+        let normalized = normalizedPhrase(text)
+        let newPointPrefixes = [
+            "additionally", "another", "finally", "first", "in conclusion",
+            "moreover", "next", "second", "the main point"
+        ]
+        if newPointPrefixes.contains(where: { normalized.hasPrefix($0) }) {
+            return 0.28
+        }
+
+        return normalized.hasPrefix("#") || normalized.hasPrefix("- ") ? 0.24 : 0
+    }
+
+    private func bulletPenalty(_ text: String) -> Double {
+        let normalized = normalizedPhrase(text)
+        if normalized.hasPrefix("-")
+            || normalized.hasPrefix("*")
+            || normalized.hasPrefix("[ ]")
+            || normalized.hasPrefix("[x]")
+            || normalized.range(of: #"^\d+[\.\)]"#, options: .regularExpression) != nil {
+            return 0.35
+        }
+
+        return 0
     }
 
     private func promptAppActionPenalty(_ text: String) -> Double {

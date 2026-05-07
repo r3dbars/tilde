@@ -170,6 +170,77 @@ struct CompletionCandidateRankerTests {
         #expect(searchSelection.suppressionReason == .lowTopScore)
     }
 
+    @Test("Casual chat profile avoids questions and emotional steering")
+    func casualChatProfileAvoidsQuestionsAndEmotionalSteering() {
+        let ranker = CompletionCandidateRanker()
+        let suggestions = [
+            CompletionSuggestion(text: " sounds good", maxVisibleWords: 8),
+            CompletionSuggestion(text: " are you worried?", maxVisibleWords: 8)
+        ]
+
+        let ranked = ranker.ranked(
+            suggestions,
+            mode: .phraseContinuation,
+            behaviorProfileID: .casualChat
+        )
+
+        #expect(ranked.first?.suggestion.visibleText == " sounds good")
+    }
+
+    @Test("Notes profile avoids flowery complete sentences")
+    func notesProfileAvoidsFloweryCompleteSentences() {
+        let ranker = CompletionCandidateRanker()
+        let suggestions = [
+            CompletionSuggestion(text: " next local step", maxVisibleWords: 8),
+            CompletionSuggestion(text: " a comprehensive strategic milestone.", maxVisibleWords: 8)
+        ]
+
+        let ranked = ranker.ranked(
+            suggestions,
+            mode: .phraseContinuation,
+            behaviorProfileID: .notes
+        )
+
+        #expect(ranked.first?.suggestion.visibleText == " next local step")
+    }
+
+    @Test("Docs prose profile avoids starting a new point")
+    func docsProseProfileAvoidsStartingANewPoint() {
+        let ranker = CompletionCandidateRanker()
+        let suggestions = [
+            CompletionSuggestion(text: " in the same paragraph", maxVisibleWords: 8),
+            CompletionSuggestion(text: " Additionally, a new section", maxVisibleWords: 8)
+        ]
+
+        let ranked = ranker.ranked(
+            suggestions,
+            mode: .phraseContinuation,
+            behaviorProfileID: .docsProse
+        )
+
+        #expect(ranked.first?.suggestion.visibleText == " in the same paragraph")
+    }
+
+    @Test("Bullets profile avoids repeating list markers")
+    func bulletsProfileAvoidsRepeatingListMarkers() {
+        let ranker = CompletionCandidateRanker()
+        let suggestions = [
+            CompletionSuggestion(text: " finish the proof", maxVisibleWords: 8),
+            CompletionSuggestion(text: " - finish the proof", maxVisibleWords: 8),
+            CompletionSuggestion(text: " [ ] finish the proof", maxVisibleWords: 8)
+        ]
+
+        let ranked = ranker.ranked(
+            suggestions,
+            mode: .phraseContinuation,
+            behaviorProfileID: .bullets
+        )
+
+        #expect(ranked.first?.suggestion.visibleText == " finish the proof")
+        #expect(ranked.dropFirst().map(\.suggestion.visibleText).contains(" - finish the proof"))
+        #expect(ranked.dropFirst().map(\.suggestion.visibleText).contains(" [ ] finish the proof"))
+    }
+
     @Test("Word mode prefers short alphabetic suffixes")
     func wordModePrefersShortAlphabeticSuffixes() {
         let ranker = CompletionCandidateRanker()
