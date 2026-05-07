@@ -201,6 +201,11 @@ public struct AutocompleteTraceReplay: Sendable {
                 detail: "\(placementCovered.count)/\(presentedEvents.count) presented events include placement metadata, \(trustedPlacementCount) trusted"
             ),
             TraceReplayRequirement(
+                name: "stale cancellation replay",
+                passed: staleCancellations.count > 0,
+                detail: "\(staleCancellations.count) stale focus selection or request cancellations"
+            ),
+            TraceReplayRequirement(
                 name: "kept horizon replay",
                 passed: !acceptedTextEdited.isEmpty && !finalHorizonEvents.isEmpty,
                 detail: "\(acceptedTextEdited.count) survival events, \(finalHorizonEvents.count) final horizon events"
@@ -212,7 +217,7 @@ public struct AutocompleteTraceReplay: Sendable {
             ),
             TraceReplayRequirement(
                 name: "annoyance replay",
-                passed: summary.presentedCount > 0 || !summary.annoyanceSignalCounts.isEmpty,
+                passed: !summary.annoyanceSignalCounts.isEmpty,
                 detail: "\(summary.annoyanceSignalCounts.values.reduce(0, +)) annoyance signals"
             ),
             TraceReplayRequirement(
