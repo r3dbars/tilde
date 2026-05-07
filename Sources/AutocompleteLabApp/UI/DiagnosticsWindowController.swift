@@ -94,6 +94,7 @@ final class DiagnosticsWindowController {
         screenshotTracingEnabled: Bool,
         compatibilityLearningPath: String,
         compatibilityLearningProfile: CompatibilityLearningProfile?,
+        quietModeSummary: String,
         refreshAction: @escaping () -> Void,
         toggleTracingAction: @escaping () -> Void,
         toggleScreenshotTracingAction: @escaping () -> Void,
@@ -125,6 +126,7 @@ final class DiagnosticsWindowController {
         sections.append("Model folder: \(modelDirectoryPath)")
         sections.append("Compatibility: \(compatibilityStatus.summary)")
         sections.append("Current app enabled: \(appEnabled)")
+        sections.append("Quiet mode: \(quietModeSummary)")
         sections.append(traceSummaryText(
             traceSummary,
             tracePath: tracePath,

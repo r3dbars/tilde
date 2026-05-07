@@ -68,11 +68,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionRequestGate = SuggestionRequestGate()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
+    private var annoyanceSuppressor = AnnoyanceSuppressor()
+    private var currentQuietMode: QuietMode = .normal
     private var currentCompletionRequest: CompletionRequest?
     private var currentSuggestionID: String?
     private var currentSuggestionRequestMode: CompletionRequestMode?
     private var currentSuggestionTextBeforeCursor: String?
     private var currentSuggestionDisplayedText: String?
+    private var currentSuggestionPresentedAt: Date?
     private var recentAcceptedWords: [String] = []
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var lastStatusLine: String?
@@ -372,6 +375,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "reason": activationDecision.blockReasonDescription
                 ]
+            )
+            hideSuggestion()
+            return
+        }
+
+        let annoyanceContext = AnnoyanceContext(
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldIdentifier: fieldIdentity.traceDescription,
+            requestMode: activationDecision.requestMode,
+            fieldKind: context.fieldKind
+        )
+        let quietMode = annoyanceSuppressor.quietMode(for: annoyanceContext)
+        currentQuietMode = quietMode
+        if quietMode.isActive {
+            updateStatusMenu(app: frontmostApp, profile: profile, appEnabled: appEnabled)
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: UUID().uuidString,
+                appBundleIdentifier: profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity.traceDescription,
+                requestMode: (activationDecision.requestMode ?? .phraseContinuation).rawValue,
+                triggerReason: "annoyance-suppressor",
+                textBeforeCursor: context.textBeforeCursor,
+                textAfterCursor: context.textAfterCursor,
+                reason: quietMode.traceReason,
+                metadata: quietMode.metadata.merging([
+                    "fieldKind": context.fieldKind.rawValue,
+                    "fieldKindReason": context.fieldKindReason
+                ]) { current, _ in current }
+            )
+            recordBlockedSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                metadata: quietMode.metadata.merging([
+                    "reason": quietMode.traceReason
+                ]) { current, _ in current }
             )
             hideSuggestion()
             return
@@ -936,6 +977,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "currentBeforeChars": String(context.textBeforeCursor.count)
                     ]
                 )
+                recordAnnoyanceSignal(
+                    .wrongInsertion,
+                    reason: "insert-verification-failed",
+                    context: AnnoyanceContext(
+                        appBundleIdentifier: baseline.profile.bundleIdentifier,
+                        fieldIdentifier: baseline.fieldIdentity.traceDescription,
+                        requestMode: baseline.requestMode,
+                        fieldKind: baseline.fieldKind
+                    )
+                )
                 if baseline.profile.suppressesAfterInsertionFailure {
                     suppressCurrentField(reason: "insert-verification-failed")
                 }
@@ -1078,6 +1129,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "acceptedWords": String(tracker.acceptedText.split(whereSeparator: \.isWhitespace).count)
             ]) { current, _ in current }
         )
+
+        let annoyanceContext = AnnoyanceContext(
+            appBundleIdentifier: tracker.appBundleIdentifier,
+            fieldIdentifier: tracker.fieldIdentity.traceDescription,
+            requestMode: CompletionRequestMode(rawValue: tracker.requestMode),
+            fieldKind: tracker.fieldKind
+        )
+        if checkpoint == .twoSeconds,
+           measurement.survivalClass == .rejectedAfterAccept {
+            recordAnnoyanceSignal(.acceptedThenDeleted, reason: "accepted-text-deleted", context: annoyanceContext)
+        } else if checkpoint.isFinalMetricCheckpoint,
+                  measurement.isFinalAcceptedAndKept {
+            recordAnnoyanceSignal(.acceptedAndKept, reason: "accepted-and-kept", context: annoyanceContext)
+        }
 
         if checkpoint.isFinalMetricCheckpoint {
             finishAcceptanceSurvivalTracking(acceptanceID: tracker.acceptanceID)
@@ -1348,6 +1413,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             reason: "repeated-miss",
                             metadata: traceGeometryMetadata(context: context, renderMode: renderMode)
                         )
+                        self.recordAnnoyanceSignal(
+                            .repeatedRejection,
+                            reason: "repeated-miss",
+                            context: AnnoyanceContext(
+                                appBundleIdentifier: appBundleIdentifier,
+                                fieldIdentifier: fieldIdentityDescription,
+                                requestMode: request.mode,
+                                fieldKind: context.fieldKind
+                            )
+                        )
                         self.hideSuggestion()
                         return
                     }
@@ -1429,6 +1504,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionRequestMode = request.mode
         currentSuggestionTextBeforeCursor = request.textBeforeCursor
         currentSuggestionDisplayedText = suggestion.visibleText
+        currentSuggestionPresentedAt = Date()
         lastCaretRect = anchorRect
         lastTextLineRect = adjustedTextLineRect
         lastClippingRect = adjustedClippingRect
@@ -1689,6 +1765,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldKindReason: currentFieldKindReason,
             requestMode: currentSuggestionRequestMode?.rawValue ?? ""
         )
+        recordAnnoyanceSignal(.accepted, reason: action.diagnosticName)
 
         return acceptanceID
     }
@@ -1871,6 +1948,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func hideSuggestion(reason: String = "hidden") {
         if suggestionSession.hasVisibleSuggestion,
            let suggestionID = currentSuggestionID {
+            let lifetimeMilliseconds = currentSuggestionPresentedAt
+                .map { max(0, Int(Date().timeIntervalSince($0) * 1_000)) }
             let outcome: String
             if reason.hasPrefix("accepted") {
                 outcome = "accepted"
@@ -1881,6 +1960,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 outcome = "ignored"
             }
+            var metadata = [
+                "fieldKind": currentFieldKind.rawValue,
+                "fieldKindReason": currentFieldKindReason
+            ]
+            if let lifetimeMilliseconds {
+                metadata["lifetimeMs"] = String(lifetimeMilliseconds)
+            }
 
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionHidden,
@@ -1890,8 +1976,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 requestMode: currentSuggestionRequestMode?.rawValue ?? "",
                 displayedText: currentSuggestionDisplayedText ?? suggestionSession.visibleSuggestion?.visibleText ?? "",
                 outcome: outcome,
-                reason: reason
+                reason: reason,
+                metadata: metadata
             )
+            recordAnnoyanceFromHiddenSuggestion(reason: reason, lifetimeMilliseconds: lifetimeMilliseconds)
         }
 
         suggestionSession.dismiss()
@@ -1899,6 +1987,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionRequestMode = nil
         currentSuggestionTextBeforeCursor = nil
         currentSuggestionDisplayedText = nil
+        currentSuggestionPresentedAt = nil
         lastCaretRect = nil
         lastTextLineRect = nil
         lastClippingRect = nil
@@ -1906,6 +1995,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastRenderMode = nil
         suggestionPanel.hide()
         stopKeyboardEventTapIfActive()
+    }
+
+    private func recordAnnoyanceFromHiddenSuggestion(
+        reason: String,
+        lifetimeMilliseconds: Int?
+    ) {
+        guard !reason.hasPrefix("accepted") else {
+            return
+        }
+
+        if reason == "escape", (lifetimeMilliseconds ?? Int.max) <= 700 {
+            recordAnnoyanceSignal(.rapidEscDismissal, reason: reason)
+        }
+
+        if reason == "typed-over" {
+            recordAnnoyanceSignal(.typedOver, reason: reason)
+        } else if reason == "typed-through-visible-prefix" {
+            recordAnnoyanceSignal(.typedThrough, reason: reason)
+        }
+
+        if let lifetimeMilliseconds, lifetimeMilliseconds < 150 {
+            recordAnnoyanceSignal(.overlayFlicker, reason: reason)
+        }
+    }
+
+    private func recordAnnoyanceSignal(_ signal: AnnoyanceSignal, reason: String) {
+        guard let currentProfile,
+              let currentFieldIdentity else {
+            return
+        }
+
+        let context = AnnoyanceContext(
+            appBundleIdentifier: currentProfile.bundleIdentifier,
+            fieldIdentifier: currentFieldIdentity.traceDescription,
+            requestMode: currentSuggestionRequestMode,
+            fieldKind: currentFieldKind
+        )
+        recordAnnoyanceSignal(signal, reason: reason, context: context)
+    }
+
+    private func recordAnnoyanceSignal(
+        _ signal: AnnoyanceSignal,
+        reason: String,
+        context: AnnoyanceContext
+    ) {
+        let update = annoyanceSuppressor.record(signal, context: context)
+        currentQuietMode = annoyanceSuppressor.quietMode(for: context)
+
+        DiagnosticsLog.shared.record(
+            "annoyance-signal",
+            metadata: [
+                "app": context.appBundleIdentifier,
+                "field": context.fieldIdentifier,
+                "signal": signal.rawValue,
+                "reason": reason,
+                "fieldScore": String(format: "%.3f", update.fieldScore),
+                "appScore": String(format: "%.3f", update.appScore),
+                "globalScore": String(format: "%.3f", update.globalScore)
+            ]
+        )
+
+        for mode in update.startedQuietModes {
+            DiagnosticsLog.shared.record(
+                "quiet-mode-started",
+                metadata: mode.metadata.merging([
+                    "app": context.appBundleIdentifier,
+                    "field": context.fieldIdentifier,
+                    "signal": signal.rawValue
+                ]) { current, _ in current }
+            )
+        }
     }
 
     private func updateStatusMenu(
@@ -1917,7 +2077,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appName = app?.localizedName ?? "No app"
         let profileName = profile?.displayName ?? "unsupported"
         let enabled = appEnabled ? "on" : "off"
-        let statusLine = "Status: \(permission) | \(appName) | \(profileName) | \(enabled)"
+        let quiet = currentQuietMode.isActive ? " | \(currentQuietMode.traceReason)" : ""
+        let statusLine = "Status: \(permission) | \(appName) | \(profileName) | \(enabled)\(quiet)"
 
         statusMenuItem?.title = statusLine
         toggleAppMenuItem?.title = app.map { appEnabled ? "Disable \($0.localizedName)" : "Enable \($0.localizedName)" } ?? "Toggle Current App"
@@ -2084,6 +2245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 || compatibilityLearningStore.profile(for: bundleIdentifier)?.screenshotTracingEnabled == true,
             compatibilityLearningPath: compatibilityLearningStore.path,
             compatibilityLearningProfile: compatibilityLearningStore.profile(for: bundleIdentifier),
+            quietModeSummary: currentQuietMode.summary,
             refreshAction: { [weak self] in
                 self?.showDiagnostics()
             },
@@ -2109,6 +2271,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func toggleTracing() {
         let nextPaused = !RawAutocompleteTraceLog.shared.isPaused
         if nextPaused {
+            if let currentProfile {
+                recordAnnoyanceSignal(
+                    .manualPause,
+                    reason: "manual",
+                    context: AnnoyanceContext(
+                        appBundleIdentifier: currentProfile.bundleIdentifier,
+                        fieldIdentifier: currentFieldIdentity?.traceDescription ?? currentProfile.bundleIdentifier,
+                        requestMode: currentSuggestionRequestMode,
+                        fieldKind: currentFieldKind
+                    )
+                )
+            }
             RawAutocompleteTraceLog.shared.record(
                 type: .appPaused,
                 suggestionID: "",
@@ -2242,6 +2416,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         disabledBundleIdentifiers = selection.bundleIdentifiers
 
         if shouldDisable {
+            recordAnnoyanceSignal(
+                .appDisable,
+                reason: "manual",
+                context: AnnoyanceContext(
+                    appBundleIdentifier: app.bundleIdentifier,
+                    fieldIdentifier: currentFieldIdentity?.traceDescription ?? app.bundleIdentifier,
+                    requestMode: currentSuggestionRequestMode,
+                    fieldKind: currentFieldKind
+                )
+            )
             RawAutocompleteTraceLog.shared.record(
                 type: .appDisabled,
                 suggestionID: "",
