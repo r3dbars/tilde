@@ -2265,13 +2265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         learningAdjustment: CompatibilityLearningAdjustment
     ) -> PlacementTrustPolicy {
-        let hasTrustedVisualAdjustment = learningAdjustment.profile?.hasTrustedVisualAdjustment == true
-        let isGreenProfile = profile.supportLevel == .green
-
-        return PlacementTrustPolicy(
-            allowsLowConfidencePlacement: isGreenProfile || hasTrustedVisualAdjustment,
-            allowsSyntheticCaretPlacement: isGreenProfile || hasTrustedVisualAdjustment
-        )
+        .compatibility(profile: profile, learningAdjustment: learningAdjustment)
     }
 
     private func captureTraceScreenshot(

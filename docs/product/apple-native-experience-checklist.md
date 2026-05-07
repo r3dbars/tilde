@@ -335,7 +335,7 @@ Native target: when the app is unsure, the user feels nothing.
 - [x] Stale model requests cancel.
 - [x] Slow AX polling can temporarily suppress visible suggestions and pause polling.
 - [x] Stale app, field, prompt target, or text suppresses async suggestions before display.
-- [ ] Low placement confidence should suppress inline mode.
+- [x] Low placement confidence should suppress inline mode.
 - [x] Prompt apps should require no-submit proof before full accept.
 - [ ] Unsupported apps should not appear broken.
 - [ ] The app should never leave a ghost after focus moves.

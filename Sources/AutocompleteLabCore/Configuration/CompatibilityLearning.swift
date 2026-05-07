@@ -134,6 +134,21 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
     }
 }
 
+public extension PlacementTrustPolicy {
+    static func compatibility(
+        profile: CompatibilityProfile,
+        learningAdjustment: CompatibilityLearningAdjustment
+    ) -> PlacementTrustPolicy {
+        let hasTrustedVisualAdjustment = learningAdjustment.profile?.hasTrustedVisualAdjustment == true
+        let isGreenProfile = profile.supportLevel == .green
+
+        return PlacementTrustPolicy(
+            allowsLowConfidencePlacement: isGreenProfile || hasTrustedVisualAdjustment,
+            allowsSyntheticCaretPlacement: isGreenProfile || hasTrustedVisualAdjustment
+        )
+    }
+}
+
 public struct CompatibilityLearningEngine: Equatable, Sendable {
     public let profiles: [String: CompatibilityLearningProfile]
 

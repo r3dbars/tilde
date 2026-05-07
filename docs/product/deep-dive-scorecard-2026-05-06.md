@@ -315,6 +315,9 @@ evidence-backed score should stay lower until those rows are closed.
 - Inline suggestions now hide unless at least one useful-word-width can fit
   after the caret, so cramped fields fail quiet instead of showing clipped
   fragments.
+- Compatibility placement trust is now pinned in core tests: unproven yellow
+  apps suppress low-confidence and synthetic placement unless a trusted manual
+  or screenshot visual correction exists.
 
 ## Remaining Gaps
 
