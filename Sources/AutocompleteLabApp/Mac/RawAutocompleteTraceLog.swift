@@ -11,6 +11,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let pauseDefaultsKey = "AutocompleteLabTracePaused"
+    private let rawTextDefaultsKey = "AutocompleteLabRawTextTraceEnabled"
     private let screenshotDefaultsKey = "AutocompleteLabScreenshotTraceEnabled"
 
     private init() {
@@ -59,6 +60,14 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         UserDefaults.standard.set(paused, forKey: pauseDefaultsKey)
     }
 
+    var rawTextTracingEnabled: Bool {
+        privacyPolicy.rawTextTracingEnabled
+    }
+
+    func setRawTextTracingEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: rawTextDefaultsKey)
+    }
+
     func deleteAll() {
         queue.sync { [logURL, screenshotsURL] in
             try? FileManager.default.removeItem(at: logURL)
@@ -67,12 +76,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     }
 
     var screenshotTracingEnabled: Bool {
-        if UserDefaults.standard.bool(forKey: screenshotDefaultsKey) {
-            return true
-        }
-
-        let value = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_SCREENSHOT_TRACE"] ?? ""
-        return ["1", "true", "yes", "on"].contains(value.lowercased())
+        privacyPolicy.screenshotTracingEnabled
     }
 
     func setScreenshotTracingEnabled(_ enabled: Bool) {
@@ -159,7 +163,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             return
         }
 
-        let event = AutocompleteTraceEvent(
+        let event = privacyPolicy.logSafeEvent(AutocompleteTraceEvent(
             timestamp: ISO8601DateFormatter().string(from: Date()),
             sessionID: sessionID,
             suggestionID: suggestionID,
@@ -182,7 +186,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             reason: reason,
             screenshotPath: screenshotPath,
             metadata: metadata
-        )
+        ))
 
         queue.async { [logURL, encoder] in
             do {
@@ -211,6 +215,14 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
                 // Raw tracing is diagnostic only and must never affect typing.
             }
         }
+    }
+
+    private var privacyPolicy: TracePrivacyPolicy {
+        TracePrivacyPolicy.fromEnvironment(
+            ProcessInfo.processInfo.environment,
+            diagnosticsRawTextTracingEnabled: UserDefaults.standard.bool(forKey: rawTextDefaultsKey),
+            diagnosticsScreenshotTracingEnabled: UserDefaults.standard.bool(forKey: screenshotDefaultsKey)
+        )
     }
 
     func recentEvents(limit: Int) -> [AutocompleteTraceEvent] {
