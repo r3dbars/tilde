@@ -12,7 +12,7 @@ The product bar is not "AI appears everywhere." The bar is:
 
 ## Current Executive Score
 
-Overall Apple-native feel: 82/100.
+Overall Apple-native feel: 83/100.
 
 This app has real engineering depth now. It is not a toy. It has local model
 runtime support, strong privacy defaults, app compatibility profiles, insertion
@@ -31,7 +31,8 @@ separate full-accept no-submit proof exists, app-specific slow AX reads cool
 down without blocking typing, TextEdit now has a live typing soak where event
 tap p95 stayed at 35us, app support status is visible in Settings and the menu, Diagnostics
 separates key-capture health from AX-poll health, placement confidence is
-visible without suggestion text, and Settings now reads more like a Mac utility.
+visible without suggestion text, placement uncertainty hides stale ghosts and
+feeds quiet mode, and Settings now reads more like a Mac utility.
 
 The largest miss is still visual placement proof in real apps. Ghost text can
 still be unproven in Notes, Obsidian, Claude Code, Claude desktop, and real
@@ -60,12 +61,12 @@ unsure. Wrong-place text is worse than no suggestion.
 | Native macOS visual feel | 8 | 80 | 100 | Settings moved toward native sections, checkboxes, clearer privacy/app controls, support status, "why hidden" copy, and calmer menu copy. Diagnostics and onboarding still need polish. |
 | Privacy and permissions trust | 9 | 93 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, and raw/screenshot debug capture now expires when enabled from the app UI. Stronger plain-language warnings remain open. |
 | Suggestion quality | 8 | 87 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, learned word completion is app-scoped, dogfood prompts are stricter, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
-| Failure restraint | 8 | 86 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, stale geometry suppresses display, event-tap disablement fails closed, prompt full accept requires proof, and unsupported apps now explain their stance. Low-confidence inline mode still needs stricter real-app gating. |
+| Failure restraint | 8 | 88 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, stale geometry suppresses display, event-tap disablement fails closed, prompt full accept requires proof, placement uncertainty now hides stale ghosts and feeds field quiet mode, and unsupported apps explain their stance. Real-app proof remains open. |
 | User control | 6 | 88 | 100 | Settings now exposes pause, app blocking, support status, privacy diagnostics, temporary raw/screenshot capture, local log deletion, shortcut state, and why the last suggestion was hidden. Per-app modes remain open. |
 | Onboarding and setup | 4 | 73 | 100 | Settings is clearer, but first-run permission flow and model install/repair are still not one calm native flow. |
 | Evidence and QA loop | 4 | 98 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
 
-Weighted score: 82/100.
+Weighted score: 83/100.
 
 ## Non-Negotiable Native Feel Rules
 
@@ -321,7 +322,7 @@ like an assistant trying to talk.
 
 ## Category 8: Failure Restraint
 
-Current score: 86/100.
+Current score: 88/100.
 
 Native target: when the app is unsure, the user feels nothing.
 
@@ -334,11 +335,11 @@ Native target: when the app is unsure, the user feels nothing.
 - [x] Stale model requests cancel.
 - [x] Slow AX polling can temporarily suppress visible suggestions and pause polling.
 - [x] Stale app, field, prompt target, or text suppresses async suggestions before display.
-- [ ] Low placement confidence should suppress inline mode.
+- [x] Low placement confidence should suppress inline mode.
 - [x] Prompt apps should require no-submit proof before full accept.
 - [ ] Unsupported apps should not appear broken.
 - [ ] The app should never leave a ghost after focus moves.
-- [ ] The app should hide after repeated placement uncertainty in the same field.
+- [x] The app should hide after repeated placement uncertainty in the same field.
 
 ## Category 9: User Control
 

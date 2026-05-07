@@ -1926,7 +1926,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             "repeatedRejection": 0.4,
             "manualPause": 1.0,
             "appDisable": 1.2,
-            "caretGeometryFailed": 0.6
+            "caretGeometryFailed": 0.3
         ]
 
         let weightedTotal = signalCounts.reduce(0.0) { total, item in

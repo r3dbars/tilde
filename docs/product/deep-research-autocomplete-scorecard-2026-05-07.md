@@ -72,6 +72,8 @@ Pass 1 shipped these improvements:
 - Diagnostics now exposes placement confidence, anchor source, render-mode
   fallback, self-healing action, clipping state, screenshot state, and caret
   failure rates without showing suggestion text.
+- Placement uncertainty now hides any stale ghost immediately, records a
+  caret-geometry failure, and feeds repeated failures into field quiet mode.
 - Settings now has a Clear Learned Suggestions control that resets
   accepted-kept scores, aggregate style memory, recent words, repetition
   suppression, and prefix-family cooldowns without deleting logs.
@@ -204,7 +206,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Ignored learning | 84 | Ignored hides now record a weak repetition signal scaled by visible lifetime, with trace-safe weight/total metadata, the same decaying repeated-miss bucket, and Diagnostics visibility into passive ignored miss score/lifetime. | Prove thresholds with fresh real-app traces and separate passive ignored from explicit dismiss in diagnostics. |
 | Esc learning | 86 | Esc dismiss now records annoyance, suppresses eligible fields until blur, starts a 15s app/field/mode/prefix cooldown, repeated Esc on the same prefix escalates to 60s, and Diagnostics exposes prefix cooldown duration/escalation metadata. | Prove real-app thresholds. |
 | Style memory | 90 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, and question rates with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, Settings can clear it, and Diagnostics exposes the trace-safe aggregate sketch. | Add tuning controls and fresh real-app trace validation. |
-| Annoyance index | 86 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, and Diagnostics now exposes annoyance score plus signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
+| Annoyance index | 87 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, records placement uncertainty as caret-geometry failures, and Diagnostics now exposes annoyance score plus signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
 | Replay-first test rig | 74 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. | Replay recorded real app sessions with caret, screenshots, accepts, kept horizon, and latency after every app/runtime change. |
 | Cross-app proof honesty | 90 | App proof matrix explicitly keeps failing rows non-A until evidence exists. | Close every pending proof row and make stale proof fail automatically. |
 
@@ -456,6 +458,8 @@ these are true.
 31. Done: add placement diagnostics to the Diagnostics window so confidence,
    anchor source, render-mode fallback, self-healing action, clipping state,
    screenshot state, and caret failure rates are inspectable without raw text.
+32. Done: make placement uncertainty hide stale ghosts immediately, record
+   caret-geometry failures, and quiet the field after repeated uncertainty.
 
 ## Goal Status
 
