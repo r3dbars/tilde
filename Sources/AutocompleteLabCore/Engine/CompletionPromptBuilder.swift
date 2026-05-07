@@ -130,13 +130,37 @@ private extension String {
 
     var isAutocompleteDogfoodContext: Bool {
         let lowercasedText = lowercased()
-        let dogfoodTerms = [
-            "autocomplete", "completion", "codex app", "engine", "latency",
-            "placement", "trace", "traces", "debug", "debugging", "test",
-            "testing", "suggestion", "suggestions", "tab", "caret", "model"
+        let dogfoodPhrases = [
+            "autocomplete", "codex app", "claude code", "ghost text",
+            "inline suggestion", "keyboard event tap", "phrase continuation",
+            "selected text range", "suggestion overlay", "tab accept",
+            "visual placement", "word completion"
         ]
+        if dogfoodPhrases.contains(where: { lowercasedText.contains($0) }) {
+            return true
+        }
 
-        return dogfoodTerms.contains { lowercasedText.contains($0) }
+        let tokens = Set(
+            lowercasedText
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty }
+        )
+        let exactDogfoodTerms: Set<String> = [
+            "caret", "debug", "debugging", "latency", "placement",
+            "suggestion", "suggestions", "trace", "traces"
+        ]
+        if !tokens.isDisjoint(with: exactDogfoodTerms) {
+            return true
+        }
+
+        guard tokens.contains("tab") else {
+            return false
+        }
+
+        let tabContextTerms: Set<String> = [
+            "accept", "accepts", "accepted", "hit", "key", "press", "pressed"
+        ]
+        return !tokens.isDisjoint(with: tabContextTerms)
     }
 }
 

@@ -42,6 +42,19 @@ struct CompletionPromptBuilderTests {
         #expect(!prompt.system.contains("Prefer concrete continuations about testing"))
     }
 
+    @Test("Codex prompt ignores loose dogfood substrings")
+    func codexPromptIgnoresLooseDogfoodSubstrings() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "This table model should pass the normal writing test",
+            appBundleIdentifier: "com.openai.codex"
+        ))
+
+        #expect(prompt.system.contains("Continue the user's actual sentence naturally"))
+        #expect(!prompt.system.contains("dogfooding this autocomplete tool"))
+        #expect(!prompt.system.contains("Prefer concrete continuations about testing"))
+    }
+
     @Test("Claude Code prompt uses dogfood guidance")
     func claudeCodePromptUsesDogfoodGuidance() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)

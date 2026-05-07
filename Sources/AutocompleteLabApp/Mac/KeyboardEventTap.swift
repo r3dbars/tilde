@@ -5,9 +5,11 @@ import Foundation
 final class KeyboardEventTap: @unchecked Sendable {
     typealias Handler = @MainActor @Sendable (AutocompleteKey, Bool, Bool) -> Bool
     typealias PassthroughKeyDownObserver = @MainActor @Sendable () -> Void
+    typealias DisabledObserver = @MainActor @Sendable (_ reason: String) -> Void
 
     private let handler: Handler
     private let passthroughKeyDownObserver: PassthroughKeyDownObserver?
+    private let disabledObserver: DisabledObserver?
     private let keyMapper = AutocompleteKeyMapper()
     private let lifecycleLock = NSLock()
     private let snapshotLock = NSLock()
@@ -31,10 +33,12 @@ final class KeyboardEventTap: @unchecked Sendable {
 
     init(
         handler: @escaping Handler,
-        passthroughKeyDownObserver: PassthroughKeyDownObserver? = nil
+        passthroughKeyDownObserver: PassthroughKeyDownObserver? = nil,
+        disabledObserver: DisabledObserver? = nil
     ) {
         self.handler = handler
         self.passthroughKeyDownObserver = passthroughKeyDownObserver
+        self.disabledObserver = disabledObserver
     }
 
     deinit {
@@ -199,7 +203,12 @@ final class KeyboardEventTap: @unchecked Sendable {
                 ]
             )
 
-            if let tap {
+            let reason = type == .tapDisabledByTimeout ? "timeout" : "user-input"
+            if let disabledObserver {
+                Task { @MainActor in
+                    disabledObserver(reason)
+                }
+            } else if let tap {
                 CGEvent.tapEnable(tap: tap, enable: true)
             }
 
