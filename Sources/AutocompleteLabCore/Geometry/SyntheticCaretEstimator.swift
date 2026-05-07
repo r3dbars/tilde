@@ -2,57 +2,62 @@ import CoreGraphics
 import Foundation
 
 public enum SyntheticCaretEstimator {
+    private static let maxMeasuredCharacters = 4_000
+
     public static func caretRect(
         textBeforeCursor: String,
         elementRect: CGRect,
         windowRect: CGRect?,
-        lineHeight: CGFloat,
-        widthOfText: (String) -> CGFloat,
+        lineHeight rawLineHeight: CGFloat,
         horizontalPadding: CGFloat = 18,
         verticalPadding: CGFloat = 4,
-        inlineGap: CGFloat = 8
+        baselineLiftFactor: CGFloat = 0.85,
+        inlineGap: CGFloat = 8,
+        inlineVerticalDropFactor: CGFloat = 0.85,
+        widthOfText: (String) -> CGFloat
     ) -> CGRect? {
-        guard elementRect.width > 80,
-              elementRect.height > 20,
-              lineHeight.isFinite,
-              lineHeight > 0 else {
+        guard elementRect.width > 80, elementRect.height > 20 else {
+            return nil
+        }
+        guard Self.hasSharedCoordinateSpace(elementRect: elementRect, windowRect: windowRect) else {
             return nil
         }
 
-        let safeLineHeight = max(lineHeight, 20)
+        let lineHeight = max(rawLineHeight, 20)
         let maxLineWidth = max(40, elementRect.width - (horizontalPadding * 2))
         let visualLines = wrappedVisualLines(
-            for: textBeforeCursor,
+            for: boundedTextBeforeCursor(textBeforeCursor),
             maxLineWidth: maxLineWidth,
             widthOfText: widthOfText
         )
         let currentLine = visualLines.last ?? ""
         let lineIndex = max(0, visualLines.count - 1)
         let currentLineWidth = min(widthOfText(currentLine), maxLineWidth)
-        let caretHeight = max(safeLineHeight, 16)
+        let caretHeight = max(lineHeight, 16)
         let preferredY = elementRect.minY
             + verticalPadding
-            - (safeLineHeight * 0.85)
-            + (safeLineHeight * 0.85)
-            + (CGFloat(lineIndex) * safeLineHeight)
+            - (lineHeight * baselineLiftFactor)
+            + (lineHeight * inlineVerticalDropFactor)
+            + (CGFloat(lineIndex) * lineHeight)
+        let y = clampedCaretY(
+            preferredY,
+            caretHeight: caretHeight,
+            elementRect: elementRect,
+            windowRect: windowRect
+        )
+        let lowerX = elementRect.minX + horizontalPadding
+        let upperX = max(lowerX, elementRect.maxX - horizontalPadding)
+        let preferredX = lowerX + currentLineWidth + inlineGap
 
         return CGRect(
-            x: min(
-                elementRect.minX + horizontalPadding + currentLineWidth + inlineGap,
-                elementRect.maxX - horizontalPadding
-            ),
-            y: clampedCaretY(
-                preferredY,
-                caretHeight: caretHeight,
-                elementRect: elementRect,
-                windowRect: windowRect
-            ),
+            x: min(max(preferredX, lowerX), upperX),
+            y: y,
             width: 0,
             height: caretHeight
         )
     }
 
-    private static func wrappedVisualLines(
+    public static func wrappedVisualLines(
         for text: String,
         maxLineWidth: CGFloat,
         widthOfText: (String) -> CGFloat
@@ -78,7 +83,22 @@ public enum SyntheticCaretEstimator {
         return lines.isEmpty ? [""] : lines
     }
 
-    private static func clampedCaretY(
+    private static func boundedTextBeforeCursor(_ text: String) -> String {
+        guard text.count > maxMeasuredCharacters else {
+            return text
+        }
+
+        let paragraphStart = text.lastIndex(of: "\n").map { text.index(after: $0) } ?? text.startIndex
+        let currentParagraph = text[paragraphStart...]
+        guard currentParagraph.count > maxMeasuredCharacters else {
+            return String(currentParagraph)
+        }
+
+        let start = currentParagraph.index(currentParagraph.endIndex, offsetBy: -maxMeasuredCharacters)
+        return String(currentParagraph[start...])
+    }
+
+    public static func clampedCaretY(
         _ preferredY: CGFloat,
         caretHeight: CGFloat,
         elementRect: CGRect,
@@ -97,5 +117,33 @@ public enum SyntheticCaretEstimator {
         }
 
         return min(max(preferredY, boundedMinY), boundedMaxY)
+    }
+
+    private static func hasSharedCoordinateSpace(elementRect: CGRect, windowRect: CGRect?) -> Bool {
+        guard let windowRect else {
+            return true
+        }
+
+        guard elementRect.isFinitePlacementRect,
+              windowRect.isFinitePlacementRect else {
+            return false
+        }
+
+        let tolerance: CGFloat = 24
+        return windowRect
+            .insetBy(dx: -tolerance, dy: -tolerance)
+            .intersects(elementRect)
+    }
+}
+
+private extension CGRect {
+    var isFinitePlacementRect: Bool {
+        minX.isFinite
+            && minY.isFinite
+            && maxX.isFinite
+            && maxY.isFinite
+            && width.isFinite
+            && height.isFinite
+            && !isNull
     }
 }

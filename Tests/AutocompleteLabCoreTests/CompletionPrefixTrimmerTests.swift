@@ -44,4 +44,18 @@ struct CompletionPrefixTrimmerTests {
 
         #expect(trimmed == " there.")
     }
+
+    @Test("Removes echoed phrase when the last typed word is partial")
+    func removesEchoedPhraseWithPartialLastWord() {
+        let trimmed = CompletionPrefixTrimmer.trim(" hello and welcome", after: "hello and w")
+
+        #expect(trimmed == "elcome")
+    }
+
+    @Test("Keeps remaining words after a partial phrase overlap")
+    func keepsRemainingWordsAfterPartialPhraseOverlap() {
+        let trimmed = CompletionPrefixTrimmer.trim(" we should keep going", after: "I think we sh")
+
+        #expect(trimmed == "ould keep going")
+    }
 }

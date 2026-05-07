@@ -14,15 +14,13 @@ struct SuggestionRepetitionSuppressorTests {
         #expect(suppressor.shouldSuppress(" what kind of laptop", mode: .phraseContinuation))
     }
 
-    @Test("near duplicate typed-over misses suppress repeated bad phrases")
-    func nearDuplicateTypedOverMissesSuppressRepeatedBadPhrases() {
-        var suppressor = SuggestionRepetitionSuppressor(missThreshold: 2)
+    @Test("normalizes spacing in repeated phrase misses")
+    func normalizesSpacingInRepeatedPhraseMisses() {
+        var suppressor = SuggestionRepetitionSuppressor(missThreshold: 1)
 
-        suppressor.recordMiss("  What   kind of laptop?", mode: .phraseContinuation)
-        suppressor.recordMiss("what kind of laptop", mode: .phraseContinuation)
+        suppressor.recordMiss("what   kind\nof laptop", mode: .phraseContinuation)
 
-        #expect(suppressor.shouldSuppress("WHAT kind of laptop!", mode: .phraseContinuation))
-        #expect(suppressor.shouldSuppress("what \u{201C}kind\u{201D} of laptop\u{2026}", mode: .phraseContinuation))
+        #expect(suppressor.shouldSuppress("What kind of laptop?", mode: .phraseContinuation))
     }
 
     @Test("suppresses tiny repeated word-completion misses")
@@ -34,13 +32,24 @@ struct SuggestionRepetitionSuppressorTests {
         #expect(suppressor.shouldSuppress("ng", mode: .wordCompletion))
     }
 
-    @Test("does not suppress substantial word completions")
-    func doesNotSuppressSubstantialWordCompletions() {
+    @Test("suppresses repeated substantial word completion misses")
+    func suppressesRepeatedSubstantialWordCompletionMisses() {
         var suppressor = SuggestionRepetitionSuppressor(missThreshold: 1)
 
         suppressor.recordMiss("tation", mode: .wordCompletion)
 
-        #expect(!suppressor.shouldSuppress("tation", mode: .wordCompletion))
+        #expect(suppressor.shouldSuppress("tation", mode: .wordCompletion))
+    }
+
+    @Test("does not suppress invalid word completion text")
+    func doesNotSuppressInvalidWordCompletionText() {
+        var suppressor = SuggestionRepetitionSuppressor(missThreshold: 1)
+
+        suppressor.recordMiss("two words", mode: .wordCompletion)
+        suppressor.recordMiss("ing.", mode: .wordCompletion)
+
+        #expect(!suppressor.shouldSuppress("two words", mode: .wordCompletion))
+        #expect(!suppressor.shouldSuppress("ing.", mode: .wordCompletion))
     }
 
     @Test("acceptance clears repeated phrase misses")

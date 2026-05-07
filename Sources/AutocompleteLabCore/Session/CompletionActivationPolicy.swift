@@ -27,6 +27,7 @@ public enum CompletionActivationBlockReason: String, Equatable, Sendable {
     case secureField
     case suppressedField
     case sensitiveContent
+    case selectedText
     case tooLittleContext
     case middleOfLine
     case unfinishedWord
@@ -51,12 +52,14 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         textBeforeCursor: String,
         textAfterCursor: String,
         isSecure: Bool,
+        selectedTextLength: Int = 0,
         isFieldSuppressed: Bool
     ) -> Bool {
         decision(
             textBeforeCursor: textBeforeCursor,
             textAfterCursor: textAfterCursor,
             isSecure: isSecure,
+            selectedTextLength: selectedTextLength,
             isFieldSuppressed: isFieldSuppressed
         ).canSuggest
     }
@@ -65,10 +68,15 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         textBeforeCursor: String,
         textAfterCursor: String,
         isSecure: Bool,
+        selectedTextLength: Int = 0,
         isFieldSuppressed: Bool
     ) -> CompletionActivationDecision {
         if isSecure {
             return .block(.secureField)
+        }
+
+        if selectedTextLength > 0 {
+            return .block(.selectedText)
         }
 
         if isFieldSuppressed {

@@ -27,6 +27,10 @@ public struct InsertionVerification: Equatable, Sendable {
             return .verified
         }
 
+        if normalizeRichEditorWhitespace(currentTextBeforeCursor) == normalizeRichEditorWhitespace(expectedTextBeforeCursor) {
+            return .verified
+        }
+
         if currentTextBeforeCursor == previousTextBeforeCursor {
             return .unchanged
         }
@@ -53,5 +57,11 @@ public struct InsertionVerification: Equatable, Sendable {
         }
 
         return .changedUnexpectedly
+    }
+
+    private func normalizeRichEditorWhitespace(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "\u{00A0}", with: " ")
+            .replacingOccurrences(of: "\u{202F}", with: " ")
     }
 }

@@ -6,6 +6,7 @@ trust.
 Run this before inviting anyone:
 
 ```bash
+./script/check_model_asset.py
 ./script/beta_readiness.sh
 ```
 
@@ -13,23 +14,23 @@ That creates:
 
 - `dist/AutocompleteLab.zip`
 - `dist/private-beta/README.md`
-- `dist/private-beta/beta-readiness-report.md`
 - `dist/private-beta/install-checklist.md`
+- `dist/private-beta/model-asset.md`
 - `dist/private-beta/feedback-log.md`
 - `dist/private-beta/session-report.md`
-- `dist/private-beta/stop-conditions.md`
-- `dist/private-beta/rollback.md`
 - `dist/private-beta/checksums.txt`
 
-## First Run
+If the model check fails on a tester machine, open Autocomplete Lab Settings
+and use the Local model action. Settings shows the expected model folder and
+keeps suggestions off until the model is valid.
 
-- Requires macOS 26 on Apple Silicon.
-- Qwen3.5 4B is the default local model.
-- First run should install or repair the app-owned model if it is missing.
-- Testers should not start Ollama, llama.cpp, or any separate server.
-- Do not invite testers if the app falls back to mock suggestions.
-- The readiness report must show the app version, git commit, model state,
-  smoke state, and archive checksum for the build being tested.
+Developer fallback:
+
+```bash
+python3 -m pip install --user huggingface_hub
+./script/download_mlx_model.py --model qwen35-4b
+./script/check_model_asset.py
+```
 
 ## Test Shape
 
@@ -38,7 +39,8 @@ That creates:
 - Start in TextEdit.
 - Then Notes.
 - Then Obsidian if they already use it.
-- Chrome textarea is only a sanity check.
+- Chrome fixture proof covers textarea, contenteditable, editor-like,
+  Monaco-like, and ProseMirror-like local pages before any broad browser beta.
 
 ## What To Watch
 
@@ -48,13 +50,14 @@ That creates:
 - Did suggestions feel helpful or distracting?
 - Did anything insert in a surprising place?
 - Did the app ever appear in a private or unsupported field?
-- Did it help, interrupt, break trust, show in the wrong app, or feel too slow?
 
-## Known Unsupported Apps
+## Privacy Rule
 
-Do not use the beta in Mail, password managers, System Settings, Safari, Slack,
-VS Code, Cursor, Atlas, or any private/sensitive field. Those targets are
-unsupported or diagnostics-only until they have separate compatibility proof.
+- No user-managed model server.
+- The app owns the local MLX runtime.
+- Raw text traces are off unless the tester opts in locally.
+- Debug screenshots are off unless the tester opts in locally.
+- Do not ask for trace files unless the tester chose to export them.
 
 ## Stop Conditions
 
@@ -62,11 +65,11 @@ Stop the beta if:
 
 - insertion happens in the wrong app,
 - a suggestion appears over sensitive text,
-- Tab is captured without a visible suggestion,
+- Tab becomes unreliable,
 - the local model falls back to mock output,
-- the app needs manual model/server setup,
-- the panel frequently detaches from the typing location,
-- users cannot understand why suggestions are missing.
+- the app needs a separate model server,
+- `./script/check_model_asset.py` fails on the tester machine,
+- raw text or screenshot logging turns on without explicit local opt-in.
 
 ## After Each Session
 
@@ -82,5 +85,6 @@ Then follow:
 dist/private-beta/session-report.md
 ```
 
-Run the trace eval panel or trace analyzer, check latency, and fix the top
-repeated miss before adding more testers.
+Run aggregate trace eval, check latency, and fix the top repeated miss before
+adding more testers. Only inspect raw traces or screenshots when the tester
+explicitly opted in.

@@ -14,6 +14,23 @@ struct InsertionVerificationTests {
         ) == .verified)
     }
 
+    @Test("Verifies rich editor whitespace equivalents")
+    func verifiesRichEditorWhitespaceEquivalents() {
+        let verifier = InsertionVerification()
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we\u{00A0}make"
+        ) == .verified)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we\u{202F}make"
+        ) == .verified)
+    }
+
     @Test("Detects unchanged and partially inserted text")
     func detectsUnchangedAndPartialInsertion() {
         let verifier = InsertionVerification()
