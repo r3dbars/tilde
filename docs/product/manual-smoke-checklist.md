@@ -10,7 +10,9 @@ Run `script/manual_smoke_status.sh` to see insertion proof and separate
 screenshot-backed placement proof. Use `script/manual_smoke_status.sh --strict`
 when missing insertion proof or missing screenshot proof should block
 release/beta work. The status command also lists the current scorecard rows
-that are still below 10/10.
+that are still below 10/10. In strict mode it also runs the screenshot evidence
+gate, so stale screenshot rows, unreferenced screenshot files, and below-target
+visual rows without a clear `Pending` label block the pass.
 
 ## Setup
 
@@ -26,7 +28,8 @@ that are still below 10/10.
 - After a typing pass, run `AUTOCOMPLETE_LAB_LOG_START_LINE=<mark> ./script/check_typing_performance_log.sh`. It fails on slow event-tap latency or tap disable/timeout events.
 - After a visual placement pass, update the scorecard screenshot row and run
   `./script/check_visual_placement_evidence.sh --require-all` when every row
-  should have screenshot proof.
+  should have screenshot proof. If a visual row is still below target, label it
+  `Pending` plainly instead of letting a stale screenshot look finished.
 
 ## TextEdit
 

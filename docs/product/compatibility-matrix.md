@@ -33,7 +33,11 @@ desktop do not look finished just because Tab insertion passed. A
 detached-suppression Obsidian row is useful safety evidence, but it is not
 enough for a green manual smoke status. The status command also prints
 remaining sub-10 scorecard gaps so release risk is visible beside the smoke
-proof.
+proof. Strict mode also runs the screenshot evidence gate and fails on stale
+screenshot rows, unreferenced screenshot files, or below-target visual rows that
+are not plainly marked `Pending`.
 
 Run `./script/check_visual_placement_evidence.sh --require-all` when every row
-in the visual placement audit should have screenshot-backed proof.
+in the visual placement audit should have screenshot-backed proof. Keep any
+below-target row explicitly marked `Pending` until the proof is strong enough to
+raise it.

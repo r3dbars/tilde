@@ -7,6 +7,10 @@ cd "$ROOT_DIR"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+mkdir -p "$TMP_DIR/visual-placement-screenshots"
+cp docs/product/visual-placement-screenshots/textedit-inline.png "$TMP_DIR/visual-placement-screenshots/textedit-inline.png"
+cp docs/product/visual-placement-screenshots/codex-inline.png "$TMP_DIR/visual-placement-screenshots/codex-inline.png"
+
 LOG_PATH="$TMP_DIR/diagnostics.log"
 TRACE_PATH="$TMP_DIR/traces.jsonl"
 REPORT_PATH="$TMP_DIR/manual-smoke-runs.md"
@@ -348,13 +352,43 @@ cat >"$COMPLETE_SCORECARD_PATH" <<'EOF'
 
 | App or surface | Grade | Evidence | What is good | What still needs work |
 | --- | ---: | --- | --- | --- |
-| TextEdit | 9.5/10 | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Inline proof exists. | More variants. |
-| Codex | 9/10 | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Prompt screenshot exists. | Same-slice accepts. |
+| TextEdit | 10/10 | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Inline proof exists. | Done. |
+| Codex | 10/10 | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Prompt screenshot exists. | Done. |
 EOF
 
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   AUTOCOMPLETE_LAB_SCORECARD="$COMPLETE_SCORECARD_PATH" \
   script/manual_smoke_status.sh --require-all >/dev/null
+
+BELOW_TARGET_SCORECARD_PATH="$TMP_DIR/deep-dive-scorecard-below-target.md"
+cat >"$BELOW_TARGET_SCORECARD_PATH" <<'EOF'
+# Deep Dive Scorecard
+
+## Area Ratings
+
+| Area | Rating | Why |
+| --- | ---: | --- |
+| Diagnostics | 10/10 | Clear enough. |
+
+## Visual Placement And Text Box Audit
+
+| App or surface | Grade | Evidence | What is good | What still needs work |
+| --- | ---: | --- | --- | --- |
+| TextEdit | 9.5/10 | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Inline proof exists. | More variants. |
+| Codex | 10/10 | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Prompt screenshot exists. | Done. |
+EOF
+
+if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  AUTOCOMPLETE_LAB_SCORECARD="$BELOW_TARGET_SCORECARD_PATH" \
+  script/manual_smoke_status.sh --require-all >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected strict status to fail on unlabelled below-target visual score" >&2
+  exit 1
+fi
+
+if ! grep -F 'Below-target visual score rows without pending labels' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not explain unlabelled below-target visual scoring" >&2
+  exit 1
+fi
 
 GENERIC_NOTES_REPORT="$TMP_DIR/generic-notes-manual-smoke-runs.md"
 cat >"$GENERIC_NOTES_REPORT" <<'EOF'
