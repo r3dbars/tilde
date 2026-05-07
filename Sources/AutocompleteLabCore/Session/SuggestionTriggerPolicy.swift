@@ -10,17 +10,23 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
     public let wordCompletionDelayMilliseconds: Int
     public let wordBoundaryDelayMilliseconds: Int
     public let pauseDelayMilliseconds: Int
+    public let largeTextChangeCharacterThreshold: Int
+    public let largeTextChangeDelayMilliseconds: Int
 
     public init(
         charactersBeforePauseRequest: Int = 4,
         wordCompletionDelayMilliseconds: Int = 0,
         wordBoundaryDelayMilliseconds: Int = 35,
-        pauseDelayMilliseconds: Int = 70
+        pauseDelayMilliseconds: Int = 70,
+        largeTextChangeCharacterThreshold: Int = 24,
+        largeTextChangeDelayMilliseconds: Int = 250
     ) {
         self.charactersBeforePauseRequest = max(1, charactersBeforePauseRequest)
         self.wordCompletionDelayMilliseconds = max(0, wordCompletionDelayMilliseconds)
         self.wordBoundaryDelayMilliseconds = max(0, wordBoundaryDelayMilliseconds)
         self.pauseDelayMilliseconds = max(0, pauseDelayMilliseconds)
+        self.largeTextChangeCharacterThreshold = max(1, largeTextChangeCharacterThreshold)
+        self.largeTextChangeDelayMilliseconds = max(pauseDelayMilliseconds, largeTextChangeDelayMilliseconds)
     }
 
     public func shouldRequestSuggestion(
@@ -55,6 +61,10 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         }
 
         let changedCount = currentTextBeforeCursor.count - previousTextBeforeCursor.count
+        if changedCount >= largeTextChangeCharacterThreshold {
+            return .request(delayMilliseconds: largeTextChangeDelayMilliseconds)
+        }
+
         if currentTextBeforeCursor.last?.isNaturalBoundary == true {
             return .request(delayMilliseconds: wordBoundaryDelayMilliseconds)
         }

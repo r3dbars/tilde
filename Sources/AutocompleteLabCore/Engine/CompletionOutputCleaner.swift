@@ -48,15 +48,43 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
-        guard !looksLikeAssistantMeta(singleLine) else {
+        guard !looksLikePromptInstructionEcho(singleLine) else {
             return nil
         }
 
-        guard !looksLikeGenericChatFiller(singleLine) else {
+        let withoutPromptEchoLabel = strippingPromptEchoLabel(from: singleLine)
+
+        guard !withoutPromptEchoLabel.isEmpty else {
             return nil
         }
 
-        let normalizedSuggestion = mode == .wordCompletion ? singleLine : ensureLeadingSpace(singleLine)
+        guard !looksLikePromptInstructionEcho(withoutPromptEchoLabel) else {
+            return nil
+        }
+
+        guard !looksLikeAssistantMeta(withoutPromptEchoLabel) else {
+            return nil
+        }
+
+        guard !looksLikeGenericChatFiller(withoutPromptEchoLabel) else {
+            return nil
+        }
+
+        guard !looksLikeUnsafePromptAction(withoutPromptEchoLabel) else {
+            return nil
+        }
+
+        if let textBeforeCursor,
+           looksLikeAssistantResponseToPrompt(withoutPromptEchoLabel, after: textBeforeCursor) {
+            return nil
+        }
+
+        if let textBeforeCursor,
+           restartsCurrentSentence(withoutPromptEchoLabel, after: textBeforeCursor) {
+            return nil
+        }
+
+        let normalizedSuggestion = mode == .wordCompletion ? withoutPromptEchoLabel : ensureLeadingSpace(withoutPromptEchoLabel)
         let trimmedSuggestion: String
         if let textBeforeCursor {
             trimmedSuggestion = CompletionPrefixTrimmer.trim(normalizedSuggestion, after: textBeforeCursor)
@@ -79,7 +107,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         if mode == .wordCompletion,
-           !isValidWordCompletion(suggestion.visibleText) {
+           !isValidWordCompletion(
+                suggestion.visibleText,
+                rawCandidate: withoutPromptEchoLabel,
+                after: textBeforeCursor
+           ) {
             return nil
         }
 
@@ -108,11 +140,57 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
         return normalized.hasPrefix("okay, let's see")
             || normalized.hasPrefix("let's see")
+            || normalized.hasPrefix("as an ai")
+            || normalized.hasPrefix("happy to")
+            || normalized.hasPrefix("here's")
+            || normalized.hasPrefix("here is")
+            || normalized.hasPrefix("i can help")
+            || normalized.hasPrefix("i can't")
+            || normalized.hasPrefix("i cannot")
+            || normalized.hasPrefix("i can’t")
+            || normalized.hasPrefix("i'm here")
+            || normalized.hasPrefix("i am here")
+            || normalized.hasPrefix("it sounds like")
+            || normalized.hasPrefix("no problem")
             || normalized.hasPrefix("the user ")
             || normalized.hasPrefix("the user is ")
             || normalized.hasPrefix("user is ")
+            || normalized.hasPrefix("would you like")
+            || normalized.hasPrefix("you can ")
+            || normalized.hasPrefix("you could ")
+            || normalized.hasPrefix("you might ")
             || normalized.hasPrefix("assistant:")
             || normalized.hasPrefix("system:")
+    }
+
+    private func looksLikePromptInstructionEcho(_ text: String) -> Bool {
+        let normalized = text
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return normalized.hasPrefix("before cursor:")
+            || normalized.hasPrefix("after cursor:")
+            || normalized.hasPrefix("inline autocomplete")
+            || normalized.hasPrefix("inline word completion")
+            || normalized.hasPrefix("return only")
+            || normalized.hasPrefix("no spaces")
+            || normalized.hasPrefix("continue the current sentence")
+            || normalized.hasPrefix("start the next sentence")
+    }
+
+    private func strippingPromptEchoLabel(from text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        for label in Self.promptEchoLabels {
+            guard trimmed.lowercased().hasPrefix(label) else {
+                continue
+            }
+
+            return String(trimmed.dropFirst(label.count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        return trimmed
     }
 
     private func looksLikeGenericChatFiller(_ text: String) -> Bool {
@@ -134,6 +212,36 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("certainly,")
     }
 
+    private func looksLikeUnsafePromptAction(_ text: String) -> Bool {
+        let normalized = text
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return normalized.hasPrefix("press enter")
+            || normalized.hasPrefix("press return")
+            || normalized.hasPrefix("hit enter")
+            || normalized.hasPrefix("hit return")
+            || normalized.hasPrefix("send the prompt")
+            || normalized.hasPrefix("submit the prompt")
+            || normalized.hasPrefix("click send")
+            || normalized.hasPrefix("run this command")
+            || normalized.hasPrefix("execute this command")
+            || normalized.hasPrefix("execute the command")
+    }
+
+    private func looksLikeAssistantResponseToPrompt(_ text: String, after textBeforeCursor: String) -> Bool {
+        let normalizedCandidate = text
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard Self.assistantResponsePrefixes.contains(where: { normalizedCandidate.hasPrefix($0) }) else {
+            return false
+        }
+
+        let nearbyContext = String(textBeforeCursor.suffix(180)).lowercased()
+        return Self.promptRequestMarkers.contains(where: { nearbyContext.contains($0) })
+    }
+
     private func ensureLeadingSpace(_ text: String) -> String {
         guard let first = text.first, !first.isWhitespace else {
             return text
@@ -142,14 +250,42 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return " " + text
     }
 
-    private func isValidWordCompletion(_ text: String) -> Bool {
+    private func isValidWordCompletion(
+        _ text: String,
+        rawCandidate: String,
+        after textBeforeCursor: String?
+    ) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               !trimmed.contains(where: { $0.isWhitespace }) else {
             return false
         }
 
-        return trimmed.contains(where: { $0.isLetter })
+        guard trimmed.allSatisfy({ $0.isLetter }) else {
+            return false
+        }
+
+        guard let textBeforeCursor,
+              let fragment = trailingWordFragment(in: textBeforeCursor) else {
+            return true
+        }
+
+        let normalizedFragment = fragment.lowercased()
+        let normalizedRawCandidate = rawCandidate
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        guard !normalizedFragment.isEmpty,
+              !normalizedRawCandidate.isEmpty,
+              normalizedRawCandidate.allSatisfy({ $0.isLetter }) else {
+            return true
+        }
+
+        if normalizedRawCandidate.hasPrefix(normalizedFragment) {
+            return normalizedRawCandidate.count > normalizedFragment.count
+        }
+
+        return !Self.commonWholeWords.contains(normalizedRawCandidate)
     }
 
     private func isLowValueSingleWordPhrase(_ text: String) -> Bool {
@@ -205,6 +341,24 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return contextWords.windows(ofCount: leadPhrase.count).contains(leadPhrase)
     }
 
+    private func restartsCurrentSentence(_ suggestion: String, after textBeforeCursor: String) -> Bool {
+        let currentSentenceWords = normalizedWords(in: currentSentence(in: textBeforeCursor))
+        let suggestionWords = normalizedWords(in: suggestion)
+
+        guard currentSentenceWords.count > 3,
+              suggestionWords.count >= 3 else {
+            return false
+        }
+
+        return Array(currentSentenceWords.prefix(3)) == Array(suggestionWords.prefix(3))
+    }
+
+    private func currentSentence(in text: String) -> String {
+        let separators = CharacterSet(charactersIn: ".!?\n")
+        let components = text.components(separatedBy: separators)
+        return components.last ?? text
+    }
+
     private func normalizedWords(in text: String) -> [String] {
         text
             .split(whereSeparator: { $0.isWhitespace })
@@ -214,10 +368,56 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             .filter { !$0.isEmpty }
     }
 
+    private func trailingWordFragment(in text: String) -> String? {
+        guard let last = text.last, last.isLetter else {
+            return nil
+        }
+
+        return text.split(whereSeparator: { !$0.isLetter }).last.map(String.init)
+    }
+
     private static let lowValueSingleWordPhrases: Set<String> = [
-        "a", "an", "and", "are", "as", "at", "be", "but", "for", "if",
-        "in", "is", "it", "of", "on", "or", "so", "the", "to", "was",
-        "were", "with"
+        "a", "an", "and", "are", "as", "at", "be", "but", "for", "i",
+        "if", "in", "is", "it", "of", "on", "or", "so", "the", "to",
+        "was", "we", "were", "with", "you"
+    ]
+
+    private static let promptEchoLabels = [
+        "next words:",
+        "next word:",
+        "continuation:",
+        "completion:",
+        "suggestion:",
+        "suffix:"
+    ]
+
+    private static let commonWholeWords = Set(WordCompletionCandidateRanker.defaultWords)
+        .union(lowValueSingleWordPhrases)
+
+    private static let assistantResponsePrefixes: Set<String> = [
+        "first,",
+        "i can ",
+        "i will ",
+        "i'll ",
+        "let me ",
+        "sure,",
+        "we need to "
+    ]
+
+    private static let promptRequestMarkers: Set<String> = [
+        "build ",
+        "can you",
+        "could you",
+        "debug ",
+        "explain ",
+        "fix ",
+        "help me",
+        "inspect ",
+        "look at",
+        "make ",
+        "please ",
+        "run ",
+        "write "
     ]
 
     private static let lowSignalWords: Set<String> = [

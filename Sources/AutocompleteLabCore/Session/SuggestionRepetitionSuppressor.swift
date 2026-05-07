@@ -73,7 +73,10 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
         let normalizedText = text
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: .punctuationCharacters)
+            .split(whereSeparator: { $0.isWhitespace })
+            .map { $0.trimmingCharacters(in: .punctuationCharacters) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
         guard !normalizedText.isEmpty else {
             return ""
         }
@@ -93,12 +96,16 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
         case .phraseContinuation:
             return true
         case .wordCompletion:
-            return isTinyWordSuffix(text)
+            return isWordSuffix(text)
         }
     }
 
-    private func isTinyWordSuffix(_ text: String) -> Bool {
-        let normalized = normalizedKey(for: text)
-        return normalized.count <= 2 && normalized.allSatisfy(\.isLetter)
+    private func isWordSuffix(_ text: String) -> Bool {
+        let normalized = text
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return !normalized.isEmpty
+            && normalized.count <= 16
+            && normalized.allSatisfy(\.isLetter)
     }
 }

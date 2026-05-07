@@ -82,6 +82,50 @@ struct CompletionActivationPolicyTests {
         ) == .block(.suppressedField))
     }
 
+    @Test("Blocks selected text so accept cannot overwrite user content")
+    func blocksSelectedText() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(!policy.canSuggest(
+            textBeforeCursor: "Replace this",
+            textAfterCursor: "",
+            isSecure: false,
+            selectedTextLength: 7,
+            isFieldSuppressed: false
+        ))
+        #expect(policy.decision(
+            textBeforeCursor: "Replace this",
+            textAfterCursor: "",
+            isSecure: false,
+            selectedTextLength: 7,
+            isFieldSuppressed: false
+        ) == .block(.selectedText))
+    }
+
+    @Test("Blocks token, payment, and API key looking fields")
+    func blocksTokenPaymentAndAPIKeyLookingFields() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "api_key = sk-abcdefghijklmnopqrstuvwxyz",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.sensitiveContent))
+        #expect(policy.decision(
+            textBeforeCursor: "Card number: 4242 4242 4242 4242",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.sensitiveContent))
+        #expect(policy.decision(
+            textBeforeCursor: "client secret: ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.sensitiveContent))
+    }
+
     @Test("Blocks very short context")
     func blocksShortContext() {
         let policy = CompletionActivationPolicy()

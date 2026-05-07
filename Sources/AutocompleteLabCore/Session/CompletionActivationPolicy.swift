@@ -26,6 +26,8 @@ public enum CompletionActivationDecision: Equatable, Sendable {
 public enum CompletionActivationBlockReason: String, Equatable, Sendable {
     case secureField
     case suppressedField
+    case sensitiveContent
+    case selectedText
     case tooLittleContext
     case middleOfLine
     case unfinishedWord
@@ -56,12 +58,14 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         textBeforeCursor: String,
         textAfterCursor: String,
         isSecure: Bool,
+        selectedTextLength: Int = 0,
         isFieldSuppressed: Bool
     ) -> Bool {
         decision(
             textBeforeCursor: textBeforeCursor,
             textAfterCursor: textAfterCursor,
             isSecure: isSecure,
+            selectedTextLength: selectedTextLength,
             isFieldSuppressed: isFieldSuppressed
         ).canSuggest
     }
@@ -70,14 +74,23 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         textBeforeCursor: String,
         textAfterCursor: String,
         isSecure: Bool,
+        selectedTextLength: Int = 0,
         isFieldSuppressed: Bool
     ) -> CompletionActivationDecision {
         if isSecure {
             return .block(.secureField)
         }
 
+        if selectedTextLength > 0 {
+            return .block(.selectedText)
+        }
+
         if isFieldSuppressed {
             return .block(.suppressedField)
+        }
+
+        if looksSensitive(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
+            return .block(.sensitiveContent)
         }
 
         let trimmedContext = textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -157,6 +170,47 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             && normalized.allSatisfy { $0.isLetter }
     }
 
+    private func looksSensitive(textBeforeCursor: String, textAfterCursor: String) -> Bool {
+        let currentLine = currentLineContext(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor)
+        let normalizedLine = currentLine
+            .lowercased()
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+
+        if Self.sensitiveLineHints.contains(where: { normalizedLine.contains($0) }) {
+            return true
+        }
+
+        if currentLine.range(
+            of: #"\b(sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|xox[baprs]-[A-Za-z0-9-]{12,}|AKIA[0-9A-Z]{12,})\b"#,
+            options: .regularExpression
+        ) != nil {
+            return true
+        }
+
+        if currentLine.range(
+            of: #"\b(?:\d[ -]*?){13,19}\b"#,
+            options: .regularExpression
+        ) != nil {
+            return true
+        }
+
+        return false
+    }
+
+    private func currentLineContext(textBeforeCursor: String, textAfterCursor: String) -> String {
+        let before = textBeforeCursor.split(
+            omittingEmptySubsequences: false,
+            whereSeparator: \.isNewline
+        ).last.map(String.init) ?? ""
+        let after = textAfterCursor.split(
+            omittingEmptySubsequences: false,
+            whereSeparator: \.isNewline
+        ).first.map(String.init) ?? ""
+
+        return before + after
+    }
+
     private static let commonCompleteWords: Set<String> = [
         "a", "an", "and", "are", "as", "at",
         "be", "but", "by",
@@ -169,5 +223,13 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         "so",
         "the", "then", "thing", "this", "to",
         "want", "we", "yes", "you"
+    ]
+
+    private static let sensitiveLineHints = [
+        "api key", "apikey", "access token", "auth token", "bearer token",
+        "client secret", "private key", "secret key", "password", "passcode",
+        "recovery code", "seed phrase", "social security", "ssn", "card number",
+        "credit card", "debit card", "security code", "cvv", "cvc", "expiry",
+        "routing number", "account number"
     ]
 }
