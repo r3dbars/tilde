@@ -53,6 +53,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleSuggestionsPaused: { [weak self] in
             self?.togglePauseSuggestions()
         },
+        silenceCurrentField: { [weak self] in
+            self?.silenceCurrentField()
+        },
         performRuntimeAction: { [weak self] action in
             self?.performRuntimeAction(action)
         },
@@ -86,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusMenuItem: NSMenuItem?
     private var runtimeMenuItem: NSMenuItem?
     private var pauseSuggestionsMenuItem: NSMenuItem?
+    private var silenceFieldMenuItem: NSMenuItem?
     private var toggleAppMenuItem: NSMenuItem?
     private var pollTimer: Timer?
     private var keyboardEventTap: KeyboardEventTap?
@@ -140,6 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastSyntheticCaretDiagnosticSignature: String?
     private var lastEligibleTargetApp: RunningApplicationInfo?
     private var lastObservedSettingsApp: RunningApplicationInfo?
+    private var lastFieldControlTarget: FieldControlTarget?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
     private let focusedTextPollInterval: TimeInterval = 0.05
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
@@ -190,6 +195,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let statusMenu = NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: "")
         let runtimeMenu = NSMenuItem(title: "Model: starting", action: nil, keyEquivalent: "")
         let pauseItem = NSMenuItem(title: pauseSuggestionsTitle, action: #selector(togglePauseSuggestions), keyEquivalent: "p")
+        let silenceFieldItem = NSMenuItem(
+            title: "Silence This Field",
+            action: #selector(silenceCurrentField),
+            keyEquivalent: "s"
+        )
         let toggleItem = NSMenuItem(title: "Toggle Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
         let debugMenuItem = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         let debugMenu = NSMenu()
@@ -199,6 +209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(runtimeMenu)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(pauseItem)
+        menu.addItem(silenceFieldItem)
         menu.addItem(toggleItem)
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
@@ -222,6 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusMenuItem = statusMenu
         runtimeMenuItem = runtimeMenu
         pauseSuggestionsMenuItem = pauseItem
+        silenceFieldMenuItem = silenceFieldItem
         toggleAppMenuItem = toggleItem
         refreshRuntimeChrome()
     }
@@ -331,6 +343,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath,
                 currentApp: settingsCurrentAppState,
+                fieldControl: settingsFieldControlState,
                 privacy: settingsPrivacyState,
                 keyboardShortcuts: settingsKeyboardShortcutState,
                 lastSuggestionDecision: lastSuggestionDecision
@@ -366,6 +379,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private var settingsFieldControlState: SettingsFieldControlState {
+        guard let target = fieldControlTarget else {
+            return SettingsFieldControlState(
+                appDisplayName: nil,
+                hasFieldTarget: false,
+                isCurrentField: false,
+                isSilenced: false
+            )
+        }
+
+        return SettingsFieldControlState(
+            appDisplayName: target.appDisplayName,
+            hasFieldTarget: true,
+            isCurrentField: target.fieldIdentity == currentFieldIdentity,
+            isSilenced: suppressedFieldIdentities.contains(target.fieldIdentity)
+        )
+    }
+
+    private var fieldControlTarget: FieldControlTarget? {
+        if let currentFieldIdentity,
+           let target = lastFieldControlTarget,
+           target.fieldIdentity == currentFieldIdentity {
+            return target
+        }
+
+        return lastFieldControlTarget
+    }
+
     private var appForSettingsState: RunningApplicationInfo? {
         if let app = accessibilityClient.frontmostApplication(),
            app.bundleIdentifier != Bundle.main.bundleIdentifier {
@@ -396,6 +437,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         lastEligibleTargetApp = app
+    }
+
+    private func rememberFieldControlTarget(
+        app: RunningApplicationInfo,
+        fieldIdentity: FocusedFieldIdentity,
+        requestMode: CompletionRequestMode?,
+        fieldKind: AXFieldKind
+    ) {
+        lastFieldControlTarget = FieldControlTarget(
+            appBundleIdentifier: app.bundleIdentifier,
+            appDisplayName: app.localizedName,
+            fieldIdentity: fieldIdentity,
+            requestMode: requestMode,
+            fieldKind: fieldKind
+        )
     }
 
     private var settingsPrivacyState: SettingsPrivacyState {
@@ -640,6 +696,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: context,
             profile: profile
         )
+        let fieldClassification = fieldClassification(for: context)
+        rememberFieldControlTarget(
+            app: frontmostApp,
+            fieldIdentity: fieldIdentity,
+            requestMode: nil,
+            fieldKind: fieldClassification.kind
+        )
         transitionToField(fieldIdentity)
 
         let snapshot = FocusedTextSnapshot(
@@ -709,13 +772,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let fieldClassification = fieldClassification(for: context)
         let activationDecision = activationPolicy.decision(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             isSecure: context.isSecure,
             selectedTextLength: context.selectedTextLength,
             isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
+            fieldKind: fieldClassification.kind
+        )
+        rememberFieldControlTarget(
+            app: frontmostApp,
+            fieldIdentity: fieldIdentity,
+            requestMode: activationDecision.requestMode,
             fieldKind: fieldClassification.kind
         )
 
@@ -3877,16 +3945,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 disabledAppCount: disabledBundleIdentifiers.count
             )
         }
+        let fieldControlState = settingsFieldControlState
         let statusLine = statusMenuTitle(
             app: app,
             supportStatus: supportStatus,
             appEnabled: appEnabled
         )
-        let statusSignature = "\(control)|\(permission)|\(appStatus)|\(lastSuggestionDecision)|\(statusLine)"
+        let statusSignature = [
+            control,
+            permission,
+            appStatus,
+            lastSuggestionDecision,
+            statusLine,
+            fieldControlState.statusText
+        ].joined(separator: "|")
 
         statusMenuItem?.title = statusLine
         statusMenuItem?.toolTip = lastSuggestionDecision
         pauseSuggestionsMenuItem?.title = pauseSuggestionsTitle
+        silenceFieldMenuItem?.title = fieldControlState.buttonTitle
+        silenceFieldMenuItem?.isEnabled = fieldControlState.canSilence
+        silenceFieldMenuItem?.toolTip = fieldControlState.detailText
         toggleAppMenuItem?.title = appControlState?.menuToggleTitle ?? "Toggle Current App"
         toggleAppMenuItem?.isEnabled = appControlState?.canToggle ?? false
         if settingsWindow.isShowing {
@@ -3897,6 +3976,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath,
                 currentApp: settingsCurrentAppState,
+                fieldControl: settingsFieldControlState,
                 privacy: settingsPrivacyState,
                 keyboardShortcuts: settingsKeyboardShortcutState,
                 lastSuggestionDecision: lastSuggestionDecision
@@ -4274,6 +4354,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
             currentApp: settingsCurrentAppState,
+            fieldControl: settingsFieldControlState,
             privacy: settingsPrivacyState,
             keyboardShortcuts: settingsKeyboardShortcutState,
             lastSuggestionDecision: lastSuggestionDecision
@@ -4300,6 +4381,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
             currentApp: settingsCurrentAppState,
+            fieldControl: settingsFieldControlState,
             privacy: settingsPrivacyState,
             keyboardShortcuts: settingsKeyboardShortcutState,
             lastSuggestionDecision: lastSuggestionDecision
@@ -4695,6 +4777,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
+    private func silenceCurrentField() {
+        guard let target = fieldControlTarget else {
+            setSuggestionDecision("Blocked: no current field")
+            refreshRuntimeChrome()
+            DiagnosticsLog.shared.record(
+                "field-control",
+                metadata: [
+                    "action": "silence",
+                    "outcome": "no-field"
+                ]
+            )
+            return
+        }
+
+        suppressedFieldIdentities.insert(target.fieldIdentity)
+        let suggestionID = currentSuggestionID ?? ""
+        setSuggestionDecision("Blocked: current field silenced")
+        invalidatePendingSuggestionRequest()
+        if suggestionSession.hasVisibleSuggestion {
+            hideSuggestion(reason: "field-silenced")
+        }
+
+        let context = annoyanceContext(
+            appBundleIdentifier: target.appBundleIdentifier,
+            fieldIdentity: target.fieldIdentity,
+            requestMode: target.requestMode,
+            fieldKind: target.fieldKind
+        )
+        RawAutocompleteTraceLog.shared.record(
+            type: .fieldPaused,
+            suggestionID: suggestionID,
+            appBundleIdentifier: target.appBundleIdentifier,
+            fieldIdentity: target.fieldIdentity.traceDescription,
+            requestMode: target.requestMode?.rawValue ?? "",
+            reason: "manual-field",
+            metadata: [
+                "scope": "field"
+            ]
+        )
+        recordAnnoyanceSignal(
+            .manualPause,
+            context: context,
+            suggestionID: suggestionID,
+            reason: "manual-field",
+            metadata: [
+                "scope": "field"
+            ]
+        )
+        DiagnosticsLog.shared.record(
+            "field-control",
+            metadata: [
+                "action": "silence",
+                "app": target.appBundleIdentifier,
+                "field": target.fieldIdentity.traceDescription
+            ]
+        )
+        refreshRuntimeChrome()
+        updateStatusMenu(
+            app: targetAppForControls(),
+            profile: profileStore.profile(for: target.appBundleIdentifier),
+            appEnabled: !disabledBundleIdentifiers.contains(target.appBundleIdentifier)
+        )
+    }
+
+    @objc
     private func togglePauseSuggestions() {
         let transition = suggestionControlPolicy.toggle(suggestionControlState)
         suggestionsPaused = transition.nextState.isPaused
@@ -4883,6 +5030,14 @@ private struct AcceptedInsertionUndo: Equatable {
     let acceptedTextLength: Int
     let acceptedAt: Date
     let expiresAt: Date
+}
+
+private struct FieldControlTarget: Equatable {
+    let appBundleIdentifier: String
+    let appDisplayName: String
+    let fieldIdentity: FocusedFieldIdentity
+    let requestMode: CompletionRequestMode?
+    let fieldKind: AXFieldKind
 }
 
 private extension FocusedFieldIdentityInput {

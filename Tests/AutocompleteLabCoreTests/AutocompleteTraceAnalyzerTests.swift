@@ -566,6 +566,7 @@ struct AutocompleteTraceAnalyzerTests {
             event(.insertionFailed, suggestionID: "three", timestamp: "2026-04-26T10:01:10Z", metadata: ["duplicateDetected": "true"]),
             event(.caretGeometryFailed, suggestionID: "four", timestamp: "2026-04-26T10:01:20Z", metadata: ["severe": "true", "effectiveRenderMode": "floatingMirror"]),
             event(.appPaused, suggestionID: "five", timestamp: "2026-04-26T10:01:30Z"),
+            event(.fieldPaused, suggestionID: "field", timestamp: "2026-04-26T10:01:35Z"),
             event(.appDisabled, suggestionID: "six", timestamp: "2026-04-26T10:01:40Z")
         ]
 
@@ -583,10 +584,11 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.annoyanceFunnel.ignored == 1)
         #expect(summary.annoyanceFunnel.typedOver == 1)
         #expect(summary.annoyanceFunnel.escapeDismissed == 1)
-        #expect(summary.annoyanceFunnel.paused == 1)
+        #expect(summary.annoyanceFunnel.paused == 2)
         #expect(summary.annoyanceFunnel.disabled == 1)
         #expect(summary.dailySummaries.first?.date == "2026-04-26")
         #expect(summary.dailySummaries.first?.activeWritingMinutes == 2)
+        #expect(summary.dailySummaries.first?.pauses == 2)
         #expect(summary.dailySummaries.first?.severeFailures == 3)
         #expect(summary.topFailureReasons.first?.title == "Duplicate text")
         #expect(summary.topFailureReasons.contains { $0.title == "Search/form leakage" })

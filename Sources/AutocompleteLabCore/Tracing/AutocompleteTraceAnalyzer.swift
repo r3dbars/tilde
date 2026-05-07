@@ -1207,7 +1207,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                     p50LatencyMilliseconds: percentile(0.50, in: latencies),
                     p95LatencyMilliseconds: percentile(0.95, in: latencies),
                     severeFailures: severeFailureCount(in: dayEvents),
-                    pauses: dayEvents.filter { $0.type == .appPaused }.count,
+                    pauses: dayEvents.filter { $0.type == .appPaused || $0.type == .fieldPaused }.count,
                     disables: dayEvents.filter { $0.type == .appDisabled }.count
                 )
             }
@@ -1330,7 +1330,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             typedOver: typedOverCount,
             escapeDismissed: events.filter { $0.type == .suggestionHidden && $0.reason == "escape" }.count,
             acceptedThenDeleted: acceptedThenDeletedCount(in: events),
-            paused: events.filter { $0.type == .appPaused }.count,
+            paused: events.filter { $0.type == .appPaused || $0.type == .fieldPaused }.count,
             disabled: events.filter { $0.type == .appDisabled }.count
         )
     }
@@ -1888,7 +1888,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                     increment("tabConflict")
                 }
 
-            case .appPaused:
+            case .appPaused, .fieldPaused:
                 increment("manualPause")
 
             case .appDisabled:

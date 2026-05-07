@@ -13,6 +13,7 @@ public enum AutocompleteTraceEventType: String, Codable, Equatable, Sendable {
     case acceptedTextEdited
     case acceptanceRetentionCleared
     case appPaused
+    case fieldPaused
     case appDisabled
     case renderModeChanged
     case caretGeometryFailed
