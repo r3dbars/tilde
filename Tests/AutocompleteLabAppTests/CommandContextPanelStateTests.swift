@@ -133,7 +133,7 @@ struct CommandContextPanelStateTests {
             runtimeReport: RuntimeReadinessReport(
                 stage: .downloadNeeded,
                 summary: "download needed",
-                action: .revealModelFolder
+                action: .installModel
             ),
             context: editableContext,
             suggestionText: nil,

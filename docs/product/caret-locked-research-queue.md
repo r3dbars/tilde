@@ -167,8 +167,8 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P1: Runtime And First Run
 
-- [ ] Make first-run model install a real in-app action.
-- [ ] Add "Install local model" to settings when the model folder is missing.
+- [x] Make first-run model install a real in-app action.
+- [x] Add "Install local model" to settings when the model folder is missing.
 - [ ] Add "Retry model load" after install or repair.
 - [x] Show clear missing/repair/ready states in plain language.
 - [x] Update runtime docs to Qwen3.5 4B as the default.

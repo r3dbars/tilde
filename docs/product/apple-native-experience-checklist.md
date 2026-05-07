@@ -391,7 +391,7 @@ Native target: setup feels like a normal Mac utility, not a developer tool.
 - [x] Settings now explains current app support, local diagnostics, and raw/screenshot capture states more plainly.
 - [x] First run should explain Accessibility in one short paragraph.
 - [x] Screen Recording should be explained only when screenshot proof is enabled.
-- [ ] Local model install/repair should be fully in-app.
+- [x] Local model install/repair should be fully in-app. Code-backed: Settings now offers Install Model / Repair Model, downloads the configured app-owned MLX source, validates the snapshot, then replaces the app-owned model folder only after validation.
 - [x] Fresh installs should start paused until the user chooses to test suggestions in TextEdit.
 - [x] First success should happen in TextEdit.
 - [x] Onboarding should never ask users to test in private notes first.

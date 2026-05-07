@@ -455,13 +455,15 @@ final class SettingsWindowController: NSObject {
     private let runtimeLabel = NSTextField(labelWithString: "")
     private let runtimeDetailLabel = NSTextField(labelWithString: "")
     private let runtimeActionLabel = NSTextField(labelWithString: "")
+    private let runtimeInstallStatusLabel = NSTextField(labelWithString: "")
     private let runtimeTargetLabel = NSTextField(labelWithString: "")
     private let modelDirectoryLabel = NSTextField(labelWithString: "")
     private let controlLabel = NSTextField(labelWithString: "")
     private let suggestionPaceDetailLabel = NSTextField(labelWithString: "")
     private let suggestionPacePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let togglePauseButton = NSButton(checkboxWithTitle: "Suggestions", target: nil, action: nil)
-    private let runtimeActionButton = NSButton(title: "Open Model Folder", target: nil, action: nil)
+    private let runtimeActionButton = NSButton(title: "Install Model", target: nil, action: nil)
+    private let revealModelFolderButton = NSButton(title: "Reveal Folder", target: nil, action: nil)
     private let currentAppLabel = NSTextField(labelWithString: "")
     private let currentAppDetailLabel = NSTextField(labelWithString: "")
     private let currentAppModeLabel = NSTextField(labelWithString: "")
@@ -611,6 +613,8 @@ final class SettingsWindowController: NSObject {
         suggestionPace: SuggestionPace,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
+        runtimeInstallStatus: String?,
+        runtimeInstallInProgress: Bool,
         modelDirectoryPath: String,
         currentApp: SettingsCurrentAppState,
         privacy: SettingsPrivacyState,
@@ -623,6 +627,8 @@ final class SettingsWindowController: NSObject {
             suggestionPace: suggestionPace,
             runtimeReport: runtimeReport,
             runtimeTargetSummary: runtimeTargetSummary,
+            runtimeInstallStatus: runtimeInstallStatus,
+            runtimeInstallInProgress: runtimeInstallInProgress,
             modelDirectoryPath: modelDirectoryPath,
             currentApp: currentApp,
             privacy: privacy,
@@ -644,6 +650,8 @@ final class SettingsWindowController: NSObject {
         suggestionPace: SuggestionPace,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
+        runtimeInstallStatus: String?,
+        runtimeInstallInProgress: Bool,
         modelDirectoryPath: String,
         currentApp: SettingsCurrentAppState,
         privacy: SettingsPrivacyState,
@@ -667,8 +675,10 @@ final class SettingsWindowController: NSObject {
         runtimeDetailLabel.stringValue = runtimeReport.detail ?? ""
         runtimeDetailLabel.isHidden = runtimeReport.detail == nil
         runtimeActionLabel.stringValue = "Next step: \(runtimeReport.action.displayName)"
+        runtimeInstallStatusLabel.stringValue = runtimeInstallStatus ?? ""
+        runtimeInstallStatusLabel.isHidden = runtimeInstallStatus == nil
         runtimeActionButton.title = guidance.actionTitle
-        runtimeActionButton.isEnabled = guidance.isActionEnabled
+        runtimeActionButton.isEnabled = guidance.isActionEnabled && !runtimeInstallInProgress
         currentRuntimeAction = runtimeReport.action
         runtimeTargetLabel.stringValue = "Runtime target: \(runtimeTargetSummary)"
         modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
@@ -733,6 +743,8 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(runtimeDetailLabel)
         runtimeActionLabel.font = NSFont.systemFont(ofSize: 12)
         runtimeActionLabel.textColor = .secondaryLabelColor
+        runtimeInstallStatusLabel.font = NSFont.systemFont(ofSize: 12)
+        configureSecondaryLabel(runtimeInstallStatusLabel)
         configureSecondaryLabel(runtimeTargetLabel)
         modelDirectoryLabel.lineBreakMode = .byTruncatingMiddle
         modelDirectoryLabel.maximumNumberOfLines = 1
@@ -786,6 +798,10 @@ final class SettingsWindowController: NSObject {
         runtimeActionButton.target = self
         runtimeActionButton.action = #selector(runRuntimeAction)
         runtimeActionButton.bezelStyle = .rounded
+        revealModelFolderButton.target = self
+        revealModelFolderButton.action = #selector(revealRuntimeFolderControl)
+        revealModelFolderButton.bezelStyle = .rounded
+        revealModelFolderButton.toolTip = "Shows the app-owned model folder in Finder."
         toggleCurrentAppButton.target = self
         toggleCurrentAppButton.action = #selector(toggleCurrentAppControl)
         toggleCurrentAppButton.toolTip = "Adds or removes the current app from your blocked-app list."
@@ -847,7 +863,8 @@ final class SettingsWindowController: NSObject {
                     runtimeLabel,
                     runtimeDetailLabel,
                     runtimeActionLabel,
-                    makeButtonRow([runtimeActionButton]),
+                    runtimeInstallStatusLabel,
+                    makeButtonRow([runtimeActionButton, revealModelFolderButton]),
                     runtimeTargetLabel,
                     modelDirectoryLabel
                 ]
@@ -1002,6 +1019,11 @@ final class SettingsWindowController: NSObject {
     @objc
     private func runRuntimeAction() {
         performRuntimeAction(currentRuntimeAction)
+    }
+
+    @objc
+    private func revealRuntimeFolderControl() {
+        performRuntimeAction(.revealModelFolder)
     }
 
     @objc

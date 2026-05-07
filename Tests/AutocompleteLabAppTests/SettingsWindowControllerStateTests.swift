@@ -311,7 +311,7 @@ struct SettingsWindowControllerStateTests {
         let missingModelReport = RuntimeReadinessReport(
             stage: .downloadNeeded,
             summary: "download needed",
-            action: .revealModelFolder
+            action: .installModel
         )
 
         let permissionNeeded = SettingsFirstRunState(
