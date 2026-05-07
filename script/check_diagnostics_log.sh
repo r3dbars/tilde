@@ -141,7 +141,7 @@ if [[ -n "${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-}" ]]; then
 fi
 
 if [[ "${AUTOCOMPLETE_LAB_REQUIRE_READY:-0}" == "1" ]]; then
-  require_latest_launch_line "runtime readinessAction=none readinessStage=ready state=ready (MLX)"
+  require_latest_launch_line "readinessAction=none readinessStage=ready state=ready (MLX)"
   reject_latest_launch_pattern "runtime-warm-failed"
 fi
 

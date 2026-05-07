@@ -8,10 +8,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let profileStore = CompatibilityProfileStore.mvp
     private let activationPolicy = CompletionActivationPolicy()
     private let triggerPolicy = SuggestionTriggerPolicy(
-        charactersBeforePauseRequest: 1,
-        wordCompletionDelayMilliseconds: 0,
-        wordBoundaryDelayMilliseconds: 0,
-        pauseDelayMilliseconds: 15
+        charactersBeforePauseRequest: 4,
+        wordCompletionDelayMilliseconds: 25,
+        wordBoundaryDelayMilliseconds: 80,
+        pauseDelayMilliseconds: 140
     )
     private let modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
     private var completionLengthConfiguration: CompletionLengthConfiguration {
@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusMenuItem: NSMenuItem?
     private var runtimeMenuItem: NSMenuItem?
     private var toggleAppMenuItem: NSMenuItem?
+    private var resumeSuggestionsMenuItem: NSMenuItem?
     private var pollTimer: Timer?
     private var keyboardEventTap: KeyboardEventTap?
     private var suggestionSession = SuggestionSession()
@@ -71,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionDisplayedText: String?
     private var recentAcceptedWords: [String] = []
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
+    private var suggestionPauseState: SuggestionPauseState?
     private var lastStatusLine: String?
     private var lastSyntheticCaretDiagnosticSignature: String?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
@@ -114,6 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let statusMenu = NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: "")
         let runtimeMenu = NSMenuItem(title: "Model: starting", action: nil, keyEquivalent: "")
         let toggleItem = NSMenuItem(title: "Toggle Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
+        let resumeItem = NSMenuItem(title: "Resume Suggestions", action: #selector(resumeSuggestions), keyEquivalent: "")
 
         menu.addItem(NSMenuItem(title: "Transcripted Autocomplete Lab", action: nil, keyEquivalent: ""))
         menu.addItem(statusMenu)
@@ -123,6 +126,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Show Diagnostics", action: #selector(showDiagnostics), keyEquivalent: "d"))
         menu.addItem(NSMenuItem(title: "Reveal Model Folder", action: #selector(revealModelFolder), keyEquivalent: "m"))
         menu.addItem(toggleItem)
+        menu.addItem(NSMenuItem(title: "Pause 15 Minutes", action: #selector(pauseSuggestionsFor15Minutes), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Pause 1 Hour", action: #selector(pauseSuggestionsForOneHour), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Pause Until Restart", action: #selector(pauseSuggestionsUntilRestart), keyEquivalent: ""))
+        menu.addItem(resumeItem)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Nudge Suggestion Up", action: #selector(nudgeCurrentAppSuggestionUp), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Nudge Suggestion Down", action: #selector(nudgeCurrentAppSuggestionDown), keyEquivalent: ""))
@@ -139,7 +146,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusMenuItem = statusMenu
         runtimeMenuItem = runtimeMenu
         toggleAppMenuItem = toggleItem
+        resumeSuggestionsMenuItem = resumeItem
         refreshRuntimeChrome()
+        refreshPauseMenu()
     }
 
     private func startPolling() {
@@ -251,6 +260,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appEnabled = !disabledBundleIdentifiers.contains(frontmostApp.bundleIdentifier)
         currentProfile = profile
         updateStatusMenu(app: frontmostApp, profile: profile, appEnabled: appEnabled)
+
+        guard activePauseDescription() == nil else {
+            clearFocusedFieldState()
+            hideSuggestion(reason: "global-pause")
+            return
+        }
 
         guard appEnabled else {
             clearFocusedFieldState()
@@ -1722,11 +1737,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let permission = accessibilityClient.isTrusted ? "AX ok" : "AX missing"
         let appName = app?.localizedName ?? "No app"
         let profileName = profile?.displayName ?? "unsupported"
-        let enabled = appEnabled ? "on" : "off"
+        let pauseDescription = activePauseDescription()
+        let enabled = pauseDescription ?? (appEnabled ? "on" : "off")
         let statusLine = "Status: \(permission) | \(appName) | \(profileName) | \(enabled)"
 
         statusMenuItem?.title = statusLine
         toggleAppMenuItem?.title = app.map { appEnabled ? "Disable \($0.localizedName)" : "Enable \($0.localizedName)" } ?? "Toggle Current App"
+        refreshPauseMenu()
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
             runtimeReport: runtimeReadinessReport,
@@ -2052,6 +2069,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
+    private func pauseSuggestionsFor15Minutes() {
+        pauseSuggestions(.until(Date().addingTimeInterval(15 * 60)), reason: "15-minutes")
+    }
+
+    @objc
+    private func pauseSuggestionsForOneHour() {
+        pauseSuggestions(.until(Date().addingTimeInterval(60 * 60)), reason: "1-hour")
+    }
+
+    @objc
+    private func pauseSuggestionsUntilRestart() {
+        pauseSuggestions(.untilRestart, reason: "until-restart")
+    }
+
+    @objc
+    private func resumeSuggestions() {
+        suggestionPauseState = nil
+        DiagnosticsLog.shared.record("pause-control", metadata: ["state": "resumed"])
+        updateStatusForFrontmostApp()
+    }
+
+    private func pauseSuggestions(_ state: SuggestionPauseState, reason: String) {
+        suggestionPauseState = state
+        clearFocusedFieldState()
+        invalidatePendingSuggestionRequest()
+        hideSuggestion(reason: "global-pause")
+        DiagnosticsLog.shared.record(
+            "pause-control",
+            metadata: [
+                "state": "paused",
+                "reason": reason
+            ]
+        )
+        updateStatusForFrontmostApp()
+    }
+
+    private func updateStatusForFrontmostApp() {
+        let app = accessibilityClient.frontmostApplication()
+        let profile = app.flatMap { profileStore.profile(for: $0.bundleIdentifier) }
+        let appEnabled = app.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
+        updateStatusMenu(app: app, profile: profile, appEnabled: appEnabled)
+    }
+
+    private func activePauseDescription(now: Date = Date()) -> String? {
+        guard let suggestionPauseState else {
+            return nil
+        }
+
+        switch suggestionPauseState {
+        case let .until(date):
+            if date <= now {
+                self.suggestionPauseState = nil
+                refreshPauseMenu()
+                return nil
+            }
+
+            return "paused until \(Self.pauseTimeFormatter.string(from: date))"
+
+        case .untilRestart:
+            return "paused until restart"
+        }
+    }
+
+    private func refreshPauseMenu() {
+        resumeSuggestionsMenuItem?.isEnabled = suggestionPauseState != nil
+    }
+
+    @objc
     private func quit() {
         NSApp.terminate(nil)
     }
@@ -2086,6 +2171,20 @@ private struct FocusedFieldIdentity: Equatable, Hashable {
     var traceDescription: String {
         "\(bundleIdentifier)|pid:\(processIdentifier)|element:\(elementIdentifier)"
     }
+}
+
+private enum SuggestionPauseState: Equatable {
+    case until(Date)
+    case untilRestart
+}
+
+private extension AppDelegate {
+    static let pauseTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter
+    }()
 }
 
 private struct FocusedTextSnapshot: Equatable {

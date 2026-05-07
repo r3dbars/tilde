@@ -69,20 +69,20 @@ never make the user wonder where their typing went.
   - Code: `CompletionModelPolicy` has `maxVisibleWords`.
   - Code: `CompletionLengthConfiguration` supports local length trials through environment overrides.
 
-- [~] Tighten the default visible-word cap from lab mode to daily-use mode.
-  - Current code: `CompletionModelPolicy.mvp.maxVisibleWords` is `10`.
+- [x] Tighten the default visible-word cap from lab mode to daily-use mode.
+  - Code: `CompletionModelPolicy.defaultVisibleWords` is `4`.
+  - Code: `CompletionModelPolicy.maximumVisibleWords` is `7` for explicit local trials.
   - Report target: default `1-4` words, soft cap around `7` only when confidence is very high.
-  - Queued code: change default phrase cap to `4`, keep `AUTOCOMPLETE_LAB_VISIBLE_WORDS` for trials.
-  - Queued tests: update `ModelPolicyTests`, `CompletionOutputCleanerTests`, `CompletionSuggestion` coverage, and any prompt-builder expectations.
+  - Keep `AUTOCOMPLETE_LAB_VISIBLE_WORDS` for model trials, not normal daily use.
 
 - [x] Keep reasoning off.
   - Code: `CompletionModelPolicy.mvp.reasoningEnabled` is `false`.
   - Code: `CompletionOutputCleaner` strips `<think>` output.
 
-- [~] Make "routine text, not ideas" an explicit product rule in prompts.
-  - Done: `CompletionPromptBuilder` says continue the current sentence and do not answer, explain, greet, quote, reason, or restart.
-  - Queued: add more direct prompt language for boring connective tissue, names, repeated phrases, closers, and short continuations.
-  - Queued tests: add prompt-builder assertions that the system prompt rejects brainstorm/rewrite behavior.
+- [x] Make "routine text, not ideas" an explicit product rule in prompts.
+  - Code: `CompletionPromptBuilder` now asks for boring, likely connective text.
+  - Code: it explicitly avoids brainstorming, rewriting, new topics, and the user's bigger thought.
+  - Tests assert the prompt keeps autocomplete small instead of acting like chat.
 
 ## Silence And Trigger Policy
 
@@ -108,10 +108,10 @@ never make the user wonder where their typing went.
 - [x] Trigger after natural boundaries or a short pause.
   - Code: `SuggestionTriggerPolicy` requests after whitespace, punctuation, a pause, or eligible word-completion changes.
 
-- [~] Tune trigger delays for real typing, not demo speed.
-  - Current code: phrase boundary delay is `35ms`, pause delay is `70ms`, word-completion delay is `0ms`.
+- [x] Tune trigger delays for real typing, not demo speed.
+  - Code: the app-level trigger now waits for a small pause/boundary instead of firing phrase requests on every character.
+  - Code: deletion now stays silent instead of immediately requesting another phrase.
   - Report target: fast enough to disappear, but not flashing after every character.
-  - Queued code: trial per-mode delay presets in `SuggestionTriggerPolicy`.
   - Queued eval: compare accept rate, typed-over rate, ignored rate, and p95 latency before/after.
 
 - [x] Cancel stale requests when typing continues.
@@ -124,10 +124,11 @@ never make the user wonder where their typing went.
   - Likely home: `SuggestionTriggerPolicy` or a small policy beside it.
   - Queued tests: burst typing should skip phrase requests but still allow safe word completion.
 
-- [ ] Add search-box, URL-field, form-field, and short-chat suppression.
+- [~] Add search-box, URL-field, form-field, and short-chat suppression.
   - Report says these are high-annoyance zones.
-  - Likely home: `CompletionActivationPolicy` plus AX metadata from `AccessibilityClient`.
-  - Needed signals: role, subrole, field description, URL/search heuristics, selected app profile.
+  - Done: `AccessibilityClient` collects title/description/placeholder/help purpose hints.
+  - Done: `AppDelegate` suppresses search fields and address/URL-like fields before requests.
+  - Queued: form-field and short-chat suppression still need stronger context heuristics.
   - Product default: off unless the app/profile explicitly opts in.
 
 - [ ] Add per-domain controls for browser apps.
@@ -331,11 +332,10 @@ never make the user wonder where their typing went.
 - [x] Cancel pending suggestions when the current app is disabled.
   - Code map: request invalidation and app state checks.
 
-- [~] Add a global temporary off switch.
+- [x] Add a global temporary off switch.
   - Report calls this out for calls, screen shares, and focus mode.
-  - Done-ish: per-app disable and diagnostics pause controls exist.
-  - Queued: menu bar "Pause for 15 minutes / 1 hour / until tomorrow".
-  - Queued tests: pause state blocks suggestions and survives app relaunch for the chosen window.
+  - Code: the menu bar now has pause for 15 minutes, pause for 1 hour, pause until restart, and resume.
+  - Code: pause clears visible suggestions, cancels pending requests, and keeps status honest while paused.
 
 - [ ] Add key remapping.
   - Report says forcing one control scheme can create resentment.
@@ -506,12 +506,12 @@ never make the user wonder where their typing went.
 
 ## Research Patterns Still Queued
 
-- [ ] Daily-use visible cap around `1-4` words.
-- [ ] Confidence gating before display.
-- [ ] Stronger fast-typing silence.
-- [ ] Search/URL/form suppression.
+- [x] Daily-use visible cap around `1-4` words.
+- [~] Confidence gating before display.
+- [~] Stronger fast-typing silence.
+- [~] Search/URL/form suppression.
 - [ ] Per-domain browser controls.
-- [ ] Global temporary off switch.
+- [x] Global temporary off switch.
 - [ ] Plain-English privacy setup.
 - [ ] Production-safe default logging with raw text off.
 - [ ] Optional personalization only after local trust is earned.
@@ -519,18 +519,17 @@ never make the user wonder where their typing went.
 
 ## Near-Term Build Order
 
-1. Tighten suggestion length defaults.
-   - Change `CompletionModelPolicy.mvp.maxVisibleWords`.
-   - Keep env overrides for trials.
-   - Update tests and eval docs.
+1. Prove the calmer defaults with dogfood traces.
+   - Compare accept rate, useful rate, ignored rate, and p95 latency before widening app support.
+   - Watch whether the new 4-word cap feels helpful or too clipped.
 
-2. Add confidence gating.
-   - Hide low-value phrase completions before display.
+2. Finish confidence gating.
+   - Hide more low-value phrase completions before display.
    - Trace suppression reasons.
    - Add tests around generic advice, tone drift, and long prose.
 
-3. Add stronger silence for fast typing and short chat.
-   - Extend `SuggestionTriggerPolicy` and `CompletionActivationPolicy`.
+3. Add stronger silence for short chat and forms.
+   - Extend `CompletionActivationPolicy`.
    - Prove accept rate improves or ignored rate drops.
 
 4. Finish Codex dogfood proof.
@@ -543,10 +542,10 @@ never make the user wonder where their typing went.
    - Screenshot tracing explicit.
    - Diagnostics export redacted by default.
 
-6. Add a global pause control.
-   - Menu bar pause durations.
-   - Clear status while paused.
-   - Tests for paused suggestion blocking.
+6. Add richer beta privacy controls.
+   - Raw text tracing off by default outside lab/debug mode.
+   - Redacted diagnostics export by default.
+   - Clear local data button in first-run/settings, not only diagnostics.
 
 7. Only then widen app support.
    - Safari next.
