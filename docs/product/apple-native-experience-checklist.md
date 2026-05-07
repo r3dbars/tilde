@@ -167,7 +167,7 @@ cheap, even if the model output is good.
 - [x] The app should prefer mirror mode over visually lying about inline placement.
 - [ ] Placement should use screenshot-derived correction only after explicit opt-in proof.
 - [ ] A learned visual offset must expire after app version, screen, or field-shape changes.
-- [ ] The UI should expose placement confidence in diagnostics without exposing user text.
+- [x] The UI should expose placement confidence in diagnostics without exposing user text.
 
 ### Native Placement Rules
 
