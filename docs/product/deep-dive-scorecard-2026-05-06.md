@@ -52,7 +52,7 @@ evidence-backed score should stay lower until those rows are closed.
 | Visual caret alignment | 9/10 | TextEdit, core Chrome fixtures, Chrome chat-like, and a disposable Codex prompt now have screenshot-backed proof. Stale line rects are dropped, vertical clipping is enforced, too-narrow inline space suppresses display instead of showing a sliver, and async suggestions refresh current geometry before display, but Obsidian, Notes title/body/checklist, Claude Code, and Claude desktop proof is incomplete. |
 | Self-healing behavior | 9.5/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, applies only explicit trusted visual offsets, manual nudges move the visible ghost immediately, untrusted placement suppression now hides any stale ghost, and trusted visual offsets expire when the target app version, screen, or field shape changes. A unit-tested pixel detector can now identify screenshot offset from synthetic pixels, screenshot capture logs offset metadata, and per-app screenshot tracing can write trusted scoped corrections through the existing trust gate. Fresh real-app screenshot proof still needs to prove this before it can count as complete. |
 | Screenshot tracing | 9.4/10 | Screen Recording is preflighted, capture runs off the hot path, screenshots include editor bounds plus ghost text, traces/logs include capture rect plus rendered panel rect, and capture now has a backlog guard plus timeout. |
-| TextEdit support | 9.6/10 | Fresh screenshot-backed run at 2026-05-07T02:28:19Z shows ghost text aligned after the caret and two verified accepts. The smoke harness now respects the active full-accept shortcut instead of assuming Backtick. |
+| TextEdit support | 9.6/10 | Fresh bounded screenshot-backed run at 2026-05-07T21:01:59Z shows ghost text aligned after the caret, two verified accepts, and current proof fingerprints. The smoke harness now respects the active full-accept shortcut instead of assuming Backtick. |
 | Notes support | 6.5/10 | Profile is safer than before. A disposable Notes note produced partial screenshot/Tab evidence, but title/body/checklist are separate proof targets and none are recorder-grade yet. |
 | Chrome textarea support | 9/10 | Fresh full-frame screenshot and two verified accepts. |
 | Chrome contenteditable support | 9/10 | Fresh full-frame screenshot and two verified accepts. |
@@ -139,9 +139,10 @@ evidence-backed score should stay lower until those rows are closed.
   rows. It passes in report mode. Strict mode now also parses each matched
   trace JSONL slice, requires bounded line evidence, screenshot-backed
   presented events for strict visual proof, verified insertions, and current
-  proof fingerprints. It fails with 18 issues: the open-ended TextEdit,
-  Chrome chat-like, Obsidian, and Claude desktop slices predate the current
-  proof fingerprints, and the remaining target surfaces are still partial or
+  proof fingerprints. It now verifies the latest TextEdit bounded trace slice
+  and fails with 16 remaining issues: Chrome chat-like, Obsidian, and Claude
+  desktop still point at open-ended historical slices that predate the current
+  proof fingerprints, and the other target surfaces are still partial or
   pending.
 - `./script/typing_performance_endurance_soak.sh --minutes 1 --strict-ax --require-event-tap-samples 50 --require-ax-samples 5`:
   passed with exact 1,200-character TextEdit verification, event-tap p95 max
@@ -158,10 +159,10 @@ evidence-backed score should stay lower until those rows are closed.
   proof-loop iterations and still failed, as expected, because the same manual
   app-proof gaps remain. It is now the repeatable repo command for grinding
   against the score targets without inflating grades.
-- Latest live TextEdit proof: `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit --skip-build`
-  passed at 2026-05-07T02:28:19Z with two verified accepts and strict screenshot
-  trace evidence after the real-app smoke harness started pressing whichever
-  full-accept shortcut the app is currently configured to use.
+- Latest live TextEdit proof: `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit`
+  passed at 2026-05-07T21:01:59Z with two verified accepts, strict screenshot
+  trace evidence, bounded diagnostics lines 135065-135095, bounded trace lines
+  34620-34630, and current trace/placement/key/runtime proof fingerprints.
 - Latest older live typing soak: `./script/typing_performance_soak.sh --skip-build --characters 1800 --chunk-size 10 --delay-ms 15 --require-event-tap-samples 100`
   passed after increasing the post-typing focused-text poll pause. The hard key
   path stayed clean over 600 event-tap summary samples: p95 max 35us, p99 max
