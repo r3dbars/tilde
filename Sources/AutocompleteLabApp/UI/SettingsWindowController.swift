@@ -324,10 +324,12 @@ struct SettingsPrivacyState: Equatable {
     }
 
     var contentStatusText: String {
-        let state = rawContentTracingEnabled
-            ? (rawContentTracingExpiresAt == nil ? "on" : "on temporarily")
-            : "off"
-        return "Raw text capture: \(state)"
+        guard rawContentTracingEnabled else {
+            return "Raw text capture: off"
+        }
+
+        let state = rawContentTracingExpiresAt == nil ? "on" : "on temporarily"
+        return "Raw text capture: \(state); can include what you type"
     }
 
     var screenRecordingPermissionText: String? {
@@ -352,7 +354,7 @@ struct SettingsPrivacyState: Equatable {
             diagnosticsStatusText,
             contentStatusText,
             screenRecordingPermissionText ?? "Screen Recording: off; normal suggestions do not need it.",
-            "No raw text is included unless raw text capture is on.",
+            "Leave raw text capture off for normal use.",
             "Logs: \(diagnosticsPath)",
             "Traces: \(tracePath)"
         ].joined(separator: "\n")
