@@ -62,6 +62,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleCurrentApp: { [weak self] in
             self?.toggleCurrentApp()
         },
+        toggleCurrentAppMirrorMode: { [weak self] in
+            self?.toggleCurrentAppMirrorMode()
+        },
         enableAllApps: { [weak self] in
             self?.enableAllDisabledApps()
         },
@@ -366,7 +369,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 bundleIdentifier: nil,
                 supportStatus: .unsupported,
                 isEnabled: false,
-                disabledAppCount: disabledBundleIdentifiers.count
+                disabledAppCount: disabledBundleIdentifiers.count,
+                renderModeOverride: nil
             )
         }
 
@@ -375,7 +379,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             bundleIdentifier: app.bundleIdentifier,
             supportStatus: profileStore.supportStatus(for: app.bundleIdentifier),
             isEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier),
-            disabledAppCount: disabledBundleIdentifiers.count
+            disabledAppCount: disabledBundleIdentifiers.count,
+            renderModeOverride: compatibilityLearningStore.profile(for: app.bundleIdentifier)?.renderModeOverride
         )
     }
 
@@ -3942,7 +3947,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 bundleIdentifier: $0.bundleIdentifier,
                 supportStatus: supportStatus,
                 isEnabled: appEnabled,
-                disabledAppCount: disabledBundleIdentifiers.count
+                disabledAppCount: disabledBundleIdentifiers.count,
+                renderModeOverride: compatibilityLearningStore.profile(for: $0.bundleIdentifier)?.renderModeOverride
             )
         }
         let fieldControlState = settingsFieldControlState
@@ -4746,6 +4752,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateStatusMenu(
             app: app,
             profile: profileStore.profile(for: app.bundleIdentifier),
+            appEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier)
+        )
+    }
+
+    @objc
+    private func toggleCurrentAppMirrorMode() {
+        guard let app = targetAppForControls(),
+              let profile = profileStore.profile(for: app.bundleIdentifier),
+              profile.canPresentSuggestions,
+              !profile.isSensitive,
+              profile.renderMode != .disabled else {
+            return
+        }
+
+        let currentOverride = compatibilityLearningStore
+            .profile(for: app.bundleIdentifier)?
+            .renderModeOverride
+        let nextOverride: SuggestionRenderMode? = currentOverride == .floatingMirror ? nil : .floatingMirror
+        compatibilityLearningStore.setRenderModeOverride(nextOverride, for: app.bundleIdentifier)
+
+        let overrideText = nextOverride?.rawValue ?? "profile"
+        let suggestionID = currentSuggestionID ?? ""
+        setSuggestionDecision("Ready: app mode \(overrideText)")
+        lastTextSnapshot = nil
+        lastRequestedTextBeforeCursor = nil
+        invalidatePendingSuggestionRequest()
+        if suggestionSession.hasVisibleSuggestion {
+            hideSuggestion(reason: "render-mode-changed")
+        }
+
+        RawAutocompleteTraceLog.shared.record(
+            type: .renderModeChanged,
+            suggestionID: suggestionID,
+            appBundleIdentifier: app.bundleIdentifier,
+            fieldIdentity: currentFieldIdentity?.traceDescription ?? "",
+            requestMode: currentSuggestionRequestMode?.rawValue ?? "",
+            reason: "manual",
+            metadata: [
+                "renderModeOverride": overrideText
+            ]
+        )
+        DiagnosticsLog.shared.record(
+            "app-mode-control",
+            metadata: [
+                "app": app.bundleIdentifier,
+                "renderModeOverride": overrideText
+            ]
+        )
+        refreshRuntimeChrome()
+        updateStatusMenu(
+            app: app,
+            profile: profile,
             appEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier)
         )
     }

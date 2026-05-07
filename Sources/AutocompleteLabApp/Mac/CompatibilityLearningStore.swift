@@ -72,6 +72,17 @@ final class CompatibilityLearningStore: @unchecked Sendable {
         }
     }
 
+    func setRenderModeOverride(_ renderMode: SuggestionRenderMode?, for bundleIdentifier: String) {
+        update(
+            bundleIdentifier: bundleIdentifier,
+            reason: renderMode == nil ? "manual-render-mode-reset" : "manual-render-mode-override"
+        ) { profile in
+            profile.renderModeOverride = renderMode
+            profile.observations += 1
+            profile.confidence = min(1, max(profile.confidence, 0.35))
+        }
+    }
+
     func reset(bundleIdentifier: String) {
         queue.sync { [fileURL, encoder, decoder] in
             guard let data = try? Data(contentsOf: fileURL),

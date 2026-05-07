@@ -69,6 +69,38 @@ struct CompatibilityLearningStorePrivacyTests {
 
         #expect(store.profile(for: bundleIdentifier)?.screenshotTracingEnabled == false)
     }
+
+    @Test("Manual render mode override persists and clears")
+    func manualRenderModeOverridePersistsAndClears() {
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CompatibilityLearningStorePrivacyTests-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: temporaryFolder)
+        }
+
+        let store = CompatibilityLearningStore(
+            fileURL: temporaryFolder.appendingPathComponent("compatibility-learning.json")
+        )
+        let bundleIdentifier = "com.example.editor"
+
+        store.setRenderModeOverride(.floatingMirror, for: bundleIdentifier)
+
+        #expect(store.profile(for: bundleIdentifier)?.renderModeOverride == .floatingMirror)
+        #expect(
+            store.engine()
+                .adjustment(for: bundleIdentifier, profileRenderMode: .inlineAdjacent)
+                .effectiveRenderMode == .floatingMirror
+        )
+
+        store.setRenderModeOverride(nil, for: bundleIdentifier)
+
+        #expect(store.profile(for: bundleIdentifier)?.renderModeOverride == nil)
+        #expect(
+            store.engine()
+                .adjustment(for: bundleIdentifier, profileRenderMode: .inlineAdjacent)
+                .effectiveRenderMode == .inlineAdjacent
+        )
+    }
 }
 
 private final class StoreTestClock {

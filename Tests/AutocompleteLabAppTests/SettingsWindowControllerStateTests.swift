@@ -115,6 +115,44 @@ struct SettingsWindowControllerStateTests {
         #expect(codex.acceptanceText == "Acceptance: Tab next word only; full accept is off for safety")
     }
 
+    @Test("Per-app mode copy exposes forced mirror overrides")
+    func perAppModeCopyExposesForcedMirrorOverrides() {
+        let store = CompatibilityProfileStore.mvp
+        let forcedMirror = SettingsCurrentAppState(
+            displayName: "TextEdit",
+            bundleIdentifier: "com.apple.TextEdit",
+            supportStatus: store.supportStatus(for: "com.apple.TextEdit"),
+            isEnabled: true,
+            disabledAppCount: 0,
+            renderModeOverride: .floatingMirror
+        )
+
+        #expect(forcedMirror.modeText == "Mode: mirror forced (profile inline)")
+        #expect(forcedMirror.modeButtonTitle == "Use Profile Mode")
+        #expect(forcedMirror.canOverrideMode)
+
+        let profileMode = SettingsCurrentAppState(
+            displayName: "TextEdit",
+            bundleIdentifier: "com.apple.TextEdit",
+            supportStatus: store.supportStatus(for: "com.apple.TextEdit"),
+            isEnabled: true,
+            disabledAppCount: 0
+        )
+
+        #expect(profileMode.modeButtonTitle == "Force Mirror Mode")
+        #expect(profileMode.canOverrideMode)
+
+        let diagnosticsOnly = SettingsCurrentAppState(
+            displayName: "Mail",
+            bundleIdentifier: "com.apple.mail",
+            supportStatus: store.supportStatus(for: "com.apple.mail"),
+            isEnabled: false,
+            disabledAppCount: 0
+        )
+
+        #expect(!diagnosticsOnly.canOverrideMode)
+    }
+
     @Test("Accessibility permission copy says what the app reads and keeps local")
     func accessibilityPermissionCopySaysWhatTheAppReadsAndKeepsLocal() {
         let needed = SettingsPermissionState(isTrusted: false)

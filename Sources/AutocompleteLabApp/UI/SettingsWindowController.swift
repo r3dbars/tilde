@@ -7,9 +7,37 @@ struct SettingsCurrentAppState: Equatable {
     let supportStatus: CompatibilitySupportStatus
     let isEnabled: Bool
     let disabledAppCount: Int
+    let renderModeOverride: SuggestionRenderMode?
+
+    init(
+        displayName: String,
+        bundleIdentifier: String?,
+        supportStatus: CompatibilitySupportStatus,
+        isEnabled: Bool,
+        disabledAppCount: Int,
+        renderModeOverride: SuggestionRenderMode? = nil
+    ) {
+        self.displayName = displayName
+        self.bundleIdentifier = bundleIdentifier
+        self.supportStatus = supportStatus
+        self.isEnabled = isEnabled
+        self.disabledAppCount = disabledAppCount
+        self.renderModeOverride = renderModeOverride
+    }
 
     var canToggle: Bool {
         bundleIdentifier != nil && supportStatus.canToggleSuggestions
+    }
+
+    var canOverrideMode: Bool {
+        guard bundleIdentifier != nil,
+              case let .supported(profile) = supportStatus,
+              profile.canPresentSuggestions,
+              !profile.isSensitive else {
+            return false
+        }
+
+        return profile.renderMode != .disabled
     }
 
     var statusText: String {
@@ -50,6 +78,10 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         let primary = Self.renderModeName(profile.renderMode)
+        if let renderModeOverride {
+            return "Mode: \(Self.renderModeName(renderModeOverride)) forced (profile \(primary))"
+        }
+
         guard let fallback = profile.fallbackRenderMode,
               fallback != profile.renderMode,
               fallback != .disabled else {
@@ -96,6 +128,10 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         return isEnabled ? "Disable \(displayName)" : "Enable \(displayName)"
+    }
+
+    var modeButtonTitle: String {
+        renderModeOverride == .floatingMirror ? "Use Profile Mode" : "Force Mirror Mode"
     }
 
     var blockedAppsText: String {
@@ -284,6 +320,7 @@ final class SettingsWindowController: NSObject {
         target: nil,
         action: nil
     )
+    private let forceMirrorModeButton = NSButton(title: "Force Mirror Mode", target: nil, action: nil)
     private let enableAllAppsButton = NSButton(title: "Clear Blocked Apps", target: nil, action: nil)
     private let privacyLabel = NSTextField(labelWithString: "")
     private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
@@ -317,6 +354,7 @@ final class SettingsWindowController: NSObject {
     private let silenceCurrentField: () -> Void
     private let performRuntimeAction: (RuntimeReadinessAction) -> Void
     private let toggleCurrentApp: () -> Void
+    private let toggleCurrentAppMirrorMode: () -> Void
     private let enableAllApps: () -> Void
     private let toggleTracingPaused: () -> Void
     private let toggleRawContentTracing: () -> Void
@@ -333,6 +371,7 @@ final class SettingsWindowController: NSObject {
         silenceCurrentField: @escaping () -> Void,
         performRuntimeAction: @escaping (RuntimeReadinessAction) -> Void,
         toggleCurrentApp: @escaping () -> Void,
+        toggleCurrentAppMirrorMode: @escaping () -> Void,
         enableAllApps: @escaping () -> Void,
         toggleTracingPaused: @escaping () -> Void,
         toggleRawContentTracing: @escaping () -> Void,
@@ -347,6 +386,7 @@ final class SettingsWindowController: NSObject {
         self.silenceCurrentField = silenceCurrentField
         self.performRuntimeAction = performRuntimeAction
         self.toggleCurrentApp = toggleCurrentApp
+        self.toggleCurrentAppMirrorMode = toggleCurrentAppMirrorMode
         self.enableAllApps = enableAllApps
         self.toggleTracingPaused = toggleTracingPaused
         self.toggleRawContentTracing = toggleRawContentTracing
@@ -448,6 +488,8 @@ final class SettingsWindowController: NSObject {
         toggleCurrentAppButton.title = currentApp.toggleTitle
         toggleCurrentAppButton.state = currentApp.isEnabled ? .on : .off
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
+        forceMirrorModeButton.title = currentApp.modeButtonTitle
+        forceMirrorModeButton.isEnabled = currentApp.canOverrideMode
         disabledAppsLabel.stringValue = currentApp.blockedAppsText
         enableAllAppsButton.isEnabled = currentApp.disabledAppCount > 0
         privacyLabel.stringValue = privacy.statusText
@@ -536,6 +578,10 @@ final class SettingsWindowController: NSObject {
         toggleCurrentAppButton.target = self
         toggleCurrentAppButton.action = #selector(toggleCurrentAppControl)
         toggleCurrentAppButton.toolTip = "Adds or removes the current app from your blocked-app list."
+        forceMirrorModeButton.target = self
+        forceMirrorModeButton.action = #selector(toggleCurrentAppMirrorModeControl)
+        forceMirrorModeButton.bezelStyle = .rounded
+        forceMirrorModeButton.toolTip = "Forces mirror placement for this app, or resets to its profile mode."
         enableAllAppsButton.target = self
         enableAllAppsButton.action = #selector(enableAllAppsControl)
         enableAllAppsButton.bezelStyle = .rounded
@@ -598,6 +644,7 @@ final class SettingsWindowController: NSObject {
                     currentAppDetailLabel,
                     currentAppModeLabel,
                     currentAppAcceptanceLabel,
+                    makeButtonRow([forceMirrorModeButton]),
                     toggleCurrentAppButton,
                     makeButtonRow([disabledAppsLabel, enableAllAppsButton])
                 ]
@@ -696,6 +743,11 @@ final class SettingsWindowController: NSObject {
     @objc
     private func toggleCurrentAppControl() {
         toggleCurrentApp()
+    }
+
+    @objc
+    private func toggleCurrentAppMirrorModeControl() {
+        toggleCurrentAppMirrorMode()
     }
 
     @objc
