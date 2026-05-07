@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionAggressivenessPolicy = SuggestionAggressivenessPolicy()
     private let screenshotTraceCapturePolicy = ScreenshotTraceCapturePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
+    private let focusPollingCadencePolicy = FocusPollingCadencePolicy()
     private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
     private let focusChangePolicy = SuggestionFocusChangePolicy()
     private let geometryChangePolicy = SuggestionGeometryChangePolicy()
@@ -167,7 +168,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var commandContextStatusMessage = ""
     private var commandContextIsLoading = false
     private var commandContextRequestID: String?
-    private let focusedTextPollInterval: TimeInterval = 0.05
+    private var lastFocusedTextPollStartedAt: Date?
+    private let focusedTextPollTickInterval: TimeInterval = 0.033
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 220
     private let postInsertionPollPauseMilliseconds = 220
@@ -272,12 +274,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startPolling() {
-        let timer = Timer.scheduledTimer(withTimeInterval: focusedTextPollInterval, repeats: true) { [weak self] _ in
+        let timer = Timer.scheduledTimer(withTimeInterval: focusedTextPollTickInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.pollFocusedTextIfIdle()
             }
         }
-        timer.tolerance = focusedTextPollInterval / 2
+        timer.tolerance = focusedTextPollTickInterval / 2
         pollTimer = timer
     }
 
@@ -585,6 +587,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let now = Date()
+        guard shouldRunFocusedTextPoll(now: now) else {
+            return
+        }
+
+        lastFocusedTextPollStartedAt = now
         isFocusedTextPollInFlight = true
         let startedAt = DispatchTime.now().uptimeNanoseconds
         var completesAsync = false
@@ -592,6 +600,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !completesAsync {
             finishFocusedTextPoll(startedAt: startedAt)
         }
+    }
+
+    private func shouldRunFocusedTextPoll(now: Date) -> Bool {
+        let hasSupportedProfile = currentProfile.map { profile in
+            profile.canPresentSuggestions && !profile.isSensitive && !suggestionsPaused
+        } ?? false
+
+        return focusPollingCadencePolicy.shouldPoll(
+            now: now,
+            lastPollAt: lastFocusedTextPollStartedAt,
+            isTrustedForAccessibility: accessibilityClient.isTrusted,
+            hasSupportedProfile: hasSupportedProfile,
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+        )
     }
 
     private func finishFocusedTextPoll(startedAt: UInt64) {

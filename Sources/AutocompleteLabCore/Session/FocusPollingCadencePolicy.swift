@@ -37,4 +37,27 @@ public struct FocusPollingCadencePolicy: Equatable, Sendable {
 
         return idleIntervalSeconds
     }
+
+    public func shouldPoll(
+        now: Date,
+        lastPollAt: Date?,
+        isTrustedForAccessibility: Bool,
+        hasSupportedProfile: Bool,
+        hasVisibleSuggestion: Bool
+    ) -> Bool {
+        guard let lastPollAt else {
+            return true
+        }
+
+        let elapsed = now.timeIntervalSince(lastPollAt)
+        guard elapsed >= 0 else {
+            return true
+        }
+
+        return elapsed >= interval(
+            isTrustedForAccessibility: isTrustedForAccessibility,
+            hasSupportedProfile: hasSupportedProfile,
+            hasVisibleSuggestion: hasVisibleSuggestion
+        )
+    }
 }
