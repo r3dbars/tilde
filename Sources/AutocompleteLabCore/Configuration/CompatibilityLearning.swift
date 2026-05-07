@@ -165,8 +165,9 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
             ]
         }
 
+        let renderModeOverrideApplied = profile.renderModeOverride != nil && !renderModeOverrideIgnored
         return [
-            "learningApplied": String(profile.hasVisualAdjustment || profile.renderModeOverride != nil),
+            "learningApplied": String(profile.hasVisualAdjustment || renderModeOverrideApplied),
             "learningRenderMode": effectiveRenderMode.rawValue,
             "learningRenderModeOverrideIgnored": String(renderModeOverrideIgnored),
             "learningXOffset": String(format: "%.1f", Double(profile.xOffset)),
