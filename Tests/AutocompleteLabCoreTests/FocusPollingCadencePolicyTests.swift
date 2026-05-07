@@ -8,6 +8,7 @@ struct FocusPollingCadencePolicyTests {
     func usesBoundedActivePollingOnlyWhileSuggestionIsVisible() {
         let policy = FocusPollingCadencePolicy()
 
+        #expect(policy.activeSuggestionIntervalSeconds == 0.05)
         #expect(policy.interval(
             isTrustedForAccessibility: true,
             hasSupportedProfile: true,
