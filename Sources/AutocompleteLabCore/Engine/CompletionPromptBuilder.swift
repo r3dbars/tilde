@@ -33,6 +33,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
 
     public func prompt(for request: CompletionRequest) -> CompletionPrompt {
         let context = promptContext(from: request.textBeforeCursor)
+        let behaviorProfile = behaviorProfile(for: request)
 
         if request.mode == .wordCompletion {
             return CompletionPrompt(
@@ -47,19 +48,25 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         }
 
         return CompletionPrompt(
-            system: phraseContinuationSystemPrompt(for: request),
+            system: phraseContinuationSystemPrompt(for: request, behaviorProfile: behaviorProfile),
             user: "Before cursor:\n\(context)\n\nNext words:"
         )
     }
 
-    private func phraseContinuationSystemPrompt(for request: CompletionRequest) -> String {
+    private func phraseContinuationSystemPrompt(
+        for request: CompletionRequest,
+        behaviorProfile: AutocompleteBehaviorProfile
+    ) -> String {
+        let effectiveMaxVisibleWords = min(maxVisibleWords, behaviorProfile.maxVisibleWords)
         let sentenceGuidance = request.textBeforeCursor.endsAtSentenceBoundary
             ? "Start the next sentence naturally."
             : "Continue the current sentence."
         let base = """
         Inline autocomplete.
-        Return only the next \(maxVisibleWords) words or fewer.
+        Return only the next \(effectiveMaxVisibleWords) words or fewer.
         Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, chatty, or likely to answer the prompt instead of continuing it.
+        Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens.
+        \(behaviorProfile.promptGuidance.joined(separator: "\n"))
         Prefer boring connective tissue, names, repeated local terms, closers, and the next few words the user was already likely to type.
         \(sentenceGuidance) Do not answer, explain, greet, quote, reason, or restart.
         Do not brainstorm, rewrite, introduce a new topic, or complete the user's whole thought.
@@ -88,6 +95,12 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         Never suggest pressing Enter/Return, sending/submitting the prompt, or running a command.
         Avoid vague product phrases like "integrate it seamlessly", "enhance the experience", or "leverage the system".
         """
+    }
+
+    private func behaviorProfile(for request: CompletionRequest) -> AutocompleteBehaviorProfile {
+        AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
+            appBundleIdentifier: request.appBundleIdentifier
+        ))
     }
 
     private func promptContext(from textBeforeCursor: String) -> String {

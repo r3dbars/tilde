@@ -146,7 +146,8 @@ struct CompletionPromptBuilderTests {
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
 
         #expect(builder.maxVisibleWords == 7)
-        #expect(prompt.system.contains("next 7 words or fewer"))
+        #expect(prompt.system.contains("next 6 words or fewer"))
+        #expect(prompt.system.contains("Behavior profile: docs_prose"))
     }
 
     @Test("Prompt trims long context from the left")
@@ -229,5 +230,19 @@ struct CompletionPromptBuilderTests {
 
         #expect(prompt.system.contains("Start the next sentence naturally"))
         #expect(!prompt.system.contains("Continue the current sentence"))
+    }
+
+    @Test("Prompt uses AI chat behavior profile from app metadata")
+    func promptUsesAIChatBehaviorProfileFromAppMetadata() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Can you make this easier to",
+            appBundleIdentifier: "com.openai.codex"
+        ))
+
+        #expect(prompt.system.contains("next 1 words or fewer"))
+        #expect(prompt.system.contains("Behavior profile: ai_chat, max 1 visible words / 4 generated tokens"))
+        #expect(prompt.system.contains("Never suggest sending, submitting"))
+        #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
     }
 }
