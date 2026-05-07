@@ -45,6 +45,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.google.Chrome")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .keyEvents)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .axValueReplacement)
+        #expect(store.profile(for: "com.google.Chrome")?.allowsSyntheticCaretPlacement == true)
         #expect(store.profile(for: "com.openai.codex")?.displayName == "Codex")
         #expect(store.profile(for: "com.openai.codex")?.appFamily == .customCanvas)
         #expect(store.profile(for: "com.openai.codex")?.allowsFieldAnchor == false)
@@ -255,6 +256,7 @@ struct CompatibilityProfileTests {
             #expect(promptProfile.supportsOneWordAcceptance == true)
             #expect(promptProfile.supportsFullAcceptance == false)
             #expect(promptProfile.allowsDetachedSuggestions == false)
+            #expect(promptProfile.allowsSyntheticCaretPlacement == false)
         }
     }
 

@@ -86,6 +86,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
     public let suppressesAfterInsertionFailure: Bool
     public let allowsDescendantTextFallback: Bool
     public let allowsDetachedSuggestions: Bool
+    public let allowsSyntheticCaretPlacement: Bool
     public let isSensitive: Bool
     public let notes: String
 
@@ -112,6 +113,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         suppressesAfterInsertionFailure: Bool = true,
         allowsDescendantTextFallback: Bool = false,
         allowsDetachedSuggestions: Bool = true,
+        allowsSyntheticCaretPlacement: Bool = false,
         isSensitive: Bool = false,
         notes: String
     ) {
@@ -137,6 +139,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         self.suppressesAfterInsertionFailure = suppressesAfterInsertionFailure
         self.allowsDescendantTextFallback = allowsDescendantTextFallback
         self.allowsDetachedSuggestions = allowsDetachedSuggestions
+        self.allowsSyntheticCaretPlacement = allowsSyntheticCaretPlacement
         self.isSensitive = isSensitive
         self.notes = notes
     }
@@ -152,7 +155,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         let fallbackInsertion = fallbackInsertionMode?.rawValue ?? "none"
         let anchors = anchorLadder.map(\.rawValue).joined(separator: ">")
 
-        return "support=\(supportLevel.rawValue); family=\(appFamily.rawValue); primary render=\(renderMode.rawValue), insert=\(insertionMode.rawValue); fallback render=\(fallbackRender), insert=\(fallbackInsertion); field=\(fieldIdentityMode.rawValue); anchors=\(anchors)"
+        return "support=\(supportLevel.rawValue); family=\(appFamily.rawValue); primary render=\(renderMode.rawValue), insert=\(insertionMode.rawValue); fallback render=\(fallbackRender), insert=\(fallbackInsertion); field=\(fieldIdentityMode.rawValue); anchors=\(anchors); synthetic=\(allowsSyntheticCaretPlacement)"
     }
 }
 
@@ -275,6 +278,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             fallbackInsertionMode: .axValueReplacement,
             anchorLadder: [.caret, .field],
             knownFailureModes: ["textarea support differs from rich editors", "zero-height caret bounds can occur"],
+            allowsSyntheticCaretPlacement: true,
             notes: "Yellow browser target. Prefer synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback. Prefer key-event insertion across textarea and contenteditable surfaces because rich browser editors can report AX replacement success without keeping cursor verification stable."
         ),
         CompatibilityProfile(

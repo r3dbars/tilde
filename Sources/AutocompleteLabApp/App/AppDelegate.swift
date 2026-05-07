@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionDiagnostics = SuggestionDiagnosticsRecorder()
     private let focusedTextUpdateSourcePolicy = FocusedTextUpdateSourcePolicy()
     private let focusedTextPollingCadencePolicy = FocusPollingCadencePolicy()
+    private let compatibilityPlacementTrustPolicy = CompatibilityPlacementTrustPolicy()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private lazy var compatibilityLearningActions = CompatibilityLearningActions(
@@ -2218,12 +2219,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         learningAdjustment: CompatibilityLearningAdjustment
     ) -> PlacementTrustPolicy {
-        let hasTrustedVisualAdjustment = learningAdjustment.profile?.hasTrustedVisualAdjustment == true
-        let isGreenProfile = profile.supportLevel == .green
-
-        return PlacementTrustPolicy(
-            allowsLowConfidencePlacement: isGreenProfile || hasTrustedVisualAdjustment,
-            allowsSyntheticCaretPlacement: isGreenProfile || hasTrustedVisualAdjustment
+        compatibilityPlacementTrustPolicy.policy(
+            profile: profile,
+            learningAdjustment: learningAdjustment
         )
     }
 
