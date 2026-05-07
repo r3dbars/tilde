@@ -324,6 +324,10 @@ struct SettingsWindowControllerStateTests {
             permissionNeeded.message
                 == "Start here: allow Accessibility so Autocomplete Lab can read cursor text and bounds, then insert only what you accept. Text stays on this Mac."
         )
+        #expect(
+            permissionNeeded.checklistText
+                == "Accessibility needed | Model ready | TextEdit test locked"
+        )
         #expect(permissionNeeded.textEditTestButtonTitle == "Open TextEdit Test")
         #expect(
             permissionNeeded.textEditTestButtonToolTip
@@ -337,6 +341,10 @@ struct SettingsWindowControllerStateTests {
             currentApp: textEdit
         )
         #expect(missingModel.message.contains("Model missing"))
+        #expect(
+            missingModel.checklistText
+                == "Accessibility allowed | Model install needed | TextEdit test locked"
+        )
         #expect(
             missingModel.textEditTestButtonToolTip
                 == "The local model must be ready before the disposable TextEdit test starts."
@@ -362,6 +370,10 @@ struct SettingsWindowControllerStateTests {
         #expect(
             readyTextEdit.message
                 == "Ready: TextEdit is the first test app. Use a disposable document; Tab accepts one word and Esc dismisses."
+        )
+        #expect(
+            readyTextEdit.checklistText
+                == "Accessibility allowed | Model ready | TextEdit test ready"
         )
         #expect(
             readyTextEdit.textEditTestButtonToolTip

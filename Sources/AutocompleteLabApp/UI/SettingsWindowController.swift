@@ -426,6 +426,14 @@ struct SettingsFirstRunState: Equatable {
         return "Ready: start in TextEdit with a disposable document before testing Notes, Obsidian, or prompt apps."
     }
 
+    var checklistText: String {
+        [
+            isTrusted ? "Accessibility allowed" : "Accessibility needed",
+            modelStepText,
+            canOpenTextEditTest ? "TextEdit test ready" : "TextEdit test locked"
+        ].joined(separator: " | ")
+    }
+
     var textEditTestButtonTitle: String {
         "Open TextEdit Test"
     }
@@ -444,6 +452,23 @@ struct SettingsFirstRunState: Equatable {
 
     var canOpenTextEditTest: Bool {
         isTrusted && runtimeReport.stage == .ready
+    }
+
+    private var modelStepText: String {
+        switch runtimeReport.stage {
+        case .downloadNeeded:
+            return "Model install needed"
+        case .repairNeeded:
+            return "Model repair needed"
+        case .runtimeUnavailable:
+            return "Model unavailable"
+        case .warming:
+            return "Model warming"
+        case .ready:
+            return "Model ready"
+        case .failed:
+            return "Model retry needed"
+        }
     }
 }
 
@@ -558,6 +583,7 @@ final class SettingsWindowController: NSObject {
     private let shortcutLabel = NSTextField(labelWithString: "")
     private let acceptAllShortcutPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
+    private let firstRunChecklistLabel = NSTextField(labelWithString: "")
     private let openTextEditTestButton = NSButton(title: "Open TextEdit Test", target: nil, action: nil)
     private let requestPermission: () -> Void
     private let openAccessibilitySettings: () -> Void
@@ -758,6 +784,7 @@ final class SettingsWindowController: NSObject {
             currentApp: currentApp
         )
         firstRunLabel.stringValue = firstRun.message
+        firstRunChecklistLabel.stringValue = "Setup: \(firstRun.checklistText)"
         openTextEditTestButton.title = firstRun.textEditTestButtonTitle
         openTextEditTestButton.toolTip = firstRun.textEditTestButtonToolTip
         openTextEditTestButton.isEnabled = firstRun.canOpenTextEditTest
@@ -791,6 +818,7 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(suggestionPaceDetailLabel)
         firstRunLabel.font = NSFont.systemFont(ofSize: 12)
         configureSecondaryLabel(firstRunLabel)
+        configureSecondaryLabel(firstRunChecklistLabel)
         currentAppLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(currentAppDetailLabel)
         configureSecondaryLabel(currentAppModeLabel)
@@ -915,6 +943,7 @@ final class SettingsWindowController: NSObject {
                     suggestionPaceDetailLabel,
                     suggestionDecisionLabel,
                     firstRunLabel,
+                    firstRunChecklistLabel,
                     makeButtonRow([openTextEditTestButton])
                 ]
             ),
