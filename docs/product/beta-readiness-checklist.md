@@ -10,7 +10,7 @@ Use this before inviting private beta testers.
 - [ ] `dist/AutocompleteLab.zip` exists.
 - [ ] `dist/private-beta/checksums.txt` matches the archive.
 - [ ] The app is signed and the package check passes.
-- [ ] Notarization status is known before sending the build.
+- [x] Notarization status is known before sending the build.
 
 ## Runtime Gate
 
@@ -65,8 +65,11 @@ Invite testers only when every applicable box is checked.
 - Codex has a screenshot, but still needs one strict same-slice proof that shows
   screenshot, one-word Tab accept, verified insertion, and no prompt submit.
 - `dist/AutocompleteLab.zip` and `dist/private-beta/checksums.txt` have been
-  created and verified locally, but `dist/` is ignored; recreate them after the
-  remaining proof and notarization blockers close.
-- `NOTARYTOOL_PROFILE` is not set, so notarization cannot be submitted yet.
+  created and verified locally, but `dist/` is ignored; recreate them if app
+  code changes after the remaining proof blockers close.
+- Current local `dist/AutocompleteLab.zip` was submitted with
+  `NOTARYTOOL_PROFILE=Transcripted`, accepted by Apple, stapled, validated, and
+  Gatekeeper-accepted on 2026-05-07. Submission:
+  `9b9c09f5-585b-4007-b8e1-55a9ac0f6ae2`.
 - All-history trace eval is diagnostic only; beta proof must use fresh marked
   slices from disposable text.
