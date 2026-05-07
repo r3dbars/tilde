@@ -3,14 +3,14 @@
 Source research:
 `/Users/redbars/Library/Caches/com.apple.SwiftUI.Drag-9DB841D4-8068-4044-B0CF-B2F61B9E12BB/deep-research-report (5).md`
 
-Repo state graded: `codex/deep-research-scorecard` after the candidate-ranking
-build pass, based on `origin/main`.
+Repo state graded: `codex/deep-research-scorecard` after the score-margin
+candidate-selection pass, based on `origin/main`.
 
 ## Executive Grade
 
 Baseline deep research score: **78/100**.
 
-Current implementation score after the current build pass: **90/100**.
+Current implementation score after the current build pass: **91/100**.
 
 This is a strong prototype with real engineering depth. It has local MLX
 runtime support, app compatibility profiles, privacy-safe tracing defaults,
@@ -21,8 +21,8 @@ It is not yet magical by the research bar. The biggest remaining misses are:
 
 - Trigger timing now uses researched delays, but still needs fresh replay proof
   and proof that accepted-and-kept tuning improves real usage.
-- Phrase and sentence quality now has conservative candidate ranking, but still
-  needs real model proof, score margins, and learned utility.
+- Phrase and sentence quality now has conservative candidate ranking and score
+  margin suppression, but still needs real model proof and learned utility.
 - Cross-app proof is honest but incomplete for Notes, Obsidian, Codex, Claude
   Code, Claude desktop, and real production editors.
 
@@ -62,14 +62,15 @@ Pass 1 shipped these improvements:
 - Phrase and sentence prompts now request 1-3 candidate suffixes, the runtime
   cleans and dedupes multiline candidates, ranks them by mode, and logs
   `cleanedCandidateCount`.
+- Candidate selection now suppresses low-score or low-margin results and logs
+  top score, score margin, and suppression reason in diagnostics/raw traces.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
 Remaining high-impact gaps:
 
 - Display score is still heuristic, but now uses durable accepted-and-kept
-  probability with half-life decay. It still lacks learned utility and score
-  margins.
+  probability with half-life decay. It still lacks learned utility estimates.
 - Candidate generation now has a conservative 1-3 candidate parse/rank path,
   but still needs fresh model traces proving it improves the shown top result.
 - Sentence mode exists now, but still needs real-app proof that it does not
@@ -122,8 +123,8 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Research item | Score | Current evidence | What 100/100 requires |
 | --- | ---: | --- | --- |
 | Finishing a word | 89 | `CompletionRequestMode.wordCompletion` exists, `WordCompletionCandidateRanker` uses recent words first, trigger policy requires 3+ alphabetic chars with 90-140ms delay, and Tab accepts one word. | Preserve casing/punctuation perfectly and prove acceptance-kept tuning by app/field. |
-| Finishing a phrase | 84 | Phrase continuation prompt requests 1-3 tiny suffixes, cleaner removes low-signal/advice-like output, and `CompletionCandidateRanker` prefers useful short phrase candidates. | Replace heuristic phrase scoring with learned utility, style fit, context fit, user affinity, risk, repetition, instability, and score margins. |
-| Continuing a sentence | 78 | First-class `sentenceContinuation` mode exists with activation, prompt guidance, stricter display threshold, streaming behavior, replay delay gate, and sentence candidate ranking. | Fresh real-app proof that it does not drift into planning or take over the writer's next thought. |
+| Finishing a phrase | 86 | Phrase continuation prompt requests 1-3 tiny suffixes, cleaner removes low-signal/advice-like output, and `CompletionCandidateRanker` prefers useful short phrase candidates with score-margin suppression. | Replace heuristic phrase scoring with learned utility, style fit, context fit, user affinity, risk, repetition, and instability. |
+| Continuing a sentence | 80 | First-class `sentenceContinuation` mode exists with activation, prompt guidance, stricter display threshold, streaming behavior, replay delay gate, sentence candidate ranking, and low-score suppression. | Fresh real-app proof that it does not drift into planning or take over the writer's next thought. |
 | Rewriting | 86 | Ambient rewrite is effectively avoided, which matches the research. | Add explicit selected-text rewrite only if needed; never ambient. |
 | Suggesting next action | 90 | Ambient next actions are not part of the app, and prompt-app guards block submit/run/Enter-like suggestions. | Keep next actions behind explicit invocation only, with tests preventing inline leakage. |
 | Specificity with restraint | 80 | Prompt asks for boring connective tissue, cleaner suppresses filler, and candidate ranking now prefers restrained phrase/sentence lengths while penalizing questions. | Candidate scoring must reward one useful semantic commitment and penalize unsupported new facts/names. |
@@ -138,9 +139,9 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | After Esc dismissal | 84 | Esc dismisses, traces the keyboard action, and starts a 15s app/field/mode/prefix-family cooldown. | Add repeated-dismiss escalation proof and diagnostics. |
 | App switch / caret move / selection change | 82 | Focus/app mismatch hides and selection is blocked. Mouse/caret moves are polling-based. | Immediate hide/cancel on focus, caret, mouse, and selection events where possible. |
 | Punctuation handling | 72 | Natural boundaries exist for whitespace and punctuation, and sentence punctuation has a stricter lane. | Separate comma/colon/close-paren/newline/bullet thresholds. |
-| Display score | 84 | Live display score includes utility, style fit, context fit, user affinity, risk, repetition, instability, accepted-and-kept probability, and trace metadata. Candidate count is logged at runtime. | Replace heuristic components with learned estimates and multi-candidate score margins. |
+| Display score | 86 | Live display score includes utility, style fit, context fit, user affinity, risk, repetition, instability, accepted-and-kept probability, and trace metadata. Candidate count, top score, score margin, and suppression reason are logged at runtime. | Replace heuristic components with learned estimates and use fresh traces to tune thresholds. |
 | Accept-and-keep probability threshold | 80 | Durable learning now gates by app, field kind, mode, and behavior profile after enough evidence, with 14-day half-life decay. | Prove thresholds with fresh real-app traces and expose tuning/clear controls. |
-| Candidate generation | 65 | Phrase/sentence prompts ask for 1-3 candidates; `CompletionOutputCleaner.cleanCandidates` strips list prefixes, filters unsafe/sentinel lines, dedupes, and `CompletionCandidateRanker` picks the top candidate for display. | Prove real model outputs produce useful candidate sets, log score margins, and show only stable top results. |
+| Candidate generation | 72 | Phrase/sentence prompts ask for 1-3 candidates; `CompletionOutputCleaner.cleanCandidates` strips list prefixes, filters unsafe/sentinel lines, dedupes, and `CompletionCandidateRanker` picks only high-score/high-margin top candidates. | Prove real model outputs produce useful candidate sets and tune score/margin thresholds from traces. |
 | Context budget | 76 | Prompt uses bounded recent context from current sentence/paragraph. | Use 48-96 tokens plus prior sentence/paragraph only when useful. |
 | Metadata in prompt | 72 | App bundle, field kind, request mode, and behavior profile now affect prompt/generation/scoring/tracing. | Include document title, partial word shape, compact style sketch, and up to 3 accepted-kept suffixes. |
 | Hard `<NO_SUGGESTION>` path | 86 | Word/phrase/sentence prompts include `<NO_SUGGESTION>` guidance, and cleaner suppresses direct sentinels plus prompt-echo sentinel lines. | Prove sentinel behavior in fresh real model traces. |
@@ -342,9 +343,10 @@ these are true.
    AI chat, then wire profile metadata into live generation/scoring/tracing.
 9. Done: add conservative multiline candidate cleaning/ranking and runtime
    candidate-count trace metadata.
-10. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
+10. Done: add candidate top-score and score-margin suppression/trace metadata.
+11. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
    checklist acceptance/proof slices are still missing.
-11. Partial: build the replay-first proof command. The command exists; a fresh
+12. Partial: build the replay-first proof command. The command exists; a fresh
    post-pass trace proof still has to pass.
 
 ## Goal Status
@@ -354,7 +356,7 @@ every scored item reaches 100/100.
 
 Baseline status: **78/100**.
 
-Current implementation status: **90/100**. Not complete.
+Current implementation status: **91/100**. Not complete.
 
 Replay proof status:
 

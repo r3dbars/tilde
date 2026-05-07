@@ -165,10 +165,12 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             mode: request.mode,
             limit: 3
         )
-        let cleanedSuggestion = candidateRanker.best(
+        let candidateSelection = candidateRanker.selection(
             cleanedCandidates,
             mode: request.mode
         )
+        let cleanedSuggestion = candidateSelection.suggestion
+        let candidateTopScore = candidateSelection.rankedCandidates.first?.score
         let cleanedAt = Date()
         let totalMilliseconds = Self.milliseconds(from: startedAt, to: cleanedAt)
         DiagnosticsLog.shared.record(
@@ -188,6 +190,9 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                 "maxVisibleWords": String(effectiveMaxVisibleWords(for: request)),
                 "rawChars": String(rawOutput.count),
                 "cleanedCandidateCount": String(cleanedCandidates.count),
+                "candidateTopScore": Self.formattedCandidateScore(candidateTopScore),
+                "candidateScoreMargin": Self.formattedCandidateScore(candidateSelection.scoreMargin),
+                "candidateSuppressionReason": candidateSelection.suppressionReason?.rawValue ?? "none",
                 "cleanedChars": String(cleanedSuggestion?.visibleText.count ?? 0)
             ]
         )
@@ -197,6 +202,9 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             rawOutput: rawOutput,
             cleanedSuggestion: cleanedSuggestion,
             cleanedCandidateCount: cleanedCandidates.count,
+            candidateTopScore: candidateTopScore,
+            candidateScoreMargin: candidateSelection.scoreMargin,
+            candidateSuppressionReason: candidateSelection.suppressionReason?.rawValue,
             suggestionID: request.suggestionID,
             latencyMilliseconds: totalMilliseconds,
             firstTokenLatencyMilliseconds: firstChunkMilliseconds
@@ -225,6 +233,14 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     private static func milliseconds(from start: Date, to end: Date) -> Int {
         max(0, Int(end.timeIntervalSince(start) * 1000))
+    }
+
+    private static func formattedCandidateScore(_ score: Double?) -> String {
+        guard let score else {
+            return "none"
+        }
+
+        return String(format: "%.3f", score)
     }
 
     private func cleaner(for request: CompletionRequest) -> CompletionOutputCleaner {
