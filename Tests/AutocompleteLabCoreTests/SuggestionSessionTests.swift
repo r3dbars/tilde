@@ -12,6 +12,37 @@ struct SuggestionSessionTests {
         #expect(suggestion.text == " we should ship")
     }
 
+    @Test("Visible text is capped under forty two characters")
+    func visibleTextIsCappedUnderFortyTwoCharacters() {
+        let suggestion = CompletionSuggestion(
+            text: " this is a very useful continuation that should not run long",
+            maxVisibleWords: 12
+        )
+
+        #expect(suggestion.visibleText.count <= CompletionSuggestion.defaultMaxVisibleCharacters)
+        #expect(suggestion.visibleText == " this is a very useful continuation that")
+    }
+
+    @Test("Visible text stays single line")
+    func visibleTextStaysSingleLine() {
+        let suggestion = CompletionSuggestion(
+            text: " keep this line\nbut never reveal this line",
+            maxVisibleWords: 8
+        )
+
+        #expect(suggestion.visibleText == " keep this line")
+    }
+
+    @Test("Long single word is hard capped")
+    func longSingleWordIsHardCapped() {
+        let suggestion = CompletionSuggestion(
+            text: " supercalifragilisticexpialidociousplusmore",
+            maxVisibleWords: 1
+        )
+
+        #expect(suggestion.visibleText.count == CompletionSuggestion.defaultMaxVisibleCharacters)
+    }
+
     @Test("Repeated word acceptance cannot reveal hidden overflow text")
     func repeatedWordAcceptanceCannotRevealOverflowText() {
         var session = SuggestionSession(
