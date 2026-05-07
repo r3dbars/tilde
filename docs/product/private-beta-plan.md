@@ -32,6 +32,10 @@ Also read:
 If the build needs a user-started model server, Python setup, Ollama,
 llama.cpp, or mock fallback, do not invite testers.
 
+The generated private-beta packet must also keep tester model setup inside the
+app. If the model is missing or invalid, stop the session and issue a fixed
+packet instead of giving testers shell commands.
+
 ## Test Shape
 
 - 4 users.

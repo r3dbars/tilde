@@ -25,6 +25,8 @@ create   Create a local private-beta packet beside dist/AutocompleteLab.zip.
          Print the no-raw-text feedback template used in the packet.
 --print-session-report-template
          Print the one-row session report template used in the packet.
+--print-model-asset-template [expected-model-path]
+         Print the tester-safe model asset template used in the packet.
 
 This script only writes local files. It never uploads or sends beta data.
 By default it requires the archive to contain a Developer ID signed app. Set
@@ -79,6 +81,33 @@ recipients, subject lines, or trace excerpts into the report.
 - Copy only redacted repeated-miss titles or failure reason labels from Diagnostics or the trace eval report.
 - If the latency report has no samples, type one short disposable sentence, wait for a phrase suggestion, and rerun it.
 - Fix the top repeated trust miss before inviting more testers.
+EOF
+}
+
+print_model_asset_template() {
+  local expected_model_path="${1:-<model folder shown in Autocomplete Lab Settings>}"
+
+  cat <<EOF
+# Model Asset Check
+
+The private beta is not ready if the app falls back to mock output.
+
+Expected model:
+
+\`\`\`text
+$expected_model_path
+\`\`\`
+
+Verify it in the app:
+
+1. Open Autocomplete Lab Settings.
+2. Check \`Local model\`.
+3. Confirm Settings says the model is ready.
+
+If the model is missing, invalid, or needs repair, stop the beta session.
+Do not ask testers to run Python, shell scripts, Ollama, llama.cpp, or any
+separate model server. Give them a new app/model packet after the operator fixes
+the asset.
 EOF
 }
 
@@ -170,33 +199,7 @@ EOF
   local expected_model_path
   expected_model_path="$(./script/check_model_asset.py --print-path)"
 
-  cat >"$MODEL_ASSET_PATH" <<EOF
-# Model Asset Check
-
-The private beta is not ready if the app falls back to mock output.
-
-Expected model:
-
-\`\`\`text
-$expected_model_path
-\`\`\`
-
-Verify it:
-
-\`\`\`bash
-./script/check_model_asset.py
-\`\`\`
-
-Fix a missing or invalid model:
-
-Open Autocomplete Lab Settings and use the Local model action. Developer fallback:
-
-\`\`\`bash
-python3 -m pip install --user huggingface_hub
-./script/download_mlx_model.py --model qwen35-4b
-./script/check_model_asset.py
-\`\`\`
-EOF
+  print_model_asset_template "$expected_model_path" >"$MODEL_ASSET_PATH"
 
   print_feedback_template >"$FEEDBACK_PATH"
   print_session_report_template >"$SESSION_REPORT_PATH"
@@ -251,6 +254,9 @@ case "$MODE" in
     ;;
   --print-session-report-template)
     print_session_report_template
+    ;;
+  --print-model-asset-template)
+    print_model_asset_template "${2:-}"
     ;;
   *)
     usage >&2
