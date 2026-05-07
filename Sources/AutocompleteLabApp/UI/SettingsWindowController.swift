@@ -121,6 +121,32 @@ struct SettingsCurrentAppState: Equatable {
         }
     }
 
+    var pathText: String {
+        guard bundleIdentifier != nil else {
+            return "Path: choose a writing app"
+        }
+
+        guard case let .supported(profile) = supportStatus,
+              profile.canPresentSuggestions,
+              !profile.isSensitive else {
+            return "Path: display off | insert off"
+        }
+
+        let displayPath = [Self.renderModeName(profile.renderMode), profile.fallbackRenderMode.map(Self.renderModeName)]
+            .compactMap { $0 }
+            .filter { $0 != "disabled" }
+            .uniqued()
+            .joined(separator: " -> ")
+        let insertPath = [Self.insertionModeName(profile.insertionMode), profile.fallbackInsertionMode.map(Self.insertionModeName)]
+            .compactMap { $0 }
+            .filter { $0 != "off" }
+            .uniqued()
+            .joined(separator: " -> ")
+        let fieldTracking = Self.fieldIdentityName(profile.fieldIdentityMode)
+
+        return "Path: display \(displayPath.isEmpty ? "off" : displayPath) | insert \(insertPath.isEmpty ? "off" : insertPath) | track \(fieldTracking)"
+    }
+
     var safetyText: String {
         guard bundleIdentifier != nil else {
             return "Safety: choose a writing app first"
@@ -224,6 +250,39 @@ struct SettingsCurrentAppState: Equatable {
         case .disabled:
             return "disabled"
         }
+    }
+
+    private static func insertionModeName(_ mode: InsertionMode) -> String {
+        switch mode {
+        case .axSelectedText:
+            return "selected text"
+        case .axValueReplacement:
+            return "value repair"
+        case .axThenKeyEvents:
+            return "AX then keys"
+        case .keyEvents:
+            return "keys"
+        case .clipboardFallbackOptIn:
+            return "clipboard opt-in"
+        case .disabled:
+            return "off"
+        }
+    }
+
+    private static func fieldIdentityName(_ mode: FocusedFieldIdentityMode) -> String {
+        switch mode {
+        case .accessibilityElement:
+            return "focused field"
+        case .stableBounds:
+            return "stable bounds"
+        }
+    }
+}
+
+private extension Array where Element == String {
+    func uniqued() -> [String] {
+        var seen: Set<String> = []
+        return filter { seen.insert($0).inserted }
     }
 }
 
@@ -403,6 +462,7 @@ final class SettingsWindowController: NSObject {
     private let currentAppDetailLabel = NSTextField(labelWithString: "")
     private let currentAppModeLabel = NSTextField(labelWithString: "")
     private let currentAppAcceptanceLabel = NSTextField(labelWithString: "")
+    private let currentAppPathLabel = NSTextField(labelWithString: "")
     private let currentAppSafetyLabel = NSTextField(labelWithString: "")
     private let currentAppProofLabel = NSTextField(labelWithString: "")
     private let disabledAppsLabel = NSTextField(labelWithString: "")
@@ -612,6 +672,7 @@ final class SettingsWindowController: NSObject {
         currentAppDetailLabel.stringValue = currentApp.detailText
         currentAppModeLabel.stringValue = currentApp.modeText
         currentAppAcceptanceLabel.stringValue = currentApp.acceptanceText
+        currentAppPathLabel.stringValue = currentApp.pathText
         currentAppSafetyLabel.stringValue = currentApp.safetyText
         currentAppProofLabel.stringValue = currentApp.proofGuideText
         currentProofCommand = currentApp.proofCommandText
@@ -680,6 +741,7 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(currentAppDetailLabel)
         configureSecondaryLabel(currentAppModeLabel)
         configureSecondaryLabel(currentAppAcceptanceLabel)
+        configureSecondaryLabel(currentAppPathLabel)
         configureSecondaryLabel(currentAppSafetyLabel)
         configureSecondaryLabel(currentAppProofLabel)
         configureSecondaryLabel(disabledAppsLabel)
@@ -804,6 +866,7 @@ final class SettingsWindowController: NSObject {
                     currentAppDetailLabel,
                     currentAppModeLabel,
                     currentAppAcceptanceLabel,
+                    currentAppPathLabel,
                     currentAppSafetyLabel,
                     currentAppProofLabel,
                     toggleMirrorModeButton,
