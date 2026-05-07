@@ -26,11 +26,11 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Add unit tests for exact kept, punctuation tweak, partial edit, immediate delete, and final checkpoint behavior.
 - [ ] Add a RAM-only expiry audit that proves accepted raw text is gone after 30s idle, blur, or 10 minutes max.
 - [ ] Add blur/send finalization for apps where send can be detected separately from generic blur.
-- [ ] Add local-window matching around expected insertion offset instead of full-field matching.
-- [ ] Add HMAC token and 3-gram fingerprints for redacted durable survival analysis.
-- [ ] Add a redacted survival export that never includes accepted raw text.
+- [x] Add local-window matching around expected insertion offset instead of full-field matching.
+- [x] Add HMAC token and 3-gram fingerprints for redacted durable survival analysis.
+- [x] Add a redacted survival export that never includes accepted raw text.
 - [ ] Add survival-rate slices by app, field kind, render mode, insertion mode, request mode, model, and experiment arm.
-- [ ] Add "accepted then deleted within 2s" as a hard trust-break signal.
+- [x] Add "accepted then deleted within 2s" as a hard trust-break signal.
 - [ ] Add a debug-only survival inspector that can be enabled for one local session.
 
 ## P0 - Annoyance And Backoff
@@ -63,15 +63,15 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Make raw context, prompts, raw outputs, displayed text, accepted text, and screenshots opt-in debug fields.
 - [x] Add a scary local-only debug toggle with visible state.
 - [x] Add `schemaVersion` and `privacyVersion` to every durable event.
-- [ ] Rotate `sessionID` daily for default tracing.
-- [ ] Add a Keychain-backed per-install HMAC secret.
-- [ ] Persist counts, lengths, buckets, fingerprints, and field metadata by default.
+- [x] Rotate `sessionID` daily for default tracing.
+- [x] Add a Keychain-backed per-install HMAC secret.
+- [x] Persist counts, lengths, buckets, fingerprints, and field metadata by default.
 - [x] Store no document names, URLs, recipients, subject lines, screenshots, or raw text by default.
 - [ ] Add redaction tests for JSONL and HTML export.
 - [x] Add a one-click redacted local report export.
 - [x] Keep screenshot traces per-app opt-in and clearly marked.
-- [ ] Add retention controls for trace logs and screenshots.
-- [ ] Add a "delete all local traces" proof test.
+- [x] Add retention controls for trace logs and screenshots.
+- [x] Add a "delete all local traces" proof test.
 
 ## P0 - Field Targeting
 

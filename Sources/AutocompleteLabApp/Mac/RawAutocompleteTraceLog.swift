@@ -8,12 +8,14 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     private let logURL: URL
     private let rawLogURL: URL
     private let screenshotsURL: URL
-    private let sessionID = UUID().uuidString
+    private let secretStore = TracePrivacySecretStore()
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let pauseDefaultsKey = "AutocompleteLabTracePaused"
     private let screenshotDefaultsKey = "AutocompleteLabScreenshotTraceEnabled"
     private let rawTraceDefaultsKey = "AutocompleteLabRawDebugTraceEnabled"
+    private let sessionIDDefaultsKey = "AutocompleteLabTraceSessionID"
+    private let sessionDayDefaultsKey = "AutocompleteLabTraceSessionDay"
     private var experimentArmName = ""
     private var runtimeMetadata: [String: String] = [:]
 
@@ -30,7 +32,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     }
 
     var currentSessionID: String {
-        sessionID
+        defaultTraceSessionID()
     }
 
     var experimentArm: String {
@@ -86,6 +88,17 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             try? FileManager.default.removeItem(at: logURL)
             try? FileManager.default.removeItem(at: rawLogURL)
             try? FileManager.default.removeItem(at: screenshotsURL)
+        }
+    }
+
+    func applyRetentionControls(
+        traceMaxAgeDays: Int = 14,
+        screenshotMaxAgeDays: Int = 3
+    ) {
+        queue.async { [logURL, rawLogURL, screenshotsURL, decoder, encoder] in
+            Self.pruneTrace(at: logURL, maxAgeDays: traceMaxAgeDays, decoder: decoder, encoder: encoder)
+            Self.pruneTrace(at: rawLogURL, maxAgeDays: max(1, min(traceMaxAgeDays, 3)), decoder: decoder, encoder: encoder)
+            Self.pruneScreenshots(at: screenshotsURL, maxAgeDays: screenshotMaxAgeDays)
         }
     }
 
@@ -174,6 +187,16 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             return
         }
 
+        var metadata = [
+            "acceptanceID": acceptanceID,
+            "acceptMode": acceptMode,
+            "fieldKind": fieldKind.rawValue,
+            "fieldKindReason": fieldKindReason,
+            "acceptedChars": String(acceptedText.count),
+            "acceptedWords": String(acceptedText.split(whereSeparator: \.isWhitespace).count)
+        ]
+        metadata.merge(survivalFingerprintMetadata(for: acceptedText)) { current, _ in current }
+
         record(
             type: .suggestionAccepted,
             suggestionID: suggestionID,
@@ -183,15 +206,12 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             acceptedText: acceptedText,
             remainingVisibleText: remainingVisibleText ?? "",
             outcome: action,
-            metadata: [
-                "acceptanceID": acceptanceID,
-                "acceptMode": acceptMode,
-                "fieldKind": fieldKind.rawValue,
-                "fieldKindReason": fieldKindReason,
-                "acceptedChars": String(acceptedText.count),
-                "acceptedWords": String(acceptedText.split(whereSeparator: \.isWhitespace).count)
-            ]
+            metadata: metadata
         )
+    }
+
+    func survivalFingerprintMetadata(for acceptedText: String) -> [String: String] {
+        TracePrivacyFingerprint.metadata(for: acceptedText, secret: secretStore.secret())
     }
 
     func record(
@@ -219,6 +239,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         guard isEnabled else {
             return
         }
+        applyRetentionControls()
 
         let traceConfiguration = queue.sync {
             let resolvedExperimentArm = experimentArmName.isEmpty
@@ -236,7 +257,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         let event = AutocompleteTraceEvent(
             experimentArm: traceConfiguration.experimentArm,
             timestamp: ISO8601DateFormatter().string(from: Date()),
-            sessionID: sessionID,
+            sessionID: defaultTraceSessionID(),
             suggestionID: suggestionID,
             type: type,
             appBundleIdentifier: appBundleIdentifier,
@@ -302,6 +323,86 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         try handle.close()
     }
 
+    private func defaultTraceSessionID(now: Date = Date()) -> String {
+        let rotation = TraceSessionRotator.session(
+            existingID: UserDefaults.standard.string(forKey: sessionIDDefaultsKey),
+            existingDay: UserDefaults.standard.string(forKey: sessionDayDefaultsKey),
+            now: now,
+            generateID: { UUID().uuidString }
+        )
+        if rotation.rotated {
+            UserDefaults.standard.set(rotation.sessionID, forKey: sessionIDDefaultsKey)
+            UserDefaults.standard.set(rotation.day, forKey: sessionDayDefaultsKey)
+        }
+
+        return rotation.sessionID
+    }
+
+    private static func pruneTrace(
+        at url: URL,
+        maxAgeDays: Int,
+        decoder: JSONDecoder,
+        encoder: JSONEncoder
+    ) {
+        guard maxAgeDays > 0,
+              let contents = try? String(contentsOf: url, encoding: .utf8) else {
+            return
+        }
+
+        let cutoff = Date().addingTimeInterval(-Double(maxAgeDays) * 24 * 60 * 60)
+        let formatter = ISO8601DateFormatter()
+        let keptEvents = contents
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .compactMap { line in
+                try? decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
+            }
+            .filter { event in
+                guard let date = formatter.date(from: event.timestamp) else {
+                    return true
+                }
+
+                return date >= cutoff
+            }
+
+        let lines = keptEvents.compactMap { event -> String? in
+            guard let data = try? encoder.encode(event) else {
+                return nil
+            }
+
+            return String(data: data, encoding: .utf8)
+        }
+        guard let data = lines
+            .joined(separator: "\n")
+            .appending(keptEvents.isEmpty ? "" : "\n")
+            .data(using: .utf8) else {
+            return
+        }
+
+        try? data.write(to: url, options: .atomic)
+    }
+
+    private static func pruneScreenshots(at url: URL, maxAgeDays: Int) {
+        guard maxAgeDays > 0,
+              let files = try? FileManager.default.contentsOfDirectory(
+                  at: url,
+                  includingPropertiesForKeys: [.contentModificationDateKey],
+                  options: [.skipsHiddenFiles]
+              ) else {
+            return
+        }
+
+        let cutoff = Date().addingTimeInterval(-Double(maxAgeDays) * 24 * 60 * 60)
+        for file in files {
+            guard let values = try? file.resourceValues(forKeys: [.contentModificationDateKey]),
+                  let modified = values.contentModificationDate,
+                  modified < cutoff else {
+                continue
+            }
+
+            try? FileManager.default.removeItem(at: file)
+        }
+    }
+
     func recentEvents(limit: Int) -> [AutocompleteTraceEvent] {
         queue.sync { [logURL, decoder] in
             guard limit > 0,
@@ -321,6 +422,35 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
 
     func summary(limit: Int = 2_000) -> AutocompleteTraceSummary {
         AutocompleteTraceAnalyzer().summary(for: recentEvents(limit: limit))
+    }
+
+    func exportRedactedSurvivalReport(limit: Int = 2_000) -> URL? {
+        queue.sync { [folderURL, decoder, encoder] in
+            let logURL = folderURL.appendingPathComponent("traces.jsonl")
+            guard let contents = try? String(contentsOf: logURL, encoding: .utf8) else {
+                return nil
+            }
+
+            let events = contents
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .suffix(limit)
+                .compactMap { line in
+                    try? decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
+                }
+                .map { $0.redactedForDefaultTrace() }
+                .filter { $0.type == .suggestionAccepted || $0.type == .acceptedTextEdited }
+
+            let reportURL = folderURL.appendingPathComponent("survival-report.json")
+
+            do {
+                try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+                let data = try encoder.encode(events)
+                try data.write(to: reportURL, options: .atomic)
+                return reportURL
+            } catch {
+                return nil
+            }
+        }
     }
 
     func exportHTMLReport(limit: Int = 2_000) -> URL? {

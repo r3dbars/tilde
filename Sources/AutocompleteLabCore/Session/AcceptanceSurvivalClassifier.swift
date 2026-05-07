@@ -124,6 +124,45 @@ public struct AcceptanceSurvivalClassifier: Equatable, Sendable {
         )
     }
 
+    public func classifyAroundExpectedInsertion(
+        acceptedText: String,
+        currentFullText: String,
+        expectedInsertionUTF16Offset: Int,
+        checkpoint: AcceptanceSurvivalCheckpoint,
+        firstEditDelayMilliseconds: Int? = nil,
+        deletedWithinTwoSeconds: Bool = false,
+        radius: Int = 160
+    ) -> AcceptanceSurvivalMeasurement {
+        classify(
+            acceptedText: acceptedText,
+            currentTextWindow: Self.localTextWindow(
+                in: currentFullText,
+                expectedInsertionUTF16Offset: expectedInsertionUTF16Offset,
+                acceptedTextUTF16Length: acceptedText.utf16.count,
+                radius: radius
+            ),
+            checkpoint: checkpoint,
+            firstEditDelayMilliseconds: firstEditDelayMilliseconds,
+            deletedWithinTwoSeconds: deletedWithinTwoSeconds
+        )
+    }
+
+    public static func localTextWindow(
+        in text: String,
+        expectedInsertionUTF16Offset: Int,
+        acceptedTextUTF16Length: Int,
+        radius: Int = 160
+    ) -> String {
+        let safeStart = max(0, expectedInsertionUTF16Offset - radius)
+        let safeEnd = min(
+            text.utf16.count,
+            max(expectedInsertionUTF16Offset, expectedInsertionUTF16Offset + acceptedTextUTF16Length) + radius
+        )
+        let startIndex = String.Index(utf16Offset: safeStart, in: text)
+        let endIndex = String.Index(utf16Offset: max(safeStart, safeEnd), in: text)
+        return String(text[startIndex..<endIndex])
+    }
+
     public static func looseTokens(in text: String) -> [String] {
         var normalized = ""
         for scalar in text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current).unicodeScalars {
