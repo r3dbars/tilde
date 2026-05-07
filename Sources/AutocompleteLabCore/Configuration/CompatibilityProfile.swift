@@ -147,6 +147,40 @@ public struct CompatibilityProfile: Equatable, Sendable {
             && (supportsOneWordAcceptance || supportsFullAcceptance)
     }
 
+    public var userFacingSafetySummary: String {
+        guard canPresentSuggestions, !isSensitive else {
+            return "Suggestions stay off here."
+        }
+
+        var sentences: [String] = []
+        switch renderMode {
+        case .inlineAdjacent:
+            if fallbackRenderMode == .floatingMirror {
+                sentences.append("Inline when caret proof is trusted; mirror fallback if inline is unsafe.")
+            } else {
+                sentences.append("Inline only when caret proof is trusted.")
+            }
+        case .floatingMirror:
+            sentences.append("Mirror only until caret placement proof is current.")
+        case .disabled:
+            sentences.append("Suggestions stay off here.")
+        }
+
+        if !allowsDetachedSuggestions {
+            sentences.append("Detached field/window suggestions are disabled.")
+        }
+
+        if supportsOneWordAcceptance && !supportsFullAcceptance {
+            sentences.append("Full accept stays off until no-submit proof exists.")
+        }
+
+        if fallbackInsertionMode == .disabled {
+            sentences.append("Insertion fails closed if the primary method is not verified.")
+        }
+
+        return sentences.joined(separator: " ")
+    }
+
     public var debugSummary: String {
         let fallbackRender = fallbackRenderMode?.rawValue ?? "none"
         let fallbackInsertion = fallbackInsertionMode?.rawValue ?? "none"
@@ -492,6 +526,17 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
             return "Blocked because this kind of app can expose secrets or shell input."
         case .unsupported:
             return "No compatibility profile yet."
+        }
+    }
+
+    public var userFacingSafetySummary: String {
+        switch self {
+        case let .supported(profile):
+            return profile.userFacingSafetySummary
+        case .denylisted:
+            return "Suggestions stay off because this kind of app can expose secrets or shell input."
+        case .unsupported:
+            return "Suggestions stay off until this app has a compatibility profile."
         }
     }
 

@@ -242,6 +242,33 @@ struct CompatibilityProfileTests {
         }
     }
 
+    @Test("Safety summaries expose the practical current-app stance")
+    func safetySummariesExposePracticalCurrentAppStance() throws {
+        let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let notes = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.Notes"))
+        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
+        let mailStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.apple.mail")
+        let unsupportedStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.openai.atlas")
+
+        #expect(
+            textEdit.userFacingSafetySummary
+                == "Inline when caret proof is trusted; mirror fallback if inline is unsafe."
+        )
+        #expect(
+            notes.userFacingSafetySummary
+                == "Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Insertion fails closed if the primary method is not verified."
+        )
+        #expect(
+            codex.userFacingSafetySummary
+                == "Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Full accept stays off until no-submit proof exists."
+        )
+        #expect(mailStatus.userFacingSafetySummary == "Suggestions stay off here.")
+        #expect(
+            unsupportedStatus.userFacingSafetySummary
+                == "Suggestions stay off until this app has a compatibility profile."
+        )
+    }
+
     @Test("Insertion mode plans can skip failed primary modes")
     func insertionModePlansCanSkipFailedPrimaryModes() throws {
         let notes = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.Notes"))

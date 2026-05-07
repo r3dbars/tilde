@@ -82,6 +82,14 @@ struct SettingsCurrentAppState: Equatable {
         }
     }
 
+    var safetyText: String {
+        guard bundleIdentifier != nil else {
+            return "Safety: choose a writing app first"
+        }
+
+        return "Safety: \(supportStatus.userFacingSafetySummary)"
+    }
+
     var toggleTitle: String {
         canToggle ? "Allow suggestions in this app" : "Suggestions unavailable in this app"
     }
@@ -208,6 +216,7 @@ final class SettingsWindowController: NSObject {
     private let currentAppDetailLabel = NSTextField(labelWithString: "")
     private let currentAppModeLabel = NSTextField(labelWithString: "")
     private let currentAppAcceptanceLabel = NSTextField(labelWithString: "")
+    private let currentAppSafetyLabel = NSTextField(labelWithString: "")
     private let disabledAppsLabel = NSTextField(labelWithString: "")
     private let suggestionDecisionLabel = NSTextField(labelWithString: "")
     private let toggleCurrentAppButton = NSButton(
@@ -361,6 +370,7 @@ final class SettingsWindowController: NSObject {
         currentAppDetailLabel.stringValue = currentApp.detailText
         currentAppModeLabel.stringValue = currentApp.modeText
         currentAppAcceptanceLabel.stringValue = currentApp.acceptanceText
+        currentAppSafetyLabel.stringValue = currentApp.safetyText
         toggleCurrentAppButton.title = currentApp.toggleTitle
         toggleCurrentAppButton.state = currentApp.isEnabled ? .on : .off
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
@@ -414,6 +424,7 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(currentAppDetailLabel)
         configureSecondaryLabel(currentAppModeLabel)
         configureSecondaryLabel(currentAppAcceptanceLabel)
+        configureSecondaryLabel(currentAppSafetyLabel)
         configureSecondaryLabel(disabledAppsLabel)
         configureSecondaryLabel(suggestionDecisionLabel)
         privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
@@ -500,6 +511,7 @@ final class SettingsWindowController: NSObject {
                     currentAppDetailLabel,
                     currentAppModeLabel,
                     currentAppAcceptanceLabel,
+                    currentAppSafetyLabel,
                     toggleCurrentAppButton,
                     makeButtonRow([disabledAppsLabel, enableAllAppsButton])
                 ]
