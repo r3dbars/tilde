@@ -16,6 +16,7 @@ MIN_AX_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_AX_SAMPLES:-0}"
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
 DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.autocomplete-lab}"
 TEXTEDIT_BUNDLE_ID="com.apple.TextEdit"
+PRIMER_TEXT="Can we make this feel "
 declare -a SOAK_TMP_DIRS=()
 declare -a ORIGINAL_DISABLED_APPS=()
 TEXTEDIT_DISABLED_FOR_SOAK=0
@@ -249,6 +250,37 @@ wait_for_log_pattern() {
   exit 1
 }
 
+front_textedit_document_text() {
+  osascript <<'APPLESCRIPT'
+tell application "TextEdit"
+  if (count of documents) = 0 then return ""
+  return text of document 1
+end tell
+APPLESCRIPT
+}
+
+verify_textedit_primer_reached_document() {
+  local expected="$1"
+  local actual frontmost
+
+  actual="$(front_textedit_document_text 2>/dev/null || true)"
+  if [[ "$actual" == *"$expected"* ]]; then
+    return 0
+  fi
+
+  frontmost="$(
+    osascript -e 'tell application "System Events" to name of first application process whose frontmost is true' \
+      2>/dev/null || true
+  )"
+
+  echo "TextEdit primer keyboard input did not reach the disposable document." >&2
+  echo "Frontmost app: ${frontmost:-unknown}" >&2
+  echo "Expected primer chars: ${#expected}" >&2
+  echo "Observed document chars: ${#actual}" >&2
+  echo "This runner cannot collect event-tap proof until keyboard automation can type into TextEdit." >&2
+  exit 1
+}
+
 build_if_needed() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
     return 0
@@ -305,10 +337,13 @@ with timeout of 20 seconds
     end tell
     keystroke "a" using command down
     key code 51
-    keystroke "Can we"
+    keystroke "$PRIMER_TEXT"
   end tell
 end timeout
 APPLESCRIPT
+
+  sleep 0.2
+  verify_textedit_primer_reached_document "$PRIMER_TEXT"
 
   wait_for_log_pattern \
     "$start_line" \
