@@ -51,7 +51,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Suppress a field for 15 minutes when field annoyance crosses the threshold.
 - [x] Auto-pause an app for 30 minutes after repeated severe annoyance.
 - [ ] Mark an app default-off after repeated manual disables over 7 days.
-- [ ] Hard-stop a field immediately after wrong insertion, duplicate insertion, or focus stealing.
+- [x] Hard-stop a field immediately after wrong insertion, duplicate insertion, or focus stealing.
 - [ ] Treat two severe events in one app/day as an app auto-pause.
 - [x] Record why a quiet mode started and when it expires.
 - [x] Surface quiet mode in the menu bar and Diagnostics.
@@ -91,15 +91,15 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Track insertion verification success rate in analyzer summaries.
 - [x] Show insertion verification success in Diagnostics.
 - [x] Print insertion verification success from `check_trace_eval.sh`.
-- [ ] Add duplicate text detection to `InsertionVerification`.
-- [ ] Add Tab-conflict detection after Tab accept.
-- [ ] Detect when Tab moved focus instead of inserting accepted text.
+- [x] Add duplicate text detection to `InsertionVerification`.
+- [x] Add Tab-conflict detection after Tab accept.
+- [x] Detect when Tab moved focus instead of inserting accepted text.
 - [ ] Detect when Tab inserted a literal tab or changed selection unexpectedly.
-- [ ] Emit `tab-conflict` and quiet that field/app.
-- [ ] Add focus-stealing detection and trace event support.
-- [ ] Add rollback attempt metadata for failed inserts.
+- [x] Emit `tab-conflict` and quiet that field/app.
+- [x] Add focus-stealing detection and trace event support.
+- [x] Add rollback attempt metadata for failed inserts.
 - [ ] Add per-app insertion mode reliability stats.
-- [ ] Add a "wrong insertion means blocked" support gate.
+- [x] Add a "wrong insertion means blocked" support gate.
 - [ ] Add tests for duplicate detection, Tab conflict, focus change, and rollback metadata.
 
 ## P0 - Caret And Overlay Reliability

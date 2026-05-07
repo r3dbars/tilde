@@ -41,4 +41,21 @@ struct InsertionVerificationTests {
             currentTextBeforeCursor: "Something else"
         ) == .changedUnexpectedly)
     }
+
+    @Test("Detects duplicate accepted text")
+    func detectsDuplicateAcceptedText() {
+        let verifier = InsertionVerification()
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we make make"
+        ) == .duplicateText)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we make make this"
+        ) == .duplicateText)
+    }
 }

@@ -737,7 +737,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
-            let verificationBaseline = insertionVerificationBaseline()
+            let verificationBaseline = insertionVerificationBaseline(action: action)
             guard let acceptedText = suggestionSession.nextWordAcceptance(),
                   insertAcceptedText(acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
@@ -772,7 +772,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
-            let verificationBaseline = insertionVerificationBaseline()
+            let verificationBaseline = insertionVerificationBaseline(action: action)
             guard let acceptedText = suggestionSession.allVisibleAcceptance(),
                   insertAcceptedText(acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
@@ -845,7 +845,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suppressKeyUntil[key] = Date().addingTimeInterval(0.25)
     }
 
-    private func insertionVerificationBaseline() -> InsertionVerificationBaseline? {
+    private func insertionVerificationBaseline(action: KeyboardAction) -> InsertionVerificationBaseline? {
         guard let currentFieldIdentity,
               let lastTextSnapshot,
               lastTextSnapshot.fieldIdentity == currentFieldIdentity,
@@ -859,6 +859,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             suggestionID: currentSuggestionID,
             acceptanceID: "",
+            acceptAction: action,
             fieldKind: currentFieldKind,
             fieldKindReason: currentFieldKindReason,
             requestMode: currentSuggestionRequestMode,
@@ -905,6 +906,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
 
             guard currentIdentity == baseline.fieldIdentity else {
+                RawAutocompleteTraceLog.shared.record(
+                    type: .insertionFailed,
+                    suggestionID: baseline.suggestionID ?? "",
+                    appBundleIdentifier: baseline.profile.bundleIdentifier,
+                    fieldIdentity: baseline.fieldIdentity.traceDescription,
+                    requestMode: baseline.requestMode?.rawValue ?? "",
+                    acceptedText: acceptedText,
+                    outcome: "focusStealing",
+                    reason: "focus-steal",
+                    metadata: [
+                        "acceptanceID": baseline.acceptanceID,
+                        "fieldKind": baseline.fieldKind.rawValue,
+                        "fieldKindReason": baseline.fieldKindReason,
+                        "focusStealing": "true",
+                        "tabConflict": String(baseline.acceptAction == .acceptNextWord),
+                        "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                        "currentBeforeChars": String(context.textBeforeCursor.count),
+                        "retryCount": String(baseline.retryCount),
+                        "rollbackAttempted": "false"
+                    ]
+                )
+                recordAnnoyanceSignal(
+                    .focusStealing,
+                    reason: "focus-steal",
+                    context: AnnoyanceContext(
+                        appBundleIdentifier: baseline.profile.bundleIdentifier,
+                        fieldIdentifier: baseline.fieldIdentity.traceDescription,
+                        requestMode: baseline.requestMode,
+                        fieldKind: baseline.fieldKind
+                    )
+                )
+                suppressCurrentField(reason: "focus-steal")
+                hideSuggestion()
                 return
             }
 
@@ -948,6 +982,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             profile: baseline.profile,
                             suggestionID: baseline.suggestionID,
                             acceptanceID: baseline.acceptanceID,
+                            acceptAction: baseline.acceptAction,
                             fieldKind: baseline.fieldKind,
                             fieldKindReason: baseline.fieldKindReason,
                             requestMode: baseline.requestMode,
@@ -962,6 +997,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
 
+                let duplicateDetected = result == .duplicateText
+                let tabConflict = baseline.acceptAction == .acceptNextWord && result == .unchanged
+                let failureReason = duplicateDetected
+                    ? "duplicate-text"
+                    : (tabConflict ? "tab-conflict" : "insert-verification-failed")
+                let annoyanceSignal: AnnoyanceSignal = duplicateDetected
+                    ? .duplicateText
+                    : (tabConflict ? .tabConflict : .wrongInsertion)
+
                 RawAutocompleteTraceLog.shared.record(
                     type: .insertionFailed,
                     suggestionID: baseline.suggestionID ?? "",
@@ -970,18 +1014,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     requestMode: baseline.requestMode?.rawValue ?? "",
                     acceptedText: acceptedText,
                     outcome: String(describing: result),
-                    reason: "insert-verification-failed",
+                    reason: failureReason,
                     metadata: [
                         "acceptanceID": baseline.acceptanceID,
                         "fieldKind": baseline.fieldKind.rawValue,
                         "fieldKindReason": baseline.fieldKindReason,
+                        "duplicateDetected": String(duplicateDetected),
+                        "tabConflict": String(tabConflict),
                         "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                        "currentBeforeChars": String(context.textBeforeCursor.count)
+                        "currentBeforeChars": String(context.textBeforeCursor.count),
+                        "retryCount": String(baseline.retryCount),
+                        "rollbackAttempted": "false"
                     ]
                 )
                 recordAnnoyanceSignal(
-                    .wrongInsertion,
-                    reason: "insert-verification-failed",
+                    annoyanceSignal,
+                    reason: failureReason,
                     context: AnnoyanceContext(
                         appBundleIdentifier: baseline.profile.bundleIdentifier,
                         fieldIdentifier: baseline.fieldIdentity.traceDescription,
@@ -989,9 +1037,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         fieldKind: baseline.fieldKind
                     )
                 )
-                if baseline.profile.suppressesAfterInsertionFailure {
-                    suppressCurrentField(reason: "insert-verification-failed")
-                }
+                suppressCurrentField(reason: failureReason)
                 hideSuggestion()
                 return
             }
@@ -2529,6 +2575,7 @@ private struct InsertionVerificationBaseline: Equatable {
     let profile: CompatibilityProfile
     let suggestionID: String?
     var acceptanceID: String
+    let acceptAction: KeyboardAction
     let fieldKind: AXFieldKind
     let fieldKindReason: String
     let requestMode: CompletionRequestMode?
