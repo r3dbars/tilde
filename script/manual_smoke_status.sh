@@ -235,12 +235,18 @@ for app_entry in "${APPS[@]}"; do
     limited_reason="needs one-word no-submit proof"
   fi
 
-  if [[ -f "$REPORT_PATH" ]] &&
-    grep -E "\\| $report_name \\| \`$bundle_id\` \\| \`$proof_label\` \\| $required_verified_regex \\|" "$REPORT_PATH" >/dev/null; then
-    echo "- $display_name: passed$pass_suffix"
-  elif [[ "$proof_label" == "default" ]] &&
-    [[ -f "$REPORT_PATH" ]] &&
-    grep -E "\\| $report_name \\| \`$bundle_id\` \\| $required_verified_regex \\|" "$REPORT_PATH" >/dev/null; then
+  proof_rows=""
+  if [[ -f "$REPORT_PATH" ]]; then
+    proof_rows="$(grep -E "\\| $report_name \\| \`$bundle_id\` \\| \`$proof_label\` \\| $required_verified_regex \\|" "$REPORT_PATH" || true)"
+    if [[ -z "$proof_rows" && "$proof_label" == "default" ]]; then
+      proof_rows="$(grep -E "\\| $report_name \\| \`$bundle_id\` \\| $required_verified_regex \\|" "$REPORT_PATH" || true)"
+    fi
+    if [[ "$proof_mode" == "one-word" && -n "$proof_rows" ]]; then
+      proof_rows="$(grep -F "prompt no-submit confirmed" <<<"$proof_rows" || true)"
+    fi
+  fi
+
+  if [[ -n "$proof_rows" ]]; then
     echo "- $display_name: passed$pass_suffix"
   elif [[ -f "$REPORT_PATH" ]] &&
     grep -E "\\| $report_name \\| \`$bundle_id\` \\| (\`$proof_label\` \\| )?0 \\| \`detached-suppressed\` \\|" "$REPORT_PATH" >/dev/null; then
