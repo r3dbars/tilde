@@ -118,18 +118,18 @@ The north star is simple: a build is better only when accepted text survives, wr
 
 ## P1 - Decision Dashboard
 
-- [ ] Replace "useful rate" as the main dashboard proxy with accepted-and-kept.
-- [ ] Add daily summary: active writing time, shown, accepts, accepted-and-kept, p50/p95 latency, severe failures, pauses, disables.
+- [x] Replace "useful rate" as the main dashboard proxy with accepted-and-kept.
+- [x] Add daily summary: active writing time, shown, accepts, accepted-and-kept, p50/p95 latency, severe failures, pauses, disables.
 - [x] Add per-app table: shows, accept rate, kept rate, verification success, caret failure, annoyance score, support state.
-- [ ] Add top failure reasons: insertion failed, duplicate text, Tab conflict, search/form leakage, caret failed, flicker.
-- [ ] Add latency percentiles: first-visible p50/p90/p95 and total-generation p50/p90/p95.
-- [ ] Add acceptance funnel: requested, model returned, shown, accepted, kept at 10s, kept at 30s/blur.
-- [ ] Add annoyance funnel: shown, ignored, typed over, Esc dismiss, accepted then deleted, paused, disabled.
+- [x] Add top failure reasons: insertion failed, duplicate text, Tab conflict, search/form leakage, caret failed, flicker.
+- [x] Add latency percentiles: first-visible p50/p90/p95 and total-generation p50/p90/p95.
+- [x] Add acceptance funnel: requested, model returned, shown, accepted, kept at 10s, kept at 30s/blur.
+- [x] Add annoyance funnel: shown, ignored, typed over, Esc dismiss, accepted then deleted, paused, disabled.
 - [x] Add current compatibility state: supported, supported with caveats, experimental, blocked.
-- [ ] Add recommended-next-fix rule engine.
-- [ ] Make duplicate/focus failures outrank model tuning.
-- [ ] Make caret/verification failures outrank prompt tuning.
-- [ ] Make latency failures outrank length experiments.
+- [x] Add recommended-next-fix rule engine.
+- [x] Make duplicate/focus failures outrank model tuning.
+- [x] Make caret/verification failures outrank prompt tuning.
+- [x] Make latency failures outrank length experiments.
 
 ## P1 - Compatibility Gates
 

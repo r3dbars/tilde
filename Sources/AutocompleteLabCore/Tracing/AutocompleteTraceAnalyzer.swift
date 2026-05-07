@@ -28,6 +28,122 @@ public struct AutocompleteTraceMiss: Equatable, Sendable {
     }
 }
 
+public struct AutocompleteTraceDailySummary: Equatable, Sendable {
+    public let date: String
+    public let activeWritingMinutes: Int
+    public let shown: Int
+    public let accepted: Int
+    public let acceptedAndKept: Int
+    public let p50LatencyMilliseconds: Int?
+    public let p95LatencyMilliseconds: Int?
+    public let severeFailures: Int
+    public let pauses: Int
+    public let disables: Int
+
+    public init(
+        date: String,
+        activeWritingMinutes: Int,
+        shown: Int,
+        accepted: Int,
+        acceptedAndKept: Int,
+        p50LatencyMilliseconds: Int?,
+        p95LatencyMilliseconds: Int?,
+        severeFailures: Int,
+        pauses: Int,
+        disables: Int
+    ) {
+        self.date = date
+        self.activeWritingMinutes = activeWritingMinutes
+        self.shown = shown
+        self.accepted = accepted
+        self.acceptedAndKept = acceptedAndKept
+        self.p50LatencyMilliseconds = p50LatencyMilliseconds
+        self.p95LatencyMilliseconds = p95LatencyMilliseconds
+        self.severeFailures = severeFailures
+        self.pauses = pauses
+        self.disables = disables
+    }
+}
+
+public struct AutocompleteTraceFailureReason: Equatable, Sendable {
+    public let title: String
+    public let count: Int
+    public let priority: Int
+    public let category: String
+
+    public init(title: String, count: Int, priority: Int, category: String) {
+        self.title = title
+        self.count = count
+        self.priority = priority
+        self.category = category
+    }
+}
+
+public struct AutocompleteAcceptanceFunnel: Equatable, Sendable {
+    public let requested: Int
+    public let modelReturned: Int
+    public let shown: Int
+    public let accepted: Int
+    public let keptAt10Seconds: Int
+    public let keptAt30SecondsOrBlur: Int
+
+    public init(
+        requested: Int = 0,
+        modelReturned: Int = 0,
+        shown: Int = 0,
+        accepted: Int = 0,
+        keptAt10Seconds: Int = 0,
+        keptAt30SecondsOrBlur: Int = 0
+    ) {
+        self.requested = requested
+        self.modelReturned = modelReturned
+        self.shown = shown
+        self.accepted = accepted
+        self.keptAt10Seconds = keptAt10Seconds
+        self.keptAt30SecondsOrBlur = keptAt30SecondsOrBlur
+    }
+}
+
+public struct AutocompleteAnnoyanceFunnel: Equatable, Sendable {
+    public let shown: Int
+    public let ignored: Int
+    public let typedOver: Int
+    public let escapeDismissed: Int
+    public let acceptedThenDeleted: Int
+    public let paused: Int
+    public let disabled: Int
+
+    public init(
+        shown: Int = 0,
+        ignored: Int = 0,
+        typedOver: Int = 0,
+        escapeDismissed: Int = 0,
+        acceptedThenDeleted: Int = 0,
+        paused: Int = 0,
+        disabled: Int = 0
+    ) {
+        self.shown = shown
+        self.ignored = ignored
+        self.typedOver = typedOver
+        self.escapeDismissed = escapeDismissed
+        self.acceptedThenDeleted = acceptedThenDeleted
+        self.paused = paused
+        self.disabled = disabled
+    }
+}
+
+public struct AutocompleteRecommendedFix: Equatable, Sendable {
+    public let title: String
+    public let reason: String
+    public let priority: Int
+
+    public init(title: String, reason: String, priority: Int) {
+        self.title = title
+        self.reason = reason
+        self.priority = priority
+    }
+}
+
 public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let totalEvents: Int
     public let presentedCount: Int
@@ -62,6 +178,14 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let p50LatencyMilliseconds: Int?
     public let p90LatencyMilliseconds: Int?
     public let p95LatencyMilliseconds: Int?
+    public let modelResultP50LatencyMilliseconds: Int?
+    public let modelResultP90LatencyMilliseconds: Int?
+    public let modelResultP95LatencyMilliseconds: Int?
+    public let dailySummaries: [AutocompleteTraceDailySummary]
+    public let topFailureReasons: [AutocompleteTraceFailureReason]
+    public let acceptanceFunnel: AutocompleteAcceptanceFunnel
+    public let annoyanceFunnel: AutocompleteAnnoyanceFunnel
+    public let recommendedFixes: [AutocompleteRecommendedFix]
     public let acceptRateByApp: [String: Double]
     public let acceptRateByMode: [String: Double]
     public let acceptRateByExperimentArm: [String: Double]
@@ -115,6 +239,14 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         p50LatencyMilliseconds: Int?,
         p90LatencyMilliseconds: Int?,
         p95LatencyMilliseconds: Int?,
+        modelResultP50LatencyMilliseconds: Int? = nil,
+        modelResultP90LatencyMilliseconds: Int? = nil,
+        modelResultP95LatencyMilliseconds: Int? = nil,
+        dailySummaries: [AutocompleteTraceDailySummary] = [],
+        topFailureReasons: [AutocompleteTraceFailureReason] = [],
+        acceptanceFunnel: AutocompleteAcceptanceFunnel = AutocompleteAcceptanceFunnel(),
+        annoyanceFunnel: AutocompleteAnnoyanceFunnel = AutocompleteAnnoyanceFunnel(),
+        recommendedFixes: [AutocompleteRecommendedFix] = [],
         acceptRateByApp: [String: Double] = [:],
         acceptRateByMode: [String: Double] = [:],
         acceptRateByExperimentArm: [String: Double] = [:],
@@ -167,6 +299,14 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.p50LatencyMilliseconds = p50LatencyMilliseconds
         self.p90LatencyMilliseconds = p90LatencyMilliseconds
         self.p95LatencyMilliseconds = p95LatencyMilliseconds
+        self.modelResultP50LatencyMilliseconds = modelResultP50LatencyMilliseconds
+        self.modelResultP90LatencyMilliseconds = modelResultP90LatencyMilliseconds
+        self.modelResultP95LatencyMilliseconds = modelResultP95LatencyMilliseconds
+        self.dailySummaries = dailySummaries
+        self.topFailureReasons = topFailureReasons
+        self.acceptanceFunnel = acceptanceFunnel
+        self.annoyanceFunnel = annoyanceFunnel
+        self.recommendedFixes = recommendedFixes
         self.acceptRateByApp = acceptRateByApp
         self.acceptRateByMode = acceptRateByMode
         self.acceptRateByExperimentArm = acceptRateByExperimentArm
@@ -211,6 +351,10 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let caretGeometryFailures = events.filter { $0.type == .caretGeometryFailed }
         let acceptedTextEdited = events.filter { $0.type == .acceptedTextEdited }
         let firstShownLatencies = firstPresentedByID.values.compactMap(\.latencyMilliseconds).sorted()
+        let modelResultLatencies = events
+            .filter { $0.type == .modelResult }
+            .compactMap(\.latencyMilliseconds)
+            .sorted()
         let acceptedEventIDs = Set(accepted.map(acceptanceIdentifier))
         let acceptedAndKeptEventIDs = Set(acceptedTextEdited
             .filter(isAcceptedAndKeptEvent)
@@ -279,6 +423,26 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             p50LatencyMilliseconds: percentile(0.50, in: firstShownLatencies),
             p90LatencyMilliseconds: percentile(0.90, in: firstShownLatencies),
             p95LatencyMilliseconds: percentile(0.95, in: firstShownLatencies),
+            modelResultP50LatencyMilliseconds: percentile(0.50, in: modelResultLatencies),
+            modelResultP90LatencyMilliseconds: percentile(0.90, in: modelResultLatencies),
+            modelResultP95LatencyMilliseconds: percentile(0.95, in: modelResultLatencies),
+            dailySummaries: dailySummaries(from: events),
+            topFailureReasons: topFailureReasons(from: events),
+            acceptanceFunnel: acceptanceFunnel(
+                events: events,
+                firstPresentedByID: firstPresentedByID,
+                acceptedIDs: acceptedIDs
+            ),
+            annoyanceFunnel: annoyanceFunnel(
+                events: events,
+                presentedCount: firstPresentedByID.count,
+                hiddenIgnoredCount: hiddenIgnored.count,
+                typedOverCount: typedOver.count
+            ),
+            recommendedFixes: recommendedFixes(
+                events: events,
+                p95LatencyMilliseconds: percentile(0.95, in: firstShownLatencies)
+            ),
             acceptRateByApp: rates(
                 presentedByID: firstPresentedByID,
                 outcomeIDs: acceptedIDs,
@@ -639,6 +803,215 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             .map { $0 }
     }
 
+    private func dailySummaries(from events: [AutocompleteTraceEvent]) -> [AutocompleteTraceDailySummary] {
+        Dictionary(grouping: events, by: dayKey)
+            .map { date, dayEvents in
+                let presentedByID = firstEventsBySuggestionID(
+                    from: dayEvents.filter { $0.type == .suggestionPresented }
+                )
+                let accepted = dayEvents.filter { $0.type == .suggestionAccepted }
+                let acceptedAndKept = dayEvents
+                    .filter { $0.type == .acceptedTextEdited && isAcceptedAndKeptEvent($0) }
+                let latencies = presentedByID.values.compactMap(\.latencyMilliseconds).sorted()
+
+                return AutocompleteTraceDailySummary(
+                    date: date,
+                    activeWritingMinutes: activeWritingMinutes(in: dayEvents),
+                    shown: presentedByID.count,
+                    accepted: accepted.count,
+                    acceptedAndKept: Set(acceptedAndKept.map(acceptanceIdentifier)).count,
+                    p50LatencyMilliseconds: percentile(0.50, in: latencies),
+                    p95LatencyMilliseconds: percentile(0.95, in: latencies),
+                    severeFailures: severeFailureCount(in: dayEvents),
+                    pauses: dayEvents.filter { $0.type == .appPaused }.count,
+                    disables: dayEvents.filter { $0.type == .appDisabled }.count
+                )
+            }
+            .sorted { $0.date > $1.date }
+    }
+
+    private func topFailureReasons(from events: [AutocompleteTraceEvent]) -> [AutocompleteTraceFailureReason] {
+        let insertionFailures = events.filter { $0.type == .insertionFailed }
+        let duplicateText = insertionFailures.filter(isDuplicateTextEvent).count
+        let wrongInsertion = insertionFailures.count - duplicateText
+        let tabConflict = tabConflictCount(in: events)
+        let focusStealing = focusStealingCount(in: events)
+        let searchOrFormLeakage = searchOrFormLeakageCount(in: events)
+        let caretFailed = events.filter { $0.type == .caretGeometryFailed }.count
+        let flicker = overlayFlickerCount(in: events)
+
+        let candidates = [
+            AutocompleteTraceFailureReason(
+                title: "Duplicate text",
+                count: duplicateText,
+                priority: 100,
+                category: "insertion trust"
+            ),
+            AutocompleteTraceFailureReason(
+                title: "Focus stealing",
+                count: focusStealing,
+                priority: 95,
+                category: "insertion trust"
+            ),
+            AutocompleteTraceFailureReason(
+                title: "Insertion failed",
+                count: wrongInsertion,
+                priority: 90,
+                category: "insertion trust"
+            ),
+            AutocompleteTraceFailureReason(
+                title: "Tab conflict",
+                count: tabConflict,
+                priority: 85,
+                category: "keyboard trust"
+            ),
+            AutocompleteTraceFailureReason(
+                title: "Search/form leakage",
+                count: searchOrFormLeakage,
+                priority: 80,
+                category: "field targeting"
+            ),
+            AutocompleteTraceFailureReason(
+                title: "Caret failed",
+                count: caretFailed,
+                priority: 75,
+                category: "renderer/caret"
+            ),
+            AutocompleteTraceFailureReason(
+                title: "Overlay flicker",
+                count: flicker,
+                priority: 60,
+                category: "renderer/caret"
+            )
+        ]
+
+        return candidates
+            .filter { $0.count > 0 }
+            .sorted { lhs, rhs in
+                if lhs.count == rhs.count {
+                    return lhs.priority > rhs.priority
+                }
+
+                return lhs.count > rhs.count
+            }
+    }
+
+    private func acceptanceFunnel(
+        events: [AutocompleteTraceEvent],
+        firstPresentedByID: [String: AutocompleteTraceEvent],
+        acceptedIDs: Set<String>
+    ) -> AutocompleteAcceptanceFunnel {
+        let requested = firstEventsBySuggestionID(
+            from: events.filter { $0.type == .suggestionRequested }
+        ).count
+        let modelReturned = firstEventsBySuggestionID(
+            from: events.filter { $0.type == .modelResult }
+        ).count
+        let keptAt10 = Set(events
+            .filter {
+                $0.type == .acceptedTextEdited
+                    && isAcceptedAndKeptEvent($0)
+                    && $0.metadata["checkpoint"] == "10s"
+            }
+            .map(acceptanceIdentifier))
+            .count
+        let keptAt30OrBlur = Set(events
+            .filter {
+                $0.type == .acceptedTextEdited
+                    && isAcceptedAndKeptEvent($0)
+                    && ["30s", "fieldBlur"].contains($0.metadata["checkpoint"] ?? "")
+            }
+            .map(acceptanceIdentifier))
+            .count
+
+        return AutocompleteAcceptanceFunnel(
+            requested: requested,
+            modelReturned: modelReturned,
+            shown: firstPresentedByID.count,
+            accepted: acceptedIDs.intersection(Set(firstPresentedByID.keys)).count,
+            keptAt10Seconds: keptAt10,
+            keptAt30SecondsOrBlur: keptAt30OrBlur
+        )
+    }
+
+    private func annoyanceFunnel(
+        events: [AutocompleteTraceEvent],
+        presentedCount: Int,
+        hiddenIgnoredCount: Int,
+        typedOverCount: Int
+    ) -> AutocompleteAnnoyanceFunnel {
+        AutocompleteAnnoyanceFunnel(
+            shown: presentedCount,
+            ignored: hiddenIgnoredCount,
+            typedOver: typedOverCount,
+            escapeDismissed: events.filter { $0.type == .suggestionHidden && $0.reason == "escape" }.count,
+            acceptedThenDeleted: acceptedThenDeletedCount(in: events),
+            paused: events.filter { $0.type == .appPaused }.count,
+            disabled: events.filter { $0.type == .appDisabled }.count
+        )
+    }
+
+    private func recommendedFixes(
+        events: [AutocompleteTraceEvent],
+        p95LatencyMilliseconds: Int?
+    ) -> [AutocompleteRecommendedFix] {
+        let insertionFailures = events.filter { $0.type == .insertionFailed }
+        let duplicateText = insertionFailures.filter(isDuplicateTextEvent).count
+        let wrongInsertion = insertionFailures.count - duplicateText
+        let focusStealing = focusStealingCount(in: events)
+        let tabConflicts = tabConflictCount(in: events)
+        let caretFailures = events.filter { $0.type == .caretGeometryFailed }.count
+        let verificationFailures = insertionFailures.count
+        let slowSuggestions = events
+            .filter { $0.type == .suggestionPresented }
+            .filter { ($0.latencyMilliseconds ?? 0) >= 1_000 }
+            .count
+        var fixes: [AutocompleteRecommendedFix] = []
+
+        let insertionTrustCount = duplicateText + wrongInsertion + focusStealing + tabConflicts
+        if insertionTrustCount > 0 {
+            fixes.append(AutocompleteRecommendedFix(
+                title: "Fix insertion trust before model tuning",
+                reason: "\(insertionTrustCount) duplicate, focus, wrong-insert, or Tab-conflict signal(s) found.",
+                priority: 100
+            ))
+        }
+
+        if caretFailures + verificationFailures > 0 {
+            fixes.append(AutocompleteRecommendedFix(
+                title: "Fix caret or verification before prompt tuning",
+                reason: "\(caretFailures) caret failure(s) and \(verificationFailures) insertion verification failure(s) found.",
+                priority: 90
+            ))
+        }
+
+        if slowSuggestions > 0 || (p95LatencyMilliseconds ?? 0) >= 1_000 {
+            fixes.append(AutocompleteRecommendedFix(
+                title: "Fix latency before length experiments",
+                reason: "First-visible p95 is \(p95LatencyMilliseconds.map { "\($0)ms" } ?? "unknown") with \(slowSuggestions) slow shown suggestion(s).",
+                priority: 80
+            ))
+        }
+
+        if fixes.isEmpty,
+           !events.contains(where: { $0.type == .acceptedTextEdited && isAcceptedAndKeptEvent($0) }),
+           events.contains(where: { $0.type == .suggestionPresented }) {
+            fixes.append(AutocompleteRecommendedFix(
+                title: "Collect accepted-and-kept proof",
+                reason: "Suggestions were shown, but no accepted text survived a checkpoint yet.",
+                priority: 50
+            ))
+        }
+
+        return fixes.sorted { lhs, rhs in
+            if lhs.priority == rhs.priority {
+                return lhs.title < rhs.title
+            }
+
+            return lhs.priority > rhs.priority
+        }
+    }
+
     private func addRepeatedUnacceptedSuggestions(
         from events: [AutocompleteTraceEvent],
         buckets: inout [String: (count: Int, example: AutocompleteTraceEvent, cause: String, category: String)]
@@ -707,6 +1080,80 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             || normalized.hasPrefix("let me know")
             || normalized.hasPrefix("sure,")
             || normalized.hasPrefix("certainly,")
+    }
+
+    private func dayKey(_ event: AutocompleteTraceEvent) -> String {
+        String(event.timestamp.prefix(10))
+    }
+
+    private func activeWritingMinutes(in events: [AutocompleteTraceEvent]) -> Int {
+        let dates = events
+            .compactMap { iso8601Date(from: $0.timestamp) }
+            .sorted()
+        guard let first = dates.first, let last = dates.last else {
+            return 0
+        }
+
+        let seconds = max(0, last.timeIntervalSince(first))
+        return max(1, Int((seconds / 60).rounded(.up)))
+    }
+
+    private func severeFailureCount(in events: [AutocompleteTraceEvent]) -> Int {
+        events.filter { event in
+            if event.type == .insertionFailed || event.type == .appDisabled {
+                return true
+            }
+
+            if event.type == .caretGeometryFailed {
+                return event.metadata["severe"] == "true"
+            }
+
+            return event.metadata["focusStealing"] == "true"
+                || event.metadata["tabConflict"] == "true"
+        }.count
+    }
+
+    private func tabConflictCount(in events: [AutocompleteTraceEvent]) -> Int {
+        events.filter { event in
+            event.reason == "tab-conflict"
+                || event.outcome == "tab-conflict"
+                || event.metadata["tabConflict"] == "true"
+        }.count
+    }
+
+    private func focusStealingCount(in events: [AutocompleteTraceEvent]) -> Int {
+        events.filter { event in
+            event.reason.localizedCaseInsensitiveContains("focus-steal")
+                || event.outcome.localizedCaseInsensitiveContains("focus-steal")
+                || event.metadata["focusStealing"] == "true"
+        }.count
+    }
+
+    private func searchOrFormLeakageCount(in events: [AutocompleteTraceEvent]) -> Int {
+        events.filter { event in
+            event.type == .suggestionPresented
+                && ["search", "form", "url", "secure"].contains(event.metadata["fieldKind"] ?? "")
+        }.count
+    }
+
+    private func overlayFlickerCount(in events: [AutocompleteTraceEvent]) -> Int {
+        events.filter { event in
+            event.type == .suggestionHidden
+                && (intMetadata(event, key: "lifetimeMs") ?? Int.max) < 150
+        }.count
+    }
+
+    private func acceptedThenDeletedCount(in events: [AutocompleteTraceEvent]) -> Int {
+        events.filter { event in
+            event.type == .acceptedTextEdited
+                && event.metadata["survivalClass"] == AcceptanceSurvivalClass.rejectedAfterAccept.rawValue
+                && ((intMetadata(event, key: "firstEditDelayMs") ?? Int.max) <= 2_000
+                    || event.metadata["checkpoint"] == AcceptanceSurvivalCheckpoint.twoSeconds.rawValue)
+        }.count
+    }
+
+    private func iso8601Date(from value: String) -> Date? {
+        ISO8601DateFormatter().date(from: value)
     }
 
     private func add(

@@ -433,6 +433,81 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.suppressedByExperimentArm["metadata_arm"] == 1)
     }
 
+    @Test("builds dashboard funnels, daily summaries, and recommended fixes")
+    func buildsDashboardSummaries() {
+        let events = [
+            event(.suggestionRequested, suggestionID: "one", timestamp: "2026-04-26T10:00:00Z"),
+            event(.modelResult, suggestionID: "one", timestamp: "2026-04-26T10:00:01Z", latency: 1_200),
+            event(
+                .suggestionPresented,
+                suggestionID: "one",
+                timestamp: "2026-04-26T10:00:02Z",
+                latency: 1_100,
+                metadata: ["fieldKind": "search", "effectiveRenderMode": "inlineAdjacent"]
+            ),
+            event(
+                .suggestionAccepted,
+                suggestionID: "one",
+                timestamp: "2026-04-26T10:00:03Z",
+                metadata: ["acceptanceID": "accept-one", "acceptMode": "tab"]
+            ),
+            event(
+                .acceptedTextEdited,
+                suggestionID: "one",
+                timestamp: "2026-04-26T10:00:05Z",
+                metadata: [
+                    "acceptanceID": "accept-one",
+                    "checkpoint": "10s",
+                    "survivalClass": "exactKept",
+                    "strongAcceptedAndKept": "true"
+                ]
+            ),
+            event(
+                .acceptedTextEdited,
+                suggestionID: "one",
+                timestamp: "2026-04-26T10:00:35Z",
+                metadata: [
+                    "acceptanceID": "accept-one",
+                    "checkpoint": "30s",
+                    "survivalClass": "exactKept",
+                    "strongAcceptedAndKept": "true"
+                ]
+            ),
+            event(.suggestionHidden, suggestionID: "one", timestamp: "2026-04-26T10:00:36Z", outcome: "ignored", reason: "escape", metadata: ["lifetimeMs": "90"]),
+            event(.suggestionTypedOver, suggestionID: "two", timestamp: "2026-04-26T10:01:00Z"),
+            event(.insertionFailed, suggestionID: "three", timestamp: "2026-04-26T10:01:10Z", metadata: ["duplicateDetected": "true"]),
+            event(.caretGeometryFailed, suggestionID: "four", timestamp: "2026-04-26T10:01:20Z", metadata: ["severe": "true", "effectiveRenderMode": "floatingMirror"]),
+            event(.appPaused, suggestionID: "five", timestamp: "2026-04-26T10:01:30Z"),
+            event(.appDisabled, suggestionID: "six", timestamp: "2026-04-26T10:01:40Z")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.modelResultP50LatencyMilliseconds == 1_200)
+        #expect(summary.modelResultP95LatencyMilliseconds == 1_200)
+        #expect(summary.acceptanceFunnel.requested == 1)
+        #expect(summary.acceptanceFunnel.modelReturned == 1)
+        #expect(summary.acceptanceFunnel.shown == 1)
+        #expect(summary.acceptanceFunnel.accepted == 1)
+        #expect(summary.acceptanceFunnel.keptAt10Seconds == 1)
+        #expect(summary.acceptanceFunnel.keptAt30SecondsOrBlur == 1)
+        #expect(summary.annoyanceFunnel.shown == 1)
+        #expect(summary.annoyanceFunnel.ignored == 1)
+        #expect(summary.annoyanceFunnel.typedOver == 1)
+        #expect(summary.annoyanceFunnel.escapeDismissed == 1)
+        #expect(summary.annoyanceFunnel.paused == 1)
+        #expect(summary.annoyanceFunnel.disabled == 1)
+        #expect(summary.dailySummaries.first?.date == "2026-04-26")
+        #expect(summary.dailySummaries.first?.activeWritingMinutes == 2)
+        #expect(summary.dailySummaries.first?.severeFailures == 3)
+        #expect(summary.topFailureReasons.first?.title == "Duplicate text")
+        #expect(summary.topFailureReasons.contains { $0.title == "Search/form leakage" })
+        #expect(summary.topFailureReasons.contains { $0.title == "Overlay flicker" })
+        #expect(summary.recommendedFixes.first?.title == "Fix insertion trust before model tuning")
+        #expect(summary.recommendedFixes.contains { $0.title == "Fix caret or verification before prompt tuning" })
+        #expect(summary.recommendedFixes.contains { $0.title == "Fix latency before length experiments" })
+    }
+
     private func event(
         _ type: AutocompleteTraceEventType,
         experimentArm: String = "length_3_word",
