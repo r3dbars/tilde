@@ -900,6 +900,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             appBundleIdentifier: frontmostApp.bundleIdentifier,
             fieldIdentity: fieldIdentity,
+            fieldClassification: fieldClassification,
             renderMode: renderMode,
             delayMilliseconds: delayMilliseconds,
             requestMode: requestMode
@@ -2026,6 +2027,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         appBundleIdentifier: String,
         fieldIdentity: FocusedFieldIdentity,
+        fieldClassification: AXFieldClassification,
         renderMode: SuggestionRenderMode,
         delayMilliseconds: Int,
         requestMode: CompletionRequestMode
@@ -2033,13 +2035,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastRequestedTextBeforeCursor = context.textBeforeCursor
 
         let suggestionID = UUID().uuidString
+        let behaviorProfile = AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
+            appBundleIdentifier: appBundleIdentifier,
+            fieldKind: fieldClassification.kind
+        ))
         let request = CompletionRequest(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             appBundleIdentifier: appBundleIdentifier,
+            fieldKind: fieldClassification.kind,
+            behaviorProfileID: behaviorProfile.id,
             maxVisibleWords: completionLengthConfiguration.maxVisibleWords,
             mode: requestMode,
             suggestionID: suggestionID
+        )
+        let requestMetadata = traceRequestMetadata(
+            request: request,
+            fieldClassification: fieldClassification
         )
         currentCompletionRequest = request
         streamingPresentationStates[suggestionID] = StreamingPresentationState()
@@ -2060,7 +2072,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "renderMode": renderMode.rawValue,
                 "delayMilliseconds": String(delayMilliseconds)
             ]
-            .merging(traceFieldMetadata(context: context)) { current, _ in current }
+            .merging(requestMetadata) { current, _ in current }
         )
 
         if requestMode == .wordCompletion {
@@ -2089,7 +2101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         metadata: [
                             "renderMode": renderMode.rawValue
                         ]
-                        .merging(self.traceFieldMetadata(context: context)) { current, _ in current }
+                        .merging(requestMetadata) { current, _ in current }
                     )
                     recordSuggestionEvent(
                         "suggestion-blocked",
@@ -2106,7 +2118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             appBundleIdentifier: appBundleIdentifier,
                             fieldIdentity: fieldIdentity,
                             requestMode: request.mode,
-                            fieldKind: fieldClassification(for: context).kind
+                            fieldKind: fieldClassification.kind
                         ),
                         suggestionID: suggestionID,
                         reason: "repeated-miss"
@@ -2142,7 +2154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "renderMode": renderMode.rawValue
                 ]
-                .merging(traceFieldMetadata(context: context)) { current, _ in current }
+                .merging(requestMetadata) { current, _ in current }
             )
             if suggestionSession.hasVisibleSuggestion {
                 setSuggestionDecision("Shown: no fast word replacement")
@@ -2236,7 +2248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             textAfterCursor: request.textAfterCursor,
                             latencyMilliseconds: latencyMilliseconds,
                             reason: "empty-suggestion",
-                            metadata: self.traceFieldMetadata(context: context)
+                            metadata: requestMetadata
                         )
                         self.recordSuggestionEvent(
                             "suggestion-blocked",
@@ -2264,7 +2276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             displayedText: suggestion.visibleText,
                             latencyMilliseconds: latencyMilliseconds,
                             reason: "missing-anchor",
-                            metadata: self.traceFieldMetadata(context: context)
+                            metadata: requestMetadata
                         )
                         self.recordSuggestionEvent(
                             "suggestion-blocked",
@@ -2290,7 +2302,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         cleanedVisibleText: suggestion.visibleText,
                         displayedText: suggestion.visibleText,
                         latencyMilliseconds: latencyMilliseconds,
-                        metadata: self.traceFieldMetadata(context: context)
+                        metadata: requestMetadata
                     )
                     guard !self.suggestionRepetitionSuppressor.shouldSuppress(
                         suggestion.visibleText,
@@ -2310,7 +2322,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             displayedText: suggestion.visibleText,
                             latencyMilliseconds: latencyMilliseconds,
                             reason: "repeated-miss",
-                            metadata: self.traceFieldMetadata(context: context)
+                            metadata: requestMetadata
                         )
                         self.recordAnnoyanceSignal(
                             .repeatedRejection,
@@ -2318,7 +2330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 appBundleIdentifier: appBundleIdentifier,
                                 fieldIdentity: fieldIdentity,
                                 requestMode: request.mode,
-                                fieldKind: self.fieldClassification(for: context).kind
+                                fieldKind: fieldClassification.kind
                             ),
                             suggestionID: suggestionID,
                             reason: "repeated-miss"
@@ -2380,6 +2392,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 latencyMilliseconds: latencyMilliseconds,
                 reason: reason,
                 metadata: traceGeometryMetadata(context: originalContext, renderMode: renderMode)
+                    .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
             )
             recordSuggestionEvent(
                 "suggestion-blocked",
@@ -2388,6 +2401,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "reason": reason
                 ]
+                .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
             )
             hideSuggestion(reason: reason)
             return
@@ -2429,6 +2443,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 latencyMilliseconds: latencyMilliseconds,
                 reason: suppression.reason.rawValue,
                 metadata: traceGeometryMetadata(context: context, renderMode: learningAdjustment.effectiveRenderMode)
+                    .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                     .merging(learningAdjustment.metadata) { current, _ in current }
                     .merging(suppression.metadata) { current, _ in current }
             )
@@ -2439,6 +2454,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "reason": suppression.reason.rawValue
                 ]
+                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(suppression.metadata) { current, _ in current }
             )
@@ -2473,6 +2489,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 latencyMilliseconds: latencyMilliseconds,
                 reason: reason,
                 metadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode)
+                    .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                     .merging(learningAdjustment.metadata) { current, _ in current }
                     .merging(placement.metadata) { current, _ in current }
                     .merging(displayScoreMetadata) { current, _ in current }
@@ -2484,6 +2501,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "reason": reason
                 ]
+                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(placement.metadata) { current, _ in current }
                 .merging(displayScoreMetadata) { current, _ in current }
@@ -2520,6 +2538,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 latencyMilliseconds: latencyMilliseconds,
                 reason: reason,
                 metadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode)
+                    .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                     .merging(learningAdjustment.metadata) { current, _ in current }
                     .merging(placement.metadata) { current, _ in current }
                     .merging(displayScoreMetadata) { current, _ in current }
@@ -2531,6 +2550,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "reason": reason
                 ]
+                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(placement.metadata) { current, _ in current }
                 .merging(displayScoreMetadata) { current, _ in current }
@@ -2597,6 +2617,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none",
                 "screenshotCaptureRect": screenshotCapture.rectDescription
             ]
+            .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
             .merging(traceGeometryMetadata(context: context, renderMode: placement.renderMode)) { current, _ in current }
             .merging(learningAdjustment.metadata) { current, _ in current }
             .merging(placement.metadata) { current, _ in current }
@@ -2620,6 +2641,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none",
                 "screenshotCaptureRect": screenshotCapture.rectDescription
             ]
+            .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
             .merging(learningAdjustment.metadata) { current, _ in current }
             .merging(placement.metadata) { current, _ in current }
             .merging(displayScoreMetadata) { current, _ in current }
@@ -2764,6 +2786,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fieldClassification(for: context).traceMetadata
     }
 
+    private func traceRequestMetadata(
+        request: CompletionRequest,
+        context: FocusedTextContext
+    ) -> [String: String] {
+        traceRequestMetadata(
+            request: request,
+            fieldClassification: fieldClassification(for: context)
+        )
+    }
+
+    private func traceRequestMetadata(
+        request: CompletionRequest,
+        fieldClassification: AXFieldClassification
+    ) -> [String: String] {
+        request.behaviorProfileTraceMetadata
+            .merging(fieldClassification.traceMetadata) { current, _ in current }
+    }
+
     private func displayScore(
         suggestion: CompletionSuggestion,
         request: CompletionRequest,
@@ -2773,6 +2813,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         latencyMilliseconds: Int
     ) -> DisplayScore {
         let classification = fieldClassification(for: context)
+        let requestFieldKind = request.fieldKind == .unknown ? classification.kind : request.fieldKind
+        let behaviorProfile = request.behaviorProfile
         let visibleWordCount = suggestion.visibleWordCount
         let visibleCharacterCount = suggestion.visibleText.count
 
@@ -2782,10 +2824,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 visibleWordCount: visibleWordCount,
                 visibleCharacterCount: visibleCharacterCount
             ),
-            styleFit: displayStyleFit(fieldKind: classification.kind, profile: profile),
+            styleFit: displayStyleFit(
+                fieldKind: requestFieldKind,
+                profile: profile,
+                behaviorProfile: behaviorProfile
+            ),
             contextFit: displayContextFit(request: request, context: context),
             userAffinity: displayUserAffinity(mode: request.mode, triggerReason: triggerReason),
-            risk: displayRisk(fieldKind: classification.kind, profile: profile, context: context),
+            risk: displayRisk(
+                fieldKind: requestFieldKind,
+                profile: profile,
+                behaviorProfile: behaviorProfile,
+                context: context
+            ),
             repetition: displayRepetition(
                 suggestion: suggestion,
                 request: request,
@@ -2826,9 +2877,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func displayStyleFit(
         fieldKind: AXFieldKind,
-        profile: CompatibilityProfile
+        profile: CompatibilityProfile,
+        behaviorProfile: AutocompleteBehaviorProfile
     ) -> Double {
-        if fieldKind.suppressesSuggestionsByDefault || profile.isSensitive {
+        if fieldKind.suppressesSuggestionsByDefault
+            || profile.isSensitive
+            || behaviorProfile.suppressionDefaults.suppressesSuggestionsByDefault {
             return 0.05
         }
 
@@ -2877,9 +2931,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func displayRisk(
         fieldKind: AXFieldKind,
         profile: CompatibilityProfile,
+        behaviorProfile: AutocompleteBehaviorProfile,
         context: FocusedTextContext
     ) -> Double {
-        if context.isSecure || profile.isSensitive || fieldKind.suppressesSuggestionsByDefault {
+        if context.isSecure
+            || profile.isSensitive
+            || fieldKind.suppressesSuggestionsByDefault
+            || behaviorProfile.suppressionDefaults.suppressesSuggestionsByDefault {
             return 0.95
         }
 

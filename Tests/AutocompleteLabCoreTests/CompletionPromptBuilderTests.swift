@@ -146,7 +146,7 @@ struct CompletionPromptBuilderTests {
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
 
         #expect(builder.maxVisibleWords == 7)
-        #expect(prompt.system.contains("next 6 words or fewer"))
+        #expect(prompt.system.contains("next 5 words or fewer"))
         #expect(prompt.system.contains("Behavior profile: docs_prose"))
     }
 
@@ -244,5 +244,42 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("Behavior profile: ai_chat, max 1 visible words / 4 generated tokens"))
         #expect(prompt.system.contains("Never suggest sending, submitting"))
         #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
+    }
+
+    @Test("Prompt uses field kind behavior profile before app metadata")
+    func promptUsesFieldKindBehaviorProfileBeforeAppMetadata() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let searchPrompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "autocomplete",
+            appBundleIdentifier: "com.apple.Notes",
+            fieldKind: .search
+        ))
+        let formPrompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Justin",
+            appBundleIdentifier: "com.openai.codex",
+            fieldKind: .form
+        ))
+
+        #expect(searchPrompt.system.contains("next 1 words or fewer"))
+        #expect(searchPrompt.system.contains("Behavior profile: search"))
+        #expect(searchPrompt.system.contains("Search fields are suppressed by default"))
+        #expect(formPrompt.system.contains("Behavior profile: forms"))
+        #expect(formPrompt.system.contains("Forms are suppressed by default"))
+        #expect(formPrompt.system.contains("Do not fill names, addresses"))
+    }
+
+    @Test("Prompt honors explicit behavior profile and request visible word cap")
+    func promptHonorsExplicitBehaviorProfileAndRequestVisibleWordCap() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 6)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "I think this should",
+            appBundleIdentifier: "com.apple.Notes",
+            behaviorProfileID: .email,
+            maxVisibleWords: 3
+        ))
+
+        #expect(prompt.system.contains("next 3 words or fewer"))
+        #expect(prompt.system.contains("Behavior profile: email"))
+        #expect(prompt.system.contains("Do not invent commitments"))
     }
 }
