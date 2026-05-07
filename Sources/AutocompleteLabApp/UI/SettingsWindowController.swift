@@ -7,9 +7,41 @@ struct SettingsCurrentAppState: Equatable {
     let supportStatus: CompatibilitySupportStatus
     let isEnabled: Bool
     let disabledAppCount: Int
+    let renderModeOverride: SuggestionRenderMode?
+
+    init(
+        displayName: String,
+        bundleIdentifier: String?,
+        supportStatus: CompatibilitySupportStatus,
+        isEnabled: Bool,
+        disabledAppCount: Int,
+        renderModeOverride: SuggestionRenderMode? = nil
+    ) {
+        self.displayName = displayName
+        self.bundleIdentifier = bundleIdentifier
+        self.supportStatus = supportStatus
+        self.isEnabled = isEnabled
+        self.disabledAppCount = disabledAppCount
+        self.renderModeOverride = renderModeOverride
+    }
 
     var canToggle: Bool {
         bundleIdentifier != nil && supportStatus.canToggleSuggestions
+    }
+
+    var canToggleMirrorMode: Bool {
+        guard case let .supported(profile) = supportStatus,
+              profile.canPresentSuggestions,
+              !profile.isSensitive else {
+            return false
+        }
+
+        return isMirrorForced
+            || (profile.renderMode == .inlineAdjacent && profile.fallbackRenderMode == .floatingMirror)
+    }
+
+    var isMirrorForced: Bool {
+        renderModeOverride == .floatingMirror
     }
 
     var statusText: String {
@@ -47,6 +79,10 @@ struct SettingsCurrentAppState: Equatable {
 
         guard case let .supported(profile) = supportStatus else {
             return "Mode: not tested yet"
+        }
+
+        if isMirrorForced {
+            return "Mode: mirror forced"
         }
 
         let primary = Self.renderModeName(profile.renderMode)
@@ -87,6 +123,10 @@ struct SettingsCurrentAppState: Equatable {
             return "Safety: choose a writing app first"
         }
 
+        if isMirrorForced {
+            return "Safety: Mirror forced by you; inline placement stays off for this app."
+        }
+
         return "Safety: \(supportStatus.userFacingSafetySummary)"
     }
 
@@ -104,6 +144,10 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         return isEnabled ? "Disable \(displayName)" : "Enable \(displayName)"
+    }
+
+    var mirrorModeTitle: String {
+        "Force mirror mode"
     }
 
     var blockedAppsText: String {
@@ -219,6 +263,11 @@ final class SettingsWindowController: NSObject {
     private let currentAppSafetyLabel = NSTextField(labelWithString: "")
     private let disabledAppsLabel = NSTextField(labelWithString: "")
     private let suggestionDecisionLabel = NSTextField(labelWithString: "")
+    private let toggleMirrorModeButton = NSButton(
+        checkboxWithTitle: "Force mirror mode",
+        target: nil,
+        action: nil
+    )
     private let toggleCurrentAppButton = NSButton(
         checkboxWithTitle: "Allow suggestions in this app",
         target: nil,
@@ -254,6 +303,7 @@ final class SettingsWindowController: NSObject {
     private let toggleSuggestionsPaused: () -> Void
     private let performRuntimeAction: (RuntimeReadinessAction) -> Void
     private let toggleCurrentApp: () -> Void
+    private let toggleMirrorMode: () -> Void
     private let enableAllApps: () -> Void
     private let toggleTracingPaused: () -> Void
     private let toggleRawContentTracing: () -> Void
@@ -268,6 +318,7 @@ final class SettingsWindowController: NSObject {
         toggleSuggestionsPaused: @escaping () -> Void,
         performRuntimeAction: @escaping (RuntimeReadinessAction) -> Void,
         toggleCurrentApp: @escaping () -> Void,
+        toggleMirrorMode: @escaping () -> Void,
         enableAllApps: @escaping () -> Void,
         toggleTracingPaused: @escaping () -> Void,
         toggleRawContentTracing: @escaping () -> Void,
@@ -280,6 +331,7 @@ final class SettingsWindowController: NSObject {
         self.toggleSuggestionsPaused = toggleSuggestionsPaused
         self.performRuntimeAction = performRuntimeAction
         self.toggleCurrentApp = toggleCurrentApp
+        self.toggleMirrorMode = toggleMirrorMode
         self.enableAllApps = enableAllApps
         self.toggleTracingPaused = toggleTracingPaused
         self.toggleRawContentTracing = toggleRawContentTracing
@@ -371,6 +423,9 @@ final class SettingsWindowController: NSObject {
         currentAppModeLabel.stringValue = currentApp.modeText
         currentAppAcceptanceLabel.stringValue = currentApp.acceptanceText
         currentAppSafetyLabel.stringValue = currentApp.safetyText
+        toggleMirrorModeButton.title = currentApp.mirrorModeTitle
+        toggleMirrorModeButton.state = currentApp.isMirrorForced ? .on : .off
+        toggleMirrorModeButton.isEnabled = currentApp.canToggleMirrorMode
         toggleCurrentAppButton.title = currentApp.toggleTitle
         toggleCurrentAppButton.state = currentApp.isEnabled ? .on : .off
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
@@ -455,6 +510,9 @@ final class SettingsWindowController: NSObject {
         toggleCurrentAppButton.target = self
         toggleCurrentAppButton.action = #selector(toggleCurrentAppControl)
         toggleCurrentAppButton.toolTip = "Adds or removes the current app from your blocked-app list."
+        toggleMirrorModeButton.target = self
+        toggleMirrorModeButton.action = #selector(toggleMirrorModeControl)
+        toggleMirrorModeButton.toolTip = "Forces this app to use the safer mirror surface instead of inline placement."
         enableAllAppsButton.target = self
         enableAllAppsButton.action = #selector(enableAllAppsControl)
         enableAllAppsButton.bezelStyle = .rounded
@@ -512,6 +570,7 @@ final class SettingsWindowController: NSObject {
                     currentAppModeLabel,
                     currentAppAcceptanceLabel,
                     currentAppSafetyLabel,
+                    toggleMirrorModeButton,
                     toggleCurrentAppButton,
                     makeButtonRow([disabledAppsLabel, enableAllAppsButton])
                 ]
@@ -620,6 +679,11 @@ final class SettingsWindowController: NSObject {
     @objc
     private func toggleCurrentAppControl() {
         toggleCurrentApp()
+    }
+
+    @objc
+    private func toggleMirrorModeControl() {
+        toggleMirrorMode()
     }
 
     @objc

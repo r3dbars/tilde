@@ -27,6 +27,9 @@ struct SettingsWindowControllerStateTests {
             allowed.safetyText
                 == "Safety: Inline when caret proof is trusted; mirror fallback if inline is unsafe."
         )
+        #expect(allowed.canToggleMirrorMode)
+        #expect(!allowed.isMirrorForced)
+        #expect(allowed.mirrorModeTitle == "Force mirror mode")
         #expect(allowed.toggleTitle == "Allow suggestions in this app")
         #expect(allowed.menuToggleTitle == "Disable TextEdit")
         #expect(allowed.blockedAppsText == "Blocked apps: none")
@@ -51,6 +54,8 @@ struct SettingsWindowControllerStateTests {
             blocked.safetyText
                 == "Safety: Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Insertion fails closed if the primary method is not verified."
         )
+        #expect(!blocked.canToggleMirrorMode)
+        #expect(blocked.mirrorModeTitle == "Force mirror mode")
         #expect(blocked.menuToggleTitle == "Enable Notes")
         #expect(blocked.blockedAppsText == "Blocked apps: 2")
         #expect(blocked.canToggle)
@@ -75,6 +80,7 @@ struct SettingsWindowControllerStateTests {
         #expect(diagnosticsOnly.modeText == "Mode: disabled")
         #expect(diagnosticsOnly.acceptanceText == "Acceptance: off here")
         #expect(diagnosticsOnly.safetyText == "Safety: Suggestions stay off here.")
+        #expect(!diagnosticsOnly.canToggleMirrorMode)
         #expect(diagnosticsOnly.menuToggleTitle == "Suggestions unavailable in Mail")
         #expect(!diagnosticsOnly.canToggle)
 
@@ -94,6 +100,7 @@ struct SettingsWindowControllerStateTests {
             unsupported.safetyText
                 == "Safety: Suggestions stay off until this app has a compatibility profile."
         )
+        #expect(!unsupported.canToggleMirrorMode)
         #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Atlas")
         #expect(!unsupported.canToggle)
 
@@ -110,8 +117,28 @@ struct SettingsWindowControllerStateTests {
         #expect(missing.modeText == "Mode: choose a writing app")
         #expect(missing.acceptanceText == "Acceptance: off until an app is selected")
         #expect(missing.safetyText == "Safety: choose a writing app first")
+        #expect(!missing.canToggleMirrorMode)
         #expect(missing.menuToggleTitle == "Toggle Current App")
         #expect(!missing.canToggle)
+    }
+
+    @Test("Current app copy exposes forced mirror mode")
+    func currentAppCopyExposesForcedMirrorMode() {
+        let store = CompatibilityProfileStore.mvp
+        let forced = SettingsCurrentAppState(
+            displayName: "TextEdit",
+            bundleIdentifier: "com.apple.TextEdit",
+            supportStatus: store.supportStatus(for: "com.apple.TextEdit"),
+            isEnabled: true,
+            disabledAppCount: 0,
+            renderModeOverride: .floatingMirror
+        )
+
+        #expect(forced.modeText == "Mode: mirror forced")
+        #expect(forced.safetyText == "Safety: Mirror forced by you; inline placement stays off for this app.")
+        #expect(forced.canToggleMirrorMode)
+        #expect(forced.isMirrorForced)
+        #expect(forced.mirrorModeTitle == "Force mirror mode")
     }
 
     @Test("Prompt apps show full accept is off for safety")
@@ -131,6 +158,7 @@ struct SettingsWindowControllerStateTests {
             codex.safetyText
                 == "Safety: Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Full accept stays off until no-submit proof exists."
         )
+        #expect(!codex.canToggleMirrorMode)
     }
 
     @Test("Accessibility permission copy says what the app reads and keeps local")
