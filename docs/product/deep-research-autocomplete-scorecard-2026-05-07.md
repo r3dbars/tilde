@@ -113,8 +113,11 @@ Pass 1 shipped these improvements:
 - `docs/product/proof-manifest.json` now indexes target-surface proof as
   structured data. `script/check_proof_manifest.sh` rechecks completed claims
   against current proof-fingerprint constants, matching manual smoke rows,
-  tracked scorecard screenshots, and strict visual markers, then fails strict
-  mode on partial or pending surfaces.
+  tracked scorecard screenshots, strict visual markers, and, in strict mode,
+  the matched trace JSONL slice. Strict proof now requires bounded line
+  evidence, screenshot-backed presented events for strict visual proof,
+  verified insertions, and current trace/placement/key/runtime proof
+  fingerprints.
 - Fresh installs now start with suggestion-capable apps off, keep Settings open
   until a test app is enabled, and use plainer local-model recovery copy that
   says Ollama or another model server is not needed.
@@ -275,8 +278,8 @@ Weighted total: **79.2/100**, rounded to **79/100**.
 | Esc learning | 86 | Esc dismiss now records annoyance, suppresses eligible fields until blur, starts a 15s app/field/mode/prefix cooldown, repeated Esc on the same prefix escalates to 60s, and Diagnostics exposes prefix cooldown duration/escalation metadata. | Prove real-app thresholds. |
 | Style memory | 90 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, and question rates with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, Settings can clear it, and Diagnostics exposes the trace-safe aggregate sketch. | Add tuning controls and fresh real-app trace validation. |
 | Annoyance index | 90 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, exposes current-field/session silence in Settings and the menu, records manual field pauses as scoped trace events, records placement uncertainty as caret-geometry failures, and Diagnostics now exposes annoyance score, active quiet-mode scope, and signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
-| Replay-first test rig | 83 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, placement metadata, trusted caret placement, stale cancellation, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. It can replay a fresh line-bounded trace slice, and the proof manifest now prevents structured proof claims from drifting away from current proof fingerprints and tracked evidence. | Replay recorded real app sessions with screenshots, accepts, kept horizon, and latency after every app/runtime change. |
-| Cross-app proof honesty | 93 | App proof matrix explicitly keeps failing rows non-A until evidence exists, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, and the proof manifest now fails strict mode while target surfaces remain partial or pending. | Close every pending proof row. |
+| Replay-first test rig | 84 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, placement metadata, trusted caret placement, stale cancellation, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. It can replay a fresh line-bounded trace slice, and the proof manifest now parses matched manual-smoke trace slices, requires bounded proof ranges, verifies accepts plus insertion verification, checks screenshot-backed strict visual trace events, and rejects stale proof fingerprints. | Replay recorded real app sessions with screenshots, accepts, kept horizon, and latency after every app/runtime change. |
+| Cross-app proof honesty | 94 | App proof matrix explicitly keeps failing rows non-A until evidence exists, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, and the proof manifest now fails strict mode on partial/pending surfaces plus old open-ended trace slices that predate the current proof fingerprint. | Close every pending proof row. |
 
 ## Baseline Evidence Notes
 

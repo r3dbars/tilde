@@ -73,7 +73,9 @@ Run the score target loop when working toward the product scorecards:
 ```
 
 The loop should keep failing until the deep dive scorecard is all 10/10, the
-Apple-native checklist is all 100/100, and the app proof matrix is all A.
+Apple-native checklist is all 100/100, the app proof matrix is all A, and the
+strict proof manifest has bounded current-fingerprint trace slices for every
+claimed surface.
 
 Run the long typing endurance command when working the "typing must feel
 untouched" score:

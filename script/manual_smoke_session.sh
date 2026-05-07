@@ -387,7 +387,22 @@ append_report_row() {
   local visual_status="${3:-}"
   local timestamp
   timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  local trace_summary="lines $((TRACE_START_LINE + 1))+ in \`$TRACE_PATH\`"
+  local log_start_line="$((START_LINE + 1))"
+  local log_end_line trace_start_line trace_end_line
+  log_end_line="$(wc -l <"$LOG_PATH" | tr -d ' ')"
+  if (( log_end_line < log_start_line )); then
+    log_end_line="$log_start_line"
+  fi
+  trace_start_line="$((TRACE_START_LINE + 1))"
+  if [[ -f "$TRACE_PATH" ]]; then
+    trace_end_line="$(wc -l <"$TRACE_PATH" | tr -d ' ')"
+  else
+    trace_end_line="$trace_start_line"
+  fi
+  if (( trace_end_line < trace_start_line )); then
+    trace_end_line="$trace_start_line"
+  fi
+  local trace_summary="lines $trace_start_line-$trace_end_line in \`$TRACE_PATH\`"
   if [[ "$visual_status" == "not-applicable" ]]; then
     trace_summary="$trace_summary; visual \`not-applicable\`"
   elif (( STRICT_VISUAL_EVIDENCE == 1 )); then
@@ -417,14 +432,15 @@ required and passed. Rows without that marker are insertion proof only.
 EOF
   fi
 
-  printf '| %s | %s | `%s` | `%s` | %s | `%s` | lines %s+ in `%s` | %s |\n' \
+  printf '| %s | %s | `%s` | `%s` | %s | `%s` | lines %s-%s in `%s` | %s |\n' \
     "$timestamp" \
     "$REPORT_APP_NAME" \
     "$BUNDLE_ID" \
     "$PROOF_LABEL" \
     "$verified_count" \
     "$render_expectation" \
-    "$((START_LINE + 1))" \
+    "$log_start_line" \
+    "$log_end_line" \
     "$LOG_PATH" \
     "$trace_summary" >>"$REPORT_PATH"
 }

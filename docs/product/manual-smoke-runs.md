@@ -10,6 +10,8 @@ historical evidence only.
 
 When a trace slice says `visual strict-complete`, strict screenshot evidence was
 required and passed. Rows without that marker are insertion proof only.
+Rows with `lines N+` are historical open-ended proof. New recorder rows should
+use bounded `lines N-M` ranges so strict proof can replay exactly that slice.
 
 | Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
 | --- | --- | --- | --- | ---: | --- | --- | --- |

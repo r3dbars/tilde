@@ -15,6 +15,21 @@ DEFAULT_MANUAL_SMOKE = ROOT_DIR / "docs/product/manual-smoke-runs.md"
 DEFAULT_SCORECARD = ROOT_DIR / "docs/product/deep-dive-scorecard-2026-05-06.md"
 PROOF_METADATA_SOURCE = ROOT_DIR / "Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift"
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+TRACE_REFERENCE_PATTERN = re.compile(
+    r"lines\s+(\d+)(?:\s*-\s*(\d+)|\+)?\s+in\s+`?([^`;\s]+)`?"
+)
+PROOF_EVENT_TYPES = {
+    "suggestionRequested",
+    "modelResult",
+    "suggestionPresented",
+    "suggestionHidden",
+    "suggestionAccepted",
+    "suggestionSuppressed",
+    "insertionVerified",
+    "insertionFailed",
+    "acceptedTextEdited",
+    "caretGeometryFailed",
+}
 
 
 def fail(message: str) -> None:
@@ -153,6 +168,138 @@ def find_manual_row(rows: list[dict[str, str]], claim: dict) -> dict[str, str] |
     return None
 
 
+def parse_trace_reference(value: str) -> dict[str, object] | None:
+    match = TRACE_REFERENCE_PATTERN.search(value)
+    if not match:
+        return None
+    start_line = int(match.group(1))
+    end_line = int(match.group(2)) if match.group(2) else None
+    return {
+        "startLine": start_line,
+        "endLine": end_line,
+        "path": repo_path(match.group(3).strip()),
+        "isOpenEnded": end_line is None,
+    }
+
+
+def load_trace_slice(path: Path, start_line: int, end_line: int) -> tuple[list[dict], list[str]]:
+    failures: list[str] = []
+    events: list[dict] = []
+    if not path.exists():
+        return [], [f"trace file missing: {path}"]
+
+    with path.open("r", encoding="utf-8") as handle:
+        for line_number, raw_line in enumerate(handle, start=1):
+            if line_number < start_line:
+                continue
+            if line_number > end_line:
+                break
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                decoded = json.loads(line)
+            except json.JSONDecodeError as error:
+                failures.append(f"invalid JSONL at {path}:{line_number}: {error}")
+                continue
+            if isinstance(decoded, dict):
+                events.append(decoded)
+            else:
+                failures.append(f"trace event at {path}:{line_number} must be an object")
+
+    return events, failures
+
+
+def event_has_current_fingerprint(event: dict, current_versions: dict[str, str]) -> bool:
+    metadata = event.get("metadata")
+    if not isinstance(metadata, dict):
+        return False
+    return all(metadata.get(key) == expected for key, expected in current_versions.items())
+
+
+def verify_manual_trace_slice(
+    name: str,
+    claim: dict,
+    matched: dict[str, str],
+    current_versions: dict[str, str],
+    require_bounded_trace_slices: bool,
+    trace_window_lines: int,
+) -> tuple[list[str], list[str], bool]:
+    failures: list[str] = []
+    warnings: list[str] = []
+    reference = parse_trace_reference(matched["traceSlice"])
+    if reference is None:
+        return [f"{name}: matched manual smoke row is missing a parseable trace slice"], [], False
+
+    start_line = int(reference["startLine"])
+    end_line = reference["endLine"]
+    is_open_ended = bool(reference["isOpenEnded"])
+    if is_open_ended:
+        if require_bounded_trace_slices:
+            failures.append(f"{name}: trace proof must use bounded line evidence, not lines {start_line}+")
+        else:
+            warnings.append(f"{name}: trace proof is open-ended; using a {trace_window_lines}-line verification window")
+        end_line = start_line + trace_window_lines - 1
+
+    assert isinstance(end_line, int)
+    trace_path = reference["path"]
+    assert isinstance(trace_path, Path)
+    events, load_failures = load_trace_slice(trace_path, start_line, end_line)
+    failures.extend(f"{name}: {failure}" for failure in load_failures)
+    if not events:
+        failures.append(f"{name}: trace slice is empty")
+        return failures, warnings, False
+
+    expected_bundle = str(claim.get("bundle", ""))
+    app_events = [event for event in events if event.get("appBundleIdentifier") == expected_bundle]
+    if not app_events:
+        failures.append(f"{name}: trace slice has no events for {expected_bundle}")
+        return failures, warnings, False
+
+    min_accepts = int(claim.get("minVerifiedAccepts", 1))
+    max_accepts = claim.get("maxVerifiedAccepts")
+    max_accepts = int(max_accepts) if max_accepts is not None else None
+    accepted = [event for event in app_events if event.get("type") == "suggestionAccepted"]
+    verified = [
+        event
+        for event in app_events
+        if event.get("type") == "insertionVerified" and event.get("outcome") == "verified"
+    ]
+    if len(accepted) < min_accepts:
+        failures.append(f"{name}: trace slice has {len(accepted)} accepts; expected at least {min_accepts}")
+    if len(verified) < min_accepts:
+        failures.append(f"{name}: trace slice has {len(verified)} verified insertions; expected at least {min_accepts}")
+    if max_accepts is not None and len(verified) > max_accepts:
+        failures.append(f"{name}: trace slice has {len(verified)} verified insertions; expected at most {max_accepts}")
+
+    if claim.get("requiresVisualStrictComplete") is True:
+        if "strict-complete" not in matched["traceSlice"]:
+            failures.append(f"{name}: matched manual smoke row is missing visual strict-complete")
+        screenshot_events = [
+            event
+            for event in app_events
+            if event.get("type") == "suggestionPresented" and str(event.get("screenshotPath", "")).strip()
+        ]
+        if not screenshot_events:
+            failures.append(f"{name}: strict visual proof requires screenshot-backed presented trace events")
+
+    proof_events = [event for event in app_events if event.get("type") in PROOF_EVENT_TYPES]
+    if not proof_events:
+        failures.append(f"{name}: trace slice has no proof-gated events")
+    else:
+        stale_count = sum(
+            1
+            for event in proof_events
+            if not event_has_current_fingerprint(event, current_versions)
+        )
+        if stale_count:
+            failures.append(
+                f"{name}: {stale_count}/{len(proof_events)} proof events are missing current proof fingerprints"
+            )
+
+    return failures, warnings, not failures
+
+
 def referenced_scorecard_screenshots(path: Path) -> set[str]:
     if not path.exists():
         return set()
@@ -179,6 +326,9 @@ def verify_manifest(
     scorecard_path: Path,
     require_all: bool,
     require_current_commit: bool,
+    verify_trace_slices: bool,
+    require_bounded_trace_slices: bool,
+    trace_window_lines: int,
 ) -> int:
     manifest = load_json(manifest_path)
     failures: list[str] = []
@@ -210,6 +360,7 @@ def verify_manifest(
     pending: list[str] = []
     partial: list[str] = []
     complete = 0
+    verified_trace_slices = 0
 
     for index, surface in enumerate(surfaces):
         if not isinstance(surface, dict):
@@ -256,6 +407,19 @@ def verify_manifest(
                 )
             elif manual_smoke.get("requiresVisualStrictComplete") is True and "strict-complete" not in matched["traceSlice"]:
                 failures.append(f"{name}: matched manual smoke row is missing visual strict-complete")
+            elif verify_trace_slices:
+                trace_failures, trace_warnings, trace_verified = verify_manual_trace_slice(
+                    name,
+                    manual_smoke,
+                    matched,
+                    current_versions,
+                    require_bounded_trace_slices,
+                    trace_window_lines,
+                )
+                failures.extend(trace_failures)
+                warnings.extend(trace_warnings)
+                if trace_verified:
+                    verified_trace_slices += 1
 
         screenshots = surface.get("screenshots", [])
         if status == "complete" and not screenshots:
@@ -285,6 +449,8 @@ def verify_manifest(
     print(f"Complete surfaces: {complete}")
     print(f"Partial surfaces: {len(partial)}")
     print(f"Pending surfaces: {len(pending)}")
+    if verify_trace_slices:
+        print(f"Verified trace slices: {verified_trace_slices}")
     if partial:
         print("Partial proof:")
         for name in partial:
@@ -315,7 +481,12 @@ def main() -> int:
     parser.add_argument("--scorecard", default=str(DEFAULT_SCORECARD))
     parser.add_argument("--require-all", "--strict", action="store_true", dest="require_all")
     parser.add_argument("--require-current-commit", action="store_true")
+    parser.add_argument("--verify-trace-slices", action="store_true")
+    parser.add_argument("--require-bounded-trace-slices", action="store_true")
+    parser.add_argument("--trace-window-lines", type=int, default=80)
     args = parser.parse_args()
+    if args.trace_window_lines < 1:
+        fail("--trace-window-lines must be at least 1")
 
     return verify_manifest(
         manifest_path=repo_path(args.manifest),
@@ -323,6 +494,9 @@ def main() -> int:
         scorecard_path=repo_path(args.scorecard),
         require_all=args.require_all,
         require_current_commit=args.require_current_commit,
+        verify_trace_slices=args.verify_trace_slices or args.require_all,
+        require_bounded_trace_slices=args.require_bounded_trace_slices or args.require_all,
+        trace_window_lines=args.trace_window_lines,
     )
 
 
