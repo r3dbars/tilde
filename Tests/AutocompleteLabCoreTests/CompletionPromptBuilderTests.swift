@@ -25,7 +25,9 @@ struct CompletionPromptBuilderTests {
         ))
 
         #expect(prompt.system.contains("dogfooding this autocomplete tool"))
+        #expect(prompt.system.contains("text the user is typing into an agent prompt"))
         #expect(prompt.system.contains("testing, using, building, debugging"))
+        #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
         #expect(prompt.system.contains("integrate it seamlessly"))
     }
 
@@ -38,7 +40,9 @@ struct CompletionPromptBuilderTests {
         ))
 
         #expect(prompt.system.contains("Continue the user's actual sentence naturally"))
+        #expect(prompt.system.contains("text the user is typing into an agent prompt"))
         #expect(prompt.system.contains("Do not force software, testing, latency, placement, or debugging topics"))
+        #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
         #expect(!prompt.system.contains("Prefer concrete continuations about testing"))
     }
 
@@ -90,6 +94,33 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("The active app is Claude Code"))
         #expect(prompt.system.contains("dogfooding this autocomplete tool"))
         #expect(prompt.system.contains("testing, using, building, debugging"))
+        #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
+    }
+
+    @Test("Claude desktop prompt gets prompt app guidance")
+    func claudeDesktopPromptGetsPromptAppGuidance() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Can you make this sentence",
+            appBundleIdentifier: "com.anthropic.claudefordesktop"
+        ))
+
+        #expect(prompt.system.contains("The active app is Claude"))
+        #expect(prompt.system.contains("text the user is typing into an agent prompt"))
+        #expect(prompt.system.contains("not a prompt to answer"))
+        #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
+    }
+
+    @Test("Dogfood prompt recognizes prompt app safety context")
+    func dogfoodPromptRecognizesPromptAppSafetyContext() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Claude Code no-submit prompt insertion should",
+            appBundleIdentifier: "com.anthropic.claude-code"
+        ))
+
+        #expect(prompt.system.contains("dogfooding this autocomplete tool"))
+        #expect(prompt.system.contains("Prefer concrete continuations about testing"))
     }
 
     @Test("Word completion prompt asks for only the current word suffix")

@@ -48,6 +48,20 @@ struct PromptEditorFingerprintPolicyTests {
         #expect(decision.reason == "prompt-fingerprint")
     }
 
+    @Test("Allows native prompt text fields with prompt fingerprints")
+    func allowsNativePromptTextFieldsWithPromptFingerprints() {
+        let decision = policy.decision(
+            bundleIdentifier: "com.openai.codex",
+            role: "AXTextField",
+            fingerprintText: "Ask Codex prompt input",
+            elementRect: nil,
+            windowRect: nil
+        )
+
+        #expect(decision.canSuggest)
+        #expect(decision.reason == "prompt-fingerprint")
+    }
+
     @Test("Allows prompt-like dogfood wrappers")
     func allowsPromptLikeDogfoodWrappers() {
         let groupDecision = policy.decision(
@@ -66,9 +80,9 @@ struct PromptEditorFingerprintPolicyTests {
         )
 
         #expect(groupDecision.canSuggest)
-        #expect(groupDecision.reason == "prompt-fingerprint")
+        #expect(groupDecision.reason == "prompt-fingerprint-geometry")
         #expect(webAreaDecision.canSuggest)
-        #expect(webAreaDecision.reason == "prompt-fingerprint")
+        #expect(webAreaDecision.reason == "prompt-fingerprint-geometry")
 
         let desktopDecision = policy.decision(
             bundleIdentifier: "com.anthropic.claudefordesktop",
@@ -80,6 +94,20 @@ struct PromptEditorFingerprintPolicyTests {
 
         #expect(desktopDecision.canSuggest)
         #expect(desktopDecision.reason == "prompt-fingerprint")
+    }
+
+    @Test("Blocks prompt wrapper fingerprints away from composer geometry")
+    func blocksPromptWrapperFingerprintsAwayFromComposerGeometry() {
+        let decision = policy.decision(
+            bundleIdentifier: "com.openai.codex",
+            role: "AXGroup",
+            fingerprintText: "Ask Codex prompt input",
+            elementRect: CGRect(x: 100, y: 180, width: 700, height: 340),
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
+        )
+
+        #expect(!decision.canSuggest)
+        #expect(decision.reason == "prompt-fingerprint-not-composer")
     }
 
     @Test("Allows generic prompt fingerprints only with composer geometry")
@@ -125,6 +153,20 @@ struct PromptEditorFingerprintPolicyTests {
             bundleIdentifier: "com.openai.codex",
             role: "AXTextArea",
             fingerprintText: "prompt",
+            elementRect: nil,
+            windowRect: nil
+        )
+
+        #expect(!decision.canSuggest)
+        #expect(decision.reason == "missing-prompt-bounds")
+    }
+
+    @Test("Blocks bare composer labels without geometry")
+    func blocksBareComposerLabelsWithoutGeometry() {
+        let decision = policy.decision(
+            bundleIdentifier: "com.anthropic.claude-code",
+            role: "AXTextArea",
+            fingerprintText: "composer",
             elementRect: nil,
             windowRect: nil
         )

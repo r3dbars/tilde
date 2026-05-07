@@ -70,6 +70,15 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        guard !looksLikeUnsafePromptAction(withoutPromptEchoLabel) else {
+            return nil
+        }
+
+        if let textBeforeCursor,
+           looksLikeAssistantResponseToPrompt(withoutPromptEchoLabel, after: textBeforeCursor) {
+            return nil
+        }
+
         let normalizedSuggestion = mode == .wordCompletion ? withoutPromptEchoLabel : ensureLeadingSpace(withoutPromptEchoLabel)
         let trimmedSuggestion: String
         if let textBeforeCursor {
@@ -188,6 +197,36 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("certainly,")
     }
 
+    private func looksLikeUnsafePromptAction(_ text: String) -> Bool {
+        let normalized = text
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return normalized.hasPrefix("press enter")
+            || normalized.hasPrefix("press return")
+            || normalized.hasPrefix("hit enter")
+            || normalized.hasPrefix("hit return")
+            || normalized.hasPrefix("send the prompt")
+            || normalized.hasPrefix("submit the prompt")
+            || normalized.hasPrefix("click send")
+            || normalized.hasPrefix("run this command")
+            || normalized.hasPrefix("execute this command")
+            || normalized.hasPrefix("execute the command")
+    }
+
+    private func looksLikeAssistantResponseToPrompt(_ text: String, after textBeforeCursor: String) -> Bool {
+        let normalizedCandidate = text
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard Self.assistantResponsePrefixes.contains(where: { normalizedCandidate.hasPrefix($0) }) else {
+            return false
+        }
+
+        let nearbyContext = String(textBeforeCursor.suffix(180)).lowercased()
+        return Self.promptRequestMarkers.contains(where: { nearbyContext.contains($0) })
+    }
+
     private func ensureLeadingSpace(_ text: String) -> String {
         guard let first = text.first, !first.isWhitespace else {
             return text
@@ -297,6 +336,32 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
     private static let commonWholeWords = Set(WordCompletionCandidateRanker.defaultWords)
         .union(lowValueSingleWordPhrases)
+
+    private static let assistantResponsePrefixes: Set<String> = [
+        "first,",
+        "i can ",
+        "i will ",
+        "i'll ",
+        "let me ",
+        "sure,",
+        "we need to "
+    ]
+
+    private static let promptRequestMarkers: Set<String> = [
+        "build ",
+        "can you",
+        "could you",
+        "debug ",
+        "explain ",
+        "fix ",
+        "help me",
+        "inspect ",
+        "look at",
+        "make ",
+        "please ",
+        "run ",
+        "write "
+    ]
 }
 
 private extension Array where Element: Equatable {

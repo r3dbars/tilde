@@ -37,6 +37,36 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
 
         let searchable = fingerprintText.lowercased()
         if Self.strongPromptTerms.contains(where: { searchable.contains($0) }) {
+            guard !Self.promptTextInputRoles.contains(role ?? "") else {
+                return PromptEditorFingerprintDecision(canSuggest: true, reason: "prompt-fingerprint")
+            }
+
+            guard let elementRect,
+                  let windowRect,
+                  windowRect.width > 0,
+                  windowRect.height > 0 else {
+                return PromptEditorFingerprintDecision(canSuggest: false, reason: "missing-prompt-bounds")
+            }
+
+            guard isPromptLikeGeometry(elementRect: elementRect, windowRect: windowRect) else {
+                return PromptEditorFingerprintDecision(canSuggest: false, reason: "prompt-fingerprint-not-composer")
+            }
+
+            return PromptEditorFingerprintDecision(canSuggest: true, reason: "prompt-fingerprint-geometry")
+        }
+
+        if searchable.contains("composer") {
+            guard let elementRect,
+                  let windowRect,
+                  windowRect.width > 0,
+                  windowRect.height > 0 else {
+                return PromptEditorFingerprintDecision(canSuggest: false, reason: "missing-prompt-bounds")
+            }
+
+            guard isPromptLikeGeometry(elementRect: elementRect, windowRect: windowRect) else {
+                return PromptEditorFingerprintDecision(canSuggest: false, reason: "generic-prompt-not-composer")
+            }
+
             return PromptEditorFingerprintDecision(canSuggest: true, reason: "prompt-fingerprint")
         }
 
@@ -56,7 +86,7 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
             return PromptEditorFingerprintDecision(canSuggest: true, reason: "generic-prompt-geometry")
         }
 
-        guard role == "AXTextArea" else {
+        guard Self.promptTextInputRoles.contains(role ?? "") else {
             return PromptEditorFingerprintDecision(canSuggest: false, reason: "missing-prompt-fingerprint")
         }
 
@@ -90,7 +120,6 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
         "claude message composer",
         "codex message composer",
         "compose a message",
-        "composer",
         "describe a task or ask a question",
         "message composer",
         "prompt editor",
@@ -111,7 +140,13 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
 
     private static let promptCompatibleRoles: Set<String> = [
         "AXTextArea",
+        "AXTextField",
         "AXGroup",
         "AXWebArea"
+    ]
+
+    private static let promptTextInputRoles: Set<String> = [
+        "AXTextArea",
+        "AXTextField"
     ]
 }
