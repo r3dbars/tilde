@@ -61,6 +61,20 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(frame.maxX <= 1304)
     }
 
+    @Test("Suppresses inline ghost when less than a useful word fits")
+    func suppressesInlineGhostWhenLessThanUsefulWordFits() {
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            caretRect: CGRect(x: 1268, y: 420, width: 0, height: 22),
+            textLineRect: CGRect(x: 20, y: 415, width: 1248, height: 22),
+            textSize: CGSize(width: 180, height: 22),
+            screenFrame: CGRect(x: 0, y: 0, width: 1600, height: 900),
+            clippingFrame: CGRect(x: 0, y: 80, width: 1312, height: 740)
+        )
+
+        #expect(frame.width < 40)
+        #expect(!SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(frame))
+    }
+
     @Test("Keeps inline ghost text inside negative-origin editor bounds")
     func keepsInlineGhostTextInsideNegativeOriginEditorBounds() {
         let screenFrame = CGRect(x: -1920, y: 300, width: 1920, height: 1080)

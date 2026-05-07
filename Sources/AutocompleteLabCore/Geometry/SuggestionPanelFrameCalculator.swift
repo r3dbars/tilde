@@ -25,7 +25,7 @@ public enum SuggestionPanelFrameCalculator {
 
     public static func isUsableInlineGhostFrame(
         _ frame: CGRect,
-        minimumVisibleWidth: CGFloat = 24
+        minimumVisibleWidth: CGFloat = 40
     ) -> Bool {
         frame.minX.isFinite
             && frame.minY.isFinite
