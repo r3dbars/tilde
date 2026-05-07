@@ -10,7 +10,7 @@ Repo state graded: `codex/deep-research-scorecard` at `46ee5f4`, based on
 
 Baseline deep research score: **78/100**.
 
-Current implementation score after the first build pass: **84/100**.
+Current implementation score after the current build pass: **85/100**.
 
 This is a strong prototype with real engineering depth. It has local MLX
 runtime support, app compatibility profiles, privacy-safe tracing defaults,
@@ -47,15 +47,22 @@ Pass 1 shipped these improvements:
 - Prefix-family cooldowns: 5s typed-over, 15s Esc, 250ms deletion.
 - Display-score object and live presentation gate with trace-safe components.
 - One-line visible suggestion cap under 42 characters.
+- Core behavior profiles for casual chat, email, notes, coding, docs/prose,
+  bullets, forms, search, and AI chat, with prompt guidance tests.
+- Replay-first trace proof command: `swift run AutocompleteTraceReplay
+  /path/to/traces.jsonl`.
 
 Remaining high-impact gaps:
 
 - Display score is heuristic; it does not yet use real accepted-and-kept
   probability or multi-candidate ranking.
 - Sentence mode is still a stricter boundary path, not a full first-class lane.
-- Behavior profiles for email, bullets, code, docs/prose, notes, and AI chat
-  are still thin.
-- Replay-first real-app proof is still missing.
+- Behavior profiles now exist in core, but live profile wiring is partial:
+  AppDelegate and `CompletionRequest` still do not pass field-kind or selected
+  profile metadata through the full generation/scoring path.
+- Replay-first real-app proof is still missing. The command exists, but the
+  current local trace corpus fails the proof gate because it predates display
+  scoring, kept-horizon events, and researched trigger delays.
 - Cross-app proof rows still need fresh screenshot-backed acceptance slices.
 
 ## Research Bar
@@ -304,16 +311,20 @@ these are true.
 
 ## First Implementation Queue
 
-1. Wire live field classification into activation.
-2. Wire accepted-and-kept tracking into the acceptance path.
-3. Wire annoyance suppression into the suggestion decision path.
-4. Replace 0-15ms app trigger delays with mode-aware researched delays.
-5. Add typed-over and Esc prefix-family cooldowns.
-6. Add `<NO_SUGGESTION>` prompt/cleaner path.
-7. Add display-score object and trace score components.
-8. Add behavior profile enum and start with notes, bullets, docs/prose, AI chat.
-9. Add bullet/checklist unit evals.
-10. Build the replay-first proof command.
+1. Done: wire live field classification into activation.
+2. Done: wire accepted-and-kept tracking into the acceptance path.
+3. Done: wire annoyance suppression into the suggestion decision path.
+4. Done: replace 0-15ms app trigger delays with mode-aware researched delays.
+5. Done: add typed-over and Esc prefix-family cooldowns.
+6. Done: add `<NO_SUGGESTION>` prompt/cleaner path.
+7. Done: add display-score object and trace score components.
+8. Partial: add behavior profile enum and start with notes, bullets,
+   docs/prose, AI chat. Core profiles and tests exist; live wiring is still
+   partial.
+9. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
+   checklist acceptance/proof slices are still missing.
+10. Partial: build the replay-first proof command. The command exists; a fresh
+   post-pass trace proof still has to pass.
 
 ## Goal Status
 
@@ -322,4 +333,13 @@ every scored item reaches 100/100.
 
 Baseline status: **78/100**.
 
-Current implementation status: **84/100**. Not complete.
+Current implementation status: **85/100**. Not complete.
+
+Replay proof status:
+
+- Command: `swift run AutocompleteTraceReplay
+  /Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`
+- Result on the current local trace corpus: proof gate **failed**, as expected
+  for stale pre-pass traces.
+- Key failures: trigger delay coverage 3%, display score coverage 0%, kept
+  horizon events 0.
