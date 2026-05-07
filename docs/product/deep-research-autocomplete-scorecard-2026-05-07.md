@@ -131,6 +131,9 @@ Pass 1 shipped these improvements:
 - Line-start cadence now stays quiet in plain prose while allowing constrained
   one-word completions in list/checklist and email contexts, so `- Pri` or
   `Tha` can complete without allowing phrase suggestions after a bare marker.
+- Notes insertion verification now uses a slower read-only recheck for unchanged
+  AX reads before retrying or suppressing the field, so delayed Notes body and
+  checklist AX updates do not immediately look like failed insertions.
 - Trace events now carry a proof fingerprint for the current trace, placement,
   key-capture, and runtime proof versions; replay fails stale proof that predates
   those versions.
@@ -268,7 +271,7 @@ Weighted total: **79.2/100**, rounded to **79/100**.
 | Atomic undo | 78 | Accepted insertions now arm an 8s one-step Command-Z restore for the same focused app/field; raw accepted text stays only in ephemeral memory and diagnostics log lengths/status only. | Prove the restore path per app and decide whether native undo grouping can replace the app-level fallback. |
 | Casual chat profile | 82 | `AutocompleteBehaviorProfile.casualChat` caps at 4 words, suppresses questions/emotional text, and runtime candidate ranking penalizes question-like or emotionally steering completions. | Fresh chat-app proof and learned style fit. |
 | Email profile | 78 | Mail resolves to an email profile with 2-6 word cap, blank/fresh paragraph suppression, no invented commitments/names/deadlines guidance, and runtime candidate ranking now penalizes invented meetings, dates, attachments, and unsupported commitments. | Real Mail proof plus safe free-form exceptions. |
-| Notes profile | 82 | Notes app profile exists with terse 1-5 word guidance and blank-line suppression; list/checklist prompt guidance now applies from trace-safe current-line shape, runtime ranking penalizes flowery complete-sentence note candidates, and the title field has same-slice strict visual proof with two verified accepts. | Bullet/list-aware proof for body and checklist surfaces. |
+| Notes profile | 84 | Notes app profile exists with terse 1-5 word guidance, blank-line suppression, list/checklist prompt guidance, safer AX-first insertion, and delayed read-only verification for Notes AX lag. The title field has same-slice strict visual proof with two verified accepts. | Bullet/list-aware proof for body and checklist surfaces. |
 | Coding profile | 78 | Coding profile caps at 1-5 tokens, warns against invented APIs/imports/blocks, and runtime candidate ranking now penalizes block/import/function starters, multiline output, and unsupported identifiers. | Opt-in proof in real editors and deeper syntax-aware scoring from editor context. |
 | Docs/prose profile | 80 | Docs/prose profile matches rhythm/vocabulary, suppresses fresh paragraphs/blank lines, and runtime ranking penalizes candidates that start a new section or new point instead of continuing the current paragraph. | Fresh prose proof and learned rhythm/style fit. |
 | Bullets profile | 84 | Bullet/checklist/numbered current-line shape is now detected without item text, feeds trace metadata and prompt guidance, maps generic list-shaped writing to the bullets profile, keeps AI/search/form safety profiles ahead of list shape, and runtime ranking penalizes repeated bullet/checklist markers. | Screenshot-backed same-slice accepts in Notes/TextEdit plus checklist undo proof. |

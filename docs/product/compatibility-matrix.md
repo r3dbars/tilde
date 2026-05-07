@@ -11,7 +11,7 @@ For screenshot-backed app-by-app grades and gaps, use
 | App | Status | Render | Insert | Proof |
 | --- | --- | --- | --- | --- |
 | TextEdit | supported | inline, mirror fallback | AX selected text, value fallback | recorded manual smoke pass |
-| Notes | supported | inline, mirror fallback | verified AX first, key fallback | title proof recorded; body and checklist still require separate proof labels |
+| Notes | supported | inline, mirror fallback | verified AX first, delayed read-only recheck, key fallback | title proof recorded; body and checklist still require separate proof labels |
 | Obsidian | supported | synthetic caret mirror, no detached fallback | AX then key events, key fallback | recorded CodeMirror smoke pass with two verified accepts; detached whole-editor anchors stay suppressed |
 | Chrome | supported for local text fields and local editor fixtures | synthetic inline, mirror fallback | key events, AX value fallback | repeatable textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture commands with screenshot-backed proof labels |
 | Codex | dogfood target | synthetic inline caret, no detached fallback | AX value replacement, key fallback | prior manual pass is stale for this gate; current one-word no-submit proof pending |
