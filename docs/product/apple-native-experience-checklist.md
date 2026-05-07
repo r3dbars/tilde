@@ -166,7 +166,10 @@ cheap, even if the model output is good.
 - [x] Real Slack/Discord chat boxes need no-submit proof before enablement.
 - [x] The app should hide inline suggestions when there is less than one useful word of room after the caret.
 - [x] The app should prefer mirror mode over visually lying about inline placement.
-- [ ] Placement should use screenshot-derived correction only after explicit opt-in proof.
+- [x] Placement should use screenshot-derived correction only after explicit opt-in proof.
+  Code-backed: trusted screenshot/manual offsets now require a stored visual scope
+  and live placement only applies them when the current app version, screen, and
+  field shape match.
 - [x] A learned visual offset must expire after app version, screen, or field-shape changes.
 - [x] The UI should expose placement confidence in diagnostics without exposing user text.
 
