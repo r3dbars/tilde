@@ -45,7 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         traceLog: RawAutocompleteTraceLog.shared,
         compatibilityLearningStore: compatibilityLearningStore
     )
-    private let suggestionPanel = SuggestionPanelController()
+    private let visibleSuggestionPanel = VisibleSuggestionPanelPresenter()
     private lazy var focusedTextReader = SerialFocusedTextAXReader(accessibilityClient: accessibilityClient)
     private lazy var accessibilityObserver = AccessibilityObserver(
         eventHandler: { [weak self] event in
@@ -107,11 +107,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyboardEventTap: KeyboardEventTap?
     private var keyboardEventTapStopTask: Task<Void, Never>?
     private var suggestionSession = SuggestionSession()
-    private var lastCaretRect: CGRect?
-    private var lastTextLineRect: CGRect?
-    private var lastClippingRect: CGRect?
-    private var lastTextStyle: FocusedTextStyle?
-    private var lastRenderMode: SuggestionRenderMode?
     private var currentFieldIdentity: FocusedFieldIdentity?
     private var currentProfile: CompatibilityProfile?
     private var lastTextSnapshot: FocusedTextSnapshot?
@@ -2203,12 +2198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        lastCaretRect = placement.anchorRect
-        lastTextLineRect = placement.textLineRect
-        lastClippingRect = placement.clippingRect
-        lastTextStyle = context.textStyle
-        lastRenderMode = placement.renderMode
-        guard let panelPresentation = suggestionPanel.show(
+        guard let panelPresentation = visibleSuggestionPanel.show(
             text: suggestion.visibleText,
             near: placement.anchorRect,
             alignedTo: placement.renderMode == .inlineAdjacent ? placement.textLineRect : nil,
@@ -2505,25 +2495,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshVisibleSuggestion() {
-        guard let suggestion = suggestionSession.visibleSuggestion,
-              let caretRect = lastCaretRect else {
+        guard let suggestion = suggestionSession.visibleSuggestion else {
             hideSuggestion()
             return
         }
 
         currentSuggestionDisplayedText = suggestion.visibleText
-        guard suggestionPanel.show(
-            text: suggestion.visibleText,
-            near: caretRect,
-            alignedTo: lastTextLineRect,
-            boundedBy: lastClippingRect,
-            style: lastTextStyle,
-            renderMode: lastRenderMode ?? .inlineAdjacent
-        ) != nil else {
+        switch visibleSuggestionPanel.refresh(text: suggestion.visibleText) {
+        case .presented:
+            updateKeyboardEventTapSnapshot()
+        case .missingPlacement:
+            hideSuggestion()
+        case .panelFrameUnusable:
             hideSuggestion(reason: "panel-frame-unusable")
-            return
         }
-        updateKeyboardEventTapSnapshot()
     }
 
     private func repositionVisibleSuggestion(
@@ -2569,11 +2554,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        lastCaretRect = placement.anchorRect
-        lastTextLineRect = placement.textLineRect
-        lastClippingRect = placement.clippingRect
-        lastTextStyle = context.textStyle
-        lastRenderMode = placement.renderMode
+        visibleSuggestionPanel.updatePlacement(
+            anchorRect: placement.anchorRect,
+            textLineRect: placement.textLineRect,
+            clippingRect: placement.clippingRect,
+            style: context.textStyle,
+            renderMode: placement.renderMode
+        )
         refreshVisibleSuggestion()
     }
 
@@ -2764,12 +2751,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionDisplayedText = nil
         currentSuggestionInvalidatedByUserKeyDown = false
         streamingPresentationStates.removeAll(keepingCapacity: true)
-        lastCaretRect = nil
-        lastTextLineRect = nil
-        lastClippingRect = nil
-        lastTextStyle = nil
-        lastRenderMode = nil
-        suggestionPanel.hide()
+        visibleSuggestionPanel.hide()
         updateKeyboardEventTapSnapshot()
         scheduleKeyboardEventTapStopIfIdle()
     }
@@ -3145,16 +3127,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func applyVisibleSuggestionNudge(dx: Double, dy: Double, bundleIdentifier: String) -> Bool {
         guard suggestionSession.hasVisibleSuggestion,
-              visibleSuggestionBundleIdentifier == bundleIdentifier,
-              lastCaretRect != nil else {
+              visibleSuggestionBundleIdentifier == bundleIdentifier else {
             return false
         }
 
-        let deltaX = CGFloat(dx)
-        let deltaY = CGFloat(dy)
-        lastCaretRect = lastCaretRect?.offsetBy(dx: deltaX, dy: deltaY)
-        lastTextLineRect = lastTextLineRect?.offsetBy(dx: deltaX, dy: deltaY)
-        lastClippingRect = lastClippingRect?.offsetBy(dx: deltaX, dy: deltaY)
+        guard visibleSuggestionPanel.offsetPlacement(dx: CGFloat(dx), dy: CGFloat(dy)) else {
+            return false
+        }
         refreshVisibleSuggestion()
         return true
     }
