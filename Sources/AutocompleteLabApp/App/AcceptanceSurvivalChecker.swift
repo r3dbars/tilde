@@ -148,6 +148,7 @@ struct AcceptanceSurvivalTracker: Equatable, Sendable {
     let appBundleIdentifier: String
     let fieldIdentity: FocusedFieldIdentity
     let requestMode: String
+    let acceptMode: String
     let acceptedText: String
     let expectedInsertionUTF16Offset: Int
     let acceptedAt: Date
