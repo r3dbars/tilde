@@ -391,7 +391,7 @@ tell application "System Events"
   tell process "TextEdit"
     set frontmost to true
     set texteditPosition to position of window 1
-    click at {(item 1 of texteditPosition) + 120, (item 2 of texteditPosition) + 120}
+    click at {(item 1 of texteditPosition) + 200, (item 2 of texteditPosition) + 220}
   end tell
 end tell
 APPLESCRIPT
