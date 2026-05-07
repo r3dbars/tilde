@@ -3449,7 +3449,16 @@ private extension AppDelegate {
     }
 
     func loadPauseState() {
-        suggestionsPaused = UserDefaults.standard.bool(forKey: Self.suggestionsPausedDefaultsKey)
+        let persistedPause: Bool?
+        if UserDefaults.standard.object(forKey: Self.suggestionsPausedDefaultsKey) == nil {
+            persistedPause = nil
+        } else {
+            persistedPause = UserDefaults.standard.bool(forKey: Self.suggestionsPausedDefaultsKey)
+        }
+
+        suggestionsPaused = suggestionControlPolicy.startupState(
+            persistedIsPaused: persistedPause
+        ).isPaused
     }
 
     func persistPauseState() {
