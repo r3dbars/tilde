@@ -35,7 +35,41 @@ struct SuggestionTriggerPolicyTests {
         )
 
         #expect(policy.decision(previousTextBeforeCursor: "Can we", currentTextBeforeCursor: "Can we ") == .request(delayMilliseconds: 140))
-        #expect(policy.decision(previousTextBeforeCursor: "Can we", currentTextBeforeCursor: "Can we,") == .request(delayMilliseconds: 140))
+    }
+
+    @Test("Punctuation boundaries use separate researched delays")
+    func punctuationBoundariesUseSeparateResearchedDelays() {
+        let policy = SuggestionTriggerPolicy(
+            wordBoundaryDelayMilliseconds: 160,
+            softPunctuationDelayMilliseconds: 220,
+            structuralPunctuationDelayMilliseconds: 240,
+            closingPunctuationDelayMilliseconds: 180
+        )
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "Can we",
+            currentTextBeforeCursor: "Can we,"
+        ) == .request(delayMilliseconds: 220))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "Can we",
+            currentTextBeforeCursor: "Can we;"
+        ) == .request(delayMilliseconds: 220))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "Can we",
+            currentTextBeforeCursor: "Can we:"
+        ) == .request(delayMilliseconds: 240))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "Can we",
+            currentTextBeforeCursor: "Can we)"
+        ) == .request(delayMilliseconds: 180))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "Can we",
+            currentTextBeforeCursor: "Can we "
+        ) == .request(delayMilliseconds: 160))
     }
 
     @Test("Within-word typing uses researched word delay")
@@ -109,6 +143,16 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(
             previousTextBeforeCursor: "I think this works.\nNew pla",
             currentTextBeforeCursor: "I think this works.\nNew plan"
+        ) == .request(delayMilliseconds: 120))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\n- ",
+            currentTextBeforeCursor: "I think this works.\n- N"
+        ) == .skip)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\n- New pla",
+            currentTextBeforeCursor: "I think this works.\n- New plan"
         ) == .request(delayMilliseconds: 120))
     }
 

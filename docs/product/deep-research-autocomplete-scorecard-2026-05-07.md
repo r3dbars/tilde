@@ -3,14 +3,14 @@
 Source research:
 `/Users/redbars/Library/Caches/com.apple.SwiftUI.Drag-9DB841D4-8068-4044-B0CF-B2F61B9E12BB/deep-research-report (5).md`
 
-Repo state graded: `codex/deep-research-scorecard` after the flicker-safe
-replacement pass, based on `origin/main`.
+Repo state graded: `codex/deep-research-scorecard` after the punctuation-boundary
+timing pass, based on `origin/main`.
 
 ## Executive Grade
 
 Baseline deep research score: **78/100**.
 
-Current implementation score after the current build pass: **95/100**.
+Current implementation score after the current build pass: **96/100**.
 
 This is a strong prototype with real engineering depth. It has local MLX
 runtime support, app compatibility profiles, privacy-safe tracing defaults,
@@ -75,6 +75,8 @@ Pass 1 shipped these improvements:
 - Replacement now protects fresh visible ghost text for 1.2s unless the new
   suggestion has a clear score win, then treats 2s-old suggestions as stale
   enough to replace.
+- Trigger timing now separates whitespace, comma/semicolon, colon, closing
+  punctuation, sentence punctuation, newline, and bullet-line starts.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -90,6 +92,8 @@ Remaining high-impact gaps:
   screenshot-backed app slices and per-profile acceptance proof.
 - Flicker control now has score-margin and stale-lifetime rules, but still
   needs screenshot-backed proof in narrow editors and streaming model output.
+- Punctuation handling now has separate tested timing lanes; it still needs
+  profile-aware email/bullet exceptions and real trace proof.
 - Replay-first real-app proof is still missing. The command exists, but the
   current local trace corpus fails the proof gate because it predates display
   scoring, candidate-selection metadata, kept-horizon events, and researched
@@ -146,13 +150,13 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Within-word mode | 86 | Word completion requires 3+ alphabetic chars with 90-140ms delay, and word suffix cleaning rejects spaces/punctuation. | Perfect casing/punctuation preservation and fresh app-slice proof. |
 | Phrase mode | 84 | Word-boundary phrase requests use 140-240ms delay, phrase display threshold, behavior-profile prompt caps, and candidate ranking. | Fresh real-app proof and learned score margins. |
 | Sentence mode | 70 | First-class `sentenceContinuation` mode exists with activation, prompt guidance, stricter display threshold, streaming behavior, and replay delay gate. | Real-app proof that it does not drift into planning or take over the writer's next thought. |
-| Line/paragraph start | 76 | Trigger policy suppresses line starts until two content words. | Add profile-aware bullet/email exceptions and screenshot proof. |
+| Line/paragraph start | 80 | Trigger policy suppresses line starts until two content words, and bullet-line starts stay quiet until the bullet text is constrained. | Add profile-aware bullet/email exceptions and screenshot proof. |
 | After deletion | 82 | Deletion skips requests and records a 250ms prefix-family cooldown. | Prove the live cooldown in fresh traces and feed longer-term deletion outcomes into learning. |
 | After accept | 86 | Tab accepts one word, full accept is profile-gated, and accepted-and-kept horizons feed durable display affinity. | Only one follow-on after accept unless recomputed and scored high. |
 | After typed-over | 82 | Typed-over is traced, learned as a miss, and starts a 5s app/field/mode/prefix-family cooldown. | Add longer-term decay/threshold learning and fresh real-app proof. |
 | After Esc dismissal | 84 | Esc dismisses, traces the keyboard action, and starts a 15s app/field/mode/prefix-family cooldown. | Add repeated-dismiss escalation proof and diagnostics. |
 | App switch / caret move / selection change | 82 | Focus/app mismatch hides and selection is blocked. Mouse/caret moves are polling-based. | Immediate hide/cancel on focus, caret, mouse, and selection events where possible. |
-| Punctuation handling | 72 | Natural boundaries exist for whitespace and punctuation, and sentence punctuation has a stricter lane. | Separate comma/colon/close-paren/newline/bullet thresholds. |
+| Punctuation handling | 84 | Whitespace, comma/semicolon, colon, closing punctuation, and sentence punctuation now have separate clamped delay lanes; newline/bullet starts stay suppressed until constrained. | Add profile-aware punctuation exceptions and tune against fresh traces. |
 | Display score | 86 | Live display score includes utility, style fit, context fit, user affinity, risk, repetition, instability, accepted-and-kept probability, and trace metadata. Candidate count, top score, score margin, and suppression reason are logged at runtime. | Replace heuristic components with learned estimates and use fresh traces to tune thresholds. |
 | Accept-and-keep probability threshold | 86 | Durable learning now gates by app, field kind, mode, and behavior profile after enough evidence, with 14-day half-life decay, and Settings can clear learned suggestion state without deleting logs. | Prove thresholds with fresh real-app traces and expose tuning controls. |
 | Candidate generation | 72 | Phrase/sentence prompts ask for 1-3 candidates; `CompletionOutputCleaner.cleanCandidates` strips list prefixes, filters unsafe/sentinel lines, dedupes, and `CompletionCandidateRanker` picks only high-score/high-margin top candidates. | Prove real model outputs produce useful candidate sets and tune score/margin thresholds from traces. |
@@ -243,6 +247,9 @@ Strong evidence in current code:
 - `Sources/AutocompleteLabApp/App/AppDelegate.swift:2587-2620` records
   replacement decisions in raw traces and keeps the current visible suggestion
   when a replacement is too fresh or too close in score.
+- `Sources/AutocompleteLabCore/Session/SuggestionTriggerPolicy.swift:20-41`
+  defines separate punctuation delay lanes, and `:84-94` applies sentence,
+  punctuation, and whitespace boundary timing in that order.
 - `docs/product/app-proof-matrix.md:24-40` honestly marks target proof as
   still failing and lists pending surfaces.
 
@@ -376,9 +383,11 @@ these are true.
    logs.
 14. Done: add score-margin replacement gate and stale visible-suggestion
    lifetime tests.
-15. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
+15. Done: add separate comma/semicolon, colon, closing punctuation, whitespace,
+   newline, and bullet-line trigger tests.
+16. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
    checklist acceptance/proof slices are still missing.
-16. Partial: build the replay-first proof command. The command exists; a fresh
+17. Partial: build the replay-first proof command. The command exists; a fresh
    post-pass trace proof still has to pass.
 
 ## Goal Status
@@ -388,7 +397,7 @@ every scored item reaches 100/100.
 
 Baseline status: **78/100**.
 
-Current implementation status: **95/100**. Not complete.
+Current implementation status: **96/100**. Not complete.
 
 Replay proof status:
 
