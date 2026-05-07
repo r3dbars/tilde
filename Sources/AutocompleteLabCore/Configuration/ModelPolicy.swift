@@ -29,7 +29,7 @@ public enum ModelRuntimeOwnership: String, Equatable, Sendable {
 
 public struct CompletionModelPolicy: Equatable, Sendable {
     public static let minimumVisibleWords = 1
-    public static let maximumVisibleWords = 10
+    public static let maximumVisibleWords = 7
     public static let minimumGeneratedTokens = 3
     public static let maximumGeneratedTokens = 32
 
@@ -81,7 +81,7 @@ public struct CompletionModelPolicy: Equatable, Sendable {
         wordCount >= Self.minimumVisibleWords && wordCount <= maxVisibleWords
     }
 
-    private static func clampedVisibleWords(_ value: Int) -> Int {
+    public static func clampedVisibleWords(_ value: Int) -> Int {
         min(maximumVisibleWords, max(minimumVisibleWords, value))
     }
 

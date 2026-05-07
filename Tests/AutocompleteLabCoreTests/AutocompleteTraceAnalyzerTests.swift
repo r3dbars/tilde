@@ -115,6 +115,20 @@ struct AutocompleteTraceAnalyzerTests {
                 requestMode: "phraseContinuation",
                 rawOutput: "Let me know when it's done.",
                 cleanedVisibleText: "Let me know when it's done."
+            ),
+            event(
+                .modelResult,
+                suggestionID: "four",
+                requestMode: "phraseContinuation",
+                rawOutput: "The best way is to restart.",
+                cleanedVisibleText: "The best way is to restart."
+            ),
+            event(
+                .modelResult,
+                suggestionID: "five",
+                requestMode: "wordCompletion",
+                rawOutput: "s",
+                cleanedVisibleText: "s"
             )
         ]
 
@@ -123,6 +137,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.topMisses.contains { $0.title == "Word mode returned phrase" })
         #expect(summary.topMisses.contains { $0.title == "Model leaked thinking text" })
         #expect(summary.topMisses.contains { $0.title == "Assistant-style completion" })
+        #expect(summary.topMisses.contains { $0.title == "Too-short word completion" })
         #expect(summary.topMisses.contains { $0.fixCategory == "output cleaning issue" })
     }
 
@@ -407,6 +422,137 @@ struct AutocompleteTraceAnalyzerTests {
         })
     }
 
+    @Test("flags geometry and observer update misses from metadata and reason")
+    func flagsGeometryAndObserverMisses() {
+        let events = [
+            event(
+                .suggestionSuppressed,
+                suggestionID: "caret-unavailable",
+                appBundleIdentifier: "com.apple.Notes",
+                reason: "missing-caret"
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "caret-invalid",
+                appBundleIdentifier: "com.google.Chrome",
+                reason: "caret-invalid",
+                metadata: ["geometryReason": "zeroHeight"]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "field-anchor",
+                appBundleIdentifier: "md.obsidian",
+                metadata: [
+                    "anchorSource": "field",
+                    "hasCaretRect": "false",
+                    "hasElementRect": "true"
+                ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "window-anchor",
+                appBundleIdentifier: "com.openai.codex",
+                metadata: ["anchorSource": "window"]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "observer-missed",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: [
+                    "expectedUpdateSource": "observer",
+                    "updateSource": "watchPoll"
+                ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "poll-recovered",
+                appBundleIdentifier: "com.apple.TextEdit",
+                reason: "poll-recovered-update",
+                metadata: ["pollRecoveredUpdate": "true"]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Caret unavailable in com.apple.Notes"
+                && miss.fixCategory == "renderer/caret bug"
+        })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Caret invalid in com.google.Chrome"
+                && miss.suggestedCause.contains("zeroheight")
+        })
+        #expect(summary.topMisses.contains { $0.title == "Field anchor used in md.obsidian" })
+        #expect(summary.topMisses.contains { $0.title == "Window anchor used in com.openai.codex" })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Observer missed update in com.apple.TextEdit"
+                && miss.fixCategory == "observer/update bug"
+        })
+        #expect(summary.topMisses.contains { $0.title == "Poll recovered update in com.apple.TextEdit" })
+    }
+
+    @Test("summarizes diagnostic metadata by app")
+    func summarizesDiagnosticMetadataByApp() {
+        let events = [
+            event(
+                .suggestionPresented,
+                suggestionID: "anchor",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: [
+                    "anchorQuality": "trusted",
+                    "profileInsertionMode": "axSelectedText",
+                    "updateSource": "observer"
+                ]
+            ),
+            event(
+                .insertionFailed,
+                suggestionID: "insert",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: ["actualInsertionMode": "keyEvents"]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "ax",
+                appBundleIdentifier: "com.google.Chrome",
+                metadata: [
+                    "geometryReason": "zeroHeight",
+                    "refreshSource": "watchPoll"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.anchorQualityByApp["com.apple.TextEdit"]?["trusted"] == 1)
+        #expect(summary.insertionModeByApp["com.apple.TextEdit"]?["axSelectedText"] == 1)
+        #expect(summary.insertionModeByApp["com.apple.TextEdit"]?["keyEvents"] == 1)
+        #expect(summary.insertionFailuresByAppAndMode["com.apple.TextEdit"]?["keyEvents"] == 1)
+        #expect(summary.updateSourceByApp["com.apple.TextEdit"]?["observer"] == 1)
+        #expect(summary.updateSourceByApp["com.google.Chrome"]?["watchPoll"] == 1)
+        #expect(summary.axFailureReasonByApp["com.google.Chrome"]?["zeroHeight"] == 1)
+    }
+
+    @Test("summarizes trust-critical suppressed reasons")
+    func summarizesTrustCriticalSuppressedReasons() {
+        let events = [
+            event(.suggestionSuppressed, suggestionID: "secure", reason: "secureField"),
+            event(.suggestionSuppressed, suggestionID: "sensitive", reason: "sensitiveContent"),
+            event(.suggestionSuppressed, suggestionID: "diagnostics", reason: "profile-diagnostics-only"),
+            event(.suggestionSuppressed, suggestionID: "paused", reason: "suppressedField"),
+            event(.suggestionSuppressed, suggestionID: "fast", reason: "no-fast-word-candidate")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.suppressedCount == 5)
+        #expect(summary.actionableSuppressedCount == 4)
+        #expect(summary.suppressedByReason["secureField"] == 1)
+        #expect(summary.suppressedByReason["sensitiveContent"] == 1)
+        #expect(summary.suppressedByReason["profile-diagnostics-only"] == 1)
+        #expect(summary.suppressedByReason["suppressedField"] == 1)
+        #expect(summary.suppressedByReason["no-fast-word-candidate"] == 1)
+    }
+
     @Test("flags repeated unaccepted suggestions")
     func flagsRepeatedUnacceptedSuggestions() {
         let events = [
@@ -515,6 +661,22 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.appDisableCount == 1)
         #expect(summary.topMisses.contains { $0.fixCategory == "accepted-and-kept issue" })
         #expect(summary.topMisses.contains { $0.fixCategory == "trust issue" })
+    }
+
+    @Test("flags repeated typed-over suggestions")
+    func flagsRepeatedTypedOverSuggestions() {
+        let events = [
+            event(.suggestionTypedOver, suggestionID: "one", requestMode: "phraseContinuation", displayedText: "sounds good"),
+            event(.suggestionTypedOver, suggestionID: "two", requestMode: "phraseContinuation", displayedText: " sounds   good ")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Repeated typed-over: sounds good"
+                && miss.count == 2
+                && miss.fixCategory == "prompt issue"
+        })
     }
 
     @Test("summarizes annoyance signals")

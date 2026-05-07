@@ -7,6 +7,7 @@ public enum InsertionVerificationResult: Equatable, Sendable {
     case duplicateText
     case literalTab
     case selectionChangedUnexpectedly
+    case insertedAtWrongLocation
     case changedUnexpectedly
 
     public var isVerified: Bool {
@@ -61,6 +62,17 @@ public struct InsertionVerification: Equatable, Sendable {
         if expectedTextBeforeCursor.hasPrefix(currentTextBeforeCursor),
            currentTextBeforeCursor.count > previousTextBeforeCursor.count {
             return .partial
+        }
+
+        if !acceptedText.isEmpty,
+           currentTextBeforeCursor.hasSuffix(acceptedText) {
+            let insertionPrefix = currentTextBeforeCursor.dropLast(acceptedText.count)
+
+            if insertionPrefix != previousTextBeforeCursor,
+               previousTextBeforeCursor.hasPrefix(insertionPrefix)
+                || insertionPrefix.hasPrefix(previousTextBeforeCursor) {
+                return .insertedAtWrongLocation
+            }
         }
 
         return .changedUnexpectedly

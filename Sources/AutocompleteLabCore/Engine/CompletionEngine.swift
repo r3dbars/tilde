@@ -24,7 +24,7 @@ public struct CompletionRequest: Equatable, Sendable {
         self.textBeforeCursor = textBeforeCursor
         self.textAfterCursor = textAfterCursor
         self.appBundleIdentifier = appBundleIdentifier
-        self.maxVisibleWords = maxVisibleWords
+        self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
         self.mode = mode
         self.suggestionID = suggestionID
     }

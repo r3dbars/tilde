@@ -12,6 +12,12 @@ echo "== Smoke =="
 ./script/smoke_test.sh
 
 echo
+echo "== Runtime production gate =="
+AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
+  AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
+  ./script/check_diagnostics_log.sh
+
+echo
 echo "== Manual app proof =="
 ./script/manual_smoke_status.sh --require-all
 
