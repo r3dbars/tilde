@@ -103,6 +103,17 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("user is ")
             || normalized.hasPrefix("assistant:")
             || normalized.hasPrefix("system:")
+            || normalized.hasPrefix("as an ai")
+            || normalized.hasPrefix("as a language model")
+            || normalized.hasPrefix("here's")
+            || normalized.hasPrefix("here is")
+            || normalized.hasPrefix("you can")
+            || normalized.hasPrefix("you should")
+            || normalized.hasPrefix("i'd suggest")
+            || normalized.hasPrefix("i suggest")
+            || normalized.hasPrefix("i recommend")
+            || normalized.hasPrefix("to do that")
+            || normalized.hasPrefix("one way to")
     }
 
     private func looksLikeGenericChatFiller(_ text: String) -> Bool {
