@@ -126,6 +126,8 @@ struct RuntimePolicyTests {
         #expect(missing.actionTitle == "Open Model Folder")
         #expect(missing.isActionEnabled)
         #expect(missing.message.contains("Model missing"))
+        #expect(missing.message.contains("app-owned MLX model"))
+        #expect(missing.message.contains("Do not start Ollama, llama.cpp, or a separate model server."))
         #expect(warming.actionTitle == "Warming...")
         #expect(!warming.isActionEnabled)
         #expect(failed.actionTitle == "Retry Model")
