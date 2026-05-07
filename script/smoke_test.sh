@@ -26,6 +26,7 @@ swift test
 ./script/typing_performance_soak_self_test.sh
 ./script/typing_performance_endurance_soak_self_test.sh
 ./script/model_latency_report_self_test.sh
+./script/private_beta_packet_self_test.sh
 ./script/package_release.sh --check
 ./script/check_model_asset.py
 ./script/build_and_run.sh --verify

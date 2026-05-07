@@ -147,6 +147,10 @@ capture:
 - worst app,
 - pause or disable reason.
 
+Do not paste raw typed text, prompts, screenshots, document names, URLs,
+recipients, subject lines, or trace excerpts into beta feedback. Use short
+labels like `wrong app`, `late`, `too much`, or `good word finish`.
+
 Run the trace checker before trusting the session:
 
 ```bash
