@@ -520,6 +520,7 @@ chrome_fixture_html() {
 <script>
 window.focusSmokeEditor = function () {
   const editor = document.querySelector("[data-smoke-editor]");
+  editor.value = "";
   editor.focus();
   editor.setSelectionRange(editor.value.length, editor.value.length);
 };
@@ -537,6 +538,7 @@ HTML
 <script>
 window.focusSmokeEditor = function () {
   const editor = document.querySelector("[data-smoke-editor]");
+  editor.textContent = "";
   editor.focus();
   const range = document.createRange();
   range.selectNodeContents(editor);
@@ -562,6 +564,7 @@ HTML
 <script>
 window.focusSmokeEditor = function () {
   const editor = document.querySelector("[data-smoke-editor]");
+  editor.textContent = "";
   editor.focus();
   const range = document.createRange();
   range.selectNodeContents(editor);
@@ -624,6 +627,7 @@ body { margin: 0; background: #f7f7f7; }
 <script>
 window.focusSmokeEditor = function () {
   const editor = document.querySelector("[data-smoke-editor]");
+  editor.textContent = "";
   editor.focus();
   const range = document.createRange();
   range.selectNodeContents(editor);
@@ -676,6 +680,7 @@ body { margin: 0; background: #fbfbfb; }
 <script>
 window.focusSmokeEditor = function () {
   const editor = document.querySelector("[data-smoke-editor]");
+  editor.innerHTML = "<p><br></p>";
   editor.focus();
   const paragraph = editor.querySelector("p") || editor;
   const range = document.createRange();
@@ -763,6 +768,7 @@ window.autocompleteSmokeEditorText = function () {
 };
 window.focusSmokeEditor = function () {
   const editor = document.querySelector("[data-smoke-editor]");
+  editor.textContent = "";
   editor.focus();
   const range = document.createRange();
   range.selectNodeContents(editor);
@@ -986,6 +992,7 @@ end tell
 APPLESCRIPT
 
   wait_for_chrome_tab_title_contains "Autocomplete Lab Chrome" "Chrome $fixture fixture"
+  sleep 0.5
 
   osascript >/dev/null <<'APPLESCRIPT'
 tell application "System Events"
