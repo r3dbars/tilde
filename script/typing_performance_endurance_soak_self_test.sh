@@ -5,7 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
+TEST_DEFAULTS_DOMAIN="bar.r3d.autocomplete-lab.endurance-soak-self-test.$$"
+export AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN="$TEST_DEFAULTS_DOMAIN"
+trap 'defaults delete "$TEST_DEFAULTS_DOMAIN" >/dev/null 2>&1 || true; rm -rf "$TMP_DIR"' EXIT
 
 script/typing_performance_endurance_soak.sh --dry-run >"$TMP_DIR/default.txt"
 
