@@ -45,6 +45,36 @@ struct CompatibilityLearningTests {
         #expect(adjustment.metadata["learningRenderMode"] == "floatingMirror")
     }
 
+    @Test("Learning ignores unsafe render mode overrides")
+    func ignoresUnsafeRenderModeOverrides() {
+        let notesProfile = CompatibilityLearningProfile(
+            bundleIdentifier: "com.apple.Notes",
+            renderModeOverride: .inlineAdjacent
+        )
+        let mailProfile = CompatibilityLearningProfile(
+            bundleIdentifier: "com.apple.mail",
+            renderModeOverride: .floatingMirror
+        )
+        let engine = CompatibilityLearningEngine(profiles: [
+            notesProfile.bundleIdentifier: notesProfile,
+            mailProfile.bundleIdentifier: mailProfile
+        ])
+
+        let notesAdjustment = engine.adjustment(
+            for: "com.apple.Notes",
+            profileRenderMode: .floatingMirror
+        )
+        let mailAdjustment = engine.adjustment(
+            for: "com.apple.mail",
+            profileRenderMode: .disabled
+        )
+
+        #expect(notesAdjustment.effectiveRenderMode == .floatingMirror)
+        #expect(notesAdjustment.metadata["learningRenderModeOverrideIgnored"] == "true")
+        #expect(mailAdjustment.effectiveRenderMode == .disabled)
+        #expect(mailAdjustment.metadata["learningRenderModeOverrideIgnored"] == "true")
+    }
+
     @Test("Learning can ignore untrusted visual offsets")
     func canIgnoreUntrustedVisualOffsets() {
         let profile = CompatibilityLearningProfile(
