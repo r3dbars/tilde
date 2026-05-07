@@ -220,7 +220,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [ ] Extract presentation policy out of `AppDelegate`.
 - [ ] Extract observer coordination out of `AppDelegate`.
 - [x] Extract insertion verification scheduling out of `AppDelegate`.
-- [ ] Extract trace screenshot capture out of `AppDelegate`.
+- [x] Extract trace screenshot capture out of `AppDelegate`.
 - [ ] Extract compatibility learning actions out of `AppDelegate`.
 - [ ] Keep `AppDelegate` mostly as wiring.
 - [ ] Add unit tests for each extracted policy.
