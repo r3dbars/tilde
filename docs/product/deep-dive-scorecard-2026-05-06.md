@@ -312,6 +312,9 @@ evidence-backed score should stay lower until those rows are closed.
 - Unproven Notes and prompt-app profiles are now mirror-first with detached
   whole-field/window suggestions still disabled, so missing proof makes the app
   quieter instead of pretending inline placement is native.
+- Inline suggestions now hide unless at least one useful-word-width can fit
+  after the caret, so cramped fields fail quiet instead of showing clipped
+  fragments.
 
 ## Remaining Gaps
 
