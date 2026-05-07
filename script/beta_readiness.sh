@@ -18,6 +18,10 @@ AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
   ./script/check_diagnostics_log.sh
 
 echo
+echo "== Proof manifest =="
+./script/check_proof_manifest.sh --require-all
+
+echo
 echo "== Manual app proof =="
 ./script/manual_smoke_status.sh --require-all
 

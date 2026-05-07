@@ -19,6 +19,7 @@ swift test
 ./script/manual_smoke_self_test.sh
 ./script/real_app_smoke_self_test.sh
 ./script/check_score_targets_self_test.sh
+./script/check_proof_manifest_self_test.sh
 ./script/check_visual_placement_evidence_self_test.sh
 ./script/check_visual_placement_evidence.sh
 ./script/check_trace_eval_self_test.sh
