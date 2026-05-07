@@ -39,7 +39,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusedTextUpdateSourcePolicy = FocusedTextUpdateSourcePolicy()
     private let focusedTextPollingCadencePolicy = FocusPollingCadencePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
-    private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private lazy var compatibilityLearningActions = CompatibilityLearningActions(
@@ -121,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debounceTask: Task<Void, Never>?
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private var focusedTextPollLifecycle = FocusedTextPollLifecycle()
-    private var focusedTextAXHealthState = FocusedTextAXHealthState()
+    private var focusedTextAXHealthCoordinator = FocusedTextAXHealthCoordinator()
     private var focusedTextPollLatencyStats = FocusedTextPollLatencyStats()
     private var focusedTextPollSkipStats = FocusedTextPollSkipStats()
     private var completionRequestLifecycle = CompletionRequestLifecycle()
@@ -893,11 +892,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func allowFocusedTextAXRead(for bundleIdentifier: String) -> Bool {
-        switch focusedTextAXHealthPolicy.pollDecision(
-            for: bundleIdentifier,
-            now: Date(),
-            state: &focusedTextAXHealthState
-        ) {
+        switch focusedTextAXHealthCoordinator.pollDecision(for: bundleIdentifier) {
         case let .allowed(recovery?):
             DiagnosticsLog.shared.record(
                 "focused-text-ax-health-recovered",
@@ -930,12 +925,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyFocusedTextAXHealthObservation(_ result: FocusedTextAXReadResult) -> Bool {
-        let observation = focusedTextAXHealthPolicy.recordRead(
+        let observation = focusedTextAXHealthCoordinator.recordRead(
             bundleIdentifier: result.app.bundleIdentifier,
             queueDelayMilliseconds: result.queueDelayMilliseconds,
-            readDurationMilliseconds: result.readDurationMilliseconds,
-            now: Date(),
-            state: &focusedTextAXHealthState
+            readDurationMilliseconds: result.readDurationMilliseconds
         )
 
         guard observation.didStartCooldown,
