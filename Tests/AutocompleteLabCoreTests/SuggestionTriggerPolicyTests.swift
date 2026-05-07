@@ -7,7 +7,7 @@ struct SuggestionTriggerPolicyTests {
     func firstSnapshotRequestsSuggestion() {
         let policy = SuggestionTriggerPolicy()
 
-        #expect(policy.decision(previousTextBeforeCursor: nil, currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 70))
+        #expect(policy.decision(previousTextBeforeCursor: nil, currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 180))
     }
 
     @Test("Unchanged snapshots do not request again")
@@ -26,55 +26,90 @@ struct SuggestionTriggerPolicyTests {
         #expect(!policy.shouldRequestSuggestion(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I thin"))
     }
 
-    @Test("Natural boundaries trigger quickly")
-    func naturalBoundariesTriggerQuickly() {
+    @Test("Natural word boundaries use phrase delay")
+    func naturalWordBoundariesUsePhraseDelay() {
         let policy = SuggestionTriggerPolicy(
             charactersBeforePauseRequest: 4,
             wordBoundaryDelayMilliseconds: 80,
             pauseDelayMilliseconds: 180
         )
 
-        #expect(policy.decision(previousTextBeforeCursor: "Can", currentTextBeforeCursor: "Can ") == .request(delayMilliseconds: 80))
-        #expect(policy.decision(previousTextBeforeCursor: "Can we", currentTextBeforeCursor: "Can we,") == .request(delayMilliseconds: 80))
+        #expect(policy.decision(previousTextBeforeCursor: "Can we", currentTextBeforeCursor: "Can we ") == .request(delayMilliseconds: 140))
+        #expect(policy.decision(previousTextBeforeCursor: "Can we", currentTextBeforeCursor: "Can we,") == .request(delayMilliseconds: 140))
     }
 
-    @Test("Short in-word typing requests instant word completion")
-    func shortInWordTypingWaits() {
+    @Test("Within-word typing uses researched word delay")
+    func withinWordTypingUsesResearchedWordDelay() {
         let policy = SuggestionTriggerPolicy(charactersBeforePauseRequest: 4)
 
-        #expect(policy.decision(previousTextBeforeCursor: "I thi", currentTextBeforeCursor: "I thin") == .request(delayMilliseconds: 0))
-        #expect(policy.decision(previousTextBeforeCursor: "I ", currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 0))
+        #expect(policy.decision(previousTextBeforeCursor: "I thi", currentTextBeforeCursor: "I thin") == .request(delayMilliseconds: 120))
+        #expect(policy.decision(previousTextBeforeCursor: "I ", currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 120))
     }
 
-    @Test("Snappy mode requests a phrase on every changed character")
-    func snappyModeRequestsEveryChangedCharacter() {
+    @Test("Eager app-style delays are clamped to researched ranges")
+    func eagerAppStyleDelaysAreClampedToResearchedRanges() {
         let policy = SuggestionTriggerPolicy(
             charactersBeforePauseRequest: 1,
+            wordCompletionDelayMilliseconds: 0,
             wordBoundaryDelayMilliseconds: 0,
             pauseDelayMilliseconds: 15
         )
 
-        #expect(policy.decision(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I think ") == .request(delayMilliseconds: 0))
-        #expect(policy.decision(previousTextBeforeCursor: "I think this wor", currentTextBeforeCursor: "I think this work") == .request(delayMilliseconds: 0))
-        #expect(policy.decision(previousTextBeforeCursor: "I think ", currentTextBeforeCursor: "I think x") == .request(delayMilliseconds: 15))
+        #expect(policy.wordCompletionDelayMilliseconds == 90)
+        #expect(policy.wordBoundaryDelayMilliseconds == 140)
+        #expect(policy.pauseDelayMilliseconds == 140)
+        #expect(policy.decision(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I think ") == .request(delayMilliseconds: 140))
+        #expect(policy.decision(previousTextBeforeCursor: "I think this wor", currentTextBeforeCursor: "I think this work") == .request(delayMilliseconds: 90))
+        #expect(policy.decision(previousTextBeforeCursor: "I think ", currentTextBeforeCursor: "I think x") == .request(delayMilliseconds: 140))
     }
 
-    @Test("Word fragments trigger quickly for completion")
-    func wordFragmentsTriggerQuickly() {
+    @Test("Word fragments need three alphabetic characters")
+    func wordFragmentsNeedThreeAlphabeticCharacters() {
         let policy = SuggestionTriggerPolicy(wordCompletionDelayMilliseconds: 50)
 
-        #expect(policy.decision(previousTextBeforeCursor: "d", currentTextBeforeCursor: "di") == .request(delayMilliseconds: 50))
-        #expect(policy.decision(previousTextBeforeCursor: "di", currentTextBeforeCursor: "dic") == .request(delayMilliseconds: 50))
+        #expect(policy.decision(previousTextBeforeCursor: "I need d", currentTextBeforeCursor: "I need di") == .skip)
+        #expect(policy.decision(previousTextBeforeCursor: "I need di", currentTextBeforeCursor: "I need dic") == .request(delayMilliseconds: 90))
     }
 
-    @Test("Word fragments after a space trigger quickly for completion")
-    func wordFragmentsAfterSpaceTriggerQuickly() {
+    @Test("Word fragments after a space use researched word delay")
+    func wordFragmentsAfterSpaceUseResearchedWordDelay() {
         let policy = SuggestionTriggerPolicy(wordCompletionDelayMilliseconds: 50)
 
         #expect(policy.decision(
-            previousTextBeforeCursor: "I need the ",
-            currentTextBeforeCursor: "I need the tr"
-        ) == .request(delayMilliseconds: 50))
+            previousTextBeforeCursor: "I need ",
+            currentTextBeforeCursor: "I need dic"
+        ) == .request(delayMilliseconds: 90))
+    }
+
+    @Test("Sentence boundaries use stricter sentence delay")
+    func sentenceBoundariesUseStricterSentenceDelay() {
+        let policy = SuggestionTriggerPolicy(sentenceBoundaryDelayMilliseconds: 500)
+
+        #expect(policy.sentenceBoundaryDelayMilliseconds == 450)
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works",
+            currentTextBeforeCursor: "I think this works."
+        ) == .request(delayMilliseconds: 450))
+    }
+
+    @Test("Line and paragraph starts wait for two content words")
+    func lineAndParagraphStartsWaitForTwoContentWords() {
+        let policy = SuggestionTriggerPolicy()
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.",
+            currentTextBeforeCursor: "I think this works.\n"
+        ) == .skip)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\nN",
+            currentTextBeforeCursor: "I think this works.\nNe"
+        ) == .skip)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\nNew pla",
+            currentTextBeforeCursor: "I think this works.\nNew plan"
+        ) == .request(delayMilliseconds: 120))
     }
 
     @Test("Large pasted text waits before requesting")

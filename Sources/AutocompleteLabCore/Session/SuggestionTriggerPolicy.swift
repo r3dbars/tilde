@@ -9,24 +9,27 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
     public let charactersBeforePauseRequest: Int
     public let wordCompletionDelayMilliseconds: Int
     public let wordBoundaryDelayMilliseconds: Int
+    public let sentenceBoundaryDelayMilliseconds: Int
     public let pauseDelayMilliseconds: Int
     public let largeTextChangeCharacterThreshold: Int
     public let largeTextChangeDelayMilliseconds: Int
 
     public init(
         charactersBeforePauseRequest: Int = 4,
-        wordCompletionDelayMilliseconds: Int = 0,
-        wordBoundaryDelayMilliseconds: Int = 35,
-        pauseDelayMilliseconds: Int = 70,
+        wordCompletionDelayMilliseconds: Int = 120,
+        wordBoundaryDelayMilliseconds: Int = 180,
+        sentenceBoundaryDelayMilliseconds: Int = 360,
+        pauseDelayMilliseconds: Int = 180,
         largeTextChangeCharacterThreshold: Int = 24,
         largeTextChangeDelayMilliseconds: Int = 250
     ) {
         self.charactersBeforePauseRequest = max(1, charactersBeforePauseRequest)
-        self.wordCompletionDelayMilliseconds = max(0, wordCompletionDelayMilliseconds)
-        self.wordBoundaryDelayMilliseconds = max(0, wordBoundaryDelayMilliseconds)
-        self.pauseDelayMilliseconds = max(0, pauseDelayMilliseconds)
+        self.wordCompletionDelayMilliseconds = wordCompletionDelayMilliseconds.clamped(to: 90...140)
+        self.wordBoundaryDelayMilliseconds = wordBoundaryDelayMilliseconds.clamped(to: 140...240)
+        self.sentenceBoundaryDelayMilliseconds = sentenceBoundaryDelayMilliseconds.clamped(to: 280...450)
+        self.pauseDelayMilliseconds = pauseDelayMilliseconds.clamped(to: 140...240)
         self.largeTextChangeCharacterThreshold = max(1, largeTextChangeCharacterThreshold)
-        self.largeTextChangeDelayMilliseconds = max(pauseDelayMilliseconds, largeTextChangeDelayMilliseconds)
+        self.largeTextChangeDelayMilliseconds = max(self.pauseDelayMilliseconds, largeTextChangeDelayMilliseconds)
     }
 
     public func shouldRequestSuggestion(
@@ -48,6 +51,10 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         previousTextBeforeCursor: String?,
         currentTextBeforeCursor: String
     ) -> SuggestionTriggerDecision {
+        if shouldSuppressAtLineStart(currentTextBeforeCursor) {
+            return .skip
+        }
+
         guard let previousTextBeforeCursor else {
             return .request(delayMilliseconds: pauseDelayMilliseconds)
         }
@@ -63,6 +70,10 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         let changedCount = currentTextBeforeCursor.count - previousTextBeforeCursor.count
         if changedCount >= largeTextChangeCharacterThreshold {
             return .request(delayMilliseconds: largeTextChangeDelayMilliseconds)
+        }
+
+        if currentTextBeforeCursor.last?.isSentenceBoundary == true {
+            return .request(delayMilliseconds: sentenceBoundaryDelayMilliseconds)
         }
 
         if currentTextBeforeCursor.last?.isNaturalBoundary == true {
@@ -82,7 +93,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
 
     private func shouldRequestWordCompletion(previousTextBeforeCursor: String, currentTextBeforeCursor: String) -> Bool {
         guard let currentFragment = trailingWordFragment(in: currentTextBeforeCursor),
-              currentFragment.count >= 2,
+              currentFragment.count >= 3,
               currentFragment.allSatisfy({ $0.isLetter }) else {
             return false
         }
@@ -98,6 +109,27 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         return currentFragment != previousFragment
     }
 
+    private func shouldSuppressAtLineStart(_ text: String) -> Bool {
+        let currentLine = text.split(
+            omittingEmptySubsequences: false,
+            whereSeparator: \.isNewline
+        ).last.map(String.init) ?? ""
+
+        return contentWordCount(in: currentLine) < 2
+    }
+
+    private func contentWordCount(in text: String) -> Int {
+        text
+            .split(whereSeparator: { $0.isWhitespace })
+            .map { word in
+                word.trimmingCharacters(in: .punctuationCharacters)
+            }
+            .filter { word in
+                word.contains(where: { $0.isLetter })
+            }
+            .count
+    }
+
     private func trailingWordFragment(in text: String) -> String? {
         guard let last = text.last, !last.isWhitespace else {
             return nil
@@ -108,7 +140,17 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
 }
 
 private extension Character {
+    var isSentenceBoundary: Bool {
+        [".", "!", "?"].contains(self)
+    }
+
     var isNaturalBoundary: Bool {
         isWhitespace || [".", ",", "!", "?", ":", ";", ")", "]"].contains(self)
+    }
+}
+
+private extension Comparable {
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }
