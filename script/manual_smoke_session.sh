@@ -41,31 +41,31 @@ case "$APP" in
     BUNDLE_ID="com.apple.TextEdit"
     DISPLAY_NAME="TextEdit"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
-    STEPS=$'- Open a disposable TextEdit document.\n- Type `Can we`.\n- Wait for a suggestion.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
+    STEPS=$'- Open a disposable TextEdit document.\n- Type `Can we`.\n- Wait for a suggestion.\n- Press Tab once.\n- Press the key above Tab for full visible accept.\n- Trigger one more suggestion, press Esc, then keep typing briefly in the same field.\n- Confirm the field stays calm until focus changes.'
     ;;
   notes)
     BUNDLE_ID="com.apple.Notes"
     DISPLAY_NAME="Notes"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
-    STEPS=$'- Open the disposable autocomplete smoke note.\n- Test a title field with `Can we`.\n- Test a body line with `Can we`.\n- Test a checklist row with `Can we`.\n- Use Tab once, then the key above Tab for full visible accept.'
+    STEPS=$'- Open the disposable autocomplete smoke note.\n- Test a title field with `Can we`.\n- Test a body line with `Can we`.\n- Test a checklist row with `Can we`.\n- Use Tab once, then the key above Tab for full visible accept.\n- Trigger one more suggestion, press Esc, then keep typing briefly in the same field.\n- Confirm the field stays calm until focus changes.'
     ;;
   obsidian)
     BUNDLE_ID="md.obsidian"
     DISPLAY_NAME="Obsidian"
     EXPECTED_RENDER="floatingMirror"
-    STEPS=$'- Open a disposable Obsidian note.\n- Type a partial word like `dicta`.\n- If CodeMirror does not expose caret bounds, confirm no detached floating bubble appears.\n- If a real caret-bound suggestion appears, use Tab once, then the key above Tab for full visible accept.'
+    STEPS=$'- Open a disposable Obsidian note.\n- Type a partial word like `dicta`.\n- If CodeMirror does not expose caret bounds, confirm no detached floating bubble appears.\n- If a real caret-bound suggestion appears, use Tab once, then the key above Tab for full visible accept.\n- Trigger one more real caret-bound suggestion, press Esc, then keep typing briefly in the same field.\n- Confirm the field stays calm until focus changes.'
     ;;
   chrome)
     BUNDLE_ID="com.google.Chrome"
     DISPLAY_NAME="Chrome"
     EXPECTED_RENDER="floatingMirror"
-    STEPS=$'- Open a local data: page with a textarea.\n- Type `Can we` in the textarea.\n- Confirm focus stays in the textarea.\n- Use Tab once, then the key above Tab for full visible accept.'
+    STEPS=$'- Open a local data: page with a textarea.\n- Type `Can we` in the textarea.\n- Confirm focus stays in the textarea.\n- Use Tab once, then the key above Tab for full visible accept.\n- Trigger one more suggestion, press Esc, then keep typing briefly in the same textarea.\n- Confirm the field stays calm until focus changes.'
     ;;
   codex)
     BUNDLE_ID="com.openai.codex"
     DISPLAY_NAME="Codex"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
-    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once, then the key above Tab for full visible accept.\n- Do not press Enter as part of the smoke pass.'
+    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once, then the key above Tab for full visible accept.\n- Trigger one more suggestion, press Esc, then keep typing briefly in the same prompt.\n- Confirm the field stays calm until focus changes.\n- Do not press Enter as part of the smoke pass.'
     ;;
   mail)
     BUNDLE_ID="com.apple.mail"
@@ -165,10 +165,20 @@ elif [[ "$MODE" != "--check" ]]; then
 fi
 
 SCAN_LINES="$(tail -n +"$((START_LINE + 1))" "$LOG_PATH" 2>/dev/null || true)"
+TRACE_SCAN_LINES=""
+if [[ -f "$TRACE_PATH" ]]; then
+  TRACE_SCAN_LINES="$(tail -n +"$((TRACE_START_LINE + 1))" "$TRACE_PATH" 2>/dev/null || true)"
+fi
 
 count_pattern() {
   local pattern="$1"
-  grep -E "$pattern" <<<"$SCAN_LINES" | wc -l | tr -d ' '
+  local lines
+  lines="$(grep -E "$pattern" <<<"$SCAN_LINES" || true)"
+  if [[ -z "$lines" ]]; then
+    echo 0
+  else
+    printf '%s\n' "$lines" | wc -l | tr -d ' '
+  fi
 }
 
 count_line_with_fields() {
@@ -187,6 +197,17 @@ count_line_with_fields() {
   fi
 }
 
+count_event_for_other_app() {
+  local event="$1"
+  local lines
+  lines="$(grep -E "^[^ ]+ $event " <<<"$SCAN_LINES" | grep -Fv "app=$BUNDLE_ID" || true)"
+  if [[ -z "$lines" ]]; then
+    echo 0
+  else
+    printf '%s\n' "$lines" | wc -l | tr -d ' '
+  fi
+}
+
 print_failure_summary() {
   {
     echo
@@ -198,6 +219,13 @@ print_failure_summary() {
     echo "- successful insert: $(count_pattern "insert .*app=$BUNDLE_ID .*success=true")"
     echo "- verified insertions: $(count_pattern "insert-verification .*app=$BUNDLE_ID .*result=verified")"
     echo "- failed verification: $(count_pattern "insert-verification .*app=$BUNDLE_ID .*result=(unchanged|partial|changedUnexpectedly|missing-context)")"
+    echo "- Esc dismiss action: $(count_line_with_fields "keyboard-action" "app=$BUNDLE_ID" "key=escape" "action=dismiss" "handled=true")"
+    echo "- Esc field suppression: $(count_line_with_fields "field-suppressed" "app=$BUNDLE_ID" "reason=escape")"
+    echo "- suppressed field block: $(count_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=suppressedField")"
+    echo "- wrong-app insertions: $(count_event_for_other_app "insert")"
+    echo "- secure-field presented rows: $(count_line_with_fields "suggestion-presented" "app=$BUNDLE_ID" "role=AXSecureTextField")"
+    echo "- sensitive-reason presented rows: $(count_line_with_fields "suggestion-presented" "app=$BUNDLE_ID" "reason=sensitiveContent")"
+    echo "- detached presented rows: $(count_line_with_fields "suggestion-presented" "app=$BUNDLE_ID" "anchorCanPresent=false")"
     echo "- field suppression: $(count_pattern "field-suppressed .*app=$BUNDLE_ID")"
     echo
     echo "If suggestions appeared but Tab action is 0, the key probably bypassed the app event tap."
@@ -256,6 +284,67 @@ reject_line_with_fields() {
   fi
 }
 
+reject_event_for_other_app() {
+  local event="$1"
+  local label="$2"
+
+  local offenders
+  offenders="$(grep -E "^[^ ]+ $event " <<<"$SCAN_LINES" | grep -Fv "app=$BUNDLE_ID" || true)"
+  if [[ -n "$offenders" ]]; then
+    echo "failed $DISPLAY_NAME diagnostics: $label" >&2
+    echo "log: $LOG_PATH" >&2
+    print_failure_summary
+    exit 1
+  fi
+}
+
+reject_trace_type_for_other_app() {
+  local type="$1"
+  local label="$2"
+
+  local offenders
+  offenders="$(grep -F "\"type\":\"$type\"" <<<"$TRACE_SCAN_LINES" | grep -Fv "\"appBundleIdentifier\":\"$BUNDLE_ID\"" || true)"
+  if [[ -n "$offenders" ]]; then
+    echo "failed $DISPLAY_NAME trace coverage: $label" >&2
+    echo "trace: $TRACE_PATH" >&2
+    print_failure_summary
+    exit 1
+  fi
+}
+
+reject_tab_without_visible_suggestion() {
+  local handled_tabs
+  handled_tabs="$(count_line_with_fields "keyboard-action" "app=$BUNDLE_ID" "key=tab" "handled=true")"
+  local shown_suggestions
+  shown_suggestions="$(count_pattern "suggestion-presented .*app=$BUNDLE_ID")"
+
+  if (( handled_tabs > 0 && shown_suggestions == 0 )); then
+    echo "failed $DISPLAY_NAME diagnostics: Tab stolen with no visible suggestion" >&2
+    echo "log: $LOG_PATH" >&2
+    print_failure_summary
+    exit 1
+  fi
+}
+
+reject_hard_fail_markers() {
+  reject_event_for_other_app "insert" "wrong-app insertion"
+  reject_event_for_other_app "insert-verification" "wrong-app insertion verification"
+  reject_trace_type_for_other_app "suggestionAccepted" "wrong-app accepted suggestion"
+  reject_trace_type_for_other_app "insertionVerified" "wrong-app verified insertion"
+  reject_tab_without_visible_suggestion
+  reject_line_with_fields "suggestion shown over sensitive field" "suggestion-presented" "app=$BUNDLE_ID" "role=AXSecureTextField"
+  reject_line_with_fields "suggestion shown over sensitive field" "suggestion-presented" "app=$BUNDLE_ID" "reason=secureField"
+  reject_line_with_fields "suggestion shown over sensitive field" "suggestion-presented" "app=$BUNDLE_ID" "reason=sensitiveContent"
+  reject_line_with_fields "suggestion shown over sensitive field" "suggestion-presented" "app=$BUNDLE_ID" "isSecure=true"
+  reject_line_with_fields "suggestion shown over sensitive field" "suggestion-presented" "app=$BUNDLE_ID" "sensitive=true"
+  reject_line_with_fields "suggestion shown over sensitive field" "suggestion-presented" "app=$BUNDLE_ID" "fieldKind=password"
+  reject_line_with_fields "suggestion shown over sensitive field" "suggestion-presented" "app=$BUNDLE_ID" "fieldKind=payment"
+  reject_line_with_fields "suggestion shown over sensitive field" "suggestion-presented" "app=$BUNDLE_ID" "fieldKind=token"
+  reject_line_with_fields "suggestion shown over sensitive field" "suggestion-presented" "app=$BUNDLE_ID" "fieldKind=apiKey"
+  reject_line_with_fields "detached bubble over whole editor" "suggestion-presented" "app=$BUNDLE_ID" "anchorCanPresent=false"
+  reject_line_with_fields "detached bubble over whole editor" "suggestion-presented" "app=$BUNDLE_ID" "anchorReason=detachedAnchorDisallowed"
+}
+
 append_report_row() {
   local verified_count="$1"
   local render_expectation="${2:-$EXPECTED_RENDER}"
@@ -287,6 +376,8 @@ EOF
     "$((TRACE_START_LINE + 1))" \
     "$TRACE_PATH" >>"$REPORT_PATH"
 }
+
+reject_hard_fail_markers
 
 if [[ "$APP" == "obsidian" ]] &&
   grep -E "suggestion-blocked .*app=$BUNDLE_ID .*reason=detached-suggestion-disabled" <<<"$SCAN_LINES" >/dev/null; then
@@ -346,6 +437,9 @@ fi
 require_pattern "suggestion-presented .*app=$BUNDLE_ID .*effectiveRenderMode=($EXPECTED_RENDER)" "suggestion presented with expected render mode"
 require_line_with_fields "Tab handled by autocomplete" "keyboard-action" "app=$BUNDLE_ID" "key=tab" "action=acceptNextWord" "handled=true"
 require_line_with_fields "full accept key handled by autocomplete" "keyboard-action" "app=$BUNDLE_ID" "key=backtick" "action=acceptAllVisible" "handled=true"
+require_line_with_fields "Esc handled by autocomplete" "keyboard-action" "app=$BUNDLE_ID" "key=escape" "action=dismiss" "handled=true"
+require_line_with_fields "Esc suppressed current field" "field-suppressed" "app=$BUNDLE_ID" "reason=escape"
+require_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=suppressedField" "suppressed field after Esc"
 require_pattern "insert .*app=$BUNDLE_ID .*success=true" "successful insert"
 require_pattern "insert-verification .*app=$BUNDLE_ID .*result=verified" "verified insertion"
 
@@ -358,7 +452,7 @@ if (( VERIFIED_COUNT < 2 )); then
 fi
 
 reject_pattern "insert-verification .*app=$BUNDLE_ID .*result=(unchanged|partial|changedUnexpectedly|missing-context)" "failed insertion verification"
-reject_pattern "field-suppressed .*app=$BUNDLE_ID" "field suppression"
+reject_pattern "field-suppressed .*app=$BUNDLE_ID .*reason=insert-verification-failed" "unexpected field suppression"
 reject_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=(insert-verification-failed|missing-anchor|runtime-not-ready)" "blocking failure"
 
 TRACE_EVAL_OUTPUT="$(mktemp)"
