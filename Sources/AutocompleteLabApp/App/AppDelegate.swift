@@ -1555,6 +1555,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
 
         case .dismiss:
+            invalidatePendingSuggestionRequest()
             suppressCurrentField(reason: "escape")
             hideSuggestion(reason: "escape")
             suppressKey(key)
