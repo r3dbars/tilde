@@ -124,6 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private var placementUncertaintySuppressor = PlacementUncertaintySuppressor()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
+    private var annoyanceSuppressor = AnnoyanceSuppressor()
     private var currentCompletionRequest: CompletionRequest?
     private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
     private var currentSuggestionID: String?
@@ -1846,6 +1847,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 acceptedText: acceptedText,
                 outcome: "verified"
             )
+            recordAnnoyance(
+                .acceptedAndKept,
+                appBundleIdentifier: baseline.profile.bundleIdentifier,
+                fieldIdentity: baseline.fieldIdentity,
+                requestMode: baseline.requestMode
+            )
         }
     }
 
@@ -2984,7 +2991,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 mode: currentSuggestionRequestMode,
                 scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
             )
+            let annoyanceUpdate = recordAnnoyance(
+                .typedOver,
+                appBundleIdentifier: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? "",
+                fieldIdentity: fieldIdentity,
+                requestMode: currentSuggestionRequestMode
+            )
             hideSuggestion(reason: "typed-over")
+            if startedFieldQuiet(for: .typedOver, update: annoyanceUpdate) {
+                suppressCurrentField(reason: "repeated-typed-over")
+                setSuggestionDecision("Blocked: repeated typed-over")
+            }
         }
     }
 
@@ -3196,6 +3213,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "reason": reason
             ]
         )
+    }
+
+    @discardableResult
+    private func recordAnnoyance(
+        _ signal: AnnoyanceSignal,
+        appBundleIdentifier: String,
+        fieldIdentity: FocusedFieldIdentity,
+        requestMode: CompletionRequestMode?
+    ) -> AnnoyanceUpdate {
+        annoyanceSuppressor.record(
+            signal,
+            context: AnnoyanceContext(
+                appBundleIdentifier: appBundleIdentifier,
+                fieldIdentifier: fieldIdentity.traceDescription,
+                requestMode: requestMode
+            )
+        )
+    }
+
+    private func startedFieldQuiet(
+        for signal: AnnoyanceSignal,
+        update: AnnoyanceUpdate
+    ) -> Bool {
+        update.startedQuietModes.contains { mode in
+            if case let .field(_, reason, _) = mode {
+                return reason == signal
+            }
+            return false
+        }
     }
 
     @objc
