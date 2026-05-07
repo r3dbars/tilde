@@ -133,10 +133,13 @@ evidence-backed score should stay lower until those rows are closed.
   70 target misses across this scorecard, the Apple-native checklist, and the
   app proof matrix. This makes the requested "all 10s / all 100s / all As"
   target executable instead of subjective.
-- `./script/typing_performance_endurance_soak.sh --dry-run`: verifies the new
-  10-minute disposable TextEdit endurance command. The live long-run driver
-  still needs a full unattended pass before the typing score can move much
-  higher.
+- `./script/typing_performance_endurance_soak.sh --minutes 1 --strict-ax --require-event-tap-samples 50 --require-ax-samples 5`:
+  passed with exact 1,200-character TextEdit verification, event-tap p95 max
+  36us, p99 max 95us, max 95us, zero slow tap markers, zero tap-disable events,
+  focused-poll p95 max 42ms, focused-poll max 88ms, and zero focused-poll skips.
+  The 10-minute wrapper is now more realistic and self-tested, but the current
+  live 10-minute harness still needs a durable unattended pass before this score
+  can become 10/10.
 - `./script/scorecard_goal_loop.sh --iterations 10`: completed all 10 requested
   proof-loop iterations and still failed, as expected, because the same manual
   app-proof gaps remain. It is now the repeatable repo command for grinding
@@ -145,7 +148,7 @@ evidence-backed score should stay lower until those rows are closed.
   passed at 2026-05-07T02:28:19Z with two verified accepts and strict screenshot
   trace evidence after the real-app smoke harness started pressing whichever
   full-accept shortcut the app is currently configured to use.
-- Latest live typing soak: `./script/typing_performance_soak.sh --skip-build --characters 1800 --chunk-size 10 --delay-ms 15 --require-event-tap-samples 100`
+- Latest older live typing soak: `./script/typing_performance_soak.sh --skip-build --characters 1800 --chunk-size 10 --delay-ms 15 --require-event-tap-samples 100`
   passed after increasing the post-typing focused-text poll pause. The hard key
   path stayed clean over 600 event-tap summary samples: p95 max 35us, p99 max
   95us, max 161us, zero slow markers, and zero tap-disabled events. The same
@@ -334,7 +337,9 @@ evidence-backed score should stay lower until those rows are closed.
   `script/scorecard_goal_loop.sh --iterations 10` together with strict manual
   smoke status and strict visual evidence.
 - `script/typing_performance_endurance_soak.sh` now wraps the safe TextEdit
-  soak with a 10-minute default, computed AppleScript timeout, and dry-run
+  soak with a 10-minute default, typing-like 5-character chunks, exact TextEdit
+  text verification, temporary TextEdit enablement, temporary pause-state
+  restore, AX warmup flushing, segmented AppleScript typing batches, and dry-run
   self-test coverage.
 
 ## Remaining Gaps

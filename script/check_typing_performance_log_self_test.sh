@@ -192,12 +192,12 @@ if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
 fi
 
 cat >"$LOG_PATH" <<'EOF'
-2026-05-06T10:00:00Z focused-text-poll-latency-slow durationMilliseconds=91
+2026-05-06T10:00:00Z focused-text-poll-latency-slow durationMilliseconds=130
 EOF
 
 AUTOCOMPLETE_LAB_LOG="$LOG_PATH" script/check_typing_performance_log.sh >"$TMP_DIR/poll-marker-warn.txt"
 
-if ! grep -F "slow focused text poll marker 91ms" "$TMP_DIR/poll-marker-warn.txt" >/dev/null; then
+if ! grep -F "slow focused text poll marker 130ms" "$TMP_DIR/poll-marker-warn.txt" >/dev/null; then
   echo "typing performance self-test did not warn on slow focused-text poll markers" >&2
   cat "$TMP_DIR/poll-marker-warn.txt" >&2
   exit 1

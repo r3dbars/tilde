@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let screenshotTraceCapturePolicy = ScreenshotTraceCapturePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
     private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
+    private let focusPollingCadencePolicy = FocusPollingCadencePolicy()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private let suggestionPanel = SuggestionPanelController()
@@ -165,6 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let postInsertionPollPauseMilliseconds = 220
     private let slowFocusedTextPollLatencyMilliseconds = 80
     private var focusedTextPollingPause = FocusedTextPollingPause()
+    private var lastFocusedTextPollAttemptAt: Date?
     private var suggestionsPaused = false
     private var appEnablementSetupCompleted = true
     private var keyboardShortcutConfiguration = KeyboardShortcutConfiguration.default
@@ -522,8 +524,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func pollFocusedTextIfIdle() {
+        let now = Date()
+        guard shouldRunFocusedTextPoll(now: now) else {
+            return
+        }
+        lastFocusedTextPollAttemptAt = now
+
         guard !isFocusedTextPollInFlight else {
-            if let notice = focusedTextPollSkipStats.recordSkippedInFlight(now: Date()) {
+            if let notice = focusedTextPollSkipStats.recordSkippedInFlight(now: now) {
                 DiagnosticsLog.shared.record(
                     "focused-text-poll-skipped",
                     metadata: [
@@ -542,6 +550,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !completesAsync {
             finishFocusedTextPoll(startedAt: startedAt)
         }
+    }
+
+    private func shouldRunFocusedTextPoll(now: Date) -> Bool {
+        let activeApp = accessibilityClient.frontmostApplication()
+        let hasSupportedProfile = activeApp.flatMap { app -> Bool? in
+            guard let profile = profileStore.profile(for: app.bundleIdentifier) else {
+                return false
+            }
+
+            return profile.canPresentSuggestions
+                && !profile.isSensitive
+                && !disabledBundleIdentifiers.contains(app.bundleIdentifier)
+        } ?? false
+        let interval = focusPollingCadencePolicy.interval(
+            isTrustedForAccessibility: accessibilityClient.isTrusted,
+            hasSupportedProfile: hasSupportedProfile,
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+        )
+
+        guard let lastFocusedTextPollAttemptAt else {
+            return true
+        }
+
+        return now.timeIntervalSince(lastFocusedTextPollAttemptAt) >= interval
     }
 
     private func finishFocusedTextPoll(startedAt: UInt64) {
