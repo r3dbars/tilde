@@ -2325,37 +2325,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        var activePlacement = placement
-        var panelRect = suggestionPanel.show(
-            text: suggestion.visibleText,
-            near: activePlacement.anchorRect,
-            alignedTo: activePlacement.renderMode == .inlineAdjacent ? activePlacement.textLineRect : nil,
-            boundedBy: activePlacement.clippingRect,
-            style: context.textStyle,
-            renderMode: activePlacement.renderMode
-        )
-
-        if panelRect == nil,
-           let fallbackPlacement = activePlacement.mirrorFallbackForCrampedInlineFrame(
-               fallbackRenderMode: profile.fallbackRenderMode
-           ) {
-            activePlacement = fallbackPlacement
-            panelRect = suggestionPanel.show(
+        let presentationAttempt = SuggestionPanelPresentationPolicy.attempt(
+            initialPlacement: placement,
+            fallbackRenderMode: profile.fallbackRenderMode
+        ) { activePlacement in
+            suggestionPanel.show(
                 text: suggestion.visibleText,
                 near: activePlacement.anchorRect,
-                alignedTo: nil,
+                alignedTo: activePlacement.renderMode == .inlineAdjacent ? activePlacement.textLineRect : nil,
                 boundedBy: activePlacement.clippingRect,
                 style: context.textStyle,
                 renderMode: activePlacement.renderMode
             )
         }
+        let activePlacement = presentationAttempt.placement
 
-        guard let panelRect else {
-            let reason = "panel-frame-unusable"
-            let failureReason = activePlacement.reason == .inlineRoomTooSmall
-                ? activePlacement.reason.rawValue
-                : reason
-            setSuggestionDecision("Blocked: \(reason)")
+        guard let panelRect = presentationAttempt.panelRect else {
+            let failureReason = presentationAttempt.failureReason
+                ?? SuggestionPanelPresentationPolicy.panelFrameUnusableReason
+            setSuggestionDecision("Blocked: \(failureReason)")
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
                 suggestionID: suggestionID,
