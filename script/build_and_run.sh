@@ -4,7 +4,7 @@ set -euo pipefail
 MODE="${1:-run}"
 APP_NAME="AutocompleteLab"
 BUNDLE_ID="bar.r3d.autocomplete-lab"
-MIN_SYSTEM_VERSION="26.0"
+MIN_SYSTEM_VERSION="14.0"
 BUILD_CONFIGURATION="${AUTOCOMPLETE_LAB_BUILD_CONFIGURATION:-debug}"
 APP_VERSION="${AUTOCOMPLETE_LAB_VERSION:-0.1.0}"
 APP_BUILD="${AUTOCOMPLETE_LAB_BUILD:-$(git rev-list --count HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"

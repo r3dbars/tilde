@@ -24,6 +24,7 @@ The magic feeling we are testing:
 - `Esc` dismisses
 - local-only by default
 - default model target: Qwen3.5 4B on Apple Silicon / 16 GB
+- macOS 14 or newer
 - starts with a small app allowlist
 
 Target apps for the first pass:
@@ -43,6 +44,8 @@ Run the MVP on Qwen3.5 4B through MLX.
 The first supported hardware target is Apple Silicon with 16 GB RAM. The app should not expose a broad model picker yet. The product question is whether the typing experience feels useful, so the model layer should stay boring: local, warm, short completions, and tuned for speed.
 
 Users should never need to start a model server. The model runtime is owned by the app. Any Ollama or llama.cpp run is only a private benchmark tool, not part of the product experience.
+
+If the local model is missing or incomplete, Settings installs or repairs the app-owned MLX model and retries the load.
 
 ## What We Are Not Building Yet
 

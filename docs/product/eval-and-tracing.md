@@ -145,7 +145,7 @@ Use the command-line checker for repeatable proof:
 Compare local model latency after a trial launch:
 
 ```bash
-script/model_latency_report.py --latest
+script/model_latency_report.py --default-model-proof
 AUTOCOMPLETE_LAB_MODEL=qwen35-9b ./script/build_and_run.sh --verify
 ```
 
@@ -167,6 +167,7 @@ After a manual model trial, require enough samples before trusting the result:
 
 ```bash
 script/model_latency_report.py --latest --require-timing-samples 5 --require-shown-samples 5
+script/model_latency_report.py --default-model-proof
 ```
 
 For a clean app-specific slice:

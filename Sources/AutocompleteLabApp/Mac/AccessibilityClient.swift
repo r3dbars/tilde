@@ -21,10 +21,13 @@ struct FocusedTextContext: Equatable, Sendable {
     let elementRect: CGRect?
     let windowRect: CGRect?
     let textLineRect: CGRect?
+    let visibleCharacterRange: AccessibilityCharacterRange?
+    let insertionPointLineNumber: Int?
     let textStyle: FocusedTextStyle?
     let isSecure: Bool
     let caretIsSynthetic: Bool
     let capabilities: FocusedTextCapabilities
+    let axReadErrors: [AXAttributeReadError]
 }
 
 struct FocusedTextCapabilities: Equatable, Sendable {
@@ -33,6 +36,26 @@ struct FocusedTextCapabilities: Equatable, Sendable {
     let canReadBoundsForRange: Bool
     let canReadAttributedText: Bool
     let canSetSelectedText: Bool
+    let canReadVisibleCharacterRange: Bool
+    let canReadInsertionPointLineNumber: Bool
+
+    init(
+        canReadValue: Bool,
+        canReadSelectedTextRange: Bool,
+        canReadBoundsForRange: Bool,
+        canReadAttributedText: Bool,
+        canSetSelectedText: Bool,
+        canReadVisibleCharacterRange: Bool = false,
+        canReadInsertionPointLineNumber: Bool = false
+    ) {
+        self.canReadValue = canReadValue
+        self.canReadSelectedTextRange = canReadSelectedTextRange
+        self.canReadBoundsForRange = canReadBoundsForRange
+        self.canReadAttributedText = canReadAttributedText
+        self.canSetSelectedText = canSetSelectedText
+        self.canReadVisibleCharacterRange = canReadVisibleCharacterRange
+        self.canReadInsertionPointLineNumber = canReadInsertionPointLineNumber
+    }
 
     var supportsInlineSuggestions: Bool {
         canReadValue && canReadSelectedTextRange && canReadBoundsForRange
@@ -56,8 +79,11 @@ struct FocusedTextDiagnostics: Equatable, Sendable {
     let elementRect: CGRect?
     let windowRect: CGRect?
     let textLineRect: CGRect?
+    let visibleCharacterRange: AccessibilityCharacterRange?
+    let insertionPointLineNumber: Int?
     let capabilities: FocusedTextCapabilities
     let attributeDump: FocusedElementAttributeDump
+    let axReadErrors: [AXAttributeReadError]
 
     var summary: String {
         """
@@ -72,12 +98,18 @@ struct FocusedTextDiagnostics: Equatable, Sendable {
         Element rect: \(elementRect.map(String.init(describing:)) ?? "missing")
         Window rect: \(windowRect.map(String.init(describing:)) ?? "missing")
         Text line rect: \(textLineRect.map(String.init(describing:)) ?? "missing")
+        Visible character range: \(visibleCharacterRange.map { "location=\($0.location), length=\($0.length)" } ?? "missing")
+        Insertion line: \(insertionPointLineNumber.map(String.init) ?? "missing")
         Capabilities:
           value: \(capabilities.canReadValue)
           selected range: \(capabilities.canReadSelectedTextRange)
           bounds for range: \(capabilities.canReadBoundsForRange)
           attributed text: \(capabilities.canReadAttributedText)
           selected text insertion: \(capabilities.canSetSelectedText)
+          visible range: \(capabilities.canReadVisibleCharacterRange)
+          insertion line: \(capabilities.canReadInsertionPointLineNumber)
+        AX read errors:
+        \(axReadErrorSummary)
 
         Attributes:
         \(attributeDump.attributeSummary)
@@ -85,6 +117,16 @@ struct FocusedTextDiagnostics: Equatable, Sendable {
         Parameterized attributes:
         \(attributeDump.parameterizedAttributeSummary)
         """
+    }
+
+    private var axReadErrorSummary: String {
+        guard !axReadErrors.isEmpty else {
+            return "  none"
+        }
+
+        return axReadErrors
+            .map { "  \($0.attribute): \($0.code)" }
+            .joined(separator: "\n")
     }
 }
 
@@ -129,8 +171,72 @@ struct FocusedTextStyle: Equatable, @unchecked Sendable {
     }
 }
 
+struct AXAttributeReadError: Equatable, Sendable {
+    let attribute: String
+    let code: String
+    let isTimeoutOrCannotComplete: Bool
+}
+
+private final class AXAttributeReadRecorder {
+    private(set) var errors: [AXAttributeReadError] = []
+
+    func record(attribute: String, result: AXError) {
+        guard result != .success else {
+            return
+        }
+
+        let code = Self.traceSafeCode(for: result)
+        errors.append(AXAttributeReadError(
+            attribute: attribute,
+            code: code,
+            isTimeoutOrCannotComplete: result == .cannotComplete
+        ))
+    }
+
+    private static func traceSafeCode(for result: AXError) -> String {
+        switch result {
+        case .success:
+            return "success"
+        case .failure:
+            return "failure"
+        case .illegalArgument:
+            return "illegalArgument"
+        case .invalidUIElement:
+            return "invalidUIElement"
+        case .invalidUIElementObserver:
+            return "invalidUIElementObserver"
+        case .cannotComplete:
+            return "cannotComplete"
+        case .attributeUnsupported:
+            return "attributeUnsupported"
+        case .actionUnsupported:
+            return "actionUnsupported"
+        case .notificationUnsupported:
+            return "notificationUnsupported"
+        case .notImplemented:
+            return "notImplemented"
+        case .notificationAlreadyRegistered:
+            return "notificationAlreadyRegistered"
+        case .notificationNotRegistered:
+            return "notificationNotRegistered"
+        case .apiDisabled:
+            return "apiDisabled"
+        case .noValue:
+            return "noValue"
+        case .parameterizedAttributeUnsupported:
+            return "parameterizedAttributeUnsupported"
+        case .notEnoughPrecision:
+            return "notEnoughPrecision"
+        @unknown default:
+            return "unknown"
+        }
+    }
+}
+
 final class AccessibilityClient: @unchecked Sendable {
     private let sensitiveTextFieldPolicy = SensitiveTextFieldPolicy()
+    private let geometryHistoryLock = NSLock()
+    private var geometryHistory = AccessibilityGeometryHistory()
 
     var isTrusted: Bool {
         AXIsProcessTrusted()
@@ -176,23 +282,34 @@ final class AccessibilityClient: @unchecked Sendable {
         for app: RunningApplicationInfo,
         allowDescendantTextFallback: Bool = false
     ) -> FocusedTextContext? {
+        let recorder = AXAttributeReadRecorder()
         guard let focusedElement = focusedElement(for: app.processIdentifier) else {
             return nil
         }
 
         configureMessagingTimeout(for: focusedElement)
 
-        let role = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
-        let subrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
+        let role = copyAttribute(
+            focusedElement,
+            attribute: kAXRoleAttribute,
+            recorder: recorder
+        ) as? String
+        let subrole = copyAttribute(
+            focusedElement,
+            attribute: kAXSubroleAttribute,
+            recorder: recorder
+        ) as? String
         let fingerprint = focusedElementFingerprint(
             for: focusedElement,
-            processIdentifier: app.processIdentifier
+            processIdentifier: app.processIdentifier,
+            recorder: recorder
         )
         let isSecure = isSensitiveTextElement(
             focusedElement,
             role: role,
             subrole: subrole,
-            fingerprint: fingerprint
+            fingerprint: fingerprint,
+            recorder: recorder
         )
 
         guard !isSecure else {
@@ -201,7 +318,8 @@ final class AccessibilityClient: @unchecked Sendable {
                 role: role,
                 subrole: subrole,
                 fingerprint: fingerprint,
-                processIdentifier: app.processIdentifier
+                processIdentifier: app.processIdentifier,
+                recorder: recorder
             )
         }
 
@@ -209,44 +327,81 @@ final class AccessibilityClient: @unchecked Sendable {
             in: focusedElement,
             role: role,
             processIdentifier: app.processIdentifier,
-            allowDescendantTextFallback: allowDescendantTextFallback
+            allowDescendantTextFallback: allowDescendantTextFallback,
+            recorder: recorder
         ) else {
             return nil
         }
 
-        let selectedRange = selectedTextRange(in: focusedElement)
+        let selectedRange = selectedTextRange(in: focusedElement, recorder: recorder)
+        let selectedTextRange = selectedRange.map(accessibilityTextRange)
+        let visibleCharacterRange = visibleCharacterRange(in: focusedElement, recorder: recorder)
+        let insertionPointLineNumber = insertionPointLineNumber(in: focusedElement, recorder: recorder)
         let selectedTextLength = max(0, selectedRange?.length ?? 0)
         let textSlice = CursorTextSplitter.split(
             text,
             utf16Offset: selectedRange?.location ?? text.utf16.count
         )
-        let caretRect = selectedRange.flatMap {
-            AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
+        let rawCaretRect = selectedRange.flatMap {
+            caretBounds(for: focusedElement, range: $0, recorder: recorder)
         }
-        let elementRect = elementBounds(for: focusedElement)
-        let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
-        let textLineRect = selectedRange.flatMap {
-            AccessibilityTextBoundsPolicy.usableTextBounds(
-                textLineBounds(
-                    for: focusedElement,
-                    textLength: text.utf16.count,
-                    textBeforeCursor: textSlice.textBeforeCursor,
-                    range: $0
-                )
+        let elementIdentifier = Int(CFHash(focusedElement))
+        let elementRect = elementBounds(for: focusedElement, recorder: recorder)
+        let windowRect = containingWindowBounds(
+            for: focusedElement,
+            processIdentifier: app.processIdentifier,
+            recorder: recorder
+        )
+        let rawTextLineRect = selectedRange.flatMap {
+            textLineBounds(
+                for: focusedElement,
+                textLength: text.utf16.count,
+                textBeforeCursor: textSlice.textBeforeCursor,
+                range: $0,
+                recorder: recorder
             )
         }
+        let fieldIdentity = FocusedFieldIdentity(
+            bundleIdentifier: app.bundleIdentifier,
+            processIdentifier: app.processIdentifier,
+            elementIdentifier: elementIdentifier
+        )
+        let geometryValidation = validateGeometrySample(AccessibilityGeometrySample(
+            fieldIdentity: fieldIdentity,
+            textState: AccessibilityGeometryTextState(
+                textBeforeCursorUTF16Length: textSlice.textBeforeCursor.utf16.count,
+                textAfterCursorUTF16Length: textSlice.textAfterCursor.utf16.count,
+                selectedRange: selectedTextRange,
+                visibleCharacterRange: visibleCharacterRange
+            ),
+            caretRect: rawCaretRect,
+            textLineRect: rawTextLineRect,
+            elementRect: elementRect,
+            windowRect: windowRect,
+            insertionPointLineNumber: insertionPointLineNumber
+        ))
+        let caretRect = geometryValidation.caretRect
+        let textLineRect = geometryValidation.textLineRect
         let textStyle = selectedRange.flatMap {
-            focusedTextStyle(in: focusedElement, textLength: text.utf16.count, range: $0)
+            focusedTextStyle(
+                in: focusedElement,
+                textLength: text.utf16.count,
+                range: $0,
+                recorder: recorder
+            )
         }
         let capabilities = textCapabilities(
             for: focusedElement,
             selectedRange: selectedRange,
-            caretRect: caretRect,
-            textStyle: textStyle
+            boundsForRangeSucceeded: rawCaretRect != nil,
+            textStyle: textStyle,
+            visibleCharacterRange: visibleCharacterRange,
+            insertionPointLineNumber: insertionPointLineNumber,
+            recorder: recorder
         )
 
         return FocusedTextContext(
-            elementIdentifier: Int(CFHash(focusedElement)),
+            elementIdentifier: elementIdentifier,
             role: role,
             subrole: subrole,
             fingerprint: fingerprint,
@@ -257,10 +412,13 @@ final class AccessibilityClient: @unchecked Sendable {
             elementRect: elementRect,
             windowRect: windowRect,
             textLineRect: textLineRect,
+            visibleCharacterRange: visibleCharacterRange,
+            insertionPointLineNumber: insertionPointLineNumber,
             textStyle: textStyle,
             isSecure: isSecure,
             caretIsSynthetic: false,
-            capabilities: capabilities
+            capabilities: capabilities,
+            axReadErrors: recorder.errors
         )
     }
 
@@ -269,7 +427,8 @@ final class AccessibilityClient: @unchecked Sendable {
         role: String?,
         subrole: String?,
         fingerprint: FocusedElementFingerprint,
-        processIdentifier: pid_t
+        processIdentifier: pid_t,
+        recorder: AXAttributeReadRecorder
     ) -> FocusedTextContext {
         FocusedTextContext(
             elementIdentifier: Int(CFHash(element)),
@@ -280,9 +439,15 @@ final class AccessibilityClient: @unchecked Sendable {
             textAfterCursor: "",
             selectedTextLength: 0,
             caretRect: nil,
-            elementRect: elementBounds(for: element),
-            windowRect: containingWindowBounds(for: element, processIdentifier: processIdentifier),
+            elementRect: elementBounds(for: element, recorder: recorder),
+            windowRect: containingWindowBounds(
+                for: element,
+                processIdentifier: processIdentifier,
+                recorder: recorder
+            ),
             textLineRect: nil,
+            visibleCharacterRange: nil,
+            insertionPointLineNumber: nil,
             textStyle: nil,
             isSecure: true,
             caretIsSynthetic: false,
@@ -292,7 +457,8 @@ final class AccessibilityClient: @unchecked Sendable {
                 canReadBoundsForRange: false,
                 canReadAttributedText: false,
                 canSetSelectedText: false
-            )
+            ),
+            axReadErrors: recorder.errors
         )
     }
 
@@ -397,53 +563,87 @@ final class AccessibilityClient: @unchecked Sendable {
         for app: RunningApplicationInfo,
         allowDescendantTextFallback: Bool = false
     ) -> FocusedTextDiagnostics? {
+        let recorder = AXAttributeReadRecorder()
         guard let focusedElement = focusedElement(for: app.processIdentifier) else {
             return nil
         }
 
         configureMessagingTimeout(for: focusedElement)
 
-        let role = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
-        let subrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
+        let role = copyAttribute(
+            focusedElement,
+            attribute: kAXRoleAttribute,
+            recorder: recorder
+        ) as? String
+        let subrole = copyAttribute(
+            focusedElement,
+            attribute: kAXSubroleAttribute,
+            recorder: recorder
+        ) as? String
         let fingerprint = focusedElementFingerprint(
             for: focusedElement,
-            processIdentifier: app.processIdentifier
+            processIdentifier: app.processIdentifier,
+            recorder: recorder
         )
         let text = editableText(
             in: focusedElement,
             role: role,
             processIdentifier: app.processIdentifier,
-            allowDescendantTextFallback: allowDescendantTextFallback
+            allowDescendantTextFallback: allowDescendantTextFallback,
+            recorder: recorder
         )
-        let selectedRange = selectedTextRange(in: focusedElement)
+        let selectedRange = selectedTextRange(in: focusedElement, recorder: recorder)
+        let selectedTextRange = selectedRange.map(accessibilityTextRange)
+        let visibleCharacterRange = visibleCharacterRange(in: focusedElement, recorder: recorder)
+        let insertionPointLineNumber = insertionPointLineNumber(in: focusedElement, recorder: recorder)
         let textSlice = text.map {
             CursorTextSplitter.split($0, utf16Offset: selectedRange?.location ?? $0.utf16.count)
         }
-        let caretRect = selectedRange.flatMap {
-            AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
+        let rawCaretRect = selectedRange.flatMap {
+            caretBounds(for: focusedElement, range: $0, recorder: recorder)
         }
-        let elementRect = elementBounds(for: focusedElement)
-        let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
+        let caretRect = AccessibilityTextBoundsPolicy.usableTextBounds(
+            rawCaretRect,
+            selectedRange: selectedTextRange,
+            visibleCharacterRange: visibleCharacterRange
+        )
+        let elementRect = elementBounds(for: focusedElement, recorder: recorder)
+        let windowRect = containingWindowBounds(
+            for: focusedElement,
+            processIdentifier: app.processIdentifier,
+            recorder: recorder
+        )
         let textLineRect = selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(
                 textLineBounds(
                     for: focusedElement,
                     textLength: text?.utf16.count ?? 0,
                     textBeforeCursor: textSlice?.textBeforeCursor ?? "",
-                    range: $0
-                )
+                    range: $0,
+                    recorder: recorder
+                ),
+                selectedRange: selectedTextRange,
+                visibleCharacterRange: visibleCharacterRange
             )
         }
         let textStyle = selectedRange.flatMap {
-            focusedTextStyle(in: focusedElement, textLength: text?.utf16.count ?? 0, range: $0)
+            focusedTextStyle(
+                in: focusedElement,
+                textLength: text?.utf16.count ?? 0,
+                range: $0,
+                recorder: recorder
+            )
         }
         let capabilities = textCapabilities(
             for: focusedElement,
             selectedRange: selectedRange,
-            caretRect: caretRect,
-            textStyle: textStyle
+            boundsForRangeSucceeded: rawCaretRect != nil,
+            textStyle: textStyle,
+            visibleCharacterRange: visibleCharacterRange,
+            insertionPointLineNumber: insertionPointLineNumber,
+            recorder: recorder
         )
-        let attributeDump = focusedElementAttributeDump(for: focusedElement)
+        let attributeDump = focusedElementAttributeDump(for: focusedElement, recorder: recorder)
 
         return FocusedTextDiagnostics(
             bundleIdentifier: app.bundleIdentifier,
@@ -454,7 +654,8 @@ final class AccessibilityClient: @unchecked Sendable {
                 focusedElement,
                 role: role,
                 subrole: subrole,
-                fingerprint: fingerprint
+                fingerprint: fingerprint,
+                recorder: recorder
             ),
             textBeforeCursorLength: textSlice?.textBeforeCursor.count ?? 0,
             textAfterCursorLength: textSlice?.textAfterCursor.count ?? 0,
@@ -463,9 +664,26 @@ final class AccessibilityClient: @unchecked Sendable {
             elementRect: elementRect,
             windowRect: windowRect,
             textLineRect: textLineRect,
+            visibleCharacterRange: visibleCharacterRange,
+            insertionPointLineNumber: insertionPointLineNumber,
             capabilities: capabilities,
-            attributeDump: attributeDump
+            attributeDump: attributeDump,
+            axReadErrors: recorder.errors
         )
+    }
+
+    func focusedElementForObserver(for processIdentifier: pid_t) -> AXUIElement? {
+        focusedElement(for: processIdentifier)
+    }
+
+    func focusedWindowForObserver(for processIdentifier: pid_t) -> AXUIElement? {
+        let appElement = AXUIElementCreateApplication(processIdentifier)
+        configureMessagingTimeout(for: appElement)
+        guard let windowValue = copyAttribute(appElement, attribute: kAXFocusedWindowAttribute) else {
+            return nil
+        }
+
+        return (windowValue as! AXUIElement)
     }
 
     private func focusedElement(for processIdentifier: pid_t) -> AXUIElement? {
@@ -478,9 +696,14 @@ final class AccessibilityClient: @unchecked Sendable {
         return (focusedElementValue as! AXUIElement)
     }
 
-    private func copyAttribute(_ element: AXUIElement, attribute: String) -> CFTypeRef? {
+    private func copyAttribute(
+        _ element: AXUIElement,
+        attribute: String,
+        recorder: AXAttributeReadRecorder? = nil
+    ) -> CFTypeRef? {
         var value: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+        recorder?.record(attribute: attribute, result: result)
         guard result == .success else {
             return nil
         }
@@ -488,11 +711,18 @@ final class AccessibilityClient: @unchecked Sendable {
         return value
     }
 
-    private func focusedElementAttributeDump(for element: AXUIElement) -> FocusedElementAttributeDump {
+    private func focusedElementAttributeDump(
+        for element: AXUIElement,
+        recorder: AXAttributeReadRecorder? = nil
+    ) -> FocusedElementAttributeDump {
         let attributes = attributeNames(for: element).map { attribute in
             FocusedElementAttributeSummary(
                 name: attribute,
-                valueSummary: diagnosticValueSummary(copyAttribute(element, attribute: attribute)),
+                valueSummary: diagnosticValueSummary(copyAttribute(
+                    element,
+                    attribute: attribute,
+                    recorder: recorder
+                )),
                 isSettable: canSetAttribute(element, attribute: attribute)
             )
         }
@@ -609,17 +839,26 @@ final class AccessibilityClient: @unchecked Sendable {
         in element: AXUIElement,
         role: String?,
         processIdentifier: pid_t,
-        allowDescendantTextFallback: Bool
+        allowDescendantTextFallback: Bool,
+        recorder: AXAttributeReadRecorder? = nil
     ) -> String? {
-        let directText = copyAttribute(element, attribute: kAXValueAttribute) as? String
+        let directText = copyAttribute(
+            element,
+            attribute: kAXValueAttribute,
+            recorder: recorder
+        ) as? String
         guard allowDescendantTextFallback,
               role == "AXWebArea",
               directText?.isEmpty != false,
-              containingWindowTitle(for: element, processIdentifier: processIdentifier) == "New Message" else {
+              containingWindowTitle(
+                for: element,
+                processIdentifier: processIdentifier,
+                recorder: recorder
+              ) == "New Message" else {
             return directText
         }
 
-        let descendantText = descendantText(in: element)
+        let descendantText = descendantText(in: element, recorder: recorder)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !descendantText.isEmpty else {
@@ -629,33 +868,74 @@ final class AccessibilityClient: @unchecked Sendable {
         return descendantText
     }
 
-    private func containingWindowTitle(for element: AXUIElement, processIdentifier: pid_t) -> String? {
-        if let windowValue = copyAttribute(element, attribute: kAXWindowAttribute),
-           let title = copyAttribute((windowValue as! AXUIElement), attribute: kAXTitleAttribute) as? String {
+    private func containingWindowTitle(
+        for element: AXUIElement,
+        processIdentifier: pid_t,
+        recorder: AXAttributeReadRecorder? = nil
+    ) -> String? {
+        if let windowValue = copyAttribute(element, attribute: kAXWindowAttribute, recorder: recorder),
+           let title = copyAttribute(
+            (windowValue as! AXUIElement),
+            attribute: kAXTitleAttribute,
+            recorder: recorder
+           ) as? String {
             return title
         }
 
         let appElement = AXUIElementCreateApplication(processIdentifier)
         configureMessagingTimeout(for: appElement)
 
-        guard let windowValue = copyAttribute(appElement, attribute: kAXFocusedWindowAttribute) else {
+        guard let windowValue = copyAttribute(
+            appElement,
+            attribute: kAXFocusedWindowAttribute,
+            recorder: recorder
+        ) else {
             return nil
         }
 
-        return copyAttribute((windowValue as! AXUIElement), attribute: kAXTitleAttribute) as? String
+        return copyAttribute(
+            (windowValue as! AXUIElement),
+            attribute: kAXTitleAttribute,
+            recorder: recorder
+        ) as? String
     }
 
     private func focusedElementFingerprint(
         for element: AXUIElement,
-        processIdentifier: pid_t
+        processIdentifier: pid_t,
+        recorder: AXAttributeReadRecorder? = nil
     ) -> FocusedElementFingerprint {
         FocusedElementFingerprint(
-            identifier: compactAttributeText(copyAttribute(element, attribute: "AXIdentifier") as? String),
-            title: compactAttributeText(copyAttribute(element, attribute: kAXTitleAttribute) as? String),
-            description: compactAttributeText(copyAttribute(element, attribute: kAXDescriptionAttribute) as? String),
-            help: compactAttributeText(copyAttribute(element, attribute: kAXHelpAttribute) as? String),
-            placeholder: compactAttributeText(copyAttribute(element, attribute: "AXPlaceholderValue") as? String),
-            windowTitle: compactAttributeText(containingWindowTitle(for: element, processIdentifier: processIdentifier))
+            identifier: compactAttributeText(copyAttribute(
+                element,
+                attribute: "AXIdentifier",
+                recorder: recorder
+            ) as? String),
+            title: compactAttributeText(copyAttribute(
+                element,
+                attribute: kAXTitleAttribute,
+                recorder: recorder
+            ) as? String),
+            description: compactAttributeText(copyAttribute(
+                element,
+                attribute: kAXDescriptionAttribute,
+                recorder: recorder
+            ) as? String),
+            help: compactAttributeText(copyAttribute(
+                element,
+                attribute: kAXHelpAttribute,
+                recorder: recorder
+            ) as? String),
+            placeholder: compactAttributeText(copyAttribute(
+                element,
+                attribute: "AXPlaceholderValue",
+                recorder: recorder
+            ) as? String),
+            windowTitle: compactAttributeText(containingWindowTitle(
+                for: element,
+                processIdentifier: processIdentifier,
+                recorder: recorder
+            ))
         )
     }
 
@@ -676,23 +956,31 @@ final class AccessibilityClient: @unchecked Sendable {
         return String(compact.prefix(120))
     }
 
-    private func descendantText(in element: AXUIElement, depth: Int = 0) -> String {
+    private func descendantText(
+        in element: AXUIElement,
+        depth: Int = 0,
+        recorder: AXAttributeReadRecorder? = nil
+    ) -> String {
         guard depth < 6 else {
             return ""
         }
 
-        let children = copyAttribute(element, attribute: kAXChildrenAttribute) as? [AXUIElement] ?? []
+        let children = copyAttribute(
+            element,
+            attribute: kAXChildrenAttribute,
+            recorder: recorder
+        ) as? [AXUIElement] ?? []
         var parts: [String] = []
 
         for child in children {
             configureMessagingTimeout(for: child)
 
-            if let value = copyAttribute(child, attribute: kAXValueAttribute) as? String,
+            if let value = copyAttribute(child, attribute: kAXValueAttribute, recorder: recorder) as? String,
                !value.isEmpty {
                 parts.append(value)
             }
 
-            let nestedText = descendantText(in: child, depth: depth + 1)
+            let nestedText = descendantText(in: child, depth: depth + 1, recorder: recorder)
             if !nestedText.isEmpty {
                 parts.append(nestedText)
             }
@@ -705,8 +993,15 @@ final class AccessibilityClient: @unchecked Sendable {
         AXUIElementSetMessagingTimeout(element, 0.12)
     }
 
-    private func selectedTextRange(in element: AXUIElement) -> CFRange? {
-        guard let rangeValue = copyAttribute(element, attribute: kAXSelectedTextRangeAttribute) else {
+    private func selectedTextRange(
+        in element: AXUIElement,
+        recorder: AXAttributeReadRecorder? = nil
+    ) -> CFRange? {
+        guard let rangeValue = copyAttribute(
+            element,
+            attribute: kAXSelectedTextRangeAttribute,
+            recorder: recorder
+        ) else {
             return nil
         }
 
@@ -718,32 +1013,90 @@ final class AccessibilityClient: @unchecked Sendable {
         return range
     }
 
-    private func caretBounds(for element: AXUIElement, range: CFRange) -> CGRect? {
+    private func visibleCharacterRange(
+        in element: AXUIElement,
+        recorder: AXAttributeReadRecorder? = nil
+    ) -> AccessibilityCharacterRange? {
+        guard let rangeValue = copyAttribute(
+            element,
+            attribute: kAXVisibleCharacterRangeAttribute,
+            recorder: recorder
+        ) else {
+            return nil
+        }
+
+        var range = CFRange()
+        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else {
+            return nil
+        }
+
+        return accessibilityTextRange(range)
+    }
+
+    private func insertionPointLineNumber(
+        in element: AXUIElement,
+        recorder: AXAttributeReadRecorder? = nil
+    ) -> Int? {
+        let value = copyAttribute(
+            element,
+            attribute: kAXInsertionPointLineNumberAttribute,
+            recorder: recorder
+        )
+
+        if let intValue = value as? Int {
+            return intValue
+        }
+
+        return (value as? NSNumber)?.intValue
+    }
+
+    private func accessibilityTextRange(_ range: CFRange) -> AccessibilityCharacterRange {
+        AccessibilityCharacterRange(location: range.location, length: range.length)
+    }
+
+    private func validateGeometrySample(
+        _ sample: AccessibilityGeometrySample
+    ) -> AccessibilityGeometryValidation {
+        geometryHistoryLock.lock()
+        defer { geometryHistoryLock.unlock() }
+        return geometryHistory.validateAndRecord(sample)
+    }
+
+    private func caretBounds(
+        for element: AXUIElement,
+        range: CFRange,
+        recorder: AXAttributeReadRecorder? = nil
+    ) -> CGRect? {
         let caretRange = CFRange(location: range.location, length: 0)
-        return bounds(for: element, range: caretRange)
+        return bounds(for: element, range: caretRange, recorder: recorder)
     }
 
     private func textLineBounds(
         for element: AXUIElement,
         textLength: Int,
         textBeforeCursor: String,
-        range: CFRange
+        range: CFRange,
+        recorder: AXAttributeReadRecorder? = nil
     ) -> CGRect? {
         if let lastCharacter = textBeforeCursor.last, !lastCharacter.isNewline, range.location > 0 {
             let previousCharacterRange = CFRange(location: range.location - 1, length: 1)
-            return bounds(for: element, range: previousCharacterRange)
+            return bounds(for: element, range: previousCharacterRange, recorder: recorder)
         }
 
         if range.location < textLength {
             let nextCharacterRange = CFRange(location: range.location, length: 1)
-            return bounds(for: element, range: nextCharacterRange)
+            return bounds(for: element, range: nextCharacterRange, recorder: recorder)
         }
 
         let caretRange = CFRange(location: range.location, length: 0)
-        return bounds(for: element, range: caretRange)
+        return bounds(for: element, range: caretRange, recorder: recorder)
     }
 
-    private func bounds(for element: AXUIElement, range: CFRange) -> CGRect? {
+    private func bounds(
+        for element: AXUIElement,
+        range: CFRange,
+        recorder: AXAttributeReadRecorder? = nil
+    ) -> CGRect? {
         var range = range
         guard let rangeValue = AXValueCreate(.cfRange, &range) else {
             return nil
@@ -756,6 +1109,7 @@ final class AccessibilityClient: @unchecked Sendable {
             rangeValue,
             &boundsValue
         )
+        recorder?.record(attribute: kAXBoundsForRangeParameterizedAttribute, result: result)
 
         guard result == .success, let boundsValue else {
             return nil
@@ -769,9 +1123,20 @@ final class AccessibilityClient: @unchecked Sendable {
         return rect
     }
 
-    private func elementBounds(for element: AXUIElement) -> CGRect? {
-        guard let positionValue = copyAttribute(element, attribute: kAXPositionAttribute),
-              let sizeValue = copyAttribute(element, attribute: kAXSizeAttribute) else {
+    private func elementBounds(
+        for element: AXUIElement,
+        recorder: AXAttributeReadRecorder? = nil
+    ) -> CGRect? {
+        guard let positionValue = copyAttribute(
+            element,
+            attribute: kAXPositionAttribute,
+            recorder: recorder
+        ),
+              let sizeValue = copyAttribute(
+                element,
+                attribute: kAXSizeAttribute,
+                recorder: recorder
+              ) else {
             return nil
         }
 
@@ -786,22 +1151,35 @@ final class AccessibilityClient: @unchecked Sendable {
         return CGRect(origin: position, size: size)
     }
 
-    private func containingWindowBounds(for element: AXUIElement, processIdentifier: pid_t) -> CGRect? {
-        if let windowValue = copyAttribute(element, attribute: kAXWindowAttribute) {
-            return elementBounds(for: (windowValue as! AXUIElement))
+    private func containingWindowBounds(
+        for element: AXUIElement,
+        processIdentifier: pid_t,
+        recorder: AXAttributeReadRecorder? = nil
+    ) -> CGRect? {
+        if let windowValue = copyAttribute(element, attribute: kAXWindowAttribute, recorder: recorder) {
+            return elementBounds(for: (windowValue as! AXUIElement), recorder: recorder)
         }
 
         let appElement = AXUIElementCreateApplication(processIdentifier)
         configureMessagingTimeout(for: appElement)
 
-        guard let windowValue = copyAttribute(appElement, attribute: kAXFocusedWindowAttribute) else {
+        guard let windowValue = copyAttribute(
+            appElement,
+            attribute: kAXFocusedWindowAttribute,
+            recorder: recorder
+        ) else {
             return nil
         }
 
-        return elementBounds(for: (windowValue as! AXUIElement))
+        return elementBounds(for: (windowValue as! AXUIElement), recorder: recorder)
     }
 
-    private func focusedTextStyle(in element: AXUIElement, textLength: Int, range: CFRange) -> FocusedTextStyle? {
+    private func focusedTextStyle(
+        in element: AXUIElement,
+        textLength: Int,
+        range: CFRange,
+        recorder: AXAttributeReadRecorder? = nil
+    ) -> FocusedTextStyle? {
         let location: Int
         let length: Int
 
@@ -827,6 +1205,7 @@ final class AccessibilityClient: @unchecked Sendable {
             rangeValue,
             &attributedValue
         )
+        recorder?.record(attribute: kAXAttributedStringForRangeParameterizedAttribute, result: result)
 
         guard result == .success,
               let attributedString = attributedValue as? NSAttributedString,
@@ -853,15 +1232,24 @@ final class AccessibilityClient: @unchecked Sendable {
     private func textCapabilities(
         for element: AXUIElement,
         selectedRange: CFRange?,
-        caretRect: CGRect?,
-        textStyle: FocusedTextStyle?
+        boundsForRangeSucceeded: Bool,
+        textStyle: FocusedTextStyle?,
+        visibleCharacterRange: AccessibilityCharacterRange?,
+        insertionPointLineNumber: Int?,
+        recorder: AXAttributeReadRecorder? = nil
     ) -> FocusedTextCapabilities {
         FocusedTextCapabilities(
-            canReadValue: copyAttribute(element, attribute: kAXValueAttribute) is String,
+            canReadValue: copyAttribute(
+                element,
+                attribute: kAXValueAttribute,
+                recorder: recorder
+            ) is String,
             canReadSelectedTextRange: selectedRange != nil,
-            canReadBoundsForRange: caretRect != nil,
+            canReadBoundsForRange: boundsForRangeSucceeded,
             canReadAttributedText: textStyle != nil,
-            canSetSelectedText: canSetAttribute(element, attribute: kAXSelectedTextAttribute)
+            canSetSelectedText: canSetAttribute(element, attribute: kAXSelectedTextAttribute),
+            canReadVisibleCharacterRange: visibleCharacterRange != nil,
+            canReadInsertionPointLineNumber: insertionPointLineNumber != nil
         )
     }
 
@@ -912,13 +1300,18 @@ final class AccessibilityClient: @unchecked Sendable {
         _ element: AXUIElement,
         role: String?,
         subrole: String?,
-        fingerprint: FocusedElementFingerprint
+        fingerprint: FocusedElementFingerprint,
+        recorder: AXAttributeReadRecorder? = nil
     ) -> Bool {
         if subrole == "AXSecureTextField" {
             return true
         }
 
-        if let protected = copyAttribute(element, attribute: "AXProtectedContent") as? Bool {
+        if let protected = copyAttribute(
+            element,
+            attribute: "AXProtectedContent",
+            recorder: recorder
+        ) as? Bool {
             return protected
         }
 

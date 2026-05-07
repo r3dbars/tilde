@@ -90,7 +90,7 @@ Useful commands:
 ./script/beta_readiness.sh
 ./script/manual_smoke_status.sh --require-all
 ./script/check_trace_eval.sh
-./script/model_latency_report.py --latest
+./script/model_latency_report.py --default-model-proof
 open "\$HOME/Library/Logs/AutocompleteLab"
 \`\`\`
 EOF
@@ -102,12 +102,13 @@ EOF
 2. Open `AutocompleteLab.app`.
 3. Grant Accessibility when macOS asks.
 4. Open Settings from the menu bar item.
-5. If the local model is not ready, use the Local model action and follow the shown model folder path.
-6. Confirm Settings says the model is ready.
-7. Open TextEdit and type a normal sentence.
-8. Use Tab for one-word accept.
-9. Use the key above Tab for full accept only in non-prompt apps where the profile allows it.
-10. Press Esc if a suggestion feels wrong.
+5. If the local model is missing, click `Install Local Model`.
+6. If Settings says the model folder needs repair, click `Repair Local Model`.
+7. Wait for Settings to show the model is ready.
+8. Open TextEdit and type a normal sentence.
+9. Use Tab for one-word accept.
+10. Use the key above Tab for full accept only in non-prompt apps where the profile allows it.
+11. Press Esc if a suggestion feels wrong.
 
 Stop the test if suggestions feel distracting, appear in the wrong app, or
 insert text somewhere surprising.
@@ -171,8 +172,7 @@ Use this after each real beta writing session.
 
 ```bash
 ./script/check_trace_eval.sh
-./script/model_latency_report.py --latest
-./script/model_latency_report.py --latest --require-shown-samples 5
+./script/model_latency_report.py --default-model-proof
 ```
 
 ## Notes

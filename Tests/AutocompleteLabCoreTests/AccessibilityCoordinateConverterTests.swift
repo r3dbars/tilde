@@ -64,4 +64,101 @@ struct AccessibilityCoordinateConverterTests {
         #expect(probeRect.height == 20)
         #expect(screenFrame.intersects(probeRect))
     }
+
+    @Test("Resolves primary display conversion")
+    func resolvesPrimaryDisplayConversion() throws {
+        let conversion = AccessibilityCoordinateConverter.appKitConversion(
+            fromAccessibilityRect: CGRect(x: 100, y: 240, width: 0, height: 20),
+            screenHeight: 900,
+            displays: [
+                AccessibilityDisplayGeometry(
+                    identifier: "primary",
+                    frame: CGRect(x: 0, y: 0, width: 1440, height: 900),
+                    backingScaleFactor: 2
+                )
+            ]
+        )
+
+        let display = try #require(conversion.display)
+        #expect(display.identifier == "primary")
+        #expect(conversion.appKitRect.minX == 100)
+        #expect(conversion.appKitRect.minY == 640)
+        #expect(conversion.appKitProbeRect.width == 1)
+    }
+
+    @Test("Resolves a display left of the primary display")
+    func resolvesLeftOfPrimaryDisplayConversion() throws {
+        let conversion = AccessibilityCoordinateConverter.appKitConversion(
+            fromAccessibilityRect: CGRect(x: -1200, y: 180, width: 0, height: 20),
+            screenHeight: 900,
+            displays: [
+                AccessibilityDisplayGeometry(
+                    identifier: "primary",
+                    frame: CGRect(x: 0, y: 0, width: 1440, height: 900),
+                    backingScaleFactor: 2
+                ),
+                AccessibilityDisplayGeometry(
+                    identifier: "left",
+                    frame: CGRect(x: -1920, y: 0, width: 1920, height: 1080),
+                    backingScaleFactor: 1
+                )
+            ]
+        )
+
+        let display = try #require(conversion.display)
+        #expect(display.identifier == "left")
+        #expect(conversion.appKitRect.minX == -1200)
+        #expect(conversion.appKitRect.minY == 700)
+    }
+
+    @Test("Resolves a display above the primary display")
+    func resolvesAbovePrimaryDisplayConversion() throws {
+        let conversion = AccessibilityCoordinateConverter.appKitConversion(
+            fromAccessibilityRect: CGRect(x: 320, y: -320, width: 0, height: 20),
+            screenHeight: 900,
+            displays: [
+                AccessibilityDisplayGeometry(
+                    identifier: "primary",
+                    frame: CGRect(x: 0, y: 0, width: 1440, height: 900),
+                    backingScaleFactor: 2
+                ),
+                AccessibilityDisplayGeometry(
+                    identifier: "above",
+                    frame: CGRect(x: 0, y: 900, width: 1440, height: 900),
+                    backingScaleFactor: 2
+                )
+            ]
+        )
+
+        let display = try #require(conversion.display)
+        #expect(display.identifier == "above")
+        #expect(conversion.appKitRect.minX == 320)
+        #expect(conversion.appKitRect.minY == 1200)
+    }
+
+    @Test("Keeps Retina and non-Retina display frames in point coordinates")
+    func keepsMixedScaleDisplayFramesInPointCoordinates() throws {
+        let conversion = AccessibilityCoordinateConverter.appKitConversion(
+            fromAccessibilityRect: CGRect(x: 1600, y: 100, width: 0, height: 20),
+            screenHeight: 900,
+            displays: [
+                AccessibilityDisplayGeometry(
+                    identifier: "primary-retina",
+                    frame: CGRect(x: 0, y: 0, width: 1440, height: 900),
+                    backingScaleFactor: 2
+                ),
+                AccessibilityDisplayGeometry(
+                    identifier: "right-non-retina",
+                    frame: CGRect(x: 1440, y: 0, width: 1920, height: 1080),
+                    backingScaleFactor: 1
+                )
+            ]
+        )
+
+        let display = try #require(conversion.display)
+        #expect(display.identifier == "right-non-retina")
+        #expect(display.backingScaleFactor == 1)
+        #expect(conversion.appKitRect.minX == 1600)
+        #expect(conversion.appKitRect.minY == 780)
+    }
 }

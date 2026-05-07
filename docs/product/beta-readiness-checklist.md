@@ -14,6 +14,8 @@ Use this before inviting private beta testers.
 
 - [ ] The menu bar or Diagnostics shows the model is ready.
 - [ ] The preferred asset is `Qwen3.5-4B-4bit`.
+- [ ] Settings installs or repairs the local model without shell commands.
+- [ ] `./script/model_latency_report.py --default-model-proof` passes.
 - [ ] Suggestions stay off while the runtime warms or fails.
 - [ ] Mock fallback is not used for beta.
 - [ ] Testers do not run Ollama, llama.cpp, Python, or a model server.
