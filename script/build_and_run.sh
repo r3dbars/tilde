@@ -207,6 +207,12 @@ open_app() {
     launchctl unsetenv AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS >/dev/null 2>&1 || true
   fi
 
+  if [[ -n "${AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS:-}" ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS "$AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS >/dev/null 2>&1 || true
+  fi
+
   /usr/bin/open -n "$APP_BUNDLE"
 }
 

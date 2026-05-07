@@ -12,6 +12,9 @@ MANUAL_GATE=0
 SKIP_BUILD="${AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD:-0}"
 CHROME_FIXTURE="${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-textarea}"
 CHROME_FIXTURE_WAS_SET=0
+TEMP_ENABLE_ENV_KEY="AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
+TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED=0
+TEMP_ENABLE_LAUNCHCTL_PREVIOUS=""
 
 usage() {
   cat <<'EOF'
@@ -118,7 +121,19 @@ cleanup_smoke_tmp_dirs() {
   fi
 }
 
-trap cleanup_smoke_tmp_dirs EXIT
+cleanup_smoke() {
+  cleanup_smoke_tmp_dirs
+
+  if [[ "$TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED" == "1" ]]; then
+    if [[ -n "$TEMP_ENABLE_LAUNCHCTL_PREVIOUS" ]]; then
+      launchctl setenv "$TEMP_ENABLE_ENV_KEY" "$TEMP_ENABLE_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
+    else
+      launchctl unsetenv "$TEMP_ENABLE_ENV_KEY" >/dev/null 2>&1 || true
+    fi
+  fi
+}
+
+trap cleanup_smoke EXIT
 
 make_tmp_dir() {
   local tmp_dir
@@ -275,6 +290,53 @@ manual_gate_reason() {
       echo "it focuses user content"
       ;;
   esac
+}
+
+smoke_target_bundle_ids() {
+  case "$APP" in
+    textedit)
+      printf 'com.apple.TextEdit\n'
+      ;;
+    chrome)
+      printf 'com.google.Chrome\n'
+      ;;
+    notes)
+      printf 'com.apple.Notes\n'
+      ;;
+    obsidian)
+      printf 'md.obsidian\n'
+      ;;
+    codex)
+      printf 'com.openai.codex\n'
+      ;;
+    claude-code)
+      printf 'com.anthropic.claude-code\n'
+      ;;
+    claude)
+      printf 'com.anthropic.claudefordesktop\n'
+      ;;
+  esac
+}
+
+prepare_temporary_app_enablement() {
+  local bundle_ids
+  bundle_ids="$(smoke_target_bundle_ids | paste -sd, -)"
+  if [[ -z "$bundle_ids" ]]; then
+    return 0
+  fi
+
+  if [[ "$TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    TEMP_ENABLE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$TEMP_ENABLE_ENV_KEY" 2>/dev/null || true)"
+    TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  export AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS="$bundle_ids"
+  launchctl setenv "$TEMP_ENABLE_ENV_KEY" "$bundle_ids" >/dev/null 2>&1 || true
+  echo "Temporary app enablement for smoke: $bundle_ids"
+
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    echo "Note: --skip-build uses the already-running app, so temporary enablement only applies if the app was launched with this environment." >&2
+  fi
 }
 
 accept_all_shortcut() {
@@ -691,6 +753,7 @@ describe_plan() {
   case "$APP" in
     textedit)
       echo "Plan: build/relaunch AutocompleteLab, open a disposable TextEdit file, type a test fragment, then validate logs and traces."
+      echo "Safety: the smoke launch temporarily enables TextEdit only for this proof pass."
       ;;
     chrome)
       echo "Chrome fixture: $CHROME_FIXTURE"
@@ -699,6 +762,7 @@ describe_plan() {
       else
         echo "Plan: build/relaunch AutocompleteLab, open a disposable Chrome $CHROME_FIXTURE fixture, type a test fragment, then validate logs and traces."
       fi
+      echo "Safety: the smoke launch temporarily enables Chrome only for this proof pass."
       ;;
     notes)
       local notes_app notes_surface
@@ -745,33 +809,34 @@ run_manual_gated() {
     fi
   fi
 
+  prepare_temporary_app_enablement
   build_if_needed
   ./script/manual_smoke_session.sh "$manual_app"
 }
 
 run_textedit() {
-  local runtime_start_line start_line trace_start_line tmp_dir tmp_file
+  local runtime_start_line start_line trace_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
 
+  prepare_temporary_app_enablement
   build_if_needed
   wait_for_runtime_ready "$runtime_start_line" "TextEdit runtime readiness" 60 "$SKIP_BUILD"
 
+  osascript <<'APPLESCRIPT'
+tell application "TextEdit"
+  activate
+  make new document
+  set text of front document to ""
+end tell
+delay 0.8
+APPLESCRIPT
+
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
-  tmp_dir="$(make_tmp_dir)"
-  tmp_file="$tmp_dir/autocomplete-lab-textedit-smoke.txt"
-
-  : >"$tmp_file"
-  open -a TextEdit "$tmp_file"
-  sleep 1
 
   osascript <<'APPLESCRIPT'
-tell application "TextEdit" to activate
-delay 0.4
 tell application "System Events"
-  keystroke "a" using command down
-  key code 51
-  keystroke "Can we make this feel "
+  keystroke "Smoke proof feels inst"
 end tell
 APPLESCRIPT
 
@@ -787,8 +852,18 @@ APPLESCRIPT
     "action=acceptNextWord" \
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit first verified insertion"
-  local full_start_line full_accept_key
+  local full_start_line full_accept_key second_start_line
   full_accept_key="$(accept_all_shortcut)"
+  second_start_line="$(line_count "$LOG_PATH")"
+
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  keystroke " and stays inst"
+end tell
+APPLESCRIPT
+
+  wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit second suggestion"
+  wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.TextEdit" "TextEdit second"
   assert_frontmost_app "TextEdit" "TextEdit"
   focus_textedit_smoke_editor
   full_start_line="$(line_count "$LOG_PATH")"
@@ -847,7 +922,7 @@ APPLESCRIPT
 
   osascript <<'APPLESCRIPT'
 tell application "System Events"
-  keystroke "Can we make this feel "
+  keystroke "Smoke proof feels inst"
 end tell
 APPLESCRIPT
 
@@ -866,8 +941,18 @@ APPLESCRIPT
   if [[ "$fixture" == "chat-like" ]]; then
     assert_chrome_chat_fixture_not_submitted "Tab acceptance"
   fi
-  local full_start_line full_accept_key
+  local full_start_line full_accept_key second_start_line
   full_accept_key="$(accept_all_shortcut)"
+  second_start_line="$(line_count "$LOG_PATH")"
+
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  keystroke " and stays inst"
+end tell
+APPLESCRIPT
+
+  wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion"
+  wait_for_screenshot_capture_if_enabled "$second_start_line" "com.google.Chrome" "Chrome $fixture second"
   focus_chrome_smoke_editor
   assert_frontmost_app "Google Chrome" "Chrome $fixture"
   full_start_line="$(line_count "$LOG_PATH")"
@@ -900,6 +985,7 @@ run_chrome() {
   local runtime_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
 
+  prepare_temporary_app_enablement
   build_if_needed
   wait_for_runtime_ready "$runtime_start_line" "Chrome runtime readiness" 60 "$SKIP_BUILD"
 

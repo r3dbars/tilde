@@ -5138,6 +5138,10 @@ private extension AppDelegate {
         "AcceptAllShortcut"
     }
 
+    static var temporarilyEnabledBundleIDsEnvironmentKey: String {
+        "AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
+    }
+
     static var acceptedAndKeptLearningDefaultsKey: String {
         "AcceptedAndKeptLearning"
     }
@@ -5161,12 +5165,17 @@ private extension AppDelegate {
         let defaults = UserDefaults.standard
         let disabledAppsKeyExists = defaults.object(forKey: Self.disabledAppsDefaultsKey) != nil
         let setupKeyExists = defaults.object(forKey: Self.appEnablementSetupCompletedDefaultsKey) != nil
+        let temporarilyEnabledBundleIDs = ProcessInfo.processInfo.environment[
+            Self.temporarilyEnabledBundleIDsEnvironmentKey
+        ]
 
         if disabledAppsKeyExists {
             let persisted = defaults.stringArray(forKey: Self.disabledAppsDefaultsKey) ?? []
-            disabledBundleIdentifiers = DisabledAppSelection(
+            var selection = DisabledAppSelection(
                 persistedBundleIdentifiers: persisted
-            ).bundleIdentifiers
+            )
+            selection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
+            disabledBundleIdentifiers = selection.bundleIdentifiers
             appEnablementSetupCompleted = setupKeyExists
                 ? defaults.bool(forKey: Self.appEnablementSetupCompletedDefaultsKey)
                 : true
@@ -5174,12 +5183,16 @@ private extension AppDelegate {
             return
         }
 
-        disabledBundleIdentifiers = DisabledAppSelection(
+        var defaultOffSelection = DisabledAppSelection(
             defaultOffProfileStore: profileStore
-        ).bundleIdentifiers
+        )
+        disabledBundleIdentifiers = defaultOffSelection.bundleIdentifiers
         appEnablementSetupCompleted = false
         defaults.set(false, forKey: Self.appEnablementSetupCompletedDefaultsKey)
         persistDisabledApps()
+
+        defaultOffSelection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
+        disabledBundleIdentifiers = defaultOffSelection.bundleIdentifiers
     }
 
     func persistDisabledApps() {
