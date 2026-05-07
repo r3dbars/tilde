@@ -29,7 +29,10 @@ profiles, calmer menu/status copy, Settings "why hidden" copy,
 placement-confidence diagnostics, and screenshot-backed Chrome chat-like
 no-submit proof. The latest placement pass also hides stale ghosts when
 placement cannot be trusted and feeds repeated caret-geometry uncertainty into
-field quiet mode, with the active quiet scope visible in Diagnostics.
+field quiet mode, with the active quiet scope visible in Diagnostics. Slow
+focused-text AX reads that return no focused text context now cool down that app
+immediately by default, which keeps failing editors from being polled twice
+before the app backs away.
 
 It is not a 10/10 yet. The biggest remaining gap is still recorder-grade visual
 placement in real production editors, especially Notes, Obsidian, Claude Code,
@@ -41,7 +44,7 @@ evidence-backed score should stay lower until those rows are closed.
 
 | Area | Rating | Why |
 | --- | ---: | --- |
-| Normal typing passthrough | 9.7/10 | Live TextEdit soak now proves the key path stays in microseconds during a long synthetic typing run. Event-tap summaries stayed clean over 600 samples with p95 max 35us, p99 max 95us, max 161us, zero slow markers, and zero tap-disable events. Focused-text AX reads are off the hot path but still warn, with p95 max 59ms and max 209ms in that run, so the typing path is strong but the AX suggestion-responsiveness lane still needs more calm-down work in worst apps. |
+| Normal typing passthrough | 9.8/10 | Live TextEdit soak now proves the key path stays in microseconds during a long synthetic typing run. Event-tap summaries stayed clean over 600 samples with p95 max 35us, p99 max 95us, max 161us, zero slow markers, and zero tap-disable events. Focused-text AX reads are off the hot path, and slow reads with no focused text context now cool down that app immediately. Worst-app AX proof still remains open because the same soak saw p95 max 59ms and max 209ms AX warnings. |
 | Keyboard capture safety | 9.8/10 | Capture starts only after a suggestion panel frame is actually usable, passes ordinary typing through, blocks selected-text replacement, fails closed if macOS disables the tap, and replays accept keys when focus moves to a protected field. |
 | Acceptance reliability | 9.1/10 | TextEdit, core Chrome fixtures, and Chrome chat-like verify Tab plus full accept. Prompt-app full accept is intentionally disabled until separate full-accept no-submit proof exists. Selected text is blocked before suggestions/acceptance and AX insertion is faster, but Notes surface-specific proof and current Codex, Claude Code, and Claude desktop one-word no-submit proof still need live runs. |
 | Visual caret alignment | 9/10 | TextEdit, core Chrome fixtures, Chrome chat-like, and a disposable Codex prompt now have screenshot-backed proof. Stale line rects are dropped, vertical clipping is enforced, too-narrow inline space suppresses display instead of showing a sliver, and async suggestions refresh current geometry before display, but Obsidian, Notes title/body/checklist, Claude Code, and Claude desktop proof is incomplete. |
@@ -66,7 +69,7 @@ evidence-backed score should stay lower until those rows are closed.
 | Onboarding | 9.6/10 | Settings explains runtime readiness, current app state, local privacy controls, and Accessibility setup in one short paragraph. Screen Recording copy appears only when screenshot capture is enabled, fresh installs start with suggestion-capable apps off, first success points to enabling TextEdit, and missing/invalid local model assets can now install or repair in-app with plain no-model-server recovery copy, progress, cancel, retry, validation, and runtime warm. Guided post-enable proof remains open. |
 | User control | 10/10 | Pause, current-field/session silence, current-app enablement, visible per-app render mode, force-mirror override, app-proof starter, green/yellow/diagnostics-only/unsupported support status, privacy controls, temporary screenshot/raw trace toggles, local log deletion, direct accept-all shortcut editing, full-accept shortcut state, and Settings "why hidden" copy are now first-class enough for this scorecard. |
 | Diagnostics | 10/10 | Placement, event-tap latency, focused poll latency, AX cooldowns, insertion, trace, screenshot-file evidence, active quiet mode, and smoke logs are strong. The Diagnostics window now separates key capture health from AX polling health and exposes placement confidence, anchor source, render fallback, self-healing action, clipping state, screenshot state, and caret failure rates without suggestion text. |
-| Automated tests | 10/10 | `swift test` passes 545 tests, including app-target settings state tests, current-field silence copy, per-app mirror override copy, direct shortcut editing copy, onboarding copy tests, diagnostics typing-health tests, placement diagnostics tests, scoped recent-word memory, privacy expiry, support status, serial AX reader, focused AX-health cooldown, focused-poll backoff, dogfood false-positive coverage, neutral word-completion vocabulary, screenshot trace capture policy, pixel offset detector policy, placement trust policy, replay proof, and trace visual evidence. Script self-tests now cover strict score targets, the 10-pass score loop path, manual smoke status, visual proof, replay slicing, typing performance, and the 10-minute endurance soak command. |
+| Automated tests | 10/10 | `swift test` passes 551 tests, including app-target settings state tests, current-field silence copy, per-app mirror override copy, direct shortcut editing copy, onboarding copy tests, diagnostics typing-health tests, placement diagnostics tests, scoped recent-word memory, privacy expiry, support status, serial AX reader, focused AX-health cooldown, missing-context AX cooldown, focused-poll backoff, dogfood false-positive coverage, neutral word-completion vocabulary, screenshot trace capture policy, pixel offset detector policy, placement trust policy, replay proof, and trace visual evidence. Script self-tests now cover strict score targets, the 10-pass score loop path, manual smoke status, visual proof, replay slicing, typing performance, and the 10-minute endurance soak command. |
 | Real-app smoke | 8.8/10 | TextEdit, core Chrome fixtures, and Chrome chat-like no-submit are green on the current build. The latest TextEdit strict visual smoke passed after the accept-all shortcut/race fix. Notes title/body/checklist, Codex, Claude Code, and Claude desktop remain honest insertion-proof gaps. |
 | Release readiness | 8/10 | Packaging is in decent shape, but beta readiness still correctly fails unless all required manual and screenshot-backed proof rows are closed. Notarization/stapling and beta onboarding still need a final product pass. |
 | Architecture | 9.1/10 | Core policy, geometry, scoped word memory, trace analysis, privacy expiry, support status, serial AX focused-text reads, and AX-health cooldowns are tested and wired. AppDelegate still owns too much orchestration. |
@@ -299,6 +302,9 @@ evidence-backed score should stay lower until those rows are closed.
 - App-specific focused-text AX health now cools down only the slow app after
   repeated slow reads, records active cooldown/recovery diagnostics, and keeps
   typing passthrough separate from suggestion responsiveness.
+- Slow focused-text AX reads that return no focused text context now start a
+  short app-specific cooldown immediately, so fields that are slow and
+  unreadable stop being chased before a second slow read is required.
 - Diagnostics now shows a typing-health summary that separates key capture from
   AX polling/cooldown health.
 - Settings now shows the last suggestion decision as "Why", and menu bar status

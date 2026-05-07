@@ -216,6 +216,56 @@ struct FocusedTextAXHealthPolicyTests {
         #expect(cooldown.reason == .queueDelay)
     }
 
+    @Test("Slow reads without focused text context cooldown immediately")
+    func slowReadsWithoutFocusedTextContextCooldownImmediately() throws {
+        let policy = FocusedTextAXHealthPolicy(
+            slowReadDurationMilliseconds: 80,
+            repeatedSlowReadCount: 3,
+            missingContextSlowReadCount: 1,
+            cooldownMilliseconds: 750
+        )
+        var state = FocusedTextAXHealthState()
+        let now = Date(timeIntervalSince1970: 100)
+
+        let observation = policy.recordRead(
+            bundleIdentifier: "com.apple.Notes",
+            queueDelayMilliseconds: 0,
+            readDurationMilliseconds: 145,
+            hasContext: false,
+            now: now,
+            state: &state
+        )
+
+        let cooldown = try #require(observation.cooldown)
+        #expect(observation.didStartCooldown)
+        #expect(cooldown.bundleIdentifier == "com.apple.Notes")
+        #expect(cooldown.reason == .readDuration)
+        #expect(cooldown.slowReadCount == 1)
+        #expect(cooldown.remainingMilliseconds == 750)
+    }
+
+    @Test("Fast missing context read does not cooldown")
+    func fastMissingContextReadDoesNotCooldown() {
+        let policy = FocusedTextAXHealthPolicy(
+            slowReadDurationMilliseconds: 80,
+            missingContextSlowReadCount: 1
+        )
+        var state = FocusedTextAXHealthState()
+
+        let observation = policy.recordRead(
+            bundleIdentifier: "com.apple.Notes",
+            queueDelayMilliseconds: 0,
+            readDurationMilliseconds: 20,
+            hasContext: false,
+            now: Date(timeIntervalSince1970: 100),
+            state: &state
+        )
+
+        #expect(!observation.isSlow)
+        #expect(!observation.didStartCooldown)
+        #expect(observation.cooldown == nil)
+    }
+
     private func isSameTime(_ lhs: Date, _ rhs: Date) -> Bool {
         abs(lhs.timeIntervalSince(rhs)) < 0.000_001
     }
