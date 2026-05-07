@@ -36,6 +36,8 @@ The north star is simple: a build is better only when accepted text survives, wr
 ## P0 - Annoyance And Backoff
 
 - [x] Add annoyance signal counts to the trace analyzer.
+- [x] Suppress phrase continuation during fast typing bursts while leaving word completion available.
+- [x] Trace `typing-burst` suppressions before display.
 - [x] Add annoyance score to Diagnostics and local HTML reports.
 - [x] Count rapid Esc dismissal.
 - [x] Count typed-over within 1s.
@@ -88,6 +90,8 @@ The north star is simple: a build is better only when accepted text survives, wr
 
 ## P0 - Insertion, Tab, And Focus Trust
 
+- [x] Add a pre-accept suggestion snapshot guard for app, process, field, selected text, and before/after cursor text.
+- [x] Trace `wrong-app-or-field-before-accept` as a severe do-not-ship blocker.
 - [x] Track insertion verification success rate in analyzer summaries.
 - [x] Show insertion verification success in Diagnostics.
 - [x] Print insertion verification success from `check_trace_eval.sh`.
@@ -118,6 +122,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 
 ## P1 - Decision Dashboard
 
+- [x] Add a do-not-ship blocker section to the redacted local HTML trace report.
 - [x] Replace "useful rate" as the main dashboard proxy with accepted-and-kept.
 - [x] Add daily summary: active writing time, shown, accepts, accepted-and-kept, p50/p95 latency, severe failures, pauses, disables.
 - [x] Add per-app table: shows, accept rate, kept rate, verification success, caret failure, annoyance score, support state.

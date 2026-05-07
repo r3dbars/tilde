@@ -89,6 +89,14 @@ evidence-backed score should stay lower until those rows are closed.
 
 ## Latest Proof
 
+- Current 2026-05-07 goal pass: added a pre-accept snapshot guard for app,
+  process, focused field, selected text, and before/after cursor text; records
+  accept-key focus mismatches as `wrong-app-or-field-before-accept` severe
+  do-not-ship blockers; suppresses phrase continuation during fast typing
+  bursts while leaving word completion available; and gates low-confidence
+  suggestions before display. Focused policy and trace tests pass; full smoke
+  status should still be treated as pending until the current branch completes
+  the normal validation stack.
 - Five-agent continuation pass: prompt-app safety hardening, strict visual proof
   gates, focused-text AX-health cooldown, Notes/Obsidian proof triage, and
   Apple-native polish ranking all completed on branch
