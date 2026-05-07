@@ -14,6 +14,8 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Suppress more answer-like model outputs such as `Here's`, `You can`, `As an AI`, and `I'd suggest`.
 - [x] Extract Codex synthetic caret math into a pure tested core helper.
 - [x] Add tests for bounds validation, polling cadence, paste/delete triggering, answer-like output cleanup, and synthetic caret geometry.
+- [x] Keep overlapping-poll backoff from hiding an already visible suggestion.
+- [x] Make the TextEdit recorder focus the disposable smoke document before typing or accepting.
 
 ## P0: Trust And Safety
 

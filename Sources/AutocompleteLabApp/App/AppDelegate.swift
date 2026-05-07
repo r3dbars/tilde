@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusedTextUpdateSourcePolicy = FocusedTextUpdateSourcePolicy()
     private let focusedTextPollingCadencePolicy = FocusPollingCadencePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
+    private let focusedTextPollingThrottleVisibilityPolicy = FocusedTextPollingThrottleVisibilityPolicy()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private lazy var compatibilityLearningActions = CompatibilityLearningActions(
@@ -1022,7 +1023,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             policy: focusedTextPollingBackoffPolicy
         )
         invalidatePendingSuggestionRequest()
-        if visibleSuggestionState.hasVisibleSuggestion {
+        if visibleSuggestionState.hasVisibleSuggestion,
+           focusedTextPollingThrottleVisibilityPolicy.shouldHideVisibleSuggestion(for: reason) {
             hideSuggestion(reason: "focused-text-poll-\(reason.rawValue)")
         }
         DiagnosticsLog.shared.record(

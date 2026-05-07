@@ -27,6 +27,19 @@ public struct FocusedTextPollingThrottleRecommendation: Equatable, Sendable {
     )
 }
 
+public struct FocusedTextPollingThrottleVisibilityPolicy: Equatable, Sendable {
+    public init() {}
+
+    public func shouldHideVisibleSuggestion(for reason: FocusedTextPollingThrottleReason) -> Bool {
+        switch reason {
+        case .slowPollLatency:
+            true
+        case .overlappingPolls:
+            false
+        }
+    }
+}
+
 public struct FocusedTextPollingBackoffPolicy: Equatable, Sendable {
     public static let typingBackoff = FocusedTextPollingBackoffPolicy()
 
