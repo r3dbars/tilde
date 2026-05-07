@@ -9,6 +9,9 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
     public let charactersBeforePauseRequest: Int
     public let wordCompletionDelayMilliseconds: Int
     public let wordBoundaryDelayMilliseconds: Int
+    public let softPunctuationDelayMilliseconds: Int
+    public let structuralPunctuationDelayMilliseconds: Int
+    public let closingPunctuationDelayMilliseconds: Int
     public let sentenceBoundaryDelayMilliseconds: Int
     public let pauseDelayMilliseconds: Int
     public let largeTextChangeCharacterThreshold: Int
@@ -18,6 +21,9 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         charactersBeforePauseRequest: Int = 4,
         wordCompletionDelayMilliseconds: Int = 120,
         wordBoundaryDelayMilliseconds: Int = 180,
+        softPunctuationDelayMilliseconds: Int = 220,
+        structuralPunctuationDelayMilliseconds: Int = 240,
+        closingPunctuationDelayMilliseconds: Int = 180,
         sentenceBoundaryDelayMilliseconds: Int = 360,
         pauseDelayMilliseconds: Int = 180,
         largeTextChangeCharacterThreshold: Int = 24,
@@ -26,6 +32,9 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         self.charactersBeforePauseRequest = max(1, charactersBeforePauseRequest)
         self.wordCompletionDelayMilliseconds = wordCompletionDelayMilliseconds.clamped(to: 90...140)
         self.wordBoundaryDelayMilliseconds = wordBoundaryDelayMilliseconds.clamped(to: 140...240)
+        self.softPunctuationDelayMilliseconds = softPunctuationDelayMilliseconds.clamped(to: 140...240)
+        self.structuralPunctuationDelayMilliseconds = structuralPunctuationDelayMilliseconds.clamped(to: 140...240)
+        self.closingPunctuationDelayMilliseconds = closingPunctuationDelayMilliseconds.clamped(to: 140...240)
         self.sentenceBoundaryDelayMilliseconds = sentenceBoundaryDelayMilliseconds.clamped(to: 280...450)
         self.pauseDelayMilliseconds = pauseDelayMilliseconds.clamped(to: 140...240)
         self.largeTextChangeCharacterThreshold = max(1, largeTextChangeCharacterThreshold)
@@ -76,6 +85,10 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
             return .request(delayMilliseconds: sentenceBoundaryDelayMilliseconds)
         }
 
+        if let punctuationDelay = punctuationBoundaryDelay(for: currentTextBeforeCursor.last) {
+            return .request(delayMilliseconds: punctuationDelay)
+        }
+
         if currentTextBeforeCursor.last?.isNaturalBoundary == true {
             return .request(delayMilliseconds: wordBoundaryDelayMilliseconds)
         }
@@ -107,6 +120,19 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         }
 
         return currentFragment != previousFragment
+    }
+
+    private func punctuationBoundaryDelay(for character: Character?) -> Int? {
+        switch character {
+        case ",", ";":
+            return softPunctuationDelayMilliseconds
+        case ":":
+            return structuralPunctuationDelayMilliseconds
+        case ")", "]", "}":
+            return closingPunctuationDelayMilliseconds
+        default:
+            return nil
+        }
     }
 
     private func shouldSuppressAtLineStart(_ text: String) -> Bool {
@@ -145,7 +171,7 @@ private extension Character {
     }
 
     var isNaturalBoundary: Bool {
-        isWhitespace || [".", ",", "!", "?", ":", ";", ")", "]"].contains(self)
+        isWhitespace || [".", ",", "!", "?", ":", ";", ")", "]", "}"].contains(self)
     }
 }
 
