@@ -221,9 +221,9 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Extract observer coordination out of `AppDelegate`.
 - [x] Extract insertion verification scheduling out of `AppDelegate`.
 - [x] Extract trace screenshot capture out of `AppDelegate`.
-- [ ] Extract compatibility learning actions out of `AppDelegate`.
+- [x] Extract compatibility learning actions out of `AppDelegate`.
 - [ ] Keep `AppDelegate` mostly as wiring.
-- [ ] Add unit tests for each extracted policy.
+- [x] Add unit tests for each extracted policy.
 
 ## P2: Self-Healing Compatibility
 
