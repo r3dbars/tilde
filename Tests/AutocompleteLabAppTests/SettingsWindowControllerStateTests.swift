@@ -315,4 +315,19 @@ struct SettingsWindowControllerStateTests {
         #expect(silenced.buttonTitle == "Field Silenced")
         #expect(!silenced.canSilence)
     }
+
+    @Test("Keyboard shortcut copy supports direct accept-all editing")
+    func keyboardShortcutCopySupportsDirectAcceptAllEditing() {
+        let backtick = SettingsKeyboardShortcutState(acceptAllShortcut: .backtick)
+
+        #expect(backtick.statusText == "Shortcuts: Tab next word | Backtick all")
+        #expect(backtick.acceptAllPickerLabel == "Accept all:")
+        #expect(backtick.cycleButtonTitle == "Use Option-Tab")
+
+        let optionTab = SettingsKeyboardShortcutState(acceptAllShortcut: .optionTab)
+
+        #expect(optionTab.statusText == "Shortcuts: Tab next word | Option-Tab all")
+        #expect(optionTab.acceptAllPickerLabel == "Accept all:")
+        #expect(optionTab.cycleButtonTitle == "Use Backtick")
+    }
 }

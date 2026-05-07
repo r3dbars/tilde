@@ -64,7 +64,7 @@ unsure. Wrong-place text is worse than no suggestion.
 | Privacy and permissions trust | 9 | 94 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, raw/screenshot debug capture now expires when enabled from the app UI, and permission copy states what is read and why. Export/privacy-bundle polish remains open. |
 | Suggestion quality | 8 | 87 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, learned word completion is app-scoped, dogfood prompts are stricter, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
 | Failure restraint | 8 | 89 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, stale geometry suppresses display, event-tap disablement fails closed, prompt full accept requires proof, placement uncertainty now hides stale ghosts and feeds field quiet mode, active quiet mode is visible in Diagnostics, and unsupported apps explain their stance. Real-app proof remains open. |
-| User control | 6 | 97 | 100 | Settings and the menu now expose pause, current-field silence, app blocking, support status, per-app render mode, force-mirror override, an app-proof starter, privacy diagnostics, temporary raw/screenshot capture, local log deletion, shortcut state, and why the last suggestion was hidden. Full shortcut editing remains open. |
+| User control | 6 | 100 | 100 | Settings and the menu now expose pause, current-field silence, app blocking, support status, per-app render mode, force-mirror override, an app-proof starter, privacy diagnostics, temporary raw/screenshot capture, local log deletion, direct accept-all shortcut editing, and why the last suggestion was hidden. |
 | Onboarding and setup | 4 | 78 | 100 | Settings explains Accessibility in one short paragraph, only mentions Screen Recording when screenshot capture is on, and points first success at TextEdit. Model install/repair is still not a fully in-app flow. |
 | Evidence and QA loop | 4 | 98 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
 
@@ -345,7 +345,7 @@ Native target: when the app is unsure, the user feels nothing.
 
 ## Category 9: User Control
 
-Current score: 97/100.
+Current score: 100/100.
 
 Native target: a user can understand and control the app in 20 seconds.
 
@@ -357,7 +357,7 @@ Native target: a user can understand and control the app in 20 seconds.
 - [x] Full-accept toggle exists.
 - [x] Settings uses clearer controls for suggestions, current app, tracing, raw text capture, screenshot capture, and local log deletion.
 - [x] Settings and menu copy now expose green/yellow/diagnostics-only/unsupported app stance.
-- [ ] Shortcut editing should be first-class.
+- [x] Shortcut editing should be first-class.
 - [x] Per-app mode should be visible: inline, mirror, command-only, disabled.
 - [x] User should be able to force mirror mode for an app.
 - [x] User should be able to disable suggestions for current field/session.

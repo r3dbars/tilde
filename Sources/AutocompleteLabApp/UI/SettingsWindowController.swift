@@ -243,6 +243,10 @@ struct SettingsKeyboardShortcutState: Equatable {
     var cycleButtonTitle: String {
         "Use \(acceptAllShortcut.next.displayName)"
     }
+
+    var acceptAllPickerLabel: String {
+        "Accept all:"
+    }
 }
 
 struct SettingsOnboardingState: Equatable {
@@ -361,6 +365,8 @@ final class SettingsWindowController: NSObject {
     private let deleteLocalLogsButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
     private let clearLearningDataButton = NSButton(title: "Clear Learned Suggestions", target: nil, action: nil)
     private let shortcutLabel = NSTextField(labelWithString: "")
+    private let acceptAllShortcutLabel = NSTextField(labelWithString: "Accept all:")
+    private let acceptAllShortcutPopup = NSPopUpButton()
     private let cycleAcceptAllShortcutButton = NSButton(title: "Use Option-Tab", target: nil, action: nil)
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
     private let requestPermission: () -> Void
@@ -378,6 +384,7 @@ final class SettingsWindowController: NSObject {
     private let deleteLocalLogs: () -> Void
     private let clearLearningData: () -> Void
     private let cycleAcceptAllShortcut: () -> Void
+    private let setAcceptAllShortcut: (AcceptAllShortcut) -> Void
     private var currentRuntimeAction: RuntimeReadinessAction = .none
 
     init(
@@ -395,7 +402,8 @@ final class SettingsWindowController: NSObject {
         toggleScreenshotTracing: @escaping () -> Void,
         deleteLocalLogs: @escaping () -> Void,
         clearLearningData: @escaping () -> Void,
-        cycleAcceptAllShortcut: @escaping () -> Void
+        cycleAcceptAllShortcut: @escaping () -> Void,
+        setAcceptAllShortcut: @escaping (AcceptAllShortcut) -> Void
     ) {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
@@ -412,6 +420,7 @@ final class SettingsWindowController: NSObject {
         self.deleteLocalLogs = deleteLocalLogs
         self.clearLearningData = clearLearningData
         self.cycleAcceptAllShortcut = cycleAcceptAllShortcut
+        self.setAcceptAllShortcut = setAcceptAllShortcut
 
         let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 780))
         contentView.material = .contentBackground
@@ -524,6 +533,8 @@ final class SettingsWindowController: NSObject {
         toggleRawTraceButton.state = privacy.rawContentTracingEnabled ? .on : .off
         toggleScreenshotTraceButton.state = privacy.screenshotTracingEnabled ? .on : .off
         shortcutLabel.stringValue = keyboardShortcuts.statusText
+        acceptAllShortcutLabel.stringValue = keyboardShortcuts.acceptAllPickerLabel
+        refreshAcceptAllShortcutPopup(selected: keyboardShortcuts.acceptAllShortcut)
         cycleAcceptAllShortcutButton.title = keyboardShortcuts.cycleButtonTitle
         firstRunLabel.stringValue = SettingsOnboardingState(
             isTrusted: isTrusted,
@@ -576,6 +587,8 @@ final class SettingsWindowController: NSObject {
         privacyPathLabel.maximumNumberOfLines = 1
         privacyPathLabel.preferredMaxLayoutWidth = 470
         shortcutLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        acceptAllShortcutLabel.font = NSFont.systemFont(ofSize: 12)
+        acceptAllShortcutLabel.textColor = .secondaryLabelColor
 
         let requestButton = NSButton(title: "Allow Accessibility", target: self, action: #selector(requestAccessibility))
         requestButton.bezelStyle = .rounded
@@ -627,6 +640,8 @@ final class SettingsWindowController: NSObject {
         cycleAcceptAllShortcutButton.target = self
         cycleAcceptAllShortcutButton.action = #selector(cycleAcceptAllShortcutControl)
         cycleAcceptAllShortcutButton.bezelStyle = .rounded
+        acceptAllShortcutPopup.target = self
+        acceptAllShortcutPopup.action = #selector(selectAcceptAllShortcutControl)
 
         [
             title,
@@ -692,7 +707,7 @@ final class SettingsWindowController: NSObject {
                 title: "Keyboard",
                 views: [
                     shortcutLabel,
-                    makeButtonRow([cycleAcceptAllShortcutButton])
+                    makeButtonRow([acceptAllShortcutLabel, acceptAllShortcutPopup, cycleAcceptAllShortcutButton])
                 ]
             )
         ].forEach {
@@ -737,6 +752,15 @@ final class SettingsWindowController: NSObject {
         row.alignment = .centerY
         row.spacing = 8
         return row
+    }
+
+    private func refreshAcceptAllShortcutPopup(selected: AcceptAllShortcut) {
+        acceptAllShortcutPopup.removeAllItems()
+        for shortcut in AcceptAllShortcut.allCases {
+            acceptAllShortcutPopup.addItem(withTitle: shortcut.displayName)
+            acceptAllShortcutPopup.lastItem?.representedObject = shortcut.rawValue
+        }
+        acceptAllShortcutPopup.selectItem(withTitle: selected.displayName)
     }
 
     @objc
@@ -812,5 +836,15 @@ final class SettingsWindowController: NSObject {
     @objc
     private func cycleAcceptAllShortcutControl() {
         cycleAcceptAllShortcut()
+    }
+
+    @objc
+    private func selectAcceptAllShortcutControl() {
+        guard let rawValue = acceptAllShortcutPopup.selectedItem?.representedObject as? String,
+              let shortcut = AcceptAllShortcut(rawValue: rawValue) else {
+            return
+        }
+
+        setAcceptAllShortcut(shortcut)
     }
 }
