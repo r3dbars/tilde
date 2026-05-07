@@ -304,6 +304,27 @@ struct SettingsKeyboardShortcutState: Equatable {
     }
 }
 
+struct SettingsSuggestionControlState: Equatable {
+    let suggestionsPaused: Bool
+    let pace: SuggestionPace
+
+    var statusText: String {
+        "Suggestions: \(suggestionsPaused ? "paused" : "ready") | Pace: \(pace.displayName)"
+    }
+
+    var detailText: String {
+        pace.detailText
+    }
+
+    var pickerTitles: [String] {
+        SuggestionPace.allCases.map(\.displayName)
+    }
+
+    var selectedPaceTitle: String {
+        pace.displayName
+    }
+}
+
 struct SettingsFirstRunState: Equatable {
     let isTrusted: Bool
     let suggestionsPaused: Bool
@@ -342,6 +363,8 @@ final class SettingsWindowController: NSObject {
     private let runtimeTargetLabel = NSTextField(labelWithString: "")
     private let modelDirectoryLabel = NSTextField(labelWithString: "")
     private let controlLabel = NSTextField(labelWithString: "")
+    private let suggestionPaceDetailLabel = NSTextField(labelWithString: "")
+    private let suggestionPacePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let togglePauseButton = NSButton(checkboxWithTitle: "Suggestions", target: nil, action: nil)
     private let runtimeActionButton = NSButton(title: "Open Model Folder", target: nil, action: nil)
     private let currentAppLabel = NSTextField(labelWithString: "")
@@ -411,6 +434,7 @@ final class SettingsWindowController: NSObject {
     private let toggleScreenshotTracing: () -> Void
     private let deleteLocalLogs: () -> Void
     private let setAcceptAllShortcut: (AcceptAllShortcut) -> Void
+    private let setSuggestionPace: (SuggestionPace) -> Void
     private var currentRuntimeAction: RuntimeReadinessAction = .none
     private var currentProofCommand: String?
 
@@ -428,7 +452,8 @@ final class SettingsWindowController: NSObject {
         toggleRawContentTracing: @escaping () -> Void,
         toggleScreenshotTracing: @escaping () -> Void,
         deleteLocalLogs: @escaping () -> Void,
-        setAcceptAllShortcut: @escaping (AcceptAllShortcut) -> Void
+        setAcceptAllShortcut: @escaping (AcceptAllShortcut) -> Void,
+        setSuggestionPace: @escaping (SuggestionPace) -> Void
     ) {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
@@ -444,6 +469,7 @@ final class SettingsWindowController: NSObject {
         self.toggleScreenshotTracing = toggleScreenshotTracing
         self.deleteLocalLogs = deleteLocalLogs
         self.setAcceptAllShortcut = setAcceptAllShortcut
+        self.setSuggestionPace = setSuggestionPace
 
         let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 760))
         contentView.material = .contentBackground
@@ -469,6 +495,7 @@ final class SettingsWindowController: NSObject {
     func show(
         isTrusted: Bool,
         suggestionsPaused: Bool,
+        suggestionPace: SuggestionPace,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
         modelDirectoryPath: String,
@@ -480,6 +507,7 @@ final class SettingsWindowController: NSObject {
         refresh(
             isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
+            suggestionPace: suggestionPace,
             runtimeReport: runtimeReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
@@ -500,6 +528,7 @@ final class SettingsWindowController: NSObject {
     func refresh(
         isTrusted: Bool,
         suggestionsPaused: Bool,
+        suggestionPace: SuggestionPace,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
         modelDirectoryPath: String,
@@ -508,11 +537,17 @@ final class SettingsWindowController: NSObject {
         keyboardShortcuts: SettingsKeyboardShortcutState,
         lastSuggestionDecision: String
     ) {
+        let suggestionControl = SettingsSuggestionControlState(
+            suggestionsPaused: suggestionsPaused,
+            pace: suggestionPace
+        )
         let guidance = RuntimeReadinessGuidance(report: runtimeReport)
         let permission = SettingsPermissionState(isTrusted: isTrusted)
         permissionLabel.stringValue = permission.statusText
         permissionDetailLabel.stringValue = permission.detailText
-        controlLabel.stringValue = suggestionsPaused ? "Suggestions: paused" : "Suggestions: ready"
+        controlLabel.stringValue = suggestionControl.statusText
+        suggestionPaceDetailLabel.stringValue = suggestionControl.detailText
+        suggestionPacePopup.selectItem(withTitle: suggestionControl.selectedPaceTitle)
         suggestionDecisionLabel.stringValue = "Why: \(lastSuggestionDecision)"
         togglePauseButton.state = suggestionsPaused ? .off : .on
         runtimeLabel.stringValue = "Local model: \(runtimeReport.summary)"
@@ -584,6 +619,7 @@ final class SettingsWindowController: NSObject {
         modelDirectoryLabel.maximumNumberOfLines = 1
         modelDirectoryLabel.preferredMaxLayoutWidth = 470
         controlLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(suggestionPaceDetailLabel)
         firstRunLabel.font = NSFont.systemFont(ofSize: 12)
         configureSecondaryLabel(firstRunLabel)
         currentAppLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
@@ -616,6 +652,13 @@ final class SettingsWindowController: NSObject {
         togglePauseButton.target = self
         togglePauseButton.action = #selector(togglePause)
         togglePauseButton.toolTip = "Turns suggestions on or off immediately."
+        suggestionPacePopup.removeAllItems()
+        suggestionPacePopupItems().forEach { item in
+            suggestionPacePopup.menu?.addItem(item)
+        }
+        suggestionPacePopup.target = self
+        suggestionPacePopup.action = #selector(selectSuggestionPaceControl)
+        suggestionPacePopup.toolTip = "Chooses how soon suggestions appear in allowed apps."
         runtimeActionButton.target = self
         runtimeActionButton.action = #selector(runRuntimeAction)
         runtimeActionButton.bezelStyle = .rounded
@@ -681,7 +724,8 @@ final class SettingsWindowController: NSObject {
                 title: "Suggestions",
                 views: [
                     controlLabel,
-                    togglePauseButton,
+                    makeButtonRow([togglePauseButton, suggestionPacePopup]),
+                    suggestionPaceDetailLabel,
                     suggestionDecisionLabel,
                     firstRunLabel
                 ]
@@ -770,6 +814,14 @@ final class SettingsWindowController: NSObject {
         AcceptAllShortcut.allCases.map { shortcut in
             let item = NSMenuItem(title: shortcut.displayName, action: nil, keyEquivalent: "")
             item.representedObject = shortcut.rawValue
+            return item
+        }
+    }
+
+    private func suggestionPacePopupItems() -> [NSMenuItem] {
+        SuggestionPace.allCases.map { pace in
+            let item = NSMenuItem(title: pace.displayName, action: nil, keyEquivalent: "")
+            item.representedObject = pace.rawValue
             return item
         }
     }
@@ -865,5 +917,15 @@ final class SettingsWindowController: NSObject {
         }
 
         setAcceptAllShortcut(shortcut)
+    }
+
+    @objc
+    private func selectSuggestionPaceControl() {
+        guard let rawValue = suggestionPacePopup.selectedItem?.representedObject as? String,
+              let pace = SuggestionPace(rawValue: rawValue) else {
+            return
+        }
+
+        setSuggestionPace(pace)
     }
 }

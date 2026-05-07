@@ -297,4 +297,49 @@ struct CompletionActivationPolicyTests {
             isFieldSuppressed: false
         ) == .block(.tooLittleContext))
     }
+
+    @Test("Suggestion pace changes phrase and word completion eagerness")
+    func suggestionPaceChangesActivationThresholds() {
+        let quiet = CompletionActivationPolicy(pace: .quiet)
+        let normal = CompletionActivationPolicy(pace: .normal)
+        let eager = CompletionActivationPolicy(pace: .eager)
+
+        #expect(quiet.decision(
+            textBeforeCursor: "I think this through ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.tooLittleContext))
+        #expect(normal.decision(
+            textBeforeCursor: "I think this through ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.phraseContinuation))
+        #expect(eager.decision(
+            textBeforeCursor: "I think this ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.phraseContinuation))
+        #expect(quiet.decision(
+            textBeforeCursor: "di",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.tooLittleContext))
+        #expect(eager.decision(
+            textBeforeCursor: "dicti",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.wordCompletion))
+    }
+
+    @Test("Suggestion pace falls back to normal for missing or bad defaults")
+    func suggestionPaceDefaultsToNormal() {
+        #expect(SuggestionPace(persistedRawValue: nil) == .normal)
+        #expect(SuggestionPace(persistedRawValue: "nope") == .normal)
+        #expect(SuggestionPace(persistedRawValue: "quiet") == .quiet)
+    }
 }
