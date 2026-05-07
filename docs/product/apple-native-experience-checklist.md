@@ -291,7 +291,7 @@ Native target: the app feels more private than cloud writing tools.
 - [x] Screenshot tracing should auto-expire after a session.
 - [x] Deleting local privacy logs should disable raw text and screenshot capture where possible.
 - [x] Exported debug bundles should have a privacy checklist.
-- [ ] Private beta feedback should never request raw text by default.
+- [x] Private beta feedback should never request raw text by default.
 
 ## Category 7: Suggestion Quality
 
@@ -407,7 +407,7 @@ Native target: every claim has proof.
 - [x] Performance proof defaults to a fresh bounded log slice.
 - [x] Chrome chat-like no-submit proof is screenshot-backed.
 - [x] The checklist should be updated after every product pass.
-- [ ] Each beta session should produce a short report row.
+- [x] Each beta session should produce a short report row.
 
 ## Priority Work Plan
 
@@ -455,7 +455,7 @@ Native target: every claim has proof.
 
 - [x] Settings pass using clearer native sections and checkbox controls.
 - [x] Menu bar copy pass.
-- [ ] Privacy status panel.
+- [x] Privacy status panel.
 - [ ] First-run setup.
 - [ ] App icon/menu icon polish.
 - [ ] Light, dark, increased contrast visual QA.

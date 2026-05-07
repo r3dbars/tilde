@@ -21,10 +21,64 @@ Usage: script/private_beta_packet.sh [create|--check]
 
 create   Create a local private-beta packet beside dist/AutocompleteLab.zip.
 --check  Validate that the packet exists and points at the current archive.
+--print-feedback-template
+         Print the no-raw-text feedback template used in the packet.
+--print-session-report-template
+         Print the one-row session report template used in the packet.
 
 This script only writes local files. It never uploads or sends beta data.
 By default it requires the archive to contain a Developer ID signed app. Set
 AUTOCOMPLETE_LAB_PRIVATE_BETA_REQUIRE_RELEASE_SIGNATURE=0 only for local script tests.
+EOF
+}
+
+print_feedback_template() {
+  cat <<'EOF'
+# Feedback Log
+
+Use one short row per real writing session.
+
+Do not include raw typed text, prompts, screenshots, document names, URLs,
+recipients, subject lines, or trace excerpts. Use plain labels like
+`wrong app`, `late`, `too much`, or `good word finish`.
+
+| Date | Tester | App | Minutes | Tab predictable? | Placement sane? | Helped? | Annoyed? | Broke trust? | Redacted report exported? | Notes (no private text) |
+| --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- | --- |
+|  |  | TextEdit / Notes / Obsidian / Chrome |  | yes/no | yes/no | yes/no | yes/no | yes/no | yes/no |  |
+
+Questions to answer after each session:
+
+- Did Tab feel predictable?
+- Did the suggestion appear in a sane place?
+- Did it finish words you were already typing?
+- Did it suggest weird repeated phrases?
+- Did it ever insert text you did not expect?
+EOF
+}
+
+print_session_report_template() {
+  cat <<'EOF'
+# Session Report
+
+Use one short row in `feedback-log.md` after each real beta writing session.
+Do not paste raw typed text, prompts, screenshots, document names, URLs,
+recipients, subject lines, or trace excerpts into the report.
+
+## Commands
+
+```bash
+./script/check_trace_eval.sh
+./script/model_latency_report.py --latest
+./script/model_latency_report.py --latest --require-shown-samples 5
+```
+
+## Notes
+
+- Record the app, minutes, Tab predictability, placement sanity, and whether trust broke.
+- Export the redacted local report from Diagnostics.
+- Copy only redacted repeated-miss titles or failure reason labels from Diagnostics or the trace eval report.
+- If the latency report has no samples, type one short disposable sentence, wait for a phrase suggestion, and rerun it.
+- Fix the top repeated trust miss before inviting more testers.
 EOF
 }
 
@@ -144,44 +198,8 @@ python3 -m pip install --user huggingface_hub
 \`\`\`
 EOF
 
-  cat >"$FEEDBACK_PATH" <<'EOF'
-# Feedback Log
-
-Use one short row per real writing session.
-
-| Date | Tester | App | Minutes | Helped? | Annoyed? | Broke trust? | Notes |
-| --- | --- | --- | ---: | --- | --- | --- | --- |
-|  |  | TextEdit / Notes / Obsidian / Chrome |  | yes/no | yes/no | yes/no |  |
-
-Questions to answer after each session:
-
-- Did Tab feel predictable?
-- Did the suggestion appear in a sane place?
-- Did it finish words you were already typing?
-- Did it suggest weird repeated phrases?
-- Did it ever insert text you did not expect?
-EOF
-
-  cat >"$SESSION_REPORT_PATH" <<'EOF'
-# Session Report
-
-Use this after each real beta writing session.
-
-## Commands
-
-```bash
-./script/check_trace_eval.sh
-./script/model_latency_report.py --latest
-./script/model_latency_report.py --latest --require-shown-samples 5
-```
-
-## Notes
-
-- Record the app, minutes, and whether Tab felt predictable.
-- Copy the top repeated misses from Diagnostics or the trace eval report.
-- If the latency report has no samples, type one short sentence, wait for a phrase suggestion, and rerun it.
-- Fix the top repeated miss before inviting more testers.
-EOF
+  print_feedback_template >"$FEEDBACK_PATH"
+  print_session_report_template >"$SESSION_REPORT_PATH"
 
   printf 'AutocompleteLab.zip  %s\n' "$sha" >"$CHECKSUM_PATH"
   echo "Private beta packet created: $PACKET_DIR"
@@ -227,6 +245,12 @@ case "$MODE" in
     ;;
   --check|check)
     check_packet
+    ;;
+  --print-feedback-template)
+    print_feedback_template
+    ;;
+  --print-session-report-template)
+    print_session_report_template
     ;;
   *)
     usage >&2

@@ -335,10 +335,13 @@ evidence-backed score should stay lower until those rows are closed.
    that the local Chrome chat-like fixture has screenshot-backed proof.
 8. Split AppDelegate into focused services around polling, insertion,
    verification, screenshot tracing, and placement tuning.
-9. Run explicit disposable raw-content dogfood audits for suggestion quality;
+9. Private beta feedback now uses one-row reports and forbids raw typed text,
+   prompts, screenshots, document names, URLs, recipients, subject lines, and
+   trace excerpts by default.
+10. Run explicit disposable raw-content dogfood audits for suggestion quality;
    default tracing correctly protects privacy, but it cannot fully grade output
    relevance without opt-in raw text.
-10. Keep `./script/check_score_targets.sh` and
+11. Keep `./script/check_score_targets.sh` and
     `./script/scorecard_goal_loop.sh --iterations 10` failing until every target
     row has real app proof, then raise scores only in the same commit as the
     proof.
