@@ -39,6 +39,8 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
     public let displayScoreCoveredCount: Int
     public let candidateSelectionCandidateCount: Int
     public let candidateSelectionCoveredCount: Int
+    public let proofFingerprintCandidateCount: Int
+    public let proofFingerprintCoveredCount: Int
     public let staleCancellationCount: Int
     public let keptHorizonEventCount: Int
     public let keptFinalHorizonEventCount: Int
@@ -59,6 +61,10 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
         rate(candidateSelectionCoveredCount, candidateSelectionCandidateCount)
     }
 
+    public var proofFingerprintCoverageRate: Double {
+        rate(proofFingerprintCoveredCount, proofFingerprintCandidateCount)
+    }
+
     public var passesReplayProofGate: Bool {
         requirements.allSatisfy(\.passed)
     }
@@ -73,6 +79,7 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
             "- trigger delay coverage: \(Self.percent(triggerDelayCoverageRate)) (\(triggerDelayCoveredCount)/\(triggerRequestCount))",
             "- display score coverage: \(Self.percent(displayScoreCoverageRate)) (\(displayScoreCoveredCount)/\(displayScoreCandidateCount))",
             "- candidate selection coverage: \(Self.percent(candidateSelectionCoverageRate)) (\(candidateSelectionCoveredCount)/\(candidateSelectionCandidateCount))",
+            "- proof fingerprint coverage: \(Self.percent(proofFingerprintCoverageRate)) (\(proofFingerprintCoveredCount)/\(proofFingerprintCandidateCount))",
             "- stale cancellations: \(staleCancellationCount)",
             "- kept horizon events: \(keptHorizonEventCount)",
             "- final kept horizon events: \(keptFinalHorizonEventCount)",
@@ -132,6 +139,10 @@ public struct AutocompleteTraceReplay: Sendable {
         let displayCovered = displayCandidates.filter(hasDisplayScoreMetadata)
         let modelResults = events.filter { $0.type == .modelResult }
         let candidateSelectionCovered = modelResults.filter(hasCandidateSelectionMetadata)
+        let proofFingerprintCandidates = proofFingerprintCandidateEvents(in: events)
+        let proofFingerprintCovered = proofFingerprintCandidates.filter {
+            AutocompleteTraceProofMetadata.isCurrent($0.metadata)
+        }
         let acceptedTextEdited = events.filter { $0.type == .acceptedTextEdited }
         let finalHorizonEvents = acceptedTextEdited.filter(isFinalKeptHorizonEvent)
         let staleCancellations = events.filter(isStaleCancellation)
@@ -166,6 +177,12 @@ public struct AutocompleteTraceReplay: Sendable {
                 detail: "\(candidateSelectionCovered.count)/\(modelResults.count) model results include candidate selection metadata"
             ),
             TraceReplayRequirement(
+                name: "proof fingerprint freshness",
+                passed: !proofFingerprintCandidates.isEmpty
+                    && proofFingerprintCovered.count == proofFingerprintCandidates.count,
+                detail: "\(proofFingerprintCovered.count)/\(proofFingerprintCandidates.count) proof events match \(AutocompleteTraceProofMetadata.traceProofVersion)"
+            ),
+            TraceReplayRequirement(
                 name: "kept horizon replay",
                 passed: !acceptedTextEdited.isEmpty && !finalHorizonEvents.isEmpty,
                 detail: "\(acceptedTextEdited.count) survival events, \(finalHorizonEvents.count) final horizon events"
@@ -195,6 +212,8 @@ public struct AutocompleteTraceReplay: Sendable {
             displayScoreCoveredCount: displayCovered.count,
             candidateSelectionCandidateCount: modelResults.count,
             candidateSelectionCoveredCount: candidateSelectionCovered.count,
+            proofFingerprintCandidateCount: proofFingerprintCandidates.count,
+            proofFingerprintCoveredCount: proofFingerprintCovered.count,
             staleCancellationCount: staleCancellations.count,
             keptHorizonEventCount: acceptedTextEdited.count,
             keptFinalHorizonEventCount: finalHorizonEvents.count,
@@ -236,6 +255,31 @@ public struct AutocompleteTraceReplay: Sendable {
             && event.metadata["candidateTopScore"] != nil
             && event.metadata["candidateScoreMargin"] != nil
             && event.metadata["candidateSuppressionReason"] != nil
+    }
+
+    private func proofFingerprintCandidateEvents(in events: [AutocompleteTraceEvent]) -> [AutocompleteTraceEvent] {
+        events.filter { event in
+            switch event.type {
+            case .suggestionRequested,
+                    .modelResult,
+                    .suggestionPresented,
+                    .suggestionHidden,
+                    .suggestionAccepted,
+                    .suggestionSuppressed,
+                    .insertionVerified,
+                    .insertionFailed,
+                    .acceptedTextEdited,
+                    .caretGeometryFailed:
+                return true
+            case .suggestionTypedOver,
+                    .acceptanceRetentionCleared,
+                    .appPaused,
+                    .fieldPaused,
+                    .appDisabled,
+                    .renderModeChanged:
+                return false
+            }
+        }
     }
 
     private func hasResearchedTriggerDelay(_ event: AutocompleteTraceEvent) -> Bool {

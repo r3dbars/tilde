@@ -107,6 +107,9 @@ Pass 1 shipped these improvements:
   casing, digits, hyphen, and apostrophe only.
 - Accepted insertions now arm a one-step Command-Z restore path for the same
   focused app/field, with an 8s expiry and trace-safe diagnostics.
+- Trace events now carry a proof fingerprint for the current trace, placement,
+  key-capture, and runtime proof versions; replay fails stale proof that predates
+  those versions.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -132,8 +135,8 @@ Remaining high-impact gaps:
   that Command-Z restores the accepted insertion cleanly in real editors.
 - Replay-first real-app proof is still missing. The command exists, but the
   current local trace corpus fails the proof gate because it predates display
-  scoring, candidate-selection metadata, kept-horizon events, and researched
-  trigger delays.
+  scoring, candidate-selection metadata, proof fingerprints, kept-horizon
+  events, and researched trigger delays.
 - Cross-app proof rows still need fresh screenshot-backed acceptance slices.
 
 ## Research Bar
@@ -226,8 +229,8 @@ Weighted total: **79.2/100**, rounded to **79/100**.
 | Esc learning | 86 | Esc dismiss now records annoyance, suppresses eligible fields until blur, starts a 15s app/field/mode/prefix cooldown, repeated Esc on the same prefix escalates to 60s, and Diagnostics exposes prefix cooldown duration/escalation metadata. | Prove real-app thresholds. |
 | Style memory | 90 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, and question rates with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, Settings can clear it, and Diagnostics exposes the trace-safe aggregate sketch. | Add tuning controls and fresh real-app trace validation. |
 | Annoyance index | 90 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, exposes current-field/session silence in Settings and the menu, records manual field pauses as scoped trace events, records placement uncertainty as caret-geometry failures, and Diagnostics now exposes annoyance score, active quiet-mode scope, and signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
-| Replay-first test rig | 74 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. | Replay recorded real app sessions with caret, screenshots, accepts, kept horizon, and latency after every app/runtime change. |
-| Cross-app proof honesty | 90 | App proof matrix explicitly keeps failing rows non-A until evidence exists. | Close every pending proof row and make stale proof fail automatically. |
+| Replay-first test rig | 76 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. | Replay recorded real app sessions with caret, screenshots, accepts, kept horizon, and latency after every app/runtime change. |
+| Cross-app proof honesty | 92 | App proof matrix explicitly keeps failing rows non-A until evidence exists, and replay now makes stale placement/key/runtime proof fail through trace proof fingerprints. | Close every pending proof row. |
 
 ## Baseline Evidence Notes
 
@@ -398,7 +401,8 @@ these are true.
   scoring, stale cancellation, kept horizon, latency, and annoyance outcomes.
 - It must support redacted traces by default.
 - It must report P50/P95 by mode and app.
-- It must make old proof stale after placement/key/runtime changes.
+- Done: it makes old proof stale after placement/key/runtime changes through
+  trace proof fingerprints.
 
 ### P1 - Close Cross-App Proof
 
@@ -498,6 +502,8 @@ these are true.
    screenshot tracing and opens Diagnostics for the current profiled app.
 38. Done: add direct Settings editing for the accept-all shortcut while keeping
    the existing quick cycle button.
+39. Done: add trace proof fingerprints so replay fails sessions captured before
+   the current trace, placement, key-capture, and runtime proof versions.
 
 ## Goal Status
 
@@ -512,11 +518,11 @@ Replay proof status:
 
 - Command: `swift run AutocompleteTraceReplay
   /Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`
-- Result on the current local trace corpus after `2811d50`: proof gate
+- Result on the current local trace corpus with proof-fingerprint gating: proof gate
   **failed**, as expected for stale pre-pass traces.
-- Key failures: trigger delay coverage 3% (183/7171), display score coverage
-  0% (0/6405), candidate selection coverage 0% (0/3997), kept horizon events
-  0.
-- Useful proof still present in the stale corpus: 25,064 events, 3,261
-  presented suggestions, 289 stale cancellations, 6 app latency slices, 2 mode
-  latency slices, and 970 annoyance signals.
+- Key failures: trigger delay coverage 3% (198/7186), display score coverage
+  0% (6/6411), candidate selection coverage 0% (4/4001), and proof fingerprint
+  coverage 0% (0/24336).
+- Useful proof still present in the stale corpus: 25,229 events, 3,267
+  presented suggestions, 289 stale cancellations, 12 kept-horizon events,
+  6 app latency slices, 2 mode latency slices, and 976 annoyance signals.

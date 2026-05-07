@@ -30,13 +30,17 @@ struct AutocompleteTracePrivacyFilterTests {
         let metadata = [
             "typedSuffix": "private words",
             "visibleChars": "12",
-            "hasCaretRect": "true"
+            "hasCaretRect": "true",
+            "traceProofVersion": AutocompleteTraceProofMetadata.traceProofVersion,
+            "placementProofVersion": AutocompleteTraceProofMetadata.placementProofVersion
         ]
 
         #expect(AutocompleteTracePrivacyFilter.metadata(metadata, rawContentEnabled: false) == [
             "typedSuffix": "String(13 chars)",
             "visibleChars": "12",
-            "hasCaretRect": "true"
+            "hasCaretRect": "true",
+            "traceProofVersion": AutocompleteTraceProofMetadata.traceProofVersion,
+            "placementProofVersion": AutocompleteTraceProofMetadata.placementProofVersion
         ])
         #expect(AutocompleteTracePrivacyFilter.metadata(metadata, rawContentEnabled: true) == metadata)
     }

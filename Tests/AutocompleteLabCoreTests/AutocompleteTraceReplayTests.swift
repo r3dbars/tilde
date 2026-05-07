@@ -59,6 +59,7 @@ struct AutocompleteTraceReplayTests {
         #expect(report.triggerDelayCoverageRate == 1)
         #expect(report.displayScoreCoverageRate == 1)
         #expect(report.candidateSelectionCoverageRate == 1)
+        #expect(report.proofFingerprintCoverageRate == 1)
         #expect(report.keptFinalHorizonEventCount == 1)
         #expect(report.latencyByApp.first?.p50Milliseconds == 220)
         #expect(report.latencyByMode.first?.key == CompletionRequestMode.phraseContinuation.rawValue)
@@ -185,6 +186,91 @@ struct AutocompleteTraceReplayTests {
         })
     }
 
+    @Test("Missing proof fingerprint metadata fails replay proof")
+    func missingProofFingerprintMetadataFailsReplayProof() {
+        let events = [
+            event(
+                .suggestionRequested,
+                suggestionID: "one",
+                metadata: ["delayMilliseconds": "180"],
+                includeProofMetadata: false
+            ),
+            event(
+                .modelResult,
+                suggestionID: "one",
+                metadata: candidateSelectionMetadata(),
+                includeProofMetadata: false
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "one",
+                latencyMilliseconds: 180,
+                metadata: displayMetadata(decision: "display"),
+                includeProofMetadata: false
+            ),
+            event(
+                .acceptedTextEdited,
+                suggestionID: "one",
+                metadata: [
+                    "checkpoint": AcceptanceSurvivalCheckpoint.thirtySeconds.rawValue,
+                    "survivalClass": AcceptanceSurvivalClass.exactKept.rawValue
+                ],
+                includeProofMetadata: false
+            )
+        ]
+
+        let report = AutocompleteTraceReplay().report(for: events)
+
+        #expect(!report.passesReplayProofGate)
+        #expect(report.proofFingerprintCoverageRate == 0)
+        #expect(report.requirements.contains {
+            $0.name == "proof fingerprint freshness" && !$0.passed
+        })
+    }
+
+    @Test("Stale proof fingerprint metadata fails replay proof")
+    func staleProofFingerprintMetadataFailsReplayProof() {
+        let events = [
+            event(
+                .suggestionRequested,
+                suggestionID: "one",
+                metadata: ["delayMilliseconds": "180"]
+                    .merging(staleProofMetadata()) { current, _ in current },
+                includeProofMetadata: false
+            ),
+            event(
+                .modelResult,
+                suggestionID: "one",
+                metadata: candidateSelectionMetadata()
+                    .merging(staleProofMetadata()) { current, _ in current },
+                includeProofMetadata: false
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "one",
+                latencyMilliseconds: 180,
+                metadata: displayMetadata(decision: "display")
+                    .merging(staleProofMetadata()) { current, _ in current },
+                includeProofMetadata: false
+            ),
+            event(
+                .acceptedTextEdited,
+                suggestionID: "one",
+                metadata: [
+                    "checkpoint": AcceptanceSurvivalCheckpoint.thirtySeconds.rawValue,
+                    "survivalClass": AcceptanceSurvivalClass.exactKept.rawValue
+                ].merging(staleProofMetadata()) { current, _ in current },
+                includeProofMetadata: false
+            )
+        ]
+
+        let report = AutocompleteTraceReplay().report(for: events)
+
+        #expect(!report.passesReplayProofGate)
+        #expect(report.proofFingerprintCoverageRate == 0)
+    }
+
+
     private func event(
         _ type: AutocompleteTraceEventType,
         suggestionID: String,
@@ -193,9 +279,14 @@ struct AutocompleteTraceReplayTests {
         latencyMilliseconds: Int? = nil,
         outcome: String = "",
         reason: String = "",
-        metadata: [String: String] = [:]
+        metadata: [String: String] = [:],
+        includeProofMetadata: Bool = true
     ) -> AutocompleteTraceEvent {
-        AutocompleteTraceEvent(
+        let traceMetadata = includeProofMetadata
+            ? metadata.merging(AutocompleteTraceProofMetadata.current) { _, current in current }
+            : metadata
+
+        return AutocompleteTraceEvent(
             timestamp: "2026-05-07T12:00:00Z",
             sessionID: "session-one",
             suggestionID: suggestionID,
@@ -207,7 +298,7 @@ struct AutocompleteTraceReplayTests {
             latencyMilliseconds: latencyMilliseconds,
             outcome: outcome,
             reason: reason,
-            metadata: metadata
+            metadata: traceMetadata
         )
     }
 
@@ -239,5 +330,11 @@ struct AutocompleteTraceReplayTests {
             "candidateScoreMargin": scoreMargin,
             "candidateSuppressionReason": suppressionReason
         ]
+    }
+
+    private func staleProofMetadata() -> [String: String] {
+        var metadata = AutocompleteTraceProofMetadata.current
+        metadata["placementProofVersion"] = "placement-old"
+        return metadata
     }
 }
