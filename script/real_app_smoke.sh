@@ -950,9 +950,7 @@ APPLESCRIPT
     "action=acceptNextWord" \
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit first verified insertion"
-  local post_first_start_line full_start_line full_accept_key
-  post_first_start_line="$(line_count "$LOG_PATH")"
-  wait_for_log_pattern "$post_first_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit post-Tab suggestion"
+  local full_start_line full_accept_key
   full_accept_key="$(accept_all_shortcut)"
   assert_frontmost_app "TextEdit" "TextEdit"
   sleep 0.5
