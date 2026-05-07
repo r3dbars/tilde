@@ -11,6 +11,7 @@ undo pass, based on `origin/main`.
 Baseline deep research score: **78/100**.
 
 Current implementation score after the current build pass: **99/100**.
+Proof status: **not complete**.
 
 This is a strong prototype with real engineering depth. It has local MLX
 runtime support, app compatibility profiles, privacy-safe tracing defaults,
@@ -116,6 +117,13 @@ Pass 1 shipped these improvements:
 - Replay now requires at least one stale cancellation and at least one annoyance
   signal, so those research outcomes cannot be skipped by a happy-path-only
   trace.
+- The replay CLI now accepts `--start-line` and `--end-line`, and
+  `script/trace_mark.sh --replay` replays only the fresh trace slice after a
+  saved mark instead of mixing new proof with stale historical logs. Fresh
+  proof can now be isolated and replayed, but it still needs a passing fresh
+  real-app slice.
+- `script/autocomplete_trace_replay_self_test.sh` proves the CLI and
+  `trace_mark --replay` skip stale rows and honor frozen slice bounds.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -235,7 +243,7 @@ Weighted total: **79.2/100**, rounded to **79/100**.
 | Esc learning | 86 | Esc dismiss now records annoyance, suppresses eligible fields until blur, starts a 15s app/field/mode/prefix cooldown, repeated Esc on the same prefix escalates to 60s, and Diagnostics exposes prefix cooldown duration/escalation metadata. | Prove real-app thresholds. |
 | Style memory | 90 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, and question rates with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, Settings can clear it, and Diagnostics exposes the trace-safe aggregate sketch. | Add tuning controls and fresh real-app trace validation. |
 | Annoyance index | 90 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, exposes current-field/session silence in Settings and the menu, records manual field pauses as scoped trace events, records placement uncertainty as caret-geometry failures, and Diagnostics now exposes annoyance score, active quiet-mode scope, and signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
-| Replay-first test rig | 79 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, placement metadata, trusted caret placement, stale cancellation, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. | Replay recorded real app sessions with screenshots, accepts, kept horizon, and latency after every app/runtime change. |
+| Replay-first test rig | 81 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, placement metadata, trusted caret placement, stale cancellation, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. It can replay a fresh line-bounded trace slice. | Replay recorded real app sessions with screenshots, accepts, kept horizon, and latency after every app/runtime change. |
 | Cross-app proof honesty | 92 | App proof matrix explicitly keeps failing rows non-A until evidence exists, and replay now makes stale placement/key/runtime proof fail through trace proof fingerprints. | Close every pending proof row. |
 
 ## Baseline Evidence Notes
@@ -514,6 +522,12 @@ these are true.
    caret or synthetic-caret placement in presented suggestions.
 41. Done: make replay proof require stale cancellation and annoyance outcomes
    instead of treating them as side metrics.
+42. Done: add replay line slicing and `trace_mark --replay` so fresh proof can
+   be isolated and replayed without stale historical trace rows. A passing fresh
+   real-app slice is still required.
+43. Done: add a replay CLI self-test that fails an unsliced stale fixture,
+   passes the fresh slice, checks frozen bounds, and covers `trace_mark
+   --replay`.
 
 ## Goal Status
 
@@ -528,6 +542,10 @@ Replay proof status:
 
 - Command: `swift run AutocompleteTraceReplay
   /Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`
+- Fresh-slice command after a saved mark: `./script/trace_mark.sh --replay`.
+- Frozen-slice command: `swift run AutocompleteTraceReplay --start-line
+  "$START_LINE" --end-line "$END_LINE"
+  /Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`.
 - Result on the current local trace corpus with proof-fingerprint gating: proof gate
   **failed**, as expected for stale pre-pass traces.
 - Key failures: trigger delay coverage 3% (198/7186), display score coverage
