@@ -286,6 +286,18 @@ struct SettingsPrivacyState: Equatable {
     var pathText: String {
         "Logs: \(diagnosticsPath) | Traces: \(tracePath)"
     }
+
+    var statusPanelText: String {
+        [
+            "Autocomplete Lab keeps suggestions and diagnostics on this Mac.",
+            diagnosticsStatusText,
+            contentStatusText,
+            screenRecordingPermissionText ?? "Screen Recording: off unless screenshot capture is enabled.",
+            "No raw text is included unless raw text capture is on.",
+            "Logs: \(diagnosticsPath)",
+            "Traces: \(tracePath)"
+        ].joined(separator: "\n")
+    }
 }
 
 struct SettingsKeyboardShortcutState: Equatable {
@@ -416,6 +428,7 @@ final class SettingsWindowController: NSObject {
         target: nil,
         action: nil
     )
+    private let privacyStatusButton = NSButton(title: "Privacy Status...", target: nil, action: nil)
     private let deleteLocalLogsButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
     private let shortcutLabel = NSTextField(labelWithString: "")
     private let acceptAllShortcutPopup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -433,10 +446,12 @@ final class SettingsWindowController: NSObject {
     private let toggleRawContentTracing: () -> Void
     private let toggleScreenshotTracing: () -> Void
     private let deleteLocalLogs: () -> Void
+    private let showPrivacyStatus: (String) -> Void
     private let setAcceptAllShortcut: (AcceptAllShortcut) -> Void
     private let setSuggestionPace: (SuggestionPace) -> Void
     private var currentRuntimeAction: RuntimeReadinessAction = .none
     private var currentProofCommand: String?
+    private var currentPrivacyStatusText = ""
 
     init(
         requestPermission: @escaping () -> Void,
@@ -452,6 +467,7 @@ final class SettingsWindowController: NSObject {
         toggleRawContentTracing: @escaping () -> Void,
         toggleScreenshotTracing: @escaping () -> Void,
         deleteLocalLogs: @escaping () -> Void,
+        showPrivacyStatus: @escaping (String) -> Void,
         setAcceptAllShortcut: @escaping (AcceptAllShortcut) -> Void,
         setSuggestionPace: @escaping (SuggestionPace) -> Void
     ) {
@@ -468,6 +484,7 @@ final class SettingsWindowController: NSObject {
         self.toggleRawContentTracing = toggleRawContentTracing
         self.toggleScreenshotTracing = toggleScreenshotTracing
         self.deleteLocalLogs = deleteLocalLogs
+        self.showPrivacyStatus = showPrivacyStatus
         self.setAcceptAllShortcut = setAcceptAllShortcut
         self.setSuggestionPace = setSuggestionPace
 
@@ -583,6 +600,7 @@ final class SettingsWindowController: NSObject {
         screenRecordingPermissionLabel.stringValue = screenRecordingText ?? ""
         screenRecordingPermissionLabel.isHidden = screenRecordingText == nil
         privacyPathLabel.stringValue = privacy.pathText
+        currentPrivacyStatusText = privacy.statusPanelText
         toggleTracingButton.state = privacy.tracingPaused ? .off : .on
         toggleRawTraceButton.state = privacy.rawContentTracingEnabled ? .on : .off
         toggleScreenshotTraceButton.state = privacy.screenshotTracingEnabled ? .on : .off
@@ -688,6 +706,10 @@ final class SettingsWindowController: NSObject {
         toggleScreenshotTraceButton.target = self
         toggleScreenshotTraceButton.action = #selector(toggleScreenshotTraceControl)
         toggleScreenshotTraceButton.toolTip = "Captures local screenshots for placement debugging."
+        privacyStatusButton.target = self
+        privacyStatusButton.action = #selector(showPrivacyStatusControl)
+        privacyStatusButton.bezelStyle = .rounded
+        privacyStatusButton.toolTip = "Shows what privacy-sensitive diagnostics are enabled right now."
         deleteLocalLogsButton.target = self
         deleteLocalLogsButton.action = #selector(deleteLocalLogsControl)
         deleteLocalLogsButton.bezelStyle = .rounded
@@ -756,7 +778,7 @@ final class SettingsWindowController: NSObject {
                     toggleRawTraceButton,
                     toggleScreenshotTraceButton,
                     privacyPathLabel,
-                    makeButtonRow([deleteLocalLogsButton])
+                    makeButtonRow([privacyStatusButton, deleteLocalLogsButton])
                 ]
             ),
             makeSection(
@@ -907,6 +929,11 @@ final class SettingsWindowController: NSObject {
     @objc
     private func deleteLocalLogsControl() {
         deleteLocalLogs()
+    }
+
+    @objc
+    private func showPrivacyStatusControl() {
+        showPrivacyStatus(currentPrivacyStatusText)
     }
 
     @objc

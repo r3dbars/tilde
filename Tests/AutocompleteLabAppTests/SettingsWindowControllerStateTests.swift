@@ -369,6 +369,18 @@ struct SettingsWindowControllerStateTests {
                 == "Screen Recording: only used for placement screenshots while this debug switch is on."
         )
         #expect(privacy.pathText == "Logs: /tmp/diagnostics.log | Traces: /tmp/traces.jsonl")
+        #expect(
+            privacy.statusPanelText
+                == [
+                    "Autocomplete Lab keeps suggestions and diagnostics on this Mac.",
+                    "Diagnostics: performance + placement traces recording, screenshots on",
+                    "Raw text capture: off",
+                    "Screen Recording: only used for placement screenshots while this debug switch is on.",
+                    "No raw text is included unless raw text capture is on.",
+                    "Logs: /tmp/diagnostics.log",
+                    "Traces: /tmp/traces.jsonl"
+                ].joined(separator: "\n")
+        )
 
         let paused = SettingsPrivacyState(
             tracingPaused: true,
@@ -386,6 +398,11 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(paused.contentStatusText == "Raw text capture: on temporarily")
         #expect(paused.screenRecordingPermissionText == nil)
+        #expect(
+            paused.statusPanelText.contains(
+                "Screen Recording: off unless screenshot capture is enabled."
+            )
+        )
     }
 
     @Test("Keyboard shortcut state exposes explicit picker choices")
