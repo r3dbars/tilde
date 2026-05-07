@@ -3,14 +3,14 @@
 Source research:
 `/Users/redbars/Library/Caches/com.apple.SwiftUI.Drag-9DB841D4-8068-4044-B0CF-B2F61B9E12BB/deep-research-report (5).md`
 
-Repo state graded: `codex/deep-research-scorecard` after the replay-gated
-candidate-selection pass, based on `origin/main`.
+Repo state graded: `codex/deep-research-scorecard` after the aggregate style
+memory pass, based on `origin/main`.
 
 ## Executive Grade
 
 Baseline deep research score: **78/100**.
 
-Current implementation score after the current build pass: **92/100**.
+Current implementation score after the current build pass: **93/100**.
 
 This is a strong prototype with real engineering depth. It has local MLX
 runtime support, app compatibility profiles, privacy-safe tracing defaults,
@@ -66,6 +66,9 @@ Pass 1 shipped these improvements:
   top score, score margin, and suppression reason in diagnostics/raw traces.
 - Replay proof now requires candidate-selection metadata coverage in model
   results, so stale traces fail this new ranking proof gate.
+- Accepted-and-kept suggestions now feed a durable aggregate style-memory store
+  with a 14-day half-life; prompts receive only a trace-safe style sketch, not
+  raw accepted text.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -146,7 +149,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Accept-and-keep probability threshold | 80 | Durable learning now gates by app, field kind, mode, and behavior profile after enough evidence, with 14-day half-life decay. | Prove thresholds with fresh real-app traces and expose tuning/clear controls. |
 | Candidate generation | 72 | Phrase/sentence prompts ask for 1-3 candidates; `CompletionOutputCleaner.cleanCandidates` strips list prefixes, filters unsafe/sentinel lines, dedupes, and `CompletionCandidateRanker` picks only high-score/high-margin top candidates. | Prove real model outputs produce useful candidate sets and tune score/margin thresholds from traces. |
 | Context budget | 76 | Prompt uses bounded recent context from current sentence/paragraph. | Use 48-96 tokens plus prior sentence/paragraph only when useful. |
-| Metadata in prompt | 72 | App bundle, field kind, request mode, and behavior profile now affect prompt/generation/scoring/tracing. | Include document title, partial word shape, compact style sketch, and up to 3 accepted-kept suffixes. |
+| Metadata in prompt | 78 | App bundle, field kind, request mode, behavior profile, and aggregate accepted-kept style sketch now affect prompt/generation/scoring/tracing. | Include document title, partial word shape, and up to 3 accepted-kept suffixes. |
 | Hard `<NO_SUGGESTION>` path | 86 | Word/phrase/sentence prompts include `<NO_SUGGESTION>` guidance, and cleaner suppresses direct sentinels plus prompt-echo sentinel lines. | Prove sentinel behavior in fresh real model traces. |
 | Privacy-first tracing | 88 | Raw content is redacted by default and raw/screenshot capture is opt-in with expiry. | Store prefix hashes and compact style features; make clear-learning-data controls part of the main loop. |
 | Local runtime ownership | 92 | App-owned embedded runtime and no user-managed server dependency. | Keep this stance through beta and fail clearly if model assets are missing. |
@@ -173,7 +176,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Typed-over learning | 74 | Typed-over trace and repetition miss exist. | Prefix-family cooldown plus decay and threshold updates. |
 | Ignored learning | 66 | Hidden/ignored events can record misses. | Separate weak negative, lifetime-aware, not just repetition miss. |
 | Esc learning | 70 | Field suppression exists. | Very strong prefix/mode negative with 15s cooldown and longer repeated-dismiss decay. |
-| Style memory | 45 | App-scoped recent word memory exists. | Durable local style sketch from accepted-and-kept suggestions with 14-day half-life. |
+| Style memory | 82 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, and question rates with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist. | Add user controls to inspect/clear the style sketch and tune it with fresh real-app traces. |
 | Annoyance index | 82 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, and quiets field/app/global scopes. | Make quiet-mode decisions easier to inspect in diagnostics and prove thresholds with fresh traces. |
 | Replay-first test rig | 74 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. | Replay recorded real app sessions with caret, screenshots, accepts, kept horizon, and latency after every app/runtime change. |
 | Cross-app proof honesty | 90 | App proof matrix explicitly keeps failing rows non-A until evidence exists. | Close every pending proof row and make stale proof fail automatically. |
@@ -348,9 +351,10 @@ these are true.
    candidate-count trace metadata.
 10. Done: add candidate top-score and score-margin suppression/trace metadata.
 11. Done: make replay proof require candidate-selection metadata.
-12. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
+12. Done: add aggregate accepted-kept style memory and prompt guidance.
+13. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
    checklist acceptance/proof slices are still missing.
-13. Partial: build the replay-first proof command. The command exists; a fresh
+14. Partial: build the replay-first proof command. The command exists; a fresh
    post-pass trace proof still has to pass.
 
 ## Goal Status
@@ -360,7 +364,7 @@ every scored item reaches 100/100.
 
 Baseline status: **78/100**.
 
-Current implementation status: **92/100**. Not complete.
+Current implementation status: **93/100**. Not complete.
 
 Replay proof status:
 
