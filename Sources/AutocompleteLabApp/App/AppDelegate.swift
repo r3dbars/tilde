@@ -665,6 +665,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        if applyFocusedTextPollingThrottleIfNeeded(
+            focusedTextPollingBackoffPolicy.throttleRecommendation(
+                queueDelayMilliseconds: result.queueDelayMilliseconds,
+                readDurationMilliseconds: result.readDurationMilliseconds
+            )
+        ) {
+            setSuggestionDecision("Waiting: AX read")
+            return
+        }
+
         guard let activeApp = accessibilityClient.frontmostApplication(),
               activeApp.bundleIdentifier == result.app.bundleIdentifier,
               activeApp.processIdentifier == result.app.processIdentifier else {
@@ -1133,13 +1143,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    @discardableResult
     private func applyFocusedTextPollingThrottleIfNeeded(
         _ recommendation: FocusedTextPollingThrottleRecommendation
-    ) {
+    ) -> Bool {
         guard recommendation.shouldThrottle,
               let reason = recommendation.reason,
               recommendation.pauseMilliseconds > 0 else {
-            return
+            return false
         }
 
         focusedTextPollingPause.pause(
@@ -1158,6 +1169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "pauseMilliseconds": String(recommendation.pauseMilliseconds)
             ]
         )
+        return true
     }
 
     private func shouldSuppressDetachedSuggestion(
