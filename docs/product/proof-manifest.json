@@ -90,11 +90,18 @@
     },
     {
       "surface": "Apple Notes title",
-      "status": "pending",
-      "screenshots": [],
-      "gaps": [
-        "Needs separate notes-title manual-gated screenshot and accept proof."
-      ]
+      "status": "complete",
+      "manualSmoke": {
+        "app": "Notes",
+        "bundle": "com.apple.Notes",
+        "proof": "notes-title",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/notes-title.png"
+      ],
+      "gaps": []
     },
     {
       "surface": "Apple Notes body",
