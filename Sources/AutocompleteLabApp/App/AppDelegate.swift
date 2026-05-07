@@ -32,6 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let screenshotTraceCapturePolicy = ScreenshotTraceCapturePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
     private let focusPollingCadencePolicy = FocusPollingCadencePolicy()
+    private lazy var focusedTextPollGatePolicy = FocusedTextPollGatePolicy(
+        cadencePolicy: focusPollingCadencePolicy
+    )
     private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
     private let focusChangePolicy = SuggestionFocusChangePolicy()
     private let geometryChangePolicy = SuggestionGeometryChangePolicy()
@@ -577,8 +580,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func pollFocusedTextIfIdle() {
-        guard !isFocusedTextPollInFlight else {
-            if let notice = focusedTextPollSkipStats.recordSkippedInFlight(now: Date()) {
+        let now = Date()
+        let gateDecision = focusedTextPollGatePolicy.decision(
+            now: now,
+            lastPollAt: lastFocusedTextPollStartedAt,
+            isPollInFlight: isFocusedTextPollInFlight,
+            isTrustedForAccessibility: accessibilityClient.isTrusted,
+            hasSupportedProfile: hasSupportedProfileForFocusedTextPoll,
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+        )
+
+        switch gateDecision {
+        case .waitForCadence:
+            return
+        case .skipInFlight:
+            if let notice = focusedTextPollSkipStats.recordSkippedInFlight(now: now) {
                 DiagnosticsLog.shared.record(
                     "focused-text-poll-skipped",
                     metadata: [
@@ -588,11 +604,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
             return
-        }
-
-        let now = Date()
-        guard shouldRunFocusedTextPoll(now: now) else {
-            return
+        case .startPoll:
+            break
         }
 
         lastFocusedTextPollStartedAt = now
@@ -605,18 +618,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func shouldRunFocusedTextPoll(now: Date) -> Bool {
-        let hasSupportedProfile = currentProfile.map { profile in
+    private var hasSupportedProfileForFocusedTextPoll: Bool {
+        currentProfile.map { profile in
             profile.canPresentSuggestions && !profile.isSensitive && !suggestionsPaused
         } ?? false
-
-        return focusPollingCadencePolicy.shouldPoll(
-            now: now,
-            lastPollAt: lastFocusedTextPollStartedAt,
-            isTrustedForAccessibility: accessibilityClient.isTrusted,
-            hasSupportedProfile: hasSupportedProfile,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
-        )
     }
 
     private func finishFocusedTextPoll(startedAt: UInt64) {
