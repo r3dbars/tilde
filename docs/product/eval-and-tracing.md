@@ -26,7 +26,7 @@ Enable optional local screenshot traces only for local debugging:
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/build_and_run.sh
 ```
 
-Or turn screenshots on for only the current app from Diagnostics. Screenshot traces are stored beside the JSONL log and linked from the exported report.
+Or turn screenshots on for only the current app from Diagnostics. Screenshot traces are stored beside the JSONL log and linked from the exported report. When this is enabled, the first streamed model presentation can capture the proof screenshot; later updates with the same suggestion ID are skipped.
 
 When raw text capture or screenshot capture is turned on from the app UI, it expires automatically after about 1 hour. Deleting local logs also turns off raw text capture and screenshot capture where the app owns that setting.
 
