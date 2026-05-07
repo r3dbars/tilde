@@ -29,7 +29,6 @@ public enum ModelRuntimeOwnership: String, Equatable, Sendable {
 
 public struct CompletionModelPolicy: Equatable, Sendable {
     public static let minimumVisibleWords = 1
-    public static let defaultVisibleWords = 4
     public static let maximumVisibleWords = 7
     public static let minimumGeneratedTokens = 3
     public static let maximumGeneratedTokens = 32
@@ -68,7 +67,7 @@ public struct CompletionModelPolicy: Equatable, Sendable {
         runtimeOwnership: .appOwnedEmbedded,
         minimumMemoryGB: 16,
         maxGeneratedTokens: 10,
-        maxVisibleWords: defaultVisibleWords,
+        maxVisibleWords: 5,
         debounceMilliseconds: 15,
         targetLatencyMilliseconds: 50,
         reasoningEnabled: false
@@ -116,10 +115,19 @@ public struct CompletionLengthConfiguration: Equatable, Sendable {
     }
 
     public static func fromEnvironment(_ environment: [String: String]) -> CompletionLengthConfiguration {
-        CompletionLengthConfiguration(
-            maxVisibleWords: parsedInt(environment["AUTOCOMPLETE_LAB_VISIBLE_WORDS"])
-                ?? CompletionModelPolicy.mvp.maxVisibleWords,
-            maxGeneratedTokens: parsedInt(environment["AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS"])
+        let visibleWords = parsedInt(environment["AUTOCOMPLETE_LAB_VISIBLE_WORDS"])
+        let generatedTokens = parsedInt(environment["AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS"])
+
+        guard let visibleWords else {
+            return CompletionLengthConfiguration(
+                maxVisibleWords: CompletionModelPolicy.mvp.maxVisibleWords,
+                maxGeneratedTokens: generatedTokens ?? CompletionModelPolicy.mvp.maxGeneratedTokens
+            )
+        }
+
+        return CompletionLengthConfiguration(
+            maxVisibleWords: visibleWords,
+            maxGeneratedTokens: generatedTokens
         )
     }
 

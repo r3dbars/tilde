@@ -20,6 +20,8 @@ struct AppModelRuntimeBundle {
             "asset": bootstrapPlan.preferredAsset.fileName,
             "assetDirectory": modelDirectoryURL.path,
             "assetState": bootstrapPlan.assetState.statusSummary,
+            "assetSourceRepoID": bootstrapPlan.preferredAsset.source?.repoID ?? "",
+            "assetSourceRevision": bootstrapPlan.preferredAsset.source?.revision ?? "",
             "modelOverride": modelOverrideName ?? "",
             "maxVisibleWords": String(lengthConfiguration.maxVisibleWords),
             "maxGeneratedTokens": String(lengthConfiguration.maxGeneratedTokens),

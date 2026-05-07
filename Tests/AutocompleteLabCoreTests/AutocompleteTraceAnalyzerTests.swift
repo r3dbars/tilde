@@ -36,10 +36,6 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.actionableSuppressedByApp["com.apple.TextEdit"] == 2)
         #expect(summary.actionableSuppressedByMode["wordCompletion"] == 2)
         #expect(summary.insertionFailureCount == 1)
-        #expect(summary.annoyanceCounters["hidden-ignored"] == nil)
-        #expect(summary.annoyanceCounters["insertion-failed"] == 1)
-        #expect(summary.annoyanceCounters["repeated-suppression"] == 2)
-        #expect(summary.doNotShipCounters["insertion-failed"] == 1)
         #expect(summary.acceptRate == 1.0 / 3.0)
         #expect(summary.usefulRate == 2.0 / 3.0)
         #expect(summary.acceptRateByApp["com.apple.TextEdit"] == 1.0 / 3.0)
@@ -47,9 +43,10 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.usefulRateByApp["com.apple.TextEdit"] == 2.0 / 3.0)
         #expect(summary.usefulRateByMode["wordCompletion"] == 2.0 / 3.0)
         #expect(summary.p50LatencyMilliseconds == 30)
-        #expect(summary.topMisses.count == 2)
+        #expect(summary.topMisses.count == 3)
         #expect(summary.topMisses.contains { $0.fixCategory == "word-completion issue" })
         #expect(summary.topMisses.contains { $0.fixCategory == "insertion bug" })
+        #expect(summary.topMisses.contains { $0.fixCategory == "model latency issue" })
     }
 
     @Test("Streaming updates count as one shown suggestion")
@@ -118,6 +115,20 @@ struct AutocompleteTraceAnalyzerTests {
                 requestMode: "phraseContinuation",
                 rawOutput: "Let me know when it's done.",
                 cleanedVisibleText: "Let me know when it's done."
+            ),
+            event(
+                .modelResult,
+                suggestionID: "four",
+                requestMode: "phraseContinuation",
+                rawOutput: "The best way is to restart.",
+                cleanedVisibleText: "The best way is to restart."
+            ),
+            event(
+                .modelResult,
+                suggestionID: "five",
+                requestMode: "wordCompletion",
+                rawOutput: "s",
+                cleanedVisibleText: "s"
             )
         ]
 
@@ -126,6 +137,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.topMisses.contains { $0.title == "Word mode returned phrase" })
         #expect(summary.topMisses.contains { $0.title == "Model leaked thinking text" })
         #expect(summary.topMisses.contains { $0.title == "Assistant-style completion" })
+        #expect(summary.topMisses.contains { $0.title == "Too-short word completion" })
         #expect(summary.topMisses.contains { $0.fixCategory == "output cleaning issue" })
     }
 
@@ -147,6 +159,19 @@ struct AutocompleteTraceAnalyzerTests {
                     "effectiveRenderMode": "floatingMirror",
                     "hasCaretRect": "false"
                 ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "three",
+                appBundleIdentifier: "com.apple.TextEdit",
+                displayedText: " world",
+                metadata: [
+                    "effectiveRenderMode": "floatingMirror",
+                    "placementSelfHealingApplied": "true",
+                    "placementHealthReason": "caret-outside-focused-bounds",
+                    "placementConfidenceBand": "low",
+                    "placementConfidenceScore": "0.40"
+                ]
             )
         ]
 
@@ -154,7 +179,139 @@ struct AutocompleteTraceAnalyzerTests {
 
         #expect(summary.topMisses.contains { $0.title == "Detached suggestions suppressed in md.obsidian" })
         #expect(summary.topMisses.contains { $0.title == "Detached suggestion shown in md.obsidian" })
+        #expect(summary.topMisses.contains { $0.title == "Placement self-healed in com.apple.TextEdit" })
+        #expect(summary.topMisses.contains { $0.title == "Low-confidence placement in com.apple.TextEdit" })
         #expect(summary.topMisses.allSatisfy { $0.fixCategory == "renderer/caret bug" })
+    }
+
+    @Test("flags panel frame, clipping, and placement fallback misses")
+    func flagsPanelFrameClippingAndPlacementFallbackMisses() {
+        let events = [
+            event(
+                .suggestionSuppressed,
+                suggestionID: "panel-suppressed",
+                appBundleIdentifier: "com.openai.codex",
+                requestMode: "phraseContinuation",
+                reason: "panel-frame-unusable",
+                metadata: [
+                    "effectiveRenderMode": "inlineAdjacent"
+                ]
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "panel-hidden",
+                appBundleIdentifier: "com.openai.codex",
+                requestMode: "phraseContinuation",
+                reason: "panel-frame-unusable"
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "inline-clipped",
+                appBundleIdentifier: "com.openai.codex",
+                requestMode: "phraseContinuation",
+                displayedText: "this suggestion is clipped",
+                metadata: [
+                    "effectiveRenderMode": "inlineAdjacent",
+                    "visibleChars": "26",
+                    "suggestionPanelRect": "x=372,y=220,w=28,h=20",
+                    "clippingRect": "x=20,y=180,w=380,h=80"
+                ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "fallback-place",
+                appBundleIdentifier: "md.obsidian",
+                requestMode: "phraseContinuation",
+                metadata: [
+                    "placementRequestedRenderMode": "inlineAdjacent",
+                    "placementEffectiveRenderMode": "floatingMirror",
+                    "placementHealthReason": "missing-caret",
+                    "placementSelfHealingApplied": "true",
+                    "placementSelfHealingAction": "fallback-floating-mirror",
+                    "placementAnchorSource": "element"
+                ]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "placement-suppressed",
+                appBundleIdentifier: "md.obsidian",
+                requestMode: "phraseContinuation",
+                reason: "missing-anchor",
+                metadata: [
+                    "placementHealthReason": "missing-anchor",
+                    "placementSelfHealingAction": "suppress"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Panel frame unusable in com.openai.codex"
+                && miss.suggestedCause.contains("inlineAdjacent panel frame")
+        })
+        #expect(summary.topMisses.contains { $0.title == "Panel frame became unusable in com.openai.codex" })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Inline placement clipped in com.openai.codex"
+                && miss.suggestedCause.contains("28 px")
+        })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Placement self-healed in md.obsidian"
+                && miss.suggestedCause.contains("fallback-floating-mirror")
+                && miss.suggestedCause.contains("inlineAdjacent to floatingMirror")
+        })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Placement suppressed in md.obsidian"
+                && miss.suggestedCause.contains("missing-anchor")
+        })
+    }
+
+    @Test("flags stale and focus mismatch hide reasons")
+    func flagsStaleAndFocusMismatchHideReasons() {
+        let events = [
+            event(
+                .suggestionPresented,
+                suggestionID: "field-move",
+                appBundleIdentifier: "com.apple.TextEdit",
+                fieldIdentity: "textedit-field",
+                displayedText: "tation"
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "field-move",
+                appBundleIdentifier: "com.openai.codex",
+                fieldIdentity: "codex-field",
+                displayedText: "tation",
+                reason: "focus-changed"
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "stale",
+                appBundleIdentifier: "com.openai.codex",
+                requestMode: "wordCompletion",
+                reason: "stale-after-keydown"
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "placement-hidden",
+                appBundleIdentifier: "md.obsidian",
+                reason: "placement-missing-caret"
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Suggestion hidden under a different field"
+                && miss.suggestedCause.contains("com.apple.TextEdit/textedit-field")
+                && miss.suggestedCause.contains("com.openai.codex/codex-field")
+        })
+        #expect(summary.topMisses.contains { $0.title == "Suggestion hidden after focus changed" })
+        #expect(summary.topMisses.contains { $0.title == "Stale suggestion passed through" })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Placement changed while suggestion was visible"
+                && miss.suggestedCause.contains("missing-caret")
+        })
     }
 
     @Test("flags slow suggestions as latency misses")
@@ -173,6 +330,13 @@ struct AutocompleteTraceAnalyzerTests {
                 requestMode: "wordCompletion",
                 displayedText: "t",
                 latency: 42
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "three",
+                requestMode: "phraseContinuation",
+                displayedText: "right now",
+                latency: 224
             )
         ]
 
@@ -183,7 +347,172 @@ struct AutocompleteTraceAnalyzerTests {
                 && miss.fixCategory == "model latency issue"
                 && miss.suggestedCause.contains("2023")
         })
-        #expect(!summary.topMisses.contains { $0.title == "Slow suggestion: wordCompletion" })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Slow suggestion: wordCompletion"
+                && miss.suggestedCause.contains("42")
+        })
+        #expect(!summary.topMisses.contains { miss in
+            miss.exampleSuggestionID == "three"
+        })
+    }
+
+    @Test("flags suggestion lifecycle scope changes")
+    func flagsSuggestionLifecycleScopeChanges() {
+        let events = [
+            event(
+                .suggestionPresented,
+                suggestionID: "one",
+                appBundleIdentifier: "com.apple.TextEdit",
+                fieldIdentity: "textedit-field",
+                displayedText: "tation"
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "one",
+                appBundleIdentifier: "com.openai.codex",
+                fieldIdentity: "codex-field",
+                displayedText: "tation",
+                outcome: "ignored"
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Suggestion hidden under a different field"
+                && miss.fixCategory == "trace ownership bug"
+        })
+    }
+
+    @Test("flags geometry and observer update misses from metadata and reason")
+    func flagsGeometryAndObserverMisses() {
+        let events = [
+            event(
+                .suggestionSuppressed,
+                suggestionID: "caret-unavailable",
+                appBundleIdentifier: "com.apple.Notes",
+                reason: "missing-caret"
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "caret-invalid",
+                appBundleIdentifier: "com.google.Chrome",
+                reason: "caret-invalid",
+                metadata: ["geometryReason": "zeroHeight"]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "field-anchor",
+                appBundleIdentifier: "md.obsidian",
+                metadata: [
+                    "anchorSource": "field",
+                    "hasCaretRect": "false",
+                    "hasElementRect": "true"
+                ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "window-anchor",
+                appBundleIdentifier: "com.openai.codex",
+                metadata: ["anchorSource": "window"]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "observer-missed",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: [
+                    "expectedUpdateSource": "observer",
+                    "updateSource": "watchPoll"
+                ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "poll-recovered",
+                appBundleIdentifier: "com.apple.TextEdit",
+                reason: "poll-recovered-update",
+                metadata: ["pollRecoveredUpdate": "true"]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Caret unavailable in com.apple.Notes"
+                && miss.fixCategory == "renderer/caret bug"
+        })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Caret invalid in com.google.Chrome"
+                && miss.suggestedCause.contains("zeroheight")
+        })
+        #expect(summary.topMisses.contains { $0.title == "Field anchor used in md.obsidian" })
+        #expect(summary.topMisses.contains { $0.title == "Window anchor used in com.openai.codex" })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Observer missed update in com.apple.TextEdit"
+                && miss.fixCategory == "observer/update bug"
+        })
+        #expect(summary.topMisses.contains { $0.title == "Poll recovered update in com.apple.TextEdit" })
+    }
+
+    @Test("summarizes diagnostic metadata by app")
+    func summarizesDiagnosticMetadataByApp() {
+        let events = [
+            event(
+                .suggestionPresented,
+                suggestionID: "anchor",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: [
+                    "anchorQuality": "trusted",
+                    "profileInsertionMode": "axSelectedText",
+                    "updateSource": "observer"
+                ]
+            ),
+            event(
+                .insertionFailed,
+                suggestionID: "insert",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: ["actualInsertionMode": "keyEvents"]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "ax",
+                appBundleIdentifier: "com.google.Chrome",
+                metadata: [
+                    "geometryReason": "zeroHeight",
+                    "refreshSource": "watchPoll"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.anchorQualityByApp["com.apple.TextEdit"]?["trusted"] == 1)
+        #expect(summary.insertionModeByApp["com.apple.TextEdit"]?["axSelectedText"] == 1)
+        #expect(summary.insertionModeByApp["com.apple.TextEdit"]?["keyEvents"] == 1)
+        #expect(summary.insertionFailuresByAppAndMode["com.apple.TextEdit"]?["keyEvents"] == 1)
+        #expect(summary.updateSourceByApp["com.apple.TextEdit"]?["observer"] == 1)
+        #expect(summary.updateSourceByApp["com.google.Chrome"]?["watchPoll"] == 1)
+        #expect(summary.axFailureReasonByApp["com.google.Chrome"]?["zeroHeight"] == 1)
+    }
+
+    @Test("summarizes trust-critical suppressed reasons")
+    func summarizesTrustCriticalSuppressedReasons() {
+        let events = [
+            event(.suggestionSuppressed, suggestionID: "secure", reason: "secureField"),
+            event(.suggestionSuppressed, suggestionID: "sensitive", reason: "sensitiveContent"),
+            event(.suggestionSuppressed, suggestionID: "diagnostics", reason: "profile-diagnostics-only"),
+            event(.suggestionSuppressed, suggestionID: "paused", reason: "suppressedField"),
+            event(.suggestionSuppressed, suggestionID: "fast", reason: "no-fast-word-candidate")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.suppressedCount == 5)
+        #expect(summary.actionableSuppressedCount == 4)
+        #expect(summary.suppressedByReason["secureField"] == 1)
+        #expect(summary.suppressedByReason["sensitiveContent"] == 1)
+        #expect(summary.suppressedByReason["profile-diagnostics-only"] == 1)
+        #expect(summary.suppressedByReason["suppressedField"] == 1)
+        #expect(summary.suppressedByReason["no-fast-word-candidate"] == 1)
     }
 
     @Test("flags repeated unaccepted suggestions")
@@ -230,109 +559,27 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(!summary.topMisses.contains { $0.title == "Repeated unaccepted: ng" })
     }
 
-    @Test("exposes annoyance counters from trace misses")
-    func exposesAnnoyanceCounters() {
+    @Test("flags repeated typed-over suggestions")
+    func flagsRepeatedTypedOverSuggestions() {
         let events = [
-            event(.suggestionPresented, suggestionID: "one", displayedText: "maybe"),
-            event(.suggestionHidden, suggestionID: "one", displayedText: "maybe", outcome: "ignored", reason: "escape"),
-            event(.suggestionPresented, suggestionID: "two", displayedText: "ship it"),
-            event(
-                .suggestionTypedOver,
-                suggestionID: "two",
-                displayedText: "ship it",
-                metadata: ["typedSuffix": "skip"]
-            ),
-            event(
-                .suggestionHidden,
-                suggestionID: "two",
-                displayedText: "ship it",
-                outcome: "typed-over",
-                reason: "typed-over",
-                metadata: ["visibleMilliseconds": "320"]
-            ),
-            event(.insertionFailed, suggestionID: "three", reason: "insert-verification-failed"),
-            event(.suggestionSuppressed, suggestionID: "four", reason: "repeated-miss"),
-            event(.suggestionSuppressed, suggestionID: "five", reason: "app-disabled"),
-            event(.suggestionSuppressed, suggestionID: "six", reason: "unsupported-app"),
-            event(.suggestionSuppressed, suggestionID: "seven", reason: "sensitive-field"),
-            event(.suggestionSuppressed, suggestionID: "eight", reason: "detached-suggestion-disabled"),
-            event(.suggestionPresented, suggestionID: "nine", requestMode: "phraseContinuation", displayedText: "I think so."),
-            event(.suggestionPresented, suggestionID: "ten", requestMode: "phraseContinuation", displayedText: " i think so. "),
-            event(.suggestionPresented, suggestionID: "eleven", requestMode: "phraseContinuation", displayedText: "i think so.")
+            event(.suggestionTypedOver, suggestionID: "one", requestMode: "phraseContinuation", displayedText: "sounds good"),
+            event(.suggestionTypedOver, suggestionID: "two", requestMode: "phraseContinuation", displayedText: " sounds   good ")
         ]
 
         let summary = AutocompleteTraceAnalyzer().summary(for: events)
 
-        #expect(summary.annoyanceCounters["escape-snooze"] == 1)
-        #expect(summary.annoyanceCounters["hidden-ignored"] == 1)
-        #expect(summary.annoyanceCounters["hidden-typed-over"] == 1)
-        #expect(summary.annoyanceCounters["typed-over"] == 1)
-        #expect(summary.annoyanceCounters["insertion-failed"] == 1)
-        #expect(summary.annoyanceCounters["repeated-suppression"] == 1)
-        #expect(summary.annoyanceCounters["quick-hide-under-500ms"] == 1)
-        #expect(summary.annoyanceCounters["app-disabled"] == 1)
-        #expect(summary.annoyanceCounters["unsupported-suppression"] == 1)
-        #expect(summary.annoyanceCounters["sensitive-suppression"] == 1)
-        #expect(summary.annoyanceCounters["detached-suppression"] == 1)
-        #expect(summary.annoyanceCounters["repeated-unaccepted"] == 3)
-    }
-
-    @Test("exposes do-not-ship counters")
-    func exposesDoNotShipCounters() {
-        let events = [
-            event(.suggestionPresented, suggestionID: "one", displayedText: "nope", latency: 40, reason: "unsupported-app"),
-            event(
-                .suggestionPresented,
-                suggestionID: "two",
-                displayedText: "secret",
-                latency: 70,
-                metadata: ["isSecure": "true"]
-            ),
-            event(
-                .suggestionPresented,
-                suggestionID: "three",
-                appBundleIdentifier: "com.apple.mail",
-                displayedText: "compose",
-                latency: 90,
-                metadata: ["isSensitive": "true"]
-            ),
-            event(
-                .suggestionPresented,
-                suggestionID: "four",
-                displayedText: "floating",
-                latency: 1_200,
-                metadata: [
-                    "effectiveRenderMode": "floatingMirror",
-                    "hasCaretRect": "false"
-                ]
-            ),
-            event(
-                .suggestionPresented,
-                suggestionID: "five",
-                displayedText: "mocked",
-                latency: 1_400,
-                metadata: ["runtimeCandidate": "mock"]
-            ),
-            event(.insertionFailed, suggestionID: "six", reason: "insert-verification-failed")
-        ]
-
-        let summary = AutocompleteTraceAnalyzer().summary(for: events)
-
-        #expect(summary.p95LatencyMilliseconds == 1_400)
-        #expect(summary.doNotShipCounters["insertion-failed"] == 1)
-        #expect(summary.doNotShipCounters["unsupported-app-presentation"] == 1)
-        #expect(summary.doNotShipCounters["secure-field-presentation"] == 1)
-        #expect(summary.doNotShipCounters["sensitive-field-presentation"] == 1)
-        #expect(summary.doNotShipCounters["detached-suggestion-shown"] == 1)
-        #expect(summary.doNotShipCounters["mock-runtime-fallback"] == 1)
-        #expect(summary.doNotShipCounters["slow-p95"] == 1)
-        #expect(summary.topMisses.contains { $0.fixCategory == "do-not-ship" })
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Repeated typed-over: sounds good"
+                && miss.count == 2
+                && miss.fixCategory == "prompt issue"
+        })
     }
 
     private func event(
         _ type: AutocompleteTraceEventType,
         suggestionID: String,
         appBundleIdentifier: String = "com.apple.TextEdit",
+        fieldIdentity: String = "",
         requestMode: String = "wordCompletion",
         rawOutput: String = "",
         cleanedVisibleText: String = "",
@@ -349,6 +596,7 @@ struct AutocompleteTraceAnalyzerTests {
             suggestionID: suggestionID,
             type: type,
             appBundleIdentifier: appBundleIdentifier,
+            fieldIdentity: fieldIdentity,
             requestMode: requestMode,
             rawOutput: rawOutput,
             cleanedVisibleText: cleanedVisibleText,

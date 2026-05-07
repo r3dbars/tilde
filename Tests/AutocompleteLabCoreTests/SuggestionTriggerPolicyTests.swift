@@ -17,8 +17,8 @@ struct SuggestionTriggerPolicyTests {
         #expect(!policy.shouldRequestSuggestion(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I think"))
     }
 
-    @Test("Typing requests refreshed suggestions, deletion stays quiet")
-    func typingRequestsRefreshesAndDeletionStaysQuiet() {
+    @Test("Typing requests refreshed suggestions but deletion stays quiet")
+    func typingRequestsRefreshesButDeletionStaysQuiet() {
         let policy = SuggestionTriggerPolicy(charactersBeforePauseRequest: 4)
 
         #expect(policy.shouldRequestSuggestion(previousTextBeforeCursor: "I thin", currentTextBeforeCursor: "I think"))
@@ -75,5 +75,19 @@ struct SuggestionTriggerPolicyTests {
             previousTextBeforeCursor: "I need the ",
             currentTextBeforeCursor: "I need the tr"
         ) == .request(delayMilliseconds: 50))
+    }
+
+    @Test("Large pasted text waits before requesting")
+    func largePastedTextWaitsBeforeRequesting() {
+        let policy = SuggestionTriggerPolicy(
+            pauseDelayMilliseconds: 70,
+            largeTextChangeCharacterThreshold: 10,
+            largeTextChangeDelayMilliseconds: 300
+        )
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think ",
+            currentTextBeforeCursor: "I think this whole pasted sentence should not fire instantly"
+        ) == .request(delayMilliseconds: 300))
     }
 }

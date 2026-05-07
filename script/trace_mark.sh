@@ -71,11 +71,13 @@ Start line: $START_LINE
 After a dogfood pass, run:
   AUTOCOMPLETE_LAB_TRACE_START_LINE=$START_LINE ./script/check_trace_eval.sh
 
-For Codex only:
+For dogfood apps:
   AUTOCOMPLETE_LAB_TRACE_START_LINE=$START_LINE AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP=com.openai.codex ./script/check_trace_eval.sh
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=$START_LINE AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP=com.anthropic.claude-code ./script/check_trace_eval.sh
 
 Shortcut:
   ./script/trace_mark.sh --save
   # do the dogfood pass
   ./script/trace_mark.sh --eval com.openai.codex
+  ./script/trace_mark.sh --eval com.anthropic.claude-code
 EOF

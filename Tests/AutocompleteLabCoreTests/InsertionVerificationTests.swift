@@ -14,6 +14,23 @@ struct InsertionVerificationTests {
         ) == .verified)
     }
 
+    @Test("Verifies rich editor whitespace equivalents")
+    func verifiesRichEditorWhitespaceEquivalents() {
+        let verifier = InsertionVerification()
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we\u{00A0}make"
+        ) == .verified)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we\u{202F}make"
+        ) == .verified)
+    }
+
     @Test("Detects unchanged and partially inserted text")
     func detectsUnchangedAndPartialInsertion() {
         let verifier = InsertionVerification()
@@ -29,6 +46,34 @@ struct InsertionVerificationTests {
             acceptedText: " make",
             currentTextBeforeCursor: "Can we ma"
         ) == .partial)
+    }
+
+    @Test("Detects duplicated accepted text")
+    func detectsDuplicatedAcceptedText() {
+        let verifier = InsertionVerification()
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we make make"
+        ) == .duplicatedAcceptedText)
+    }
+
+    @Test("Detects accepted text inserted away from the captured cursor")
+    func detectsAcceptedTextAtWrongLocation() {
+        let verifier = InsertionVerification()
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can make"
+        ) == .insertedAtWrongLocation)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we later make"
+        ) == .insertedAtWrongLocation)
     }
 
     @Test("Detects unexpected editor mutations")

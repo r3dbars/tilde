@@ -4,12 +4,26 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+echo "== Model asset =="
+./script/check_model_asset.py
+
+echo
 echo "== Smoke =="
 ./script/smoke_test.sh
 
 echo
+echo "== Runtime production gate =="
+AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
+  AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
+  ./script/check_diagnostics_log.sh
+
+echo
 echo "== Manual app proof =="
 ./script/manual_smoke_status.sh --require-all
+
+echo
+echo "== Visual placement proof =="
+./script/check_visual_placement_evidence.sh --require-all
 
 echo
 echo "== Release package =="
