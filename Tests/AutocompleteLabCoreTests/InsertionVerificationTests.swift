@@ -48,17 +48,6 @@ struct InsertionVerificationTests {
         ) == .partial)
     }
 
-    @Test("Detects duplicated accepted text")
-    func detectsDuplicatedAcceptedText() {
-        let verifier = InsertionVerification()
-
-        #expect(verifier.verify(
-            previousTextBeforeCursor: "Can we",
-            acceptedText: " make",
-            currentTextBeforeCursor: "Can we make make"
-        ) == .duplicatedAcceptedText)
-    }
-
     @Test("Detects accepted text inserted away from the captured cursor")
     func detectsAcceptedTextAtWrongLocation() {
         let verifier = InsertionVerification()

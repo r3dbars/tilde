@@ -260,7 +260,6 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
             metadata: safeMetadata
         )
     }
-
     public func redacted(
         privacyMode: AutocompleteTracePrivacyMode
     ) -> RedactedAutocompleteTraceEvent {

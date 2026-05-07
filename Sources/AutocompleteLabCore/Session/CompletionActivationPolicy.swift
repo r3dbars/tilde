@@ -26,6 +26,7 @@ public enum CompletionActivationDecision: Equatable, Sendable {
 public enum CompletionActivationBlockReason: String, Equatable, Sendable {
     case secureField
     case suppressedField
+    case blockedFieldKind
     case sensitiveContent
     case selectedText
     case tooLittleContext
@@ -59,14 +60,16 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         textAfterCursor: String,
         isSecure: Bool,
         selectedTextLength: Int = 0,
-        isFieldSuppressed: Bool
+        isFieldSuppressed: Bool,
+        fieldKind: AXFieldKind = .unknown
     ) -> Bool {
         decision(
             textBeforeCursor: textBeforeCursor,
             textAfterCursor: textAfterCursor,
             isSecure: isSecure,
             selectedTextLength: selectedTextLength,
-            isFieldSuppressed: isFieldSuppressed
+            isFieldSuppressed: isFieldSuppressed,
+            fieldKind: fieldKind
         ).canSuggest
     }
 
@@ -75,9 +78,10 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         textAfterCursor: String,
         isSecure: Bool,
         selectedTextLength: Int = 0,
-        isFieldSuppressed: Bool
+        isFieldSuppressed: Bool,
+        fieldKind: AXFieldKind = .unknown
     ) -> CompletionActivationDecision {
-        if isSecure {
+        if isSecure || fieldKind == .secure {
             return .block(.secureField)
         }
 
@@ -87,6 +91,10 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
 
         if isFieldSuppressed {
             return .block(.suppressedField)
+        }
+
+        if fieldKind.suppressesSuggestionsByDefault {
+            return .block(.blockedFieldKind)
         }
 
         if looksSensitive(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {

@@ -11,7 +11,10 @@ autocomplete works.
 ## Current Preferred Path: MLX + Qwen3.5 4B
 
 MLX is the current runtime path because it is Apple Silicon native and already
-lives behind the app-owned `ModelRuntime` boundary.
+lives behind the app-owned `ModelRuntime` boundary. Qwen3.5 4B is the documented
+default because it is the current low-latency quality target for short
+autocomplete completions. LiteRT-LM stays tracked as a fallback candidate for
+future app-owned packaging work.
 
 The preferred beta model asset is Qwen3.5 4B 4-bit:
 
@@ -32,7 +35,7 @@ Sources:
 
 - [MLX Swift LM GitHub](https://github.com/ml-explore/mlx-swift-lm)
 - [MLX Swift LM package](https://github.com/ml-explore/mlx-swift-lm/blob/main/Package.swift)
-- [Qwen3.5 4B MLX model](https://huggingface.co/mlx-community/Qwen3.5-4B-4bit)
+- [Qwen3.5 4B MLX model](https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit)
 
 ## Other Local Trial Models
 
@@ -59,11 +62,19 @@ Use the MLX/Hugging Face directory format under:
 ~/Library/Application Support/AutocompleteLab/Models/<ModelName>/MLX/<AssetFolder>
 ```
 
+The preferred beta asset currently resolves to:
+
+```text
+~/Library/Application Support/AutocompleteLab/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
+```
+
 The directory should contain at least:
 
 - `config.json`
 - tokenizer files such as `tokenizer.json` or `tokenizer_config.json`
 - one or more `.safetensors` weight files
+
+The default model repo is `mlx-community/Qwen3.5-4B-MLX-4bit`.
 
 ## Fallback Candidate: LiteRT-LM
 
@@ -77,13 +88,16 @@ Sources:
 
 ## Product Constraints
 
-- app-owned runtime,
-- no user-managed server,
-- Qwen3.5 4B 4-bit preferred beta asset,
-- Apple Silicon with 16 GB RAM first target,
-- reasoning off,
-- 9 generated tokens by default,
-- 1-3 visible words by default,
-- p95 first-visible latency at or below 750ms for supported status,
-- p95 first-visible latency at or below 1000ms for caveated status,
-- no beta if runtime falls back to mock output.
+- app-owned runtime
+- no user-managed server
+- Qwen3.5 4B 4-bit preferred beta asset
+- macOS 26 on Apple Silicon for the private beta
+- Apple Silicon with 16 GB RAM first target
+- reasoning off
+- 9 generated tokens by default
+- 1-3 visible words by default
+- p95 first-visible latency at or below 750ms for supported status
+- p95 first-visible latency at or below 1000ms for caveated status
+- average latency under 700ms as a private beta target
+- stretch latency under 300ms after warmup
+- no beta if runtime falls back to mock output
