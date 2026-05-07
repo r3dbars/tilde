@@ -1,6 +1,8 @@
 import Foundation
 
 public struct CompletionOutputCleaner: Equatable, Sendable {
+    private static let noSuggestionToken = CompletionPromptBuilder.noSuggestionToken.lowercased()
+
     public let minimumVisibleWords: Int
     public let maxVisibleWords: Int
 
@@ -39,6 +41,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        guard !isNoSuggestionSentinel(withoutThinking) else {
+            return nil
+        }
+
         let singleLine = withoutThinking
             .components(separatedBy: .newlines)
             .first?
@@ -55,6 +61,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         let withoutPromptEchoLabel = strippingPromptEchoLabel(from: singleLine)
 
         guard !withoutPromptEchoLabel.isEmpty else {
+            return nil
+        }
+
+        guard !isNoSuggestionSentinel(withoutPromptEchoLabel) else {
             return nil
         }
 
@@ -131,6 +141,14 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         return suggestion
+    }
+
+    private func isNoSuggestionSentinel(_ text: String) -> Bool {
+        let trimmed = text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: Self.noSuggestionWrapperCharacters)
+
+        return trimmed.lowercased() == Self.noSuggestionToken
     }
 
     private func looksLikeAssistantMeta(_ text: String) -> Bool {
@@ -390,6 +408,8 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "suggestion:",
         "suffix:"
     ]
+
+    private static let noSuggestionWrapperCharacters = CharacterSet(charactersIn: "\"'`")
 
     private static let commonWholeWords = Set(WordCompletionCandidateRanker.defaultWords)
         .union(lowValueSingleWordPhrases)

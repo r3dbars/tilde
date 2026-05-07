@@ -10,6 +10,8 @@ struct CompletionPromptBuilderTests {
 
         #expect(prompt.system.contains("next 5 words or fewer"))
         #expect(prompt.system.contains("Inline autocomplete"))
+        #expect(prompt.system.contains("return exactly <NO_SUGGESTION>"))
+        #expect(prompt.system.contains("confidence is low"))
         #expect(prompt.system.contains("boring connective tissue"))
         #expect(prompt.system.contains("Do not answer, explain"))
         #expect(prompt.system.contains("Do not brainstorm, rewrite"))
@@ -132,6 +134,8 @@ struct CompletionPromptBuilderTests {
 
         #expect(prompt.system.contains("Inline word completion"))
         #expect(prompt.system.contains("missing suffix"))
+        #expect(prompt.system.contains("return exactly <NO_SUGGESTION>"))
+        #expect(prompt.system.contains("confidence is low"))
         #expect(prompt.system.contains("No spaces"))
         #expect(prompt.user.hasSuffix("Suffix:"))
     }
