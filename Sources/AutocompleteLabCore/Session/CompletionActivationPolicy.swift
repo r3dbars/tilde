@@ -66,6 +66,24 @@ public enum SuggestionPace: String, CaseIterable, Codable, Equatable, Sendable {
     }
 }
 
+public struct SuggestionAggressivenessPolicy: Equatable, Sendable {
+    public init() {}
+
+    public func pace(
+        userPace: SuggestionPace,
+        supportStatus: CompatibilitySupportStatus
+    ) -> SuggestionPace {
+        switch supportStatus.supportLevel {
+        case .green:
+            return userPace
+        case .yellow:
+            return userPace == .eager ? .normal : userPace
+        case .diagnosticsOnly, .unsupported:
+            return .quiet
+        }
+    }
+}
+
 public struct CompletionActivationPolicy: Equatable, Sendable {
     public let minimumContextCharacters: Int
     public let minimumContextWords: Int

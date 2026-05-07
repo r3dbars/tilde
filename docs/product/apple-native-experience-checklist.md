@@ -325,7 +325,7 @@ like an assistant trying to talk.
 - [ ] Model should prefer suffixes over phrase restarts.
 - [x] Suggestions should not duplicate the user's visible text.
 - [x] Suggestions should be less eager after repeated typed-over misses.
-- [ ] Different app modes should have different suggestion aggressiveness.
+- [x] Different app modes should have different suggestion aggressiveness.
 - [x] User should be able to choose quiet, normal, or eager suggestions.
 - [x] Dogfood agent prompts should avoid generic productivity filler.
 

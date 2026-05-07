@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
+    private let suggestionAggressivenessPolicy = SuggestionAggressivenessPolicy()
     private let screenshotTraceCapturePolicy = ScreenshotTraceCapturePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
     private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
@@ -155,8 +156,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionsPaused = false
     private var suggestionPace = SuggestionPace.normal
     private var keyboardShortcutConfiguration = KeyboardShortcutConfiguration.default
-    private var activationPolicy: CompletionActivationPolicy {
-        CompletionActivationPolicy(pace: suggestionPace)
+    private func activationPolicy(for profile: CompatibilityProfile) -> CompletionActivationPolicy {
+        CompletionActivationPolicy(
+            pace: suggestionAggressivenessPolicy.pace(
+                userPace: suggestionPace,
+                supportStatus: .supported(profile)
+            )
+        )
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -807,7 +813,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let activationDecision = activationPolicy.decision(
+        let activationDecision = activationPolicy(for: profile).decision(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             isSecure: context.isSecure,

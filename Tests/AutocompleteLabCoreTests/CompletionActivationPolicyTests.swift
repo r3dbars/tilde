@@ -336,6 +336,21 @@ struct CompletionActivationPolicyTests {
         ) == .allow(.wordCompletion))
     }
 
+    @Test("App support level caps eager suggestion pace for unproven apps")
+    func appSupportLevelCapsEagerSuggestionPace() throws {
+        let store = CompatibilityProfileStore.mvp
+        let policy = SuggestionAggressivenessPolicy()
+        let textEdit = try #require(store.profile(for: "com.apple.TextEdit"))
+        let notes = try #require(store.profile(for: "com.apple.Notes"))
+
+        #expect(policy.pace(userPace: .eager, supportStatus: .supported(textEdit)) == .eager)
+        #expect(policy.pace(userPace: .eager, supportStatus: .supported(notes)) == .normal)
+        #expect(policy.pace(userPace: .normal, supportStatus: .supported(notes)) == .normal)
+        #expect(policy.pace(userPace: .quiet, supportStatus: .supported(notes)) == .quiet)
+        #expect(policy.pace(userPace: .eager, supportStatus: .unsupported) == .quiet)
+        #expect(policy.pace(userPace: .eager, supportStatus: .denylisted) == .quiet)
+    }
+
     @Test("Suggestion pace falls back to normal for missing or bad defaults")
     func suggestionPaceDefaultsToNormal() {
         #expect(SuggestionPace(persistedRawValue: nil) == .normal)
