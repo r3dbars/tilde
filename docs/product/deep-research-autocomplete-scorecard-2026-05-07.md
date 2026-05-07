@@ -27,7 +27,7 @@ It is not yet magical by the research bar. The biggest remaining misses are:
 - Cross-app proof is honest but incomplete for Notes, Obsidian, Codex, Claude
   Code, Claude desktop, and real production editors.
 
-The repo's existing Apple-native score is **85/100**. This score is lower
+The repo's existing Apple-native score is **86/100**. This score is lower
 because it grades against the research definition of "magical autocomplete,"
 not only Mac plumbing, safety, and proof infrastructure.
 
@@ -136,6 +136,9 @@ Pass 1 shipped these improvements:
 - Slow focused-text AX reads that return no focused text context now start a
   short app-specific cooldown immediately instead of requiring a repeated slow
   read, so failing editors back off sooner without touching the key path.
+- Single slow focused-text AX reads with context now start a short polling
+  throttle and drop that returned context, so a slow read cannot become the
+  next visible suggestion while the app is trying to catch up.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
