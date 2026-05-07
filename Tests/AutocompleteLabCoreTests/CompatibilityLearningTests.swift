@@ -70,8 +70,10 @@ struct CompatibilityLearningTests {
         )
 
         #expect(notesAdjustment.effectiveRenderMode == .floatingMirror)
+        #expect(notesAdjustment.metadata["learningApplied"] == "false")
         #expect(notesAdjustment.metadata["learningRenderModeOverrideIgnored"] == "true")
         #expect(mailAdjustment.effectiveRenderMode == .disabled)
+        #expect(mailAdjustment.metadata["learningApplied"] == "false")
         #expect(mailAdjustment.metadata["learningRenderModeOverrideIgnored"] == "true")
     }
 
