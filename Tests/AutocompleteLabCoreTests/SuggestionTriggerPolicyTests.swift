@@ -166,6 +166,79 @@ struct SuggestionTriggerPolicyTests {
         ) == .request(delayMilliseconds: 120))
     }
 
+    @Test("Plain line starts stay quiet for single word fragments")
+    func plainLineStartsStayQuietForSingleWordFragments() {
+        let policy = SuggestionTriggerPolicy()
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\nPla",
+            currentTextBeforeCursor: "I think this works.\nPlan"
+        ) == .skip)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\nPlan",
+            currentTextBeforeCursor: "I think this works.\nPlan "
+        ) == .skip)
+    }
+
+    @Test("List line starts allow constrained word completion only")
+    func listLineStartsAllowConstrainedWordCompletionOnly() {
+        let policy = SuggestionTriggerPolicy()
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\n- Pr",
+            currentTextBeforeCursor: "I think this works.\n- Pri",
+            lineStartBehavior: .listItem
+        ) == .request(delayMilliseconds: 120))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\n- ",
+            currentTextBeforeCursor: "I think this works.\n- P",
+            lineStartBehavior: .listItem
+        ) == .skip)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\n- Plan",
+            currentTextBeforeCursor: "I think this works.\n- Plan ",
+            lineStartBehavior: .listItem
+        ) == .skip)
+    }
+
+    @Test("Email line starts allow constrained word completion only")
+    func emailLineStartsAllowConstrainedWordCompletionOnly() {
+        let policy = SuggestionTriggerPolicy()
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "Hi Justin,\nTh",
+            currentTextBeforeCursor: "Hi Justin,\nTha",
+            lineStartBehavior: .email
+        ) == .request(delayMilliseconds: 120))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "Hi Justin,\nThanks",
+            currentTextBeforeCursor: "Hi Justin,\nThanks ",
+            lineStartBehavior: .email
+        ) == .skip)
+    }
+
+    @Test("Line start behavior follows profile and list shape")
+    func lineStartBehaviorFollowsProfileAndListShape() {
+        #expect(SuggestionLineStartBehavior.behavior(
+            for: .email,
+            currentLineStructure: nil
+        ) == .email)
+
+        #expect(SuggestionLineStartBehavior.behavior(
+            for: .notes,
+            currentLineStructure: CurrentLineStructure.from(textBeforeCursor: "- Pri")
+        ) == .listItem)
+
+        #expect(SuggestionLineStartBehavior.behavior(
+            for: .notes,
+            currentLineStructure: nil
+        ) == .plain)
+    }
+
     @Test("Large pasted text waits before requesting")
     func largePastedTextWaitsBeforeRequesting() {
         let policy = SuggestionTriggerPolicy(

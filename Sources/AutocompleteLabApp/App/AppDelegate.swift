@@ -1015,9 +1015,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let currentLineStructure = CurrentLineStructure.from(textBeforeCursor: context.textBeforeCursor)
+        let triggerBehaviorProfile = AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
+            appBundleIdentifier: frontmostApp.bundleIdentifier,
+            fieldKind: fieldClassification.kind,
+            currentLineStructure: currentLineStructure
+        ))
         let triggerDecision = triggerPolicy.decision(
             previousTextBeforeCursor: lastRequestedTextBeforeCursor,
-            currentTextBeforeCursor: context.textBeforeCursor
+            currentTextBeforeCursor: context.textBeforeCursor,
+            lineStartBehavior: SuggestionLineStartBehavior.behavior(
+                for: triggerBehaviorProfile.id,
+                currentLineStructure: currentLineStructure
+            )
         )
 
         guard case let .request(delayMilliseconds) = triggerDecision else {
