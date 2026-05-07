@@ -226,9 +226,109 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(!summary.topMisses.contains { $0.title == "Repeated unaccepted: ng" })
     }
 
+    @Test("summarizes accepted-and-kept and first ten metrics")
+    func summarizesAcceptedAndKeptMetrics() {
+        let events = [
+            event(.suggestionPresented, suggestionID: "one", displayedText: "make this easier", latency: 80),
+            event(.suggestionPresented, suggestionID: "two", displayedText: "wrong direction", latency: 120),
+            event(
+                .suggestionAccepted,
+                suggestionID: "one",
+                acceptedText: "make",
+                outcome: "acceptNextWord",
+                metadata: ["acceptanceID": "accept-one", "acceptMode": "tab"]
+            ),
+            event(
+                .suggestionAccepted,
+                suggestionID: "two",
+                acceptedText: "wrong direction",
+                outcome: "acceptAllVisible",
+                metadata: ["acceptanceID": "accept-two", "acceptMode": "full"]
+            ),
+            event(
+                .acceptedTextEdited,
+                suggestionID: "one",
+                metadata: [
+                    "acceptanceID": "accept-one",
+                    "checkpoint": "10s",
+                    "survivalClass": "lightlyEditedKept",
+                    "tokenRecall": "0.800",
+                    "normalizedEditDistance": "0.100",
+                    "firstEditDelayMs": "6000",
+                    "strongAcceptedAndKept": "true"
+                ]
+            ),
+            event(
+                .acceptedTextEdited,
+                suggestionID: "two",
+                metadata: [
+                    "acceptanceID": "accept-two",
+                    "checkpoint": "2s",
+                    "survivalClass": "rejectedAfterAccept",
+                    "tokenRecall": "0.000",
+                    "normalizedEditDistance": "1.000",
+                    "firstEditDelayMs": "900"
+                ]
+            ),
+            event(.insertionVerified, suggestionID: "one", metadata: ["acceptanceID": "accept-one"]),
+            event(.insertionFailed, suggestionID: "two", reason: "insert-verification-failed", metadata: ["acceptanceID": "accept-two", "duplicateDetected": "true"]),
+            event(.appDisabled, suggestionID: "", reason: "manual")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.acceptedAndKeptCount == 1)
+        #expect(summary.acceptedAndKeptRateAccepted == 0.5)
+        #expect(summary.acceptedAndKeptRateShown == 0.5)
+        #expect(summary.medianEditDistanceAfterAccept == 0.55)
+        #expect(summary.medianTimeUntilFirstEditAfterAcceptMilliseconds == 6_000)
+        #expect(summary.tabAcceptShare == 0.5)
+        #expect(summary.fullAcceptShare == 0.5)
+        #expect(summary.insertionVerifiedCount == 1)
+        #expect(summary.insertionVerificationSuccessRate == 0.5)
+        #expect(summary.duplicateTextCount == 1)
+        #expect(summary.appDisableCount == 1)
+        #expect(summary.topMisses.contains { $0.fixCategory == "accepted-and-kept issue" })
+        #expect(summary.topMisses.contains { $0.fixCategory == "trust issue" })
+    }
+
+    @Test("summarizes annoyance signals")
+    func summarizesAnnoyanceSignals() {
+        let events = [
+            event(.suggestionPresented, suggestionID: "one", timestamp: "2026-04-26T00:00:00Z"),
+            event(.suggestionHidden, suggestionID: "one", timestamp: "2026-04-26T00:00:00Z", outcome: "ignored", reason: "escape"),
+            event(.suggestionTypedOver, suggestionID: "two", metadata: ["delayMs": "500"]),
+            event(
+                .acceptedTextEdited,
+                suggestionID: "three",
+                metadata: [
+                    "checkpoint": "2s",
+                    "survivalClass": "rejectedAfterAccept",
+                    "firstEditDelayMs": "900"
+                ]
+            ),
+            event(.suggestionPresented, suggestionID: "four", metadata: ["fieldKind": "search"]),
+            event(.suggestionSuppressed, suggestionID: "five", reason: "repeated-miss"),
+            event(.insertionFailed, suggestionID: "six", reason: "insert-verification-failed"),
+            event(.appDisabled, suggestionID: "seven", reason: "manual")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.annoyanceSignalCounts["rapidEscDismissal"] == 1)
+        #expect(summary.annoyanceSignalCounts["typedOverWithinOneSecond"] == 1)
+        #expect(summary.annoyanceSignalCounts["acceptedThenDeleted"] == 1)
+        #expect(summary.annoyanceSignalCounts["searchOrFormLeakage"] == 1)
+        #expect(summary.annoyanceSignalCounts["repeatedRejection"] == 1)
+        #expect(summary.annoyanceSignalCounts["wrongInsertion"] == 1)
+        #expect(summary.annoyanceSignalCounts["appDisable"] == 1)
+        #expect(summary.annoyanceScore > 0)
+    }
+
     private func event(
         _ type: AutocompleteTraceEventType,
         suggestionID: String,
+        timestamp: String = "2026-04-26T00:00:00Z",
         appBundleIdentifier: String = "com.apple.TextEdit",
         requestMode: String = "wordCompletion",
         rawOutput: String = "",
@@ -241,7 +341,7 @@ struct AutocompleteTraceAnalyzerTests {
         metadata: [String: String] = [:]
     ) -> AutocompleteTraceEvent {
         AutocompleteTraceEvent(
-            timestamp: "2026-04-26T00:00:00Z",
+            timestamp: timestamp,
             sessionID: "session",
             suggestionID: suggestionID,
             type: type,

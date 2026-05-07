@@ -8,6 +8,7 @@ cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0}
 {"type":"suggestionAccepted","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at"}
 {"type":"insertionVerified","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at"}
+{"type":"acceptedTextEdited","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","metadata":{"checkpoint":"10s","survivalClass":"exactKept","tokenRecall":"1.000","normalizedEditDistance":"0.000","strongAcceptedAndKept":"true"}}
 {"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","latencyMilliseconds":120}
 {"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","latencyMilliseconds":220}
 {"type":"suggestionPresented","suggestionID":"three","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":" I   think so. ","latencyMilliseconds":80}
@@ -106,6 +107,24 @@ if ! grep -F "Useful rate: 64%" /tmp/autocomplete-trace-eval-self-test.txt >/dev
   exit 1
 fi
 
+if ! grep -F "Accepted and kept: 1" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report accepted-and-kept count" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Accepted-and-kept shown rate: 9%" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report accepted-and-kept shown rate" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Insertion verification success: 100%" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report insertion verification success" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
 if ! grep -F "com.openai.codex: 67% (6/9)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not report useful rate by app" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
@@ -172,7 +191,7 @@ if ! grep -F "Start line: 3" /tmp/autocomplete-trace-eval-self-test-slice.txt >/
   exit 1
 fi
 
-if [[ "$(AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh --quiet)" != "23" ]]; then
+if [[ "$(AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh --quiet)" != "24" ]]; then
   echo "trace mark self-test did not report the current trace line" >&2
   AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh >&2
   exit 1
@@ -183,7 +202,7 @@ AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
 AUTOCOMPLETE_LAB_TRACE_MARK_PATH="$MARK_FILE" \
   script/trace_mark.sh --save >/tmp/autocomplete-trace-mark-save.txt
 
-if ! grep -F "Saved trace mark: 23" /tmp/autocomplete-trace-mark-save.txt >/dev/null; then
+if ! grep -F "Saved trace mark: 24" /tmp/autocomplete-trace-mark-save.txt >/dev/null; then
   echo "trace mark self-test did not save the current trace line" >&2
   cat /tmp/autocomplete-trace-mark-save.txt >&2
   exit 1

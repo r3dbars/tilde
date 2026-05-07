@@ -14,7 +14,7 @@ struct MockModelRuntimeTests {
 
         let suggestion = try await runtime.complete(CompletionRequest(textBeforeCursor: "I think"))
 
-        #expect(suggestion?.visibleText == " we should ship this")
+        #expect(suggestion?.visibleText == " we should ship")
     }
 
     @Test("Runtime backed engine delegates to the model runtime")
@@ -25,7 +25,7 @@ struct MockModelRuntimeTests {
         let suggestion = try await engine.suggestion(for: CompletionRequest(textBeforeCursor: "Can we"))
 
         #expect(await runtime.state == .ready(candidate: .mock))
-        #expect(suggestion?.visibleText == " make this feel instant")
+        #expect(suggestion?.visibleText == " make this feel")
     }
 
     @Test("Runtime backed engine streams partial suggestions")
@@ -41,8 +41,8 @@ struct MockModelRuntimeTests {
             }
         )
 
-        #expect(suggestion?.visibleText == " make this feel instant")
-        #expect(partials.values == [" make this feel instant"])
+        #expect(suggestion?.visibleText == " make this feel")
+        #expect(partials.values == [" make this feel"])
     }
 
     @Test("Canceling a warm runtime leaves it unavailable")

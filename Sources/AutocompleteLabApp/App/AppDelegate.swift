@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keyboardCapturePolicy = KeyboardCapturePolicy()
     private let insertionVerification = InsertionVerification()
     private let insertionRetryPolicy = InsertionRetryPolicy()
+    private let acceptanceSurvivalClassifier = AcceptanceSurvivalClassifier()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
@@ -59,6 +60,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var disabledBundleIdentifiers: Set<String> = []
     private var debounceTask: Task<Void, Never>?
     private var insertionVerificationTask: Task<Void, Never>?
+    private var acceptanceSurvivalTasks: [String: Task<Void, Never>] = [:]
+    private var acceptanceSurvivalTrackers: [String: AcceptanceSurvivalTracker] = [:]
     private var runtimeWarmTask: Task<Void, Never>?
     private var suggestionRequestGate = SuggestionRequestGate()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
@@ -98,6 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.record("terminate")
         debounceTask?.cancel()
         insertionVerificationTask?.cancel()
+        cancelAcceptanceSurvivalTracking()
         runtimeWarmTask?.cancel()
         invalidatePendingSuggestionRequest()
         modelRuntime.cancel()
@@ -682,13 +686,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 mode: currentSuggestionRequestMode,
                 scope: currentProfile?.bundleIdentifier ?? ""
             )
-            recordRawAcceptance(action: action, acceptedText: acceptedText)
+            let acceptanceID = recordRawAcceptance(action: action, acceptedText: acceptedText)
             if suggestionSession.hasVisibleSuggestion {
                 refreshVisibleSuggestion()
             } else {
                 hideSuggestion(reason: "accepted-next-word-final")
             }
-            scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
+            scheduleInsertionVerification(
+                acceptedText: acceptedText,
+                acceptanceID: acceptanceID,
+                baseline: verificationBaseline
+            )
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
             return true
@@ -713,9 +721,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 mode: currentSuggestionRequestMode,
                 scope: currentProfile?.bundleIdentifier ?? ""
             )
-            recordRawAcceptance(action: action, acceptedText: acceptedText)
+            let acceptanceID = recordRawAcceptance(action: action, acceptedText: acceptedText)
             hideSuggestion(reason: "accepted-all")
-            scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
+            scheduleInsertionVerification(
+                acceptedText: acceptedText,
+                acceptanceID: acceptanceID,
+                baseline: verificationBaseline
+            )
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
             return true
@@ -781,6 +793,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             previousTextBeforeCursor: lastTextSnapshot.textBeforeCursor,
             profile: profile,
             suggestionID: currentSuggestionID,
+            acceptanceID: "",
             requestMode: currentSuggestionRequestMode,
             retryCount: 0
         )
@@ -788,11 +801,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func scheduleInsertionVerification(
         acceptedText: String,
+        acceptanceID: String,
         baseline: InsertionVerificationBaseline?
     ) {
-        guard let baseline else {
+        guard var baseline else {
             return
         }
+        baseline.acceptanceID = acceptanceID
 
         insertionVerificationTask?.cancel()
         insertionVerificationTask = Task { @MainActor in
@@ -865,10 +880,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             previousTextBeforeCursor: baseline.previousTextBeforeCursor,
                             profile: baseline.profile,
                             suggestionID: baseline.suggestionID,
+                            acceptanceID: baseline.acceptanceID,
                             requestMode: baseline.requestMode,
                             retryCount: baseline.retryCount + 1
                         )
-                        scheduleInsertionVerification(acceptedText: acceptedText, baseline: retryBaseline)
+                        scheduleInsertionVerification(
+                            acceptedText: acceptedText,
+                            acceptanceID: acceptanceID,
+                            baseline: retryBaseline
+                        )
                         return
                     }
                 }
@@ -883,6 +903,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     outcome: String(describing: result),
                     reason: "insert-verification-failed",
                     metadata: [
+                        "acceptanceID": baseline.acceptanceID,
                         "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                         "currentBeforeChars": String(context.textBeforeCursor.count)
                     ]
@@ -901,9 +922,162 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 fieldIdentity: baseline.fieldIdentity.traceDescription,
                 requestMode: baseline.requestMode?.rawValue ?? "",
                 acceptedText: acceptedText,
-                outcome: "verified"
+                outcome: "verified",
+                metadata: [
+                    "acceptanceID": baseline.acceptanceID
+                ]
+            )
+            beginAcceptanceSurvivalTracking(
+                acceptedText: acceptedText,
+                baseline: baseline
             )
         }
+    }
+
+    private func beginAcceptanceSurvivalTracking(
+        acceptedText: String,
+        baseline: InsertionVerificationBaseline
+    ) {
+        guard let suggestionID = baseline.suggestionID,
+              !baseline.acceptanceID.isEmpty else {
+            return
+        }
+
+        let tracker = AcceptanceSurvivalTracker(
+            acceptanceID: baseline.acceptanceID,
+            suggestionID: suggestionID,
+            appBundleIdentifier: baseline.profile.bundleIdentifier,
+            fieldIdentity: baseline.fieldIdentity,
+            requestMode: baseline.requestMode?.rawValue ?? "",
+            acceptedText: acceptedText,
+            acceptedAt: Date(),
+            profile: baseline.profile
+        )
+        acceptanceSurvivalTrackers[baseline.acceptanceID] = tracker
+        acceptanceSurvivalTasks[baseline.acceptanceID]?.cancel()
+        acceptanceSurvivalTasks[baseline.acceptanceID] = Task { @MainActor in
+            var previousDelaySeconds = 0
+            for (delaySeconds, checkpoint) in [
+                (2, AcceptanceSurvivalCheckpoint.twoSeconds),
+                (10, AcceptanceSurvivalCheckpoint.tenSeconds),
+                (30, AcceptanceSurvivalCheckpoint.thirtySeconds)
+            ] {
+                try? await Task.sleep(for: .seconds(delaySeconds - previousDelaySeconds))
+                previousDelaySeconds = delaySeconds
+                guard !Task.isCancelled else {
+                    return
+                }
+
+                recordAcceptanceSurvivalCheckpoint(
+                    acceptanceID: baseline.acceptanceID,
+                    checkpoint: checkpoint
+                )
+            }
+        }
+    }
+
+    private func recordAcceptanceSurvivalCheckpoint(
+        acceptanceID: String,
+        checkpoint: AcceptanceSurvivalCheckpoint
+    ) {
+        guard let tracker = acceptanceSurvivalTrackers[acceptanceID],
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              let context = accessibilityClient.focusedTextContext(
+                  allowDescendantTextFallback: tracker.profile.allowsDescendantTextFallback
+              ) else {
+            return
+        }
+
+        let currentIdentity = fieldIdentity(
+            app: frontmostApp,
+            context: context,
+            profile: tracker.profile
+        )
+        guard currentIdentity == tracker.fieldIdentity else {
+            return
+        }
+
+        recordAcceptanceSurvival(
+            tracker: tracker,
+            checkpoint: checkpoint,
+            currentTextWindow: context.textBeforeCursor + context.textAfterCursor
+        )
+    }
+
+    private func recordAcceptanceSurvival(
+        tracker: AcceptanceSurvivalTracker,
+        checkpoint: AcceptanceSurvivalCheckpoint,
+        currentTextWindow: String
+    ) {
+        let firstPass = acceptanceSurvivalClassifier.classify(
+            acceptedText: tracker.acceptedText,
+            currentTextWindow: currentTextWindow,
+            checkpoint: checkpoint,
+            deletedWithinTwoSeconds: tracker.deletedWithinTwoSeconds
+        )
+        var updatedTracker = tracker
+        if checkpoint == .twoSeconds,
+           firstPass.survivalClass == .rejectedAfterAccept {
+            updatedTracker.deletedWithinTwoSeconds = true
+            acceptanceSurvivalTrackers[tracker.acceptanceID] = updatedTracker
+        }
+
+        let measurement = acceptanceSurvivalClassifier.classify(
+            acceptedText: tracker.acceptedText,
+            currentTextWindow: currentTextWindow,
+            checkpoint: checkpoint,
+            firstEditDelayMilliseconds: firstPass.survivalClass == .exactKept
+                ? nil
+                : max(0, Int(Date().timeIntervalSince(tracker.acceptedAt) * 1_000)),
+            deletedWithinTwoSeconds: updatedTracker.deletedWithinTwoSeconds
+        )
+
+        RawAutocompleteTraceLog.shared.record(
+            type: .acceptedTextEdited,
+            suggestionID: tracker.suggestionID,
+            appBundleIdentifier: tracker.appBundleIdentifier,
+            fieldIdentity: tracker.fieldIdentity.traceDescription,
+            requestMode: tracker.requestMode,
+            metadata: measurement.traceMetadata.merging([
+                "acceptanceID": tracker.acceptanceID,
+                "acceptedChars": String(tracker.acceptedText.count),
+                "acceptedWords": String(tracker.acceptedText.split(whereSeparator: \.isWhitespace).count)
+            ]) { current, _ in current }
+        )
+
+        if checkpoint.isFinalMetricCheckpoint {
+            finishAcceptanceSurvivalTracking(acceptanceID: tracker.acceptanceID)
+        }
+    }
+
+    private func flushAcceptanceSurvivalTrackers(for fieldIdentity: FocusedFieldIdentity?) {
+        guard let fieldIdentity,
+              let snapshot = lastTextSnapshot,
+              snapshot.fieldIdentity == fieldIdentity else {
+            return
+        }
+
+        let currentTextWindow = snapshot.textBeforeCursor + snapshot.textAfterCursor
+        let trackers = Array(acceptanceSurvivalTrackers.values)
+        for tracker in trackers where tracker.fieldIdentity == fieldIdentity {
+            recordAcceptanceSurvival(
+                tracker: tracker,
+                checkpoint: .fieldBlur,
+                currentTextWindow: currentTextWindow
+            )
+        }
+    }
+
+    private func finishAcceptanceSurvivalTracking(acceptanceID: String) {
+        acceptanceSurvivalTasks[acceptanceID]?.cancel()
+        acceptanceSurvivalTasks[acceptanceID] = nil
+        acceptanceSurvivalTrackers[acceptanceID] = nil
+    }
+
+    private func cancelAcceptanceSurvivalTracking() {
+        acceptanceSurvivalTasks.values.forEach { $0.cancel() }
+        acceptanceSurvivalTasks.removeAll()
+        acceptanceSurvivalTrackers.removeAll()
     }
 
     private func scheduleSuggestion(
@@ -1447,13 +1621,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return result.succeeded
     }
 
-    private func recordRawAcceptance(action: KeyboardAction, acceptedText: String) {
+    private func recordRawAcceptance(action: KeyboardAction, acceptedText: String) -> String {
+        let acceptanceID = UUID().uuidString
         guard let profile = currentProfile else {
-            return
+            return acceptanceID
         }
 
         RawAutocompleteTraceLog.shared.recordAcceptance(
             action: action.diagnosticName,
+            acceptanceID: acceptanceID,
+            acceptMode: action == .acceptNextWord ? "tab" : "full",
             appBundleIdentifier: profile.bundleIdentifier,
             acceptedText: acceptedText,
             remainingVisibleText: suggestionSession.visibleSuggestion?.visibleText,
@@ -1461,6 +1638,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: currentFieldIdentity?.traceDescription ?? "",
             requestMode: currentSuggestionRequestMode?.rawValue ?? ""
         )
+
+        return acceptanceID
     }
 
     private func refreshVisibleSuggestion() {
@@ -1737,6 +1916,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         invalidatePendingSuggestionRequest()
+        flushAcceptanceSurvivalTrackers(for: currentFieldIdentity)
 
         if let currentFieldIdentity {
             suppressedFieldIdentities.remove(currentFieldIdentity)
@@ -1750,6 +1930,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func clearFocusedFieldState() {
         invalidatePendingSuggestionRequest()
+        flushAcceptanceSurvivalTrackers(for: currentFieldIdentity)
 
         if let currentFieldIdentity {
             suppressedFieldIdentities.remove(currentFieldIdentity)
@@ -1874,6 +2055,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func toggleTracing() {
         let nextPaused = !RawAutocompleteTraceLog.shared.isPaused
+        if nextPaused {
+            RawAutocompleteTraceLog.shared.record(
+                type: .appPaused,
+                suggestionID: "",
+                appBundleIdentifier: currentProfile?.bundleIdentifier ?? "",
+                fieldIdentity: currentFieldIdentity?.traceDescription ?? "",
+                reason: "manual",
+                metadata: [
+                    "pauseReason": "manual",
+                    "scope": "global"
+                ]
+            )
+        }
         RawAutocompleteTraceLog.shared.setPaused(nextPaused)
         DiagnosticsLog.shared.record(
             "trace-control",
@@ -1995,6 +2189,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         disabledBundleIdentifiers = selection.bundleIdentifiers
 
         if shouldDisable {
+            RawAutocompleteTraceLog.shared.record(
+                type: .appDisabled,
+                suggestionID: "",
+                appBundleIdentifier: app.bundleIdentifier,
+                fieldIdentity: currentFieldIdentity?.traceDescription ?? "",
+                reason: "manual",
+                metadata: [
+                    "disableReason": "manual",
+                    "scope": "app"
+                ]
+            )
             clearFocusedFieldState()
             hideSuggestion()
         }
@@ -2063,8 +2268,21 @@ private struct InsertionVerificationBaseline: Equatable {
     let previousTextBeforeCursor: String
     let profile: CompatibilityProfile
     let suggestionID: String?
+    var acceptanceID: String
     let requestMode: CompletionRequestMode?
     let retryCount: Int
+}
+
+private struct AcceptanceSurvivalTracker: Equatable {
+    let acceptanceID: String
+    let suggestionID: String
+    let appBundleIdentifier: String
+    let fieldIdentity: FocusedFieldIdentity
+    let requestMode: String
+    let acceptedText: String
+    let acceptedAt: Date
+    let profile: CompatibilityProfile
+    var deletedWithinTwoSeconds: Bool = false
 }
 
 private extension CompletionActivationDecision {

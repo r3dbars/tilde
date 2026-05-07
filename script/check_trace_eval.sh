@@ -43,6 +43,31 @@ for event in presented:
     if suggestion_id and suggestion_id not in presented_by_id:
         presented_by_id[suggestion_id] = event
 accepted_ids = {event.get("suggestionID") for event in accepted if event.get("suggestionID")}
+accepted_event_ids = {
+    event.get("metadata", {}).get("acceptanceID") or event.get("suggestionID")
+    for event in accepted
+    if event.get("metadata", {}).get("acceptanceID") or event.get("suggestionID")
+}
+accepted_text_edited = [event for event in events if event.get("type") == "acceptedTextEdited"]
+
+def kept_event(event):
+    metadata = event.get("metadata") or {}
+    if metadata.get("strongAcceptedAndKept") == "true" or metadata.get("finalAcceptedAndKept") == "true":
+        return True
+    if metadata.get("checkpoint") not in {"10s", "30s", "fieldBlur"}:
+        return False
+    return metadata.get("survivalClass") in {"exactKept", "lightlyEditedKept", "partiallyKept"}
+
+accepted_and_kept_event_ids = {
+    event.get("metadata", {}).get("acceptanceID") or event.get("suggestionID")
+    for event in accepted_text_edited
+    if kept_event(event) and (event.get("metadata", {}).get("acceptanceID") or event.get("suggestionID"))
+}
+accepted_and_kept_suggestion_ids = {
+    event.get("suggestionID")
+    for event in accepted_text_edited
+    if kept_event(event) and event.get("suggestionID")
+}
 typed_through_ids = {
     event.get("suggestionID")
     for event in events
@@ -133,10 +158,33 @@ print(f"Actionable suppressed: {sum(1 for event in events if event.get('type') =
 print(f"Insertion failures: {types['insertionFailed']}")
 accept_rate = 0 if not presented_ids else round((len(accepted_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
 useful_rate = 0 if not presented_ids else round((len(useful_suggestion_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
+accepted_and_kept_rate_shown = 0 if not presented_ids else round((len(accepted_and_kept_suggestion_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
+accepted_and_kept_rate_accepted = 0 if not accepted_event_ids else round((len(accepted_and_kept_event_ids.intersection(accepted_event_ids)) / len(accepted_event_ids)) * 100)
+tab_accepts = [
+    event for event in accepted
+    if (event.get("metadata") or {}).get("acceptMode") == "tab" or event.get("outcome") == "acceptNextWord"
+]
+full_accepts = [
+    event for event in accepted
+    if (event.get("metadata") or {}).get("acceptMode") == "full" or event.get("outcome") == "acceptAllVisible"
+]
+tab_accept_share = 0 if not accepted else round((len(tab_accepts) / len(accepted)) * 100)
+full_accept_share = 0 if not accepted else round((len(full_accepts) / len(accepted)) * 100)
+verified_inserts = types["insertionVerified"]
+failed_inserts = types["insertionFailed"]
+insert_attempts = verified_inserts + failed_inserts
+verification_success = 0 if not insert_attempts else round((verified_inserts / insert_attempts) * 100)
 print(f"Accept rate: {accept_rate}%")
 print(f"Useful rate: {useful_rate}%")
+print(f"Accepted and kept: {len(accepted_and_kept_event_ids)}")
+print(f"Accepted-and-kept shown rate: {accepted_and_kept_rate_shown}%")
+print(f"Accepted-and-kept accepted rate: {accepted_and_kept_rate_accepted}%")
+print(f"Tab accept share: {tab_accept_share}%")
+print(f"Full accept share: {full_accept_share}%")
+print(f"Insertion verification success: {verification_success}%")
 print(f"p50 latency: {percentile(latencies, 0.50)}")
 print(f"p90 latency: {percentile(latencies, 0.90)}")
+print(f"p95 latency: {percentile(latencies, 0.95)}")
 print("Accept rate by mode:")
 for mode, (accepted_count, shown_count) in sorted(accept_by_mode.items()):
     rate = 0 if shown_count == 0 else round((accepted_count / shown_count) * 100)

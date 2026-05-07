@@ -38,6 +38,19 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let suppressedCount: Int
     public let actionableSuppressedCount: Int
     public let insertionFailureCount: Int
+    public let insertionVerifiedCount: Int
+    public let insertionVerificationSuccessRate: Double
+    public let acceptedAndKeptCount: Int
+    public let acceptedAndKeptRateAccepted: Double
+    public let acceptedAndKeptRateShown: Double
+    public let medianEditDistanceAfterAccept: Double?
+    public let medianTimeUntilFirstEditAfterAcceptMilliseconds: Int?
+    public let tabAcceptShare: Double
+    public let fullAcceptShare: Double
+    public let duplicateTextCount: Int
+    public let appDisableCount: Int
+    public let annoyanceScore: Double
+    public let annoyanceSignalCounts: [String: Int]
     public let acceptRate: Double
     public let usefulRate: Double
     public let p50LatencyMilliseconds: Int?
@@ -64,6 +77,19 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         suppressedCount: Int = 0,
         actionableSuppressedCount: Int = 0,
         insertionFailureCount: Int,
+        insertionVerifiedCount: Int = 0,
+        insertionVerificationSuccessRate: Double = 0,
+        acceptedAndKeptCount: Int = 0,
+        acceptedAndKeptRateAccepted: Double = 0,
+        acceptedAndKeptRateShown: Double = 0,
+        medianEditDistanceAfterAccept: Double? = nil,
+        medianTimeUntilFirstEditAfterAcceptMilliseconds: Int? = nil,
+        tabAcceptShare: Double = 0,
+        fullAcceptShare: Double = 0,
+        duplicateTextCount: Int = 0,
+        appDisableCount: Int = 0,
+        annoyanceScore: Double = 0,
+        annoyanceSignalCounts: [String: Int] = [:],
         acceptRate: Double,
         usefulRate: Double,
         p50LatencyMilliseconds: Int?,
@@ -89,6 +115,19 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.suppressedCount = suppressedCount
         self.actionableSuppressedCount = actionableSuppressedCount
         self.insertionFailureCount = insertionFailureCount
+        self.insertionVerifiedCount = insertionVerifiedCount
+        self.insertionVerificationSuccessRate = insertionVerificationSuccessRate
+        self.acceptedAndKeptCount = acceptedAndKeptCount
+        self.acceptedAndKeptRateAccepted = acceptedAndKeptRateAccepted
+        self.acceptedAndKeptRateShown = acceptedAndKeptRateShown
+        self.medianEditDistanceAfterAccept = medianEditDistanceAfterAccept
+        self.medianTimeUntilFirstEditAfterAcceptMilliseconds = medianTimeUntilFirstEditAfterAcceptMilliseconds
+        self.tabAcceptShare = tabAcceptShare
+        self.fullAcceptShare = fullAcceptShare
+        self.duplicateTextCount = duplicateTextCount
+        self.appDisableCount = appDisableCount
+        self.annoyanceScore = annoyanceScore
+        self.annoyanceSignalCounts = annoyanceSignalCounts
         self.acceptRate = acceptRate
         self.usefulRate = usefulRate
         self.p50LatencyMilliseconds = p50LatencyMilliseconds
@@ -126,7 +165,25 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let suppressed = events.filter { $0.type == .suggestionSuppressed }
         let actionableSuppressed = suppressed.filter { isActionableSuppression($0) }
         let insertionFailures = events.filter { $0.type == .insertionFailed }
+        let insertionVerified = events.filter { $0.type == .insertionVerified }
+        let acceptedTextEdited = events.filter { $0.type == .acceptedTextEdited }
         let firstShownLatencies = firstPresentedByID.values.compactMap(\.latencyMilliseconds).sorted()
+        let acceptedEventIDs = Set(accepted.map(acceptanceIdentifier))
+        let acceptedAndKeptEventIDs = Set(acceptedTextEdited
+            .filter(isAcceptedAndKeptEvent)
+            .map(acceptanceIdentifier))
+        let acceptedAndKeptSuggestionIDs = Set(acceptedTextEdited
+            .filter(isAcceptedAndKeptEvent)
+            .map(\.suggestionID))
+            .intersection(presentedIDs)
+        let editDistances = acceptedTextEdited
+            .compactMap { doubleMetadata($0, key: "normalizedEditDistance") }
+            .sorted()
+        let firstEditDelays = acceptedTextEdited
+            .compactMap { intMetadata($0, key: "firstEditDelayMs") }
+            .sorted()
+        let verifiedAndFailedCount = insertionVerified.count + insertionFailures.count
+        let annoyanceSignals = annoyanceSignalCounts(from: events, presentedByID: firstPresentedByID)
 
         return AutocompleteTraceSummary(
             totalEvents: events.count,
@@ -138,6 +195,25 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             suppressedCount: suppressed.count,
             actionableSuppressedCount: actionableSuppressed.count,
             insertionFailureCount: insertionFailures.count,
+            insertionVerifiedCount: insertionVerified.count,
+            insertionVerificationSuccessRate: verifiedAndFailedCount == 0
+                ? 0
+                : Double(insertionVerified.count) / Double(verifiedAndFailedCount),
+            acceptedAndKeptCount: acceptedAndKeptEventIDs.count,
+            acceptedAndKeptRateAccepted: acceptedEventIDs.isEmpty
+                ? 0
+                : Double(acceptedAndKeptEventIDs.intersection(acceptedEventIDs).count) / Double(acceptedEventIDs.count),
+            acceptedAndKeptRateShown: presentedIDs.isEmpty
+                ? 0
+                : Double(acceptedAndKeptSuggestionIDs.count) / Double(presentedIDs.count),
+            medianEditDistanceAfterAccept: median(editDistances),
+            medianTimeUntilFirstEditAfterAcceptMilliseconds: percentile(0.50, in: firstEditDelays),
+            tabAcceptShare: accepted.isEmpty ? 0 : Double(accepted.filter(isTabAccept).count) / Double(accepted.count),
+            fullAcceptShare: accepted.isEmpty ? 0 : Double(accepted.filter(isFullAccept).count) / Double(accepted.count),
+            duplicateTextCount: insertionFailures.filter(isDuplicateTextEvent).count,
+            appDisableCount: events.filter { $0.type == .appDisabled }.count,
+            annoyanceScore: annoyanceScore(signalCounts: annoyanceSignals, presentedCount: firstPresentedByID.count),
+            annoyanceSignalCounts: annoyanceSignals,
             acceptRate: presentedIDs.isEmpty ? 0 : Double(acceptedIDs.count) / Double(presentedIDs.count),
             usefulRate: presentedIDs.isEmpty ? 0 : Double(usefulIDs.count) / Double(presentedIDs.count),
             p50LatencyMilliseconds: percentile(0.50, in: firstShownLatencies),
@@ -186,6 +262,53 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         counts(events) { event in
             event.reason.isEmpty ? "unknown" : event.reason
         }
+    }
+
+    private func acceptanceIdentifier(_ event: AutocompleteTraceEvent) -> String {
+        event.metadata["acceptanceID"] ?? event.suggestionID
+    }
+
+    private func isAcceptedAndKeptEvent(_ event: AutocompleteTraceEvent) -> Bool {
+        if event.metadata["strongAcceptedAndKept"] == "true"
+            || event.metadata["finalAcceptedAndKept"] == "true" {
+            return true
+        }
+
+        guard ["10s", "30s", "fieldBlur"].contains(event.metadata["checkpoint"] ?? "") else {
+            return false
+        }
+
+        return ["exactKept", "lightlyEditedKept", "partiallyKept"].contains(event.metadata["survivalClass"] ?? "")
+    }
+
+    private func isTabAccept(_ event: AutocompleteTraceEvent) -> Bool {
+        event.metadata["acceptMode"] == "tab" || event.outcome == "acceptNextWord"
+    }
+
+    private func isFullAccept(_ event: AutocompleteTraceEvent) -> Bool {
+        event.metadata["acceptMode"] == "full" || event.outcome == "acceptAllVisible"
+    }
+
+    private func isDuplicateTextEvent(_ event: AutocompleteTraceEvent) -> Bool {
+        event.metadata["duplicateDetected"] == "true"
+            || event.reason.localizedCaseInsensitiveContains("duplicate")
+            || event.outcome.localizedCaseInsensitiveContains("duplicate")
+    }
+
+    private func doubleMetadata(_ event: AutocompleteTraceEvent, key: String) -> Double? {
+        guard let value = event.metadata[key] else {
+            return nil
+        }
+
+        return Double(value)
+    }
+
+    private func intMetadata(_ event: AutocompleteTraceEvent, key: String) -> Int? {
+        guard let value = event.metadata[key] else {
+            return nil
+        }
+
+        return Int(value)
     }
 
     private func counts(
@@ -300,6 +423,38 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                     event: event,
                     cause: "The app did not verify the accepted text after insertion.",
                     category: "insertion bug",
+                    buckets: &buckets
+                )
+            }
+
+            if event.type == .acceptedTextEdited,
+               event.metadata["survivalClass"] == AcceptanceSurvivalClass.rejectedAfterAccept.rawValue {
+                let checkpoint = event.metadata["checkpoint"] ?? "unknown"
+                add(
+                    key: "Accepted text did not survive",
+                    event: event,
+                    cause: "Accepted text was gone or heavily edited by the \(checkpoint) checkpoint.",
+                    category: "accepted-and-kept issue",
+                    buckets: &buckets
+                )
+            }
+
+            if event.type == .appDisabled {
+                add(
+                    key: "App disabled: \(event.appBundleIdentifier)",
+                    event: event,
+                    cause: "The user or auto-policy disabled suggestions in this app.",
+                    category: "trust issue",
+                    buckets: &buckets
+                )
+            }
+
+            if event.type == .caretGeometryFailed {
+                add(
+                    key: "Caret geometry failed: \(event.reason)",
+                    event: event,
+                    cause: "The app could not place the suggestion reliably near the caret.",
+                    category: "renderer/caret bug",
                     buckets: &buckets
                 )
             }
@@ -451,6 +606,135 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         } else {
             buckets[normalizedKey] = (1, event, cause, category)
         }
+    }
+
+    private func annoyanceSignalCounts(
+        from events: [AutocompleteTraceEvent],
+        presentedByID: [String: AutocompleteTraceEvent]
+    ) -> [String: Int] {
+        var counts: [String: Int] = [:]
+
+        func increment(_ signal: String) {
+            counts[signal, default: 0] += 1
+        }
+
+        for event in events {
+            switch event.type {
+            case .insertionFailed:
+                increment(isDuplicateTextEvent(event) ? "duplicateText" : "wrongInsertion")
+
+            case .suggestionTypedOver:
+                if let delay = intMetadata(event, key: "delayMs") {
+                    if delay <= 1_000 {
+                        increment("typedOverWithinOneSecond")
+                    }
+                } else {
+                    increment("typedOver")
+                }
+
+            case .acceptedTextEdited:
+                let rejected = event.metadata["survivalClass"] == AcceptanceSurvivalClass.rejectedAfterAccept.rawValue
+                let fastDelete = (intMetadata(event, key: "firstEditDelayMs") ?? Int.max) <= 2_000
+                    || event.metadata["checkpoint"] == AcceptanceSurvivalCheckpoint.twoSeconds.rawValue
+                if rejected && fastDelete {
+                    increment("acceptedThenDeleted")
+                }
+
+            case .suggestionHidden:
+                if event.reason == "escape",
+                   let presented = presentedByID[event.suggestionID],
+                   let elapsed = millisecondsBetween(presented.timestamp, event.timestamp),
+                   elapsed <= 700 {
+                    increment("rapidEscDismissal")
+                }
+
+                if let lifetime = intMetadata(event, key: "lifetimeMs"), lifetime < 150 {
+                    increment("overlayFlicker")
+                }
+
+            case .suggestionPresented:
+                if ["search", "form", "url", "secure"].contains(event.metadata["fieldKind"] ?? "") {
+                    increment("searchOrFormLeakage")
+                }
+
+            case .suggestionSuppressed:
+                if event.reason == "repeated-miss" {
+                    increment("repeatedRejection")
+                }
+
+                if event.reason == "tab-conflict" {
+                    increment("tabConflict")
+                }
+
+            case .appPaused:
+                increment("manualPause")
+
+            case .appDisabled:
+                increment("appDisable")
+
+            case .caretGeometryFailed:
+                increment("caretGeometryFailed")
+
+            default:
+                if event.metadata["focusStealing"] == "true" {
+                    increment("focusStealing")
+                }
+
+                if event.metadata["tabConflict"] == "true" {
+                    increment("tabConflict")
+                }
+            }
+        }
+
+        return counts
+    }
+
+    private func annoyanceScore(signalCounts: [String: Int], presentedCount: Int) -> Double {
+        let weights: [String: Double] = [
+            "wrongInsertion": 1.0,
+            "duplicateText": 1.0,
+            "focusStealing": 1.0,
+            "tabConflict": 0.8,
+            "rapidEscDismissal": 0.5,
+            "typedOverWithinOneSecond": 0.4,
+            "typedOver": 0.4,
+            "acceptedThenDeleted": 0.7,
+            "searchOrFormLeakage": 0.6,
+            "overlayFlicker": 0.4,
+            "repeatedRejection": 0.4,
+            "manualPause": 1.0,
+            "appDisable": 1.2,
+            "caretGeometryFailed": 0.6
+        ]
+
+        let weightedTotal = signalCounts.reduce(0.0) { total, item in
+            total + (weights[item.key] ?? 0.25) * Double(item.value)
+        }
+
+        return weightedTotal / Double(max(1, presentedCount))
+    }
+
+    private func millisecondsBetween(_ start: String, _ end: String) -> Int? {
+        let formatter = ISO8601DateFormatter()
+        guard let startDate = formatter.date(from: start),
+              let endDate = formatter.date(from: end) else {
+            return nil
+        }
+
+        return max(0, Int(endDate.timeIntervalSince(startDate) * 1_000))
+    }
+
+    private func median(_ values: [Double]) -> Double? {
+        guard !values.isEmpty else {
+            return nil
+        }
+
+        let middle = values.count / 2
+        if values.count.isMultiple(of: 2) {
+            return (values[middle - 1] + values[middle]) / 2
+        }
+
+        return values[middle]
     }
 
     private func percentile(_ percentile: Double, in values: [Int]) -> Int? {

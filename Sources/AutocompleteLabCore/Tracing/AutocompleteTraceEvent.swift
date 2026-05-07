@@ -10,6 +10,11 @@ public enum AutocompleteTraceEventType: String, Codable, Equatable, Sendable {
     case suggestionSuppressed
     case insertionVerified
     case insertionFailed
+    case acceptedTextEdited
+    case appPaused
+    case appDisabled
+    case renderModeChanged
+    case caretGeometryFailed
 }
 
 public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable {
@@ -87,4 +92,3 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
         self.metadata = metadata
     }
 }
-
