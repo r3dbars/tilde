@@ -205,7 +205,7 @@ Manual proof blocker evidence: `./script/manual_smoke_status.sh --strict` still 
 - [x] Add unsupported-app smoke.
 - [x] Add no-Accessibility-permission smoke.
 
-Manual proof blocker evidence: `./script/manual_smoke_status.sh --strict` reports Codex as pending current one-word no-submit proof, and reports 16 required app passes as stale or pending against the current build proof. Do not raise support grades until fresh recorder rows exist in `docs/product/manual-smoke-runs.md`. A 2026-05-07 TextEdit retry proved the recorder now avoids stale soak/autosave contamination and reaches first Tab acceptance, but it still did not close the full-accept proof row, so TextEdit remains stale until a full recorder pass lands.
+Manual proof blocker evidence: `./script/manual_smoke_status.sh --strict` now reports current TextEdit default/multiline/wrapped proof and current Chrome textarea/contenteditable/editor-like/Monaco-like/ProseMirror-like/chat-like proof. It still fails honestly on the manual-gated surfaces: Notes title/body/checklist, Obsidian fresh visual proof, Codex one-word no-submit proof, Claude Code, and Claude desktop. Do not raise support grades for those apps until fresh recorder rows exist in `docs/product/manual-smoke-runs.md`.
 
 ## P1: Trace Analysis
 

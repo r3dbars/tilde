@@ -23,10 +23,10 @@ When code lands, update these surfaces in the same PR:
 
 | App | Status | Render | Insert | Proof |
 | --- | --- | --- | --- | --- |
-| TextEdit | supported | inline, mirror fallback | AX selected text, value fallback | recorded manual smoke pass |
+| TextEdit | supported | inline, mirror fallback | AX selected text, value fallback | current default, multiline, and wrapped-line strict visual smoke rows |
 | Notes | supported | inline, mirror fallback | key events only | requires title, body, and checklist proof labels |
-| Obsidian | supported | synthetic caret mirror, no detached fallback | AX then key events, key fallback | recorded CodeMirror smoke pass with two verified accepts; detached whole-editor anchors stay suppressed |
-| Chrome | supported for local text fields and local editor fixtures | synthetic inline, mirror fallback | key events, AX value fallback | repeatable textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture commands with screenshot-backed proof labels |
+| Obsidian | supported | synthetic caret mirror, no detached fallback | AX then key events, key fallback | prior CodeMirror smoke pass exists but needs fresh screenshot-backed current proof; detached whole-editor anchors stay suppressed |
+| Chrome | supported for local text fields and local editor fixtures | synthetic inline, mirror fallback | key events, AX value fallback | repeatable textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, and chat-like no-submit fixture commands with screenshot-backed proof labels |
 | Codex | dogfood target | synthetic inline caret, no detached fallback | AX value replacement, key fallback | prior manual pass is stale for this gate; current one-word no-submit proof pending |
 | Claude Code | dogfood target | synthetic inline caret, no detached fallback | key events, AX fallback | pending manual smoke pass |
 | Claude desktop | dogfood target | synthetic inline caret, no detached fallback | AX value replacement | prior manual pass is stale for this gate; current one-word no-submit proof pending |
