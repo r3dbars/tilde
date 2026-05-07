@@ -59,6 +59,7 @@ require_pattern "Tests/AutocompleteLabCoreTests/DiagnosticValueRedactorTests.swi
 require_file "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift" "Verifies accepted text landed exactly" "successful insertion verification coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift" "Detects unchanged and partially inserted text" "failed insertion verification coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift" "Detects duplicate accepted text" "duplicate insertion detection coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/AcceptanceSurvivalClassifierTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/AcceptanceSurvivalClassifierTests.swift" "Classifies exact kept text" "accepted-and-kept exact survival coverage"

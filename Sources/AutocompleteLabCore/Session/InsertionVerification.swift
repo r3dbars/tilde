@@ -4,6 +4,7 @@ public enum InsertionVerificationResult: Equatable, Sendable {
     case verified
     case unchanged
     case partial
+    case duplicateText
     case changedUnexpectedly
 
     public var isVerified: Bool {
@@ -23,6 +24,17 @@ public struct InsertionVerification: Equatable, Sendable {
 
         if currentTextBeforeCursor == expectedTextBeforeCursor {
             return .verified
+        }
+
+        if !acceptedText.isEmpty,
+           currentTextBeforeCursor == expectedTextBeforeCursor + acceptedText {
+            return .duplicateText
+        }
+
+        if !acceptedText.isEmpty,
+           currentTextBeforeCursor.hasPrefix(expectedTextBeforeCursor),
+           currentTextBeforeCursor.dropFirst(expectedTextBeforeCursor.count).hasPrefix(acceptedText) {
+            return .duplicateText
         }
 
         if currentTextBeforeCursor == previousTextBeforeCursor {
