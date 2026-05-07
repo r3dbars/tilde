@@ -2,6 +2,9 @@
 
 This is the working list for making the lab feel like a real Mac autocomplete app.
 
+Research-backed caret-locking work now lives in
+`docs/product/caret-locked-research-queue.md`.
+
 ## Now
 
 - [x] Verify insertion after every accept.
