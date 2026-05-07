@@ -110,6 +110,7 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
 - Press Tab and expect the next word/suffix to insert without submitting.
 - Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
+- When the recorder asks, type `NO-SUBMIT` only after confirming the prompt was not sent.
 
 ## Claude Code
 
@@ -125,6 +126,7 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manua
 - Press Tab and expect the next word/suffix to insert without submitting.
 - Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
+- When the recorder asks, type `NO-SUBMIT` only after confirming the prompt was not sent.
 
 ## Claude Desktop
 
@@ -140,6 +142,7 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gat
 - Press Tab and expect the next word/suffix to insert without submitting.
 - Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
+- When the recorder asks, type `NO-SUBMIT` only after confirming the prompt was not sent.
 
 ## Hold For Explicit Confirmation
 

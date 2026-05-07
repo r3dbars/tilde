@@ -148,7 +148,7 @@ struct SettingsCurrentAppState: Equatable {
         case "com.google.Chrome":
             return "Proof: copies the local Chrome fixture smoke command."
         case "com.openai.codex", "com.anthropic.claude-code", "com.anthropic.claudefordesktop":
-            return "Proof: use a harmless prompt fragment; press Tab only, never Enter."
+            return "Proof: use harmless prompt text; press Tab only, never Enter; confirm NO-SUBMIT only after checking it was not sent."
         default:
             return "Proof: no proof flow for this app yet."
         }
