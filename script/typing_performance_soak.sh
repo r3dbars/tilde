@@ -228,6 +228,27 @@ wait_for_runtime_ready() {
   exit 1
 }
 
+wait_for_log_pattern() {
+  local start_line="$1"
+  local pattern="$2"
+  local label="$3"
+  local timeout_seconds="${4:-12}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    if tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -E "$pattern" >/dev/null; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for $label." >&2
+  echo "Pattern: $pattern" >&2
+  echo "Log: $LOG_PATH" >&2
+  tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+  exit 1
+}
+
 build_if_needed() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
     return 0
@@ -248,6 +269,7 @@ describe_plan() {
   fi
   echo "Synthetic text: $TARGET_CHARS generated chars from a built-in neutral fixture"
   echo "Typing: $CHUNK_SIZE-char chunks with ${DELAY_MS}ms delay"
+  echo "Primer: require a TextEdit suggestion before long typing"
   echo "AppleScript timeout: $(computed_applescript_timeout_seconds)s"
   echo "Event tap proof: require at least $MIN_EVENT_TAP_SAMPLES samples"
   if is_truthy "$STRICT_AX"; then
@@ -259,6 +281,7 @@ describe_plan() {
 }
 
 type_textedit_fixture() {
+  local start_line="$1"
   local tmp_dir text_file target_file delay timeout_seconds
   tmp_dir="$(make_tmp_dir)"
   text_file="$tmp_dir/autocomplete-lab-typing-soak-input.txt"
@@ -273,10 +296,6 @@ type_textedit_fixture() {
   sleep 1
 
   osascript <<APPLESCRIPT
-set soakText to read POSIX file "$text_file" as «class utf8»
-set soakChunkSize to $CHUNK_SIZE
-set soakDelay to $delay
-
 with timeout of 20 seconds
   tell application "TextEdit" to activate
   delay 0.4
@@ -286,8 +305,21 @@ with timeout of 20 seconds
     end tell
     keystroke "a" using command down
     key code 51
+    keystroke "Can we"
   end tell
 end timeout
+APPLESCRIPT
+
+  wait_for_log_pattern \
+    "$start_line" \
+    "suggestion-presented .*app=com.apple.TextEdit" \
+    "TextEdit suggestion primer" \
+    12
+
+  osascript <<APPLESCRIPT
+set soakText to read POSIX file "$text_file" as «class utf8»
+set soakChunkSize to $CHUNK_SIZE
+set soakDelay to $delay
 
 with timeout of $timeout_seconds seconds
   tell application "System Events"
@@ -442,7 +474,7 @@ build_if_needed
 wait_for_runtime_ready "$runtime_start_line" "$SKIP_BUILD"
 
 start_line="$(line_count "$LOG_PATH")"
-type_textedit_fixture
+type_textedit_fixture "$start_line"
 sleep 1
 run_checker "$start_line"
 
