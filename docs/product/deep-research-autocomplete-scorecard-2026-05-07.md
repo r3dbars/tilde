@@ -92,6 +92,8 @@ Pass 1 shipped these improvements:
   punctuation, sentence punctuation, newline, and bullet-line starts.
 - Ambient generation is now hard-capped at 16 generated tokens even when env
   overrides request more.
+- Inline placement now suppresses when less than one useful word can fit after
+  the caret, so near-edge fields hide instead of showing clipped slivers.
 - Prompt/context metadata now includes trace-safe partial-word shape: counts,
   casing, digits, hyphen, and apostrophe only.
 - Accepted insertions now arm a one-step Command-Z restore path for the same
