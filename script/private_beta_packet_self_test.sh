@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 FEEDBACK_TEMPLATE="$(./script/private_beta_packet.sh --print-feedback-template)"
 SESSION_TEMPLATE="$(./script/private_beta_packet.sh --print-session-report-template)"
+MODEL_TEMPLATE="$(./script/private_beta_packet.sh --print-model-asset-template "/tmp/AutocompleteLab/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit")"
 
 require_contains() {
   local text="$1"
@@ -38,5 +39,16 @@ require_contains "$SESSION_TEMPLATE" "one short disposable sentence"
 
 reject_contains "$SESSION_TEMPLATE" "Copy the top repeated misses from Diagnostics or the trace eval report."
 reject_contains "$SESSION_TEMPLATE" "type one short sentence"
+
+require_contains "$MODEL_TEMPLATE" "The private beta is not ready if the app falls back to mock output."
+require_contains "$MODEL_TEMPLATE" "Confirm Settings says the model is ready."
+require_contains "$MODEL_TEMPLATE" "stop the beta session"
+require_contains "$MODEL_TEMPLATE" "Do not ask testers to run Python, shell scripts, Ollama, llama.cpp, or any"
+require_contains "$MODEL_TEMPLATE" "/tmp/AutocompleteLab/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit"
+
+reject_contains "$MODEL_TEMPLATE" "python3 -m pip install"
+reject_contains "$MODEL_TEMPLATE" "./script/download_mlx_model.py"
+reject_contains "$MODEL_TEMPLATE" "./script/check_model_asset.py"
+reject_contains "$MODEL_TEMPLATE" "Developer fallback"
 
 echo "Private beta packet self-test passed."
