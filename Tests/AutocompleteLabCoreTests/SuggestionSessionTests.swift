@@ -75,6 +75,54 @@ struct SuggestionSessionTests {
         #expect(!session.hasVisibleSuggestion)
     }
 
+    @Test("Typing a visible prefix keeps the residual suggestion visible")
+    func typedVisiblePrefixKeepsResidualSuggestion() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: "tation", maxVisibleWords: 8)
+        )
+
+        let didCommit = session.commitTypedVisiblePrefix("t")
+
+        #expect(didCommit)
+        #expect(session.visibleSuggestion?.visibleText == "ation")
+    }
+
+    @Test("Typing a visible prefix ignores case differences")
+    func typedVisiblePrefixIgnoresCaseDifferences() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: "Tation", maxVisibleWords: 8)
+        )
+
+        let didCommit = session.commitTypedVisiblePrefix("t")
+
+        #expect(didCommit)
+        #expect(session.visibleSuggestion?.visibleText == "ation")
+    }
+
+    @Test("Typing the full visible suggestion dismisses it")
+    func typedFullVisiblePrefixDismissesSuggestion() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: "ation", maxVisibleWords: 8)
+        )
+
+        let didCommit = session.commitTypedVisiblePrefix("ation")
+
+        #expect(didCommit)
+        #expect(!session.hasVisibleSuggestion)
+    }
+
+    @Test("Typing conflicting text leaves the suggestion untouched")
+    func typedConflictingPrefixLeavesSuggestionUntouched() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: "ation", maxVisibleWords: 8)
+        )
+
+        let didCommit = session.commitTypedVisiblePrefix("x")
+
+        #expect(!didCommit)
+        #expect(session.visibleSuggestion?.visibleText == "ation")
+    }
+
     @Test("Previewing next word does not consume the suggestion")
     func previewingNextWordDoesNotConsumeSuggestion() {
         var session = SuggestionSession(

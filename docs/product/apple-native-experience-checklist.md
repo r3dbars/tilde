@@ -161,9 +161,9 @@ cheap, even if the model output is good.
 - [x] Keyboard capture now starts only after the panel frame is proven usable.
 - [x] Trace eval now surfaces panel-frame failures, inline clipping, placement health reasons, and screenshot-file evidence.
 - [x] Chrome chat-like no-submit fixture has live screenshot-backed no-submit proof.
-- [ ] Obsidian needs fresh screenshot-backed placement proof.
-- [ ] Apple Notes title needs screenshot-backed proof.
-- [ ] Apple Notes body needs screenshot-backed proof.
+- [x] Obsidian has fresh screenshot-backed placement proof.
+- [x] Apple Notes title has screenshot-backed placement proof.
+- [x] Apple Notes body has screenshot-backed placement proof.
 - [ ] Apple Notes checklist needs screenshot-backed proof.
 - [ ] Claude Code needs safe live prompt proof.
 - [ ] Claude desktop needs fresh screenshot-backed proof.
@@ -204,10 +204,10 @@ cheap, even if the model output is good.
 | Codex | 74 | 100 | Prompt screenshot plus one-word no-submit proof in same slice. |
 | Claude Code | 35 | 100 | Safe prompt proof with one-word accept. |
 | Claude desktop | 72 | 100 | Fresh screenshot-backed proof. |
-| Notes title | 50 | 100 | Dedicated title proof. |
-| Notes body | 55 | 100 | Dedicated body proof. |
+| Notes title | 90 | 100 | More title lengths and variants. |
+| Notes body | 90 | 100 | More body lengths and variants. |
 | Notes checklist | 45 | 100 | Dedicated checklist proof. |
-| Obsidian | 66 | 100 | Real vault note screenshot and accept proof. |
+| Obsidian | 90 | 100 | More vault themes, panes, and long-note variants. |
 
 ## Category 3: Acceptance Safety
 

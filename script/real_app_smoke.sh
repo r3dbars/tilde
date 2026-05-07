@@ -811,7 +811,10 @@ run_manual_gated() {
 
   prepare_temporary_app_enablement
   build_if_needed
-  ./script/manual_smoke_session.sh "$manual_app"
+  local full_accept_key
+  full_accept_key="$(accept_all_shortcut)"
+  AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
+    ./script/manual_smoke_session.sh "$manual_app"
 }
 
 run_textedit() {

@@ -23,7 +23,7 @@ visual rows without a clear `Pending` label block the pass.
 - Keep test text local and disposable.
 - Watch `~/Library/Logs/AutocompleteLab/diagnostics.log` for `suggestion-presented`, `keyboard-action`, `insert`, and `insert-verification`.
 - Watch `~/Library/Logs/AutocompleteLab/traces.jsonl` for matching `suggestionPresented`, `suggestionAccepted`, and `insertionVerified` events.
-- Prefer a real hardware key press for Tab/backtick acceptance. Some automation paths can set text or insert a literal tab without going through the app's event tap, which is useful to catch but does not count as an accept pass.
+- Prefer a real hardware key press for Tab and the configured full-accept shortcut. Some automation paths can set text or insert a literal tab without going through the app's event tap, which is useful to catch but does not count as an accept pass.
 - If a recorder fails, read its layer summary. `suggestion-presented` with `Tab autocomplete action: 0` means rendering worked but key routing did not.
 - Recovered insertion fallbacks are allowed when the same suggestion later verifies.
   Unrecovered insertion failures fail the recorder.
@@ -45,7 +45,7 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit
 - Confirm a suggestion appears.
 - Press Tab and expect `instant`.
 - Type ` and stays inst`.
-- Press the key above Tab and expect another `instant` completion.
+- Press the configured full-accept shortcut and expect another `instant` completion.
 - Confirm `insert-verification result=verified`.
 
 ## Notes
@@ -61,9 +61,9 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --m
 - Use the existing autocomplete smoke note.
 - Do not let automation create, delete, or search private notes.
 - Do not record a generic `notes` pass as proof. Title, body, and checklist are separate proof targets.
-- Test title-only text with `Can we`.
-- Test body text with `Autocomplete smoke` on line one and `Can we` on line two.
-- Toggle Checklist and test a checklist row.
+- Test title-only text with `Smoke proof feels inst`, then ` and stays inst`.
+- Test body text with `Autocomplete smoke` on line one and `Smoke proof feels inst` on line two, then ` and stays inst`.
+- Toggle Checklist and test a checklist row with `Smoke proof feels inst`, then ` and stays inst`.
 - Confirm one-word and full accepts verify.
 
 ## Obsidian
@@ -97,7 +97,7 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture al
   uses key events with AX value replacement as fallback.
 - Press Tab and expect `instant` without focus leaving the editor.
 - Type ` and stays inst`.
-- Press the key above Tab and expect another `instant` completion.
+- Press the configured full-accept shortcut and expect another `instant` completion.
 - Confirm verification succeeds.
 - Each fixture records its own proof label.
 
