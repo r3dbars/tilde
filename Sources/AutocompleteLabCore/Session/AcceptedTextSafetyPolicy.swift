@@ -40,6 +40,17 @@ public struct AcceptedTextSafetyPolicy: Equatable, Sendable {
             return .blocked(reason: "accepted-text-control-character")
         }
 
+        if !profile.supportsFullAcceptance,
+           Self.wordCount(in: acceptedText) > 1 {
+            return .blocked(reason: "accepted-text-multiword-full-disabled")
+        }
+
         return .allowed
+    }
+
+    private static func wordCount(in text: String) -> Int {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: { $0.isWhitespace })
+            .count
     }
 }
