@@ -908,6 +908,7 @@ APPLESCRIPT
   wait_for_screenshot_capture_if_enabled "$stable_start_line" "com.apple.TextEdit" "TextEdit"
   assert_frontmost_app "TextEdit" "TextEdit"
   focus_textedit_document_path "$tmp_file"
+  sleep 0.5
   press_key_code 48
   wait_for_log_fields "$start_line" "TextEdit Tab acceptance" 12 \
     "keyboard-action" \
@@ -985,6 +986,7 @@ APPLESCRIPT
   wait_for_screenshot_capture_if_enabled "$start_line" "com.google.Chrome" "Chrome $fixture"
   focus_chrome_smoke_editor
   assert_frontmost_app "Google Chrome" "Chrome $fixture"
+  sleep 0.5
   press_key_code 48
   wait_for_log_fields "$start_line" "Chrome $fixture Tab acceptance" 12 \
     "keyboard-action" \
