@@ -141,6 +141,21 @@ START_LINE=$(wc -l < "$HOME/Library/Logs/AutocompleteLab/diagnostics.log" | tr -
 AUTOCOMPLETE_LAB_LOG_START_LINE=$START_LINE ./script/check_typing_performance_log.sh
 ```
 
+For a repeatable safe soak, use the TextEdit helper. It types built-in
+synthetic text into a disposable temp file, requires real event-tap latency
+evidence, and keeps focused-text AX warnings separate by default:
+
+```bash
+./script/typing_performance_soak.sh
+```
+
+Use strict AX mode only when the app-adapter pass should fail on slow or
+skipped focused-text polling:
+
+```bash
+./script/typing_performance_soak.sh --strict-ax
+```
+
 The typing guard fails on `keyboard-event-tap-latency-slow`,
 `keyboard-event-tap-disabled`, raw latency above 8000us, or a latency summary
 whose p95/max is above 8000us. Use
