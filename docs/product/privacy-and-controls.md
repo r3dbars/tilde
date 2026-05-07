@@ -46,6 +46,7 @@ Open `Show Diagnostics` from the menu bar item.
 - `Pause Tracing` stops default redacted trace writes.
 - `Resume Tracing` turns them back on.
 - `Export Report` creates the local redacted HTML report and survival report.
+- Exported reports include a short privacy checklist before the metrics.
 - `Delete Traces` deletes local trace files.
 - `Open Trace Folder` reveals the local trace folder.
 

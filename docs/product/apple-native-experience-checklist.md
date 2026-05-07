@@ -58,7 +58,7 @@ unsure. Wrong-place text is worse than no suggestion.
 | Acceptance safety | 10 | 90 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Prompt-app one-word no-submit proof is still incomplete. |
 | Cross-app reliability | 10 | 70 | 100 | The proof matrix now has 8 screenshot rows and the app exposes green/yellow/diagnostics-only/unsupported status. Many real apps are still yellow or pending screenshot proof. |
 | Native macOS visual feel | 8 | 80 | 100 | Settings moved toward native sections, checkboxes, clearer privacy/app controls, support status, "why hidden" copy, and calmer menu copy. Diagnostics and onboarding still need polish. |
-| Privacy and permissions trust | 9 | 93 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, raw/screenshot debug capture now expires when enabled from the app UI, and Settings has a one-click Privacy Status panel. Stronger plain-language warnings remain open. |
+| Privacy and permissions trust | 9 | 93 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, raw/screenshot debug capture now expires when enabled from the app UI, Settings has a one-click Privacy Status panel, and exported reports include a privacy checklist. Stronger plain-language warnings remain open. |
 | Suggestion quality | 8 | 87 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, learned word completion is app-scoped, dogfood prompts are stricter, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
 | Failure restraint | 8 | 86 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, stale geometry suppresses display, event-tap disablement fails closed, prompt full accept requires proof, and unsupported apps now explain their stance. Low-confidence inline mode still needs stricter real-app gating. |
 | User control | 6 | 88 | 100 | Settings and the menu now expose pause, app blocking, current-field quieting, support status, per-app mode and safety stance, a force-mirror toggle for inline apps, privacy diagnostics, temporary raw/screenshot capture, local log deletion, shortcut state, quiet/normal/eager pace, and why the last suggestion was hidden. Per-app mode visibility remains open. |
@@ -290,7 +290,7 @@ Native target: the app feels more private than cloud writing tools.
 - [x] Raw tracing should auto-expire after a session.
 - [x] Screenshot tracing should auto-expire after a session.
 - [x] Deleting local privacy logs should disable raw text and screenshot capture where possible.
-- [ ] Exported debug bundles should have a privacy checklist.
+- [x] Exported debug bundles should have a privacy checklist.
 - [ ] Private beta feedback should never request raw text by default.
 
 ## Category 7: Suggestion Quality
