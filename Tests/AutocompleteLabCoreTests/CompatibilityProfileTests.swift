@@ -14,10 +14,10 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.TextEdit")?.supportsObserverUpdates == true)
         #expect(store.profile(for: "com.apple.TextEdit")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.apple.TextEdit")?.fallbackInsertionMode == .axValueReplacement)
-        #expect(store.profile(for: "com.apple.Notes")?.insertionMode == .keyEvents)
+        #expect(store.profile(for: "com.apple.Notes")?.insertionMode == .axThenKeyEvents)
         #expect(store.profile(for: "com.apple.Notes")?.appFamily == .swiftUIAppKit)
         #expect(store.profile(for: "com.apple.Notes")?.supportLevel == .yellow)
-        #expect(store.profile(for: "com.apple.Notes")?.fallbackInsertionMode == .disabled)
+        #expect(store.profile(for: "com.apple.Notes")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "com.apple.Notes")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "md.obsidian")?.renderMode == .floatingMirror)
         #expect(store.profile(for: "md.obsidian")?.appFamily == .electron)
@@ -208,7 +208,7 @@ struct CompatibilityProfileTests {
         let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
 
         #expect(InsertionModePlan.modes(for: textEdit) == [.axSelectedText, .axValueReplacement])
-        #expect(InsertionModePlan.modes(for: notes) == [.keyEvents])
+        #expect(InsertionModePlan.modes(for: notes) == [.axThenKeyEvents, .keyEvents])
         #expect(InsertionModePlan.modes(for: chrome) == [.keyEvents, .axValueReplacement])
         #expect(InsertionModePlan.modes(for: codex) == [.axValueReplacement, .keyEvents])
         #expect(InsertionModePlan.modes(for: claudeCode) == [.keyEvents, .axThenKeyEvents])
@@ -224,7 +224,7 @@ struct CompatibilityProfileTests {
         let claude = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claudefordesktop"))
 
         #expect(notes.allowsDetachedSuggestions == false)
-        #expect(notes.fallbackInsertionMode == .disabled)
+        #expect(notes.fallbackInsertionMode == .keyEvents)
         #expect(codex.supportsOneWordAcceptance == true)
         #expect(codex.supportsFullAcceptance == false)
         #expect(claudeCode.supportsOneWordAcceptance == true)
@@ -249,19 +249,22 @@ struct CompatibilityProfileTests {
         let notes = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.Notes"))
         let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
 
-        #expect(InsertionModePlan.modes(for: notes, skipping: [.keyEvents]) == [])
+        #expect(InsertionModePlan.modes(for: notes, skipping: [.axThenKeyEvents]) == [.keyEvents])
+        #expect(InsertionModePlan.modes(for: notes, skipping: [.axThenKeyEvents, .keyEvents]) == [])
         #expect(InsertionModePlan.modes(for: chrome, skipping: [.keyEvents]) == [.axValueReplacement])
         #expect(InsertionModePlan.modes(for: chrome, skipping: [.keyEvents, .axValueReplacement]) == [])
     }
 
-    @Test("Notes insertion fails closed to avoid rich text cursor drift")
-    func notesInsertionFailsClosed() throws {
+    @Test("Notes insertion can fall back while still failing closed after verification")
+    func notesInsertionCanFallBackWhileStillFailingClosedAfterVerification() throws {
         let notes = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.Notes"))
 
-        #expect(notes.insertionMode == .keyEvents)
-        #expect(notes.fallbackInsertionMode == .disabled)
-        #expect(InsertionModePlan.modes(for: notes) == [.keyEvents])
-        #expect(InsertionModePlan.modes(for: notes, skipping: [.keyEvents]) == [])
+        #expect(notes.insertionMode == .axThenKeyEvents)
+        #expect(notes.fallbackInsertionMode == .keyEvents)
+        #expect(notes.suppressesAfterInsertionFailure)
+        #expect(notes.allowsDetachedSuggestions == false)
+        #expect(InsertionModePlan.modes(for: notes) == [.axThenKeyEvents, .keyEvents])
+        #expect(InsertionModePlan.modes(for: notes, skipping: [.axThenKeyEvents]) == [.keyEvents])
     }
 
     @Test("Render mode plans fall back to mirror when inline bounds are unavailable")

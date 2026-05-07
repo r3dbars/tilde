@@ -17,7 +17,7 @@ Research-backed caret-locking work now lives in
 - [x] Finish safe compatibility passes.
   - [x] Encode known primary/fallback paths and a visible debug summary per profile.
   - TextEdit: keep as the green reference app.
-  - Notes: title/body/list fields use key-event insertion because AX selected-text insertion can report success without moving the caret.
+  - Notes: title/body/list fields try verified AX insertion first, fall back to key events, and still fail closed unless post-insert verification proves the text moved.
   - Obsidian: keep CodeMirror behavior stable across AX element churn; do not suppress the whole field after one flaky key-event verification miss.
   - Mail: safe diagnostics pass shows compose body as AXWebArea with empty direct value, no selected range, and no selected-text insertion; profile is diagnostics-only until a safe adapter is verified.
   - Chrome: local textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture paths have distinct smoke proof labels.
