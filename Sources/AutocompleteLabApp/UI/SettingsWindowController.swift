@@ -236,10 +236,10 @@ struct SettingsPermissionState: Equatable {
 
     var detailText: String {
         if isTrusted {
-            return "Autocomplete Lab can read the active text field and insert accepted suggestions. Text stays on this Mac."
+            return "Autocomplete Lab can read the active field text around the cursor, read cursor and field bounds, and insert only text you accept. Text stays on this Mac."
         }
 
-        return "Allow Accessibility so Autocomplete Lab can read the active text field, find the cursor, and insert accepted suggestions. Text stays on this Mac."
+        return "Allow Accessibility so Autocomplete Lab can read the active field text around the cursor, read cursor and field bounds, and insert only text you accept. Text stays on this Mac."
     }
 }
 
@@ -277,10 +277,10 @@ struct SettingsPrivacyState: Equatable {
         }
 
         if screenshotTracingExpiresAt == nil {
-            return "Screen Recording: only used for placement screenshots while this debug switch is on."
+            return "Screen Recording: only captures placement screenshots while this debug switch is on. Normal suggestions do not need it."
         }
 
-        return "Screen Recording: only used for temporary placement screenshots."
+        return "Screen Recording: only captures temporary placement screenshots. Normal suggestions do not need it."
     }
 
     var pathText: String {
@@ -292,7 +292,7 @@ struct SettingsPrivacyState: Equatable {
             "Autocomplete Lab keeps suggestions and diagnostics on this Mac.",
             diagnosticsStatusText,
             contentStatusText,
-            screenRecordingPermissionText ?? "Screen Recording: off unless screenshot capture is enabled.",
+            screenRecordingPermissionText ?? "Screen Recording: off; normal suggestions do not need it.",
             "No raw text is included unless raw text capture is on.",
             "Logs: \(diagnosticsPath)",
             "Traces: \(tracePath)"
@@ -345,7 +345,7 @@ struct SettingsFirstRunState: Equatable {
 
     var message: String {
         if !isTrusted {
-            return "Start here: allow Accessibility so Autocomplete Lab can read the current text field and insert accepted suggestions. Text stays on this Mac."
+            return "Start here: allow Accessibility so Autocomplete Lab can read cursor text and bounds, then insert only what you accept. Text stays on this Mac."
         }
 
         guard runtimeReport.stage == .ready else {

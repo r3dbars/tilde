@@ -272,7 +272,7 @@ Native target: nothing looks like a web widget floating on top of macOS.
 - [x] Settings now uses clearer native sections, checkboxes, button rows, and calmer app/privacy labels.
 - [x] Menu bar copy should be short and calm.
 - [ ] Diagnostics should look like a utility inspector, not a debug dump.
-- [ ] Onboarding should use system language for Accessibility and Screen Recording.
+- [x] Onboarding should use system language for Accessibility and Screen Recording.
 - [ ] Dark Mode and increased contrast need visual QA.
 - [ ] Reduce custom visual language unless system controls cannot do the job.
 - [ ] Use SF/system font behavior everywhere.
@@ -294,7 +294,7 @@ Native target: the app feels more private than cloud writing tools.
 - [x] Password/token/API-key fields are suppressed before reading text.
 - [x] Secure text fields are suppressed.
 - [x] Recent word memory is scoped by app so vocabulary learned in one app does not bleed into another.
-- [ ] Permission copy should explain exactly what is read and why.
+- [x] Permission copy should explain exactly what is read and why.
 - [x] A one-click privacy status panel should show what is currently enabled.
 - [x] Raw tracing should auto-expire after a session.
 - [x] Screenshot tracing should auto-expire after a session.
