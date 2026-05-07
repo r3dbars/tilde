@@ -44,6 +44,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openAccessibilitySettings: { [weak self] in
             self?.openAccessibilitySettings()
         },
+        openScreenRecordingSettings: { [weak self] in
+            self?.openScreenRecordingSettings()
+        },
         toggleSuggestionsPaused: { [weak self] in
             self?.togglePauseSuggestions()
         },
@@ -2936,6 +2939,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DiagnosticsLog.shared.record("open-accessibility-settings")
         } else {
             DiagnosticsLog.shared.record("open-accessibility-settings-failed")
+        }
+    }
+
+    @objc
+    private func openScreenRecordingSettings() {
+        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+        if let url, NSWorkspace.shared.open(url) {
+            DiagnosticsLog.shared.record("open-screen-recording-settings")
+        } else {
+            DiagnosticsLog.shared.record("open-screen-recording-settings-failed")
         }
     }
 

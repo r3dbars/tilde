@@ -123,6 +123,12 @@ Use the command-line checker for repeatable proof:
 ./script/check_trace_eval.sh
 ```
 
+All-history trace output is diagnostic only. The log can contain old branches,
+old app versions, failed experiments, and stale proof attempts, so do not use it
+to raise or lower beta support grades. Product proof must use a fresh marked
+slice from `trace_mark.sh` or explicit `AUTOCOMPLETE_LAB_TRACE_START_LINE` and
+`AUTOCOMPLETE_LAB_TRACE_END_LINE` bounds.
+
 Compare local model latency after a trial launch:
 
 ```bash
