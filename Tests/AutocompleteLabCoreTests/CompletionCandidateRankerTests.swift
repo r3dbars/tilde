@@ -55,4 +55,42 @@ struct CompletionCandidateRankerTests {
 
         #expect(ranker.best([], mode: .phraseContinuation) == nil)
     }
+
+    @Test("Selection suppresses ambiguous top candidates")
+    func selectionSuppressesAmbiguousTopCandidates() {
+        let ranker = CompletionCandidateRanker()
+        let suggestions = [
+            CompletionSuggestion(text: " feel calm today", maxVisibleWords: 8),
+            CompletionSuggestion(text: " feel clear today", maxVisibleWords: 8)
+        ]
+
+        let selection = ranker.selection(suggestions, mode: .phraseContinuation)
+
+        #expect(selection.suggestion == nil)
+        #expect(selection.scoreMargin == 0)
+        #expect(selection.suppressionReason == .lowScoreMargin)
+    }
+
+    @Test("Selection allows single high confidence candidates")
+    func selectionAllowsSingleHighConfidenceCandidates() {
+        let ranker = CompletionCandidateRanker()
+        let suggestion = CompletionSuggestion(text: " feel calm today", maxVisibleWords: 8)
+
+        let selection = ranker.selection([suggestion], mode: .phraseContinuation)
+
+        #expect(selection.suggestion == suggestion)
+        #expect(selection.scoreMargin == nil)
+        #expect(selection.suppressionReason == nil)
+    }
+
+    @Test("Selection suppresses low score sentence candidates")
+    func selectionSuppressesLowScoreSentenceCandidates() {
+        let ranker = CompletionCandidateRanker()
+        let suggestion = CompletionSuggestion(text: " and then", maxVisibleWords: 8)
+
+        let selection = ranker.selection([suggestion], mode: .sentenceContinuation)
+
+        #expect(selection.suggestion == nil)
+        #expect(selection.suppressionReason == .lowTopScore)
+    }
 }

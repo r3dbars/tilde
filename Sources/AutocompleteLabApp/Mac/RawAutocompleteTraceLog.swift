@@ -208,6 +208,9 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         rawOutput: String,
         cleanedSuggestion: CompletionSuggestion?,
         cleanedCandidateCount: Int = 0,
+        candidateTopScore: Double? = nil,
+        candidateScoreMargin: Double? = nil,
+        candidateSuppressionReason: String? = nil,
         suggestionID: String = "",
         latencyMilliseconds: Int? = nil,
         firstTokenLatencyMilliseconds: Int? = nil
@@ -219,6 +222,9 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         var metadata = [
             "cleanedWordCount": String(cleanedSuggestion?.visibleWordCount ?? 0),
             "cleanedCandidateCount": String(cleanedCandidateCount),
+            "candidateTopScore": Self.formattedCandidateScore(candidateTopScore),
+            "candidateScoreMargin": Self.formattedCandidateScore(candidateScoreMargin),
+            "candidateSuppressionReason": candidateSuppressionReason ?? "none",
             "emptyResult": String(cleanedSuggestion == nil)
         ]
         metadata.merge(request.behaviorProfileTraceMetadata) { current, _ in current }
@@ -567,6 +573,14 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
             .replacingOccurrences(of: "\"", with: "&quot;")
+    }
+
+    private static func formattedCandidateScore(_ score: Double?) -> String {
+        guard let score else {
+            return "none"
+        }
+
+        return String(format: "%.3f", score)
     }
 
     private static func screenshotLink(_ path: String) -> String {
