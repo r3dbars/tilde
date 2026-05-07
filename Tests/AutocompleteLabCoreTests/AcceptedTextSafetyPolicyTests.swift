@@ -55,4 +55,18 @@ struct AcceptedTextSafetyPolicyTests {
                 == .blocked(reason: "accepted-text-empty")
         )
     }
+
+    @Test("Prompt-safe profiles allow only one word")
+    func promptSafeProfilesAllowOnlyOneWord() throws {
+        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
+        let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+
+        #expect(policy.decision(acceptedText: " make", profile: codex) == .allowed)
+        #expect(policy.decision(acceptedText: "ing", profile: codex) == .allowed)
+        #expect(
+            policy.decision(acceptedText: " make this", profile: codex)
+                == .blocked(reason: "accepted-text-multiword-full-disabled")
+        )
+        #expect(policy.decision(acceptedText: " make this", profile: textEdit) == .allowed)
+    }
 }
