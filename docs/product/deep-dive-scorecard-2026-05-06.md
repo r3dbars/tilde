@@ -63,7 +63,7 @@ evidence-backed score should stay lower until those rows are closed.
 | Onboarding | 8.2/10 | Settings explains runtime readiness, current app state, and local privacy controls more clearly, but model install/repair and first-run permission explanation are still not fully in-app. |
 | User control | 9.2/10 | Pause, current-app enablement, green/yellow/diagnostics-only/unsupported support status, privacy controls, temporary screenshot/raw trace toggles, local log deletion, full-accept shortcut state, and Settings "why hidden" copy are clearer; full shortcut editing is still thin. |
 | Diagnostics | 9.8/10 | Placement, event-tap latency, focused poll latency, AX cooldowns, insertion, trace, screenshot-file evidence, and smoke logs are strong. The Diagnostics window now separates key capture health from AX polling health so slow app reads do not look like missed keys. |
-| Automated tests | 9.9/10 | `swift test` passes 326 tests, including app-target settings state tests, diagnostics typing-health tests, scoped recent-word memory, privacy expiry, support status, serial AX reader, focused AX-health cooldown, focused-poll backoff, dogfood false-positive coverage, neutral word-completion vocabulary, screenshot trace capture policy, placement trust policy, and trace visual evidence. Manual smoke status self-tests now also prove strict mode fails while screenshot proof is pending. |
+| Automated tests | 10/10 | `swift test` passes 326 tests, including app-target settings state tests, diagnostics typing-health tests, scoped recent-word memory, privacy expiry, support status, serial AX reader, focused AX-health cooldown, focused-poll backoff, dogfood false-positive coverage, neutral word-completion vocabulary, screenshot trace capture policy, placement trust policy, and trace visual evidence. Script self-tests now cover strict score targets, the 10-pass score loop path, manual smoke status, visual proof, typing performance, and the 10-minute endurance soak command. |
 | Real-app smoke | 8.8/10 | TextEdit, core Chrome fixtures, and Chrome chat-like no-submit are green on the current build. The latest TextEdit strict visual smoke passed after the accept-all shortcut/race fix. Notes title/body/checklist, Codex, Claude Code, and Claude desktop remain honest insertion-proof gaps. |
 | Release readiness | 8/10 | Packaging is in decent shape, but beta readiness still correctly fails unless all required manual and screenshot-backed proof rows are closed. Notarization/stapling and beta onboarding still need a final product pass. |
 | Architecture | 9.1/10 | Core policy, geometry, scoped word memory, trace analysis, privacy expiry, support status, serial AX focused-text reads, and AX-health cooldowns are tested and wired. AppDelegate still owns too much orchestration. |
@@ -122,9 +122,13 @@ evidence-backed score should stay lower until those rows are closed.
   Claude Code, and Claude desktop; Codex still needs same-slice one-word
   no-submit visual proof.
 - `./script/check_score_targets.sh`: exits 1 honestly on the current docs with
-  78 target misses across this scorecard, the Apple-native checklist, and the
+  77 target misses across this scorecard, the Apple-native checklist, and the
   app proof matrix. This makes the requested "all 10s / all 100s / all As"
   target executable instead of subjective.
+- `./script/typing_performance_endurance_soak.sh --dry-run`: verifies the new
+  10-minute disposable TextEdit endurance command. The live long-run driver
+  still needs a full unattended pass before the typing score can move much
+  higher.
 - `./script/scorecard_goal_loop.sh --iterations 10`: completed all 10 requested
   proof-loop iterations and still failed, as expected, because the same manual
   app-proof gaps remain. It is now the repeatable repo command for grinding
@@ -302,6 +306,9 @@ evidence-backed score should stay lower until those rows are closed.
   by `script/check_score_targets_self_test.sh`, and looped by
   `script/scorecard_goal_loop.sh --iterations 10` together with strict manual
   smoke status and strict visual evidence.
+- `script/typing_performance_endurance_soak.sh` now wraps the safe TextEdit
+  soak with a 10-minute default, computed AppleScript timeout, and dry-run
+  self-test coverage.
 
 ## Remaining Gaps
 
