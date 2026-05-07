@@ -33,6 +33,12 @@ struct AutocompleteTraceReplayTests {
                 metadata: ["acceptanceID": "accept-one", "acceptMode": "tab"]
             ),
             event(
+                .suggestionSuppressed,
+                suggestionID: "stale-one",
+                requestMode: CompletionRequestMode.phraseContinuation.rawValue,
+                reason: "stale-request"
+            ),
+            event(
                 .acceptedTextEdited,
                 suggestionID: "one",
                 requestMode: CompletionRequestMode.phraseContinuation.rawValue,
@@ -62,6 +68,7 @@ struct AutocompleteTraceReplayTests {
         #expect(report.proofFingerprintCoverageRate == 1)
         #expect(report.placementCoverageRate == 1)
         #expect(report.trustedPlacementCount == 1)
+        #expect(report.staleCancellationCount == 1)
         #expect(report.keptFinalHorizonEventCount == 1)
         #expect(report.latencyByApp.first?.p50Milliseconds == 220)
         #expect(report.latencyByMode.first?.key == CompletionRequestMode.phraseContinuation.rawValue)
@@ -132,6 +139,13 @@ struct AutocompleteTraceReplayTests {
                 metadata: displayMetadata(decision: "display")
             ),
             event(
+                .suggestionSuppressed,
+                suggestionID: "stale-one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                textBeforeCursor: "[redacted length=42]",
+                reason: "stale-request"
+            ),
+            event(
                 .acceptedTextEdited,
                 suggestionID: "one",
                 requestMode: CompletionRequestMode.wordCompletion.rawValue,
@@ -139,6 +153,15 @@ struct AutocompleteTraceReplayTests {
                     "checkpoint": AcceptanceSurvivalCheckpoint.fieldSend.rawValue,
                     "survivalClass": AcceptanceSurvivalClass.lightlyEditedKept.rawValue
                 ]
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                textBeforeCursor: "[redacted length=42]",
+                outcome: "ignored",
+                reason: "escape",
+                metadata: ["lifetimeMs": "80"]
             )
         ]
 
