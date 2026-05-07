@@ -367,6 +367,18 @@ struct SettingsFirstRunState: Equatable {
         "Open TextEdit Test"
     }
 
+    var textEditTestButtonToolTip: String {
+        if !isTrusted {
+            return "Allow Accessibility before opening the disposable TextEdit test."
+        }
+
+        guard runtimeReport.stage == .ready else {
+            return "The local model must be ready before the disposable TextEdit test starts."
+        }
+
+        return "Opens a disposable TextEdit document for the first safe writing test."
+    }
+
     var canOpenTextEditTest: Bool {
         isTrusted && runtimeReport.stage == .ready
     }
@@ -634,6 +646,7 @@ final class SettingsWindowController: NSObject {
         )
         firstRunLabel.stringValue = firstRun.message
         openTextEditTestButton.title = firstRun.textEditTestButtonTitle
+        openTextEditTestButton.toolTip = firstRun.textEditTestButtonToolTip
         openTextEditTestButton.isEnabled = firstRun.canOpenTextEditTest
     }
 
