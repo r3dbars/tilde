@@ -125,6 +125,7 @@ final class SettingsWindowController: NSObject {
     private let currentAppLabel = NSTextField(labelWithString: "")
     private let currentAppDetailLabel = NSTextField(labelWithString: "")
     private let disabledAppsLabel = NSTextField(labelWithString: "")
+    private let suggestionDecisionLabel = NSTextField(labelWithString: "")
     private let toggleCurrentAppButton = NSButton(
         checkboxWithTitle: "Allow suggestions in this app",
         target: nil,
@@ -221,7 +222,8 @@ final class SettingsWindowController: NSObject {
         modelDirectoryPath: String,
         currentApp: SettingsCurrentAppState,
         privacy: SettingsPrivacyState,
-        keyboardShortcuts: SettingsKeyboardShortcutState
+        keyboardShortcuts: SettingsKeyboardShortcutState,
+        lastSuggestionDecision: String
     ) {
         refresh(
             isTrusted: isTrusted,
@@ -231,7 +233,8 @@ final class SettingsWindowController: NSObject {
             modelDirectoryPath: modelDirectoryPath,
             currentApp: currentApp,
             privacy: privacy,
-            keyboardShortcuts: keyboardShortcuts
+            keyboardShortcuts: keyboardShortcuts,
+            lastSuggestionDecision: lastSuggestionDecision
         )
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -250,11 +253,13 @@ final class SettingsWindowController: NSObject {
         modelDirectoryPath: String,
         currentApp: SettingsCurrentAppState,
         privacy: SettingsPrivacyState,
-        keyboardShortcuts: SettingsKeyboardShortcutState
+        keyboardShortcuts: SettingsKeyboardShortcutState,
+        lastSuggestionDecision: String
     ) {
         let guidance = RuntimeReadinessGuidance(report: runtimeReport)
         permissionLabel.stringValue = isTrusted ? "Accessibility: on" : "Accessibility: needed"
         controlLabel.stringValue = suggestionsPaused ? "Suggestions: paused" : "Suggestions: ready"
+        suggestionDecisionLabel.stringValue = "Why: \(lastSuggestionDecision)"
         togglePauseButton.state = suggestionsPaused ? .off : .on
         runtimeLabel.stringValue = "Local model: \(runtimeReport.summary)"
         runtimeDetailLabel.stringValue = runtimeReport.detail ?? ""
@@ -315,6 +320,7 @@ final class SettingsWindowController: NSObject {
         currentAppLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(currentAppDetailLabel)
         configureSecondaryLabel(disabledAppsLabel)
+        configureSecondaryLabel(suggestionDecisionLabel)
         privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(diagnosticsStatusLabel)
         configureSecondaryLabel(rawContentStatusLabel)
@@ -396,6 +402,7 @@ final class SettingsWindowController: NSObject {
                 views: [
                     controlLabel,
                     togglePauseButton,
+                    suggestionDecisionLabel,
                     firstRunLabel
                 ]
             ),

@@ -12,7 +12,7 @@ The product bar is not "AI appears everywhere." The bar is:
 
 ## Current Executive Score
 
-Overall Apple-native feel: 81/100.
+Overall Apple-native feel: 82/100.
 
 This app has real engineering depth now. It is not a toy. It has local model
 runtime support, strong privacy defaults, app compatibility profiles, insertion
@@ -26,8 +26,11 @@ completion honors repeated-miss suppression, recent-word memory is scoped per
 app, focused-text AX reads now run through a serial off-main reader,
 raw/screenshot debug capture now expires from Settings, lab/debug
 vocabulary was removed from the global word list, Chrome chat-like no-submit
-now has screenshot-backed proof, app support status is visible in Settings and
-the menu, and Settings now reads more like a Mac utility.
+now has screenshot-backed proof, prompt-app full accept is disabled until
+no-submit proof exists, app-specific slow AX reads cool down without blocking
+typing, app support status is visible in Settings and the menu, Diagnostics
+separates key-capture health from AX-poll health, and Settings now reads more
+like a Mac utility.
 
 The largest miss is still visual placement proof in real apps. Ghost text can
 still be unproven in Notes, Obsidian, Claude Code, Claude desktop, and real
@@ -49,19 +52,19 @@ unsure. Wrong-place text is worse than no suggestion.
 
 | Category | Weight | Current | Target | Why |
 | --- | ---: | ---: | ---: | --- |
-| Typing must feel untouched | 15 | 88 | 100 | Event tap is fast, performance checks use a fresh bounded window, slow poll summaries throttle polling, AX insertion no longer has fixed sleeps, focused-text AX reads now run through the serial off-main reader, and the checker separates hard key latency from off-main AX warnings. Live long-form typing proof in the worst apps is still needed. |
+| Typing must feel untouched | 15 | 91 | 100 | Event tap is fast, performance checks use a fresh bounded window, slow poll summaries throttle polling, AX insertion no longer has fixed sleeps, focused-text AX reads now run through the serial off-main reader, repeated slow app-specific AX reads cool down suggestions for only that app, and the checker/UI separate hard key latency from off-main AX warnings. Live long-form typing proof in the worst apps is still needed. |
 | Visual placement and caret alignment | 18 | 64 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, and Chrome chat-like now has proof. Notes, Obsidian, Claude Code, and Claude desktop are still the blocker. |
-| Acceptance safety | 10 | 89 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, the event tap fails closed, and Chrome chat-like proved Tab/full accept without submit. Prompt-app no-submit proof is still incomplete. |
+| Acceptance safety | 10 | 90 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, and prompt-app full accept is disabled until no-submit proof exists. Prompt-app one-word no-submit proof is still incomplete. |
 | Cross-app reliability | 10 | 70 | 100 | The proof matrix now has 8 screenshot rows and the app exposes green/yellow/diagnostics-only/unsupported status. Many real apps are still yellow or pending screenshot proof. |
-| Native macOS visual feel | 8 | 78 | 100 | Settings moved toward native sections, checkboxes, clearer privacy/app controls, support status, and calmer copy. Menu bar, diagnostics, and onboarding still need polish. |
+| Native macOS visual feel | 8 | 80 | 100 | Settings moved toward native sections, checkboxes, clearer privacy/app controls, support status, "why hidden" copy, and calmer menu copy. Diagnostics and onboarding still need polish. |
 | Privacy and permissions trust | 9 | 93 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, and raw/screenshot debug capture now expires when enabled from the app UI. Stronger plain-language warnings remain open. |
-| Suggestion quality | 8 | 86 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, learned word completion is app-scoped, dogfood prompts are stricter, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
-| Failure restraint | 8 | 83 | 100 | Slow polling can hide suggestions, stale geometry suppresses display, event-tap disablement fails closed, and unsupported apps now explain their stance. Low-confidence inline mode still needs stricter real-app gating. |
-| User control | 6 | 85 | 100 | Settings now exposes pause, app blocking, support status, privacy diagnostics, temporary raw/screenshot capture, local log deletion, and shortcut state. Per-app modes and "why hidden" UI remain open. |
-| Onboarding and setup | 4 | 72 | 100 | Settings is clearer, but first-run permission flow and model install/repair are still not one calm native flow. |
-| Evidence and QA loop | 4 | 95 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, trace eval, strict manual-smoke status, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
+| Suggestion quality | 8 | 87 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, learned word completion is app-scoped, dogfood prompts are stricter, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
+| Failure restraint | 8 | 86 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, stale geometry suppresses display, event-tap disablement fails closed, prompt full accept requires proof, and unsupported apps now explain their stance. Low-confidence inline mode still needs stricter real-app gating. |
+| User control | 6 | 88 | 100 | Settings now exposes pause, app blocking, support status, privacy diagnostics, temporary raw/screenshot capture, local log deletion, shortcut state, and why the last suggestion was hidden. Per-app modes remain open. |
+| Onboarding and setup | 4 | 73 | 100 | Settings is clearer, but first-run permission flow and model install/repair are still not one calm native flow. |
+| Evidence and QA loop | 4 | 96 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
 
-Weighted score: 81/100.
+Weighted score: 82/100.
 
 ## Non-Negotiable Native Feel Rules
 
@@ -83,7 +86,7 @@ Weighted score: 81/100.
 
 ## Category 1: Typing Must Feel Untouched
 
-Current score: 88/100.
+Current score: 91/100.
 
 Native target: the user cannot tell the app is running unless a suggestion is
 visible.
@@ -104,8 +107,8 @@ visible.
 - [x] A serial off-main focused-text AX reader exists and is tested.
 - [x] Focused-text polling must be wired through the serial AX reader instead of reading synchronously in the polling path.
 - [x] Typing performance checks treat event-tap latency as the hard guard and report off-main AX poll slowness separately.
-- [ ] Slow app-specific AX calls should disable suggestions temporarily for that app.
-- [ ] Diagnostics should distinguish event-tap latency from AX polling latency in the UI.
+- [x] Slow app-specific AX calls should disable suggestions temporarily for that app.
+- [x] Diagnostics should distinguish event-tap latency from AX polling latency in the UI.
 
 ### Acceptance Bar
 
@@ -151,7 +154,7 @@ cheap, even if the model output is good.
 - [ ] Apple Notes checklist needs screenshot-backed proof.
 - [ ] Claude Code needs safe live prompt proof.
 - [ ] Claude desktop needs fresh screenshot-backed proof.
-- [ ] Codex needs screenshot plus two verified accepts in one strict trace slice.
+- [ ] Codex needs screenshot plus verified one-word no-submit accept in one strict trace slice.
 - [ ] Real Google Docs needs a distinct proof path or an explicit unsupported state.
 - [ ] Real Notion needs a distinct proof path or an explicit unsupported state.
 - [ ] Real Slack/Discord chat boxes need no-submit proof before enablement.
@@ -183,7 +186,7 @@ cheap, even if the model output is good.
 | Chrome Monaco-like | 78 | 100 | Real Monaco proof, not only local fixture. |
 | Chrome ProseMirror-like | 84 | 100 | Real ProseMirror/Notion proof. |
 | Chrome chat-like | 80 | 100 | Local screenshot-backed no-submit accept proof exists; real chat apps still need proof. |
-| Codex | 74 | 100 | Prompt screenshot plus insertion proof in same slice. |
+| Codex | 74 | 100 | Prompt screenshot plus one-word no-submit proof in same slice. |
 | Claude Code | 35 | 100 | Safe prompt proof with one-word accept. |
 | Claude desktop | 72 | 100 | Fresh screenshot-backed proof. |
 | Notes title | 50 | 100 | Dedicated title proof. |
@@ -193,7 +196,7 @@ cheap, even if the model output is good.
 
 ## Category 3: Acceptance Safety
 
-Current score: 89/100.
+Current score: 90/100.
 
 Native target: accepting a suggestion feels as safe as accepting a system
 autocomplete suggestion.
@@ -213,10 +216,10 @@ autocomplete suggestion.
 - [x] Keyboard event tap disablement fails closed and hides the suggestion.
 - [x] AX value replacement confirms the edited value without fixed sleeps, then later async verification catches delayed editor drift.
 - [x] Chat-like fixture has a live run with screenshot proof.
-- [ ] Codex/Claude prompt proof must verify accept without submit.
+- [ ] Codex/Claude prompt proof must verify one-word accept without submit.
 - [ ] Esc must always dismiss without changing text.
 - [ ] Undo after accept must behave like normal typed text in each supported app.
-- [ ] Full accept should be disabled by default in any app without proof.
+- [x] Full accept should be disabled by default in any app without proof.
 - [ ] The visible suggestion must exactly match the accepted text.
 
 ## Category 4: Cross-App Reliability
@@ -243,7 +246,7 @@ or unsupported.
 
 ## Category 5: Native macOS Visual Feel
 
-Current score: 78/100.
+Current score: 80/100.
 
 Native target: nothing looks like a web widget floating on top of macOS.
 
@@ -253,7 +256,7 @@ Native target: nothing looks like a web widget floating on top of macOS.
 - [x] Floating mirror uses system material.
 - [x] Inline text is subdued.
 - [x] Settings now uses clearer native sections, checkboxes, button rows, and calmer app/privacy labels.
-- [ ] Menu bar copy should be short and calm.
+- [x] Menu bar copy should be short and calm.
 - [ ] Diagnostics should look like a utility inspector, not a debug dump.
 - [ ] Onboarding should use system language for Accessibility and Screen Recording.
 - [ ] Dark Mode and increased contrast need visual QA.
@@ -287,7 +290,7 @@ Native target: the app feels more private than cloud writing tools.
 
 ## Category 7: Suggestion Quality
 
-Current score: 86/100.
+Current score: 87/100.
 
 Native target: suggestions feel like a continuation of the user's sentence, not
 like an assistant trying to talk.
@@ -314,7 +317,7 @@ like an assistant trying to talk.
 
 ## Category 8: Failure Restraint
 
-Current score: 83/100.
+Current score: 86/100.
 
 Native target: when the app is unsure, the user feels nothing.
 
@@ -328,14 +331,14 @@ Native target: when the app is unsure, the user feels nothing.
 - [x] Slow AX polling can temporarily suppress visible suggestions and pause polling.
 - [x] Stale app, field, prompt target, or text suppresses async suggestions before display.
 - [ ] Low placement confidence should suppress inline mode.
-- [ ] Prompt apps should require no-submit proof before full accept.
+- [x] Prompt apps should require no-submit proof before full accept.
 - [ ] Unsupported apps should not appear broken.
 - [ ] The app should never leave a ghost after focus moves.
 - [ ] The app should hide after repeated placement uncertainty in the same field.
 
 ## Category 9: User Control
 
-Current score: 85/100.
+Current score: 88/100.
 
 Native target: a user can understand and control the app in 20 seconds.
 
@@ -351,12 +354,12 @@ Native target: a user can understand and control the app in 20 seconds.
 - [ ] Per-app mode should be visible: inline, mirror, command-only, disabled.
 - [ ] User should be able to force mirror mode for an app.
 - [ ] User should be able to disable suggestions for current field/session.
-- [ ] User should see why a suggestion is hidden without reading logs.
+- [x] User should see why a suggestion is hidden without reading logs.
 - [ ] A "make this app safe" flow should guide proof collection.
 
 ## Category 10: Onboarding And Setup
 
-Current score: 72/100.
+Current score: 73/100.
 
 Native target: setup feels like a normal Mac utility, not a developer tool.
 
@@ -375,7 +378,7 @@ Native target: setup feels like a normal Mac utility, not a developer tool.
 
 ## Category 11: Evidence And QA Loop
 
-Current score: 95/100.
+Current score: 96/100.
 
 Native target: every claim has proof.
 
@@ -394,7 +397,7 @@ Native target: every claim has proof.
 - [ ] All pending screenshot rows need real proof.
 - [x] Performance proof defaults to a fresh bounded log slice.
 - [x] Chrome chat-like no-submit proof is screenshot-backed.
-- [ ] The checklist should be updated after every product pass.
+- [x] The checklist should be updated after every product pass.
 - [ ] Each beta session should produce a short report row.
 
 ## Priority Work Plan
@@ -408,11 +411,11 @@ Native target: every claim has proof.
 - [x] Refresh focused context before showing async suggestions.
 - [x] Start keyboard capture only after panel display succeeds.
 - [x] Run screenshot proof for Chrome chat-like fixture.
-- [ ] Run screenshot proof for Codex with two accepts.
+- [ ] Run screenshot proof for Codex with one-word no-submit accept.
 
 ### Pass 2: Make Typing Untouchable
 
-- [ ] Move focused-text polling off the main actor or isolate slow AX calls.
+- [x] Move focused-text polling off the main actor or isolate slow AX calls.
 - [x] Add adaptive poll backoff after slow p95 or overlapping-poll summaries.
 - [x] Add slow-poll suppression after repeated spikes.
 - [x] Make performance check use fresh log windows by default.
@@ -437,7 +440,7 @@ Native target: every claim has proof.
 ### Pass 5: Native Polish
 
 - [x] Settings pass using clearer native sections and checkbox controls.
-- [ ] Menu bar copy pass.
+- [x] Menu bar copy pass.
 - [ ] Privacy status panel.
 - [ ] First-run setup.
 - [ ] App icon/menu icon polish.

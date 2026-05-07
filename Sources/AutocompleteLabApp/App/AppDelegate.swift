@@ -311,7 +311,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 modelDirectoryPath: modelDirectoryPath,
                 currentApp: settingsCurrentAppState,
                 privacy: settingsPrivacyState,
-                keyboardShortcuts: settingsKeyboardShortcutState
+                keyboardShortcuts: settingsKeyboardShortcutState,
+                lastSuggestionDecision: lastSuggestionDecision
             )
         }
     }
@@ -821,6 +822,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .allowed(nil):
             return true
         case let .coolingDown(cooldown):
+            DiagnosticsLog.shared.record(
+                "focused-text-ax-health-cooldown",
+                metadata: [
+                    "app": cooldown.bundleIdentifier,
+                    "reason": cooldown.reason.rawValue,
+                    "slowReadCount": String(cooldown.slowReadCount),
+                    "remainingMilliseconds": String(cooldown.remainingMilliseconds)
+                ]
+            )
             invalidatePendingSuggestionRequest()
             if suggestionSession.hasVisibleSuggestion {
                 hideSuggestion(reason: "focused-text-ax-health-\(cooldown.reason.rawValue)")
@@ -2717,9 +2727,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 disabledAppCount: disabledBundleIdentifiers.count
             )
         }
-        let statusLine = "Status: \(control) | \(permission) | \(appStatus) | \(lastSuggestionDecision)"
+        let statusLine = statusMenuTitle(
+            app: app,
+            supportStatus: supportStatus,
+            appEnabled: appEnabled
+        )
+        let statusSignature = "\(control)|\(permission)|\(appStatus)|\(lastSuggestionDecision)|\(statusLine)"
 
         statusMenuItem?.title = statusLine
+        statusMenuItem?.toolTip = lastSuggestionDecision
         pauseSuggestionsMenuItem?.title = pauseSuggestionsTitle
         toggleAppMenuItem?.title = appControlState?.menuToggleTitle ?? "Toggle Current App"
         toggleAppMenuItem?.isEnabled = appControlState?.canToggle ?? false
@@ -2732,15 +2748,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 modelDirectoryPath: modelDirectoryPath,
                 currentApp: settingsCurrentAppState,
                 privacy: settingsPrivacyState,
-                keyboardShortcuts: settingsKeyboardShortcutState
+                keyboardShortcuts: settingsKeyboardShortcutState,
+                lastSuggestionDecision: lastSuggestionDecision
             )
         }
 
-        guard lastStatusLine != statusLine else {
+        guard lastStatusLine != statusSignature else {
             return
         }
 
-        lastStatusLine = statusLine
+        lastStatusLine = statusSignature
         DiagnosticsLog.shared.record(
             "status",
             metadata: [
@@ -2753,6 +2770,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "decision": lastSuggestionDecision
             ]
         )
+    }
+
+    private func statusMenuTitle(
+        app: RunningApplicationInfo?,
+        supportStatus: CompatibilitySupportStatus,
+        appEnabled: Bool
+    ) -> String {
+        guard accessibilityClient.isTrusted else {
+            return "Needs Accessibility"
+        }
+
+        if suggestionsPaused {
+            return "Paused"
+        }
+
+        guard let app else {
+            return "Ready"
+        }
+
+        guard supportStatus.canToggleSuggestions else {
+            switch supportStatus.supportLevel {
+            case .diagnosticsOnly:
+                return "Diagnostics only in \(app.localizedName)"
+            case .unsupported:
+                return "Unsupported in \(app.localizedName)"
+            case .green, .yellow:
+                return "Off in \(app.localizedName)"
+            }
+        }
+
+        guard appEnabled else {
+            return "Blocked in \(app.localizedName)"
+        }
+
+        if lastSuggestionDecision.hasPrefix("Shown") {
+            return "Showing in \(app.localizedName)"
+        }
+
+        if lastSuggestionDecision.hasPrefix("Queued") {
+            return "Thinking in \(app.localizedName)"
+        }
+
+        if lastSuggestionDecision.hasPrefix("Waiting") {
+            return "Waiting in \(app.localizedName)"
+        }
+
+        return "Ready in \(app.localizedName)"
     }
 
     private func setSuggestionDecision(_ decision: String) {
@@ -2836,7 +2900,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             modelDirectoryPath: modelDirectoryPath,
             currentApp: settingsCurrentAppState,
             privacy: settingsPrivacyState,
-            keyboardShortcuts: settingsKeyboardShortcutState
+            keyboardShortcuts: settingsKeyboardShortcutState,
+            lastSuggestionDecision: lastSuggestionDecision
         )
         DiagnosticsLog.shared.record("request-accessibility")
     }
@@ -2861,7 +2926,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             modelDirectoryPath: modelDirectoryPath,
             currentApp: settingsCurrentAppState,
             privacy: settingsPrivacyState,
-            keyboardShortcuts: settingsKeyboardShortcutState
+            keyboardShortcuts: settingsKeyboardShortcutState,
+            lastSuggestionDecision: lastSuggestionDecision
         )
     }
 
