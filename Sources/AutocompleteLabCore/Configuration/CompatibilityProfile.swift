@@ -69,6 +69,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
     public let appFamily: CompatibilityAppFamily
     public let supportLevel: CompatibilitySupportLevel
     public let supportReason: String
+    public let safetyOwnerNote: String
     public let renderMode: SuggestionRenderMode
     public let insertionMode: InsertionMode
     public let fallbackRenderMode: SuggestionRenderMode?
@@ -95,6 +96,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         appFamily: CompatibilityAppFamily = .unknown,
         supportLevel: CompatibilitySupportLevel,
         supportReason: String,
+        safetyOwnerNote: String,
         renderMode: SuggestionRenderMode,
         insertionMode: InsertionMode,
         fallbackRenderMode: SuggestionRenderMode? = nil,
@@ -120,6 +122,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         self.appFamily = appFamily
         self.supportLevel = supportLevel
         self.supportReason = supportReason
+        self.safetyOwnerNote = safetyOwnerNote
         self.renderMode = renderMode
         self.insertionMode = insertionMode
         self.fallbackRenderMode = fallbackRenderMode
@@ -233,6 +236,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .nativeAppKit,
             supportLevel: .green,
             supportReason: "Verified inline suggestions and native text insertion.",
+            safetyOwnerNote: "Owner: TextEdit allows inline because caret geometry, observer updates, and native AX selected-text insertion are verified; mirror fallback remains available.",
             renderMode: .inlineAdjacent,
             insertionMode: .axSelectedText,
             fallbackRenderMode: .floatingMirror,
@@ -247,6 +251,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .swiftUIAppKit,
             supportLevel: .yellow,
             supportReason: "Rich text can drift; display stays mirror-first and insertion fails closed until each Notes surface is proven.",
+            safetyOwnerNote: "Owner: Notes stays yellow because rich text can drift; mirror-only display, no detached anchors, and disabled insertion fallback fail closed until title, body, and checklist proof is current.",
             renderMode: .floatingMirror,
             insertionMode: .keyEvents,
             fallbackInsertionMode: .disabled,
@@ -261,6 +266,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .electron,
             supportLevel: .yellow,
             supportReason: "Electron editors can hide caret bounds, so this uses floating or synthetic placement.",
+            safetyOwnerNote: "Owner: Obsidian stays yellow because CodeMirror can hide caret bounds; caret-only mirror placement and no detached suggestions prevent whole-editor ghosts.",
             renderMode: .floatingMirror,
             insertionMode: .axThenKeyEvents,
             fallbackRenderMode: .floatingMirror,
@@ -281,6 +287,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .nativeAppKit,
             supportLevel: .diagnosticsOnly,
             supportReason: "Mail compose is sensitive and insertion is not proven.",
+            safetyOwnerNote: "Owner: Mail remains diagnostics-only because compose fields can contain sensitive text and no safe insertion adapter exists.",
             renderMode: .disabled,
             insertionMode: .disabled,
             fallbackRenderMode: .disabled,
@@ -302,6 +309,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .chromium,
             supportLevel: .yellow,
             supportReason: "Browser editors vary; display can fall back to floating and insertion can fall back to AX.",
+            safetyOwnerNote: "Owner: Chrome stays yellow because browser fields vary; inline requires caret proof and mirror/AX fallback covers proven local fixture paths.",
             renderMode: .inlineAdjacent,
             insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
@@ -316,6 +324,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .customCanvas,
             supportLevel: .yellow,
             supportReason: "Dogfood prompt support stays mirror-first until one-word no-submit proof is current.",
+            safetyOwnerNote: "Owner: Codex is prompt-gated because accidental submit is high risk; mirror next-word accept is allowed, full accept stays off until no-submit proof exists.",
             renderMode: .floatingMirror,
             insertionMode: .axValueReplacement,
             fallbackInsertionMode: .keyEvents,
@@ -335,6 +344,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .customCanvas,
             supportLevel: .yellow,
             supportReason: "Prompt insertion requires one-word no-submit proof and stays limited to next-word accept until full accept is separately proven safe.",
+            safetyOwnerNote: "Owner: Claude Code is prompt-gated because Enter must never be implied; key-event next-word accept is allowed, full accept stays off until no-submit proof exists.",
             renderMode: .floatingMirror,
             insertionMode: .keyEvents,
             fallbackInsertionMode: .axThenKeyEvents,
@@ -354,6 +364,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .electron,
             supportLevel: .yellow,
             supportReason: "Composer placement stays mirror-first until one-word no-submit proof is current.",
+            safetyOwnerNote: "Owner: Claude desktop is prompt-gated because composer submit is high risk; mirror next-word accept is allowed, full accept stays off until no-submit proof exists.",
             renderMode: .floatingMirror,
             insertionMode: .axValueReplacement,
             fieldIdentityMode: .stableBounds,
@@ -372,6 +383,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .webKit,
             supportLevel: .diagnosticsOnly,
             supportReason: "Browser rich editors need separate proof from textareas.",
+            safetyOwnerNote: "Owner: Safari remains diagnostics-only because textarea, contenteditable, and rich-editor placement and insertion proof need separate capture.",
             renderMode: .disabled,
             insertionMode: .disabled,
             fallbackRenderMode: .disabled,
@@ -390,6 +402,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
             supportReason: "Electron rich editor needs app-specific proof.",
+            safetyOwnerNote: "Owner: Slack remains diagnostics-only because message composer geometry and one-word no-submit insertion proof are not captured yet.",
             renderMode: .disabled,
             insertionMode: .disabled,
             fallbackRenderMode: .disabled,
@@ -408,6 +421,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
             supportReason: "Monaco editor exposes custom text geometry.",
+            safetyOwnerNote: "Owner: VS Code remains diagnostics-only because Monaco geometry and developer input surfaces are not proven safe.",
             renderMode: .disabled,
             insertionMode: .disabled,
             fallbackRenderMode: .disabled,
@@ -426,6 +440,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
             supportReason: "Monaco editor exposes custom text geometry.",
+            safetyOwnerNote: "Owner: Cursor remains diagnostics-only because Monaco geometry and developer input surfaces are not proven safe.",
             renderMode: .disabled,
             insertionMode: .disabled,
             fallbackRenderMode: .disabled,

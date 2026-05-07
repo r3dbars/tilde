@@ -251,7 +251,7 @@ or unsupported.
 - [x] Atlas is unsupported.
 - [x] Chrome local fixtures cover major browser editor shapes.
 - [x] A dedicated app proof matrix now separates screenshot proof, accept proof, and evidence gaps.
-- [ ] Every profile needs an owner note explaining why it is safe.
+- [x] Every profile needs an owner note explaining why it is safe.
 - [ ] Every profile needs a screenshot evidence row.
 - [x] Every yellow app needs a visible fallback mode.
 - [x] Unsupported apps should explain why, not silently fail.

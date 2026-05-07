@@ -198,6 +198,15 @@ struct CompatibilityProfileTests {
         #expect(profile.debugSummary.contains("anchors=caret>field"))
     }
 
+    @Test("Every MVP profile has an explicit safety owner note")
+    func everyMVPProfileHasSafetyOwnerNote() {
+        for profile in CompatibilityProfileStore.mvp.profiles.values {
+            #expect(profile.safetyOwnerNote.hasPrefix("Owner: "))
+            #expect(profile.safetyOwnerNote.count >= 80)
+            #expect(profile.safetyOwnerNote.contains("because"))
+        }
+    }
+
     @Test("Insertion mode plans try primary then safe fallback")
     func insertionModePlansTryPrimaryThenFallback() throws {
         let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
