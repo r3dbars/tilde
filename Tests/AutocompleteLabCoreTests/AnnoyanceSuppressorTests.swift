@@ -44,9 +44,8 @@ struct AnnoyanceSuppressorTests {
 
         _ = suppressor.record(.wrongInsertion, context: context, now: start)
         _ = suppressor.record(.wrongInsertion, context: context, now: start.addingTimeInterval(10))
-        _ = suppressor.record(.wrongInsertion, context: context, now: start.addingTimeInterval(20))
 
-        #expect(suppressor.quietMode(for: context, now: start.addingTimeInterval(20)).traceReason == "quiet-mode-app")
+        #expect(suppressor.quietMode(for: context, now: start.addingTimeInterval(10)).traceReason == "quiet-mode-app")
     }
 
     @Test("Wrong insertion hard-stops the field")
@@ -79,5 +78,24 @@ struct AnnoyanceSuppressorTests {
 
         #expect(suppressor.quietMode(for: context, now: start.addingTimeInterval(60)).isActive)
         #expect(!suppressor.quietMode(for: context, now: start.addingTimeInterval(15 * 60 + 1)).isActive)
+    }
+
+    @Test("Manual disable policy marks repeated disables default-off over seven days")
+    func manualDisableDefaultOffPolicy() {
+        let start = Date(timeIntervalSince1970: 0)
+        let policy = ManualDisableDefaultOffPolicy()
+        let first = policy.history(afterAddingManualDisableTo: [], now: start)
+        let second = policy.history(
+            afterAddingManualDisableTo: first,
+            now: start.addingTimeInterval(6 * 24 * 60 * 60)
+        )
+        let oldThenNew = policy.history(
+            afterAddingManualDisableTo: [start],
+            now: start.addingTimeInterval(8 * 24 * 60 * 60)
+        )
+
+        #expect(!policy.shouldMarkDefaultOff(history: first, now: start))
+        #expect(policy.shouldMarkDefaultOff(history: second, now: start.addingTimeInterval(6 * 24 * 60 * 60)))
+        #expect(!policy.shouldMarkDefaultOff(history: oldThenNew, now: start.addingTimeInterval(8 * 24 * 60 * 60)))
     }
 }

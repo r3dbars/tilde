@@ -173,6 +173,7 @@ final class DiagnosticsWindowController {
         sections.append(countBucketsText(title: "Caret failures by render mode", buckets: traceSummary.caretGeometryFailuresByRenderMode))
         sections.append(acceptRateBucketsText(title: "Caret failure rate by render mode", buckets: traceSummary.caretGeometryFailureRateByRenderMode))
         sections.append(countBucketsText(title: "Annoyance signals", buckets: traceSummary.annoyanceSignalCounts))
+        sections.append(insertionReliabilityText(traceSummary.insertionReliabilityByAppAndMode))
         sections.append(topMissesText(traceSummary.topMisses))
         sections.append(supportStateText(recentTraceEvents))
 
@@ -346,7 +347,20 @@ final class DiagnosticsWindowController {
         return """
         Support state by app:
         \(evaluations.map { evaluation in
-            "  \(evaluation.bundleIdentifier): \(evaluation.state.rawValue) shown=\(evaluation.presentedCount) kept=\(Self.percent(evaluation.acceptedAndKeptShownRate)) insert=\(Self.percent(evaluation.insertionVerificationSuccessRate)) p95=\(Self.latency(evaluation.p95LatencyMilliseconds)) annoyance=\(Self.decimal(evaluation.annoyanceScore))"
+            "  \(evaluation.bundleIdentifier): \(evaluation.state.rawValue) family=\(evaluation.appFamily) shown=\(evaluation.presentedCount)/\(evaluation.minimumSampleSize) kept=\(Self.percent(evaluation.acceptedAndKeptShownRate)) insert=\(Self.percent(evaluation.insertionVerificationSuccessRate)) p95=\(Self.latency(evaluation.p95LatencyMilliseconds)) annoyance=\(Self.decimal(evaluation.annoyanceScore))"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func insertionReliabilityText(_ rows: [AutocompleteInsertionReliability]) -> String {
+        guard !rows.isEmpty else {
+            return "Insertion reliability by app and mode: none yet"
+        }
+
+        return """
+        Insertion reliability by app and mode:
+        \(rows.map { row in
+            "  \(row.appBundleIdentifier) \(row.insertionMode): \(Self.percent(row.successRate)) (\(row.verifiedCount) ok / \(row.failedCount) failed)"
         }.joined(separator: "\n"))
         """
     }

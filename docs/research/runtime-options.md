@@ -38,11 +38,13 @@ Sources:
 
 These are useful for developer trials, not the default beta promise:
 
-- `qwen35-9b`: Qwen3.5 9B 4-bit, better quality trial with higher cost.
+- `qwen35-4b` or `qwen3.5-4b`: preferred Qwen3.5 4B beta asset.
+- `qwen35-9b` or `qwen3.5-9b`: Qwen3.5 9B 4-bit, better quality trial with higher cost.
 - `qwen3-1.7b`: smaller Qwen3 baseline.
 - `qwen3-0.6b`: very small smoke-test baseline.
-- `gemma-4-e4b`: Gemma 4 E4B MLX trial.
-- `gemma-4-e4b-it-optiq`: Gemma 4 E4B OptiQ trial.
+- `gemma-4-e2b`: historical Gemma E2B candidate.
+- `gemma-4-e4b`, `gemma4-e4b`, or `gemma-4-e4b-4bit`: Gemma 4 E4B MLX trial.
+- `gemma-4-e4b-it-optiq`, `gemma-4-e4b-it-optiq-4bit`, or `gemma4-e4b-it-optiq`: Gemma 4 E4B OptiQ trial.
 - `gemma-4-26b`: larger Gemma 4 trial.
 
 Gemma 4 E2B is no longer the beta target. It remains a historical candidate

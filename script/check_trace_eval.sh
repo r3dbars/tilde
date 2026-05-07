@@ -59,7 +59,7 @@ def kept_event(event):
     metadata = event.get("metadata") or {}
     if metadata.get("strongAcceptedAndKept") == "true" or metadata.get("finalAcceptedAndKept") == "true":
         return True
-    if metadata.get("checkpoint") not in {"10s", "30s", "fieldBlur"}:
+    if metadata.get("checkpoint") not in {"10s", "30s", "fieldBlur", "fieldSend"}:
         return False
     return metadata.get("survivalClass") in {"exactKept", "lightlyEditedKept", "partiallyKept"}
 
@@ -123,17 +123,63 @@ typed_through_ids = {
 }
 useful_suggestion_ids = accepted_ids.union(typed_through_ids)
 presented_ids = set(presented_by_id.keys())
+
+def metadata_int(event, key):
+    try:
+        return int((event.get("metadata") or {}).get(key))
+    except (TypeError, ValueError):
+        return None
+
+def model_total_generation_latency(event):
+    if isinstance(event.get("latencyMilliseconds"), int):
+        return event["latencyMilliseconds"]
+    return (
+        metadata_int(event, "totalGenerationLatencyMilliseconds")
+        or metadata_int(event, "modelTotalLatencyMilliseconds")
+    )
+
+def empty_model_result(event):
+    metadata = event.get("metadata") or {}
+    word_count = metadata_int(event, "cleanedWordCount")
+    if word_count is not None:
+        return word_count == 0
+    char_count = metadata_int(event, "cleanedVisibleTextChars")
+    if char_count is not None:
+        return char_count == 0
+    cleaned = (event.get("cleanedVisibleText") or "").strip()
+    raw = (event.get("rawOutput") or "").strip()
+    if not cleaned and not raw:
+        return False
+    return not cleaned
+
 latencies = sorted(
     event["latencyMilliseconds"]
     for event in presented_by_id.values()
     if isinstance(event.get("latencyMilliseconds"), int)
 )
 model_result_latencies = sorted(
-    event["latencyMilliseconds"]
+    latency
     for event in events
     if event.get("type") == "modelResult"
-    and isinstance(event.get("latencyMilliseconds"), int)
+    for latency in [model_total_generation_latency(event)]
+    if latency is not None
 )
+first_token_latencies = sorted(
+    latency
+    for event in events
+    if event.get("type") == "modelResult"
+    for latency in [metadata_int(event, "firstTokenLatencyMilliseconds")]
+    if latency is not None
+)
+empty_model_results = [
+    event for event in events
+    if event.get("type") == "modelResult" and empty_model_result(event)
+]
+pre_render_blocked = [
+    event for event in events
+    if event.get("type") == "suggestionSuppressed"
+    and event.get("suggestionID") not in presented_by_id
+]
 
 def percentile(values, fraction):
     if not values:
@@ -146,6 +192,24 @@ def percentile_int(values, fraction):
         return None
     index = min(len(values) - 1, round((len(values) - 1) * fraction))
     return values[index]
+
+def latency_buckets(values):
+    labels = ["0-50ms", "51-100ms", "101-250ms", "251-500ms", "501-1000ms", ">1000ms"]
+    buckets = Counter()
+    for value in values:
+        if value <= 50:
+            buckets[labels[0]] += 1
+        elif value <= 100:
+            buckets[labels[1]] += 1
+        elif value <= 250:
+            buckets[labels[2]] += 1
+        elif value <= 500:
+            buckets[labels[3]] += 1
+        elif value <= 1000:
+            buckets[labels[4]] += 1
+        else:
+            buckets[labels[5]] += 1
+    return [(label, buckets[label]) for label in labels if buckets[label]]
 
 def parse_date(value):
     if not value:
@@ -243,6 +307,25 @@ def has_text_signal(event, *needles):
     ]).lower()
     return any(needle in haystack for needle in needles)
 
+def app_family(app):
+    if app in {"com.apple.TextEdit", "com.apple.Notes"}:
+        return "nativeText"
+    if app == "com.google.Chrome":
+        return "browserTextarea"
+    if app in {"md.obsidian", "com.openai.codex"}:
+        return "electronEditor"
+    if app == "com.apple.mail":
+        return "richTextCompose"
+    return "unknown"
+
+def minimum_sample_size(family):
+    return {
+        "nativeText": 20,
+        "browserTextarea": 15,
+        "electronEditor": 15,
+        "richTextCompose": 20,
+    }.get(family, 10)
+
 def support_evaluation(app):
     app_events = [event for event in events if event.get("appBundleIdentifier") == app]
     app_presented_by_id = {}
@@ -297,6 +380,8 @@ def support_evaluation(app):
     )
     app_p95 = percentile_int(app_latencies, 0.95)
     kept_rate = 0 if not app_presented_ids else len(app_kept_ids) / len(app_presented_ids)
+    family = app_family(app)
+    min_sample = minimum_sample_size(family)
     annoyance_signal_count = (
         duplicate_count
         + wrong_insertion_count
@@ -346,7 +431,7 @@ def support_evaluation(app):
     if reasons:
         state = "blocked"
     elif (
-        len(app_presented) >= 20
+        len(app_presented) >= min_sample
         and kept_rate >= 0.15
         and len(app_kept_ids) >= 3
         and insertion_success >= 0.98
@@ -372,6 +457,8 @@ def support_evaluation(app):
         reasons = ["meets caveated gates"]
         if any(event.get("reason") == "detached-suggestion-disabled" for event in app_actionable_suppressed):
             reasons.append("detached suggestions suppressed")
+        if len(app_presented) < min_sample:
+            reasons.append(f"needs {min_sample} shown for supported")
     else:
         state = "experimental"
         reasons = []
@@ -390,12 +477,29 @@ def support_evaluation(app):
         "app": app,
         "state": state,
         "shown": len(app_presented),
+        "family": family,
+        "minimum_sample": min_sample,
         "kept_rate": kept_rate,
         "insert_rate": insertion_success,
         "p95": app_p95,
         "annoyance": annoyance_score,
         "reasons": reasons,
     }
+
+def insertion_mode_reliability(events):
+    buckets = defaultdict(lambda: [0, 0])
+    for event in events:
+        if event.get("type") not in {"insertionVerified", "insertionFailed"}:
+            continue
+        metadata = event.get("metadata") or {}
+        app = event.get("appBundleIdentifier") or "unknown"
+        mode = metadata.get("insertionMode") or "unknown"
+        bucket = buckets[(app, mode)]
+        if event.get("type") == "insertionVerified":
+            bucket[0] += 1
+        else:
+            bucket[1] += 1
+    return buckets
 
 missing = []
 if not presented:
@@ -543,7 +647,7 @@ kept_at_10_ids = {
 kept_at_30_or_blur_ids = {
     event.get("metadata", {}).get("acceptanceID") or event.get("suggestionID")
     for event in accepted_text_edited
-    if kept_event(event) and (event.get("metadata") or {}).get("checkpoint") in {"30s", "fieldBlur"}
+    if kept_event(event) and (event.get("metadata") or {}).get("checkpoint") in {"30s", "fieldBlur", "fieldSend"}
 }
 
 print(f"Trace: {path}")
@@ -597,6 +701,33 @@ print(f"first-visible p95 latency: {percentile(latencies, 0.95)}")
 print(f"total-generation p50 latency: {percentile(model_result_latencies, 0.50)}")
 print(f"total-generation p90 latency: {percentile(model_result_latencies, 0.90)}")
 print(f"total-generation p95 latency: {percentile(model_result_latencies, 0.95)}")
+model_result_count = types["modelResult"]
+empty_rate = 0 if not model_result_count else round((len(empty_model_results) / model_result_count) * 100)
+print(f"Empty model results: {len(empty_model_results)} ({empty_rate}%)")
+print(f"Pre-render blocked: {len(pre_render_blocked)}")
+print("Pre-render blocked by reason:")
+pre_render_reasons = Counter(event.get("reason") or "unknown" for event in pre_render_blocked)
+if pre_render_reasons:
+    for reason, count in pre_render_reasons.most_common():
+        print(f"  {reason}: {count}")
+else:
+    print("  none")
+print("Model-result latency buckets:")
+print("  first token:")
+for label, count in latency_buckets(first_token_latencies):
+    print(f"    {label}: {count}")
+if not first_token_latencies:
+    print("    none")
+print("  first visible:")
+for label, count in latency_buckets(latencies):
+    print(f"    {label}: {count}")
+if not latencies:
+    print("    none")
+print("  total generation:")
+for label, count in latency_buckets(model_result_latencies):
+    print(f"    {label}: {count}")
+if not model_result_latencies:
+    print("    none")
 print("Acceptance funnel:")
 print(f"  requested: {len(requested_ids)}")
 print(f"  model returned: {len(model_returned_ids)}")
@@ -798,12 +929,22 @@ if support_evaluations:
             reason_text = "; " + ", ".join(evaluation["reasons"][:3])
         print(
             f"  {app}: {evaluation['state']} "
-            f"(shown={evaluation['shown']} "
+            f"(family={evaluation['family']} "
+            f"shown={evaluation['shown']}/{evaluation['minimum_sample']} "
             f"kept={round(evaluation['kept_rate'] * 100)}% "
             f"insert={round(evaluation['insert_rate'] * 100)}% "
             f"p95={p95} "
             f"annoyance={evaluation['annoyance']:.2f}{reason_text})"
         )
+else:
+    print("  none")
+print("Insertion reliability by app and mode:")
+insertion_reliability = insertion_mode_reliability(events)
+if insertion_reliability:
+    for (app, mode), (verified, failed) in sorted(insertion_reliability.items()):
+        attempts = verified + failed
+        success = 0 if attempts == 0 else round((verified / attempts) * 100)
+        print(f"  {app} {mode}: {success}% ({verified} ok / {failed} failed)")
 else:
     print("  none")
 

@@ -41,6 +41,8 @@ public struct CompatibilitySupportEvaluation: Equatable, Sendable {
     public let focusStealCount: Int
     public let sensitiveFieldShownCount: Int
     public let annoyanceScore: Double
+    public let appFamily: String
+    public let minimumSampleSize: Int
 
     public init(
         bundleIdentifier: String,
@@ -58,7 +60,9 @@ public struct CompatibilitySupportEvaluation: Equatable, Sendable {
         tabConflictCount: Int,
         focusStealCount: Int,
         sensitiveFieldShownCount: Int,
-        annoyanceScore: Double
+        annoyanceScore: Double,
+        appFamily: String = "unknown",
+        minimumSampleSize: Int = 20
     ) {
         self.bundleIdentifier = bundleIdentifier
         self.displayName = displayName
@@ -76,6 +80,8 @@ public struct CompatibilitySupportEvaluation: Equatable, Sendable {
         self.focusStealCount = focusStealCount
         self.sensitiveFieldShownCount = sensitiveFieldShownCount
         self.annoyanceScore = annoyanceScore
+        self.appFamily = appFamily
+        self.minimumSampleSize = minimumSampleSize
     }
 }
 
@@ -100,6 +106,8 @@ public struct CompatibilitySupportEvaluator: Equatable, Sendable {
         let appEvents = events.filter { $0.appBundleIdentifier == bundleIdentifier }
         let supportStatus = profileStore.supportStatus(for: bundleIdentifier)
         let displayName = displayName(for: bundleIdentifier, supportStatus: supportStatus)
+        let appFamily = appFamily(for: bundleIdentifier)
+        let minimumSampleSize = minimumSampleSize(for: appFamily)
         let presentedByID = firstPresentedBySuggestionID(from: appEvents)
         let presented = Array(presentedByID.values)
         let presentedIDs = Set(presentedByID.keys)
@@ -191,7 +199,7 @@ public struct CompatibilitySupportEvaluator: Equatable, Sendable {
         if !hardBlockReasons.isEmpty {
             state = .blocked
             reasons = hardBlockReasons
-        } else if presented.count >= 20
+        } else if presented.count >= minimumSampleSize
             && acceptedAndKeptShownRate >= 0.15
             && acceptedAndKeptSuggestionIDs.count >= 3
             && insertionSuccessRate >= 0.98
@@ -211,6 +219,7 @@ public struct CompatibilitySupportEvaluator: Equatable, Sendable {
             state = .caveated
             reasons = caveatedReasons(
                 presentedCount: presented.count,
+                minimumSampleSize: minimumSampleSize,
                 acceptedAndKeptShownRate: acceptedAndKeptShownRate,
                 p95LatencyMilliseconds: p95LatencyMilliseconds,
                 actionableSuppressedRate: actionableSuppressedRate,
@@ -243,7 +252,9 @@ public struct CompatibilitySupportEvaluator: Equatable, Sendable {
             tabConflictCount: tabConflictCount,
             focusStealCount: focusStealCount,
             sensitiveFieldShownCount: sensitiveFieldShownCount,
-            annoyanceScore: summary.annoyanceScore
+            annoyanceScore: summary.annoyanceScore,
+            appFamily: appFamily,
+            minimumSampleSize: minimumSampleSize
         )
     }
 
@@ -267,6 +278,34 @@ public struct CompatibilitySupportEvaluator: Equatable, Sendable {
         }
     }
 
+    private func appFamily(for bundleIdentifier: String) -> String {
+        switch bundleIdentifier {
+        case "com.apple.TextEdit", "com.apple.Notes":
+            return "nativeText"
+        case "com.google.Chrome":
+            return "browserTextarea"
+        case "md.obsidian", "com.openai.codex":
+            return "electronEditor"
+        case "com.apple.mail":
+            return "richTextCompose"
+        default:
+            return "unknown"
+        }
+    }
+
+    private func minimumSampleSize(for appFamily: String) -> Int {
+        switch appFamily {
+        case "nativeText":
+            return 20
+        case "browserTextarea", "electronEditor":
+            return 15
+        case "richTextCompose":
+            return 20
+        default:
+            return 10
+        }
+    }
+
     private func firstPresentedBySuggestionID(
         from events: [AutocompleteTraceEvent]
     ) -> [String: AutocompleteTraceEvent] {
@@ -283,7 +322,7 @@ public struct CompatibilitySupportEvaluator: Equatable, Sendable {
             return true
         }
 
-        guard ["10s", "30s", "fieldBlur"].contains(event.metadata["checkpoint"] ?? "") else {
+        guard ["10s", "30s", "fieldBlur", "fieldSend"].contains(event.metadata["checkpoint"] ?? "") else {
             return false
         }
 
@@ -346,14 +385,15 @@ public struct CompatibilitySupportEvaluator: Equatable, Sendable {
 
     private func caveatedReasons(
         presentedCount: Int,
+        minimumSampleSize: Int,
         acceptedAndKeptShownRate: Double,
         p95LatencyMilliseconds: Int?,
         actionableSuppressedRate: Double,
         events: [AutocompleteTraceEvent]
     ) -> [String] {
         var reasons = ["Meets caveated gates."]
-        if presentedCount < 20 {
-            reasons.append("Needs 20 shown suggestions for supported.")
+        if presentedCount < minimumSampleSize {
+            reasons.append("Needs \(minimumSampleSize) shown suggestions for supported.")
         }
         if acceptedAndKeptShownRate < 0.15 {
             reasons.append("Accepted-and-kept rate is below the supported gate.")

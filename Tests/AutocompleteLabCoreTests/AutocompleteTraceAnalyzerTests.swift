@@ -433,6 +433,78 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.suppressedByExperimentArm["metadata_arm"] == 1)
     }
 
+    @Test("summarizes survival slices and retention clearing")
+    func summarizesSurvivalSlicesAndRetentionClearing() {
+        let events = [
+            event(
+                .suggestionPresented,
+                experimentArm: "length_1_word",
+                suggestionID: "one",
+                appBundleIdentifier: "com.apple.TextEdit",
+                requestMode: "wordCompletion",
+                metadata: [
+                    "fieldKind": "multilineCompose",
+                    "effectiveRenderMode": "inlineAdjacent",
+                    "model": "qwen35-4b"
+                ]
+            ),
+            event(
+                .acceptedTextEdited,
+                experimentArm: "length_1_word",
+                suggestionID: "one",
+                appBundleIdentifier: "com.apple.TextEdit",
+                requestMode: "wordCompletion",
+                metadata: [
+                    "fieldKind": "multilineCompose",
+                    "checkpoint": "10s",
+                    "survivalClass": "exactKept",
+                    "strongAcceptedAndKept": "true",
+                    "model": "qwen35-4b"
+                ]
+            ),
+            event(
+                .acceptanceRetentionCleared,
+                suggestionID: "one",
+                appBundleIdentifier: "com.apple.TextEdit",
+                requestMode: "wordCompletion",
+                reason: "thirty-second-retention-expiry",
+                metadata: [
+                    "retentionCleared": "true",
+                    "rawAcceptedTextDurable": "false"
+                ]
+            ),
+            event(
+                .suggestionPresented,
+                experimentArm: "length_3_word",
+                suggestionID: "two",
+                appBundleIdentifier: "md.obsidian",
+                requestMode: "phraseContinuation",
+                metadata: [
+                    "fieldKind": "multilineCompose",
+                    "effectiveRenderMode": "floatingMirror",
+                    "model": "qwen35-4b"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.acceptanceRetentionClearedCount == 1)
+        #expect(summary.acceptanceRetentionClearedByReason["thirty-second-retention-expiry"] == 1)
+        #expect(summary.acceptedAndKeptRateByApp["com.apple.TextEdit"] == 1.0)
+        #expect(summary.acceptedAndKeptRateByApp["md.obsidian"] == 0.0)
+        #expect(summary.acceptedAndKeptRateByFieldKind["multilineCompose"] == 0.5)
+        #expect(summary.acceptedAndKeptRateByRenderMode["inlineAdjacent"] == 1.0)
+        #expect(summary.acceptedAndKeptRateByRenderMode["floatingMirror"] == 0.0)
+        #expect(summary.acceptedAndKeptRateByInsertionMode["axSelectedText"] == 1.0)
+        #expect(summary.acceptedAndKeptRateByInsertionMode["axThenKeyEvents"] == 0.0)
+        #expect(summary.acceptedAndKeptRateByRequestMode["wordCompletion"] == 1.0)
+        #expect(summary.acceptedAndKeptRateByRequestMode["phraseContinuation"] == 0.0)
+        #expect(summary.acceptedAndKeptRateByModel["qwen35-4b"] == 0.5)
+        #expect(summary.acceptedAndKeptRateByExperimentArm["length_1_word"] == 1.0)
+        #expect(summary.acceptedAndKeptRateByExperimentArm["length_3_word"] == 0.0)
+    }
+
     @Test("builds dashboard funnels, daily summaries, and recommended fixes")
     func buildsDashboardSummaries() {
         let events = [
@@ -506,6 +578,102 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.recommendedFixes.first?.title == "Fix insertion trust before model tuning")
         #expect(summary.recommendedFixes.contains { $0.title == "Fix caret or verification before prompt tuning" })
         #expect(summary.recommendedFixes.contains { $0.title == "Fix latency before length experiments" })
+    }
+
+    @Test("summarizes insertion reliability by app and mode")
+    func summarizesInsertionReliabilityByAppAndMode() {
+        let events = [
+            event(
+                .insertionVerified,
+                suggestionID: "one",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: ["insertionMode": "axSelectedText"]
+            ),
+            event(
+                .insertionVerified,
+                suggestionID: "two",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: ["insertionMode": "axSelectedText"]
+            ),
+            event(
+                .insertionFailed,
+                suggestionID: "three",
+                appBundleIdentifier: "com.apple.TextEdit",
+                reason: "tab-literal-tab",
+                metadata: [
+                    "insertionMode": "axSelectedText",
+                    "tabConflict": "true",
+                    "literalTabInserted": "true",
+                    "rollbackAttempted": "false"
+                ]
+            ),
+            event(
+                .insertionFailed,
+                suggestionID: "four",
+                appBundleIdentifier: "md.obsidian",
+                metadata: [
+                    "insertionMode": "keyEvents",
+                    "focusStealing": "true",
+                    "rollbackAttempted": "false"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.insertionReliabilityByAppAndMode.contains { row in
+            row.appBundleIdentifier == "com.apple.TextEdit"
+                && row.insertionMode == "axSelectedText"
+                && row.verifiedCount == 2
+                && row.failedCount == 1
+                && abs(row.successRate - (2.0 / 3.0)) < 0.0001
+        })
+        #expect(summary.annoyanceSignalCounts["tabConflict"] == 1)
+        #expect(summary.annoyanceSignalCounts["focusStealing"] == 1)
+    }
+
+    @Test("summarizes model quality tracking buckets")
+    func summarizesModelQualityTrackingBuckets() {
+        let events = [
+            event(
+                .modelResult,
+                suggestionID: "one",
+                rawOutput: "later today",
+                cleanedVisibleText: "later today",
+                latency: 180,
+                metadata: [
+                    "cleanedWordCount": "2",
+                    "firstTokenLatencyMilliseconds": "44"
+                ]
+            ),
+            event(
+                .modelResult,
+                suggestionID: "two",
+                rawOutput: "Let me think",
+                cleanedVisibleText: "",
+                latency: 520,
+                metadata: [
+                    "cleanedWordCount": "0",
+                    "firstTokenLatencyMilliseconds": "160"
+                ]
+            ),
+            event(.suggestionPresented, suggestionID: "one", latency: 60),
+            event(.suggestionSuppressed, suggestionID: "two", reason: "empty-model-result"),
+            event(.suggestionSuppressed, suggestionID: "three", reason: "blocked-field-kind")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.emptyModelResultCount == 1)
+        #expect(summary.emptyModelResultRate == 0.5)
+        #expect(summary.preRenderBlockedCount == 2)
+        #expect(summary.preRenderBlockedByReason["empty-model-result"] == 1)
+        #expect(summary.preRenderBlockedByReason["blocked-field-kind"] == 1)
+        #expect(summary.modelFirstTokenLatencyBuckets["0-50ms"] == 1)
+        #expect(summary.modelFirstTokenLatencyBuckets["101-250ms"] == 1)
+        #expect(summary.modelFirstVisibleLatencyBuckets["51-100ms"] == 1)
+        #expect(summary.modelTotalGenerationLatencyBuckets["101-250ms"] == 1)
+        #expect(summary.modelTotalGenerationLatencyBuckets["501-1000ms"] == 1)
     }
 
     private func event(

@@ -75,6 +75,21 @@ struct AcceptanceSurvivalClassifierTests {
         #expect(measurement.isFinalAcceptedAndKept)
     }
 
+    @Test("Send checkpoint finalizes accepted text separately from blur")
+    func sendCheckpointFinalizesAcceptedTextSeparatelyFromBlur() {
+        let measurement = classifier.classify(
+            acceptedText: "send this note",
+            currentTextWindow: "Please send this note.",
+            checkpoint: .fieldSend,
+            firstEditDelayMilliseconds: 8_000
+        )
+
+        #expect(measurement.survivalClass == .exactKept)
+        #expect(measurement.isStrongAcceptedAndKept)
+        #expect(measurement.isFinalAcceptedAndKept)
+        #expect(measurement.traceMetadata["checkpoint"] == "fieldSend")
+    }
+
     @Test("Matches around the expected insertion offset instead of the whole field")
     func matchesAroundExpectedInsertionOffset() {
         let acceptedText = "make this better"

@@ -133,6 +133,7 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
     private var fieldQuietModes: [String: QuietMode] = [:]
     private var appQuietModes: [String: QuietMode] = [:]
     private var globalQuietMode: QuietMode = .normal
+    private var severeEventCountsByAppDay: [String: Int] = [:]
 
     public init(
         halfLifeSeconds: TimeInterval = 20 * 60,
@@ -192,11 +193,17 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
             started.append(mode)
         }
 
-        if appScore >= appQuietThreshold {
+        let severeEventCountToday = recordSevereEventIfNeeded(
+            signal,
+            appBundleIdentifier: context.appBundleIdentifier,
+            now: now
+        )
+
+        if appScore >= appQuietThreshold || severeEventCountToday >= 2 {
             let mode = QuietMode.app(
                 until: now.addingTimeInterval(appQuietDurationSeconds),
                 reason: signal,
-                score: appScore
+                score: max(appScore, Double(severeEventCountToday))
             )
             appQuietModes[context.appBundleIdentifier] = mode
             started.append(mode)
@@ -273,6 +280,21 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
         }
     }
 
+    private mutating func recordSevereEventIfNeeded(
+        _ signal: AnnoyanceSignal,
+        appBundleIdentifier: String,
+        now: Date
+    ) -> Int {
+        guard Self.autoPausesAppAfterTwoEventsPerDay(signal) else {
+            return 0
+        }
+
+        let key = "\(appBundleIdentifier)|\(Self.utcDay(for: now))"
+        let count = (severeEventCountsByAppDay[key] ?? 0) + 1
+        severeEventCountsByAppDay[key] = count
+        return count
+    }
+
     private static func hardStopsField(_ signal: AnnoyanceSignal) -> Bool {
         switch signal {
         case .wrongInsertion, .duplicateText, .focusStealing:
@@ -280,6 +302,27 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
         default:
             false
         }
+    }
+
+    private static func autoPausesAppAfterTwoEventsPerDay(_ signal: AnnoyanceSignal) -> Bool {
+        switch signal {
+        case .wrongInsertion, .duplicateText, .focusStealing, .tabConflict, .acceptedThenDeleted:
+            true
+        default:
+            false
+        }
+    }
+
+    private static func utcDay(for date: Date) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        )
     }
 
     private static func weight(for signal: AnnoyanceSignal) -> Double {

@@ -5,13 +5,14 @@ public enum AcceptanceSurvivalCheckpoint: String, Codable, Equatable, Sendable {
     case tenSeconds = "10s"
     case thirtySeconds = "30s"
     case fieldBlur
+    case fieldSend
 
     public var isStrongMetricCheckpoint: Bool {
-        self == .tenSeconds || self == .fieldBlur
+        self == .tenSeconds || self == .fieldBlur || self == .fieldSend
     }
 
     public var isFinalMetricCheckpoint: Bool {
-        self == .thirtySeconds || self == .fieldBlur
+        self == .thirtySeconds || self == .fieldBlur || self == .fieldSend
     }
 }
 

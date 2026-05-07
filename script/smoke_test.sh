@@ -16,6 +16,9 @@ swift test
 ./script/check_test_coverage_manifest.sh
 ./script/manual_smoke_self_test.sh
 ./script/check_trace_eval_self_test.sh
+./script/experiment_report_self_test.sh
+./script/visual_calibration_report_self_test.sh
+./script/download_mlx_model_self_test.sh
 ./script/model_latency_report_self_test.sh
 ./script/package_release.sh --check
 ./script/build_and_run.sh --verify

@@ -95,10 +95,11 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         traceMaxAgeDays: Int = 14,
         screenshotMaxAgeDays: Int = 3
     ) {
-        queue.async { [logURL, rawLogURL, screenshotsURL, decoder, encoder] in
-            Self.pruneTrace(at: logURL, maxAgeDays: traceMaxAgeDays, decoder: decoder, encoder: encoder)
-            Self.pruneTrace(at: rawLogURL, maxAgeDays: max(1, min(traceMaxAgeDays, 3)), decoder: decoder, encoder: encoder)
-            Self.pruneScreenshots(at: screenshotsURL, maxAgeDays: screenshotMaxAgeDays)
+        Task {
+            await TraceLogger.shared.applyRetentionControls(
+                traceMaxAgeDays: traceMaxAgeDays,
+                screenshotMaxAgeDays: screenshotMaxAgeDays
+            )
         }
     }
 
@@ -146,10 +147,23 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         prompt: CompletionPrompt,
         rawOutput: String,
         cleanedSuggestion: CompletionSuggestion?,
-        suggestionID: String = ""
+        suggestionID: String = "",
+        latencyMilliseconds: Int? = nil,
+        firstTokenLatencyMilliseconds: Int? = nil
     ) {
         guard isEnabled else {
             return
+        }
+
+        var metadata = [
+            "cleanedWordCount": String(cleanedSuggestion?.visibleWordCount ?? 0),
+            "emptyResult": String(cleanedSuggestion == nil)
+        ]
+        if let latencyMilliseconds {
+            metadata["totalGenerationLatencyMilliseconds"] = String(latencyMilliseconds)
+        }
+        if let firstTokenLatencyMilliseconds {
+            metadata["firstTokenLatencyMilliseconds"] = String(firstTokenLatencyMilliseconds)
         }
 
         record(
@@ -164,9 +178,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             rawOutput: rawOutput,
             cleanedVisibleText: cleanedSuggestion?.visibleText ?? "",
             displayedText: cleanedSuggestion?.visibleText ?? "",
-            metadata: [
-                "cleanedWordCount": String(cleanedSuggestion?.visibleWordCount ?? 0)
-            ]
+            latencyMilliseconds: latencyMilliseconds,
+            metadata: metadata
         )
     }
 
@@ -280,18 +293,13 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             metadata: traceConfiguration.metadata
         )
 
-        let redactedEvent = event.redactedForDefaultTrace()
         let writesRawDebugTrace = rawDebugTracingEnabled
 
-        queue.async { [logURL, rawLogURL, encoder] in
-            do {
-                try Self.append(redactedEvent, to: logURL, encoder: encoder)
-                if writesRawDebugTrace {
-                    try Self.append(event, to: rawLogURL, encoder: encoder)
-                }
-            } catch {
-                // Raw tracing is diagnostic only and must never affect typing.
-            }
+        Task(priority: .utility) {
+            await TraceLogger.shared.record(
+                event,
+                writesRawDebugTrace: writesRawDebugTrace
+            )
         }
     }
 
@@ -416,7 +424,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
                 .compactMap { line in
                     try? decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
                 }
-                .map { $0.redactedForDefaultTrace() }
+                .map(RedactionLayer.redactedDefaultTrace)
         }
     }
 
@@ -425,60 +433,27 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     }
 
     func exportRedactedSurvivalReport(limit: Int = 2_000) -> URL? {
-        queue.sync { [folderURL, decoder, encoder] in
-            let logURL = folderURL.appendingPathComponent("traces.jsonl")
-            guard let contents = try? String(contentsOf: logURL, encoding: .utf8) else {
-                return nil
-            }
+        queue.sync {
+            LocalReportExporter(folderURL: folderURL)
+                .exportRedactedSurvivalReport(limit: limit)
+        }
+    }
 
-            let events = contents
-                .split(separator: "\n", omittingEmptySubsequences: true)
-                .suffix(limit)
-                .compactMap { line in
-                    try? decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
-                }
-                .map { $0.redactedForDefaultTrace() }
-                .filter { $0.type == .suggestionAccepted || $0.type == .acceptedTextEdited }
+    func exportDebugSurvivalInspector(limit: Int = 2_000) -> URL? {
+        guard rawDebugTracingEnabled else {
+            return nil
+        }
 
-            let reportURL = folderURL.appendingPathComponent("survival-report.json")
-
-            do {
-                try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
-                let data = try encoder.encode(events)
-                try data.write(to: reportURL, options: .atomic)
-                return reportURL
-            } catch {
-                return nil
-            }
+        return queue.sync {
+            LocalReportExporter(folderURL: folderURL)
+                .exportDebugSurvivalInspector(limit: limit)
         }
     }
 
     func exportHTMLReport(limit: Int = 2_000) -> URL? {
-        queue.sync { [folderURL, decoder] in
-            let logURL = folderURL.appendingPathComponent("traces.jsonl")
-            guard let contents = try? String(contentsOf: logURL, encoding: .utf8) else {
-                return nil
-            }
-
-            let events = contents
-                .split(separator: "\n", omittingEmptySubsequences: true)
-                .suffix(limit)
-                .compactMap { line in
-                    try? decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
-                }
-                .map { $0.redactedForDefaultTrace() }
-
-            let summary = AutocompleteTraceAnalyzer().summary(for: events)
-            let html = Self.htmlReport(summary: summary, events: events)
-            let reportURL = folderURL.appendingPathComponent("trace-report.html")
-
-            do {
-                try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
-                try html.write(to: reportURL, atomically: true, encoding: .utf8)
-                return reportURL
-            } catch {
-                return nil
-            }
+        queue.sync {
+            LocalReportExporter(folderURL: folderURL)
+                .exportHTMLReport(limit: limit)
         }
     }
 
@@ -561,7 +536,12 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         let supportStates = CompatibilitySupportEvaluator()
             .evaluations(for: events)
             .map { evaluation in
-                "<tr><td><code>\(escape(evaluation.bundleIdentifier))</code></td><td>\(escape(evaluation.state.rawValue))</td><td>\(evaluation.presentedCount)</td><td>\(Int((evaluation.acceptedAndKeptShownRate * 100).rounded()))%</td><td>\(Int((evaluation.insertionVerificationSuccessRate * 100).rounded()))%</td><td>\(evaluation.p95LatencyMilliseconds.map { "\($0)ms" } ?? "n/a")</td><td>\(String(format: "%.2f", evaluation.annoyanceScore))</td></tr>"
+                "<tr><td><code>\(escape(evaluation.bundleIdentifier))</code></td><td>\(escape(evaluation.state.rawValue))</td><td>\(escape(evaluation.appFamily))</td><td>\(evaluation.presentedCount)/\(evaluation.minimumSampleSize)</td><td>\(Int((evaluation.acceptedAndKeptShownRate * 100).rounded()))%</td><td>\(Int((evaluation.insertionVerificationSuccessRate * 100).rounded()))%</td><td>\(evaluation.p95LatencyMilliseconds.map { "\($0)ms" } ?? "n/a")</td><td>\(String(format: "%.2f", evaluation.annoyanceScore))</td></tr>"
+            }
+            .joined(separator: "\n")
+        let insertionReliabilityRows = summary.insertionReliabilityByAppAndMode
+            .map { row in
+                "<tr><td><code>\(escape(row.appBundleIdentifier))</code></td><td><code>\(escape(row.insertionMode))</code></td><td>\(Int((row.successRate * 100).rounded()))%</td><td>\(row.verifiedCount)</td><td>\(row.failedCount)</td></tr>"
             }
             .joined(separator: "\n")
 
@@ -680,8 +660,13 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           <ul>\(annoyanceSignals)</ul>
           <h2>Support state by app</h2>
           <table>
-            <thead><tr><th>App</th><th>State</th><th>Shown</th><th>Kept</th><th>Insert</th><th>p95</th><th>Annoyance</th></tr></thead>
+            <thead><tr><th>App</th><th>State</th><th>Family</th><th>Shown/min</th><th>Kept</th><th>Insert</th><th>p95</th><th>Annoyance</th></tr></thead>
             <tbody>\(supportStates)</tbody>
+          </table>
+          <h2>Insertion reliability by app and mode</h2>
+          <table>
+            <thead><tr><th>App</th><th>Mode</th><th>Success</th><th>Verified</th><th>Failed</th></tr></thead>
+            <tbody>\(insertionReliabilityRows)</tbody>
           </table>
           <h2>Top 5 misses</h2>
           <ol>\(misses)</ol>
