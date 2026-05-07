@@ -126,7 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
     private let focusedTextPollInterval: TimeInterval = 0.05
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
-    private let postTypingPollPauseMilliseconds = 120
+    private let postTypingPollPauseMilliseconds = 220
     private let postInsertionPollPauseMilliseconds = 220
     private let slowFocusedTextPollLatencyMilliseconds = 80
     private var focusedTextPollingPause = FocusedTextPollingPause()

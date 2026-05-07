@@ -229,7 +229,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             bundleIdentifier: "com.openai.codex",
             displayName: "Codex",
             supportLevel: .yellow,
-            supportReason: "Dogfood prompt support still needs wider live proof before it is green.",
+            supportReason: "Dogfood prompt support still needs one-word no-submit proof before it is green.",
             renderMode: .inlineAdjacent,
             insertionMode: .axValueReplacement,
             fallbackRenderMode: .floatingMirror,
@@ -238,13 +238,13 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportsFullAcceptance: false,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Dogfood target. Prefer caret-bound inline suggestions and AX value replacement in the prompt editor. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Full accept stays disabled until no-submit prompt proof is current."
+            notes: "Dogfood target. Prefer caret-bound inline suggestions and AX value replacement in the prompt editor. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claude-code",
             displayName: "Claude Code",
             supportLevel: .yellow,
-            supportReason: "Prompt insertion is limited to next-word accept until full accept is proven safe.",
+            supportReason: "Prompt insertion requires one-word no-submit proof and stays limited to next-word accept until full accept is separately proven safe.",
             renderMode: .inlineAdjacent,
             insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
@@ -253,13 +253,13 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportsFullAcceptance: false,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Dogfood target. Prefer caret-bound inline suggestions when the prompt editor exposes bounds. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Full accept stays disabled until a safe live prompt pass proves it."
+            notes: "Dogfood target. Prefer caret-bound inline suggestions when the prompt editor exposes bounds. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claudefordesktop",
             displayName: "Claude",
             supportLevel: .yellow,
-            supportReason: "Composer placement still needs broader proof before it is green.",
+            supportReason: "Composer placement still needs one-word no-submit proof before it is green.",
             renderMode: .inlineAdjacent,
             insertionMode: .axValueReplacement,
             fallbackRenderMode: .floatingMirror,
@@ -267,7 +267,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportsFullAcceptance: false,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Dogfood target for Claude desktop. Prefer prompt-bound inline suggestions when the composer exposes bounds; otherwise use mirror placement without showing detached whole-window suggestions. Full accept stays disabled until no-submit prompt proof is current."
+            notes: "Dogfood target for Claude desktop. Prefer prompt-bound inline suggestions when the composer exposes bounds; otherwise use mirror placement without showing detached whole-window suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
         )
     ])
 

@@ -50,13 +50,14 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit
 Recorder:
 
 ```bash
-AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-title AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes --manual-gate
-AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-body AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes --manual-gate
-AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=notes-checklist AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
 ```
 
 - Use the existing autocomplete smoke note.
 - Do not let automation create, delete, or search private notes.
+- Do not record a generic `notes` pass as proof. Title, body, and checklist are separate proof targets.
 - Test title-only text with `Can we`.
 - Test body text with `Autocomplete smoke` on line one and `Can we` on line two.
 - Toggle Checklist and test a checklist row.
@@ -107,7 +108,7 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
 - Type a harmless local test fragment like `Can we make this`.
 - Confirm a suggestion appears near the prompt or in a stable mirror position.
 - Press Tab and expect the next word/suffix to insert without submitting.
-- Full visible accept is disabled for this profile until safe no-submit proof exists.
+- Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
 
 ## Claude Code
@@ -122,7 +123,7 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manua
 - Type a harmless local test fragment like `Can we make this`.
 - Confirm a suggestion appears near the prompt or in a stable mirror position.
 - Press Tab and expect the next word/suffix to insert without submitting.
-- Full visible accept is disabled for this profile until a safe live prompt pass proves it.
+- Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
 
 ## Claude Desktop
@@ -137,7 +138,7 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gat
 - Type a harmless local test fragment like `Can we make this`.
 - Confirm a suggestion appears near the prompt or in a stable mirror position.
 - Press Tab and expect the next word/suffix to insert without submitting.
-- Full visible accept is disabled for this profile until safe no-submit proof exists.
+- Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
 
 ## Hold For Explicit Confirmation
