@@ -13,6 +13,12 @@ struct AutocompleteTraceReplayTests {
                 metadata: ["delayMilliseconds": "180"]
             ),
             event(
+                .modelResult,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.phraseContinuation.rawValue,
+                metadata: candidateSelectionMetadata()
+            ),
+            event(
                 .suggestionPresented,
                 suggestionID: "one",
                 requestMode: CompletionRequestMode.phraseContinuation.rawValue,
@@ -52,6 +58,7 @@ struct AutocompleteTraceReplayTests {
         #expect(report.passesReplayProofGate)
         #expect(report.triggerDelayCoverageRate == 1)
         #expect(report.displayScoreCoverageRate == 1)
+        #expect(report.candidateSelectionCoverageRate == 1)
         #expect(report.keptFinalHorizonEventCount == 1)
         #expect(report.latencyByApp.first?.p50Milliseconds == 220)
         #expect(report.latencyByMode.first?.key == CompletionRequestMode.phraseContinuation.rawValue)
@@ -102,6 +109,18 @@ struct AutocompleteTraceReplayTests {
                 metadata: ["delayMilliseconds": "120"]
             ),
             event(
+                .modelResult,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                textBeforeCursor: "[redacted length=42]",
+                metadata: candidateSelectionMetadata(
+                    cleanedCandidateCount: "1",
+                    topScore: "0.950",
+                    scoreMargin: "none",
+                    suppressionReason: "none"
+                )
+            ),
+            event(
                 .suggestionPresented,
                 suggestionID: "one",
                 requestMode: CompletionRequestMode.wordCompletion.rawValue,
@@ -125,6 +144,44 @@ struct AutocompleteTraceReplayTests {
         #expect(report.passesReplayProofGate)
         #expect(report.requirements.contains {
             $0.name == "redacted trace compatible" && $0.passed
+        })
+    }
+
+    @Test("Missing candidate selection metadata fails replay proof")
+    func missingCandidateSelectionMetadataFailsReplayProof() {
+        let events = [
+            event(
+                .suggestionRequested,
+                suggestionID: "one",
+                metadata: ["delayMilliseconds": "180"]
+            ),
+            event(
+                .modelResult,
+                suggestionID: "one",
+                metadata: ["cleanedCandidateCount": "2"]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "one",
+                latencyMilliseconds: 180,
+                metadata: displayMetadata(decision: "display")
+            ),
+            event(
+                .acceptedTextEdited,
+                suggestionID: "one",
+                metadata: [
+                    "checkpoint": AcceptanceSurvivalCheckpoint.thirtySeconds.rawValue,
+                    "survivalClass": AcceptanceSurvivalClass.exactKept.rawValue
+                ]
+            )
+        ]
+
+        let report = AutocompleteTraceReplay().report(for: events)
+
+        #expect(!report.passesReplayProofGate)
+        #expect(report.candidateSelectionCoverageRate == 0)
+        #expect(report.requirements.contains {
+            $0.name == "candidate selection replay" && !$0.passed
         })
     }
 
@@ -167,6 +224,20 @@ struct AutocompleteTraceReplayTests {
             "displayScoreFinal": "1.65",
             "displayScoreAcceptedAndKeptProbability": "0.340",
             "displayScoreAcceptedAndKeptSamples": "0"
+        ]
+    }
+
+    private func candidateSelectionMetadata(
+        cleanedCandidateCount: String = "2",
+        topScore: String = "0.950",
+        scoreMargin: String = "0.090",
+        suppressionReason: String = "none"
+    ) -> [String: String] {
+        [
+            "cleanedCandidateCount": cleanedCandidateCount,
+            "candidateTopScore": topScore,
+            "candidateScoreMargin": scoreMargin,
+            "candidateSuppressionReason": suppressionReason
         ]
     }
 }
