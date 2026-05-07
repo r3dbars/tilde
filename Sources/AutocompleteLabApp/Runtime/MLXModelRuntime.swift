@@ -11,6 +11,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private let usesVisionLanguageFactory: Bool
     private let promptBuilder: CompletionPromptBuilder
     private let cleaner: CompletionOutputCleaner
+    private let candidateRanker: CompletionCandidateRanker
     private let lengthConfiguration: CompletionLengthConfiguration
     private let stateQueue = DispatchQueue(label: "app.transcripted.autocomplete.mlx-model-runtime")
 
@@ -23,13 +24,15 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         usesVisionLanguageFactory: Bool = false,
         lengthConfiguration: CompletionLengthConfiguration = .default,
         promptBuilder: CompletionPromptBuilder? = nil,
-        cleaner: CompletionOutputCleaner? = nil
+        cleaner: CompletionOutputCleaner? = nil,
+        candidateRanker: CompletionCandidateRanker = CompletionCandidateRanker()
     ) {
         self.modelDirectoryURL = modelDirectoryURL
         self.usesVisionLanguageFactory = usesVisionLanguageFactory
         self.lengthConfiguration = lengthConfiguration
         self.promptBuilder = promptBuilder ?? CompletionPromptBuilder(maxVisibleWords: lengthConfiguration.maxVisibleWords)
         self.cleaner = cleaner ?? CompletionOutputCleaner(maxVisibleWords: lengthConfiguration.maxVisibleWords)
+        self.candidateRanker = candidateRanker
         self.storedState = .unavailable(reason: "MLX runtime has not been warmed.")
     }
 
@@ -156,7 +159,16 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let generatedAt = Date()
         try Task.checkCancellation()
 
-        let cleanedSuggestion = requestCleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode)
+        let cleanedCandidates = requestCleaner.cleanCandidates(
+            rawOutput,
+            after: request.textBeforeCursor,
+            mode: request.mode,
+            limit: 3
+        )
+        let cleanedSuggestion = candidateRanker.best(
+            cleanedCandidates,
+            mode: request.mode
+        )
         let cleanedAt = Date()
         let totalMilliseconds = Self.milliseconds(from: startedAt, to: cleanedAt)
         DiagnosticsLog.shared.record(
@@ -175,6 +187,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                 "maxTokens": String(requestMaxGeneratedTokens),
                 "maxVisibleWords": String(effectiveMaxVisibleWords(for: request)),
                 "rawChars": String(rawOutput.count),
+                "cleanedCandidateCount": String(cleanedCandidates.count),
                 "cleanedChars": String(cleanedSuggestion?.visibleText.count ?? 0)
             ]
         )
@@ -183,6 +196,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             prompt: prompt,
             rawOutput: rawOutput,
             cleanedSuggestion: cleanedSuggestion,
+            cleanedCandidateCount: cleanedCandidates.count,
             suggestionID: request.suggestionID,
             latencyMilliseconds: totalMilliseconds,
             firstTokenLatencyMilliseconds: firstChunkMilliseconds
