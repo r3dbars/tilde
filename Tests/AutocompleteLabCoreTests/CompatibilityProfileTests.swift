@@ -210,6 +210,34 @@ struct CompatibilityProfileTests {
         }
     }
 
+    @Test("Profiles expose explicit interaction modes")
+    func profilesExposeExplicitInteractionModes() throws {
+        let store = CompatibilityProfileStore.mvp
+        let textEdit = try #require(store.profile(for: "com.apple.TextEdit"))
+        let notes = try #require(store.profile(for: "com.apple.Notes"))
+        let codex = try #require(store.profile(for: "com.openai.codex"))
+        let mailStatus = store.supportStatus(for: "com.apple.mail")
+        let unsupportedStatus = store.supportStatus(for: "com.openai.atlas")
+        let commandOnly = CompatibilityProfile(
+            bundleIdentifier: "com.example.CommandOnly",
+            displayName: "Command Only",
+            supportLevel: .yellow,
+            supportReason: "Inline placement is not proven.",
+            safetyOwnerNote: "Owner: Command-only test stays manual because inline and mirror placement are intentionally unavailable.",
+            renderMode: .disabled,
+            insertionMode: .keyEvents,
+            notes: "Synthetic command-only profile for mode labeling."
+        )
+
+        #expect(textEdit.interactionMode == .inline)
+        #expect(notes.interactionMode == .mirror)
+        #expect(codex.interactionMode == .mirror)
+        #expect(mailStatus.interactionMode == .disabled)
+        #expect(unsupportedStatus.interactionMode == .disabled)
+        #expect(commandOnly.interactionMode == .commandOnly)
+        #expect(commandOnly.canPresentSuggestions == false)
+    }
+
     @Test("Insertion mode plans try primary then safe fallback")
     func insertionModePlansTryPrimaryThenFallback() throws {
         let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))

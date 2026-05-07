@@ -81,14 +81,14 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         guard case let .supported(profile) = supportStatus else {
-            return "Mode: not tested yet"
+            return "Mode: \(supportStatus.interactionMode.displayName)"
         }
 
         if isMirrorForced {
             return "Mode: mirror forced"
         }
 
-        let primary = Self.renderModeName(profile.renderMode)
+        let primary = profile.interactionMode.displayName
         guard let fallback = profile.fallbackRenderMode,
               fallback != profile.renderMode,
               fallback != .disabled else {
