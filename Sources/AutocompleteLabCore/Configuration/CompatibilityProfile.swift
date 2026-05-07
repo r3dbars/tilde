@@ -217,13 +217,13 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportLevel: .yellow,
             supportReason: "Rich text can drift; display can fall back to floating, and insertion fails closed.",
             renderMode: .inlineAdjacent,
-            insertionMode: .keyEvents,
+            insertionMode: .axThenKeyEvents,
             fallbackRenderMode: .floatingMirror,
-            fallbackInsertionMode: .disabled,
-            knownFailureModes: ["AX selected-text insertion can report success without moving the caret"],
+            fallbackInsertionMode: .keyEvents,
+            knownFailureModes: ["AX selected-text insertion can report success without moving the caret unless post-insert verification passes"],
             supportsObserverUpdates: true,
             allowsDetachedSuggestions: false,
-            notes: "Yellow rich-text target. Use key events only, fail closed on unchanged verification, and suppress detached mirror placement until fresh title/body/checklist proof exists because Notes can report AX selected-text insertion success without moving the caret."
+            notes: "Yellow rich-text target. Try verified AX selected-text insertion before synthetic keys, fail closed on unchanged verification, and suppress detached mirror placement until fresh title/body/checklist proof exists because Notes can report AX selected-text insertion success without moving the caret."
         ),
         CompatibilityProfile(
             bundleIdentifier: "md.obsidian",
