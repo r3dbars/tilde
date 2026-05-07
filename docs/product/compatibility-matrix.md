@@ -15,6 +15,10 @@ Current compatibility stance for the lab build.
 | VS Code | diagnostics only | disabled | off | disabled | Monaco caret and Tab behavior need app-specific proof |
 | Cursor | diagnostics only | disabled | off | disabled | Monaco caret and Tab behavior need app-specific proof |
 | Atlas | unsupported | disabled | off | disabled | blocked until focused AX element is reliable |
+| Terminal / iTerm | unsupported high-risk | disabled | off | disabled | denylisted; command prompts must never get autocomplete during MVP |
+| Password managers | unsupported high-risk | disabled | off | disabled | denylisted: Apple Passwords, Keychain Access, 1Password, Bitwarden, Dashlane, LastPass |
+| System Settings | unsupported high-risk | disabled | off | disabled | denylisted; settings and permission panes are not writing targets |
+| Unknown apps | unsupported by default | disabled | off | disabled | blocked unless an explicit profile and smoke proof are added |
 
 Run:
 
@@ -24,4 +28,6 @@ Run:
 
 TextEdit, Notes, Chrome, and Codex must have full accept proof. Obsidian may
 pass as limited proof when CodeMirror does not expose caret bounds and detached
-suggestions are suppressed instead of shown.
+suggestions are suppressed instead of shown. Mail, Safari, Slack, VS Code, and
+Cursor must prove diagnostics-only blocking. Atlas, Terminal, and 1Password
+must prove unsupported-app blocking.
