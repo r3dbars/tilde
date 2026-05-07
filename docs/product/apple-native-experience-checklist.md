@@ -277,7 +277,7 @@ Native target: nothing looks like a web widget floating on top of macOS.
 - [ ] Reduce custom visual language unless system controls cannot do the job.
 - [ ] Use SF/system font behavior everywhere.
 - [ ] Avoid card-heavy layouts in settings.
-- [ ] Use a proper app icon and menu bar icon variants.
+- [x] Use a proper app icon and menu bar icon variants.
 
 ## Category 6: Privacy And Permissions Trust
 
@@ -468,7 +468,7 @@ Native target: every claim has proof.
 - [x] Menu bar copy pass.
 - [x] Privacy status panel.
 - [ ] First-run setup.
-- [ ] App icon/menu icon polish.
+- [x] App icon/menu icon polish.
 - [ ] Light, dark, increased contrast visual QA.
 
 ## References

@@ -222,8 +222,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func configureStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.title = "Autocomplete"
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.button?.title = ""
+        item.button?.imagePosition = .imageOnly
 
         let menu = NSMenu()
         let statusMenu = NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: "")
@@ -266,6 +267,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pauseSuggestionsMenuItem = pauseItem
         toggleAppMenuItem = toggleItem
         quietFieldMenuItem = quietFieldItem
+        refreshMenuBarIcon()
         refreshRuntimeChrome()
     }
 
@@ -447,6 +449,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshRuntimeChrome() {
         runtimeMenuItem?.title = "Model: \(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(runtimeReadinessReport.summary) • \(completionLengthConfiguration.displaySummary)"
+        refreshMenuBarIcon()
         if settingsWindow.isShowing {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,
@@ -3166,6 +3169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusMenuItem?.title = statusLine
         statusMenuItem?.toolTip = lastSuggestionDecision
+        refreshMenuBarIcon(statusLine: statusLine)
         pauseSuggestionsMenuItem?.title = pauseSuggestionsTitle
         toggleAppMenuItem?.title = appControlState?.menuToggleTitle ?? "Toggle Current App"
         toggleAppMenuItem?.isEnabled = appControlState?.canToggle ?? false
@@ -3254,6 +3258,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setSuggestionDecision(_ decision: String) {
         lastSuggestionDecision = decision
+    }
+
+    private func refreshMenuBarIcon(statusLine: String? = nil) {
+        let presentation = MenuBarIconPresentation(
+            isTrusted: accessibilityClient.isTrusted,
+            suggestionsPaused: suggestionsPaused,
+            runtimeReport: runtimeReadinessReport
+        )
+        statusItem?.button?.image = MenuBarIconFactory.image(for: presentation)
+        statusItem?.button?.imagePosition = .imageOnly
+        statusItem?.button?.toolTip = [
+            presentation.accessibilityDescription,
+            statusLine ?? statusMenuItem?.title
+        ]
+            .compactMap { $0 }
+            .joined(separator: ": ")
     }
 
     private var canQuietCurrentField: Bool {
