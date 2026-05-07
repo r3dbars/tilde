@@ -110,6 +110,9 @@ Pass 1 shipped these improvements:
 - Trace events now carry a proof fingerprint for the current trace, placement,
   key-capture, and runtime proof versions; replay fails stale proof that predates
   those versions.
+- Replay now also requires every presented suggestion in the proof slice to
+  include placement anchor, confidence band, and caret-rect metadata, with at
+  least one trusted caret or synthetic-caret placement.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -229,7 +232,7 @@ Weighted total: **79.2/100**, rounded to **79/100**.
 | Esc learning | 86 | Esc dismiss now records annoyance, suppresses eligible fields until blur, starts a 15s app/field/mode/prefix cooldown, repeated Esc on the same prefix escalates to 60s, and Diagnostics exposes prefix cooldown duration/escalation metadata. | Prove real-app thresholds. |
 | Style memory | 90 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, and question rates with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, Settings can clear it, and Diagnostics exposes the trace-safe aggregate sketch. | Add tuning controls and fresh real-app trace validation. |
 | Annoyance index | 90 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, exposes current-field/session silence in Settings and the menu, records manual field pauses as scoped trace events, records placement uncertainty as caret-geometry failures, and Diagnostics now exposes annoyance score, active quiet-mode scope, and signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
-| Replay-first test rig | 76 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. | Replay recorded real app sessions with caret, screenshots, accepts, kept horizon, and latency after every app/runtime change. |
+| Replay-first test rig | 78 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, placement metadata, trusted caret placement, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. | Replay recorded real app sessions with screenshots, accepts, kept horizon, and latency after every app/runtime change. |
 | Cross-app proof honesty | 92 | App proof matrix explicitly keeps failing rows non-A until evidence exists, and replay now makes stale placement/key/runtime proof fail through trace proof fingerprints. | Close every pending proof row. |
 
 ## Baseline Evidence Notes
@@ -504,6 +507,8 @@ these are true.
    the existing quick cycle button.
 39. Done: add trace proof fingerprints so replay fails sessions captured before
    the current trace, placement, key-capture, and runtime proof versions.
+40. Done: make replay proof require placement metadata and at least one trusted
+   caret or synthetic-caret placement in presented suggestions.
 
 ## Goal Status
 
@@ -522,7 +527,8 @@ Replay proof status:
   **failed**, as expected for stale pre-pass traces.
 - Key failures: trigger delay coverage 3% (198/7186), display score coverage
   0% (6/6411), candidate selection coverage 0% (4/4001), and proof fingerprint
-  coverage 0% (0/24336).
+  coverage 0% (0/24336). Placement metadata coverage is now also checked and is
+  21% (1336/6411, trusted=1153) on the stale corpus.
 - Useful proof still present in the stale corpus: 25,229 events, 3,267
   presented suggestions, 289 stale cancellations, 12 kept-horizon events,
   6 app latency slices, 2 mode latency slices, and 976 annoyance signals.
