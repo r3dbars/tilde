@@ -13,6 +13,7 @@ struct FocusedTextContext: Equatable {
     let elementIdentifier: Int
     let role: String?
     let subrole: String?
+    let purposeHints: [String]
     let textBeforeCursor: String
     let textAfterCursor: String
     let caretRect: CGRect?
@@ -45,6 +46,7 @@ struct FocusedTextDiagnostics: Equatable {
     let localizedAppName: String?
     let role: String?
     let subrole: String?
+    let purposeHints: [String]
     let isSecure: Bool
     let textBeforeCursorLength: Int
     let textAfterCursorLength: Int
@@ -61,6 +63,7 @@ struct FocusedTextDiagnostics: Equatable {
         App: \(localizedAppName ?? "Unknown") (\(bundleIdentifier ?? "unknown bundle"))
         Role: \(role ?? "unknown")
         Subrole: \(subrole ?? "none")
+        Purpose hints: \(purposeHints.isEmpty ? "none" : purposeHints.joined(separator: ", "))
         Secure: \(isSecure)
         Selected range: \(selectedRangeDescription)
         Text before cursor: \(textBeforeCursorLength) chars
@@ -170,6 +173,7 @@ final class AccessibilityClient {
         let isSecure = isSecureTextElement(focusedElement)
         let role = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
         let subrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
+        let purposeHints = textPurposeHints(in: focusedElement)
 
         guard let text = editableText(
             in: focusedElement,
@@ -214,6 +218,7 @@ final class AccessibilityClient {
             elementIdentifier: Int(CFHash(focusedElement)),
             role: role,
             subrole: subrole,
+            purposeHints: purposeHints,
             textBeforeCursor: textSlice.textBeforeCursor,
             textAfterCursor: textSlice.textAfterCursor,
             caretRect: caretRect,
@@ -297,6 +302,7 @@ final class AccessibilityClient {
 
         let role = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
         let subrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
+        let purposeHints = textPurposeHints(in: focusedElement)
         let text = editableText(
             in: focusedElement,
             role: role,
@@ -338,6 +344,7 @@ final class AccessibilityClient {
             localizedAppName: app.localizedName,
             role: role,
             subrole: subrole,
+            purposeHints: purposeHints,
             isSecure: isSecureTextElement(focusedElement),
             textBeforeCursorLength: textSlice?.textBeforeCursor.count ?? 0,
             textAfterCursorLength: textSlice?.textAfterCursor.count ?? 0,
@@ -551,6 +558,18 @@ final class AccessibilityClient {
         }
 
         return parts.joined(separator: "\n")
+    }
+
+    private func textPurposeHints(in element: AXUIElement) -> [String] {
+        [
+            kAXTitleAttribute,
+            kAXDescriptionAttribute,
+            kAXPlaceholderValueAttribute,
+            kAXHelpAttribute
+        ]
+        .compactMap { copyAttribute(element, attribute: $0) as? String }
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
     }
 
     private func configureMessagingTimeout(for element: AXUIElement) {
