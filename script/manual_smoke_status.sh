@@ -64,6 +64,89 @@ trim() {
   printf '%s' "$value"
 }
 
+declare -a CURRENT_BUILD_PROOFS=()
+
+collect_current_build_proofs() {
+  if [[ -n "${AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF:-}" ]]; then
+    CURRENT_BUILD_PROOFS+=("$AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF")
+  fi
+
+  local commit
+  commit="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
+  if [[ -n "$commit" ]]; then
+    CURRENT_BUILD_PROOFS+=("commit:$commit")
+  fi
+
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/AutocompleteLab.zip}"
+  if [[ -s "$archive_path" ]]; then
+    local archive_sha
+    archive_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
+    if [[ -n "$archive_sha" ]]; then
+      CURRENT_BUILD_PROOFS+=("archive-sha256:$archive_sha")
+    fi
+  fi
+}
+
+current_build_proof_summary() {
+  if (( ${#CURRENT_BUILD_PROOFS[@]} == 0 )); then
+    printf 'none'
+    return
+  fi
+
+  local IFS=', '
+  printf '%s' "${CURRENT_BUILD_PROOFS[*]}"
+}
+
+line_has_current_build_proof() {
+  local line="$1"
+  local proof
+  for proof in "${CURRENT_BUILD_PROOFS[@]}"; do
+    if [[ "$line" == *"$proof"* ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+matching_report_line() {
+  local report_name="$1"
+  local bundle_id="$2"
+  local proof_label="$3"
+  local required_verified_regex="$4"
+
+  [[ -f "$REPORT_PATH" ]] || return 0
+
+  local line
+  line="$(
+    grep -E "\\| $report_name \\| \`$bundle_id\` \\| \`$proof_label\` \\| $required_verified_regex \\|" "$REPORT_PATH" |
+      tail -n 1 ||
+      true
+  )"
+
+  if [[ -z "$line" && "$proof_label" == "default" ]]; then
+    line="$(
+      grep -E "\\| $report_name \\| \`$bundle_id\` \\| $required_verified_regex \\|" "$REPORT_PATH" |
+        tail -n 1 ||
+        true
+    )"
+  fi
+
+  printf '%s' "$line"
+}
+
+matching_limited_report_line() {
+  local report_name="$1"
+  local bundle_id="$2"
+  local proof_label="$3"
+
+  [[ -f "$REPORT_PATH" ]] || return 0
+
+  grep -E "\\| $report_name \\| \`$bundle_id\` \\| (\`$proof_label\` \\| )?0 \\| \`detached-suppressed\` \\|" "$REPORT_PATH" |
+    tail -n 1 ||
+    true
+}
+
 print_scorecard_gaps() {
   echo
   if [[ ! -f "$SCORECARD_PATH" ]]; then
@@ -208,6 +291,8 @@ if [[ ! -f "$REPORT_PATH" ]]; then
 else
   echo "Insertion proof status: $REPORT_PATH"
 fi
+collect_current_build_proofs
+echo "Current build proof: $(current_build_proof_summary)"
 
 missing=0
 declare -a pending_apps=()
@@ -235,15 +320,18 @@ for app_entry in "${APPS[@]}"; do
     limited_reason="needs one-word no-submit proof"
   fi
 
-  if [[ -f "$REPORT_PATH" ]] &&
-    grep -E "\\| $report_name \\| \`$bundle_id\` \\| \`$proof_label\` \\| $required_verified_regex \\|" "$REPORT_PATH" >/dev/null; then
-    echo "- $display_name: passed$pass_suffix"
-  elif [[ "$proof_label" == "default" ]] &&
-    [[ -f "$REPORT_PATH" ]] &&
-    grep -E "\\| $report_name \\| \`$bundle_id\` \\| $required_verified_regex \\|" "$REPORT_PATH" >/dev/null; then
-    echo "- $display_name: passed$pass_suffix"
-  elif [[ -f "$REPORT_PATH" ]] &&
-    grep -E "\\| $report_name \\| \`$bundle_id\` \\| (\`$proof_label\` \\| )?0 \\| \`detached-suppressed\` \\|" "$REPORT_PATH" >/dev/null; then
+  pass_line="$(matching_report_line "$report_name" "$bundle_id" "$proof_label" "$required_verified_regex")"
+  limited_line="$(matching_limited_report_line "$report_name" "$bundle_id" "$proof_label")"
+
+  if [[ -n "$pass_line" ]]; then
+    if line_has_current_build_proof "$pass_line"; then
+      echo "- $display_name: passed$pass_suffix"
+    else
+      echo "- $display_name: stale pass (needs current commit/archive proof; run $run_hint)"
+      missing=$((missing + 1))
+      pending_apps+=("$display_name - $run_hint")
+    fi
+  elif [[ -n "$limited_line" ]]; then
     echo "- $display_name: limited pass ($limited_reason; run $run_hint)"
     missing=$((missing + 1))
     pending_apps+=("$display_name - $run_hint")
