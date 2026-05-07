@@ -436,6 +436,34 @@ APPLESCRIPT
   exit 1
 }
 
+wait_for_chrome_tab_title_contains() {
+  local expected_text="$1"
+  local label="$2"
+  local timeout_seconds="${3:-8}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    local current_title
+    current_title="$(osascript <<'APPLESCRIPT'
+tell application "Google Chrome"
+  try
+    return title of active tab of front window
+  on error
+    return ""
+  end try
+end tell
+APPLESCRIPT
+)"
+    if [[ "$current_title" == *"$expected_text"* ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for $label to load in Chrome." >&2
+  exit 1
+}
+
 close_textedit_smoke_documents() {
   osascript >/dev/null <<'APPLESCRIPT'
 tell application "TextEdit"
@@ -952,10 +980,14 @@ run_chrome_fixture() {
   osascript >/dev/null <<APPLESCRIPT
 tell application "Google Chrome"
   activate
-  if not (exists window 1) then make new window
+  make new window
   set URL of active tab of front window to "$chrome_url"
 end tell
-delay 1.2
+APPLESCRIPT
+
+  wait_for_chrome_tab_title_contains "Autocomplete Lab Chrome" "Chrome $fixture fixture"
+
+  osascript >/dev/null <<'APPLESCRIPT'
 tell application "System Events"
   tell process "Google Chrome"
     set frontmost to true
