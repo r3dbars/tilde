@@ -89,6 +89,7 @@ Useful commands:
 ./script/check_model_asset.py
 ./script/beta_readiness.sh
 ./script/manual_smoke_status.sh --require-all
+./script/manual_proof_queue.sh --print
 ./script/check_trace_eval.sh
 ./script/model_latency_report.py --latest
 ./script/check_redacted_report_export.sh
