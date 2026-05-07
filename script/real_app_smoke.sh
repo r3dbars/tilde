@@ -866,7 +866,7 @@ run_manual_gated() {
 }
 
 run_textedit() {
-  local runtime_start_line start_line trace_start_line stable_start_line tmp_dir tmp_file expected_text
+  local runtime_start_line start_line trace_start_line typing_start_line tmp_dir tmp_file expected_text
   runtime_start_line="$(line_count "$LOG_PATH")"
 
   build_if_needed
@@ -888,6 +888,7 @@ end tell
 APPLESCRIPT
   sleep 1
   focus_textedit_document_path "$tmp_file"
+  typing_start_line="$(line_count "$LOG_PATH")"
 
   case "$TEXTEDIT_SESSION_APP" in
     textedit-multiline)
@@ -936,9 +937,8 @@ APPLESCRIPT
   esac
 
   wait_for_textedit_front_document_contains "$expected_text" "scripted TextEdit text"
-  stable_start_line="$(line_count "$LOG_PATH")"
-  wait_for_log_pattern "$stable_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit stable suggestion"
-  wait_for_screenshot_capture_if_enabled "$stable_start_line" "com.apple.TextEdit" "TextEdit"
+  wait_for_log_pattern "$typing_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit stable suggestion"
+  wait_for_screenshot_capture_if_enabled "$typing_start_line" "com.apple.TextEdit" "TextEdit"
   assert_frontmost_app "TextEdit" "TextEdit"
   focus_textedit_document_path "$tmp_file"
   sleep 0.5
