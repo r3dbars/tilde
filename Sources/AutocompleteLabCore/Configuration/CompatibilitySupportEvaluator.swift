@@ -363,7 +363,7 @@ public struct CompatibilitySupportEvaluator: Equatable, Sendable {
 
     private func isSensitiveFieldPresentation(_ event: AutocompleteTraceEvent) -> Bool {
         let fieldKind = event.metadata["fieldKind"] ?? ""
-        return ["search", "form", "url", "secure"].contains(fieldKind)
+        return ["search", "form", "url", "secure", "unprovenSurface"].contains(fieldKind)
     }
 
     private func isDetachedWholeAnchorPresentation(_ event: AutocompleteTraceEvent) -> Bool {

@@ -86,7 +86,7 @@ struct CompletionActivationPolicyTests {
     func blocksUnsafeFieldKinds() {
         let policy = CompletionActivationPolicy()
 
-        for fieldKind in [AXFieldKind.search, .form, .url] {
+        for fieldKind in [AXFieldKind.search, .form, .url, .unprovenSurface] {
             #expect(policy.decision(
                 textBeforeCursor: "I think this",
                 textAfterCursor: "",

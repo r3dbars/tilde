@@ -161,9 +161,9 @@ cheap, even if the model output is good.
 - [ ] Claude Code needs safe live prompt proof.
 - [ ] Claude desktop needs fresh screenshot-backed proof.
 - [ ] Codex needs screenshot plus verified one-word no-submit accept in one strict trace slice.
-- [ ] Real Google Docs needs a distinct proof path or an explicit unsupported state.
-- [ ] Real Notion needs a distinct proof path or an explicit unsupported state.
-- [ ] Real Slack/Discord chat boxes need no-submit proof before enablement.
+- [x] Real Google Docs needs a distinct proof path or an explicit unsupported state.
+- [x] Real Notion needs a distinct proof path or an explicit unsupported state.
+- [x] Real Slack/Discord chat boxes need no-submit proof before enablement.
 - [x] The app should hide inline suggestions when there is less than one useful word of room after the caret.
 - [x] The app should prefer mirror mode over visually lying about inline placement.
 - [ ] Placement should use screenshot-derived correction only after explicit opt-in proof.

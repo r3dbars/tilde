@@ -23,6 +23,7 @@ struct FocusedTextContext: Equatable, Sendable {
     let textLineRect: CGRect?
     let textStyle: FocusedTextStyle?
     let isSecure: Bool
+    let fieldClassification: AXFieldClassification
     let caretIsSynthetic: Bool
     let capabilities: FocusedTextCapabilities
 }
@@ -131,6 +132,7 @@ struct FocusedTextStyle: Equatable, @unchecked Sendable {
 
 final class AccessibilityClient: @unchecked Sendable {
     private let sensitiveTextFieldPolicy = SensitiveTextFieldPolicy()
+    private let fieldClassifier = AXFieldClassifier()
 
     var isTrusted: Bool {
         AXIsProcessTrusted()
@@ -238,6 +240,16 @@ final class AccessibilityClient: @unchecked Sendable {
         let textStyle = selectedRange.flatMap {
             focusedTextStyle(in: focusedElement, textLength: text.utf16.count, range: $0)
         }
+        let fieldClassification = fieldClassification(
+            role: role,
+            subrole: subrole,
+            fingerprint: fingerprint,
+            isSecure: isSecure,
+            textBeforeCursorLength: textSlice.textBeforeCursor.count,
+            textAfterCursorLength: textSlice.textAfterCursor.count,
+            selectedTextLength: selectedTextLength,
+            lineCount: lineCount(in: text)
+        )
         let capabilities = textCapabilities(
             for: focusedElement,
             selectedRange: selectedRange,
@@ -259,6 +271,7 @@ final class AccessibilityClient: @unchecked Sendable {
             textLineRect: textLineRect,
             textStyle: textStyle,
             isSecure: isSecure,
+            fieldClassification: fieldClassification,
             caretIsSynthetic: false,
             capabilities: capabilities
         )
@@ -285,6 +298,16 @@ final class AccessibilityClient: @unchecked Sendable {
             textLineRect: nil,
             textStyle: nil,
             isSecure: true,
+            fieldClassification: fieldClassification(
+                role: role,
+                subrole: subrole,
+                fingerprint: fingerprint,
+                isSecure: true,
+                textBeforeCursorLength: 0,
+                textAfterCursorLength: 0,
+                selectedTextLength: 0,
+                lineCount: 0
+            ),
             caretIsSynthetic: false,
             capabilities: FocusedTextCapabilities(
                 canReadValue: false,
@@ -927,5 +950,39 @@ final class AccessibilityClient: @unchecked Sendable {
             subrole: subrole,
             fingerprint: fingerprint
         )
+    }
+
+    private func fieldClassification(
+        role: String?,
+        subrole: String?,
+        fingerprint: FocusedElementFingerprint,
+        isSecure: Bool,
+        textBeforeCursorLength: Int,
+        textAfterCursorLength: Int,
+        selectedTextLength: Int,
+        lineCount: Int
+    ) -> AXFieldClassification {
+        fieldClassifier.classification(
+            for: AXFieldClassifierInput(
+                role: role,
+                subrole: subrole,
+                title: fingerprint.title,
+                placeholder: fingerprint.placeholder,
+                windowTitle: fingerprint.windowTitle,
+                isSecure: isSecure,
+                textBeforeCursorLength: textBeforeCursorLength,
+                textAfterCursorLength: textAfterCursorLength,
+                selectedTextLength: selectedTextLength,
+                lineCount: lineCount
+            )
+        )
+    }
+
+    private func lineCount(in text: String) -> Int {
+        guard !text.isEmpty else {
+            return 0
+        }
+
+        return text.split(separator: "\n", omittingEmptySubsequences: false).count
     }
 }
