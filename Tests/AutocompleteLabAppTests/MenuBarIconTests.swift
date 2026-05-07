@@ -43,7 +43,7 @@ struct MenuBarIconTests {
             runtimeReport: RuntimeReadinessReport(
                 stage: .downloadNeeded,
                 summary: "download needed",
-                action: .revealModelFolder
+                action: .installModel
             )
         )
 
