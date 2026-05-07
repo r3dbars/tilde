@@ -7,6 +7,7 @@ BUNDLE_ID="bar.r3d.autocomplete-lab"
 MIN_SYSTEM_VERSION="26.0"
 BUILD_CONFIGURATION="${AUTOCOMPLETE_LAB_BUILD_CONFIGURATION:-debug}"
 APP_VERSION="${AUTOCOMPLETE_LAB_VERSION:-0.1.0}"
+APP_BUILD="${AUTOCOMPLETE_LAB_BUILD:-$(git rev-list --count HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -20,8 +21,6 @@ APP_ICON="$APP_RESOURCES/AppIcon.icns"
 MLX_METALLIB="$ROOT_DIR/.build/mlx-metal/default.metallib"
 
 cd "$ROOT_DIR"
-
-APP_BUILD_NUMBER="${AUTOCOMPLETE_LAB_BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
 
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 
@@ -146,7 +145,7 @@ cat >"$INFO_PLIST" <<PLIST
   <key>CFBundleShortVersionString</key>
   <string>$APP_VERSION</string>
   <key>CFBundleVersion</key>
-  <string>$APP_BUILD_NUMBER</string>
+  <string>$APP_BUILD</string>
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
   <key>CFBundlePackageType</key>
@@ -182,6 +181,12 @@ open_app() {
     launchctl setenv AUTOCOMPLETE_LAB_SCREENSHOT_TRACE "$AUTOCOMPLETE_LAB_SCREENSHOT_TRACE"
   else
     launchctl unsetenv AUTOCOMPLETE_LAB_SCREENSHOT_TRACE >/dev/null 2>&1 || true
+  fi
+
+  if [[ "${AUTOCOMPLETE_LAB_RAW_TRACE:-}" =~ ^(1|true|yes|on|0|false|no|off)$ ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_RAW_TRACE "$AUTOCOMPLETE_LAB_RAW_TRACE"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_RAW_TRACE >/dev/null 2>&1 || true
   fi
 
   if [[ -n "${AUTOCOMPLETE_LAB_MODEL:-}" ]]; then

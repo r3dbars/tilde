@@ -5,8 +5,11 @@ public struct KeyboardCapturePolicy: Equatable, Sendable {
 
     public func shouldCaptureKeys(
         isTrustedForAccessibility: Bool,
-        hasVisibleSuggestion: Bool
+        hasVisibleSuggestion: Bool,
+        controlState: SuggestionControlState = .running
     ) -> Bool {
-        isTrustedForAccessibility && hasVisibleSuggestion
+        isTrustedForAccessibility
+            && hasVisibleSuggestion
+            && controlState == .running
     }
 }

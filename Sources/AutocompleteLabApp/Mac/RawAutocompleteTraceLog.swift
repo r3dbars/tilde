@@ -2,24 +2,45 @@ import Foundation
 import AutocompleteLabCore
 
 final class RawAutocompleteTraceLog: @unchecked Sendable {
-    static let shared = RawAutocompleteTraceLog()
+    static let shared = RawAutocompleteTraceLog(
+        logURL: FileManager.default
+            .homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/AutocompleteLab/traces.jsonl"),
+        screenshotsURL: FileManager.default
+            .homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/AutocompleteLab/screenshots")
+    )
 
     private let queue = DispatchQueue(label: "app.transcripted.autocomplete.raw-trace-log")
     private let logURL: URL
     private let screenshotsURL: URL
+    private let userDefaults: UserDefaults
+    private let environment: [String: String]
+    private let debugCaptureDuration: TimeInterval
+    private let now: () -> Date
     private let sessionID = UUID().uuidString
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let pauseDefaultsKey = "AutocompleteLabTracePaused"
     private let screenshotDefaultsKey = "AutocompleteLabScreenshotTraceEnabled"
+    private let screenshotExpiryDefaultsKey = "AutocompleteLabScreenshotTraceExpiresAt"
+    private let rawContentDefaultsKey = "AutocompleteLabRawTraceContentEnabled"
+    private let rawContentExpiryDefaultsKey = "AutocompleteLabRawTraceContentExpiresAt"
 
-    private init() {
-        logURL = FileManager.default
-            .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/AutocompleteLab/traces.jsonl")
-        screenshotsURL = FileManager.default
-            .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/AutocompleteLab/screenshots")
+    init(
+        logURL: URL,
+        screenshotsURL: URL,
+        userDefaults: UserDefaults = .standard,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        debugCaptureDuration: TimeInterval = 60 * 60,
+        now: @escaping () -> Date = Date.init
+    ) {
+        self.logURL = logURL
+        self.screenshotsURL = screenshotsURL
+        self.userDefaults = userDefaults
+        self.environment = environment
+        self.debugCaptureDuration = debugCaptureDuration
+        self.now = now
     }
 
     var currentSessionID: String {
@@ -34,31 +55,60 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         screenshotsURL
     }
 
-    var allowsScreenshotTracing: Bool {
-        traceStorageMode.allowsScreenshots
-    }
-
     var path: String {
         logURL.path
     }
 
-    var privacySummary: String {
-        traceStorageMode.diagnosticSummary
+    var isEnabled: Bool {
+        if isPaused {
+            return false
+        }
+
+        let value = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_TRACE"] ?? ""
+        if ["0", "false", "no", "off"].contains(value.lowercased()) {
+            return false
+        }
+
+        return true
     }
 
-    var isEnabled: Bool {
-        traceStorageMode.isEnabled
+    var rawContentTracingEnabled: Bool {
+        if let override = environmentFlag("AUTOCOMPLETE_LAB_RAW_TRACE") {
+            return override
+        }
+
+        return activeDefaultFlag(
+            flagKey: rawContentDefaultsKey,
+            expiryKey: rawContentExpiryDefaultsKey
+        )
+    }
+
+    func setRawContentTracingEnabled(_ enabled: Bool) {
+        setExpiringDefaultFlag(
+            enabled,
+            flagKey: rawContentDefaultsKey,
+            expiryKey: rawContentExpiryDefaultsKey
+        )
+    }
+
+    var rawContentTracingExpiresAt: Date? {
+        activeDefaultExpirationDate(
+            flagKey: rawContentDefaultsKey,
+            expiryKey: rawContentExpiryDefaultsKey
+        )
     }
 
     var isPaused: Bool {
-        UserDefaults.standard.bool(forKey: pauseDefaultsKey)
+        userDefaults.bool(forKey: pauseDefaultsKey)
     }
 
     func setPaused(_ paused: Bool) {
-        UserDefaults.standard.set(paused, forKey: pauseDefaultsKey)
+        userDefaults.set(paused, forKey: pauseDefaultsKey)
     }
 
     func deleteAll() {
+        setRawContentTracingEnabled(false)
+        setScreenshotTracingEnabled(false)
         queue.sync { [logURL, screenshotsURL] in
             try? FileManager.default.removeItem(at: logURL)
             try? FileManager.default.removeItem(at: screenshotsURL)
@@ -66,15 +116,90 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     }
 
     var screenshotTracingEnabled: Bool {
-        guard traceStorageMode.allowsScreenshots else {
-            return false
+        if activeDefaultFlag(
+            flagKey: screenshotDefaultsKey,
+            expiryKey: screenshotExpiryDefaultsKey
+        ) {
+            return true
         }
 
-        return UserDefaults.standard.bool(forKey: screenshotDefaultsKey)
+        return environmentFlag("AUTOCOMPLETE_LAB_SCREENSHOT_TRACE") == true
     }
 
     func setScreenshotTracingEnabled(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: screenshotDefaultsKey)
+        setExpiringDefaultFlag(
+            enabled,
+            flagKey: screenshotDefaultsKey,
+            expiryKey: screenshotExpiryDefaultsKey
+        )
+    }
+
+    var screenshotTracingExpiresAt: Date? {
+        activeDefaultExpirationDate(
+            flagKey: screenshotDefaultsKey,
+            expiryKey: screenshotExpiryDefaultsKey
+        )
+    }
+
+    private func environmentFlag(_ key: String) -> Bool? {
+        guard let value = environment[key]?.lowercased() else {
+            return nil
+        }
+
+        if ["1", "true", "yes", "on"].contains(value) {
+            return true
+        }
+
+        if ["0", "false", "no", "off"].contains(value) {
+            return false
+        }
+
+        return nil
+    }
+
+    private func activeDefaultFlag(flagKey: String, expiryKey: String) -> Bool {
+        activeDefaultExpirationDate(flagKey: flagKey, expiryKey: expiryKey) != nil
+    }
+
+    private func activeDefaultExpirationDate(flagKey: String, expiryKey: String) -> Date? {
+        guard userDefaults.bool(forKey: flagKey) else {
+            return nil
+        }
+
+        guard let expiresAt = expirationDate(forKey: expiryKey),
+              expiresAt > now() else {
+            clearExpiringDefaultFlag(flagKey: flagKey, expiryKey: expiryKey)
+            return nil
+        }
+
+        return expiresAt
+    }
+
+    private func setExpiringDefaultFlag(_ enabled: Bool, flagKey: String, expiryKey: String) {
+        guard enabled else {
+            clearExpiringDefaultFlag(flagKey: flagKey, expiryKey: expiryKey)
+            return
+        }
+
+        userDefaults.set(true, forKey: flagKey)
+        userDefaults.set(
+            now().addingTimeInterval(debugCaptureDuration).timeIntervalSince1970,
+            forKey: expiryKey
+        )
+    }
+
+    private func clearExpiringDefaultFlag(flagKey: String, expiryKey: String) {
+        userDefaults.set(false, forKey: flagKey)
+        userDefaults.removeObject(forKey: expiryKey)
+    }
+
+    private func expirationDate(forKey key: String) -> Date? {
+        let value = userDefaults.double(forKey: key)
+        guard value > 0 else {
+            return nil
+        }
+
+        return Date(timeIntervalSince1970: value)
     }
 
     func recordModelResult(
@@ -157,7 +282,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             return
         }
 
-        let event = privacyFilteredEvent(AutocompleteTraceEvent(
+        let rawContentEnabled = rawContentTracingEnabled
+        let event = AutocompleteTraceEvent(
             timestamp: ISO8601DateFormatter().string(from: Date()),
             sessionID: sessionID,
             suggestionID: suggestionID,
@@ -166,21 +292,51 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             fieldIdentity: fieldIdentity,
             requestMode: requestMode,
             triggerReason: triggerReason,
-            textBeforeCursor: textBeforeCursor,
-            textAfterCursor: textAfterCursor,
-            systemPrompt: systemPrompt,
-            userPrompt: userPrompt,
-            rawOutput: rawOutput,
-            cleanedVisibleText: cleanedVisibleText,
-            displayedText: displayedText,
-            acceptedText: acceptedText,
-            remainingVisibleText: remainingVisibleText,
+            textBeforeCursor: AutocompleteTracePrivacyFilter.textValue(
+                textBeforeCursor,
+                rawContentEnabled: rawContentEnabled
+            ),
+            textAfterCursor: AutocompleteTracePrivacyFilter.textValue(
+                textAfterCursor,
+                rawContentEnabled: rawContentEnabled
+            ),
+            systemPrompt: AutocompleteTracePrivacyFilter.textValue(
+                systemPrompt,
+                rawContentEnabled: rawContentEnabled
+            ),
+            userPrompt: AutocompleteTracePrivacyFilter.textValue(
+                userPrompt,
+                rawContentEnabled: rawContentEnabled
+            ),
+            rawOutput: AutocompleteTracePrivacyFilter.textValue(
+                rawOutput,
+                rawContentEnabled: rawContentEnabled
+            ),
+            cleanedVisibleText: AutocompleteTracePrivacyFilter.textValue(
+                cleanedVisibleText,
+                rawContentEnabled: rawContentEnabled
+            ),
+            displayedText: AutocompleteTracePrivacyFilter.textValue(
+                displayedText,
+                rawContentEnabled: rawContentEnabled
+            ),
+            acceptedText: AutocompleteTracePrivacyFilter.textValue(
+                acceptedText,
+                rawContentEnabled: rawContentEnabled
+            ),
+            remainingVisibleText: AutocompleteTracePrivacyFilter.textValue(
+                remainingVisibleText,
+                rawContentEnabled: rawContentEnabled
+            ),
             latencyMilliseconds: latencyMilliseconds,
             outcome: outcome,
             reason: reason,
             screenshotPath: screenshotPath,
-            metadata: metadata
-        ))
+            metadata: AutocompleteTracePrivacyFilter.metadata(
+                metadata,
+                rawContentEnabled: rawContentEnabled
+            )
+        )
 
         queue.async { [logURL, encoder] in
             do {
@@ -312,11 +468,6 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         let suppressedModes = sortedCountList(summary.suppressedByMode)
         let actionableSuppressedApps = sortedCountList(summary.actionableSuppressedByApp)
         let actionableSuppressedModes = sortedCountList(summary.actionableSuppressedByMode)
-        let anchorQualityByApp = nestedCountList(summary.anchorQualityByApp)
-        let insertionModeByApp = nestedCountList(summary.insertionModeByApp)
-        let insertionFailuresByAppAndMode = nestedCountList(summary.insertionFailuresByAppAndMode)
-        let updateSourceByApp = nestedCountList(summary.updateSourceByApp)
-        let axFailureReasonByApp = nestedCountList(summary.axFailureReasonByApp)
 
         return """
         <!doctype html>
@@ -368,17 +519,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           <ul>\(actionableSuppressedApps)</ul>
           <h2>Actionable suppressed by mode</h2>
           <ul>\(actionableSuppressedModes)</ul>
-          <h2>Anchor quality by app</h2>
-          <ul>\(anchorQualityByApp)</ul>
-          <h2>Insertion mode by app</h2>
-          <ul>\(insertionModeByApp)</ul>
-          <h2>Insertion failures by app and mode</h2>
-          <ul>\(insertionFailuresByAppAndMode)</ul>
-          <h2>Update source by app</h2>
-          <ul>\(updateSourceByApp)</ul>
-          <h2>AX failure reason by app</h2>
-          <ul>\(axFailureReasonByApp)</ul>
-          <h2>Top 10 misses</h2>
+          <h2>Top 5 misses</h2>
           <ol>\(misses)</ol>
           <h2>Recent events</h2>
           <table>
@@ -403,25 +544,6 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             .joined(separator: "\n")
     }
 
-    private static func nestedCountList(_ buckets: [String: [String: Int]]) -> String {
-        buckets
-            .sorted { $0.key < $1.key }
-            .flatMap { app, values in
-                values
-                    .sorted { lhs, rhs in
-                        if lhs.value == rhs.value {
-                            return lhs.key < rhs.key
-                        }
-
-                        return lhs.value > rhs.value
-                    }
-                    .map { key, value in
-                        "<li><code>\(escape(app))</code>: <code>\(escape(key))</code> \(value)</li>"
-                    }
-            }
-            .joined(separator: "\n")
-    }
-
     private static func escape(_ value: String) -> String {
         value
             .replacingOccurrences(of: "&", with: "&amp;")
@@ -436,119 +558,5 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         }
 
         return "<a href=\"file://\(escape(path))\">open</a>"
-    }
-
-    private var traceStorageMode: TraceStorageMode {
-        if isPaused {
-            return .disabled
-        }
-
-        let environment = ProcessInfo.processInfo.environment
-        let explicitMode = environment["AUTOCOMPLETE_LAB_TRACE_MODE"]?.lowercased() ?? ""
-        if let mode = traceMode(explicitMode: explicitMode) {
-            return mode
-        }
-
-        let legacyValue = environment["AUTOCOMPLETE_LAB_TRACE"]?.lowercased() ?? ""
-        if ["0", "false", "no", "off", "disabled"].contains(legacyValue) {
-            return .disabled
-        }
-
-        if ["1", "true", "yes", "on", "raw", "lab", "dogfood"].contains(legacyValue) {
-            return .enabled(.lab)
-        }
-
-        return .enabled(.beta)
-    }
-
-    private func traceMode(explicitMode: String) -> TraceStorageMode? {
-        switch explicitMode {
-        case "0", "false", "no", "off", "disabled":
-            return .disabled
-        case "", "default":
-            return nil
-        case "lab", "raw":
-            return .enabled(.lab)
-        case "dogfood":
-            return .enabled(.dogfood)
-        case "customer":
-            return .enabled(.customer)
-        case "1", "true", "yes", "on", "beta", "redacted":
-            return .enabled(.beta)
-        default:
-            return .enabled(.beta)
-        }
-    }
-
-    private func privacyFilteredEvent(_ event: AutocompleteTraceEvent) -> AutocompleteTraceEvent {
-        guard case let .enabled(mode) = traceStorageMode,
-              !mode.allowsRawTextPersistence else {
-            return event
-        }
-
-        let redacted = event.redacted(privacyMode: mode)
-        var metadata = redacted.metadata
-        metadata["privacyMode"] = mode.rawValue
-        metadata["rawTextRedacted"] = "true"
-        metadata["textBeforeCursorChars"] = String(redacted.textBeforeCursorCharacterCount)
-        metadata["textAfterCursorChars"] = String(redacted.textAfterCursorCharacterCount)
-        metadata["systemPromptChars"] = String(redacted.systemPromptCharacterCount)
-        metadata["userPromptChars"] = String(redacted.userPromptCharacterCount)
-        metadata["rawOutputChars"] = String(redacted.rawOutputCharacterCount)
-        metadata["cleanedVisibleChars"] = String(redacted.cleanedVisibleTextCharacterCount)
-        metadata["displayedChars"] = String(redacted.displayedTextCharacterCount)
-        metadata["acceptedChars"] = String(redacted.acceptedTextCharacterCount)
-        metadata["remainingVisibleChars"] = String(redacted.remainingVisibleTextCharacterCount)
-        metadata["hadScreenshotPath"] = String(redacted.hasScreenshot)
-
-        return AutocompleteTraceEvent(
-            id: event.id,
-            timestamp: event.timestamp,
-            sessionID: event.sessionID,
-            suggestionID: event.suggestionID,
-            type: event.type,
-            appBundleIdentifier: event.appBundleIdentifier,
-            fieldIdentity: event.fieldIdentity,
-            requestMode: event.requestMode,
-            triggerReason: event.triggerReason,
-            latencyMilliseconds: event.latencyMilliseconds,
-            outcome: event.outcome,
-            reason: event.reason,
-            metadata: metadata
-        )
-    }
-}
-
-private enum TraceStorageMode {
-    case disabled
-    case enabled(AutocompleteTracePrivacyMode)
-
-    var isEnabled: Bool {
-        switch self {
-        case .disabled:
-            return false
-        case .enabled:
-            return true
-        }
-    }
-
-    var allowsScreenshots: Bool {
-        switch self {
-        case .disabled:
-            return false
-        case let .enabled(mode):
-            return mode.allowsScreenshotTracing
-        }
-    }
-
-    var diagnosticSummary: String {
-        switch self {
-        case .disabled:
-            return "disabled"
-        case let .enabled(mode):
-            let text = mode.allowsRawTextPersistence ? "raw text on" : "raw text off"
-            let screenshots = mode.allowsScreenshotTracing ? "screenshots allowed" : "screenshots blocked"
-            return "\(mode.rawValue) (\(text), \(screenshots))"
-        }
     }
 }

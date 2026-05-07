@@ -23,17 +23,22 @@ final class DiagnosticsWindowController {
         textView.isEditable = false
         textView.isSelectable = true
         textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.textColor = .textColor
+        textView.backgroundColor = .textBackgroundColor
+        textView.drawsBackground = true
         textView.textContainerInset = NSSize(width: 12, height: 12)
 
         refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
-        pauseTracingButton = NSButton(title: "Pause Tracing", target: nil, action: nil)
-        screenshotTracingButton = NSButton(title: "Screenshot Trace", target: nil, action: nil)
-        openTraceFolderButton = NSButton(title: "Open Trace Folder", target: nil, action: nil)
-        exportReportButton = NSButton(title: "Export Report", target: nil, action: nil)
-        deleteTracesButton = NSButton(title: "Delete Traces", target: nil, action: nil)
+        pauseTracingButton = NSButton(title: "Pause", target: nil, action: nil)
+        screenshotTracingButton = NSButton(title: "Screenshots", target: nil, action: nil)
+        openTraceFolderButton = NSButton(title: "Trace Folder", target: nil, action: nil)
+        exportReportButton = NSButton(title: "Export", target: nil, action: nil)
+        deleteTracesButton = NSButton(title: "Delete", target: nil, action: nil)
 
         let scrollView = NSScrollView(frame: .zero)
         scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.borderType = .bezelBorder
         scrollView.documentView = textView
 
         let buttonStack = NSStackView(views: [
@@ -46,22 +51,48 @@ final class DiagnosticsWindowController {
         ])
         buttonStack.orientation = .horizontal
         buttonStack.spacing = 8
+        buttonStack.alignment = .centerY
         buttonStack.edgeInsets = NSEdgeInsets(top: 10, left: 10, bottom: 6, right: 10)
+        [
+            refreshButton,
+            pauseTracingButton,
+            screenshotTracingButton,
+            openTraceFolderButton,
+            exportReportButton,
+            deleteTracesButton
+        ].forEach {
+            $0.bezelStyle = .rounded
+            $0.controlSize = .small
+            $0.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        }
 
         let contentStack = NSStackView(views: [buttonStack, scrollView])
         contentStack.orientation = .vertical
         contentStack.spacing = 0
-        contentStack.frame = NSRect(x: 0, y: 0, width: 780, height: 560)
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
         scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 460).isActive = true
+        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 780, height: 560))
+        contentView.material = .contentBackground
+        contentView.blendingMode = .behindWindow
+        contentView.state = .active
+        contentView.addSubview(contentStack)
 
         window = NSWindow(
-            contentRect: contentStack.frame,
+            contentRect: contentView.frame,
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "Autocomplete Diagnostics"
-        window.contentView = contentStack
+        window.title = "Diagnostics"
+        window.contentView = contentView
+        window.contentMinSize = NSSize(width: 680, height: 460)
+        window.isMovableByWindowBackground = true
+        NSLayoutConstraint.activate([
+            contentStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            contentStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            contentStack.topAnchor.constraint(equalTo: contentView.topAnchor),
+            contentStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
+        ])
 
         refreshButton.target = self
         refreshButton.action = #selector(refresh)
@@ -83,6 +114,7 @@ final class DiagnosticsWindowController {
         compatibilityStatus: CompatibilitySupportStatus,
         appEnabled: Bool,
         appTrusted: Bool,
+        lastSuggestionDecision: String,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
         modelDirectoryPath: String,
@@ -90,10 +122,8 @@ final class DiagnosticsWindowController {
         traceSummary: AutocompleteTraceSummary,
         recentTraceEvents: [AutocompleteTraceEvent],
         tracePath: String,
-        tracePrivacySummary: String,
         tracingPaused: Bool,
         screenshotTracingEnabled: Bool,
-        anchorDecisionSummary: String?,
         compatibilityLearningPath: String,
         compatibilityLearningProfile: CompatibilityLearningProfile?,
         refreshAction: @escaping () -> Void,
@@ -109,12 +139,13 @@ final class DiagnosticsWindowController {
         self.openTraceFolderAction = openTraceFolderAction
         self.exportReportAction = exportReportAction
         self.deleteTracesAction = deleteTracesAction
-        pauseTracingButton.title = tracingPaused ? "Resume Tracing" : "Pause Tracing"
+        pauseTracingButton.title = tracingPaused ? "Resume" : "Pause"
         screenshotTracingButton.title = screenshotTracingEnabled ? "Screenshots On" : "Screenshots Off"
 
         var sections: [String] = []
 
-        sections.append("Permission: Accessibility \(appTrusted ? "granted" : "missing")")
+        sections.append("Accessibility: \(appTrusted ? "on" : "needed")")
+        sections.append("Suggestion: \(lastSuggestionDecision)")
         sections.append(
             """
             Local model: \(runtimeReport.summary)
@@ -126,24 +157,10 @@ final class DiagnosticsWindowController {
         )
         sections.append("Model folder: \(modelDirectoryPath)")
         sections.append("Compatibility: \(compatibilityStatus.summary)")
-        sections.append("Current app enabled: \(appEnabled)")
-        if let anchorDecisionSummary {
-            sections.append("Anchor: \(anchorDecisionSummary)")
-        }
-        sections.append(whyNoSuggestionText(
-            diagnostics: diagnostics,
-            profile: profile,
-            compatibilityStatus: compatibilityStatus,
-            appEnabled: appEnabled,
-            appTrusted: appTrusted,
-            runtimeReport: runtimeReport,
-            anchorDecisionSummary: anchorDecisionSummary,
-            traceSummary: traceSummary
-        ))
+        sections.append("App enabled: \(appEnabled)")
         sections.append(traceSummaryText(
             traceSummary,
             tracePath: tracePath,
-            tracePrivacySummary: tracePrivacySummary,
             tracingPaused: tracingPaused,
             screenshotTracingEnabled: screenshotTracingEnabled,
             compatibilityLearningPath: compatibilityLearningPath,
@@ -158,14 +175,6 @@ final class DiagnosticsWindowController {
         sections.append(countBucketsText(title: "Suppressed by mode", buckets: traceSummary.suppressedByMode))
         sections.append(countBucketsText(title: "Actionable suppressed by app", buckets: traceSummary.actionableSuppressedByApp))
         sections.append(countBucketsText(title: "Actionable suppressed by mode", buckets: traceSummary.actionableSuppressedByMode))
-        sections.append(nestedCountBucketsText(title: "Anchor quality by app", buckets: traceSummary.anchorQualityByApp))
-        sections.append(nestedCountBucketsText(title: "Insertion mode by app", buckets: traceSummary.insertionModeByApp))
-        sections.append(nestedCountBucketsText(
-            title: "Insertion failures by app and mode",
-            buckets: traceSummary.insertionFailuresByAppAndMode
-        ))
-        sections.append(nestedCountBucketsText(title: "Update source by app", buckets: traceSummary.updateSourceByApp))
-        sections.append(nestedCountBucketsText(title: "AX failure reason by app", buckets: traceSummary.axFailureReasonByApp))
         sections.append(topMissesText(traceSummary.topMisses))
 
         if let profile {
@@ -173,23 +182,16 @@ final class DiagnosticsWindowController {
                 """
                 Compatibility profile:
                   app: \(profile.displayName) (\(profile.bundleIdentifier))
-                  family: \(profile.appFamily.rawValue)
                   render mode: \(profile.renderMode.rawValue)
                   insertion mode: \(profile.insertionMode.rawValue)
                   fallback render: \(profile.fallbackRenderMode?.rawValue ?? "none")
                   fallback insertion: \(profile.fallbackInsertionMode?.rawValue ?? "none")
                   field identity: \(profile.fieldIdentityMode.rawValue)
-                  anchor ladder: \(profile.anchorLadder.map(\.rawValue).joined(separator: " > "))
-                  field anchor: \(profile.allowsFieldAnchor)
-                  window anchor: \(profile.allowsWindowAnchor)
-                  requires validated caret: \(profile.requiresValidatedCaret)
-                  observer updates: \(profile.supportsObserverUpdates)
                   one-word accept: \(profile.supportsOneWordAcceptance)
                   full accept: \(profile.supportsFullAcceptance)
                   Esc suppression: \(profile.suppressesUntilBlurAfterEscape)
                   suppress after failed insert: \(profile.suppressesAfterInsertionFailure)
                   sensitive: \(profile.isSensitive)
-                  known failures: \(profile.knownFailureModes.isEmpty ? "none" : profile.knownFailureModes.joined(separator: "; "))
                   debug summary: \(profile.debugSummary)
                   notes: \(profile.notes)
                 """
@@ -200,6 +202,7 @@ final class DiagnosticsWindowController {
 
         sections.append(diagnostics?.summary ?? "Focused text diagnostics: unavailable")
         sections.append(recentTraceText(recentTraceEvents))
+        sections.append(typingHealthText(recentEvents))
         sections.append(recentDiagnosticsText(recentEvents))
 
         textView.string = sections.joined(separator: "\n\n")
@@ -210,7 +213,6 @@ final class DiagnosticsWindowController {
     private func traceSummaryText(
         _ summary: AutocompleteTraceSummary,
         tracePath: String,
-        tracePrivacySummary: String,
         tracingPaused: Bool,
         screenshotTracingEnabled: Bool,
         compatibilityLearningPath: String,
@@ -219,10 +221,8 @@ final class DiagnosticsWindowController {
         """
         Trace eval:
           path: \(tracePath)
-          privacy: \(tracePrivacySummary)
           tracing: \(tracingPaused ? "paused" : "on")
           screenshot tracing: \(screenshotTracingEnabled ? "on" : "off")
-          raw mode warning: \(tracePrivacySummary.contains("raw") ? "typed text may be persisted locally" : "typed text is redacted")
           compatibility learning: \(compatibilityLearningPath)
           current learned adapter: \(compatibilityLearningProfile?.debugSummary ?? "none")
           events: \(summary.totalEvents)
@@ -242,140 +242,13 @@ final class DiagnosticsWindowController {
         """
     }
 
-    private func whyNoSuggestionText(
-        diagnostics: FocusedTextDiagnostics?,
-        profile: CompatibilityProfile?,
-        compatibilityStatus: CompatibilitySupportStatus,
-        appEnabled: Bool,
-        appTrusted: Bool,
-        runtimeReport: RuntimeReadinessReport,
-        anchorDecisionSummary: String?,
-        traceSummary: AutocompleteTraceSummary
-    ) -> String {
-        let currentReason = currentNoSuggestionReason(
-            diagnostics: diagnostics,
-            profile: profile,
-            compatibilityStatus: compatibilityStatus,
-            appEnabled: appEnabled,
-            appTrusted: appTrusted,
-            runtimeReport: runtimeReport,
-            anchorDecisionSummary: anchorDecisionSummary
-        )
-        let recentReasons = recentNoSuggestionReasons(traceSummary.suppressedByReason)
-
-        return """
-        Why no suggestion:
-          now: \(currentReason)
-        \(recentReasons)
-        """
-    }
-
-    private func currentNoSuggestionReason(
-        diagnostics: FocusedTextDiagnostics?,
-        profile: CompatibilityProfile?,
-        compatibilityStatus: CompatibilitySupportStatus,
-        appEnabled: Bool,
-        appTrusted: Bool,
-        runtimeReport: RuntimeReadinessReport,
-        anchorDecisionSummary: String?
-    ) -> String {
-        if !appTrusted {
-            return "Accessibility permission is missing, so the app cannot read the focused field."
-        }
-
-        if !appEnabled {
-            return "Suggestions are paused or disabled for the current app."
-        }
-
-        if !runtimeReport.allowsSuggestions {
-            return "The local model is not ready. Next action: \(runtimeReport.action.displayName)."
-        }
-
-        guard let profile else {
-            return "The current app is not allowed yet. \(compatibilityStatus.summary)."
-        }
-
-        if !profile.canPresentSuggestions {
-            return "\(profile.displayName) is diagnostics-only until insertion and caret behavior are proven."
-        }
-
-        if diagnostics?.isSecure == true {
-            return "The focused field looks private or secure, so suggestions stay off."
-        }
-
-        if let anchorDecisionSummary, anchorDecisionSummary.contains("canPresent=false") {
-            return "Caret placement is not trusted enough to show a suggestion: \(anchorDecisionSummary)."
-        }
-
-        if diagnostics == nil {
-            return "No focused text field is visible to Accessibility right now."
-        }
-
-        return "Nothing is blocked right now. If no text appears, check recent suppressed reasons below."
-    }
-
-    private func recentNoSuggestionReasons(_ buckets: [String: Int]) -> String {
-        let topReasons = buckets
-            .sorted { lhs, rhs in
-                if lhs.value == rhs.value {
-                    return lhs.key < rhs.key
-                }
-
-                return lhs.value > rhs.value
-            }
-            .prefix(5)
-
-        guard !topReasons.isEmpty else {
-            return "  recent: none recorded yet"
-        }
-
-        let lines = topReasons.map { reason, count in
-            "  recent: \(reason) (\(count)) - \(plainNoSuggestionReason(reason))"
-        }
-
-        return lines.joined(separator: "\n")
-    }
-
-    private func plainNoSuggestionReason(_ reason: String) -> String {
-        switch reason {
-        case "profile-diagnostics-only":
-            return "this app is being observed only, not completed into yet"
-        case "runtime-not-ready":
-            return "the local model is missing, loading, or failed"
-        case "secure-field", "secureField":
-            return "the field looks private or password-like"
-        case "suppressed-field", "suppressedField":
-            return "Esc or a failed insertion calmed this field until focus changes"
-        case "sensitiveContent":
-            return "the nearby text looks like payment, token, password, or key material"
-        case "tooLittleContext":
-            return "there is not enough typed context yet"
-        case "middleOfLine":
-            return "the cursor is in the middle of existing text"
-        case "unfinishedWord":
-            return "the app is waiting for a clearer word or phrase boundary"
-        case "missing-inline-capabilities":
-            return "the app did not expose enough Accessibility data for inline placement"
-        case "detached-suggestion-disabled":
-            return "only a whole-field/window anchor was available, so the bubble stayed hidden"
-        case "empty-suggestion":
-            return "the model returned nothing useful"
-        case "repeated-miss":
-            return "the same bad suggestion was typed over too often"
-        case "no-fast-word-candidate":
-            return "word completion did not have a confident local candidate"
-        default:
-            return "see recent trace events for the exact context"
-        }
-    }
-
     private func topMissesText(_ misses: [AutocompleteTraceMiss]) -> String {
         guard !misses.isEmpty else {
-            return "Top 10 misses: none yet"
+            return "Top 5 misses: none yet"
         }
 
         return """
-        Top 10 misses:
+        Top 5 misses:
         \(misses.enumerated().map { index, miss in
             "  \(index + 1). \(miss.title) | count=\(miss.count) | app=\(miss.appBundleIdentifier.isEmpty ? "unknown" : miss.appBundleIdentifier) | mode=\(miss.requestMode.isEmpty ? "unknown" : miss.requestMode) | fix=\(miss.fixCategory) | cause=\(miss.suggestedCause) | example=\(miss.exampleSuggestionID)"
         }.joined(separator: "\n"))
@@ -414,34 +287,6 @@ final class DiagnosticsWindowController {
         """
     }
 
-    private func nestedCountBucketsText(title: String, buckets: [String: [String: Int]]) -> String {
-        guard !buckets.isEmpty else {
-            return "\(title): none yet"
-        }
-
-        let lines = buckets
-            .sorted { $0.key < $1.key }
-            .flatMap { app, values in
-                values
-                    .sorted { lhs, rhs in
-                        if lhs.value == rhs.value {
-                            return lhs.key < rhs.key
-                        }
-
-                        return lhs.value > rhs.value
-                    }
-                    .map { key, value in
-                        "  \(app): \(key)=\(value)"
-                    }
-            }
-            .joined(separator: "\n")
-
-        return """
-        \(title):
-        \(lines)
-        """
-    }
-
     private func recentTraceText(_ events: [AutocompleteTraceEvent]) -> String {
         guard !events.isEmpty else {
             return "Recent trace events: none yet"
@@ -463,6 +308,17 @@ final class DiagnosticsWindowController {
         return """
         Recent events:
         \(events.map { "  \($0)" }.joined(separator: "\n"))
+        """
+    }
+
+    private func typingHealthText(_ events: [String]) -> String {
+        let health = DiagnosticsTypingHealth(events: events)
+        return """
+        Typing health:
+          key capture: \(health.keyCaptureStatus)
+          key samples: \(health.keySampleDescription)
+          AX polling: \(health.axPollingStatus)
+          AX samples: \(health.axSampleDescription)
         """
     }
 
@@ -502,5 +358,155 @@ final class DiagnosticsWindowController {
     @objc
     private func deleteTraces() {
         deleteTracesAction?()
+    }
+}
+
+struct DiagnosticsTypingHealth {
+    private var keySamples = 0
+    private var keySummarySamples = 0
+    private var keyMaxMicros: Int?
+    private var keyP95Micros: Int?
+    private var slowKeyMarkers = 0
+    private var disabledKeyEvents = 0
+
+    private var axSummarySamples = 0
+    private var axP95Milliseconds: Int?
+    private var axMaxMilliseconds: Int?
+    private var slowAXMarkers = 0
+    private var skippedAXPolls = 0
+    private var axCooldowns = 0
+
+    init(events: [String]) {
+        for event in events {
+            ingest(event)
+        }
+    }
+
+    var keyCaptureStatus: String {
+        if disabledKeyEvents > 0 {
+            return "needs attention - event tap disabled \(disabledKeyEvents)x"
+        }
+
+        if slowKeyMarkers > 0 {
+            return "needs attention - slow key capture \(slowKeyMarkers)x"
+        }
+
+        if keySamples + keySummarySamples == 0 {
+            return "no recent key samples"
+        }
+
+        return "healthy"
+    }
+
+    var keySampleDescription: String {
+        "raw=\(keySamples), summary=\(keySummarySamples), p95=\(microseconds(keyP95Micros)), max=\(microseconds(keyMaxMicros))"
+    }
+
+    var axPollingStatus: String {
+        if axCooldowns > 0 {
+            return "cooling down slow app reads, typing should pass through"
+        }
+
+        if slowAXMarkers > 0 || skippedAXPolls > 0 {
+            return "warning - suggestions may lag, typing should pass through"
+        }
+
+        if axSummarySamples == 0 {
+            return "no recent AX samples"
+        }
+
+        return "healthy"
+    }
+
+    var axSampleDescription: String {
+        "summary=\(axSummarySamples), p95=\(milliseconds(axP95Milliseconds)), max=\(milliseconds(axMaxMilliseconds)), slow=\(slowAXMarkers), skipped=\(skippedAXPolls), cooldowns=\(axCooldowns)"
+    }
+
+    private mutating func ingest(_ line: String) {
+        let parts = line.split(separator: " ").map(String.init)
+        guard parts.count >= 2 else {
+            return
+        }
+
+        let event = parts[1]
+        let fields = Self.fields(from: parts.dropFirst(2))
+
+        switch event {
+        case "keyboard-event-tap-latency":
+            keySamples += 1
+            keyMaxMicros = maxOptional(keyMaxMicros, fields.intValue(for: "durationMicros"))
+        case "keyboard-event-tap-latency-summary":
+            keySummarySamples += fields.intValue(for: "count") ?? 0
+            keyP95Micros = maxOptional(keyP95Micros, fields.intValue(for: "p95Micros"))
+            keyMaxMicros = maxOptional(keyMaxMicros, fields.intValue(for: "maxMicros"))
+        case "keyboard-event-tap-latency-slow":
+            slowKeyMarkers += 1
+            keyMaxMicros = maxOptional(keyMaxMicros, fields.intValue(for: "durationMicros"))
+        case "keyboard-event-tap-disabled":
+            disabledKeyEvents += 1
+        case "focused-text-poll-latency-summary":
+            axSummarySamples += fields.intValue(for: "count") ?? 0
+            axP95Milliseconds = maxOptional(axP95Milliseconds, fields.intValue(for: "p95Milliseconds"))
+            axMaxMilliseconds = maxOptional(axMaxMilliseconds, fields.intValue(for: "maxMilliseconds"))
+        case "focused-text-poll-latency-slow":
+            slowAXMarkers += 1
+            axMaxMilliseconds = maxOptional(axMaxMilliseconds, fields.intValue(for: "durationMilliseconds"))
+        case "focused-text-ax-read-slow":
+            slowAXMarkers += 1
+            axMaxMilliseconds = maxOptional(
+                axMaxMilliseconds,
+                fields.intValue(for: "readDurationMilliseconds")
+            )
+        case "focused-text-poll-skipped":
+            skippedAXPolls += fields.intValue(for: "count") ?? 1
+        case "focused-text-poll-skip-summary":
+            skippedAXPolls += fields.intValue(for: "count") ?? 0
+        case "focused-text-ax-health-cooldown", "focused-text-ax-health-cooldown-started":
+            axCooldowns += 1
+        default:
+            return
+        }
+    }
+
+    private func maxOptional(_ lhs: Int?, _ rhs: Int?) -> Int? {
+        switch (lhs, rhs) {
+        case let (.some(lhs), .some(rhs)):
+            return max(lhs, rhs)
+        case let (.some(lhs), .none):
+            return lhs
+        case let (.none, .some(rhs)):
+            return rhs
+        case (.none, .none):
+            return nil
+        }
+    }
+
+    private static func fields<S: Sequence>(from parts: S) -> [String: String] where S.Element == String {
+        var result: [String: String] = [:]
+        for part in parts {
+            let pieces = part.split(separator: "=", maxSplits: 1).map(String.init)
+            guard pieces.count == 2 else {
+                continue
+            }
+            result[pieces[0]] = pieces[1]
+        }
+        return result
+    }
+
+    private func microseconds(_ value: Int?) -> String {
+        value.map { "\($0)us" } ?? "n/a"
+    }
+
+    private func milliseconds(_ value: Int?) -> String {
+        value.map { "\($0)ms" } ?? "n/a"
+    }
+}
+
+private extension Dictionary where Key == String, Value == String {
+    func intValue(for key: String) -> Int? {
+        guard let value = self[key] else {
+            return nil
+        }
+        return Int(value)
     }
 }
