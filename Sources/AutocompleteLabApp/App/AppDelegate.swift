@@ -1504,7 +1504,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 acceptanceID: acceptanceID,
                 acceptedAt: acceptedAt
             )
-            suggestionSession.commitNextWordAcceptance(acceptedText)
+            suggestionSession.commitNextWordAcceptance(acceptedText, keepsResidual: false)
             recordAcceptedText(acceptedText)
             advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
             suggestionRepetitionSuppressor.recordAcceptance(
@@ -1519,12 +1519,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 suggestionID: currentSuggestionID ?? "",
                 reason: action.diagnosticName
             )
-            setSuggestionDecision("Accepted: next word")
-            if suggestionSession.hasVisibleSuggestion {
-                refreshVisibleSuggestion()
-            } else {
-                hideSuggestion(reason: "accepted-next-word-final")
-            }
+            setSuggestionDecision("Accepted: next word; waiting for recompute")
+            hideSuggestion(reason: "accepted-next-word-recompute")
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")

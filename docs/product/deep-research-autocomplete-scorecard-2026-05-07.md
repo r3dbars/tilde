@@ -164,7 +164,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Sentence mode | 78 | First-class `sentenceContinuation` mode exists with activation, prompt guidance, stricter display threshold, streaming behavior, replay delay gate, and ranker penalties for question/planning drift. | Real-app proof that it does not take over the writer's next thought. |
 | Line/paragraph start | 80 | Trigger policy suppresses line starts until two content words, and bullet-line starts stay quiet until the bullet text is constrained. | Add profile-aware bullet/email exceptions and screenshot proof. |
 | After deletion | 82 | Deletion skips requests and records a 250ms prefix-family cooldown. | Prove the live cooldown in fresh traces and feed longer-term deletion outcomes into learning. |
-| After accept | 86 | Tab accepts one word, full accept is profile-gated, and accepted-and-kept horizons feed durable display affinity. | Only one follow-on after accept unless recomputed and scored high. |
+| After accept | 90 | Tab accepts one word, full accept is profile-gated, accepted-and-kept horizons feed durable display affinity, and the app now discards residual Tab text so the next follow-on must be recomputed and rescored. | Prove the recompute behavior in fresh real-app traces. |
 | After typed-over | 82 | Typed-over is traced, learned as a miss, and starts a 5s app/field/mode/prefix-family cooldown. | Add longer-term decay/threshold learning and fresh real-app proof. |
 | After Esc dismissal | 84 | Esc dismisses, traces the keyboard action, and starts a 15s app/field/mode/prefix-family cooldown. | Add repeated-dismiss escalation proof and diagnostics. |
 | App switch / caret move / selection change | 82 | Focus/app mismatch hides and selection is blocked. Mouse/caret moves are polling-based. | Immediate hide/cancel on focus, caret, mouse, and selection events where possible. |
@@ -183,7 +183,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | One visible suggestion | 95 | Single `SuggestionSession`, no dropdown or carousel. | Keep this invariant. |
 | Single-line under 42 chars | 90 | `CompletionSuggestion` caps visible text to one line, bounded words, and 42 visible characters. | Add screenshot proof across narrow editors and long wrapped lines. |
 | Flicker control | 90 | Streaming presentation gate limits partial updates, and replacement now suppresses fresh/low-margin candidate swaps with 1.2s fresh and 2s stale lifetime tests. | Add screenshot proof across narrow editors and streaming model output. |
-| Tab next word | 91 | Implemented and app/profile gated. | Recompute residual after one follow-on instead of chaining unscored residuals. |
+| Tab next word | 95 | Implemented, app/profile gated, and app Tab acceptance now discards residual visible text after one word so the next suggestion must come from a new scored request. | Prove the recompute behavior in fresh real-app traces. |
 | Backtick full visible accept | 86 | Full accept exists when profile supports it; prompt apps disable full accept; accepted insertions arm the same one-step Command-Z restore path. | Prove undo and no-submit in every app where full accept is enabled. |
 | Esc dismiss | 88 | Implemented and traces keyboard action. | Add prefix-family cooldown and repeated-dismiss escalation. |
 | Atomic undo | 78 | Accepted insertions now arm an 8s one-step Command-Z restore for the same focused app/field; raw accepted text stays only in ephemeral memory and diagnostics log lengths/status only. | Prove the restore path per app and decide whether native undo grouping can replace the app-level fallback. |
@@ -435,6 +435,8 @@ these are true.
 25. Done: make candidate ranking context-aware so sentence/phrase candidates
    lose score for unsupported names/dates, generic filler, and sentence-mode
    planning drift, while local terms get a small tie breaker.
+26. Done: make app-level Tab next-word acceptance discard residual visible
+   text so follow-on words require a fresh scored request.
 
 ## Goal Status
 
