@@ -48,6 +48,7 @@ declare -a APPS=(
   "Chrome editor-like|Chrome|com.google.Chrome|full|editor-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=editor-like script/manual_smoke_session.sh chrome --visual"
   "Chrome Monaco-like|Chrome|com.google.Chrome|full|monaco-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=monaco-like script/manual_smoke_session.sh chrome --visual"
   "Chrome ProseMirror-like|Chrome|com.google.Chrome|full|prosemirror-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=prosemirror-like script/manual_smoke_session.sh chrome --visual"
+  "Chrome chat-like no-submit|Chrome|com.google.Chrome|full|chat-like|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture chat-like"
   "Codex|Codex|com.openai.codex|full|default|script/manual_smoke_session.sh codex --visual"
   "Claude Code|Claude Code|com.anthropic.claude-code|one-word|default|script/manual_smoke_session.sh claude-code --visual"
   "Claude desktop|Claude|com.anthropic.claudefordesktop|full|default|script/manual_smoke_session.sh claude --visual"
