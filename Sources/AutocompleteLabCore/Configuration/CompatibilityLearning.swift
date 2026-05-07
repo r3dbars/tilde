@@ -1,11 +1,32 @@
 import CoreGraphics
 import Foundation
 
+public struct CompatibilityLearningVisualScope: Codable, Equatable, Sendable {
+    public let appVersion: String
+    public let screen: String
+    public let fieldShape: String
+
+    public init(
+        appVersion: String,
+        screen: String,
+        fieldShape: String
+    ) {
+        self.appVersion = appVersion
+        self.screen = screen
+        self.fieldShape = fieldShape
+    }
+
+    public var debugSummary: String {
+        "app=\(appVersion); screen=\(screen); field=\(fieldShape)"
+    }
+}
+
 public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
     public let bundleIdentifier: String
     public var xOffset: CGFloat
     public var yOffset: CGFloat
     public var renderModeOverride: SuggestionRenderMode?
+    public var visualScope: CompatibilityLearningVisualScope?
     public var screenshotTracingEnabled: Bool
     public var screenshotTracingExpiresAt: String?
     public var observations: Int
@@ -18,6 +39,7 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         xOffset: CGFloat = 0,
         yOffset: CGFloat = 0,
         renderModeOverride: SuggestionRenderMode? = nil,
+        visualScope: CompatibilityLearningVisualScope? = nil,
         screenshotTracingEnabled: Bool = false,
         screenshotTracingExpiresAt: String? = nil,
         observations: Int = 0,
@@ -29,6 +51,7 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         self.xOffset = xOffset
         self.yOffset = yOffset
         self.renderModeOverride = renderModeOverride
+        self.visualScope = visualScope
         self.screenshotTracingEnabled = screenshotTracingEnabled
         self.screenshotTracingExpiresAt = screenshotTracingExpiresAt
         self.observations = observations
@@ -49,9 +72,20 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         return lastReason == "manual-visual-nudge" || lastReason == "screenshot-visual-correction"
     }
 
+    public func hasTrustedVisualAdjustment(matching visualScope: CompatibilityLearningVisualScope?) -> Bool {
+        guard hasTrustedVisualAdjustment,
+              let storedScope = self.visualScope,
+              let visualScope else {
+            return false
+        }
+
+        return storedScope == visualScope
+    }
+
     public var debugSummary: String {
         let render = renderModeOverride?.rawValue ?? "profile"
-        return "offset=(\(Self.format(xOffset)), \(Self.format(yOffset))), render=\(render), screenshots=\(screenshotTracingEnabled), observations=\(observations), confidence=\(Self.format(confidence))"
+        let scope = visualScope?.debugSummary ?? "none"
+        return "offset=(\(Self.format(xOffset)), \(Self.format(yOffset))), render=\(render), scope=\(scope), screenshots=\(screenshotTracingEnabled), observations=\(observations), confidence=\(Self.format(confidence))"
     }
 
     private static func format(_ value: CGFloat) -> String {
@@ -94,8 +128,23 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
     }
 
     public var trustedVisualOffsetOnly: CompatibilityLearningAdjustment {
+        trustedVisualOffsetOnly(matching: nil, allowUnscopedTrustedOffset: true)
+    }
+
+    public func trustedVisualOffsetOnly(
+        matching visualScope: CompatibilityLearningVisualScope?
+    ) -> CompatibilityLearningAdjustment {
+        trustedVisualOffsetOnly(matching: visualScope, allowUnscopedTrustedOffset: false)
+    }
+
+    private func trustedVisualOffsetOnly(
+        matching visualScope: CompatibilityLearningVisualScope?,
+        allowUnscopedTrustedOffset: Bool
+    ) -> CompatibilityLearningAdjustment {
         guard let profile,
-              !profile.hasTrustedVisualAdjustment else {
+              !(allowUnscopedTrustedOffset
+                ? profile.hasTrustedVisualAdjustment
+                : profile.hasTrustedVisualAdjustment(matching: visualScope)) else {
             return self
         }
 
@@ -117,6 +166,7 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
             "learningXOffset": String(format: "%.1f", Double(profile.xOffset)),
             "learningYOffset": String(format: "%.1f", Double(profile.yOffset)),
             "learningVisualOffsetTrusted": String(profile.hasTrustedVisualAdjustment),
+            "learningVisualScope": profile.visualScope?.debugSummary ?? "none",
             "learningConfidence": String(format: "%.2f", profile.confidence),
             "learningObservations": String(profile.observations),
             "learningScreenshotTracing": String(profile.screenshotTracingEnabled)

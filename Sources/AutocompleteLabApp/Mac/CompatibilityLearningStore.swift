@@ -65,19 +65,32 @@ final class CompatibilityLearningStore: @unchecked Sendable {
         }
     }
 
-    func updateOffset(x: Double, y: Double, for bundleIdentifier: String, reason: String) {
+    func updateOffset(
+        x: Double,
+        y: Double,
+        for bundleIdentifier: String,
+        reason: String,
+        visualScope: CompatibilityLearningVisualScope? = nil
+    ) {
         update(bundleIdentifier: bundleIdentifier, reason: reason) { profile in
             profile.xOffset = x
             profile.yOffset = y
+            profile.visualScope = visualScope
             profile.observations += 1
             profile.confidence = min(1, max(profile.confidence, 0.25))
         }
     }
 
-    func nudgeOffset(dx: Double, dy: Double, for bundleIdentifier: String) {
+    func nudgeOffset(
+        dx: Double,
+        dy: Double,
+        for bundleIdentifier: String,
+        visualScope: CompatibilityLearningVisualScope? = nil
+    ) {
         update(bundleIdentifier: bundleIdentifier, reason: "manual-visual-nudge") { profile in
             profile.xOffset += dx
             profile.yOffset += dy
+            profile.visualScope = visualScope
             profile.observations += 1
             profile.confidence = min(1, max(profile.confidence, 0.35))
         }

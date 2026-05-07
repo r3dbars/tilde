@@ -318,6 +318,9 @@ evidence-backed score should stay lower until those rows are closed.
 - Compatibility placement trust is now pinned in core tests: unproven yellow
   apps suppress low-confidence and synthetic placement unless a trusted manual
   or screenshot visual correction exists.
+- Learned visual offsets now carry app-version, screen-layout, and field-shape
+  scope; the live app strips the offset when any of those proof conditions
+  change.
 
 ## Remaining Gaps
 
