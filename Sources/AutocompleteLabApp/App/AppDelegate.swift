@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
     private let focusChangePolicy = SuggestionFocusChangePolicy()
     private let geometryChangePolicy = SuggestionGeometryChangePolicy()
+    private let placementPreflightPolicy = SuggestionPlacementPreflightPolicy()
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
@@ -915,45 +916,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion()
             return
         }
-        let renderMode = compatibilityLearningStore.engine()
-            .adjustment(for: profile.bundleIdentifier, profileRenderMode: baseRenderMode)
-            .effectiveRenderMode
+        let visualScope = compatibilityVisualScope(
+            bundleIdentifier: profile.bundleIdentifier,
+            context: context
+        )
+        let learningAdjustment = compatibilityLearningStore.engine().adjustment(
+            for: profile.bundleIdentifier,
+            profileRenderMode: baseRenderMode
+        ).trustedVisualOffsetOnly(matching: visualScope)
+        let renderMode = learningAdjustment.effectiveRenderMode
 
-        if shouldSuppressDetachedSuggestion(
-            profile: profile,
-            context: context,
-            renderMode: renderMode
-        ) {
-            setSuggestionDecision("Blocked: detached suggestion disabled")
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: UUID().uuidString,
-                appBundleIdentifier: profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: (activationDecision.requestMode ?? .phraseContinuation).rawValue,
-                triggerReason: "policy",
-                textBeforeCursor: context.textBeforeCursor,
-                textAfterCursor: context.textAfterCursor,
-                reason: "detached-suggestion-disabled",
-                metadata: traceGeometryMetadata(context: context, renderMode: renderMode)
+        let placementPreflight = placementPreflightPolicy.decision(
+            for: placementHealthPlan(
+                context: context,
+                profile: profile,
+                learningAdjustment: learningAdjustment
             )
-            recordBlockedSuggestionEvent(
-                "suggestion-blocked",
+        )
+        if let suppression = placementPreflight.suppression {
+            blockSuggestionForPlacementPreflight(
+                suppression: suppression,
+                requestMode: activationDecision.requestMode ?? .phraseContinuation,
                 context: context,
                 profile: profile,
                 fieldIdentity: fieldIdentity,
-                metadata: [
-                    "reason": "detached-suggestion-disabled"
-                ]
+                learningAdjustment: learningAdjustment
             )
-            _ = recordPlacementUncertainty(
-                reason: "detached-suggestion-disabled",
-                context: context,
-                profile: profile,
-                fieldIdentity: fieldIdentity,
-                metadata: traceGeometryMetadata(context: context, renderMode: renderMode)
-            )
-            hideSuggestion()
             return
         }
 
@@ -1141,16 +1129,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "pauseMilliseconds": String(recommendation.pauseMilliseconds)
             ]
         )
-    }
-
-    private func shouldSuppressDetachedSuggestion(
-        profile: CompatibilityProfile,
-        context: FocusedTextContext,
-        renderMode: SuggestionRenderMode
-    ) -> Bool {
-        renderMode == .floatingMirror
-            && context.caretRect == nil
-            && !profile.allowsDetachedSuggestions
     }
 
     private func presentationAdjustedContext(
@@ -2607,6 +2585,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "canReadBounds": String(context.capabilities.canReadBoundsForRange)
         ]
         .merging(context.fieldClassification.traceMetadata) { current, _ in current }
+    }
+
+    private func blockSuggestionForPlacementPreflight(
+        suppression: PlacementHealthSuppression,
+        requestMode: CompletionRequestMode,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        learningAdjustment: CompatibilityLearningAdjustment
+    ) {
+        let reason = suppression.reason.rawValue
+        let metadata = traceGeometryMetadata(
+            context: context,
+            renderMode: learningAdjustment.effectiveRenderMode
+        )
+        .merging(learningAdjustment.metadata) { current, _ in current }
+        .merging(suppression.metadata) { current, _ in current }
+
+        setSuggestionDecision(
+            suppression.reason == .detachedSuggestionDisabled
+                ? "Blocked: detached suggestion disabled"
+                : "Blocked: placement \(reason)"
+        )
+        RawAutocompleteTraceLog.shared.record(
+            type: .suggestionSuppressed,
+            suggestionID: UUID().uuidString,
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldIdentity: fieldIdentity.traceDescription,
+            requestMode: requestMode.rawValue,
+            triggerReason: "placement-preflight",
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            reason: reason,
+            metadata: metadata
+        )
+        recordBlockedSuggestionEvent(
+            "suggestion-blocked",
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            metadata: ["reason": reason]
+                .merging(learningAdjustment.metadata) { current, _ in current }
+                .merging(suppression.metadata) { current, _ in current }
+        )
+        _ = recordPlacementUncertainty(
+            reason: reason,
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            metadata: metadata
+        )
+        hideSuggestion()
     }
 
     private func recordSuggestionEvent(
