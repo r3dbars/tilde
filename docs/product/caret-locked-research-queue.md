@@ -184,7 +184,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 - [ ] Refresh Codex dogfood manual smoke proof.
 - [ ] Require manual smoke proof from the current commit or current archive.
-- [ ] Add smoke rows for anchor source: caret, line, field, window, off.
+- [x] Add smoke rows for anchor source: caret, line, field, window, off.
 - [x] Add "wrong app insertion" as a hard fail.
 - [x] Add "Tab stolen with no visible suggestion" as a hard fail.
 - [x] Add "Esc does not calm the field" as a hard fail.
@@ -197,7 +197,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [ ] Add Obsidian CodeMirror smoke.
 - [ ] Add Codex prompt smoke.
 - [x] Add unsupported-app smoke.
-- [ ] Add no-Accessibility-permission smoke.
+- [x] Add no-Accessibility-permission smoke.
 
 ## P1: Trace Analysis
 
@@ -228,7 +228,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 ## P2: Self-Healing Compatibility
 
 - [x] Turn manual nudges into adapter recommendations.
-- [ ] Add confidence thresholds for "learning should become code".
+- [x] Add confidence thresholds for "learning should become code".
 - [x] Add a local report that lists apps with repeated visual nudges.
 - [x] Add a local report that lists apps with repeated detached suppression.
 - [ ] Add fixture-based visual calibration tests.

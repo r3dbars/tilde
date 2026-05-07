@@ -47,6 +47,25 @@ The app also keeps local compatibility learning here:
 
 That file can hold per-app visual offsets, render-mode overrides, screenshot-tracing state, observation counts, and confidence. This is the first self-healing layer: small learned adjustments can apply at runtime, while bigger repeated misses become adapter patches.
 
+Compatibility learning is not a support claim by itself. Treat it as a code
+candidate only when all of these are true:
+
+- at least 5 observations for the same bundle id,
+- confidence is at least 0.75,
+- the reason is `manual-visual-nudge` or `screenshot-visual-correction`,
+- the offset is reproduced on the current commit with screenshot-backed smoke,
+- no wrong-app insertion, sensitive-field, or Tab-capture failure appears in
+  the same slice.
+
+Use the report helper to separate low-confidence learning from code candidates:
+
+```bash
+script/compatibility_self_healing_report.py
+```
+
+The default code-promotion thresholds are 5 observations and 0.75 confidence.
+Lower them only for a local experiment, not for beta support language.
+
 For quick visual calibration, use the menu bar nudge actions while the target app is focused:
 
 - `Nudge Suggestion Up/Down/Left/Right`
