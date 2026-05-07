@@ -23,8 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
     private let keyboardCapturePolicy = KeyboardCapturePolicy()
-    private let insertionVerification = InsertionVerification()
-    private let insertionRetryPolicy = InsertionRetryPolicy()
+    private let insertionVerificationCoordinator = InsertionVerificationCoordinator()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let visibleSuggestionOutcomePolicy = VisibleSuggestionOutcomePolicy()
@@ -115,7 +114,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suppressedFieldIdentities: Set<FocusedFieldIdentity> = []
     private var disabledBundleIdentifiers: Set<String> = []
     private var debounceTask: Task<Void, Never>?
-    private var insertionVerificationTask: Task<Void, Never>?
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private var isFocusedTextPollInFlight = false
     private var latestFocusedTextReadRequestID: UInt64?
@@ -172,7 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         debounceTask?.cancel()
         keyboardEventTapStopTask?.cancel()
-        insertionVerificationTask?.cancel()
+        insertionVerificationCoordinator.cancel()
         runtimeLifecycle.cancel()
         invalidatePendingSuggestionRequest()
         pollTimer?.invalidate()
@@ -1635,144 +1633,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         acceptedText: String,
         baseline: InsertionVerificationBaseline?
     ) {
-        guard let baseline else {
-            return
+        insertionVerificationCoordinator.schedule(
+            acceptedText: acceptedText,
+            baseline: baseline,
+            readFocusedContext: { [weak self] profile in
+                self?.insertionVerificationFocusedContext(profile: profile)
+            },
+            insertAcceptedText: { [weak self] acceptedText, skippedModes in
+                self?.insertAcceptedText(acceptedText, skippingInsertionModes: skippedModes) ?? false
+            },
+            suppressCurrentField: { [weak self] reason in
+                self?.suppressCurrentField(reason: reason)
+            },
+            hideSuggestion: { [weak self] in
+                self?.hideSuggestion()
+            }
+        )
+    }
+
+    private func insertionVerificationFocusedContext(
+        profile: CompatibilityProfile
+    ) -> InsertionVerificationFocusedContext? {
+        guard let frontmostApp = accessibilityClient.frontmostApplication(),
+              let context = accessibilityClient.focusedTextContext(
+                  allowDescendantTextFallback: profile.allowsDescendantTextFallback
+              ) else {
+            return nil
         }
 
-        insertionVerificationTask?.cancel()
-        insertionVerificationTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(140))
-            guard !Task.isCancelled else {
-                return
-            }
-
-            guard let frontmostApp = accessibilityClient.frontmostApplication(),
-                  let context = accessibilityClient.focusedTextContext(
-                      allowDescendantTextFallback: baseline.profile.allowsDescendantTextFallback
-                  ) else {
-                DiagnosticsLog.shared.record(
-                    "insert-verification",
-                    metadata: [
-                        "app": baseline.profile.bundleIdentifier,
-                        "result": "missing-context"
-                    ]
-                )
-                hideSuggestion()
-                return
-            }
-
-            let currentIdentity = fieldIdentity(
+        return InsertionVerificationFocusedContext(
+            fieldIdentity: fieldIdentity(
                 app: frontmostApp,
                 context: context,
-                profile: baseline.profile
-            )
-
-            guard currentIdentity == baseline.fieldIdentity else {
-                return
-            }
-
-            let result = insertionVerification.verify(
-                previousTextBeforeCursor: baseline.previousTextBeforeCursor,
-                acceptedText: acceptedText,
-                currentTextBeforeCursor: context.textBeforeCursor
-            )
-
-            DiagnosticsLog.shared.record(
-                "insert-verification",
-                metadata: [
-                    "app": baseline.profile.bundleIdentifier,
-                    "result": String(describing: result),
-                    "acceptedChars": String(acceptedText.count),
-                    "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                    "currentBeforeChars": String(context.textBeforeCursor.count)
-                ]
-            )
-
-            guard result.isVerified else {
-                if insertionRetryPolicy.shouldRetry(
-                    result: result,
-                    insertionMode: baseline.profile.insertionMode,
-                    retryCount: baseline.retryCount
-                ) {
-                    DiagnosticsLog.shared.record(
-                        "insert-verification-retry",
-                        metadata: [
-                            "app": baseline.profile.bundleIdentifier,
-                            "acceptedChars": String(acceptedText.count),
-                            "retryCount": String(baseline.retryCount + 1),
-                            "result": String(describing: result)
-                        ]
-                    )
-
-                    let skippedModes = insertionRetrySkippedModes(
-                        result: result,
-                        profile: baseline.profile,
-                        retryCount: baseline.retryCount
-                    )
-                    if insertAcceptedText(acceptedText, skippingInsertionModes: skippedModes) {
-                        let retryBaseline = InsertionVerificationBaseline(
-                            fieldIdentity: baseline.fieldIdentity,
-                            previousTextBeforeCursor: baseline.previousTextBeforeCursor,
-                            profile: baseline.profile,
-                            suggestionID: baseline.suggestionID,
-                            requestMode: baseline.requestMode,
-                            retryCount: baseline.retryCount + 1
-                        )
-                        scheduleInsertionVerification(acceptedText: acceptedText, baseline: retryBaseline)
-                        return
-                    }
-                }
-
-                DiagnosticsLog.shared.record(
-                    "insert-verification-final-failure",
-                    metadata: [
-                        "app": baseline.profile.bundleIdentifier,
-                        "result": String(describing: result),
-                        "acceptedChars": String(acceptedText.count),
-                        "retryCount": String(baseline.retryCount)
-                    ]
-                )
-                RawAutocompleteTraceLog.shared.record(
-                    type: .insertionFailed,
-                    suggestionID: baseline.suggestionID ?? "",
-                    appBundleIdentifier: baseline.profile.bundleIdentifier,
-                    fieldIdentity: baseline.fieldIdentity.traceDescription,
-                    requestMode: baseline.requestMode?.rawValue ?? "",
-                    acceptedText: acceptedText,
-                    outcome: String(describing: result),
-                    reason: "insert-verification-failed",
-                    metadata: [
-                        "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                        "currentBeforeChars": String(context.textBeforeCursor.count)
-                    ]
-                )
-                if baseline.profile.suppressesAfterInsertionFailure {
-                    suppressCurrentField(reason: "insert-verification-failed")
-                }
-                hideSuggestion()
-                return
-            }
-
-            if baseline.retryCount > 0 {
-                DiagnosticsLog.shared.record(
-                    "insert-verification-recovered",
-                    metadata: [
-                        "app": baseline.profile.bundleIdentifier,
-                        "acceptedChars": String(acceptedText.count),
-                        "retryCount": String(baseline.retryCount)
-                    ]
-                )
-            }
-            RawAutocompleteTraceLog.shared.record(
-                type: .insertionVerified,
-                suggestionID: baseline.suggestionID ?? "",
-                appBundleIdentifier: baseline.profile.bundleIdentifier,
-                fieldIdentity: baseline.fieldIdentity.traceDescription,
-                requestMode: baseline.requestMode?.rawValue ?? "",
-                acceptedText: acceptedText,
-                outcome: "verified"
-            )
-        }
+                profile: profile
+            ),
+            textBeforeCursor: context.textBeforeCursor
+        )
     }
 
     private func scheduleSuggestion(
@@ -2414,20 +2310,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mode: profile.fieldIdentityMode,
             input: FocusedFieldIdentityInput(context: context)
         )
-    }
-
-    private func insertionRetrySkippedModes(
-        result: InsertionVerificationResult,
-        profile: CompatibilityProfile,
-        retryCount: Int
-    ) -> Set<InsertionMode> {
-        guard result == .unchanged,
-              retryCount == 0,
-              profile.fallbackInsertionMode != nil else {
-            return []
-        }
-
-        return [profile.insertionMode]
     }
 
     private func insertAcceptedText(
@@ -3302,15 +3184,6 @@ private extension AppDelegate {
             forKey: Self.acceptAllShortcutDefaultsKey
         )
     }
-}
-
-private struct InsertionVerificationBaseline: Equatable {
-    let fieldIdentity: FocusedFieldIdentity
-    let previousTextBeforeCursor: String
-    let profile: CompatibilityProfile
-    let suggestionID: String?
-    let requestMode: CompletionRequestMode?
-    let retryCount: Int
 }
 
 private extension FocusedFieldIdentityInput {
