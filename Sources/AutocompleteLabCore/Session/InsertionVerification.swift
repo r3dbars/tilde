@@ -5,6 +5,8 @@ public enum InsertionVerificationResult: Equatable, Sendable {
     case unchanged
     case partial
     case duplicateText
+    case literalTab
+    case selectionChangedUnexpectedly
     case changedUnexpectedly
 
     public var isVerified: Bool {
@@ -18,12 +20,19 @@ public struct InsertionVerification: Equatable, Sendable {
     public func verify(
         previousTextBeforeCursor: String,
         acceptedText: String,
-        currentTextBeforeCursor: String
+        currentTextBeforeCursor: String,
+        previousTextAfterCursor: String = "",
+        currentTextAfterCursor: String = ""
     ) -> InsertionVerificationResult {
         let expectedTextBeforeCursor = previousTextBeforeCursor + acceptedText
 
         if currentTextBeforeCursor == expectedTextBeforeCursor {
             return .verified
+        }
+
+        if currentTextBeforeCursor == previousTextBeforeCursor + "\t"
+            || currentTextBeforeCursor.hasPrefix(previousTextBeforeCursor + "\t") {
+            return .literalTab
         }
 
         if !acceptedText.isEmpty,
@@ -38,6 +47,10 @@ public struct InsertionVerification: Equatable, Sendable {
         }
 
         if currentTextBeforeCursor == previousTextBeforeCursor {
+            if !previousTextAfterCursor.isEmpty,
+               previousTextAfterCursor != currentTextAfterCursor {
+                return .selectionChangedUnexpectedly
+            }
             return .unchanged
         }
 

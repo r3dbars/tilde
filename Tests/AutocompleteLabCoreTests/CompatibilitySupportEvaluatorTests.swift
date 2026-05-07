@@ -18,6 +18,8 @@ struct CompatibilitySupportEvaluatorTests {
 
         #expect(evaluation.state == .supported)
         #expect(evaluation.presentedCount == 20)
+        #expect(evaluation.appFamily == "nativeText")
+        #expect(evaluation.minimumSampleSize == 20)
         #expect(evaluation.acceptedAndKeptCount == 4)
         #expect(evaluation.acceptedAndKeptShownRate == 0.2)
         #expect(evaluation.insertionVerificationSuccessRate == 1)
@@ -37,9 +39,11 @@ struct CompatibilitySupportEvaluatorTests {
 
         #expect(evaluation.state == .caveated)
         #expect(evaluation.presentedCount == 10)
+        #expect(evaluation.appFamily == "browserTextarea")
+        #expect(evaluation.minimumSampleSize == 15)
         #expect(evaluation.acceptedAndKeptCount == 1)
         #expect(evaluation.p95LatencyMilliseconds == 900)
-        #expect(evaluation.reasons.contains("Needs 20 shown suggestions for supported."))
+        #expect(evaluation.reasons.contains("Needs 15 shown suggestions for supported."))
     }
 
     @Test("Low sample dogfood traces stay experimental")

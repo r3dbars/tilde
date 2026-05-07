@@ -58,4 +58,23 @@ struct InsertionVerificationTests {
             currentTextBeforeCursor: "Can we make make this"
         ) == .duplicateText)
     }
+
+    @Test("Detects literal Tab and selection changes after Tab accept")
+    func detectsLiteralTabAndSelectionChanges() {
+        let verifier = InsertionVerification()
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we\t"
+        ) == .literalTab)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we",
+            previousTextAfterCursor: " keep writing",
+            currentTextAfterCursor: " writing"
+        ) == .selectionChangedUnexpectedly)
+    }
 }

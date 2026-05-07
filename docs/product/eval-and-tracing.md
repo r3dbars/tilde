@@ -53,6 +53,14 @@ For quick visual calibration, use the menu bar nudge actions while the target ap
 - `Reset Current App Learning`
 
 Nudges are local, per app, and take effect on the next suggestion.
+For a screenshot-free placement readout, run:
+
+```bash
+script/visual_calibration_report.py
+```
+
+The report uses redacted caret, render-mode, learning-offset, flicker, and
+caret-failure metadata only. It does not read or link screenshots.
 
 ## Trace Events
 
@@ -79,7 +87,11 @@ text, accepted text, remaining visible text, and screenshot paths are removed
 from the default trace. They are written only to `raw-traces.jsonl` when raw
 local debug tracing is explicitly enabled.
 
-The headline product metric is accepted-and-kept, not raw accept rate. Accepted text is compared at 2s, 10s, 30s, and field blur. Durable checkpoint events store survival class, token recall, edit distance, accepted length, and timing metadata. They should not need the current field text on disk.
+The headline product metric is accepted-and-kept, not raw accept rate. Accepted text is compared at 2s, 10s, 30s, and field blur. Durable checkpoint events store survival class, token recall, edit distance, accepted length, timing metadata, and redacted fingerprints. They should not need the current field text on disk.
+
+The RAM-only audit proof is the `acceptanceRetentionCleared` event. It records
+the clear reason, accepted text length, fingerprint metadata, and
+`rawAcceptedTextDurable=false`, but not the accepted raw text.
 
 ## What To Evaluate
 
@@ -90,6 +102,8 @@ Track these rates per app and request mode:
 - accepted with backtick
 - accepted-and-kept shown rate
 - accepted-and-kept accepted rate
+- accepted-and-kept slices by app, field kind, render mode, insertion mode,
+  request mode, model, and experiment arm
 - median edit distance after accept
 - median first edit delay after accept
 - ignored by continued typing
@@ -116,7 +130,12 @@ script/model_latency_report.py --latest
 AUTOCOMPLETE_LAB_MODEL=qwen35-9b ./script/build_and_run.sh --verify
 ```
 
-Supported override names include `qwen35-4b`, `qwen35-9b`, `qwen3-1.7b`, `qwen3-0.6b`, `gemma-4-e4b`, `gemma-4-e4b-it-optiq`, and `gemma-4-26b`.
+Supported override names match the runtime and download helper:
+`qwen35-4b`, `qwen3.5-4b`, `qwen35-9b`, `qwen3.5-9b`,
+`qwen3-1.7b`, `qwen3-0.6b`, `gemma-4-e2b`, `gemma-4-e4b`,
+`gemma4-e4b`, `gemma-4-e4b-4bit`, `gemma-4-e4b-it-optiq`,
+`gemma-4-e4b-it-optiq-4bit`, `gemma4-e4b-it-optiq`, and
+`gemma-4-26b`.
 
 Try shorter or longer streamed phrase suggestions without editing code:
 

@@ -28,6 +28,7 @@ let package = Package(
                 "AGENTS.md",
                 "Configuration/AGENTS.md",
                 "Engine/AGENTS.md",
+                "Experiments/AGENTS.md",
                 "Geometry/AGENTS.md",
                 "Runtime/AGENTS.md",
                 "Session/AGENTS.md",

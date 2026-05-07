@@ -24,14 +24,14 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Show accepted-and-kept metrics in the local HTML trace report.
 - [x] Print accepted-and-kept metrics from `script/check_trace_eval.sh`.
 - [x] Add unit tests for exact kept, punctuation tweak, partial edit, immediate delete, and final checkpoint behavior.
-- [ ] Add a RAM-only expiry audit that proves accepted raw text is gone after 30s idle, blur, or 10 minutes max.
-- [ ] Add blur/send finalization for apps where send can be detected separately from generic blur.
+- [x] Add a RAM-only expiry audit that proves accepted raw text is gone after 30s idle, blur, or 10 minutes max.
+- [x] Add blur/send finalization for apps where send can be detected separately from generic blur.
 - [x] Add local-window matching around expected insertion offset instead of full-field matching.
 - [x] Add HMAC token and 3-gram fingerprints for redacted durable survival analysis.
 - [x] Add a redacted survival export that never includes accepted raw text.
-- [ ] Add survival-rate slices by app, field kind, render mode, insertion mode, request mode, model, and experiment arm.
+- [x] Add survival-rate slices by app, field kind, render mode, insertion mode, request mode, model, and experiment arm.
 - [x] Add "accepted then deleted within 2s" as a hard trust-break signal.
-- [ ] Add a debug-only survival inspector that can be enabled for one local session.
+- [x] Add a debug-only survival inspector that can be enabled for one local session.
 
 ## P0 - Annoyance And Backoff
 
@@ -50,12 +50,12 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Use a 20-minute half-life for annoyance decay.
 - [x] Suppress a field for 15 minutes when field annoyance crosses the threshold.
 - [x] Auto-pause an app for 30 minutes after repeated severe annoyance.
-- [ ] Mark an app default-off after repeated manual disables over 7 days.
+- [x] Mark an app default-off after repeated manual disables over 7 days.
 - [x] Hard-stop a field immediately after wrong insertion, duplicate insertion, or focus stealing.
-- [ ] Treat two severe events in one app/day as an app auto-pause.
+- [x] Treat two severe events in one app/day as an app auto-pause.
 - [x] Record why a quiet mode started and when it expires.
 - [x] Surface quiet mode in the menu bar and Diagnostics.
-- [ ] Add tests for EMA decay, field quiet mode, app quiet mode, severe hard stop, and manual disable default-off.
+- [x] Add tests for EMA decay, field quiet mode, app quiet mode, severe hard stop, and manual disable default-off.
 
 ## P0 - Privacy-Safe Tracing
 
@@ -67,7 +67,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Add a Keychain-backed per-install HMAC secret.
 - [x] Persist counts, lengths, buckets, fingerprints, and field metadata by default.
 - [x] Store no document names, URLs, recipients, subject lines, screenshots, or raw text by default.
-- [ ] Add redaction tests for JSONL and HTML export.
+- [x] Add redaction tests for JSONL and HTML export.
 - [x] Add a one-click redacted local report export.
 - [x] Keep screenshot traces per-app opt-in and clearly marked.
 - [x] Add retention controls for trace logs and screenshots.
@@ -94,13 +94,13 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Add duplicate text detection to `InsertionVerification`.
 - [x] Add Tab-conflict detection after Tab accept.
 - [x] Detect when Tab moved focus instead of inserting accepted text.
-- [ ] Detect when Tab inserted a literal tab or changed selection unexpectedly.
+- [x] Detect when Tab inserted a literal tab or changed selection unexpectedly.
 - [x] Emit `tab-conflict` and quiet that field/app.
 - [x] Add focus-stealing detection and trace event support.
 - [x] Add rollback attempt metadata for failed inserts.
-- [ ] Add per-app insertion mode reliability stats.
+- [x] Add per-app insertion mode reliability stats.
 - [x] Add a "wrong insertion means blocked" support gate.
-- [ ] Add tests for duplicate detection, Tab conflict, focus change, and rollback metadata.
+- [x] Add tests for duplicate detection, Tab conflict, focus change, and rollback metadata.
 
 ## P0 - Caret And Overlay Reliability
 
@@ -114,7 +114,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Detect and count flicker under 150ms.
 - [x] Suppress detached suggestions when only whole-editor anchors are available.
 - [x] Add render-mode change events with reason.
-- [ ] Add a visual calibration report that does not require screenshots by default.
+- [x] Add a visual calibration report that does not require screenshots by default.
 
 ## P1 - Decision Dashboard
 
@@ -135,7 +135,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 
 - [x] Add `CompatibilitySupportEvaluator`.
 - [x] Gate TextEdit, Notes, Mail, Chrome textareas, Obsidian/CodeMirror, and Electron separately.
-- [ ] Track minimum sample size per app family.
+- [x] Track minimum sample size per app family.
 - [x] Gate caret placement reliability.
 - [x] Gate insertion verification success.
 - [x] Gate duplicate text rate.
@@ -156,26 +156,26 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Add a first-class 1-word vs 3-word suggestion-length experiment.
 - [x] Stop treating 8-10 word suggestions as the default beta posture.
 - [x] Add config capture for visible word count, token cap, model, prompt style, debounce, render mode, and acceptance mode.
-- [ ] Add within-user crossover helpers.
-- [ ] Counterbalance experiment order across testers.
-- [ ] Mark tiny-sample results as directional, not winners.
-- [ ] Add guardrail checks for annoyance, p95 latency, insertion success, duplicate rate, and app disable rate.
+- [x] Add within-user crossover helpers.
+- [x] Counterbalance experiment order across testers.
+- [x] Mark tiny-sample results as directional, not winners.
+- [x] Add guardrail checks for annoyance, p95 latency, insertion success, duplicate rate, and app disable rate.
 - [x] Add experiment slices to trace eval and Diagnostics.
-- [ ] Add a one-command local experiment report.
+- [x] Add a one-command local experiment report.
 
 ## P1 - Model Quality
 
-- [ ] Add a small offline prompt/output eval corpus.
-- [ ] Include realistic writing tasks, not only proxy completions.
-- [ ] Score relevance, literal continuation, repetition, assistant-style leakage, and length control.
-- [ ] Add confidence/coverage threshold experiments.
-- [ ] Track empty-result rate and blocked pre-render reason.
-- [ ] Add model-result latency buckets: first token, first visible, total generation.
+- [x] Add a small offline prompt/output eval corpus.
+- [x] Include realistic writing tasks, not only proxy completions.
+- [x] Score relevance, literal continuation, repetition, assistant-style leakage, and length control.
+- [x] Add confidence/coverage threshold experiments.
+- [x] Track empty-result rate and blocked pre-render reason.
+- [x] Add model-result latency buckets: first token, first visible, total generation.
 - [x] Add p95 latency gates to `CompletionRuntimeBenchmark`.
 - [x] Add p95 to `script/model_latency_report.py`.
-- [ ] Add model alias parity between runtime, docs, and download helper.
-- [ ] Move model acquisition into app/beta package so testers do not run Python.
-- [ ] Add a beta stop condition if runtime falls back to mock output.
+- [x] Add model alias parity between runtime, docs, and download helper.
+- [x] Move model acquisition into app/beta package so testers do not run Python.
+- [x] Add a beta stop condition if runtime falls back to mock output.
 
 ## P1 - Private Beta
 
@@ -192,16 +192,16 @@ The north star is simple: a build is better only when accepted text survives, wr
 
 ## P2 - Architecture
 
-- [ ] Extract `SuggestionOrchestrator` from `AppDelegate`.
-- [ ] Extract `TraceLogger` as an actor.
-- [ ] Extract `RedactionLayer` as an actor.
-- [ ] Extract `AcceptanceSurvivalChecker` as an app-owned actor around the pure classifier.
-- [ ] Extract `AnnoyanceSuppressor` as an actor.
-- [ ] Extract `LocalReportExporter`.
-- [ ] Keep core logic AppKit-free.
-- [ ] Keep AX and AppKit adapters thin.
+- [x] Extract `SuggestionOrchestrator` from `AppDelegate`.
+- [x] Extract `TraceLogger` as an actor.
+- [x] Extract `RedactionLayer` as an actor.
+- [x] Extract `AcceptanceSurvivalChecker` as an app-owned actor around the pure classifier.
+- [x] Extract `AnnoyanceSuppressor` as an actor.
+- [x] Extract `LocalReportExporter`.
+- [x] Keep core logic AppKit-free.
+- [x] Keep AX and AppKit adapters thin.
 - [x] Add schema migration tests before changing trace storage format.
-- [ ] Keep raw dogfood diagnostics separate from beta/customer telemetry.
+- [x] Keep raw dogfood diagnostics separate from beta/customer telemetry.
 
 ## P2 - Docs And Product Surface
 
