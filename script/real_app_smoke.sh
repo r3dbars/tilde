@@ -888,11 +888,11 @@ end tell
 APPLESCRIPT
   sleep 1
   focus_textedit_document_path "$tmp_file"
-  typing_start_line="$(line_count "$LOG_PATH")"
 
   case "$TEXTEDIT_SESSION_APP" in
     textedit-multiline)
       expected_text="Can we make this feel "
+      typing_start_line="$(line_count "$LOG_PATH")"
       osascript <<'APPLESCRIPT'
 tell application "TextEdit" to activate
 delay 0.4
@@ -906,7 +906,7 @@ end tell
 APPLESCRIPT
       ;;
     textedit-wrapped)
-      expected_text="This is a disposable autocomplete smoke paragraph"
+      expected_text="Can we make this feel "
       osascript <<'APPLESCRIPT'
 tell application "TextEdit" to activate
 delay 0.4
@@ -916,6 +916,11 @@ tell application "TextEdit"
   end try
   set text of front document to "This is a disposable autocomplete smoke paragraph that should wrap before the caret. "
 end tell
+APPLESCRIPT
+      wait_for_textedit_front_document_contains "This is a disposable autocomplete smoke paragraph" "scripted TextEdit wrapped setup"
+      sleep 1
+      typing_start_line="$(line_count "$LOG_PATH")"
+      osascript <<'APPLESCRIPT'
 tell application "System Events"
   key code 124 using command down
   keystroke "Can we make this feel "
@@ -924,6 +929,7 @@ APPLESCRIPT
       ;;
     *)
       expected_text="Can we make this feel "
+      typing_start_line="$(line_count "$LOG_PATH")"
       osascript <<'APPLESCRIPT'
 tell application "TextEdit" to activate
 delay 0.4
