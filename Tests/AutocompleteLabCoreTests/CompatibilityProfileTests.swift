@@ -17,6 +17,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.Notes")?.insertionMode == .keyEvents)
         #expect(store.profile(for: "com.apple.Notes")?.appFamily == .swiftUIAppKit)
         #expect(store.profile(for: "com.apple.Notes")?.supportLevel == .yellow)
+        #expect(store.profile(for: "com.apple.Notes")?.renderMode == .floatingMirror)
         #expect(store.profile(for: "com.apple.Notes")?.fallbackInsertionMode == .disabled)
         #expect(store.profile(for: "com.apple.Notes")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "md.obsidian")?.renderMode == .floatingMirror)
@@ -49,8 +50,8 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.appFamily == .customCanvas)
         #expect(store.profile(for: "com.openai.codex")?.allowsFieldAnchor == false)
         #expect(store.profile(for: "com.openai.codex")?.supportLevel == .yellow)
-        #expect(store.profile(for: "com.openai.codex")?.renderMode == .inlineAdjacent)
-        #expect(store.profile(for: "com.openai.codex")?.fallbackRenderMode == .floatingMirror)
+        #expect(store.profile(for: "com.openai.codex")?.renderMode == .floatingMirror)
+        #expect(store.profile(for: "com.openai.codex")?.fallbackRenderMode == nil)
         #expect(store.profile(for: "com.openai.codex")?.insertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.openai.codex")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "com.openai.codex")?.fieldIdentityMode == .stableBounds)
@@ -59,8 +60,8 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claude-code")?.displayName == "Claude Code")
         #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .yellow)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.renderMode == .inlineAdjacent)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackRenderMode == .floatingMirror)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.renderMode == .floatingMirror)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackRenderMode == nil)
         #expect(store.profile(for: "com.anthropic.claude-code")?.insertionMode == .keyEvents)
         #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackInsertionMode == .axThenKeyEvents)
         #expect(store.profile(for: "com.anthropic.claude-code")?.fieldIdentityMode == .stableBounds)
@@ -70,8 +71,8 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.anthropic.claude-code")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.displayName == "Claude")
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportLevel == .yellow)
-        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.renderMode == .inlineAdjacent)
-        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackRenderMode == .floatingMirror)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.renderMode == .floatingMirror)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackRenderMode == nil)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.insertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackInsertionMode == nil)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fieldIdentityMode == .stableBounds)
@@ -162,7 +163,7 @@ struct CompatibilityProfileTests {
         #expect(yellow.userFacingSummary == "Yellow: Notes")
         #expect(
             yellow.userFacingReason
-                == "Rich text can drift; display can fall back to floating, and insertion fails closed."
+                == "Rich text can drift; display stays mirror-first and insertion fails closed until each Notes surface is proven."
         )
         #expect(yellow.menuText(appDisplayName: "Notes", isEnabled: false) == "Notes yellow off")
         #expect(yellow.canToggleSuggestions)
@@ -261,8 +262,8 @@ struct CompatibilityProfileTests {
         #expect(InsertionModePlan.modes(for: notes, skipping: [.keyEvents]) == [])
     }
 
-    @Test("Render mode plans fall back to mirror when inline bounds are unavailable")
-    func renderModePlansFallbackToMirrorWhenInlineBoundsAreUnavailable() throws {
+    @Test("Render mode plans keep unproven targets mirror first")
+    func renderModePlansKeepUnprovenTargetsMirrorFirst() throws {
         let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
         let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
         let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
@@ -294,7 +295,7 @@ struct CompatibilityProfileTests {
             for: codex,
             supportsInlineSuggestions: true,
             hasMirrorAnchor: true
-        ) == .inlineAdjacent)
+        ) == .floatingMirror)
         #expect(RenderModePlan.effectiveMode(
             for: codex,
             supportsInlineSuggestions: false,
@@ -304,7 +305,7 @@ struct CompatibilityProfileTests {
             for: claudeCode,
             supportsInlineSuggestions: true,
             hasMirrorAnchor: true
-        ) == .inlineAdjacent)
+        ) == .floatingMirror)
         #expect(RenderModePlan.effectiveMode(
             for: claudeCode,
             supportsInlineSuggestions: false,
@@ -314,7 +315,7 @@ struct CompatibilityProfileTests {
             for: claude,
             supportsInlineSuggestions: true,
             hasMirrorAnchor: true
-        ) == .inlineAdjacent)
+        ) == .floatingMirror)
         #expect(RenderModePlan.effectiveMode(
             for: claude,
             supportsInlineSuggestions: false,

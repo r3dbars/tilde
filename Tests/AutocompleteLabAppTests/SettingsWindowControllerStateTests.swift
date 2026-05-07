@@ -39,9 +39,9 @@ struct SettingsWindowControllerStateTests {
         #expect(blocked.statusText == "Current app: Notes is yellow and blocked")
         #expect(
             blocked.detailText
-                == "Rich text can drift; display can fall back to floating, and insertion fails closed. Suggestions are blocked by your app list."
+                == "Rich text can drift; display stays mirror-first and insertion fails closed until each Notes surface is proven. Suggestions are blocked by your app list."
         )
-        #expect(blocked.modeText == "Mode: inline, mirror fallback")
+        #expect(blocked.modeText == "Mode: mirror")
         #expect(blocked.acceptanceText == "Acceptance: Tab next word + full accept")
         #expect(blocked.menuToggleTitle == "Enable Notes")
         #expect(blocked.blockedAppsText == "Blocked apps: 2")
@@ -111,7 +111,7 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 0
         )
 
-        #expect(codex.modeText == "Mode: inline, mirror fallback")
+        #expect(codex.modeText == "Mode: mirror")
         #expect(codex.acceptanceText == "Acceptance: Tab next word only; full accept is off for safety")
     }
 
