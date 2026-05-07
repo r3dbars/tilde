@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
     private let suggestionReplacementPolicy = SuggestionReplacementPolicy()
+    private let completionFailureVisibilityPolicy = CompletionFailureVisibilityPolicy()
     private let displayScorePolicy = DisplayScorePolicy()
     private var acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
     private var acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
@@ -2804,6 +2805,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } catch {
                 await MainActor.run {
                     self.streamingPresentationStates[suggestionID] = nil
+                    guard self.completionFailureVisibilityPolicy.shouldHideVisibleSuggestion(
+                        requestGate: self.suggestionRequestGate,
+                        ticket: requestTicket,
+                        currentRequest: self.currentCompletionRequest,
+                        failedRequestFieldIdentity: fieldIdentity,
+                        currentFieldIdentity: self.currentFieldIdentity
+                    ) else {
+                        return
+                    }
                     self.hideSuggestion(reason: "engine-error")
                 }
             }
