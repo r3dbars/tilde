@@ -61,6 +61,12 @@ if ! grep -F "Typing: 7-char chunks with 2ms delay" "$TMP_DIR/strict.txt" >/dev/
   exit 1
 fi
 
+if ! grep -F "AppleScript timeout:" "$TMP_DIR/strict.txt" >/dev/null; then
+  echo "typing soak self-test did not print the computed AppleScript timeout" >&2
+  cat "$TMP_DIR/strict.txt" >&2
+  exit 1
+fi
+
 if ! grep -F "Event tap proof: require at least 25 samples" "$TMP_DIR/strict.txt" >/dev/null; then
   echo "typing soak self-test did not honor event-tap sample override" >&2
   cat "$TMP_DIR/strict.txt" >&2

@@ -70,3 +70,13 @@ Run the score target loop when working toward the product scorecards:
 
 The loop should keep failing until the deep dive scorecard is all 10/10, the
 Apple-native checklist is all 100/100, and the app proof matrix is all A.
+
+Run the long typing endurance command when working the "typing must feel
+untouched" score:
+
+```bash
+script/typing_performance_endurance_soak.sh
+```
+
+The default target is 10 minutes in a disposable TextEdit file. Use
+`--dry-run` for a fast command/config check.
