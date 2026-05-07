@@ -248,7 +248,7 @@ or unsupported.
 - [x] Compatibility profiles exist.
 - [x] Denylist exists for sensitive/unsupported apps.
 - [x] Mail is diagnostics-only.
-- [x] Atlas is unsupported.
+- [x] Atlas is diagnostics-only.
 - [x] Chrome local fixtures cover major browser editor shapes.
 - [x] A dedicated app proof matrix now separates screenshot proof, accept proof, and evidence gaps.
 - [x] Every profile needs an owner note explaining why it is safe.
@@ -446,7 +446,7 @@ Native target: every claim has proof.
 
 - [ ] Green apps: TextEdit, Chrome textarea, Chrome contenteditable.
 - [ ] Yellow apps: Codex, Claude desktop, Obsidian, Notes.
-- [ ] Red/disabled apps: Mail compose, Atlas, terminals unless explicitly scoped.
+- [x] Red/disabled apps: Mail compose, Atlas, terminals unless explicitly scoped.
 - [x] Add per-app support mode to settings.
 - [x] Add per-app safety stance to settings.
 - [x] Add user-forced mirror mode for inline profiles with mirror fallback.

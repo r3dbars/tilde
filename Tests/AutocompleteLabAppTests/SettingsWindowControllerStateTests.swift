@@ -110,7 +110,7 @@ struct SettingsWindowControllerStateTests {
         #expect(!diagnosticsOnly.canCopyProofCommand)
         #expect(!diagnosticsOnly.canToggle)
 
-        let unsupported = SettingsCurrentAppState(
+        let atlas = SettingsCurrentAppState(
             displayName: "Atlas",
             bundleIdentifier: "com.openai.atlas",
             supportStatus: store.supportStatus(for: "com.openai.atlas"),
@@ -118,7 +118,31 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 1
         )
 
-        #expect(unsupported.statusText == "Current app: Atlas is unsupported")
+        #expect(atlas.statusText == "Current app: Atlas is diagnostics-only")
+        #expect(
+            atlas.detailText
+                == "Atlas can contain private browser text and prompt chats; no no-submit proof exists. Suggestions stay off here."
+        )
+        #expect(atlas.modeText == "Mode: disabled")
+        #expect(atlas.acceptanceText == "Acceptance: off here")
+        #expect(atlas.pathText == "Path: display off | insert off")
+        #expect(atlas.safetyText == "Safety: Suggestions stay off here.")
+        #expect(!atlas.canToggleMirrorMode)
+        #expect(atlas.menuToggleTitle == "Suggestions unavailable in Atlas")
+        #expect(atlas.proofGuideText == "Proof: no proof flow for this app yet.")
+        #expect(atlas.proofCommandText == nil)
+        #expect(!atlas.canCopyProofCommand)
+        #expect(!atlas.canToggle)
+
+        let unsupported = SettingsCurrentAppState(
+            displayName: "Unknown",
+            bundleIdentifier: "com.example.UnknownEditor",
+            supportStatus: store.supportStatus(for: "com.example.UnknownEditor"),
+            isEnabled: false,
+            disabledAppCount: 1
+        )
+
+        #expect(unsupported.statusText == "Current app: Unknown is unsupported")
         #expect(
             unsupported.detailText
                 == "No compatibility profile yet; broad unknown-app support stays off until proven apps feel safe. Suggestions are intentionally off until this app is tested."
@@ -131,7 +155,7 @@ struct SettingsWindowControllerStateTests {
                 == "Safety: Suggestions are intentionally off until this app has a compatibility profile."
         )
         #expect(!unsupported.canToggleMirrorMode)
-        #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Atlas")
+        #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Unknown")
         #expect(unsupported.proofGuideText == "Proof: no proof flow for this app yet.")
         #expect(unsupported.proofCommandText == nil)
         #expect(!unsupported.canCopyProofCommand)
