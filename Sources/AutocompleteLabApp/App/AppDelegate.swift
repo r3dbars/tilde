@@ -3772,14 +3772,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 outcome = "ignored"
             }
             let displayedText = currentSuggestionDisplayedText ?? suggestionSession.visibleSuggestion?.visibleText ?? ""
-            let metadata = currentSuggestionLifetimeMetadata()
+            let lifetimeMilliseconds = currentSuggestionLifetimeMilliseconds()
+            var metadata = currentSuggestionLifetimeMetadata(lifetimeMilliseconds: lifetimeMilliseconds)
 
             if outcome == "ignored" {
-                suggestionRepetitionSuppressor.recordMiss(
+                let missRecord = suggestionRepetitionSuppressor.recordIgnored(
                     displayedText,
                     mode: currentSuggestionRequestMode,
-                    scope: appBundleIdentifier
+                    scope: appBundleIdentifier,
+                    lifetimeMilliseconds: lifetimeMilliseconds
                 )
+                if let missRecord {
+                    metadata.merge(missRecord.traceMetadata) { current, _ in current }
+                }
             }
 
             RawAutocompleteTraceLog.shared.record(
@@ -4005,14 +4010,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func currentSuggestionLifetimeMetadata(now: Date = Date()) -> [String: String] {
-        guard let currentSuggestionPresentedAt else {
+        currentSuggestionLifetimeMetadata(lifetimeMilliseconds: currentSuggestionLifetimeMilliseconds(now: now))
+    }
+
+    private func currentSuggestionLifetimeMetadata(lifetimeMilliseconds: Int?) -> [String: String] {
+        guard let lifetimeMilliseconds else {
             return [:]
         }
 
-        let lifetimeMilliseconds = max(0, Int(now.timeIntervalSince(currentSuggestionPresentedAt) * 1_000))
         return [
             "lifetimeMs": String(lifetimeMilliseconds)
         ]
+    }
+
+    private func currentSuggestionLifetimeMilliseconds(now: Date = Date()) -> Int? {
+        guard let currentSuggestionPresentedAt else {
+            return nil
+        }
+
+        return max(0, Int(now.timeIntervalSince(currentSuggestionPresentedAt) * 1_000))
     }
 
     private func currentPrefixFamilyCooldownInput(

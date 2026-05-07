@@ -75,4 +75,48 @@ struct SuggestionRepetitionSuppressorTests {
 
         #expect(suppressor.shouldSuppress("is", mode: .wordCompletion, scope: "com.openai.codex"))
     }
+
+    @Test("ignored hides are weak and lifetime aware")
+    func ignoredHidesAreWeakAndLifetimeAware() {
+        var suppressor = SuggestionRepetitionSuppressor(missThreshold: 1)
+
+        for _ in 0..<10 {
+            suppressor.recordIgnored(
+                "maybe later",
+                mode: .phraseContinuation,
+                lifetimeMilliseconds: 90
+            )
+        }
+
+        #expect(!suppressor.shouldSuppress("maybe later", mode: .phraseContinuation))
+
+        suppressor.recordIgnored(
+            "maybe later",
+            mode: .phraseContinuation,
+            lifetimeMilliseconds: 6_000
+        )
+
+        #expect(suppressor.shouldSuppress("maybe later", mode: .phraseContinuation))
+    }
+
+    @Test("ignored miss metadata is trace safe")
+    func ignoredMissMetadataIsTraceSafe() throws {
+        var suppressor = SuggestionRepetitionSuppressor(missThreshold: 2)
+
+        let maybeRecord = suppressor.recordIgnored(
+            "Follow up tomorrow",
+            mode: .phraseContinuation,
+            lifetimeMilliseconds: 2_000
+        )
+        let record = try #require(maybeRecord)
+        let metadata = record.traceMetadata
+
+        #expect(metadata["repetitionMissKind"] == "ignored")
+        #expect(metadata["repetitionMissWeight"] == "0.35")
+        #expect(metadata["repetitionMissTotal"] == "0.35")
+        #expect(metadata["repetitionMissThreshold"] == "2.00")
+        #expect(metadata["repetitionMissSuppressed"] == "false")
+        #expect(metadata["repetitionMissLifetimeMs"] == "2000")
+        #expect(!metadata.values.joined(separator: " ").contains("Follow"))
+    }
 }
