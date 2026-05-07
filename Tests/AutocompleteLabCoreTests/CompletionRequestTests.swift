@@ -42,4 +42,17 @@ struct CompletionRequestTests {
         #expect(metadata["partialWordCasing"] == "titlecase")
         #expect(!metadata.values.joined(separator: " ").contains("Transcrip"))
     }
+
+    @Test("Trace metadata includes current line structure only")
+    func traceMetadataIncludesCurrentLineStructureOnly() {
+        let request = CompletionRequest(textBeforeCursor: "Plan\n- [ ] Follow u")
+        let metadata = request.behaviorProfileTraceMetadata
+
+        #expect(request.behaviorProfile.id == .bullets)
+        #expect(metadata["currentLineStructure"] == "checklist_unchecked")
+        #expect(metadata["currentLineMarkerStyle"] == "dash")
+        #expect(metadata["currentLineIndentationColumns"] == "0")
+        #expect(metadata["currentLineContentWords"] == "2")
+        #expect(!metadata.values.joined(separator: " ").contains("Follow"))
+    }
 }

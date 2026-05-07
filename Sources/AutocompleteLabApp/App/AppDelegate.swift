@@ -1825,7 +1825,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let behaviorProfileID = currentCompletionRequest?.behaviorProfile.id
             ?? AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
                 appBundleIdentifier: profile.bundleIdentifier,
-                fieldKind: fieldKind
+                fieldKind: fieldKind,
+                currentLineStructure: CurrentLineStructure.from(textBeforeCursor: lastTextSnapshot.textBeforeCursor)
             )).id
 
         return InsertionVerificationBaseline(
@@ -2279,7 +2280,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let suggestionID = UUID().uuidString
         let behaviorProfile = AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
             appBundleIdentifier: appBundleIdentifier,
-            fieldKind: fieldClassification.kind
+            fieldKind: fieldClassification.kind,
+            currentLineStructure: CurrentLineStructure.from(textBeforeCursor: context.textBeforeCursor)
         ))
         let acceptedTextStyleSketch = acceptedTextStyleMemory.sketch(
             for: AcceptedTextStyleMemoryKey(

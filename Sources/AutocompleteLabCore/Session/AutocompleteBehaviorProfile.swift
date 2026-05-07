@@ -207,15 +207,18 @@ public struct AutocompleteBehaviorProfileInput: Equatable, Sendable {
     public let requestedProfileID: AutocompleteBehaviorProfileID?
     public let appBundleIdentifier: String?
     public let fieldKind: AXFieldKind?
+    public let currentLineStructure: CurrentLineStructure?
 
     public init(
         requestedProfileID: AutocompleteBehaviorProfileID? = nil,
         appBundleIdentifier: String? = nil,
-        fieldKind: AXFieldKind? = nil
+        fieldKind: AXFieldKind? = nil,
+        currentLineStructure: CurrentLineStructure? = nil
     ) {
         self.requestedProfileID = requestedProfileID
         self.appBundleIdentifier = appBundleIdentifier
         self.fieldKind = fieldKind
+        self.currentLineStructure = currentLineStructure
     }
 }
 
@@ -236,6 +239,9 @@ public struct AutocompleteBehaviorProfileResolver: Equatable, Sendable {
         }
 
         guard let appBundleIdentifier = input.appBundleIdentifier?.lowercased() else {
+            if input.currentLineStructure?.isListLike == true {
+                return AutocompleteBehaviorProfile.profile(.bullets)
+            }
             return AutocompleteBehaviorProfile.profile(.docsProse)
         }
 
@@ -255,6 +261,10 @@ public struct AutocompleteBehaviorProfileResolver: Equatable, Sendable {
             || appBundleIdentifier.contains("xcode")
             || appBundleIdentifier.contains("vscode") {
             return AutocompleteBehaviorProfile.profile(.coding)
+        }
+
+        if input.currentLineStructure?.isListLike == true {
+            return AutocompleteBehaviorProfile.profile(.bullets)
         }
 
         return AutocompleteBehaviorProfile.profile(.docsProse)

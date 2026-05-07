@@ -97,6 +97,40 @@ struct AutocompleteBehaviorProfileTests {
         )).id == .forms)
     }
 
+    @Test("Resolver maps generic list shaped lines to bullets")
+    func resolverMapsGenericListShapedLinesToBullets() {
+        let resolver = AutocompleteBehaviorProfileResolver()
+
+        #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(
+            fieldKind: .multilineCompose,
+            currentLineStructure: CurrentLineStructure.from(textBeforeCursor: "- Follow u")
+        )).id == .bullets)
+
+        #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldKind: .multilineCompose,
+            currentLineStructure: CurrentLineStructure.from(textBeforeCursor: "- [ ] Follow u")
+        )).id == .bullets)
+    }
+
+    @Test("Resolver keeps safety profiles ahead of list shape")
+    func resolverKeepsSafetyProfilesAheadOfListShape() {
+        let resolver = AutocompleteBehaviorProfileResolver()
+        let lineStructure = CurrentLineStructure.from(textBeforeCursor: "- [ ] Follow u")
+
+        #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(
+            appBundleIdentifier: "com.openai.codex",
+            fieldKind: .multilineCompose,
+            currentLineStructure: lineStructure
+        )).id == .aiChat)
+
+        #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldKind: .search,
+            currentLineStructure: lineStructure
+        )).id == .search)
+    }
+
     @Test("Resolver maps common app bundles")
     func resolverMapsCommonAppBundles() {
         let resolver = AutocompleteBehaviorProfileResolver()
