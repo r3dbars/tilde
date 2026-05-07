@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
+    private let displayScorePolicy = DisplayScorePolicy()
     private let annoyanceSuppressor = AnnoyanceSuppressorActor()
     private let screenshotTraceCapturePolicy = ScreenshotTraceCapturePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
@@ -2444,6 +2445,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let displayScoreDecision = displayScorePolicy.decision(
+            for: displayScore(
+                suggestion: suggestion,
+                request: request,
+                context: context,
+                profile: profile,
+                triggerReason: triggerReason,
+                latencyMilliseconds: latencyMilliseconds
+            ),
+            mode: request.mode
+        )
+        let displayScoreMetadata = displayScoreDecision.metadata
+        guard displayScoreDecision.shouldDisplay else {
+            let reason = displayScoreMetadata["displayScoreSuppressionReason"] ?? "display-score"
+            setSuggestionDecision("Blocked: display score \(reason)")
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: suggestionID,
+                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity.traceDescription,
+                requestMode: request.mode.rawValue,
+                triggerReason: triggerReason,
+                textBeforeCursor: request.textBeforeCursor,
+                textAfterCursor: request.textAfterCursor,
+                displayedText: suggestion.visibleText,
+                latencyMilliseconds: latencyMilliseconds,
+                reason: reason,
+                metadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode)
+                    .merging(learningAdjustment.metadata) { current, _ in current }
+                    .merging(placement.metadata) { current, _ in current }
+                    .merging(displayScoreMetadata) { current, _ in current }
+            )
+            recordSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                metadata: [
+                    "reason": reason
+                ]
+                .merging(learningAdjustment.metadata) { current, _ in current }
+                .merging(placement.metadata) { current, _ in current }
+                .merging(displayScoreMetadata) { current, _ in current }
+            )
+            hideSuggestion(reason: reason)
+            return
+        }
+
         lastCaretRect = placement.anchorRect
         lastTextLineRect = placement.textLineRect
         lastClippingRect = placement.clippingRect
@@ -2474,6 +2522,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode)
                     .merging(learningAdjustment.metadata) { current, _ in current }
                     .merging(placement.metadata) { current, _ in current }
+                    .merging(displayScoreMetadata) { current, _ in current }
             )
             recordSuggestionEvent(
                 "suggestion-blocked",
@@ -2484,6 +2533,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(placement.metadata) { current, _ in current }
+                .merging(displayScoreMetadata) { current, _ in current }
             )
             hideSuggestion(reason: reason)
             return
@@ -2550,6 +2600,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(traceGeometryMetadata(context: context, renderMode: placement.renderMode)) { current, _ in current }
             .merging(learningAdjustment.metadata) { current, _ in current }
             .merging(placement.metadata) { current, _ in current }
+            .merging(displayScoreMetadata) { current, _ in current }
         )
         recordSuggestionEvent(
             "suggestion-presented",
@@ -2571,6 +2622,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
             .merging(learningAdjustment.metadata) { current, _ in current }
             .merging(placement.metadata) { current, _ in current }
+            .merging(displayScoreMetadata) { current, _ in current }
         )
         updateKeyboardEventTapSnapshot()
     }
@@ -2710,6 +2762,173 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func traceFieldMetadata(context: FocusedTextContext) -> [String: String] {
         fieldClassification(for: context).traceMetadata
+    }
+
+    private func displayScore(
+        suggestion: CompletionSuggestion,
+        request: CompletionRequest,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        triggerReason: String,
+        latencyMilliseconds: Int
+    ) -> DisplayScore {
+        let classification = fieldClassification(for: context)
+        let visibleWordCount = suggestion.visibleWordCount
+        let visibleCharacterCount = suggestion.visibleText.count
+
+        return DisplayScore(
+            utility: displayUtility(
+                mode: request.mode,
+                visibleWordCount: visibleWordCount,
+                visibleCharacterCount: visibleCharacterCount
+            ),
+            styleFit: displayStyleFit(fieldKind: classification.kind, profile: profile),
+            contextFit: displayContextFit(request: request, context: context),
+            userAffinity: displayUserAffinity(mode: request.mode, triggerReason: triggerReason),
+            risk: displayRisk(fieldKind: classification.kind, profile: profile, context: context),
+            repetition: displayRepetition(
+                suggestion: suggestion,
+                request: request,
+                profile: profile
+            ),
+            instability: displayInstability(
+                context: context,
+                triggerReason: triggerReason,
+                latencyMilliseconds: latencyMilliseconds
+            )
+        )
+    }
+
+    private func displayUtility(
+        mode: CompletionRequestMode,
+        visibleWordCount: Int,
+        visibleCharacterCount: Int
+    ) -> Double {
+        switch mode {
+        case .wordCompletion:
+            if visibleCharacterCount <= 12 {
+                return 0.85
+            }
+            return 0.65
+        case .phraseContinuation:
+            switch visibleWordCount {
+            case 2...4:
+                return 0.70
+            case 5...7:
+                return 0.58
+            case 1:
+                return 0.48
+            default:
+                return 0.40
+            }
+        }
+    }
+
+    private func displayStyleFit(
+        fieldKind: AXFieldKind,
+        profile: CompatibilityProfile
+    ) -> Double {
+        if fieldKind.suppressesSuggestionsByDefault || profile.isSensitive {
+            return 0.05
+        }
+
+        switch fieldKind {
+        case .multilineCompose:
+            return 0.48
+        case .singlelineCompose:
+            return 0.40
+        case .unknown:
+            return 0.32
+        case .search, .form, .secure, .url:
+            return 0.05
+        }
+    }
+
+    private func displayContextFit(
+        request: CompletionRequest,
+        context: FocusedTextContext
+    ) -> Double {
+        var score = request.textBeforeCursor == context.textBeforeCursor ? 0.50 : 0.30
+        if !context.textAfterCursor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            score -= 0.15
+        }
+        if context.selectedTextLength > 0 {
+            score -= 0.35
+        }
+        return displayComponent(score)
+    }
+
+    private func displayUserAffinity(
+        mode: CompletionRequestMode,
+        triggerReason: String
+    ) -> Double {
+        if triggerReason == "fast-word-completion" {
+            return 0.25
+        }
+
+        switch mode {
+        case .wordCompletion:
+            return 0.20
+        case .phraseContinuation:
+            return 0.15
+        }
+    }
+
+    private func displayRisk(
+        fieldKind: AXFieldKind,
+        profile: CompatibilityProfile,
+        context: FocusedTextContext
+    ) -> Double {
+        if context.isSecure || profile.isSensitive || fieldKind.suppressesSuggestionsByDefault {
+            return 0.95
+        }
+
+        switch profile.supportLevel {
+        case .green:
+            return fieldKind == .unknown ? 0.18 : 0.05
+        case .yellow:
+            return fieldKind == .unknown ? 0.25 : 0.12
+        case .diagnosticsOnly:
+            return 0.85
+        case .unsupported:
+            return 0.95
+        }
+    }
+
+    private func displayRepetition(
+        suggestion: CompletionSuggestion,
+        request: CompletionRequest,
+        profile: CompatibilityProfile
+    ) -> Double {
+        suggestionRepetitionSuppressor.shouldSuppress(
+            suggestion.visibleText,
+            mode: request.mode,
+            scope: request.appBundleIdentifier ?? profile.bundleIdentifier
+        ) ? 0.90 : 0.05
+    }
+
+    private func displayInstability(
+        context: FocusedTextContext,
+        triggerReason: String,
+        latencyMilliseconds: Int
+    ) -> Double {
+        var score = 0.05
+        if triggerReason == "model-stream" {
+            score += 0.15
+        }
+        if context.caretIsSynthetic {
+            score += 0.12
+        }
+        if latencyMilliseconds >= 1_500 {
+            score += 0.30
+        } else if latencyMilliseconds >= 800 {
+            score += 0.15
+        }
+        return displayComponent(score)
+    }
+
+    private func displayComponent(_ value: Double) -> Double {
+        min(max(value, 0), 1)
     }
 
     private func fieldClassification(for context: FocusedTextContext) -> AXFieldClassification {
