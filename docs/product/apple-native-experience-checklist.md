@@ -322,7 +322,7 @@ like an assistant trying to talk.
 - [x] Dogfood prompt guidance no longer triggers from loose substrings like `table`, `stable`, `model`, or `test`.
 - [x] Assistant-y prefixes like "as an AI", "happy to", "you could", and "would you like" are suppressed before display.
 - [x] Word-completion mode rejects unrelated whole-word completions.
-- [ ] Model should prefer suffixes over phrase restarts.
+- [x] Model should prefer suffixes over phrase restarts.
 - [x] Suggestions should not duplicate the user's visible text.
 - [x] Suggestions should be less eager after repeated typed-over misses.
 - [x] Different app modes should have different suggestion aggressiveness.

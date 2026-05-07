@@ -157,6 +157,10 @@ struct CompletionOutputCleanerTests {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
         #expect(cleaner.clean(
+            "Can we make this feel calmer",
+            after: "Can we make this"
+        )?.visibleText == " feel calmer")
+        #expect(cleaner.clean(
             "I want this app to feel smoother",
             after: "I want this to feel"
         ) == nil)

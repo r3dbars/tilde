@@ -368,6 +368,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return false
         }
 
+        if suggestionWords.count > currentSentenceWords.count,
+           Array(suggestionWords.prefix(currentSentenceWords.count)) == currentSentenceWords {
+            return false
+        }
+
         return Array(currentSentenceWords.prefix(3)) == Array(suggestionWords.prefix(3))
     }
 
