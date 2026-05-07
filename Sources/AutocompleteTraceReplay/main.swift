@@ -67,25 +67,20 @@ let traceURL = URL(fileURLWithPath: tracePath)
 let data = try Data(contentsOf: traceURL)
 let contents = String(decoding: data, as: UTF8.self)
 let decoder = JSONDecoder()
-let events = try contents
-    .split(whereSeparator: \.isNewline)
-    .enumerated()
-    .filter { item in
-        let lineNumber = item.offset + 1
-        guard lineNumber > startLine else {
-            return false
-        }
-
-        if let endLine {
-            return lineNumber <= endLine
-        }
-
-        return true
+var events: [AutocompleteTraceEvent] = []
+for (offset, line) in contents.split(whereSeparator: \.isNewline).enumerated() {
+    let lineNumber = offset + 1
+    guard lineNumber > startLine else {
+        continue
     }
-    .map { item -> AutocompleteTraceEvent in
-        let line = item.element
-        return try decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
+
+    if let endLine, lineNumber > endLine {
+        continue
     }
+
+    let event = try decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
+    events.append(event)
+}
 
 let report = AutocompleteTraceReplay().report(for: events)
 print(report.markdown)

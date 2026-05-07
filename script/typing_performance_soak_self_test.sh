@@ -15,7 +15,7 @@ if ! grep -F "Safe typing performance soak" "$TMP_DIR/default.txt" >/dev/null; t
   exit 1
 fi
 
-if ! grep -F "Target app: disposable TextEdit document" "$TMP_DIR/default.txt" >/dev/null; then
+if ! grep -F "Target app: disposable TextEdit .txt file" "$TMP_DIR/default.txt" >/dev/null; then
   echo "typing soak self-test did not explain the safe TextEdit target" >&2
   cat "$TMP_DIR/default.txt" >&2
   exit 1
@@ -39,26 +39,20 @@ if ! grep -F "Synthetic text: 1200 generated chars from a built-in neutral fixtu
   exit 1
 fi
 
-if ! grep -F "Typed text proof: exact TextEdit document match required" "$TMP_DIR/default.txt" >/dev/null; then
+if ! grep -F "Typed text proof: exact named TextEdit document match required" "$TMP_DIR/default.txt" >/dev/null; then
   echo "typing soak self-test did not explain exact typed-text verification" >&2
   cat "$TMP_DIR/default.txt" >&2
   exit 1
 fi
 
-if ! grep -F "Clipboard fallback: used only if direct TextEdit read fails" "$TMP_DIR/default.txt" >/dev/null; then
-  echo "typing soak self-test did not explain clipboard fallback verification" >&2
+if ! grep -F "Typing driver: CGEvent Unicode key events after target-window focus" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain the CGEvent typing driver" >&2
   cat "$TMP_DIR/default.txt" >&2
   exit 1
 fi
 
-if ! grep -F "Typing driver: System Events key chunks" "$TMP_DIR/default.txt" >/dev/null; then
-  echo "typing soak self-test did not explain the System Events typing driver" >&2
-  cat "$TMP_DIR/default.txt" >&2
-  exit 1
-fi
-
-if ! grep -F "Typing batches: up to 1200 chars per AppleScript process" "$TMP_DIR/default.txt" >/dev/null; then
-  echo "typing soak self-test did not explain segmented typing batches" >&2
+if ! grep -F "Typing batches: up to 250 chars per Swift process" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain segmented Swift typing batches" >&2
   cat "$TMP_DIR/default.txt" >&2
   exit 1
 fi
@@ -97,7 +91,7 @@ if ! grep -F "Build: skipped; using an already-running app" "$TMP_DIR/strict.txt
   exit 1
 fi
 
-if ! grep -F "Typing: 7-char chunks with 2ms delay" "$TMP_DIR/strict.txt" >/dev/null; then
+if ! grep -F "Typing: 7-char chunks with 2ms delay and 3000us key spacing" "$TMP_DIR/strict.txt" >/dev/null; then
   echo "typing soak self-test did not honor chunk and delay overrides" >&2
   cat "$TMP_DIR/strict.txt" >&2
   exit 1

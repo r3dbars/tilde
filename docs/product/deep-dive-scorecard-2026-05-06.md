@@ -137,9 +137,13 @@ evidence-backed score should stay lower until those rows are closed.
   passed with exact 1,200-character TextEdit verification, event-tap p95 max
   36us, p99 max 95us, max 95us, zero slow tap markers, zero tap-disable events,
   focused-poll p95 max 42ms, focused-poll max 88ms, and zero focused-poll skips.
-  The 10-minute wrapper is now more realistic and self-tested, but the current
-  live 10-minute harness still needs a durable unattended pass before this score
-  can become 10/10.
+- Latest harness hardening keeps CGEvent typing focused on the named TextEdit
+  document, uses 250-character segments so focus is revalidated often, and
+  bounds cleanup AppleScript so a wedged disposable TextEdit document cannot
+  hang the proof runner. A current short proof passed with exact 100-character
+  named-document verification. The 10-minute wrapper is now more realistic and
+  self-tested, but the current live 10-minute harness still needs a durable
+  unattended pass before this score can become 10/10.
 - `./script/scorecard_goal_loop.sh --iterations 10`: completed all 10 requested
   proof-loop iterations and still failed, as expected, because the same manual
   app-proof gaps remain. It is now the repeatable repo command for grinding
@@ -337,10 +341,12 @@ evidence-backed score should stay lower until those rows are closed.
   `script/scorecard_goal_loop.sh --iterations 10` together with strict manual
   smoke status and strict visual evidence.
 - `script/typing_performance_endurance_soak.sh` now wraps the safe TextEdit
-  soak with a 10-minute default, typing-like 5-character chunks, exact TextEdit
-  text verification, temporary TextEdit enablement, temporary pause-state
-  restore, AX warmup flushing, segmented AppleScript typing batches, and dry-run
-  self-test coverage.
+  soak with a 10-minute default, typing-like 5-character chunks, exact named
+  TextEdit document verification, temporary TextEdit enablement, temporary
+  pause-state restore, AX warmup flushing, a CGEvent Unicode typing driver that
+  focuses and verifies the target TextEdit window before each Swift batch,
+  bounded cleanup, segmented Swift typing batches, and dry-run self-test
+  coverage.
 
 ## Remaining Gaps
 
