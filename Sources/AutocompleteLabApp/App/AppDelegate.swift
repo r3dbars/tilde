@@ -109,6 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionRequestGate = SuggestionRequestGate()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
+    private var prefixFamilyCooldownPolicy = PrefixFamilyCooldownPolicy()
     private var currentCompletionRequest: CompletionRequest?
     private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
     private var currentSuggestionID: String?
@@ -633,8 +634,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor
         )
+        let previousSnapshot = lastTextSnapshot
 
-        guard snapshot != lastTextSnapshot else {
+        guard snapshot != previousSnapshot else {
             setSuggestionDecision(
                 suggestionSession.hasVisibleSuggestion
                     ? "Shown: tracking current field"
@@ -650,7 +652,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile
         )
         rememberTypedWordsIfNeeded(
-            previousSnapshot: lastTextSnapshot,
+            previousSnapshot: previousSnapshot,
             currentSnapshot: snapshot,
             appBundleIdentifier: frontmostApp.bundleIdentifier
         )
@@ -733,6 +735,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let requestMode = activationDecision.requestMode ?? .phraseContinuation
+        let prefixCooldownInput = PrefixFamilyCooldownInput(
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldIdentifier: fieldIdentity.traceDescription,
+            requestMode: requestMode,
+            textBeforeCursor: context.textBeforeCursor
+        )
+        if let previousSnapshot,
+           previousSnapshot.fieldIdentity == fieldIdentity,
+           context.textBeforeCursor.count < previousSnapshot.textBeforeCursor.count {
+            recordPrefixFamilyCooldown(.deletion, input: prefixCooldownInput)
+        }
+
+        switch prefixFamilyCooldownPolicy.decision(for: prefixCooldownInput) {
+        case .allowed:
+            break
+        case let .coolingDown(cooldown):
+            setSuggestionDecision("Waiting: prefix \(cooldown.reason.rawValue)")
+            let metadata = fieldClassification.traceMetadata
+                .merging(cooldown.metadata) { current, _ in current }
+                .merging(["reason": "prefix-family-cooldown"]) { current, _ in current }
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: UUID().uuidString,
+                appBundleIdentifier: profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity.traceDescription,
+                requestMode: requestMode.rawValue,
+                triggerReason: "prefix-family-cooldown",
+                textBeforeCursor: context.textBeforeCursor,
+                textAfterCursor: context.textAfterCursor,
+                reason: cooldown.reason.rawValue,
+                metadata: metadata
+            )
+            recordBlockedSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                metadata: metadata
+            )
+            hideSuggestion()
+            return
+        }
+
         let annoyanceContext = annoyanceContext(
             appBundleIdentifier: profile.bundleIdentifier,
             fieldIdentity: fieldIdentity,
@@ -1485,12 +1530,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
 
         case .dismiss:
+            var metadata = currentSuggestionLifetimeMetadata()
+            if let input = currentPrefixFamilyCooldownInput() {
+                metadata.merge(recordPrefixFamilyCooldown(.escapeDismissal, input: input)) { current, _ in current }
+            }
             recordAnnoyanceSignal(
                 .rapidEscDismissal,
                 context: currentAnnoyanceContext(),
                 suggestionID: currentSuggestionID ?? "",
                 reason: "escape",
-                metadata: currentSuggestionLifetimeMetadata()
+                metadata: metadata
             )
             suppressCurrentField(reason: "escape")
             hideSuggestion(reason: "escape")
@@ -3019,6 +3068,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        var metadata = [
+            "typedSuffix": typedSuffix
+        ]
+        metadata.merge(recordPrefixFamilyCooldown(
+            .typedOver,
+            input: PrefixFamilyCooldownInput(
+                appBundleIdentifier: profile.bundleIdentifier,
+                fieldIdentifier: fieldIdentity.traceDescription,
+                requestMode: currentSuggestionRequestMode,
+                textBeforeCursor: newTextBeforeCursor
+            )
+        )) { current, _ in current }
+        metadata.merge(currentSuggestionLifetimeMetadata()) { current, _ in current }
+
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionTypedOver,
             suggestionID: suggestionID,
@@ -3029,9 +3092,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             displayedText: displayedText,
             outcome: "typed-over",
             reason: "typed-against-visible-suggestion",
-            metadata: [
-                "typedSuffix": typedSuffix
-            ]
+            metadata: metadata
         )
         recordAnnoyanceSignal(
             .typedOver,
@@ -3043,10 +3104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ),
             suggestionID: suggestionID,
             reason: "typed-against-visible-suggestion",
-            metadata: [
-                "typedSuffix": typedSuffix
-            ]
-            .merging(currentSuggestionLifetimeMetadata()) { current, _ in current }
+            metadata: metadata
         )
     }
 
@@ -3339,6 +3397,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return [
             "lifetimeMs": String(lifetimeMilliseconds)
         ]
+    }
+
+    private func currentPrefixFamilyCooldownInput(
+        textBeforeCursor: String? = nil
+    ) -> PrefixFamilyCooldownInput? {
+        let appBundleIdentifier = currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier
+        let fieldIdentity = currentSuggestionFieldIdentity ?? currentFieldIdentity
+        let textBeforeCursor = textBeforeCursor ?? currentSuggestionTextBeforeCursor
+        guard let appBundleIdentifier,
+              let fieldIdentity,
+              let textBeforeCursor else {
+            return nil
+        }
+
+        return PrefixFamilyCooldownInput(
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentifier: fieldIdentity.traceDescription,
+            requestMode: currentSuggestionRequestMode,
+            textBeforeCursor: textBeforeCursor
+        )
+    }
+
+    private func recordPrefixFamilyCooldown(
+        _ reason: PrefixFamilyCooldownReason,
+        input: PrefixFamilyCooldownInput
+    ) -> [String: String] {
+        guard let cooldown = prefixFamilyCooldownPolicy.record(reason, input: input) else {
+            return [:]
+        }
+
+        DiagnosticsLog.shared.record(
+            "prefix-family-cooldown",
+            metadata: [
+                "app": input.appBundleIdentifier,
+                "reason": reason.rawValue,
+                "durationMilliseconds": String(cooldown.durationMilliseconds),
+                "prefixFamilyTokenCount": String(cooldown.prefixTokenCount)
+            ]
+        )
+        return cooldown.metadata
     }
 
     private func recordAnnoyanceSignal(
