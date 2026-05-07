@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let promptEditorPolicy = PromptEditorFingerprintPolicy()
     private let suggestionControlPolicy = SuggestionControlPolicy()
     private let activationPolicy = CompletionActivationPolicy()
+    private let fieldClassifier = AXFieldClassifier()
     private let triggerPolicy = SuggestionTriggerPolicy(
         charactersBeforePauseRequest: 1,
         wordCompletionDelayMilliseconds: 0,
@@ -688,16 +689,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let fieldClassification = fieldClassification(for: context)
         let activationDecision = activationPolicy.decision(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             isSecure: context.isSecure,
             selectedTextLength: context.selectedTextLength,
-            isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity)
+            isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
+            fieldKind: fieldClassification.kind
         )
 
         guard activationDecision.canSuggest else {
             setSuggestionDecision("Blocked: \(activationDecision.blockReasonDescription)")
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: UUID().uuidString,
+                appBundleIdentifier: profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity.traceDescription,
+                requestMode: activationDecision.requestMode?.rawValue ?? "",
+                triggerReason: "activation-policy",
+                textBeforeCursor: context.textBeforeCursor,
+                textAfterCursor: context.textAfterCursor,
+                reason: activationDecision.blockReasonDescription,
+                metadata: fieldClassification.traceMetadata
+            )
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
@@ -706,6 +721,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "reason": activationDecision.blockReasonDescription
                 ]
+                .merging(fieldClassification.traceMetadata) { current, _ in current }
             )
             hideSuggestion()
             return
@@ -1686,6 +1702,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "renderMode": renderMode.rawValue,
                 "delayMilliseconds": String(delayMilliseconds)
             ]
+            .merging(traceFieldMetadata(context: context)) { current, _ in current }
         )
 
         if requestMode == .wordCompletion {
@@ -1714,6 +1731,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         metadata: [
                             "renderMode": renderMode.rawValue
                         ]
+                        .merging(self.traceFieldMetadata(context: context)) { current, _ in current }
                     )
                     recordSuggestionEvent(
                         "suggestion-blocked",
@@ -1755,6 +1773,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "renderMode": renderMode.rawValue
                 ]
+                .merging(traceFieldMetadata(context: context)) { current, _ in current }
             )
             if suggestionSession.hasVisibleSuggestion {
                 setSuggestionDecision("Shown: no fast word replacement")
@@ -1847,7 +1866,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             textBeforeCursor: request.textBeforeCursor,
                             textAfterCursor: request.textAfterCursor,
                             latencyMilliseconds: latencyMilliseconds,
-                            reason: "empty-suggestion"
+                            reason: "empty-suggestion",
+                            metadata: self.traceFieldMetadata(context: context)
                         )
                         self.recordSuggestionEvent(
                             "suggestion-blocked",
@@ -1874,7 +1894,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             cleanedVisibleText: suggestion.visibleText,
                             displayedText: suggestion.visibleText,
                             latencyMilliseconds: latencyMilliseconds,
-                            reason: "missing-anchor"
+                            reason: "missing-anchor",
+                            metadata: self.traceFieldMetadata(context: context)
                         )
                         self.recordSuggestionEvent(
                             "suggestion-blocked",
@@ -1899,7 +1920,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         textAfterCursor: request.textAfterCursor,
                         cleanedVisibleText: suggestion.visibleText,
                         displayedText: suggestion.visibleText,
-                        latencyMilliseconds: latencyMilliseconds
+                        latencyMilliseconds: latencyMilliseconds,
+                        metadata: self.traceFieldMetadata(context: context)
                     )
                     guard !self.suggestionRepetitionSuppressor.shouldSuppress(
                         suggestion.visibleText,
@@ -1918,7 +1940,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             cleanedVisibleText: suggestion.visibleText,
                             displayedText: suggestion.visibleText,
                             latencyMilliseconds: latencyMilliseconds,
-                            reason: "repeated-miss"
+                            reason: "repeated-miss",
+                            metadata: self.traceFieldMetadata(context: context)
                         )
                         self.hideSuggestion()
                         return
@@ -2301,6 +2324,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "hasWindowRect": String(context.windowRect != nil),
             "canReadBounds": String(context.capabilities.canReadBoundsForRange)
         ]
+        .merging(traceFieldMetadata(context: context)) { current, _ in current }
+    }
+
+    private func traceFieldMetadata(context: FocusedTextContext) -> [String: String] {
+        fieldClassification(for: context).traceMetadata
+    }
+
+    private func fieldClassification(for context: FocusedTextContext) -> AXFieldClassification {
+        fieldClassifier.classification(
+            for: AXFieldClassifierInput(
+                role: context.role,
+                subrole: context.subrole,
+                title: context.fingerprint.title,
+                placeholder: context.fingerprint.placeholder,
+                windowTitle: context.fingerprint.windowTitle,
+                isSecure: context.isSecure,
+                textBeforeCursorLength: context.textBeforeCursor.count,
+                textAfterCursorLength: context.textAfterCursor.count,
+                selectedTextLength: context.selectedTextLength,
+                lineCount: lineCount(for: context)
+            )
+        )
+    }
+
+    private func lineCount(for context: FocusedTextContext) -> Int {
+        let text = context.textBeforeCursor + context.textAfterCursor
+        guard !text.isEmpty else {
+            return 0
+        }
+
+        return text.split(
+            omittingEmptySubsequences: false,
+            whereSeparator: \.isNewline
+        ).count
     }
 
     private func recordSuggestionEvent(
@@ -2325,6 +2382,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         safeMetadata["canReadRange"] = String(context.capabilities.canReadSelectedTextRange)
         safeMetadata["canReadBounds"] = String(context.capabilities.canReadBoundsForRange)
         safeMetadata["canSetSelectedText"] = String(context.capabilities.canSetSelectedText)
+        safeMetadata.merge(traceFieldMetadata(context: context)) { current, _ in current }
 
         DiagnosticsLog.shared.record(event, metadata: safeMetadata)
     }
