@@ -91,8 +91,8 @@ public enum RenderModePlan {
             lineRect: lineRect,
             elementRect: elementRect,
             windowRect: windowRect,
-            allowsDetachedAnchors: profile.allowsDetachedSuggestions,
-            allowsWindowAnchor: allowsWindowAnchor
+            allowsDetachedAnchors: profile.allowsDetachedSuggestions && profile.allowsFieldAnchor,
+            allowsWindowAnchor: allowsWindowAnchor || profile.allowsWindowAnchor
         )
     }
 

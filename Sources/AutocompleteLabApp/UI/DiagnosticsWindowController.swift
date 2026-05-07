@@ -163,16 +163,23 @@ final class DiagnosticsWindowController {
                 """
                 Compatibility profile:
                   app: \(profile.displayName) (\(profile.bundleIdentifier))
+                  family: \(profile.appFamily.rawValue)
                   render mode: \(profile.renderMode.rawValue)
                   insertion mode: \(profile.insertionMode.rawValue)
                   fallback render: \(profile.fallbackRenderMode?.rawValue ?? "none")
                   fallback insertion: \(profile.fallbackInsertionMode?.rawValue ?? "none")
                   field identity: \(profile.fieldIdentityMode.rawValue)
+                  anchor ladder: \(profile.anchorLadder.map(\.rawValue).joined(separator: " > "))
+                  field anchor: \(profile.allowsFieldAnchor)
+                  window anchor: \(profile.allowsWindowAnchor)
+                  requires validated caret: \(profile.requiresValidatedCaret)
+                  observer updates: \(profile.supportsObserverUpdates)
                   one-word accept: \(profile.supportsOneWordAcceptance)
                   full accept: \(profile.supportsFullAcceptance)
                   Esc suppression: \(profile.suppressesUntilBlurAfterEscape)
                   suppress after failed insert: \(profile.suppressesAfterInsertionFailure)
                   sensitive: \(profile.isSensitive)
+                  known failures: \(profile.knownFailureModes.isEmpty ? "none" : profile.knownFailureModes.joined(separator: "; "))
                   debug summary: \(profile.debugSummary)
                   notes: \(profile.notes)
                 """

@@ -280,6 +280,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     private func topMisses(from events: [AutocompleteTraceEvent]) -> [AutocompleteTraceMiss] {
         var buckets: [String: (count: Int, example: AutocompleteTraceEvent, cause: String, category: String)] = [:]
         addRepeatedUnacceptedSuggestions(from: events, buckets: &buckets)
+        addRepeatedTypedOverSuggestions(from: events, buckets: &buckets)
 
         for event in events {
             if event.type == .suggestionTypedOver {
@@ -321,6 +322,18 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                     event: event,
                     cause: "Word-completion mode produced multi-word output.",
                     category: "output cleaning issue",
+                    buckets: &buckets
+                )
+            }
+
+            if event.type == .modelResult,
+               event.requestMode == "wordCompletion",
+               isTooShortWordCompletion(event.cleanedVisibleText.isEmpty ? event.rawOutput : event.cleanedVisibleText) {
+                add(
+                    key: "Too-short word completion",
+                    event: event,
+                    cause: "Word-completion mode returned a tiny suffix that is likely to twitch more than help.",
+                    category: "word-completion issue",
                     buckets: &buckets
                 )
             }
@@ -651,6 +664,38 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         }
     }
 
+    private func addRepeatedTypedOverSuggestions(
+        from events: [AutocompleteTraceEvent],
+        buckets: inout [String: (count: Int, example: AutocompleteTraceEvent, cause: String, category: String)]
+    ) {
+        let typedOver = events.filter { $0.type == .suggestionTypedOver }
+        let repeated = Dictionary(grouping: typedOver) { event in
+            "\(event.requestMode)|\(event.appBundleIdentifier)|\(normalizedSuggestionText(event.displayedText))"
+        }
+
+        for (_, suggestions) in repeated {
+            guard suggestions.count >= 2,
+                  let example = suggestions.first,
+                  !normalizedSuggestionText(example.displayedText).isEmpty else {
+                continue
+            }
+
+            let title = "Repeated typed-over: \(normalizedSuggestionText(example.displayedText))"
+            add(
+                key: title,
+                event: example,
+                cause: "The same suggestion was typed over \(suggestions.count) times in \(appName(for: example)).",
+                category: example.requestMode == "wordCompletion" ? "word-completion issue" : "prompt issue",
+                buckets: &buckets
+            )
+
+            if var existing = buckets[title] {
+                existing.count = max(existing.count, suggestions.count)
+                buckets[title] = existing
+            }
+        }
+    }
+
     private func normalizedSuggestionText(_ text: String) -> String {
         text
             .lowercased()
@@ -667,8 +712,17 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         return normalized.hasPrefix("i will do that")
             || normalized.hasPrefix("i'll do that")
             || normalized.hasPrefix("let me know")
+            || normalized.hasPrefix("here are")
+            || normalized.hasPrefix("you need to")
+            || normalized.hasPrefix("the best way")
+            || normalized.hasPrefix("in order to")
             || normalized.hasPrefix("sure,")
             || normalized.hasPrefix("certainly,")
+    }
+
+    private func isTooShortWordCompletion(_ text: String) -> Bool {
+        let normalized = normalizedSuggestionText(text)
+        return !normalized.isEmpty && normalized.count <= 1
     }
 
     private func add(

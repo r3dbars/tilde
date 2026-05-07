@@ -48,6 +48,10 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("integrate it seamlessly.") == nil)
         #expect(cleaner.clean("enhance the experience") == nil)
         #expect(cleaner.clean("You can make this easier") == nil)
+        #expect(cleaner.clean("Here are three ways to fix it") == nil)
+        #expect(cleaner.clean("You need to open settings") == nil)
+        #expect(cleaner.clean("The best way is to retry") == nil)
+        #expect(cleaner.clean("In order to finish this") == nil)
         #expect(cleaner.clean("I'd suggest keeping it short") == nil)
         #expect(cleaner.clean("I recommend trying this") == nil)
         #expect(cleaner.clean("To do that, open settings") == nil)
@@ -77,6 +81,20 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("ready.", after: "I know you are")?.visibleText == " ready.")
     }
 
+    @Test("Suppresses completions that restart the current sentence")
+    func suppressesCurrentSentenceRestarts() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean(
+            "I want this app to feel smoother",
+            after: "I want this to feel"
+        ) == nil)
+        #expect(cleaner.clean(
+            "I want this to feel smoother",
+            after: "I want this"
+        )?.visibleText == " to feel smoother")
+    }
+
     @Test("Suppresses one word twitch completions")
     func suppressesOneWordTwitchCompletions() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
@@ -94,6 +112,7 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("dictation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
         #expect(cleaner.clean("tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
         #expect(cleaner.clean("tation next", after: "dic", mode: .wordCompletion) == nil)
+        #expect(cleaner.clean("tion.", after: "dic", mode: .wordCompletion) == nil)
     }
 
     @Test("Suppresses suggestions that parrot earlier field text")
