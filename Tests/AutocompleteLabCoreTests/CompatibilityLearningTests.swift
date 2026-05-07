@@ -149,4 +149,65 @@ struct CompatibilityLearningTests {
         #expect(!adjustment.shouldCaptureScreenshot)
         #expect(adjustment.metadata["learningApplied"] == "false")
     }
+
+    @Test("Placement trust policy allows low confidence only for green or trusted visual proof")
+    func placementTrustPolicyAllowsLowConfidenceOnlyForGreenOrTrustedVisualProof() {
+        let store = CompatibilityProfileStore.mvp
+        let textEdit = store.profile(for: "com.apple.TextEdit")!
+        let notes = store.profile(for: "com.apple.Notes")!
+
+        let greenPolicy = PlacementTrustPolicy.compatibility(
+            profile: textEdit,
+            learningAdjustment: CompatibilityLearningAdjustment(
+                profile: nil,
+                effectiveRenderMode: textEdit.renderMode
+            )
+        )
+        #expect(greenPolicy.allowsLowConfidencePlacement)
+        #expect(greenPolicy.allowsSyntheticCaretPlacement)
+
+        let unprovenPolicy = PlacementTrustPolicy.compatibility(
+            profile: notes,
+            learningAdjustment: CompatibilityLearningAdjustment(
+                profile: nil,
+                effectiveRenderMode: notes.renderMode
+            )
+        )
+        #expect(!unprovenPolicy.allowsLowConfidencePlacement)
+        #expect(!unprovenPolicy.allowsSyntheticCaretPlacement)
+
+        let untrustedLearningPolicy = PlacementTrustPolicy.compatibility(
+            profile: notes,
+            learningAdjustment: CompatibilityLearningAdjustment(
+                profile: CompatibilityLearningProfile(
+                    bundleIdentifier: notes.bundleIdentifier,
+                    xOffset: 2,
+                    yOffset: 0,
+                    observations: 4,
+                    confidence: 0.9,
+                    lastReason: "observation"
+                ),
+                effectiveRenderMode: notes.renderMode
+            )
+        )
+        #expect(!untrustedLearningPolicy.allowsLowConfidencePlacement)
+        #expect(!untrustedLearningPolicy.allowsSyntheticCaretPlacement)
+
+        let trustedLearningPolicy = PlacementTrustPolicy.compatibility(
+            profile: notes,
+            learningAdjustment: CompatibilityLearningAdjustment(
+                profile: CompatibilityLearningProfile(
+                    bundleIdentifier: notes.bundleIdentifier,
+                    xOffset: 2,
+                    yOffset: 0,
+                    observations: 4,
+                    confidence: 0.9,
+                    lastReason: "screenshot-visual-correction"
+                ),
+                effectiveRenderMode: notes.renderMode
+            )
+        )
+        #expect(trustedLearningPolicy.allowsLowConfidencePlacement)
+        #expect(trustedLearningPolicy.allowsSyntheticCaretPlacement)
+    }
 }
