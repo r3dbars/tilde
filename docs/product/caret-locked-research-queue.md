@@ -238,10 +238,11 @@ Manual proof blocker evidence: `./script/manual_smoke_status.sh --strict` report
 - [x] Extract focused text poll lifecycle out of `AppDelegate`.
 - [x] Extract focused text suggestion planning out of `AppDelegate`.
 - [x] Extract focused text AX health coordination out of `AppDelegate`.
+- [x] Extract visible suggestion acceptance coordination out of `AppDelegate`.
 - [ ] Keep `AppDelegate` mostly as wiring.
 - [x] Add unit tests for each extracted policy.
 
-Blocker evidence: `AppDelegate` is still 3,115 lines after extracting presentation, observer coordination, insertion verification scheduling/coordination, trace screenshot capture, compatibility learning actions, status menu state, runtime lifecycle, local privacy controls, suggestion diagnostics, visible suggestion panel placement, visible suggestion session state, visible suggestion outcome policy, completion request lifecycle, visible suggestion keyboard acceptance decisions, focused text poll lifecycle, focused text suggestion planning, and focused text AX health coordination. The remaining heavy owners are focused text side effects, suggestion request orchestration, and visible suggestion acceptance side effects.
+Blocker evidence: `AppDelegate` is still 3,103 lines after extracting presentation, observer coordination, insertion verification scheduling/coordination, trace screenshot capture, compatibility learning actions, status menu state, runtime lifecycle, local privacy controls, suggestion diagnostics, visible suggestion panel placement, visible suggestion session state, visible suggestion outcome policy, completion request lifecycle, visible suggestion keyboard acceptance decisions, focused text poll lifecycle, focused text suggestion planning, focused text AX health coordination, and visible suggestion acceptance coordination. The remaining heavy owners are focused text side effects and suggestion request orchestration.
 
 ## P2: Self-Healing Compatibility
 
