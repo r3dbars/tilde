@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
     private let keyboardCapturePolicy = KeyboardCapturePolicy()
     private let insertionVerificationCoordinator = InsertionVerificationCoordinator()
-    private let wordCompletionRanker = WordCompletionCandidateRanker()
+    private let fastWordCompletionCoordinator = FastWordCompletionCoordinator()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let visibleSuggestionOutcomePolicy = VisibleSuggestionOutcomePolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
@@ -1644,78 +1644,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(updateSourceMetadata) { current, _ in current }
         )
 
-        if requestMode == .wordCompletion {
-            if let fastSuggestion = wordCompletionRanker.suggestion(
-                for: context.textBeforeCursor,
-                recentWords: recentWordMemory.words(for: appBundleIdentifier)
-            ) {
-                guard !suggestionRepetitionSuppressor.shouldSuppress(
-                    fastSuggestion.visibleText,
-                    mode: request.mode,
-                    scope: appBundleIdentifier
-                ) else {
-                    RawAutocompleteTraceLog.shared.record(
-                        type: .suggestionSuppressed,
-                        suggestionID: suggestionID,
-                        appBundleIdentifier: appBundleIdentifier,
-                        fieldIdentity: fieldIdentityDescription,
-                        requestMode: request.mode.rawValue,
-                        triggerReason: "fast-word-completion",
-                        textBeforeCursor: request.textBeforeCursor,
-                        textAfterCursor: request.textAfterCursor,
-                        cleanedVisibleText: fastSuggestion.visibleText,
-                        displayedText: fastSuggestion.visibleText,
-                        latencyMilliseconds: 0,
-                        reason: "repeated-miss",
-                        metadata: [
-                            "renderMode": renderMode.rawValue
-                        ]
-                        .merging(updateSourceMetadata) { current, _ in current }
-                    )
-                    suggestionDiagnostics.recordSuggestionEvent(
-                        "suggestion-blocked",
-                        context: context,
-                        profile: profile,
-                        metadata: [
-                            "reason": "repeated-miss",
-                            "triggerReason": "fast-word-completion"
-                        ]
-                    )
-                    hideSuggestion()
-                    return
-                }
+        switch fastWordCompletionCoordinator.plan(
+            request: request,
+            recentWords: recentWordMemory.words(for: appBundleIdentifier),
+            repetitionSuppressor: suggestionRepetitionSuppressor,
+            scope: appBundleIdentifier
+        ) {
+        case .notWordCompletion:
+            break
 
-                presentSuggestion(
-                    fastSuggestion,
-                    suggestionID: suggestionID,
-                    request: request,
-                    context: context,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    renderMode: renderMode,
-                    latencyMilliseconds: 0,
-                    triggerReason: "fast-word-completion",
-                    updateSource: updateSource
-                )
-                return
-            }
-
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
+        case let .present(fastSuggestion):
+            presentSuggestion(
+                fastSuggestion,
                 suggestionID: suggestionID,
-                appBundleIdentifier: appBundleIdentifier,
-                fieldIdentity: fieldIdentityDescription,
-                requestMode: request.mode.rawValue,
+                request: request,
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                renderMode: renderMode,
+                latencyMilliseconds: 0,
                 triggerReason: "fast-word-completion",
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                reason: "no-fast-word-candidate",
-                metadata: [
-                    "renderMode": renderMode.rawValue
-                ]
-                .merging(updateSourceMetadata) { current, _ in current }
+                updateSource: updateSource
             )
-            if visibleSuggestionState.hasVisibleSuggestion {
+            return
+
+        case let .suppress(suppression):
+            recordFastWordCompletionSuppression(
+                suppression,
+                suggestionID: suggestionID,
+                request: request,
+                context: context,
+                profile: profile,
+                fieldIdentityDescription: fieldIdentityDescription,
+                renderMode: renderMode,
+                updateSourceMetadata: updateSourceMetadata
+            )
+            if suppression.reason == .noFastWordCandidate,
+               visibleSuggestionState.hasVisibleSuggestion {
                 setSuggestionDecision("Shown: no fast word replacement")
                 repositionVisibleSuggestion(context: context, profile: profile)
                 return
@@ -1906,6 +1871,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+    }
+
+    private func recordFastWordCompletionSuppression(
+        _ suppression: FastWordCompletionSuppression,
+        suggestionID: String,
+        request: CompletionRequest,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentityDescription: String,
+        renderMode: SuggestionRenderMode,
+        updateSourceMetadata: [String: String]
+    ) {
+        let visibleText = suppression.suggestion?.visibleText ?? ""
+        RawAutocompleteTraceLog.shared.record(
+            type: .suggestionSuppressed,
+            suggestionID: suggestionID,
+            appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+            fieldIdentity: fieldIdentityDescription,
+            requestMode: request.mode.rawValue,
+            triggerReason: "fast-word-completion",
+            textBeforeCursor: request.textBeforeCursor,
+            textAfterCursor: request.textAfterCursor,
+            cleanedVisibleText: visibleText,
+            displayedText: visibleText,
+            latencyMilliseconds: 0,
+            reason: suppression.reason.rawValue,
+            metadata: [
+                "renderMode": renderMode.rawValue
+            ]
+            .merging(updateSourceMetadata) { current, _ in current }
+        )
+        suggestionDiagnostics.recordSuggestionEvent(
+            "suggestion-blocked",
+            context: context,
+            profile: profile,
+            metadata: [
+                "reason": suppression.reason.rawValue,
+                "triggerReason": "fast-word-completion"
+            ]
+        )
     }
 
     private func presentSuggestion(
