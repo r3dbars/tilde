@@ -284,15 +284,18 @@ struct SettingsWindowControllerStateTests {
             action: .revealModelFolder
         )
 
+        let permissionNeeded = SettingsFirstRunState(
+            isTrusted: false,
+            suggestionsPaused: false,
+            runtimeReport: readyReport,
+            currentApp: textEdit
+        )
         #expect(
-            SettingsFirstRunState(
-                isTrusted: false,
-                suggestionsPaused: false,
-                runtimeReport: readyReport,
-                currentApp: textEdit
-            ).message
+            permissionNeeded.message
                 == "Start here: allow Accessibility so Autocomplete Lab can read cursor text and bounds, then insert only what you accept. Text stays on this Mac."
         )
+        #expect(permissionNeeded.textEditTestButtonTitle == "Open TextEdit Test")
+        #expect(!permissionNeeded.canOpenTextEditTest)
         #expect(
             SettingsFirstRunState(
                 isTrusted: true,
@@ -300,6 +303,14 @@ struct SettingsWindowControllerStateTests {
                 runtimeReport: missingModelReport,
                 currentApp: textEdit
             ).message.contains("Model missing")
+        )
+        #expect(
+            !SettingsFirstRunState(
+                isTrusted: true,
+                suggestionsPaused: true,
+                runtimeReport: missingModelReport,
+                currentApp: textEdit
+            ).canOpenTextEditTest
         )
         #expect(
             SettingsFirstRunState(
@@ -310,15 +321,17 @@ struct SettingsWindowControllerStateTests {
             ).message
                 == "Start paused: open TextEdit with a disposable document, then turn on Suggestions when you are ready to test."
         )
+        let readyTextEdit = SettingsFirstRunState(
+            isTrusted: true,
+            suggestionsPaused: false,
+            runtimeReport: readyReport,
+            currentApp: textEdit
+        )
         #expect(
-            SettingsFirstRunState(
-                isTrusted: true,
-                suggestionsPaused: false,
-                runtimeReport: readyReport,
-                currentApp: textEdit
-            ).message
+            readyTextEdit.message
                 == "Ready: TextEdit is the first test app. Use a disposable document; Tab accepts one word and Esc dismisses."
         )
+        #expect(readyTextEdit.canOpenTextEditTest)
         #expect(
             SettingsFirstRunState(
                 isTrusted: true,

@@ -362,6 +362,14 @@ struct SettingsFirstRunState: Equatable {
 
         return "Ready: start in TextEdit with a disposable document before testing Notes, Obsidian, or prompt apps."
     }
+
+    var textEditTestButtonTitle: String {
+        "Open TextEdit Test"
+    }
+
+    var canOpenTextEditTest: Bool {
+        isTrusted && runtimeReport.stage == .ready
+    }
 }
 
 @MainActor
@@ -438,9 +446,11 @@ final class SettingsWindowController: NSObject {
     private let shortcutLabel = NSTextField(labelWithString: "")
     private let acceptAllShortcutPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
+    private let openTextEditTestButton = NSButton(title: "Open TextEdit Test", target: nil, action: nil)
     private let requestPermission: () -> Void
     private let openAccessibilitySettings: () -> Void
     private let toggleSuggestionsPaused: () -> Void
+    private let openTextEditTest: () -> Void
     private let performRuntimeAction: (RuntimeReadinessAction) -> Void
     private let toggleCurrentApp: () -> Void
     private let toggleMirrorMode: () -> Void
@@ -463,6 +473,7 @@ final class SettingsWindowController: NSObject {
         requestPermission: @escaping () -> Void,
         openAccessibilitySettings: @escaping () -> Void,
         toggleSuggestionsPaused: @escaping () -> Void,
+        openTextEditTest: @escaping () -> Void,
         performRuntimeAction: @escaping (RuntimeReadinessAction) -> Void,
         toggleCurrentApp: @escaping () -> Void,
         toggleMirrorMode: @escaping () -> Void,
@@ -481,6 +492,7 @@ final class SettingsWindowController: NSObject {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
         self.toggleSuggestionsPaused = toggleSuggestionsPaused
+        self.openTextEditTest = openTextEditTest
         self.performRuntimeAction = performRuntimeAction
         self.toggleCurrentApp = toggleCurrentApp
         self.toggleMirrorMode = toggleMirrorMode
@@ -614,12 +626,15 @@ final class SettingsWindowController: NSObject {
         toggleScreenshotTraceButton.state = privacy.screenshotTracingEnabled ? .on : .off
         shortcutLabel.stringValue = keyboardShortcuts.statusText
         acceptAllShortcutPopup.selectItem(withTitle: keyboardShortcuts.selectedShortcutTitle)
-        firstRunLabel.stringValue = onboardingText(
+        let firstRun = SettingsFirstRunState(
             isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
             runtimeReport: runtimeReport,
             currentApp: currentApp
         )
+        firstRunLabel.stringValue = firstRun.message
+        openTextEditTestButton.title = firstRun.textEditTestButtonTitle
+        openTextEditTestButton.isEnabled = firstRun.canOpenTextEditTest
     }
 
     private func buildContent(in contentView: NSView) {
@@ -678,6 +693,10 @@ final class SettingsWindowController: NSObject {
         togglePauseButton.target = self
         togglePauseButton.action = #selector(togglePause)
         togglePauseButton.toolTip = "Turns suggestions on or off immediately."
+        openTextEditTestButton.target = self
+        openTextEditTestButton.action = #selector(openTextEditTestControl)
+        openTextEditTestButton.bezelStyle = .rounded
+        openTextEditTestButton.toolTip = "Opens a disposable TextEdit document for the first test."
         suggestionPacePopup.removeAllItems()
         suggestionPacePopupItems().forEach { item in
             suggestionPacePopup.menu?.addItem(item)
@@ -761,7 +780,8 @@ final class SettingsWindowController: NSObject {
                     makeButtonRow([togglePauseButton, suggestionPacePopup]),
                     suggestionPaceDetailLabel,
                     suggestionDecisionLabel,
-                    firstRunLabel
+                    firstRunLabel,
+                    makeButtonRow([openTextEditTestButton])
                 ]
             ),
             makeSection(
@@ -860,20 +880,6 @@ final class SettingsWindowController: NSObject {
         }
     }
 
-    private func onboardingText(
-        isTrusted: Bool,
-        suggestionsPaused: Bool,
-        runtimeReport: RuntimeReadinessReport,
-        currentApp: SettingsCurrentAppState
-    ) -> String {
-        SettingsFirstRunState(
-            isTrusted: isTrusted,
-            suggestionsPaused: suggestionsPaused,
-            runtimeReport: runtimeReport,
-            currentApp: currentApp
-        ).message
-    }
-
     @objc
     private func requestAccessibility() {
         requestPermission()
@@ -887,6 +893,11 @@ final class SettingsWindowController: NSObject {
     @objc
     private func togglePause() {
         toggleSuggestionsPaused()
+    }
+
+    @objc
+    private func openTextEditTestControl() {
+        openTextEditTest()
     }
 
     @objc
