@@ -106,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pollTimer: Timer?
     private var keyboardEventTap: KeyboardEventTap?
     private var keyboardEventTapStopTask: Task<Void, Never>?
-    private var suggestionSession = SuggestionSession()
+    private var visibleSuggestionState = VisibleSuggestionState()
     private var currentFieldIdentity: FocusedFieldIdentity?
     private var currentProfile: CompatibilityProfile?
     private var lastTextSnapshot: FocusedTextSnapshot?
@@ -127,13 +127,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
     private var currentCompletionRequest: CompletionRequest?
     private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
-    private var currentSuggestionID: String?
-    private var currentSuggestionAppBundleIdentifier: String?
-    private var currentSuggestionFieldIdentity: FocusedFieldIdentity?
-    private var currentSuggestionRequestMode: CompletionRequestMode?
-    private var currentSuggestionTextBeforeCursor: String?
-    private var currentSuggestionDisplayedText: String?
-    private var currentSuggestionInvalidatedByUserKeyDown = false
     private var recentWordMemory = ScopedRecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var lastStatusLine: String?
@@ -187,12 +180,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func frontmostApplicationDidChange(_ notification: Notification) {
-        guard suggestionSession.hasVisibleSuggestion else {
+        guard visibleSuggestionState.hasVisibleSuggestion else {
             return
         }
 
         let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-        guard app?.bundleIdentifier != currentSuggestionAppBundleIdentifier else {
+        guard app?.bundleIdentifier != visibleSuggestionState.appBundleIdentifier else {
             return
         }
 
@@ -456,7 +449,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isTrustedForAccessibility: accessibilityClient.isTrusted,
             hasSupportedProfile: hasSupportedProfile,
             usesObserverUpdates: usesObserverUpdates,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+            hasVisibleSuggestion: visibleSuggestionState.hasVisibleSuggestion
         )
     }
 
@@ -759,7 +752,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard snapshot != lastTextSnapshot else {
             setSuggestionDecision(
-                suggestionSession.hasVisibleSuggestion
+                visibleSuggestionState.hasVisibleSuggestion
                     ? "Shown: tracking current field"
                     : "Ready: waiting for text change"
             )
@@ -910,7 +903,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard case let .request(delayMilliseconds) = triggerDecision else {
-            if suggestionSession.hasVisibleSuggestion {
+            if visibleSuggestionState.hasVisibleSuggestion {
                 setSuggestionDecision("Shown: waiting for cadence")
                 repositionVisibleSuggestion(context: context, profile: profile)
                 return
@@ -972,7 +965,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
             )
             invalidatePendingSuggestionRequest()
-            if suggestionSession.hasVisibleSuggestion {
+            if visibleSuggestionState.hasVisibleSuggestion {
                 hideSuggestion(reason: "focused-text-ax-health-\(cooldown.reason.rawValue)")
             }
             setSuggestionDecision("Waiting: AX cooldown")
@@ -1007,7 +1000,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         invalidatePendingSuggestionRequest()
-        if suggestionSession.hasVisibleSuggestion {
+        if visibleSuggestionState.hasVisibleSuggestion {
             hideSuggestion(reason: "focused-text-ax-health-\(cooldown.reason.rawValue)")
         }
         setSuggestionDecision("Waiting: AX cooldown")
@@ -1079,7 +1072,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             policy: focusedTextPollingBackoffPolicy
         )
         invalidatePendingSuggestionRequest()
-        if suggestionSession.hasVisibleSuggestion {
+        if visibleSuggestionState.hasVisibleSuggestion {
             hideSuggestion(reason: "focused-text-poll-\(reason.rawValue)")
         }
         DiagnosticsLog.shared.record(
@@ -1314,7 +1307,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard keyboardCapturePolicy.shouldCaptureKeys(
             isTrustedForAccessibility: accessibilityClient.isTrusted,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+            hasVisibleSuggestion: visibleSuggestionState.hasVisibleSuggestion,
             controlState: suggestionControlState
         ) else {
             return false
@@ -1349,10 +1342,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func keyboardEventTapSnapshot() -> KeyboardEventTapSnapshot {
         KeyboardEventTapSnapshot(
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+            hasVisibleSuggestion: visibleSuggestionState.hasVisibleSuggestion,
             supportsOneWordAcceptance: currentProfile?.supportsOneWordAcceptance == true,
             supportsFullAcceptance: currentProfile?.supportsFullAcceptance == true,
-            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+            isInvalidatedByUserTyping: visibleSuggestionState.isInvalidatedByUserKeyDown,
             acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut
         )
     }
@@ -1363,7 +1356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleKeyboardEventTapDisabled(reason: String) {
         stopKeyboardEventTapNow(reason: "system-\(reason)")
-        currentSuggestionInvalidatedByUserKeyDown = true
+        visibleSuggestionState.markInvalidatedByUserKeyDown()
         invalidatePendingSuggestionRequest()
         setSuggestionDecision("Blocked: keyboard capture disabled")
         hideSuggestion(reason: "keyboard-event-tap-\(reason)")
@@ -1386,7 +1379,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? await Task.sleep(for: .milliseconds(idleStopDelayMilliseconds))
             guard !Task.isCancelled,
                   let self,
-                  !self.suggestionSession.hasVisibleSuggestion else {
+                  !self.visibleSuggestionState.hasVisibleSuggestion else {
                 return
             }
 
@@ -1418,11 +1411,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             durationMilliseconds: postTypingPollPauseMilliseconds
         )
 
-        guard suggestionSession.hasVisibleSuggestion else {
+        guard visibleSuggestionState.hasVisibleSuggestion else {
             return
         }
 
-        currentSuggestionInvalidatedByUserKeyDown = true
+        visibleSuggestionState.markInvalidatedByUserKeyDown()
         invalidatePendingSuggestionRequest()
         setSuggestionDecision("Waiting: typing")
         hideSuggestion(reason: "typing-continued")
@@ -1434,10 +1427,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         didObservePassthroughKeyDown: Bool = false
     ) -> Bool {
         if didObservePassthroughKeyDown {
-            currentSuggestionInvalidatedByUserKeyDown = true
+            visibleSuggestionState.markInvalidatedByUserKeyDown()
         }
 
-        guard suggestionSession.hasVisibleSuggestion else {
+        guard visibleSuggestionState.hasVisibleSuggestion else {
             suppressKeyUntil[key] = nil
             return false
         }
@@ -1454,7 +1447,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        if currentSuggestionInvalidatedByUserKeyDown {
+        if visibleSuggestionState.isInvalidatedByUserKeyDown {
             setSuggestionDecision("Blocked: stale suggestion passed through")
             hideSuggestion(reason: "stale-after-keydown")
             recordKeyboardAction(
@@ -1473,7 +1466,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let action = KeyboardActionRouter(shortcutConfiguration: keyboardShortcutConfiguration).action(
             for: key,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+            hasVisibleSuggestion: visibleSuggestionState.hasVisibleSuggestion
         )
 
         switch action {
@@ -1484,23 +1477,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             let verificationBaseline = insertionVerificationBaseline()
-            guard let acceptedText = suggestionSession.nextWordAcceptance(),
+            guard let acceptedText = visibleSuggestionState.nextWordAcceptance(),
                   insertAcceptedText(acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return false
             }
 
-            suggestionSession.commitNextWordAcceptance(acceptedText)
+            visibleSuggestionState.commitNextWordAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
             advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
             suggestionRepetitionSuppressor.recordAcceptance(
                 acceptedText,
-                mode: currentSuggestionRequestMode,
-                scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
+                mode: visibleSuggestionState.requestMode,
+                scope: visibleSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
             )
             recordRawAcceptance(action: action, acceptedText: acceptedText)
             setSuggestionDecision("Accepted: next word")
-            if suggestionSession.hasVisibleSuggestion {
+            if visibleSuggestionState.hasVisibleSuggestion {
                 refreshVisibleSuggestion()
             } else {
                 hideSuggestion(reason: "accepted-next-word-final")
@@ -1517,18 +1510,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             let verificationBaseline = insertionVerificationBaseline()
-            guard let acceptedText = suggestionSession.allVisibleAcceptance(),
+            guard let acceptedText = visibleSuggestionState.allVisibleAcceptance(),
                   insertAcceptedText(acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return false
             }
 
-            suggestionSession.commitAllVisibleAcceptance(acceptedText)
+            visibleSuggestionState.commitAllVisibleAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
             suggestionRepetitionSuppressor.recordAcceptance(
                 acceptedText,
-                mode: currentSuggestionRequestMode,
-                scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
+                mode: visibleSuggestionState.requestMode,
+                scope: visibleSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
             )
             recordRawAcceptance(action: action, acceptedText: acceptedText)
             setSuggestionDecision("Accepted: full suggestion")
@@ -1554,10 +1547,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func focusedFieldMatchesCurrentSuggestion() -> Bool {
-        guard let currentSuggestionAppBundleIdentifier,
-              let currentSuggestionFieldIdentity,
+        guard let suggestionAppBundleIdentifier = visibleSuggestionState.appBundleIdentifier,
+              let suggestionFieldIdentity = visibleSuggestionState.fieldIdentity,
               let frontmostApp = accessibilityClient.frontmostApplication(),
-              frontmostApp.bundleIdentifier == currentSuggestionAppBundleIdentifier,
+              frontmostApp.bundleIdentifier == suggestionAppBundleIdentifier,
               let profile = profileStore.profile(for: frontmostApp.bundleIdentifier),
               let rawContext = accessibilityClient.focusedTextContext(
                   allowDescendantTextFallback: profile.allowsDescendantTextFallback
@@ -1576,7 +1569,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             app: frontmostApp,
             context: context,
             profile: profile
-        ) == currentSuggestionFieldIdentity
+        ) == suggestionFieldIdentity
     }
 
     private func recordKeyboardAction(
@@ -1588,7 +1581,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.record(
             "keyboard-action",
             metadata: [
-                "app": currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? "unknown",
+                "app": visibleSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? "unknown",
                 "key": key.diagnosticName,
                 "action": action.diagnosticName,
                 "handled": String(handled),
@@ -1631,8 +1624,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: currentFieldIdentity,
             previousTextBeforeCursor: lastTextSnapshot.textBeforeCursor,
             profile: profile,
-            suggestionID: currentSuggestionID,
-            requestMode: currentSuggestionRequestMode,
+            suggestionID: visibleSuggestionState.suggestionID,
+            requestMode: visibleSuggestionState.requestMode,
             retryCount: 0
         )
     }
@@ -1896,7 +1889,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
                 .merging(updateSourceMetadata) { current, _ in current }
             )
-            if suggestionSession.hasVisibleSuggestion {
+            if visibleSuggestionState.hasVisibleSuggestion {
                 setSuggestionDecision("Shown: no fast word replacement")
                 repositionVisibleSuggestion(context: context, profile: profile)
                 return
@@ -2242,15 +2235,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        suggestionSession.present(suggestion)
+        visibleSuggestionState.present(
+            suggestion,
+            suggestionID: suggestionID,
+            appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            requestMode: request.mode,
+            textBeforeCursor: request.textBeforeCursor
+        )
         setSuggestionDecision("Shown: \(triggerReason) \(latencyMilliseconds)ms")
-        currentSuggestionID = suggestionID
-        currentSuggestionAppBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
-        currentSuggestionFieldIdentity = fieldIdentity
-        currentSuggestionRequestMode = request.mode
-        currentSuggestionTextBeforeCursor = request.textBeforeCursor
-        currentSuggestionDisplayedText = suggestion.visibleText
-        currentSuggestionInvalidatedByUserKeyDown = false
         keyboardEventTap?.resetPassthroughObservation()
         updateKeyboardEventTapSnapshot()
         guard startKeyboardEventTapIfPossible() else {
@@ -2477,7 +2470,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func recordRawAcceptance(action: KeyboardAction, acceptedText: String) {
-        guard let appBundleIdentifier = currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier else {
+        guard let appBundleIdentifier = visibleSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier else {
             return
         }
 
@@ -2485,22 +2478,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: action.diagnosticName,
             appBundleIdentifier: appBundleIdentifier,
             acceptedText: acceptedText,
-            remainingVisibleText: suggestionSession.visibleSuggestion?.visibleText,
-            suggestionID: currentSuggestionID ?? "",
-            fieldIdentity: currentSuggestionFieldIdentity?.traceDescription
+            remainingVisibleText: visibleSuggestionState.visibleSuggestion?.visibleText,
+            suggestionID: visibleSuggestionState.suggestionID ?? "",
+            fieldIdentity: visibleSuggestionState.fieldIdentity?.traceDescription
                 ?? currentFieldIdentity?.traceDescription
                 ?? "",
-            requestMode: currentSuggestionRequestMode?.rawValue ?? ""
+            requestMode: visibleSuggestionState.requestMode?.rawValue ?? ""
         )
     }
 
     private func refreshVisibleSuggestion() {
-        guard let suggestion = suggestionSession.visibleSuggestion else {
+        guard let suggestion = visibleSuggestionState.updateDisplayedTextFromVisibleSuggestion() else {
             hideSuggestion()
             return
         }
 
-        currentSuggestionDisplayedText = suggestion.visibleText
         switch visibleSuggestionPanel.refresh(text: suggestion.visibleText) {
         case .presented:
             updateKeyboardEventTapSnapshot()
@@ -2515,7 +2507,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         context: FocusedTextContext,
         profile: CompatibilityProfile
     ) {
-        guard suggestionSession.hasVisibleSuggestion,
+        guard visibleSuggestionState.hasVisibleSuggestion,
               let renderMode = RenderModePlan.effectiveMode(
                   for: profile,
                   supportsInlineSuggestions: context.capabilities.supportsInlineSuggestions,
@@ -2567,7 +2559,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func recordAcceptedText(_ acceptedText: String) {
         rememberAcceptedWords(
             in: acceptedText,
-            appBundleIdentifier: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier
+            appBundleIdentifier: visibleSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier
         )
 
         guard let currentFieldIdentity,
@@ -2584,19 +2576,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func advanceCurrentSuggestionBaseline(afterAccepting acceptedText: String) {
-        guard !acceptedText.isEmpty else {
-            return
+        let snapshotTextBeforeCursor: String? = if let lastTextSnapshot,
+                                                   lastTextSnapshot.fieldIdentity == currentFieldIdentity {
+            lastTextSnapshot.textBeforeCursor
+        } else {
+            nil
         }
 
-        if let lastTextSnapshot,
-           lastTextSnapshot.fieldIdentity == currentFieldIdentity {
-            currentSuggestionTextBeforeCursor = lastTextSnapshot.textBeforeCursor
-            return
-        }
-
-        if let currentSuggestionTextBeforeCursor {
-            self.currentSuggestionTextBeforeCursor = currentSuggestionTextBeforeCursor + acceptedText
-        }
+        visibleSuggestionState.advanceBaseline(
+            afterAccepting: acceptedText,
+            snapshotTextBeforeCursor: snapshotTextBeforeCursor
+        )
     }
 
     private func rememberAcceptedWords(in text: String, appBundleIdentifier: String?) {
@@ -2635,10 +2625,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fieldIdentity: FocusedFieldIdentity,
         profile: CompatibilityProfile
     ) {
-        guard suggestionSession.hasVisibleSuggestion,
-              let suggestionID = currentSuggestionID,
-              let originalTextBeforeCursor = currentSuggestionTextBeforeCursor,
-              let displayedText = currentSuggestionDisplayedText,
+        guard visibleSuggestionState.hasVisibleSuggestion,
+              let suggestionID = visibleSuggestionState.suggestionID,
+              let originalTextBeforeCursor = visibleSuggestionState.textBeforeCursor,
+              let displayedText = visibleSuggestionState.displayedText,
               fieldIdentity == currentFieldIdentity,
               newTextBeforeCursor.hasPrefix(originalTextBeforeCursor),
               newTextBeforeCursor != originalTextBeforeCursor else {
@@ -2660,7 +2650,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionID: suggestionID,
             appBundleIdentifier: profile.bundleIdentifier,
             fieldIdentity: fieldIdentity.traceDescription,
-            requestMode: currentSuggestionRequestMode?.rawValue ?? "",
+            requestMode: visibleSuggestionState.requestMode?.rawValue ?? "",
             textBeforeCursor: originalTextBeforeCursor,
             displayedText: displayedText,
             outcome: "typed-over",
@@ -2675,10 +2665,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         newTextBeforeCursor: String,
         fieldIdentity: FocusedFieldIdentity
     ) {
-        guard suggestionSession.hasVisibleSuggestion,
+        guard visibleSuggestionState.hasVisibleSuggestion,
               fieldIdentity == currentFieldIdentity,
-              let originalTextBeforeCursor = currentSuggestionTextBeforeCursor,
-              let displayedText = currentSuggestionDisplayedText,
+              let originalTextBeforeCursor = visibleSuggestionState.textBeforeCursor,
+              let displayedText = visibleSuggestionState.displayedText,
               newTextBeforeCursor.hasPrefix(originalTextBeforeCursor),
               newTextBeforeCursor != originalTextBeforeCursor else {
             return
@@ -2695,18 +2685,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else if case .typedOver = progress {
             suggestionRepetitionSuppressor.recordMiss(
                 displayedText,
-                mode: currentSuggestionRequestMode,
-                scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
+                mode: visibleSuggestionState.requestMode,
+                scope: visibleSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
             )
             hideSuggestion(reason: "typed-over")
         }
     }
 
     private func hideSuggestion(reason: String = "hidden") {
-        if suggestionSession.hasVisibleSuggestion,
-           let suggestionID = currentSuggestionID {
-            let appBundleIdentifier = currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
-            let fieldIdentityDescription = currentSuggestionFieldIdentity?.traceDescription
+        if visibleSuggestionState.hasVisibleSuggestion,
+           let suggestionID = visibleSuggestionState.suggestionID {
+            let appBundleIdentifier = visibleSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
+            let fieldIdentityDescription = visibleSuggestionState.fieldIdentity?.traceDescription
                 ?? currentFieldIdentity?.traceDescription
                 ?? ""
             let outcome: String
@@ -2719,12 +2709,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 outcome = "ignored"
             }
-            let displayedText = currentSuggestionDisplayedText ?? suggestionSession.visibleSuggestion?.visibleText ?? ""
+            let displayedText = visibleSuggestionState.displayedText ?? visibleSuggestionState.visibleSuggestion?.visibleText ?? ""
 
             if outcome == "ignored" {
                 suggestionRepetitionSuppressor.recordMiss(
                     displayedText,
-                    mode: currentSuggestionRequestMode,
+                    mode: visibleSuggestionState.requestMode,
                     scope: appBundleIdentifier
                 )
             }
@@ -2734,7 +2724,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 suggestionID: suggestionID,
                 appBundleIdentifier: appBundleIdentifier,
                 fieldIdentity: fieldIdentityDescription,
-                requestMode: currentSuggestionRequestMode?.rawValue ?? "",
+                requestMode: visibleSuggestionState.requestMode?.rawValue ?? "",
                 displayedText: displayedText,
                 outcome: outcome,
                 reason: reason
@@ -2742,14 +2732,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setSuggestionDecision("Hidden: \(reason)")
         }
 
-        suggestionSession.dismiss()
-        currentSuggestionID = nil
-        currentSuggestionAppBundleIdentifier = nil
-        currentSuggestionFieldIdentity = nil
-        currentSuggestionRequestMode = nil
-        currentSuggestionTextBeforeCursor = nil
-        currentSuggestionDisplayedText = nil
-        currentSuggestionInvalidatedByUserKeyDown = false
+        visibleSuggestionState.dismiss()
         streamingPresentationStates.removeAll(keepingCapacity: true)
         visibleSuggestionPanel.hide()
         updateKeyboardEventTapSnapshot()
@@ -2833,7 +2816,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if suggestionSession.hasVisibleSuggestion {
+        if visibleSuggestionState.hasVisibleSuggestion {
             hideSuggestion(reason: "focus-changed")
         }
         invalidatePendingSuggestionRequest()
@@ -2852,7 +2835,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hideReason: String = "focus-lost",
         resetBlockLogGate: Bool = true
     ) {
-        if suggestionSession.hasVisibleSuggestion {
+        if visibleSuggestionState.hasVisibleSuggestion {
             hideSuggestion(reason: hideReason)
         }
         invalidatePendingSuggestionRequest()
@@ -3118,15 +3101,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var visibleSuggestionBundleIdentifier: String? {
-        guard suggestionSession.hasVisibleSuggestion else {
+        guard visibleSuggestionState.hasVisibleSuggestion else {
             return nil
         }
 
-        return currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier
+        return visibleSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier
     }
 
     private func applyVisibleSuggestionNudge(dx: Double, dy: Double, bundleIdentifier: String) -> Bool {
-        guard suggestionSession.hasVisibleSuggestion,
+        guard visibleSuggestionState.hasVisibleSuggestion,
               visibleSuggestionBundleIdentifier == bundleIdentifier else {
             return false
         }
