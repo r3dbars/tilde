@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import AutocompleteLabCore
 
 @MainActor
@@ -274,6 +275,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         transitionToField(fieldIdentity)
 
+        if let suppressionReason = unsafeFieldSuppressionReason(context: context) {
+            recordBlockedSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                metadata: [
+                    "reason": suppressionReason
+                ]
+            )
+            hideSuggestion()
+            return
+        }
+
         let snapshot = FocusedTextSnapshot(
             fieldIdentity: fieldIdentity,
             textBeforeCursor: context.textBeforeCursor,
@@ -470,6 +485,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             elementIdentifier: context.elementIdentifier,
             role: context.role,
             subrole: context.subrole,
+            purposeHints: context.purposeHints,
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             caretRect: syntheticCaret,
@@ -480,6 +496,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isSecure: context.isSecure,
             capabilities: capabilities
         )
+    }
+
+    private func unsafeFieldSuppressionReason(context: FocusedTextContext) -> String? {
+        if context.subrole == kAXSearchFieldSubrole {
+            return "search-field"
+        }
+
+        let normalizedHints = ([context.role, context.subrole].compactMap { $0 } + context.purposeHints)
+            .joined(separator: " ")
+            .lowercased()
+
+        if normalizedHints.contains("search") {
+            return "search-field"
+        }
+
+        if normalizedHints.contains("address") || normalizedHints.contains("url") {
+            return "address-or-url-field"
+        }
+
+        return nil
     }
 
     private func codexSyntheticCaretRect(for context: FocusedTextContext) -> CGRect? {
