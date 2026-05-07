@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
+    private let suggestionPresentationPolicy = SuggestionPresentationPolicy()
     private var traceScreenshotCapture = TraceScreenshotCaptureCoordinator()
     private let focusedTextUpdateSourcePolicy = FocusedTextUpdateSourcePolicy()
     private let focusedTextPollingCadencePolicy = FocusPollingCadencePolicy()
@@ -994,10 +995,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let baseRenderMode = RenderModePlan.effectiveMode(
-            for: profile,
+        let presentationCapabilities = SuggestionPresentationCapabilities(
             supportsInlineSuggestions: context.capabilities.supportsInlineSuggestions,
-            hasMirrorAnchor: context.elementRect != nil || context.windowRect != nil
+            hasElementRect: context.elementRect != nil,
+            hasWindowRect: context.windowRect != nil,
+            hasCaretRect: context.caretRect != nil
+        )
+        let baseRenderMode = suggestionPresentationPolicy.baseRenderMode(
+            for: profile,
+            capabilities: presentationCapabilities
         )
 
         guard let baseRenderMode else {
@@ -1018,10 +1024,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .adjustment(for: profile.bundleIdentifier, profileRenderMode: baseRenderMode)
             .effectiveRenderMode
 
-        if shouldSuppressDetachedSuggestion(
+        if let suppressionReason = suggestionPresentationPolicy.suppressionReason(
             profile: profile,
-            context: context,
-            renderMode: renderMode
+            renderMode: renderMode,
+            capabilities: presentationCapabilities
         ) {
             setSuggestionDecision("Blocked: detached suggestion disabled")
             RawAutocompleteTraceLog.shared.record(
@@ -1033,7 +1039,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 triggerReason: "policy",
                 textBeforeCursor: context.textBeforeCursor,
                 textAfterCursor: context.textAfterCursor,
-                reason: "detached-suggestion-disabled",
+                reason: suppressionReason.rawValue,
                 metadata: traceGeometryMetadata(
                     context: context,
                     renderMode: renderMode,
@@ -1046,7 +1052,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 profile: profile,
                 fieldIdentity: fieldIdentity,
                 metadata: [
-                    "reason": "detached-suggestion-disabled"
+                    "reason": suppressionReason.rawValue
                 ]
             )
             hideSuggestion()
@@ -1238,16 +1244,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "pauseMilliseconds": String(recommendation.pauseMilliseconds)
             ]
         )
-    }
-
-    private func shouldSuppressDetachedSuggestion(
-        profile: CompatibilityProfile,
-        context: FocusedTextContext,
-        renderMode: SuggestionRenderMode
-    ) -> Bool {
-        renderMode == .floatingMirror
-            && context.caretRect == nil
-            && !profile.allowsDetachedSuggestions
     }
 
     private func presentationAdjustedContext(
