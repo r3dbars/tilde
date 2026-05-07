@@ -11,6 +11,8 @@ public enum PlacementHealthReason: String, Equatable, Sendable {
     case caretOutsideFocusedBounds = "caret-outside-focused-bounds"
     case detachedSuggestionDisabled = "detached-suggestion-disabled"
     case missingFloatingFallback = "missing-floating-fallback"
+    case lowConfidencePlacement = "low-confidence-placement"
+    case untrustedSyntheticCaret = "untrusted-synthetic-caret"
 }
 
 public enum PlacementAnchorSource: String, Equatable, Sendable {
@@ -18,6 +20,21 @@ public enum PlacementAnchorSource: String, Equatable, Sendable {
     case syntheticCaret = "synthetic-caret"
     case element
     case window
+}
+
+public struct PlacementTrustPolicy: Equatable, Sendable {
+    public let allowsLowConfidencePlacement: Bool
+    public let allowsSyntheticCaretPlacement: Bool
+
+    public init(
+        allowsLowConfidencePlacement: Bool = true,
+        allowsSyntheticCaretPlacement: Bool = true
+    ) {
+        self.allowsLowConfidencePlacement = allowsLowConfidencePlacement
+        self.allowsSyntheticCaretPlacement = allowsSyntheticCaretPlacement
+    }
+
+    public static let permissive = PlacementTrustPolicy()
 }
 
 public struct PlacementHealthPresentation: Equatable {
@@ -99,6 +116,10 @@ public struct PlacementHealthPresentation: Equatable {
         }
     }
 
+    public var isLowConfidence: Bool {
+        confidenceScore > 0 && confidenceScore < 0.55
+    }
+
     public var selfHealingAction: String {
         if !isSelfHealing {
             return "none"
@@ -150,7 +171,8 @@ public enum PlacementHealth {
         windowRect: CGRect?,
         textLineRect: CGRect?,
         caretIsSynthetic: Bool = false,
-        allowsDetachedSuggestions: Bool
+        allowsDetachedSuggestions: Bool,
+        trustPolicy: PlacementTrustPolicy = .permissive
     ) -> PlacementHealthPlan {
         let validCaret = caretRect.flatMap(validCaretRect)
         let validElement = elementRect.flatMap(validContainerRect)
@@ -171,7 +193,8 @@ public enum PlacementHealth {
                     elementRect: validElement,
                     windowRect: validWindow,
                     clippingRect: clippingRect,
-                    allowsDetachedSuggestions: allowsDetachedSuggestions
+                    allowsDetachedSuggestions: allowsDetachedSuggestions,
+                    trustPolicy: trustPolicy
                 )
             }
 
@@ -184,11 +207,12 @@ public enum PlacementHealth {
                     elementRect: validElement,
                     windowRect: validWindow,
                     clippingRect: clippingRect,
-                    allowsDetachedSuggestions: allowsDetachedSuggestions
+                    allowsDetachedSuggestions: allowsDetachedSuggestions,
+                    trustPolicy: trustPolicy
                 )
             }
 
-            return .present(PlacementHealthPresentation(
+            return applyTrustPolicy(PlacementHealthPresentation(
                 requestedRenderMode: requestedRenderMode,
                 renderMode: .inlineAdjacent,
                 anchorRect: validCaret,
@@ -200,7 +224,7 @@ public enum PlacementHealth {
                 ),
                 clippingRect: clippingRect,
                 reason: .healthy
-            ))
+            ), trustPolicy: trustPolicy)
 
         case .floatingMirror:
             if !allowsDetachedSuggestions {
@@ -213,7 +237,8 @@ public enum PlacementHealth {
                     anchorRect: validCaret,
                     anchorSource: caretIsSynthetic ? .syntheticCaret : .caret,
                     clippingRect: clippingRect,
-                    reason: .healthy
+                    reason: .healthy,
+                    trustPolicy: trustPolicy
                 )
             }
 
@@ -223,7 +248,8 @@ public enum PlacementHealth {
                     anchorRect: validElement,
                     anchorSource: .element,
                     clippingRect: clippingRect,
-                    reason: .healthy
+                    reason: .healthy,
+                    trustPolicy: trustPolicy
                 )
             }
 
@@ -233,7 +259,8 @@ public enum PlacementHealth {
                     anchorRect: validWindow,
                     anchorSource: .window,
                     clippingRect: clippingRect,
-                    reason: .healthy
+                    reason: .healthy,
+                    trustPolicy: trustPolicy
                 )
             }
 
@@ -243,7 +270,8 @@ public enum PlacementHealth {
                     anchorRect: validCaret,
                     anchorSource: caretIsSynthetic ? .syntheticCaret : .caret,
                     clippingRect: clippingRect,
-                    reason: .healthy
+                    reason: .healthy,
+                    trustPolicy: trustPolicy
                 )
             }
 
@@ -261,7 +289,8 @@ public enum PlacementHealth {
         elementRect: CGRect?,
         windowRect: CGRect?,
         clippingRect: CGRect?,
-        allowsDetachedSuggestions: Bool
+        allowsDetachedSuggestions: Bool,
+        trustPolicy: PlacementTrustPolicy
     ) -> PlacementHealthPlan {
         guard fallbackRenderMode == .floatingMirror else {
             return suppress(requestedRenderMode, reason: .missingFloatingFallback)
@@ -277,7 +306,8 @@ public enum PlacementHealth {
                 anchorRect: elementRect,
                 anchorSource: .element,
                 clippingRect: clippingRect,
-                reason: reason
+                reason: reason,
+                trustPolicy: trustPolicy
             )
         }
 
@@ -287,7 +317,8 @@ public enum PlacementHealth {
                 anchorRect: windowRect,
                 anchorSource: .window,
                 clippingRect: clippingRect,
-                reason: reason
+                reason: reason,
+                trustPolicy: trustPolicy
             )
         }
 
@@ -299,9 +330,10 @@ public enum PlacementHealth {
         anchorRect: CGRect,
         anchorSource: PlacementAnchorSource,
         clippingRect: CGRect?,
-        reason: PlacementHealthReason
+        reason: PlacementHealthReason,
+        trustPolicy: PlacementTrustPolicy
     ) -> PlacementHealthPlan {
-        .present(PlacementHealthPresentation(
+        applyTrustPolicy(PlacementHealthPresentation(
             requestedRenderMode: requestedRenderMode,
             renderMode: .floatingMirror,
             anchorRect: anchorRect,
@@ -309,7 +341,24 @@ public enum PlacementHealth {
             textLineRect: nil,
             clippingRect: clippingRect,
             reason: reason
-        ))
+        ), trustPolicy: trustPolicy)
+    }
+
+    private static func applyTrustPolicy(
+        _ presentation: PlacementHealthPresentation,
+        trustPolicy: PlacementTrustPolicy
+    ) -> PlacementHealthPlan {
+        if presentation.anchorSource == .syntheticCaret,
+           !trustPolicy.allowsSyntheticCaretPlacement {
+            return suppress(presentation.requestedRenderMode, reason: .untrustedSyntheticCaret)
+        }
+
+        if presentation.isLowConfidence,
+           !trustPolicy.allowsLowConfidencePlacement {
+            return suppress(presentation.requestedRenderMode, reason: .lowConfidencePlacement)
+        }
+
+        return .present(presentation)
     }
 
     private static func suppress(

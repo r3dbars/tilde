@@ -2230,7 +2230,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             windowRect: learningAdjustment.adjusted(context.windowRect),
             textLineRect: learningAdjustment.adjusted(context.textLineRect),
             caretIsSynthetic: context.caretIsSynthetic,
-            allowsDetachedSuggestions: profile.allowsDetachedSuggestions
+            allowsDetachedSuggestions: profile.allowsDetachedSuggestions,
+            trustPolicy: placementTrustPolicy(profile: profile, learningAdjustment: learningAdjustment)
+        )
+    }
+
+    private func placementTrustPolicy(
+        profile: CompatibilityProfile,
+        learningAdjustment: CompatibilityLearningAdjustment
+    ) -> PlacementTrustPolicy {
+        let hasTrustedVisualAdjustment = learningAdjustment.profile?.hasTrustedVisualAdjustment == true
+        let isGreenProfile = profile.supportLevel == .green
+
+        return PlacementTrustPolicy(
+            allowsLowConfidencePlacement: isGreenProfile || hasTrustedVisualAdjustment,
+            allowsSyntheticCaretPlacement: isGreenProfile || hasTrustedVisualAdjustment
         )
     }
 

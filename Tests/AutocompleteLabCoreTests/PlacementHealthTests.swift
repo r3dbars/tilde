@@ -195,6 +195,82 @@ struct PlacementHealthTests {
         #expect(presentation.metadata["placementConfidenceBand"] == "low")
     }
 
+    @Test("Suppresses low confidence placement unless it is trusted")
+    func suppressesLowConfidencePlacementUnlessTrusted() {
+        let plan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: .floatingMirror,
+            caretRect: nil,
+            elementRect: CGRect(x: 100, y: 200, width: 500, height: 180),
+            windowRect: nil,
+            textLineRect: nil,
+            allowsDetachedSuggestions: true,
+            trustPolicy: PlacementTrustPolicy(
+                allowsLowConfidencePlacement: false,
+                allowsSyntheticCaretPlacement: true
+            )
+        )
+
+        guard case let .suppress(suppression) = plan else {
+            Issue.record("Expected low-confidence fallback placement to suppress")
+            return
+        }
+
+        #expect(suppression.reason == .lowConfidencePlacement)
+        #expect(suppression.metadata["placementSelfHealingAction"] == "suppress")
+    }
+
+    @Test("Keeps low confidence placement when explicitly trusted")
+    func keepsLowConfidencePlacementWhenExplicitlyTrusted() {
+        let plan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: .floatingMirror,
+            caretRect: nil,
+            elementRect: CGRect(x: 100, y: 200, width: 500, height: 180),
+            windowRect: nil,
+            textLineRect: nil,
+            allowsDetachedSuggestions: true,
+            trustPolicy: PlacementTrustPolicy(
+                allowsLowConfidencePlacement: true,
+                allowsSyntheticCaretPlacement: false
+            )
+        )
+
+        guard case let .present(presentation) = plan else {
+            Issue.record("Expected explicitly trusted low-confidence fallback to present")
+            return
+        }
+
+        #expect(presentation.renderMode == .floatingMirror)
+        #expect(presentation.anchorSource == .element)
+        #expect(presentation.isLowConfidence)
+    }
+
+    @Test("Suppresses synthetic caret placement unless it is trusted")
+    func suppressesSyntheticCaretPlacementUnlessTrusted() {
+        let plan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: .floatingMirror,
+            caretRect: CGRect(x: 140, y: 220, width: 0, height: 22),
+            elementRect: CGRect(x: 80, y: 180, width: 520, height: 160),
+            windowRect: CGRect(x: 40, y: 120, width: 640, height: 360),
+            textLineRect: CGRect(x: 140, y: 220, width: 0, height: 22),
+            caretIsSynthetic: true,
+            allowsDetachedSuggestions: true,
+            trustPolicy: PlacementTrustPolicy(
+                allowsLowConfidencePlacement: true,
+                allowsSyntheticCaretPlacement: false
+            )
+        )
+
+        guard case let .suppress(suppression) = plan else {
+            Issue.record("Expected untrusted synthetic caret placement to suppress")
+            return
+        }
+
+        #expect(suppression.reason == .untrustedSyntheticCaret)
+    }
+
     @Test("Keeps mirror placement on focused element anchor")
     func keepsMirrorPlacementOnFocusedElementAnchor() {
         let plan = PlacementHealth.plan(
