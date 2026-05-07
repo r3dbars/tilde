@@ -82,6 +82,9 @@ Pass 1 shipped these improvements:
 - Settings now has a Clear Learned Suggestions control that resets
   accepted-kept scores, aggregate style memory, recent words, repetition
   suppression, and prefix-family cooldowns without deleting logs.
+- Settings now turns missing or invalid app-owned MLX assets into an in-app
+  Install/Repair Model action with progress, validation, runtime reload, and
+  warmup instead of only revealing a folder.
 - Replacement now protects fresh visible ghost text for 1.2s unless the new
   suggestion has a clear score win, then treats 2s-old suggestions as stale
   enough to replace.
@@ -291,6 +294,10 @@ Strong evidence in current code:
   AX, and logs only lengths/status.
 - `Sources/AutocompleteLabApp/Mac/AccessibilityClient.swift:366-390` restores
   the focused text value and cursor offset for the undo path.
+- `Sources/AutocompleteLabApp/Runtime/LocalModelAssetInstaller.swift:1-132`
+  downloads, validates, and reports progress for the app-owned MLX model via
+  the Swift Hugging Face client, and AppDelegate reloads/warmups the runtime
+  after success.
 - `docs/product/app-proof-matrix.md:24-40` honestly marks target proof as
   still failing and lists pending surfaces.
 
