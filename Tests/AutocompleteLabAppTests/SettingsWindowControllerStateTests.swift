@@ -23,6 +23,7 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(allowed.modeText == "Mode: inline, mirror fallback")
         #expect(allowed.acceptanceText == "Acceptance: Tab next word + full accept")
+        #expect(allowed.pathText == "Path: display inline -> mirror | insert selected text -> value repair | track focused field")
         #expect(
             allowed.safetyText
                 == "Safety: Inline when caret proof is trusted; mirror fallback if inline is unsafe."
@@ -57,6 +58,7 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(blocked.modeText == "Mode: mirror")
         #expect(blocked.acceptanceText == "Acceptance: Tab next word + full accept")
+        #expect(blocked.pathText == "Path: display mirror | insert keys | track focused field")
         #expect(
             blocked.safetyText
                 == "Safety: Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Insertion fails closed if the primary method is not verified."
@@ -99,6 +101,7 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(diagnosticsOnly.modeText == "Mode: disabled")
         #expect(diagnosticsOnly.acceptanceText == "Acceptance: off here")
+        #expect(diagnosticsOnly.pathText == "Path: display off | insert off")
         #expect(diagnosticsOnly.safetyText == "Safety: Suggestions stay off here.")
         #expect(!diagnosticsOnly.canToggleMirrorMode)
         #expect(diagnosticsOnly.menuToggleTitle == "Suggestions unavailable in Mail")
@@ -122,6 +125,7 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(unsupported.modeText == "Mode: disabled")
         #expect(unsupported.acceptanceText == "Acceptance: off here")
+        #expect(unsupported.pathText == "Path: display off | insert off")
         #expect(
             unsupported.safetyText
                 == "Safety: Suggestions are intentionally off until this app has a compatibility profile."
@@ -145,6 +149,7 @@ struct SettingsWindowControllerStateTests {
         #expect(missing.detailText == "Open a writing app to see whether suggestions are supported.")
         #expect(missing.modeText == "Mode: choose a writing app")
         #expect(missing.acceptanceText == "Acceptance: off until an app is selected")
+        #expect(missing.pathText == "Path: choose a writing app")
         #expect(missing.safetyText == "Safety: choose a writing app first")
         #expect(!missing.canToggleMirrorMode)
         #expect(missing.menuToggleTitle == "Toggle Current App")
@@ -188,6 +193,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(codex.modeText == "Mode: mirror")
         #expect(codex.acceptanceText == "Acceptance: Tab next word only; full accept is off for safety")
+        #expect(codex.pathText == "Path: display mirror | insert value repair -> keys | track stable bounds")
         #expect(
             codex.safetyText
                 == "Safety: Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Full accept stays off until no-submit proof exists."
