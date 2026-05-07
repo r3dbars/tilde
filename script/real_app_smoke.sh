@@ -360,51 +360,17 @@ focus_chrome_smoke_editor() {
   osascript >/dev/null <<'APPLESCRIPT'
 tell application "Google Chrome"
   activate
-  try
-    tell active tab of front window to execute javascript "window.focusSmokeEditor && window.focusSmokeEditor();"
-  end try
 end tell
 delay 0.1
 tell application "System Events"
   tell process "Google Chrome"
     set frontmost to true
+    set chromePosition to position of window 1
+    click at {(item 1 of chromePosition) + 180, (item 2 of chromePosition) + 190}
   end tell
 end tell
 APPLESCRIPT
   wait_for_frontmost_app "Google Chrome" 5
-}
-
-require_chrome_javascript_apple_events() {
-  local output status
-
-  set +e
-  output="$(osascript <<'APPLESCRIPT' 2>&1
-tell application "Google Chrome"
-  activate
-  if not (exists window 1) then make new window
-  tell active tab of front window to execute javascript "1"
-end tell
-APPLESCRIPT
-)"
-  status=$?
-  set -e
-
-  if ((status == 0)); then
-    return 0
-  fi
-
-  if [[ "$output" == *"Executing JavaScript through AppleScript is turned off"* ]]; then
-    cat >&2 <<'EOF'
-Chrome smoke requires Chrome's "Allow JavaScript from Apple Events" developer setting.
-Open Chrome > View > Developer > Allow JavaScript from Apple Events, or run:
-  defaults write com.google.Chrome AppleScriptEnabled -bool true
-then restart Chrome and rerun the smoke.
-EOF
-  else
-    echo "Chrome JavaScript Apple Event preflight failed:" >&2
-    echo "$output" >&2
-  fi
-  exit 1
 }
 
 focus_textedit_smoke_editor() {
@@ -467,34 +433,6 @@ APPLESCRIPT
   done
 
   echo "Timed out waiting for $label to land in TextEdit." >&2
-  exit 1
-}
-
-wait_for_chrome_smoke_editor_contains() {
-  local expected_text="$1"
-  local label="$2"
-  local timeout_seconds="${3:-8}"
-  local deadline=$((SECONDS + timeout_seconds))
-
-  while ((SECONDS <= deadline)); do
-    local current_text
-    current_text="$(osascript <<'APPLESCRIPT'
-tell application "Google Chrome"
-  try
-    tell active tab of front window to execute javascript "(() => { const editor = document.querySelector('[data-smoke-editor]'); if (!editor) return ''; return 'value' in editor ? editor.value : editor.innerText; })();"
-  on error
-    return ""
-  end try
-end tell
-APPLESCRIPT
-)"
-    if [[ "$current_text" == *"$expected_text"* ]]; then
-      return 0
-    fi
-    sleep 0.2
-  done
-
-  echo "Timed out waiting for $label to land in Chrome." >&2
   exit 1
 }
 
@@ -838,7 +776,6 @@ describe_plan() {
       ;;
     chrome)
       echo "Chrome fixture: $CHROME_FIXTURE"
-      echo "Requirement: Chrome must allow JavaScript from Apple Events for fixture automation."
       if [[ "$CHROME_FIXTURE" == "all" ]]; then
         echo "Plan: build/relaunch AutocompleteLab, then run disposable Chrome textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, and chat-like no-submit local fixtures."
       else
@@ -1002,7 +939,7 @@ APPLESCRIPT
 
 run_chrome_fixture() {
   local fixture="$1"
-  local start_line trace_start_line stable_start_line tmp_dir html_file
+  local start_line trace_start_line tmp_dir html_file
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
   tmp_dir="$(make_tmp_dir)"
@@ -1021,12 +958,6 @@ tell application "Google Chrome"
   set URL of active tab of front window to "$chrome_url"
 end tell
 delay 1.2
-tell application "Google Chrome"
-  try
-    tell active tab of front window to execute javascript "window.focusSmokeEditor && window.focusSmokeEditor();"
-  end try
-end tell
-delay 0.2
 tell application "System Events"
   tell process "Google Chrome"
     set frontmost to true
@@ -1044,11 +975,8 @@ tell application "System Events"
 end tell
 APPLESCRIPT
 
-  wait_for_chrome_smoke_editor_contains "Can we make this feel " "scripted Chrome text"
-  stable_start_line="$(line_count "$LOG_PATH")"
-  wait_for_log_pattern "$stable_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture stable suggestion"
-  wait_for_screenshot_capture_if_enabled "$stable_start_line" "com.google.Chrome" "Chrome $fixture"
-  focus_chrome_smoke_editor
+  wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome .*beforeChars=22 .*requestMode=phraseContinuation" "Chrome $fixture full-fragment suggestion"
+  wait_for_screenshot_capture_if_enabled "$start_line" "com.google.Chrome" "Chrome $fixture"
   assert_frontmost_app "Google Chrome" "Chrome $fixture"
   sleep 0.5
   press_key_code 48
@@ -1064,7 +992,6 @@ APPLESCRIPT
   fi
   local full_start_line full_accept_key
   full_accept_key="$(accept_all_shortcut)"
-  focus_chrome_smoke_editor
   assert_frontmost_app "Google Chrome" "Chrome $fixture"
   sleep 0.5
   full_start_line="$(line_count "$LOG_PATH")"
@@ -1093,7 +1020,6 @@ run_chrome() {
     echo "Google Chrome is not installed or not scriptable on this machine." >&2
     exit 1
   fi
-  require_chrome_javascript_apple_events
 
   local runtime_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
