@@ -16,6 +16,8 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Add tests for bounds validation, polling cadence, paste/delete triggering, answer-like output cleanup, and synthetic caret geometry.
 - [x] Keep overlapping-poll backoff from hiding an already visible suggestion.
 - [x] Make the TextEdit recorder focus the disposable smoke document before typing or accepting.
+- [x] Harden TextEdit real-app proof setup against stale smoke/autosave documents and transient suggestions while scripted typing is still landing.
+- [x] Ensure typing soak cleanup stops its AppleScript child and closes disposable soak documents so later proof runs are not contaminated.
 
 ## P0: Trust And Safety
 
@@ -203,7 +205,7 @@ Manual proof blocker evidence: `./script/manual_smoke_status.sh --strict` still 
 - [x] Add unsupported-app smoke.
 - [x] Add no-Accessibility-permission smoke.
 
-Manual proof blocker evidence: `./script/manual_smoke_status.sh --strict` reports Codex as pending current one-word no-submit proof, and reports 16 required app passes as stale or pending against the current build proof. Do not raise support grades until fresh recorder rows exist in `docs/product/manual-smoke-runs.md`.
+Manual proof blocker evidence: `./script/manual_smoke_status.sh --strict` reports Codex as pending current one-word no-submit proof, and reports 16 required app passes as stale or pending against the current build proof. Do not raise support grades until fresh recorder rows exist in `docs/product/manual-smoke-runs.md`. A 2026-05-07 TextEdit retry proved the recorder now avoids stale soak/autosave contamination and reaches first Tab acceptance, but it still did not close the full-accept proof row, so TextEdit remains stale until a full recorder pass lands.
 
 ## P1: Trace Analysis
 
