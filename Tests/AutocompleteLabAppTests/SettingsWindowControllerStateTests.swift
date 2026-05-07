@@ -288,7 +288,7 @@ struct SettingsWindowControllerStateTests {
                 runtimeReport: readyReport,
                 currentApp: textEdit
             ).message
-                == "Start here: allow Accessibility so Autocomplete Lab can read the current text field and insert accepted suggestions. Text stays on this Mac."
+                == "Start here: allow Accessibility so Autocomplete Lab can read cursor text and bounds, then insert only what you accept. Text stays on this Mac."
         )
         #expect(
             SettingsFirstRunState(
@@ -334,7 +334,7 @@ struct SettingsWindowControllerStateTests {
         #expect(needed.statusText == "Accessibility permission: needed")
         #expect(
             needed.detailText
-                == "Allow Accessibility so Autocomplete Lab can read the active text field, find the cursor, and insert accepted suggestions. Text stays on this Mac."
+                == "Allow Accessibility so Autocomplete Lab can read the active field text around the cursor, read cursor and field bounds, and insert only text you accept. Text stays on this Mac."
         )
 
         let allowed = SettingsPermissionState(isTrusted: true)
@@ -342,7 +342,7 @@ struct SettingsWindowControllerStateTests {
         #expect(allowed.statusText == "Accessibility permission: allowed")
         #expect(
             allowed.detailText
-                == "Autocomplete Lab can read the active text field and insert accepted suggestions. Text stays on this Mac."
+                == "Autocomplete Lab can read the active field text around the cursor, read cursor and field bounds, and insert only text you accept. Text stays on this Mac."
         )
     }
 
@@ -366,7 +366,7 @@ struct SettingsWindowControllerStateTests {
         #expect(privacy.contentStatusText == "Raw text capture: off")
         #expect(
             privacy.screenRecordingPermissionText
-                == "Screen Recording: only used for placement screenshots while this debug switch is on."
+                == "Screen Recording: only captures placement screenshots while this debug switch is on. Normal suggestions do not need it."
         )
         #expect(privacy.pathText == "Logs: /tmp/diagnostics.log | Traces: /tmp/traces.jsonl")
         #expect(
@@ -375,7 +375,7 @@ struct SettingsWindowControllerStateTests {
                     "Autocomplete Lab keeps suggestions and diagnostics on this Mac.",
                     "Diagnostics: performance + placement traces recording, screenshots on",
                     "Raw text capture: off",
-                    "Screen Recording: only used for placement screenshots while this debug switch is on.",
+                    "Screen Recording: only captures placement screenshots while this debug switch is on. Normal suggestions do not need it.",
                     "No raw text is included unless raw text capture is on.",
                     "Logs: /tmp/diagnostics.log",
                     "Traces: /tmp/traces.jsonl"
@@ -400,8 +400,23 @@ struct SettingsWindowControllerStateTests {
         #expect(paused.screenRecordingPermissionText == nil)
         #expect(
             paused.statusPanelText.contains(
-                "Screen Recording: off unless screenshot capture is enabled."
+                "Screen Recording: off; normal suggestions do not need it."
             )
+        )
+
+        let temporaryScreenshots = SettingsPrivacyState(
+            tracingPaused: false,
+            rawContentTracingEnabled: false,
+            rawContentTracingExpiresAt: nil,
+            screenshotTracingEnabled: true,
+            screenshotTracingExpiresAt: Date(timeIntervalSince1970: 1_000),
+            diagnosticsPath: "/tmp/diagnostics.log",
+            tracePath: "/tmp/traces.jsonl"
+        )
+        #expect(temporaryScreenshots.diagnosticsStatusText.contains("screenshots on temporarily"))
+        #expect(
+            temporaryScreenshots.screenRecordingPermissionText
+                == "Screen Recording: only captures temporary placement screenshots. Normal suggestions do not need it."
         )
     }
 
