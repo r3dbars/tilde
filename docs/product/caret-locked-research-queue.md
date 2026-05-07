@@ -225,6 +225,8 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [ ] Keep `AppDelegate` mostly as wiring.
 - [x] Add unit tests for each extracted policy.
 
+Blocker evidence: `AppDelegate` is still 3,665 lines after extracting presentation, observer coordination, insertion verification scheduling, trace screenshot capture, compatibility learning actions, and status menu state. The remaining heavy owners are runtime install/warm/retry flow, focused text polling, suggestion request orchestration, and visible suggestion lifecycle.
+
 ## P2: Self-Healing Compatibility
 
 - [x] Turn manual nudges into adapter recommendations.

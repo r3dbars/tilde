@@ -216,7 +216,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         let statusMenu = NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: "")
         let runtimeMenu = NSMenuItem(title: "Model: starting", action: nil, keyEquivalent: "")
-        let pauseItem = NSMenuItem(title: pauseSuggestionsTitle, action: #selector(togglePauseSuggestions), keyEquivalent: "p")
+        let pauseItem = NSMenuItem(
+            title: suggestionControlState.toggleTitle,
+            action: #selector(togglePauseSuggestions),
+            keyEquivalent: "p"
+        )
         let toggleItem = NSMenuItem(title: "Toggle Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
         let debugMenuItem = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         let debugMenu = NSMenu()
@@ -588,10 +592,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private var pauseSuggestionsTitle: String {
-        suggestionControlState.toggleTitle
-    }
-
     private var suggestionControlState: SuggestionControlState {
         suggestionControlPolicy.state(isPaused: suggestionsPaused)
     }
@@ -692,7 +692,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let frontmostApp = accessibilityClient.frontmostApplication()
             updateStatusMenu(
                 app: frontmostApp,
-                profile: frontmostApp.flatMap { profileStore.profile(for: $0.bundleIdentifier) },
                 appEnabled: frontmostApp.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
             )
             hideSuggestion(reason: reason.hideReason)
@@ -702,7 +701,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard accessibilityClient.isTrusted else {
             accessibilityObserver.stopTrackingAll()
             setSuggestionDecision("Blocked: Accessibility permission missing")
-            updateStatusMenu(app: nil, profile: nil, appEnabled: false)
+            updateStatusMenu(app: nil, appEnabled: false)
             hideSuggestion()
             return
         }
@@ -719,7 +718,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             clearFocusedFieldState()
             currentProfile = nil
             setSuggestionDecision("Blocked: unsupported app")
-            updateStatusMenu(app: activeApp, profile: nil, appEnabled: false)
+            updateStatusMenu(app: activeApp, appEnabled: false)
             hideSuggestion()
             return
         }
@@ -727,7 +726,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rememberEligibleTargetApp(frontmostApp)
         let appEnabled = !disabledBundleIdentifiers.contains(frontmostApp.bundleIdentifier)
         currentProfile = profile
-        updateStatusMenu(app: frontmostApp, profile: profile, appEnabled: appEnabled)
+        updateStatusMenu(app: frontmostApp, appEnabled: appEnabled)
 
         guard appEnabled else {
             accessibilityObserver.stopTrackingAll()
@@ -3031,7 +3030,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateStatusMenu(
         app: RunningApplicationInfo?,
-        profile: CompatibilityProfile?,
         appEnabled: Bool
     ) {
         if let app,
@@ -3039,36 +3037,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastObservedSettingsApp = app
         }
 
-        let permission = accessibilityClient.isTrusted ? "AX ok" : "AX missing"
-        let control = suggestionControlState.statusName
-        let appName = app?.localizedName ?? "No app"
-        let enabled = appEnabled ? "on" : "off"
         let supportStatus = app.map { profileStore.supportStatus(for: $0.bundleIdentifier) } ?? .unsupported
-        let profileName = app.map { _ in supportStatus.summary } ?? "none"
-        let appStatus = app.map {
-            supportStatus.menuText(appDisplayName: $0.localizedName, isEnabled: appEnabled)
-        } ?? appName
-        let appControlState = app.map {
-            SettingsCurrentAppState(
-                displayName: $0.localizedName,
-                bundleIdentifier: $0.bundleIdentifier,
-                supportStatus: supportStatus,
-                isEnabled: appEnabled,
-                disabledAppCount: disabledBundleIdentifiers.count
-            )
-        }
-        let statusLine = statusMenuTitle(
-            app: app,
+        let statusState = StatusMenuStateBuilder.make(
+            isTrustedForAccessibility: accessibilityClient.isTrusted,
+            controlState: suggestionControlState,
+            appDisplayName: app?.localizedName,
+            appBundleIdentifier: app?.bundleIdentifier,
             supportStatus: supportStatus,
-            appEnabled: appEnabled
+            appEnabled: appEnabled,
+            disabledAppCount: disabledBundleIdentifiers.count,
+            lastSuggestionDecision: lastSuggestionDecision
         )
-        let statusSignature = "\(control)|\(permission)|\(appStatus)|\(lastSuggestionDecision)|\(statusLine)"
 
-        statusMenuItem?.title = statusLine
-        statusMenuItem?.toolTip = lastSuggestionDecision
-        pauseSuggestionsMenuItem?.title = pauseSuggestionsTitle
-        toggleAppMenuItem?.title = appControlState?.menuToggleTitle ?? "Toggle Current App"
-        toggleAppMenuItem?.isEnabled = appControlState?.canToggle ?? false
+        statusMenuItem?.title = statusState.title
+        statusMenuItem?.toolTip = statusState.tooltip
+        pauseSuggestionsMenuItem?.title = statusState.pauseTitle
+        toggleAppMenuItem?.title = statusState.toggleTitle
+        toggleAppMenuItem?.isEnabled = statusState.toggleEnabled
         if settingsWindow.isShowing {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,
@@ -3083,70 +3068,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
-        guard lastStatusLine != statusSignature else {
+        guard lastStatusLine != statusState.diagnosticsSignature else {
             return
         }
 
-        lastStatusLine = statusSignature
+        lastStatusLine = statusState.diagnosticsSignature
         DiagnosticsLog.shared.record(
             "status",
-            metadata: [
-                "accessibility": permission,
-                "control": control,
-                "app": appName,
-                "profile": profileName,
-                "enabled": enabled,
-                "paused": String(suggestionsPaused),
-                "decision": lastSuggestionDecision
-            ]
+            metadata: statusState.diagnosticsMetadata
         )
-    }
-
-    private func statusMenuTitle(
-        app: RunningApplicationInfo?,
-        supportStatus: CompatibilitySupportStatus,
-        appEnabled: Bool
-    ) -> String {
-        guard accessibilityClient.isTrusted else {
-            return "Needs Accessibility"
-        }
-
-        if suggestionsPaused {
-            return "Paused"
-        }
-
-        guard let app else {
-            return "Ready"
-        }
-
-        guard supportStatus.canToggleSuggestions else {
-            switch supportStatus.supportLevel {
-            case .diagnosticsOnly:
-                return "Diagnostics only in \(app.localizedName)"
-            case .unsupported:
-                return "Unsupported in \(app.localizedName)"
-            case .green, .yellow:
-                return "Off in \(app.localizedName)"
-            }
-        }
-
-        guard appEnabled else {
-            return "Blocked in \(app.localizedName)"
-        }
-
-        if lastSuggestionDecision.hasPrefix("Shown") {
-            return "Showing in \(app.localizedName)"
-        }
-
-        if lastSuggestionDecision.hasPrefix("Queued") {
-            return "Thinking in \(app.localizedName)"
-        }
-
-        if lastSuggestionDecision.hasPrefix("Waiting") {
-            return "Waiting in \(app.localizedName)"
-        }
-
-        return "Ready in \(app.localizedName)"
     }
 
     private func setSuggestionDecision(_ decision: String) {
@@ -3583,7 +3513,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         updateStatusMenu(
             app: app,
-            profile: profileStore.profile(for: app.bundleIdentifier),
             appEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier)
         )
     }
@@ -3609,7 +3538,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         updateStatusMenu(
             app: frontmostApp,
-            profile: frontmostApp.flatMap { profileStore.profile(for: $0.bundleIdentifier) },
             appEnabled: frontmostApp.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
         )
     }
@@ -3640,7 +3568,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let frontmostApp = targetAppForControls()
         updateStatusMenu(
             app: frontmostApp,
-            profile: frontmostApp.flatMap { profileStore.profile(for: $0.bundleIdentifier) },
             appEnabled: frontmostApp.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
         )
     }
