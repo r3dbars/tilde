@@ -44,6 +44,15 @@ struct AutocompleteKeyMapperTests {
         #expect(mapper.key(physicalKey: .backtick, modifiers: [.command, .shift]) == .other)
     }
 
+    @Test("Command Z maps to accepted insertion undo")
+    func commandZMapsToAcceptedInsertionUndo() {
+        let mapper = AutocompleteKeyMapper()
+
+        #expect(mapper.key(physicalKey: .z, modifiers: [.command]) == .commandZ)
+        #expect(mapper.key(physicalKey: .z, modifiers: []) == .other)
+        #expect(mapper.key(physicalKey: .z, modifiers: [.command, .shift]) == .other)
+    }
+
     @Test("Only plain Escape dismisses")
     func onlyPlainEscapeDismisses() {
         let mapper = AutocompleteKeyMapper()

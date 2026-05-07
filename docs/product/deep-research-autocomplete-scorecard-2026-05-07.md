@@ -3,14 +3,14 @@
 Source research:
 `/Users/redbars/Library/Caches/com.apple.SwiftUI.Drag-9DB841D4-8068-4044-B0CF-B2F61B9E12BB/deep-research-report (5).md`
 
-Repo state graded: `codex/deep-research-scorecard` after the partial-word-shape
-prompt pass, based on `origin/main`.
+Repo state graded: `codex/deep-research-scorecard` after the accepted-insertion
+undo pass, based on `origin/main`.
 
 ## Executive Grade
 
 Baseline deep research score: **78/100**.
 
-Current implementation score after the current build pass: **98/100**.
+Current implementation score after the current build pass: **99/100**.
 
 This is a strong prototype with real engineering depth. It has local MLX
 runtime support, app compatibility profiles, privacy-safe tracing defaults,
@@ -81,6 +81,8 @@ Pass 1 shipped these improvements:
   overrides request more.
 - Prompt/context metadata now includes trace-safe partial-word shape: counts,
   casing, digits, hyphen, and apostrophe only.
+- Accepted insertions now arm a one-step Command-Z restore path for the same
+  focused app/field, with an 8s expiry and trace-safe diagnostics.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -102,6 +104,8 @@ Remaining high-impact gaps:
   mostly cache and latency-slice proof.
 - Prompt metadata now includes partial-word shape; accepted-kept raw suffixes
   are still intentionally absent until there is a privacy-safe design.
+- Atomic undo now has an app-level restore path, but still needs per-app proof
+  that Command-Z restores the accepted insertion cleanly in real editors.
 - Replay-first real-app proof is still missing. The command exists, but the
   current local trace corpus fails the proof gate because it predates display
   scoring, candidate-selection metadata, kept-horizon events, and researched
@@ -136,7 +140,7 @@ Baseline scorecard from the initial audit:
 | Context and prompt hygiene | 9 | 73 | 6.6 | Context is small and local, but lacks field metadata, style sketch, recent kept suffixes, and a hard `<NO_SUGGESTION>` prompt path. |
 | Output shape and cleanup | 8 | 88 | 7.0 | Cleaner is one of the strongest parts of the app. |
 | Local runtime and latency | 10 | 84 | 8.4 | App-owned MLX runtime, warm model, streaming, timing slices; no KV/session cache and default length is still a little long. |
-| Ghost text UX and controls | 10 | 84 | 8.4 | One suggestion, Tab next word, full accept when allowed, Esc dismiss, stale hiding; atomic undo is not proven. |
+| Ghost text UX and controls | 10 | 88 | 8.8 | One suggestion, Tab next word, full accept when allowed, Esc dismiss, stale hiding, and app-level Command-Z restore for accepted insertions. |
 | Mode profiles and cross-app safety | 10 | 74 | 7.4 | Strong app profiles, but behavior modes are not first-class for email, notes, bullets, docs, code, forms, search, and AI chat. |
 | Learning, annoyance, accepted-and-kept loop | 12 | 65 | 7.8 | Metrics and core types exist; live app wiring appears incomplete. |
 | Metrics, replay, and proof gates | 5 | 84 | 4.2 | Trace/report scripts are strong; true replay-first real-app rig is still missing. |
@@ -180,9 +184,9 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Single-line under 42 chars | 90 | `CompletionSuggestion` caps visible text to one line, bounded words, and 42 visible characters. | Add screenshot proof across narrow editors and long wrapped lines. |
 | Flicker control | 90 | Streaming presentation gate limits partial updates, and replacement now suppresses fresh/low-margin candidate swaps with 1.2s fresh and 2s stale lifetime tests. | Add screenshot proof across narrow editors and streaming model output. |
 | Tab next word | 91 | Implemented and app/profile gated. | Recompute residual after one follow-on instead of chaining unscored residuals. |
-| Backtick full visible accept | 82 | Full accept exists when profile supports it; prompt apps disable full accept. | Prove atomic undo and no-submit for every app where full accept is enabled. |
+| Backtick full visible accept | 86 | Full accept exists when profile supports it; prompt apps disable full accept; accepted insertions arm the same one-step Command-Z restore path. | Prove undo and no-submit in every app where full accept is enabled. |
 | Esc dismiss | 88 | Implemented and traces keyboard action. | Add prefix-family cooldown and repeated-dismiss escalation. |
-| Atomic undo | 45 | Insertion verification and retry exist; true host-app undo grouping is not proven. | Make accepted insertion undoable as one unit or prove native insertion already groups it per app. |
+| Atomic undo | 78 | Accepted insertions now arm an 8s one-step Command-Z restore for the same focused app/field; raw accepted text stays only in ephemeral memory and diagnostics log lengths/status only. | Prove the restore path per app and decide whether native undo grouping can replace the app-level fallback. |
 | Casual chat profile | 78 | `AutocompleteBehaviorProfile.casualChat` caps at 4 words and suppresses questions/emotional text. | Fresh chat-app proof and learned style fit. |
 | Email profile | 72 | Mail resolves to an email profile with 2-6 word cap, blank/fresh paragraph suppression, and no invented commitments/names/deadlines guidance. | Real Mail proof plus safe free-form exceptions. |
 | Notes profile | 74 | Notes app profile exists with terse 1-5 word guidance and blank-line suppression. | Bullet/list-aware proof for title, body, and checklist surfaces. |
@@ -267,6 +271,16 @@ Strong evidence in current code:
 - `Sources/AutocompleteLabCore/Engine/CompletionPromptBuilder.swift:38-47`
   feeds partial-word shape into word-completion prompts, and `:62-77` adds it
   to phrase/sentence prompts.
+- `Sources/AutocompleteLabCore/Session/KeyboardAction.swift:166-193`
+  routes Command-Z to `undoAcceptedInsertion` only when a pending accepted
+  insertion undo exists.
+- `Sources/AutocompleteLabApp/Mac/KeyboardEventTap.swift:373-414` lets
+  Command-Z be consumed after acceptance even when no suggestion is visible.
+- `Sources/AutocompleteLabApp/App/AppDelegate.swift:1680-1810` arms an 8s
+  same-app/same-field accepted-insertion undo, restores the previous text via
+  AX, and logs only lengths/status.
+- `Sources/AutocompleteLabApp/Mac/AccessibilityClient.swift:366-390` restores
+  the focused text value and cursor offset for the undo path.
 - `docs/product/app-proof-matrix.md:24-40` honestly marks target proof as
   still failing and lists pending surfaces.
 
@@ -404,9 +418,11 @@ these are true.
    newline, and bullet-line trigger tests.
 16. Done: hard cap ambient generated tokens at 16.
 17. Done: add trace-safe partial-word shape metadata to prompts and traces.
-18. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
+18. Done: add one-step Command-Z restore for accepted insertions in the same
+   app/field.
+19. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
    checklist acceptance/proof slices are still missing.
-19. Partial: build the replay-first proof command. The command exists; a fresh
+20. Partial: build the replay-first proof command. The command exists; a fresh
    post-pass trace proof still has to pass.
 
 ## Goal Status
@@ -416,7 +432,7 @@ every scored item reaches 100/100.
 
 Baseline status: **78/100**.
 
-Current implementation status: **98/100**. Not complete.
+Current implementation status: **99/100**. Not complete.
 
 Replay proof status:
 

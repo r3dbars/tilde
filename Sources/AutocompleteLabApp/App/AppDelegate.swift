@@ -133,6 +133,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let maxScheduledScreenshotSuggestionIDs = 256
     private var recentWordMemory = ScopedRecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
+    private var pendingAcceptedInsertionUndo: AcceptedInsertionUndo?
+    private var acceptedInsertionUndoExpirationTask: Task<Void, Never>?
     private var lastStatusLine: String?
     private var lastSuggestionDecision = "Starting"
     private var lastSyntheticCaretDiagnosticSignature: String?
@@ -172,6 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debounceTask?.cancel()
         keyboardEventTapStopTask?.cancel()
         insertionVerificationTask?.cancel()
+        acceptedInsertionUndoExpirationTask?.cancel()
         runtimeWarmTask?.cancel()
         invalidatePendingSuggestionRequest()
         modelRuntime.cancel()
@@ -1331,6 +1334,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             supportsOneWordAcceptance: currentProfile?.supportsOneWordAcceptance == true,
             supportsFullAcceptance: currentProfile?.supportsFullAcceptance == true,
             isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+            hasPendingAcceptedInsertionUndo: acceptedInsertionUndoIsActive(),
             acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut
         )
     }
@@ -1364,7 +1368,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? await Task.sleep(for: .milliseconds(idleStopDelayMilliseconds))
             guard !Task.isCancelled,
                   let self,
-                  !self.suggestionSession.hasVisibleSuggestion else {
+                  !self.suggestionSession.hasVisibleSuggestion,
+                  !self.acceptedInsertionUndoIsActive() else {
                 return
             }
 
@@ -1395,6 +1400,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             now: Date(),
             durationMilliseconds: postTypingPollPauseMilliseconds
         )
+        clearPendingAcceptedInsertionUndo(reason: "typing")
 
         guard suggestionSession.hasVisibleSuggestion else {
             return
@@ -1413,6 +1419,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> Bool {
         if didObservePassthroughKeyDown {
             currentSuggestionInvalidatedByUserKeyDown = true
+            clearPendingAcceptedInsertionUndo(reason: "typing")
+        }
+
+        let action = KeyboardActionRouter(shortcutConfiguration: keyboardShortcutConfiguration).action(
+            for: key,
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+            hasPendingAcceptedInsertionUndo: acceptedInsertionUndoIsActive()
+        )
+
+        if action == .undoAcceptedInsertion {
+            let handled = undoAcceptedInsertion()
+            if handled {
+                suppressKey(key)
+            }
+            recordKeyboardAction(
+                key: key,
+                action: action,
+                handled: handled,
+                reason: handled ? "accepted-insertion-undone" : "undo-unavailable"
+            )
+            return handled
         }
 
         guard suggestionSession.hasVisibleSuggestion else {
@@ -1449,12 +1476,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
 
-        let action = KeyboardActionRouter(shortcutConfiguration: keyboardShortcutConfiguration).action(
-            for: key,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
-        )
-
         switch action {
+        case .undoAcceptedInsertion:
+            return false
+
         case .acceptNextWord:
             guard currentProfile?.supportsOneWordAcceptance == true else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-one-word")
@@ -1474,6 +1499,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            armAcceptedInsertionUndo(
+                acceptedText: acceptedText,
+                acceptanceID: acceptanceID,
+                acceptedAt: acceptedAt
+            )
             suggestionSession.commitNextWordAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
             advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
@@ -1519,6 +1549,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            armAcceptedInsertionUndo(
+                acceptedText: acceptedText,
+                acceptanceID: acceptanceID,
+                acceptedAt: acceptedAt
+            )
             suggestionSession.commitAllVisibleAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
             suggestionRepetitionSuppressor.recordAcceptance(
@@ -1630,6 +1665,148 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func suppressKey(_ key: AutocompleteKey) {
         suppressKeyUntil[key] = Date().addingTimeInterval(0.25)
+    }
+
+    private func acceptedInsertionUndoIsActive(now: Date = Date()) -> Bool {
+        guard let pendingAcceptedInsertionUndo else {
+            return false
+        }
+
+        return pendingAcceptedInsertionUndo.expiresAt > now
+    }
+
+    private func armAcceptedInsertionUndo(
+        acceptedText: String,
+        acceptanceID: String,
+        acceptedAt: Date
+    ) {
+        guard let currentFieldIdentity,
+              let lastTextSnapshot,
+              lastTextSnapshot.fieldIdentity == currentFieldIdentity,
+              let appBundleIdentifier = currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier else {
+            clearPendingAcceptedInsertionUndo(reason: "missing-baseline")
+            return
+        }
+
+        let expiresAt = acceptedAt.addingTimeInterval(8)
+        pendingAcceptedInsertionUndo = AcceptedInsertionUndo(
+            acceptanceID: acceptanceID,
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentity: currentFieldIdentity,
+            textBeforeCursor: lastTextSnapshot.textBeforeCursor,
+            textAfterCursor: lastTextSnapshot.textAfterCursor,
+            acceptedTextLength: acceptedText.count,
+            acceptedAt: acceptedAt,
+            expiresAt: expiresAt
+        )
+        DiagnosticsLog.shared.record(
+            "accepted-insertion-undo-armed",
+            metadata: [
+                "acceptanceID": acceptanceID,
+                "app": appBundleIdentifier,
+                "fieldIdentity": currentFieldIdentity.traceDescription,
+                "acceptedTextLength": String(acceptedText.count),
+                "previousBeforeLength": String(lastTextSnapshot.textBeforeCursor.count),
+                "previousAfterLength": String(lastTextSnapshot.textAfterCursor.count),
+                "expiresInMilliseconds": "8000"
+            ]
+        )
+        updateKeyboardEventTapSnapshot()
+        scheduleAcceptedInsertionUndoExpiration(acceptanceID: acceptanceID, expiresAt: expiresAt)
+    }
+
+    private func scheduleAcceptedInsertionUndoExpiration(acceptanceID: String, expiresAt: Date) {
+        acceptedInsertionUndoExpirationTask?.cancel()
+        acceptedInsertionUndoExpirationTask = Task { @MainActor [weak self] in
+            let delay = max(0, expiresAt.timeIntervalSinceNow)
+            try? await Task.sleep(for: .milliseconds(Int(delay * 1_000)))
+            guard !Task.isCancelled,
+                  let self,
+                  self.pendingAcceptedInsertionUndo?.acceptanceID == acceptanceID else {
+                return
+            }
+
+            self.clearPendingAcceptedInsertionUndo(reason: "expired")
+            self.scheduleKeyboardEventTapStopIfIdle()
+        }
+    }
+
+    private func clearPendingAcceptedInsertionUndo(reason: String) {
+        guard let pendingAcceptedInsertionUndo else {
+            return
+        }
+
+        acceptedInsertionUndoExpirationTask?.cancel()
+        acceptedInsertionUndoExpirationTask = nil
+        self.pendingAcceptedInsertionUndo = nil
+        DiagnosticsLog.shared.record(
+            "accepted-insertion-undo-cleared",
+            metadata: [
+                "acceptanceID": pendingAcceptedInsertionUndo.acceptanceID,
+                "reason": reason
+            ]
+        )
+        updateKeyboardEventTapSnapshot()
+    }
+
+    private func undoAcceptedInsertion() -> Bool {
+        guard let undo = pendingAcceptedInsertionUndo,
+              undo.expiresAt > Date() else {
+            clearPendingAcceptedInsertionUndo(reason: "expired")
+            return false
+        }
+
+        guard let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == undo.appBundleIdentifier,
+              let profile = profileStore.profile(for: frontmostApp.bundleIdentifier),
+              let rawContext = accessibilityClient.focusedTextContext(
+                  allowDescendantTextFallback: profile.allowsDescendantTextFallback
+              ),
+              !rawContext.isSecure,
+              rawContext.selectedTextLength == 0,
+              promptTextAreaMatch(for: frontmostApp.bundleIdentifier, context: rawContext).canSuggest else {
+            clearPendingAcceptedInsertionUndo(reason: "stale-focus")
+            return false
+        }
+
+        let context = presentationAdjustedContext(rawContext, app: frontmostApp, profile: profile)
+        guard fieldIdentity(app: frontmostApp, context: context, profile: profile) == undo.fieldIdentity else {
+            clearPendingAcceptedInsertionUndo(reason: "stale-field")
+            return false
+        }
+
+        let restoredText = undo.textBeforeCursor + undo.textAfterCursor
+        guard accessibilityClient.restoreFocusedTextValue(
+            restoredText,
+            cursorUTF16Offset: undo.textBeforeCursor.utf16.count
+        ) else {
+            clearPendingAcceptedInsertionUndo(reason: "restore-failed")
+            return false
+        }
+
+        lastTextSnapshot = FocusedTextSnapshot(
+            fieldIdentity: undo.fieldIdentity,
+            textBeforeCursor: undo.textBeforeCursor,
+            textAfterCursor: undo.textAfterCursor
+        )
+        focusedTextPollingPause.pause(
+            now: Date(),
+            durationMilliseconds: postInsertionPollPauseMilliseconds
+        )
+        DiagnosticsLog.shared.record(
+            "accepted-insertion-undone",
+            metadata: [
+                "acceptanceID": undo.acceptanceID,
+                "app": undo.appBundleIdentifier,
+                "fieldIdentity": undo.fieldIdentity.traceDescription,
+                "acceptedTextLength": String(undo.acceptedTextLength),
+                "restoredTextLength": String(restoredText.count)
+            ]
+        )
+        clearPendingAcceptedInsertionUndo(reason: "undone")
+        setSuggestionDecision("Accepted insertion undone")
+        scheduleKeyboardEventTapStopIfIdle()
+        return true
     }
 
     private func insertionVerificationBaseline(
@@ -4616,6 +4793,17 @@ private struct InsertionVerificationBaseline: Equatable {
     let fieldKindReason: String
     let behaviorProfileID: AutocompleteBehaviorProfileID
     let retryCount: Int
+}
+
+private struct AcceptedInsertionUndo: Equatable {
+    let acceptanceID: String
+    let appBundleIdentifier: String
+    let fieldIdentity: FocusedFieldIdentity
+    let textBeforeCursor: String
+    let textAfterCursor: String
+    let acceptedTextLength: Int
+    let acceptedAt: Date
+    let expiresAt: Date
 }
 
 private extension FocusedFieldIdentityInput {
