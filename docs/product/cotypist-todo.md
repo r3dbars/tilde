@@ -21,7 +21,7 @@ Research-backed caret-locking work now lives in
   - Obsidian: keep CodeMirror behavior stable across AX element churn; do not suppress the whole field after one flaky key-event verification miss.
   - Mail: safe diagnostics pass shows compose body as AXWebArea with empty direct value, no selected range, and no selected-text insertion; profile is diagnostics-only until a safe adapter is verified.
   - Chrome: local textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture paths have distinct smoke proof labels.
-  - Atlas: keep unsupported until the focused AX element is reliably available.
+  - Atlas: keep diagnostics-only until browser-field privacy and no-submit proof exist.
   - [x] Capture the current app stance in `docs/product/compatibility-matrix.md`.
 
 - [x] Persist user control.

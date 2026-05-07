@@ -18,7 +18,7 @@ For screenshot-backed app-by-app grades and gaps, use
 | Claude Code | dogfood target | caret-bound mirror only, no detached fallback | key events, AX fallback | pending manual smoke pass |
 | Claude desktop | dogfood target | caret-bound mirror only, no detached fallback | AX value replacement | prior manual pass is stale for this gate; current one-word no-submit proof pending |
 | Mail | diagnostics only | disabled | disabled | blocked until safe compose adapter exists |
-| Atlas | unsupported | disabled | disabled | blocked until focused AX element is reliable |
+| Atlas | diagnostics only | disabled | disabled | blocked because browser fields and prompt chats can contain private text; no no-submit proof exists |
 
 Run:
 
