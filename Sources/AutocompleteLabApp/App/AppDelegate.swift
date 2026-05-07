@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keyboardCapturePolicy = KeyboardCapturePolicy()
     private let insertionVerification = InsertionVerification()
     private let insertionRetryPolicy = InsertionRetryPolicy()
+    private let insertionVerificationTimingPolicy = InsertionVerificationTimingPolicy()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
@@ -1998,15 +1999,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         insertionVerificationTask?.cancel()
         insertionVerificationTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(140))
+            try? await Task.sleep(for: .milliseconds(
+                insertionVerificationTimingPolicy.delayMilliseconds(
+                    for: baseline.profile,
+                    retryCount: baseline.retryCount
+                )
+            ))
             guard !Task.isCancelled else {
                 return
             }
 
-            guard let frontmostApp = accessibilityClient.frontmostApplication(),
-                  let context = accessibilityClient.focusedTextContext(
-                      allowDescendantTextFallback: baseline.profile.allowsDescendantTextFallback
-                  ) else {
+            let verificationContextRead = focusedInsertionVerificationContext(for: baseline)
+            guard case let .ready(context: verificationContext) = verificationContextRead else {
+                if case .fieldChanged = verificationContextRead {
+                    return
+                }
+
                 DiagnosticsLog.shared.record(
                     "insert-verification",
                     metadata: [
@@ -2018,17 +2026,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            let currentIdentity = fieldIdentity(
-                app: frontmostApp,
-                context: context,
-                profile: baseline.profile
-            )
-
-            guard currentIdentity == baseline.fieldIdentity else {
-                return
-            }
-
-            let result = insertionVerification.verify(
+            var context = verificationContext
+            var result = insertionVerification.verify(
                 previousTextBeforeCursor: baseline.previousTextBeforeCursor,
                 acceptedText: acceptedText,
                 currentTextBeforeCursor: context.textBeforeCursor
@@ -2044,6 +2043,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "currentBeforeChars": String(context.textBeforeCursor.count)
                 ]
             )
+
+            if !result.isVerified,
+               let recheckDelayMilliseconds = insertionVerificationTimingPolicy.readOnlyRecheckDelayMilliseconds(
+                   for: baseline.profile,
+                   result: result,
+                   retryCount: baseline.retryCount
+               ) {
+                try? await Task.sleep(for: .milliseconds(recheckDelayMilliseconds))
+                guard !Task.isCancelled else {
+                    return
+                }
+
+                if case let .ready(context: recheckContext) = focusedInsertionVerificationContext(for: baseline) {
+                    context = recheckContext
+                    result = insertionVerification.verify(
+                        previousTextBeforeCursor: baseline.previousTextBeforeCursor,
+                        acceptedText: acceptedText,
+                        currentTextBeforeCursor: context.textBeforeCursor
+                    )
+                    DiagnosticsLog.shared.record(
+                        "insert-verification",
+                        metadata: [
+                            "app": baseline.profile.bundleIdentifier,
+                            "result": String(describing: result),
+                            "acceptedChars": String(acceptedText.count),
+                            "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                            "currentBeforeChars": String(context.textBeforeCursor.count),
+                            "source": "read-only-recheck",
+                            "recheckDelayMilliseconds": String(recheckDelayMilliseconds)
+                        ]
+                    )
+                }
+            }
 
             guard result.isVerified else {
                 if insertionRetryPolicy.shouldRetry(
@@ -2180,6 +2212,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             startAcceptanceSurvivalTracking(tracker)
         }
+    }
+
+    private func focusedInsertionVerificationContext(
+        for baseline: InsertionVerificationBaseline
+    ) -> FocusedInsertionVerificationContext {
+        guard let frontmostApp = accessibilityClient.frontmostApplication(),
+              let context = accessibilityClient.focusedTextContext(
+                  allowDescendantTextFallback: baseline.profile.allowsDescendantTextFallback
+              ) else {
+            return .missingContext
+        }
+
+        let currentIdentity = fieldIdentity(
+            app: frontmostApp,
+            context: context,
+            profile: baseline.profile
+        )
+
+        guard currentIdentity == baseline.fieldIdentity else {
+            return .fieldChanged
+        }
+
+        return .ready(context: context)
     }
 
     private func startAcceptanceSurvivalTracking(_ tracker: AcceptanceSurvivalTracker) {
@@ -5425,6 +5480,12 @@ private struct InsertionVerificationBaseline: Equatable {
     let fieldKindReason: String
     let behaviorProfileID: AutocompleteBehaviorProfileID
     let retryCount: Int
+}
+
+private enum FocusedInsertionVerificationContext {
+    case ready(context: FocusedTextContext)
+    case missingContext
+    case fieldChanged
 }
 
 private struct AcceptedInsertionUndo: Equatable {
