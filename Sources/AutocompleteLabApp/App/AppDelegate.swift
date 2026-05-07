@@ -4822,16 +4822,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func exportTraceReport() {
-        guard let reportURL = RawAutocompleteTraceLog.shared.exportHTMLReport() else {
-            DiagnosticsLog.shared.record("trace-report-export-failed")
+        guard let bundleURL = RawAutocompleteTraceLog.shared.exportPrivacyBundle() else {
+            DiagnosticsLog.shared.record("trace-privacy-bundle-export-failed")
             showDiagnostics()
             return
         }
 
-        NSWorkspace.shared.open(reportURL)
+        NSWorkspace.shared.open(bundleURL)
         DiagnosticsLog.shared.record(
-            "trace-report-exported",
-            metadata: ["path": reportURL.path]
+            "trace-privacy-bundle-exported",
+            metadata: ["path": bundleURL.path]
         )
         showDiagnostics()
     }

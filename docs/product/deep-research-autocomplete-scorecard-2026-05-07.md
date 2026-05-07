@@ -94,6 +94,9 @@ Pass 1 shipped these improvements:
   overrides request more.
 - Inline placement now suppresses when less than one useful word can fit after
   the caret, so near-edge fields hide instead of showing clipped slivers.
+- Diagnostics export now creates a redacted privacy bundle with a manifest,
+  checklist, redacted JSONL, survival report, visual calibration report, and
+  HTML report instead of exposing raw trace rows through the export path.
 - Prompt/context metadata now includes trace-safe partial-word shape: counts,
   casing, digits, hyphen, and apostrophe only.
 - Accepted insertions now arm a one-step Command-Z restore path for the same

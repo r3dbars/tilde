@@ -5,11 +5,13 @@ TRACE_FOLDER="$(mktemp -d)"
 trap 'rm -rf "$TRACE_FOLDER"' EXIT
 
 mkdir -p "$TRACE_FOLDER/screenshots"
+mkdir -p "$TRACE_FOLDER/privacy-export"
 printf '{}\n' >"$TRACE_FOLDER/traces.jsonl"
 printf '{}\n' >"$TRACE_FOLDER/raw-traces.jsonl"
 printf '<html></html>\n' >"$TRACE_FOLDER/trace-report.html"
 printf '[]\n' >"$TRACE_FOLDER/survival-report.json"
 printf 'png\n' >"$TRACE_FOLDER/screenshots/sample.txt"
+printf '{}\n' >"$TRACE_FOLDER/privacy-export/manifest.json"
 
 AUTOCOMPLETE_LAB_TRACE_FOLDER="$TRACE_FOLDER" script/delete_local_traces.sh >/tmp/autocomplete-delete-local-traces-self-test.txt
 
@@ -18,6 +20,7 @@ for path in \
   "$TRACE_FOLDER/raw-traces.jsonl" \
   "$TRACE_FOLDER/trace-report.html" \
   "$TRACE_FOLDER/survival-report.json" \
+  "$TRACE_FOLDER/privacy-export" \
   "$TRACE_FOLDER/screenshots"; do
   if [[ -e "$path" ]]; then
     echo "delete local traces self-test left $path behind" >&2

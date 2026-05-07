@@ -45,7 +45,9 @@ Open `Show Diagnostics` from the menu bar item.
 
 - `Pause Tracing` stops default redacted trace writes.
 - `Resume Tracing` turns them back on.
-- `Export Report` creates the local redacted HTML report and survival report.
+- `Export Privacy Bundle` creates a local folder with the redacted HTML report,
+  redacted JSONL, survival report, visual calibration report, manifest, and a
+  checklist.
 - `Delete Traces` deletes local trace files.
 - `Open Trace Folder` reveals the local trace folder.
 
