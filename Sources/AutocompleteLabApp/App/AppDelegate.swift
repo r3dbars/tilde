@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let screenshotTraceCapturePolicy = ScreenshotTraceCapturePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
     private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
+    private let focusChangePolicy = SuggestionFocusChangePolicy()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private let suggestionPanel = SuggestionPanelController()
@@ -169,11 +170,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if shouldShowSettingsForCurrentReadiness {
             showSettings()
         }
+        observeWorkspaceActivation()
         startPolling()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         DiagnosticsLog.shared.record("terminate")
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
         debounceTask?.cancel()
         keyboardEventTapStopTask?.cancel()
         insertionVerificationTask?.cancel()
@@ -239,6 +242,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         timer.tolerance = focusedTextPollInterval / 2
         pollTimer = timer
+    }
+
+    private func observeWorkspaceActivation() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(workspaceDidActivateApplication(_:)),
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil
+        )
+    }
+
+    @objc
+    private func workspaceDidActivateApplication(_ notification: Notification) {
+        guard suggestionSession.hasVisibleSuggestion else {
+            return
+        }
+
+        let activatedApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        let visibleSuggestionBundleIdentifier = currentSuggestionAppBundleIdentifier
+            ?? currentProfile?.bundleIdentifier
+        guard focusChangePolicy.shouldHideVisibleSuggestion(
+            visibleSuggestionBundleIdentifier: visibleSuggestionBundleIdentifier,
+            activatedBundleIdentifier: activatedApp?.bundleIdentifier
+        ) else {
+            return
+        }
+
+        DiagnosticsLog.shared.record(
+            "workspace-focus-changed",
+            metadata: [
+                "visibleSuggestionApp": visibleSuggestionBundleIdentifier ?? "unknown",
+                "activatedApp": activatedApp?.bundleIdentifier ?? "unknown"
+            ]
+        )
+        clearFocusedFieldState(hideReason: "focus-changed")
+        setSuggestionDecision("Blocked: focus changed")
     }
 
     private func warmModelRuntime() {
