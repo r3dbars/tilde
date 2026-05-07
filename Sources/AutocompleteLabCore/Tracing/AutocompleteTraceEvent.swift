@@ -260,6 +260,11 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
             metadata: safeMetadata
         )
     }
+    public func redacted(
+        privacyMode: AutocompleteTracePrivacyMode
+    ) -> RedactedAutocompleteTraceEvent {
+        RedactedAutocompleteTraceEvent(event: self, privacyMode: privacyMode)
+    }
 
     private func addLengthMetadata(
         value: String,
@@ -271,12 +276,6 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
         }
 
         metadata[key] = String(value.count)
-    }
-
-    public func redacted(
-        privacyMode: AutocompleteTracePrivacyMode
-    ) -> RedactedAutocompleteTraceEvent {
-        RedactedAutocompleteTraceEvent(event: self, privacyMode: privacyMode)
     }
 }
 

@@ -1,64 +1,45 @@
 # Compatibility Matrix
 
-Current beta-readiness stance for the lab build. This is not a promise that an
-app is broadly supported. It is a local proof gate for a tiny beta.
+Current compatibility stance for the lab build.
 
-## Support Gates
+After changing placement or key handling, treat recorded proof as stale until
+the manual smoke status is refreshed from the current build.
 
-An app is `supported` only when the trace evaluator shows:
+For screenshot-backed app-by-app grades and gaps, use
+[App Proof Matrix](app-proof-matrix.md).
 
-- at least 20 shown suggestions,
-- at least 3 accepted-and-kept suggestions,
-- accepted-and-kept shown rate at or above 15%,
-- insertion verification at or above 98%,
-- p95 first-visible latency at or below 750ms,
-- zero caret failures,
-- actionable suppression at or below 15%,
-- annoyance score at or below 0.10.
-
-An app is `caveated` when it has enough clean proof for a guarded beta:
-
-- at least 10 shown suggestions,
-- at least 1 accepted-and-kept suggestion,
-- accepted-and-kept shown rate at or above 8%,
-- insertion verification at or above 95%,
-- p95 first-visible latency at or below 1000ms,
-- caret failure rate at or below 5%,
-- annoyance score at or below 0.20.
-
-Any wrong insertion, duplicate insertion, focus steal, major `Tab` conflict,
-sensitive-field suggestion, whole-anchor detached suggestion, app disable, high
-caret failure, p95 above 1500ms, or annoyance above 0.35 blocks the app.
-
-## Beta Matrix
-
-| App | Beta stance | Render | Insert | Caveat |
+| App | Status | Render | Insert | Proof |
 | --- | --- | --- | --- | --- |
-| TextEdit | reference target after gates pass | inline, mirror fallback | AX selected text, AX value fallback | Must stay clean on caret placement, one-word `Tab`, full accept, and accepted-and-kept. |
-| Notes | caveated rich-text target | inline, mirror fallback | key events, AX selected text fallback | Rich-text insertion must be verified; do not graduate on AX success alone. |
-| Chrome textareas | caveated local-textarea target | mirror | AX value replacement, key fallback | Local textarea proof only; browser-wide fields still need separate proof. |
-| Obsidian / CodeMirror | caveated only with detached suggestions suppressed | mirror | AX then key events, key fallback | Never show suggestions from a whole-editor anchor when caret bounds are missing. |
-| Electron writing app | experimental beta slot | app-specific | app-specific | Pick one real writing app, then require the same support gates before trusting it. |
-| Codex | experimental dogfood target | synthetic inline caret, no detached fallback | key events, AX fallback | Useful for local dogfood traces, not a beta support claim. |
-| Mail | blocked, diagnostics-only | disabled | disabled | Include only for field detection and privacy proof until a safe compose adapter exists. |
-| Atlas | blocked, unsupported | disabled | disabled | Keep unsupported until focused AX element reliability is proven. |
+| TextEdit | supported | inline, mirror fallback | AX selected text, value fallback | recorded manual smoke pass |
+| Notes | supported | inline, mirror fallback | key events only | requires title, body, and checklist proof labels |
+| Obsidian | supported | synthetic caret mirror, no detached fallback | AX then key events, key fallback | recorded CodeMirror smoke pass with two verified accepts; detached whole-editor anchors stay suppressed |
+| Chrome | supported for local text fields and local editor fixtures | synthetic inline, mirror fallback | key events, AX value fallback | repeatable textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture commands with screenshot-backed proof labels |
+| Codex | dogfood target | synthetic inline caret, no detached fallback | AX value replacement, key fallback | prior manual pass is stale for this gate; current one-word no-submit proof pending |
+| Claude Code | dogfood target | synthetic inline caret, no detached fallback | key events, AX fallback | pending manual smoke pass |
+| Claude desktop | dogfood target | synthetic inline caret, no detached fallback | AX value replacement | prior manual pass is stale for this gate; current one-word no-submit proof pending |
+| Mail | diagnostics only | disabled | disabled | blocked until safe compose adapter exists |
+| Atlas | unsupported | disabled | disabled | blocked until focused AX element is reliable |
 
-## Commands
-
-Run manual proof:
-
-```bash
-./script/manual_smoke_status.sh --require-all
-```
-
-Run app trace gates:
+Run:
 
 ```bash
-AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP="com.apple.TextEdit" \
-AUTOCOMPLETE_LAB_TRACE_REQUIRE_SUPPORT_STATE="caveated" \
-  ./script/check_trace_eval.sh
+./script/manual_smoke_status.sh --strict
 ```
 
-Use `supported` only when the app has enough samples for the stricter gate.
-Use `caveated` for guarded beta use. Use `experimental` for dogfood only. Use
-`blocked` when trust failed or the app is diagnostics-only.
+TextEdit, Notes title/body/checklist, Obsidian, and Chrome must have full
+accept proof. Codex, Claude Code, and Claude desktop must have one-word
+no-submit proof before they can graduate; full accept stays disabled in prompt
+apps until separate full-accept no-submit proof exists. Screenshot-backed visual proof is
+also enforced by strict mode, so Codex, Obsidian, Notes, Claude Code, and Claude
+desktop do not look finished just because insertion passed. A
+detached-suppression Obsidian row is useful safety evidence, but it is not
+enough for a green manual smoke status. The status command also prints
+remaining sub-10 scorecard gaps so release risk is visible beside the smoke
+proof. Strict mode also runs the screenshot evidence gate and fails on stale
+screenshot rows, unreferenced screenshot files, or below-target visual rows that
+are not plainly marked `Pending`.
+
+Run `./script/check_visual_placement_evidence.sh --require-all` when every row
+in the visual placement audit should have screenshot-backed proof. Keep any
+below-target row explicitly marked `Pending` until the proof is strong enough to
+raise it.

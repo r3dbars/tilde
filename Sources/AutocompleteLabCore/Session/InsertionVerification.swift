@@ -40,6 +40,14 @@ public struct InsertionVerification: Equatable, Sendable {
             return .literalTab
         }
 
+        if currentTextBeforeCursor == previousTextBeforeCursor {
+            if !previousTextAfterCursor.isEmpty,
+               previousTextAfterCursor != currentTextAfterCursor {
+                return .selectionChangedUnexpectedly
+            }
+            return .unchanged
+        }
+
         if !acceptedText.isEmpty,
            currentTextBeforeCursor == expectedTextBeforeCursor + acceptedText {
             return .duplicateText
@@ -49,14 +57,6 @@ public struct InsertionVerification: Equatable, Sendable {
            currentTextBeforeCursor.hasPrefix(expectedTextBeforeCursor),
            currentTextBeforeCursor.dropFirst(expectedTextBeforeCursor.count).hasPrefix(acceptedText) {
             return .duplicateText
-        }
-
-        if currentTextBeforeCursor == previousTextBeforeCursor {
-            if !previousTextAfterCursor.isEmpty,
-               previousTextAfterCursor != currentTextAfterCursor {
-                return .selectionChangedUnexpectedly
-            }
-            return .unchanged
         }
 
         if expectedTextBeforeCursor.hasPrefix(currentTextBeforeCursor),

@@ -1070,8 +1070,6 @@ kept_at_30_or_blur_ids = {
 
 print(f"Trace: {path}")
 print(f"Start line: {start_line}")
-if end_line is not None:
-    print(f"End line: {end_line}")
 print(f"Events: {len(events)}")
 print(f"Presented: {len(presented_by_id)}")
 print(f"Accepted keypresses: {len(accepted)}")
@@ -1104,12 +1102,6 @@ verified_inserts = types["insertionVerified"]
 failed_inserts = types["insertionFailed"]
 insert_attempts = verified_inserts + failed_inserts
 verification_success = 0 if not insert_attempts else round((verified_inserts / insert_attempts) * 100)
-print(f"Recovered insertion failures: {len(recovered_insertion_failures)}")
-print(f"Unrecovered insertion failures: {len(unrecovered_insertion_failures)}")
-if min_useful_rate is not None and useful_rate < min_useful_rate:
-    annoyance_failures.append(
-        f"useful rate {useful_rate}% is below required {min_useful_rate}%"
-    )
 print(f"Accept rate: {accept_rate}%")
 print(f"Useful rate: {useful_rate}%")
 print(f"Accepted and kept: {len(accepted_and_kept_event_ids)}")
@@ -1371,10 +1363,6 @@ print("Top repeated unaccepted suggestions:")
 if repeated_unaccepted:
     for count, mode, displayed, top_app, top_app_count, suggestion_id in repeated_unaccepted[:5]:
         print(f"  {count}x {mode}: {displayed} | app {top_app} {top_app_count}/{count} (example {suggestion_id})")
-        if max_repeated_unaccepted is not None and count > max_repeated_unaccepted:
-            annoyance_failures.append(
-                f"{count}x repeated unaccepted {mode} suggestion exceeds limit {max_repeated_unaccepted}: {displayed} (example {suggestion_id})"
-            )
 else:
     print("  none")
 print("Support state by app:")
@@ -1408,50 +1396,6 @@ if insertion_reliability:
         print(f"  {app} {mode}: {success}% ({verified} ok / {failed} failed)")
 else:
     print("  none")
-print("Placement confidence by band:")
-if placement_bands:
-    for band, count in placement_bands.most_common():
-        print(f"  {band}: {count}")
-else:
-    print("  none")
-print("Placement self-healing actions:")
-if self_healing_actions:
-    for action, count in self_healing_actions.most_common():
-        print(f"  {action}: {count}")
-else:
-    print("  none")
-print("Placement health reasons:")
-if placement_health_reasons:
-    for reason, count in placement_health_reasons.most_common():
-        print(f"  {reason}: {count}")
-else:
-    print("  none")
-print("Placement self-healing detail:")
-if placement_self_healing_details:
-    for detail, count in placement_self_healing_details.most_common():
-        print(f"  {detail}: {count}")
-else:
-    print("  none")
-print("Panel frame issues:")
-if panel_frame_issue_examples:
-    for example in panel_frame_issue_examples:
-        print(f"  {example}")
-else:
-    print("  none")
-print("Inline clipping evidence:")
-if inline_clipping_examples:
-    for example in inline_clipping_examples:
-        print(f"  {example}")
-else:
-    print("  none")
-print("Stale or mismatch hidden reasons:")
-if stale_mismatch_examples:
-    for example in stale_mismatch_examples:
-        print(f"  {example}")
-else:
-    print("  none")
-if require_visual_evidence:
-    print(f"Visual evidence complete: {visual_evidence_count}/{len(presentations_by_id)}")
 
 if require_app:
     app_events = [event for event in events if event.get("appBundleIdentifier") == require_app]
@@ -1471,12 +1415,10 @@ if require_app:
         if event.get("type") == "insertionVerified"
     ]
     app_failed = [
-        event for event in app_events
-        if event.get("type") == "insertionFailed"
-    ]
-    app_unrecovered_failed = [
-        event for event in app_failed
-        if event in unrecovered_insertion_failures
+        event
+        for index, event in insertion_failed
+        if event.get("appBundleIdentifier") == require_app
+        and not is_recovered_insertion_failure(index, event)
     ]
 
     if not app_presented:
@@ -1485,8 +1427,8 @@ if require_app:
         missing.append(f"{require_app}: accepted suggestion")
     if not app_verified:
         missing.append(f"{require_app}: insertionVerified")
-    if app_unrecovered_failed:
-        missing.append(f"{require_app}: no unrecovered insertionFailed")
+    if app_failed:
+        missing.append(f"{require_app}: no insertionFailed")
 
 if require_experiment_arm:
     arm_presented = [

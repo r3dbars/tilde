@@ -1,125 +1,8 @@
 import CoreGraphics
 import Foundation
 
-public enum SyntheticCaretSource: String, Equatable, Sendable {
-    case axTextAreaEstimate = "ax-textarea-estimate"
-    case webAreaEstimate = "web-area-estimate"
-    case electronTextAreaEstimate = "electron-textarea-estimate"
-    case codeMirrorEstimate = "codemirror-estimate"
-}
-
-public struct SyntheticCaretEstimateInput: Equatable, Sendable {
-    public let textBeforeCursor: String
-    public let elementRect: CGRect
-    public let windowRect: CGRect?
-    public let lineHeight: CGFloat
-    public let horizontalPadding: CGFloat
-    public let verticalPadding: CGFloat
-    public let baselineLiftRatio: CGFloat
-    public let inlineVerticalDropRatio: CGFloat
-    public let inlineGap: CGFloat
-    public let minimumLineWidth: CGFloat
-    public let minimumElementWidth: CGFloat
-    public let minimumElementHeight: CGFloat
-
-    public init(
-        textBeforeCursor: String,
-        elementRect: CGRect,
-        windowRect: CGRect? = nil,
-        lineHeight: CGFloat,
-        horizontalPadding: CGFloat = 18,
-        verticalPadding: CGFloat = 4,
-        baselineLiftRatio: CGFloat = 0.85,
-        inlineVerticalDropRatio: CGFloat = 0.85,
-        inlineGap: CGFloat = 8,
-        minimumLineWidth: CGFloat = 40,
-        minimumElementWidth: CGFloat = 80,
-        minimumElementHeight: CGFloat = 20
-    ) {
-        self.textBeforeCursor = textBeforeCursor
-        self.elementRect = elementRect
-        self.windowRect = windowRect
-        self.lineHeight = lineHeight
-        self.horizontalPadding = horizontalPadding
-        self.verticalPadding = verticalPadding
-        self.baselineLiftRatio = baselineLiftRatio
-        self.inlineVerticalDropRatio = inlineVerticalDropRatio
-        self.inlineGap = inlineGap
-        self.minimumLineWidth = minimumLineWidth
-        self.minimumElementWidth = minimumElementWidth
-        self.minimumElementHeight = minimumElementHeight
-    }
-}
-
-public enum SyntheticCaretEligibility {
-    public static func source(
-        bundleIdentifier: String,
-        role: String?,
-        subrole: String?,
-        elementRect: CGRect?,
-        canReadValue: Bool,
-        canReadSelectedTextRange: Bool
-    ) -> SyntheticCaretSource? {
-        guard canReadValue,
-              canReadSelectedTextRange,
-              let elementRect,
-              elementRect.isFinitePlacementRect,
-              elementRect.width > 80,
-              elementRect.height > 20 else {
-            return nil
-        }
-
-        let roles = Set([role, subrole].compactMap { $0 })
-        if bundleIdentifier == "md.obsidian",
-           roles.contains("AXTextArea") || roles.contains("AXGroup") {
-            return .codeMirrorEstimate
-        }
-
-        if bundleIdentifier == "com.openai.codex",
-           roles.contains("AXTextArea") {
-            return .electronTextAreaEstimate
-        }
-
-        if bundleIdentifier == "com.google.Chrome",
-           roles.contains("AXWebArea") || roles.contains("AXTextArea") {
-            return .webAreaEstimate
-        }
-
-        if roles.contains("AXTextArea") {
-            return .axTextAreaEstimate
-        }
-
-        if roles.contains("AXWebArea") {
-            return .webAreaEstimate
-        }
-
-        return nil
-    }
-}
-
 public enum SyntheticCaretEstimator {
     private static let maxMeasuredCharacters = 4_000
-
-    public static func estimate(
-        input: SyntheticCaretEstimateInput,
-        widthOf: (String) -> CGFloat
-    ) -> CGRect? {
-        caretRect(
-            textBeforeCursor: input.textBeforeCursor,
-            elementRect: input.elementRect,
-            windowRect: input.windowRect,
-            lineHeight: input.lineHeight,
-            horizontalPadding: input.horizontalPadding,
-            verticalPadding: input.verticalPadding,
-            baselineLiftFactor: input.baselineLiftRatio,
-            inlineGap: input.inlineGap,
-            inlineVerticalDropFactor: input.inlineVerticalDropRatio,
-            minimumLineWidth: input.minimumLineWidth,
-            minimumElementWidth: input.minimumElementWidth,
-            minimumElementHeight: input.minimumElementHeight,
-            widthOfText: widthOf
-        )
-    }
 
     public static func caretRect(
         textBeforeCursor: String,
@@ -131,22 +14,17 @@ public enum SyntheticCaretEstimator {
         baselineLiftFactor: CGFloat = 0.85,
         inlineGap: CGFloat = 8,
         inlineVerticalDropFactor: CGFloat = 0.85,
-        minimumLineWidth: CGFloat = 40,
-        minimumElementWidth: CGFloat = 80,
-        minimumElementHeight: CGFloat = 20,
         widthOfText: (String) -> CGFloat
     ) -> CGRect? {
-        guard elementRect.width > minimumElementWidth,
-              elementRect.height > minimumElementHeight,
-              rawLineHeight > 0 else {
+        guard elementRect.width > 80, elementRect.height > 20 else {
             return nil
         }
         guard Self.hasSharedCoordinateSpace(elementRect: elementRect, windowRect: windowRect) else {
             return nil
         }
 
-        let lineHeight = max(rawLineHeight, 16)
-        let maxLineWidth = max(minimumLineWidth, elementRect.width - (horizontalPadding * 2))
+        let lineHeight = max(rawLineHeight, 20)
+        let maxLineWidth = max(40, elementRect.width - (horizontalPadding * 2))
         let visualLines = wrappedVisualLines(
             for: boundedTextBeforeCursor(textBeforeCursor),
             maxLineWidth: maxLineWidth,
