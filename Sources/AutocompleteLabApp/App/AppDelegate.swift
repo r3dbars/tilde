@@ -56,6 +56,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleMirrorMode: { [weak self] in
             self?.toggleMirrorModeForCurrentApp()
         },
+        quietCurrentField: { [weak self] in
+            self?.quietCurrentFieldFromControl()
+        },
         enableAllApps: { [weak self] in
             self?.enableAllDisabledApps()
         },
@@ -81,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var runtimeMenuItem: NSMenuItem?
     private var pauseSuggestionsMenuItem: NSMenuItem?
     private var toggleAppMenuItem: NSMenuItem?
+    private var quietFieldMenuItem: NSMenuItem?
     private var pollTimer: Timer?
     private var keyboardEventTap: KeyboardEventTap?
     private var keyboardEventTapStopTask: Task<Void, Never>?
@@ -174,6 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let runtimeMenu = NSMenuItem(title: "Model: starting", action: nil, keyEquivalent: "")
         let pauseItem = NSMenuItem(title: pauseSuggestionsTitle, action: #selector(togglePauseSuggestions), keyEquivalent: "p")
         let toggleItem = NSMenuItem(title: "Toggle Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
+        let quietFieldItem = NSMenuItem(title: "Quiet Current Field", action: #selector(quietCurrentFieldFromControl), keyEquivalent: "")
         let debugMenuItem = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         let debugMenu = NSMenu()
 
@@ -183,6 +188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
         menu.addItem(pauseItem)
         menu.addItem(toggleItem)
+        menu.addItem(quietFieldItem)
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Request Accessibility", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
@@ -206,6 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runtimeMenuItem = runtimeMenu
         pauseSuggestionsMenuItem = pauseItem
         toggleAppMenuItem = toggleItem
+        quietFieldMenuItem = quietFieldItem
         refreshRuntimeChrome()
     }
 
@@ -346,7 +353,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             supportStatus: profileStore.supportStatus(for: app.bundleIdentifier),
             isEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier),
             disabledAppCount: disabledBundleIdentifiers.count,
-            renderModeOverride: compatibilityLearningStore.profile(for: app.bundleIdentifier)?.renderModeOverride
+            renderModeOverride: compatibilityLearningStore.profile(for: app.bundleIdentifier)?.renderModeOverride,
+            canQuietCurrentField: canQuietCurrentField
         )
     }
 
@@ -2752,7 +2760,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 supportStatus: supportStatus,
                 isEnabled: appEnabled,
                 disabledAppCount: disabledBundleIdentifiers.count,
-                renderModeOverride: compatibilityLearningStore.profile(for: $0.bundleIdentifier)?.renderModeOverride
+                renderModeOverride: compatibilityLearningStore.profile(for: $0.bundleIdentifier)?.renderModeOverride,
+                canQuietCurrentField: canQuietCurrentField
             )
         }
         let statusLine = statusMenuTitle(
@@ -2767,6 +2776,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pauseSuggestionsMenuItem?.title = pauseSuggestionsTitle
         toggleAppMenuItem?.title = appControlState?.menuToggleTitle ?? "Toggle Current App"
         toggleAppMenuItem?.isEnabled = appControlState?.canToggle ?? false
+        quietFieldMenuItem?.isEnabled = canQuietCurrentField
         if settingsWindow.isShowing {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,
@@ -2851,6 +2861,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastSuggestionDecision = decision
     }
 
+    private var canQuietCurrentField: Bool {
+        currentFieldIdentity != nil && currentProfile?.suppressesUntilBlurAfterEscape == true
+    }
+
     private func suppressCurrentField(reason: String) {
         guard let currentProfile,
               currentProfile.suppressesUntilBlurAfterEscape,
@@ -2865,6 +2879,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "app": currentProfile.bundleIdentifier,
                 "reason": reason
             ]
+        )
+    }
+
+    @objc
+    private func quietCurrentFieldFromControl() {
+        guard canQuietCurrentField else {
+            return
+        }
+
+        suppressCurrentField(reason: "user-quiet-field")
+        hideSuggestion(reason: "user-quiet-field")
+        setSuggestionDecision("Blocked: current field quieted")
+
+        let app = targetAppForControls()
+        updateStatusMenu(
+            app: app,
+            profile: app.flatMap { profileStore.profile(for: $0.bundleIdentifier) },
+            appEnabled: app.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
         )
     }
 
