@@ -153,6 +153,44 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.topMisses.allSatisfy { $0.fixCategory == "renderer/caret bug" })
     }
 
+    @Test("summarizes caret geometry failures by app and render mode")
+    func summarizesCaretGeometryFailures() {
+        let events = [
+            event(
+                .suggestionPresented,
+                suggestionID: "shown",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: ["effectiveRenderMode": "inlineAdjacent"]
+            ),
+            event(
+                .caretGeometryFailed,
+                suggestionID: "fallback",
+                appBundleIdentifier: "com.apple.TextEdit",
+                reason: "inline-caret-unavailable-fell-back",
+                metadata: ["effectiveRenderMode": "floatingMirror"]
+            ),
+            event(
+                .caretGeometryFailed,
+                suggestionID: "missing",
+                appBundleIdentifier: "md.obsidian",
+                reason: "detached-suggestion-disabled",
+                metadata: ["effectiveRenderMode": "floatingMirror"]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.caretGeometryFailureCount == 2)
+        #expect(summary.caretGeometryFailureRate == 2.0 / 3.0)
+        #expect(summary.caretGeometryFailuresByApp["com.apple.TextEdit"] == 1)
+        #expect(summary.caretGeometryFailuresByApp["md.obsidian"] == 1)
+        #expect(summary.caretGeometryFailureRateByApp["com.apple.TextEdit"] == 0.5)
+        #expect(summary.caretGeometryFailureRateByApp["md.obsidian"] == 1.0)
+        #expect(summary.caretGeometryFailuresByRenderMode["floatingMirror"] == 2)
+        #expect(summary.caretGeometryFailureRateByRenderMode["floatingMirror"] == 1.0)
+        #expect(summary.topMisses.contains { $0.title == "Caret geometry failed: detached-suggestion-disabled" })
+    }
+
     @Test("flags slow suggestions as latency misses")
     func flagsSlowSuggestions() {
         let events = [
@@ -310,7 +348,8 @@ struct AutocompleteTraceAnalyzerTests {
             event(.suggestionPresented, suggestionID: "four", metadata: ["fieldKind": "search"]),
             event(.suggestionSuppressed, suggestionID: "five", reason: "repeated-miss"),
             event(.insertionFailed, suggestionID: "six", reason: "insert-verification-failed"),
-            event(.appDisabled, suggestionID: "seven", reason: "manual")
+            event(.appDisabled, suggestionID: "seven", reason: "manual"),
+            event(.suggestionHidden, suggestionID: "eight", reason: "hidden", metadata: ["lifetimeMs": "90"])
         ]
 
         let summary = AutocompleteTraceAnalyzer().summary(for: events)
@@ -322,6 +361,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.annoyanceSignalCounts["repeatedRejection"] == 1)
         #expect(summary.annoyanceSignalCounts["wrongInsertion"] == 1)
         #expect(summary.annoyanceSignalCounts["appDisable"] == 1)
+        #expect(summary.annoyanceSignalCounts["overlayFlicker"] == 1)
         #expect(summary.annoyanceScore > 0)
     }
 

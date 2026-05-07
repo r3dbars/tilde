@@ -81,6 +81,10 @@ def experiment_arm(event):
     metadata = event.get("metadata") or {}
     return event.get("experimentArm") or metadata.get("experimentArm") or "unknown"
 
+def render_mode(event):
+    metadata = event.get("metadata") or {}
+    return metadata.get("effectiveRenderMode") or metadata.get("renderMode") or "unknown"
+
 presented_field_kinds = Counter(field_kind(event) for event in presented_by_id.values())
 accepted_and_kept_field_kinds = Counter(
     field_kind(event)
@@ -103,6 +107,12 @@ suppressed_experiment_arms = Counter(
     for event in events
     if event.get("type") == "suggestionSuppressed"
 )
+caret_geometry_failures = [
+    event for event in events
+    if event.get("type") == "caretGeometryFailed"
+]
+caret_failures_by_app = Counter(event.get("appBundleIdentifier") or "unknown" for event in caret_geometry_failures)
+caret_failures_by_render_mode = Counter(render_mode(event) for event in caret_geometry_failures)
 typed_through_ids = {
     event.get("suggestionID")
     for event in events
@@ -396,6 +406,10 @@ print(f"Hidden ignored: {sum(1 for event in events if event.get('type') == 'sugg
 print(f"Suppressed: {types['suggestionSuppressed']}")
 print(f"Actionable suppressed: {sum(1 for event in events if event.get('type') == 'suggestionSuppressed' and event.get('reason') != 'no-fast-word-candidate')}")
 print(f"Insertion failures: {types['insertionFailed']}")
+caret_failure_denominator = len(presented_by_id) + len(caret_geometry_failures)
+caret_failure_rate = 0 if not caret_failure_denominator else round((len(caret_geometry_failures) / caret_failure_denominator) * 100)
+print(f"Caret placement failures: {len(caret_geometry_failures)}")
+print(f"Caret placement failure rate: {caret_failure_rate}%")
 accept_rate = 0 if not presented_ids else round((len(accepted_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
 useful_rate = 0 if not presented_ids else round((len(useful_suggestion_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
 accepted_and_kept_rate_shown = 0 if not presented_ids else round((len(accepted_and_kept_suggestion_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
@@ -529,6 +543,22 @@ actionable_suppressed_modes = Counter(event.get("requestMode") or "unknown" for 
 if actionable_suppressed_modes:
     for mode, count in actionable_suppressed_modes.most_common():
         print(f"  {mode}: {count}")
+else:
+    print("  none")
+print("Caret failures by app:")
+if caret_failures_by_app:
+    for app, count in caret_failures_by_app.most_common():
+        shown = sum(1 for event in presented_by_id.values() if (event.get("appBundleIdentifier") or "unknown") == app)
+        rate = round((count / max(1, shown + count)) * 100)
+        print(f"  {app}: {rate}% ({count}/{shown + count})")
+else:
+    print("  none")
+print("Caret failures by render mode:")
+if caret_failures_by_render_mode:
+    for mode, count in caret_failures_by_render_mode.most_common():
+        shown = sum(1 for event in presented_by_id.values() if render_mode(event) == mode)
+        rate = round((count / max(1, shown + count)) * 100)
+        print(f"  {mode}: {rate}% ({count}/{shown + count})")
 else:
     print("  none")
 print("Top repeated unaccepted suggestions:")

@@ -104,16 +104,16 @@ The north star is simple: a build is better only when accepted text survives, wr
 
 ## P0 - Caret And Overlay Reliability
 
-- [ ] Emit `caretGeometryFailed` when placement falls back or fails.
-- [ ] Track caret placement failure rate by app and render mode.
-- [ ] Move synthetic caret estimation into core geometry.
-- [ ] Reuse synthetic caret estimation for AXTextArea, WebKit, Electron, and CodeMirror-like targets when safe.
-- [ ] Add line-wrapping tests for synthetic caret estimation.
-- [ ] Add clipping tests for narrow and cramped screens.
-- [ ] Add overlay lifetime measurement.
-- [ ] Detect and count flicker under 150ms.
-- [ ] Suppress detached suggestions when only whole-editor anchors are available.
-- [ ] Add render-mode change events with reason.
+- [x] Emit `caretGeometryFailed` when placement falls back or fails.
+- [x] Track caret placement failure rate by app and render mode.
+- [x] Move synthetic caret estimation into core geometry.
+- [x] Reuse synthetic caret estimation for AXTextArea, WebKit, Electron, and CodeMirror-like targets when safe.
+- [x] Add line-wrapping tests for synthetic caret estimation.
+- [x] Add clipping tests for narrow and cramped screens.
+- [x] Add overlay lifetime measurement.
+- [x] Detect and count flicker under 150ms.
+- [x] Suppress detached suggestions when only whole-editor anchors are available.
+- [x] Add render-mode change events with reason.
 - [ ] Add a visual calibration report that does not require screenshots by default.
 
 ## P1 - Decision Dashboard
