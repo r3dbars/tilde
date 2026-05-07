@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wordBoundaryDelayMilliseconds: 0,
         pauseDelayMilliseconds: 15
     )
-    private let modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
+    private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
     private var completionLengthConfiguration: CompletionLengthConfiguration {
         modelRuntimeBundle.lengthConfiguration
     }
@@ -155,6 +155,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastObservedSettingsApp: RunningApplicationInfo?
     private var lastFieldControlTarget: FieldControlTarget?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
+    private var modelInstallTask: Task<Void, Never>?
+    private var modelInstallStatusText: String?
     private let focusedTextPollInterval: TimeInterval = 0.05
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 220
@@ -307,6 +309,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentRuntimeState = state
         refreshRuntimeChrome()
         let report = runtimeReadinessReport
+        if report.allowsSuggestions,
+           modelInstallTask == nil,
+           modelInstallStatusText != nil {
+            modelInstallStatusText = "Model install: ready"
+            refreshRuntimeChrome()
+        }
         if !wasReadyForSuggestions && report.allowsSuggestions {
             rearmFocusedTextAfterRuntimeReady()
         }
@@ -351,6 +359,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 runtimeReport: runtimeReadinessReport,
                 runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath,
+                modelInstallStatusText: modelInstallStatusText,
+                isModelInstallInProgress: modelInstallTask != nil,
                 currentApp: settingsCurrentAppState,
                 fieldControl: settingsFieldControlState,
                 privacy: settingsPrivacyState,
@@ -3987,6 +3997,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 runtimeReport: runtimeReadinessReport,
                 runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath,
+                modelInstallStatusText: modelInstallStatusText,
+                isModelInstallInProgress: modelInstallTask != nil,
                 currentApp: settingsCurrentAppState,
                 fieldControl: settingsFieldControlState,
                 privacy: settingsPrivacyState,
@@ -4365,6 +4377,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
+            modelInstallStatusText: modelInstallStatusText,
+            isModelInstallInProgress: modelInstallTask != nil,
             currentApp: settingsCurrentAppState,
             fieldControl: settingsFieldControlState,
             privacy: settingsPrivacyState,
@@ -4392,6 +4406,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
+            modelInstallStatusText: modelInstallStatusText,
+            isModelInstallInProgress: modelInstallTask != nil,
             currentApp: settingsCurrentAppState,
             fieldControl: settingsFieldControlState,
             privacy: settingsPrivacyState,
@@ -4420,8 +4436,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func startModelInstall() {
+        guard modelInstallTask == nil else {
+            return
+        }
+
+        let manifest = modelRuntimeBundle.bootstrapPlan.preferredAsset
+        let destinationURL = modelRuntimeBundle.modelDirectoryURL
+        modelInstallStatusText = "Model install: preparing download"
+        refreshRuntimeChrome()
+        DiagnosticsLog.shared.record(
+            "model-install-start",
+            metadata: [
+                "model": manifest.model.rawValue,
+                "repoID": manifest.source?.repoID ?? "",
+                "target": destinationURL.path
+            ]
+        )
+
+        let installer = LocalModelAssetInstaller(
+            manifest: manifest,
+            destinationURL: destinationURL
+        )
+        modelInstallTask = Task { [weak self, installer] in
+            do {
+                let installedURL = try await installer.install { progress in
+                    self?.modelInstallStatusText = progress.userFacingText
+                    self?.refreshRuntimeChrome()
+                }
+
+                await MainActor.run {
+                    DiagnosticsLog.shared.record(
+                        "model-install-succeeded",
+                        metadata: [
+                            "model": manifest.model.rawValue,
+                            "target": installedURL.path
+                        ]
+                    )
+                    self?.modelInstallTask = nil
+                    self?.modelInstallStatusText = "Model install: warming local runtime"
+                    self?.reloadModelRuntimeAfterInstall()
+                }
+            } catch {
+                await MainActor.run {
+                    DiagnosticsLog.shared.record(
+                        "model-install-failed",
+                        metadata: [
+                            "model": manifest.model.rawValue,
+                            "reason": error.localizedDescription
+                        ]
+                    )
+                    self?.modelInstallTask = nil
+                    self?.modelInstallStatusText = "Model install failed: \(error.localizedDescription)"
+                    self?.refreshRuntimeChrome()
+                    self?.showSettings()
+                }
+            }
+        }
+    }
+
+    private func reloadModelRuntimeAfterInstall() {
+        runtimeWarmTask?.cancel()
+        modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
+        engine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
+        currentRuntimeState = .unavailable(reason: "model install completed")
+        DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
+        refreshRuntimeChrome()
+        warmModelRuntime()
+    }
+
     private func performRuntimeAction(_ action: RuntimeReadinessAction) {
         switch action {
+        case .installModel, .repairModel:
+            startModelInstall()
         case .revealModelFolder:
             revealModelFolder()
         case .retry:

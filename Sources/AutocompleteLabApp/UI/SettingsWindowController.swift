@@ -321,6 +321,7 @@ final class SettingsWindowController: NSObject {
     private let runtimeActionLabel = NSTextField(labelWithString: "")
     private let runtimeTargetLabel = NSTextField(labelWithString: "")
     private let modelDirectoryLabel = NSTextField(labelWithString: "")
+    private let modelInstallStatusLabel = NSTextField(labelWithString: "")
     private let controlLabel = NSTextField(labelWithString: "")
     private let togglePauseButton = NSButton(checkboxWithTitle: "Suggestions", target: nil, action: nil)
     private let fieldControlLabel = NSTextField(labelWithString: "")
@@ -449,6 +450,8 @@ final class SettingsWindowController: NSObject {
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
         modelDirectoryPath: String,
+        modelInstallStatusText: String?,
+        isModelInstallInProgress: Bool,
         currentApp: SettingsCurrentAppState,
         fieldControl: SettingsFieldControlState,
         privacy: SettingsPrivacyState,
@@ -461,6 +464,8 @@ final class SettingsWindowController: NSObject {
             runtimeReport: runtimeReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
+            modelInstallStatusText: modelInstallStatusText,
+            isModelInstallInProgress: isModelInstallInProgress,
             currentApp: currentApp,
             fieldControl: fieldControl,
             privacy: privacy,
@@ -482,6 +487,8 @@ final class SettingsWindowController: NSObject {
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
         modelDirectoryPath: String,
+        modelInstallStatusText: String?,
+        isModelInstallInProgress: Bool,
         currentApp: SettingsCurrentAppState,
         fieldControl: SettingsFieldControlState,
         privacy: SettingsPrivacyState,
@@ -503,11 +510,13 @@ final class SettingsWindowController: NSObject {
         runtimeDetailLabel.stringValue = runtimeReport.detail ?? ""
         runtimeDetailLabel.isHidden = runtimeReport.detail == nil
         runtimeActionLabel.stringValue = "Next step: \(runtimeReport.action.displayName)"
-        runtimeActionButton.title = guidance.actionTitle
-        runtimeActionButton.isEnabled = guidance.isActionEnabled
+        runtimeActionButton.title = isModelInstallInProgress ? "Installing..." : guidance.actionTitle
+        runtimeActionButton.isEnabled = guidance.isActionEnabled && !isModelInstallInProgress
         currentRuntimeAction = runtimeReport.action
         runtimeTargetLabel.stringValue = "Runtime target: \(runtimeTargetSummary)"
         modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
+        modelInstallStatusLabel.stringValue = modelInstallStatusText ?? ""
+        modelInstallStatusLabel.isHidden = modelInstallStatusText == nil
         currentAppLabel.stringValue = currentApp.statusText
         currentAppDetailLabel.stringValue = currentApp.detailText
         currentAppModeLabel.stringValue = currentApp.modeText
@@ -565,6 +574,7 @@ final class SettingsWindowController: NSObject {
         modelDirectoryLabel.lineBreakMode = .byTruncatingMiddle
         modelDirectoryLabel.maximumNumberOfLines = 1
         modelDirectoryLabel.preferredMaxLayoutWidth = 470
+        configureSecondaryLabel(modelInstallStatusLabel)
         controlLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         fieldControlLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(fieldControlDetailLabel)
@@ -660,6 +670,7 @@ final class SettingsWindowController: NSObject {
                     runtimeDetailLabel,
                     runtimeActionLabel,
                     makeButtonRow([runtimeActionButton]),
+                    modelInstallStatusLabel,
                     runtimeTargetLabel,
                     modelDirectoryLabel
                 ]

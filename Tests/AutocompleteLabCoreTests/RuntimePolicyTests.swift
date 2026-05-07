@@ -77,7 +77,7 @@ struct RuntimePolicyTests {
         #expect(missingReport.stage == .downloadNeeded)
         #expect(missingReport.summary == "download needed (Qwen3.5 4B); fallback: ready (mock)")
         #expect(missingReport.detail == "Expected MLX model folder at /tmp/gemma")
-        #expect(missingReport.action == .revealModelFolder)
+        #expect(missingReport.action == .installModel)
 
         let invalidPlan = RuntimeBootstrapPlan(
             assetState: .invalid(path: "/tmp/gemma", reason: "missing config.json"),
@@ -88,7 +88,14 @@ struct RuntimePolicyTests {
         #expect(invalidReport.stage == .repairNeeded)
         #expect(invalidReport.summary == "model folder needs repair; fallback: ready (mock)")
         #expect(invalidReport.detail == "/tmp/gemma: missing config.json")
-        #expect(invalidReport.action == .revealModelFolder)
+        #expect(invalidReport.action == .repairModel)
+
+        let unsupportedSourcePlan = RuntimeBootstrapPlan(
+            preferredAsset: .qwen35NineBMLX,
+            assetState: .missing(expectedPath: "/tmp/qwen9"),
+            nativeRuntimeAvailable: false
+        )
+        #expect(unsupportedSourcePlan.readinessReport(for: .ready(candidate: .mock)).action == .revealModelFolder)
     }
 
     @Test("Runtime readiness guidance gives stage-specific setup actions")
@@ -97,7 +104,14 @@ struct RuntimePolicyTests {
             report: RuntimeReadinessReport(
                 stage: .downloadNeeded,
                 summary: "download needed",
-                action: .revealModelFolder
+                action: .installModel
+            )
+        )
+        let repair = RuntimeReadinessGuidance(
+            report: RuntimeReadinessReport(
+                stage: .repairNeeded,
+                summary: "repair needed",
+                action: .repairModel
             )
         )
         let warming = RuntimeReadinessGuidance(
@@ -123,9 +137,12 @@ struct RuntimePolicyTests {
             )
         )
 
-        #expect(missing.actionTitle == "Open Model Folder")
+        #expect(missing.actionTitle == "Install Model")
         #expect(missing.isActionEnabled)
         #expect(missing.message.contains("Model missing"))
+        #expect(repair.actionTitle == "Repair Model")
+        #expect(repair.isActionEnabled)
+        #expect(repair.message.contains("Model repair needed"))
         #expect(warming.actionTitle == "Warming...")
         #expect(!warming.isActionEnabled)
         #expect(failed.actionTitle == "Retry Model")

@@ -12,7 +12,7 @@ The product bar is not "AI appears everywhere." The bar is:
 
 ## Current Executive Score
 
-Overall Apple-native feel: 83/100.
+Overall Apple-native feel: 84/100.
 
 This app has real engineering depth now. It is not a toy. It has local model
 runtime support, strong privacy defaults, app compatibility profiles, insertion
@@ -32,9 +32,11 @@ down without blocking typing, TextEdit now has a live typing soak where event
 tap p95 stayed at 35us, app support status is visible in Settings and the menu, Diagnostics
 separates key-capture health from AX-poll health, placement confidence is
 visible without suggestion text, placement uncertainty hides stale ghosts and
-feeds quiet mode, active quiet mode is visible in Diagnostics, and Settings now
-reads more like a Mac utility. First-run setup now explains Accessibility in
-one short paragraph and points first success at TextEdit, not private notes.
+feeds quiet mode, active quiet mode is visible in Diagnostics, Settings now
+reads more like a Mac utility, and missing/invalid model assets can be
+installed or repaired from Settings with progress before the app reloads and
+warms the local runtime. First-run setup now explains Accessibility in one
+short paragraph and points first success at TextEdit, not private notes.
 
 The largest miss is still visual placement proof in real apps. Ghost text can
 still be unproven in Notes, Obsidian, Claude Code, Claude desktop, and real
@@ -65,10 +67,10 @@ unsure. Wrong-place text is worse than no suggestion.
 | Suggestion quality | 8 | 87 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, learned word completion is app-scoped, dogfood prompts are stricter, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
 | Failure restraint | 8 | 89 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, stale geometry suppresses display, event-tap disablement fails closed, prompt full accept requires proof, placement uncertainty now hides stale ghosts and feeds field quiet mode, active quiet mode is visible in Diagnostics, and unsupported apps explain their stance. Real-app proof remains open. |
 | User control | 6 | 100 | 100 | Settings and the menu now expose pause, current-field silence, app blocking, support status, per-app render mode, force-mirror override, an app-proof starter, privacy diagnostics, temporary raw/screenshot capture, local log deletion, direct accept-all shortcut editing, and why the last suggestion was hidden. |
-| Onboarding and setup | 4 | 78 | 100 | Settings explains Accessibility in one short paragraph, only mentions Screen Recording when screenshot capture is on, and points first success at TextEdit. Model install/repair is still not a fully in-app flow. |
+| Onboarding and setup | 4 | 88 | 100 | Settings explains Accessibility in one short paragraph, only mentions Screen Recording when screenshot capture is on, points first success at TextEdit, and now installs or repairs the app-owned MLX model in-app with progress before warming the runtime. The remaining setup gap is beta polish around cancel/retry/offline failure states and default app enablement. |
 | Evidence and QA loop | 4 | 98 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
 
-Weighted score: 83/100.
+Weighted score: 84/100.
 
 ## Non-Negotiable Native Feel Rules
 
@@ -366,7 +368,7 @@ Native target: a user can understand and control the app in 20 seconds.
 
 ## Category 10: Onboarding And Setup
 
-Current score: 78/100.
+Current score: 88/100.
 
 Native target: setup feels like a normal Mac utility, not a developer tool.
 
@@ -378,8 +380,9 @@ Native target: setup feels like a normal Mac utility, not a developer tool.
 - [x] Settings now explains current app support, local diagnostics, and raw/screenshot capture states more plainly.
 - [x] First run should explain Accessibility in one short paragraph.
 - [x] Screen Recording should be explained only when screenshot proof is enabled.
-- [ ] Local model install/repair should be fully in-app.
+- [x] Local model install/repair should be fully in-app.
 - [ ] The app should start disabled until the user enables a test app.
+- [ ] Model install should have polished cancel/retry/offline failure states.
 - [x] First success should happen in TextEdit.
 - [x] Onboarding should never ask users to test in private notes first.
 
