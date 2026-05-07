@@ -179,16 +179,16 @@ The north star is simple: a build is better only when accepted text survives, wr
 
 ## P1 - Private Beta
 
-- [ ] Upgrade the beta plan to 4 users over 10 days.
-- [ ] Include TextEdit, Notes, Mail, Chrome textareas, Obsidian/CodeMirror, and one Electron app.
-- [ ] Add day-zero onboarding with privacy, pause/disable, and smoke checks.
-- [ ] Add daily 2-minute survey.
-- [ ] Add midweek human check-in.
-- [ ] Add exit interview.
-- [ ] Include forced edge cases: search, login, forms, app switching, Tab, Esc, accept/delete.
-- [ ] Export a redacted local report after each session.
-- [ ] Keep manual reports lightweight: one magic moment, one annoying moment, best app, worst app, pause/disable reason.
-- [ ] Stop beta on wrong insertion, sensitive-field suggestion, unreliable Tab, mock fallback, or manual model setup.
+- [x] Upgrade the beta plan to 4 users over 10 days.
+- [x] Include TextEdit, Notes, Mail, Chrome textareas, Obsidian/CodeMirror, and one Electron app.
+- [x] Add day-zero onboarding with privacy, pause/disable, and smoke checks.
+- [x] Add daily 2-minute survey.
+- [x] Add midweek human check-in.
+- [x] Add exit interview.
+- [x] Include forced edge cases: search, login, forms, app switching, Tab, Esc, accept/delete.
+- [x] Export a redacted local report after each session.
+- [x] Keep manual reports lightweight: one magic moment, one annoying moment, best app, worst app, pause/disable reason.
+- [x] Stop beta on wrong insertion, sensitive-field suggestion, unreliable Tab, mock fallback, or manual model setup.
 
 ## P2 - Architecture
 
@@ -206,11 +206,11 @@ The north star is simple: a build is better only when accepted text survives, wr
 ## P2 - Docs And Product Surface
 
 - [x] Update `eval-and-tracing.md` so accepted-and-kept is the headline metric.
-- [ ] Update `private-beta-plan.md` with the 10-day protocol.
-- [ ] Update `compatibility-matrix.md` with support gates and caveats.
-- [ ] Update `implementation-plan.md` with the redacted telemetry architecture.
-- [ ] Update README model/runtime language so it matches Qwen3.5 and current packaging.
-- [ ] Document the exact privacy promise in plain language.
-- [ ] Document how to disable an app and delete traces.
-- [ ] Add a beta-readiness checklist that must pass before inviting testers.
-- [ ] Keep this repo framed as an experiment, not a committed Transcripted feature.
+- [x] Update `private-beta-plan.md` with the 10-day protocol.
+- [x] Update `compatibility-matrix.md` with support gates and caveats.
+- [x] Update `implementation-plan.md` with the redacted telemetry architecture.
+- [x] Update README model/runtime language so it matches Qwen3.5 and current packaging.
+- [x] Document the exact privacy promise in plain language.
+- [x] Document how to disable an app and delete traces.
+- [x] Add a beta-readiness checklist that must pass before inviting testers.
+- [x] Keep this repo framed as an experiment, not a committed Transcripted feature.
