@@ -10,8 +10,8 @@ struct ModelPolicyTests {
         #expect(policy.model == .qwen35FourB)
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)
-        #expect(policy.maxGeneratedTokens == 9)
-        #expect(policy.maxVisibleWords == 3)
+        #expect(policy.maxGeneratedTokens == 10)
+        #expect(policy.maxVisibleWords == 5)
         #expect(policy.maxVisibleWords >= CompletionModelPolicy.minimumVisibleWords)
         #expect(policy.maxVisibleWords <= CompletionModelPolicy.maximumVisibleWords)
     }
@@ -40,7 +40,7 @@ struct ModelPolicyTests {
         )
 
         #expect(tiny.maxVisibleWords == 1)
-        #expect(huge.maxVisibleWords == 10)
+        #expect(huge.maxVisibleWords == 7)
     }
 
     @Test("Model policy accepts only tiny autocomplete-sized visible output")
@@ -50,13 +50,13 @@ struct ModelPolicyTests {
         #expect(policy.allowsVisibleWordCount(1))
         #expect(policy.allowsVisibleWordCount(2))
         #expect(policy.allowsVisibleWordCount(3))
+        #expect(policy.allowsVisibleWordCount(5))
         #expect(!policy.allowsVisibleWordCount(6))
-        #expect(!policy.allowsVisibleWordCount(10))
-        #expect(!policy.allowsVisibleWordCount(11))
     }
 
     @Test("Completion length configuration reads environment overrides")
     func completionLengthConfigurationReadsEnvironmentOverrides() {
+        let defaultConfiguration = CompletionLengthConfiguration.fromEnvironment([:])
         let short = CompletionLengthConfiguration.fromEnvironment([
             "AUTOCOMPLETE_LAB_VISIBLE_WORDS": "3"
         ])
@@ -65,13 +65,15 @@ struct ModelPolicyTests {
             "AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS": "99"
         ])
 
+        #expect(defaultConfiguration.maxVisibleWords == 5)
+        #expect(defaultConfiguration.maxGeneratedTokens == 10)
+        #expect(defaultConfiguration.displaySummary == "5 words / 10 tokens")
         #expect(short.maxVisibleWords == 3)
-        #expect(short.experimentArm == .length3Word)
         #expect(short.maxGeneratedTokens == 9)
         #expect(short.displaySummary == "3 words / 9 tokens")
-        #expect(long.maxVisibleWords == 10)
+        #expect(long.maxVisibleWords == 7)
         #expect(long.maxGeneratedTokens == 32)
-        #expect(long.displaySummary == "10 words / 32 tokens")
+        #expect(long.displaySummary == "7 words / 32 tokens")
     }
 
     @Test("Experiment arms set default completion lengths")

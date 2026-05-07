@@ -82,11 +82,21 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         }
 
         if source == .recent {
-            if suffix.count == 1 {
-                return fragment.count >= 5
+            if suffix.count <= 2 {
+                return fragment.count >= 6
             }
 
             return true
+        }
+
+        if suffix == "ng" {
+            return fragment.count >= 6
+        }
+
+        if source == .staticDictionary,
+           Self.ambiguousTwoLetterStaticFragments.contains(fragment),
+           competingCandidateCount > 1 {
+            return false
         }
 
         if suffix.count <= 2,
@@ -122,22 +132,25 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
 
     public static let defaultWords = [
         "about", "accurate", "actually", "again", "also", "always", "app",
-        "application", "around", "autocomplete", "available", "because",
+        "application", "around", "available", "because",
         "before", "being", "better", "between", "bring", "build", "change",
-        "codex", "completion", "computer", "context", "conversation", "could",
-        "decent", "decently", "debugging", "definitely", "diagnostics", "dictation", "different",
-        "document", "dogfooding", "everything", "evaluation", "fantastic",
+        "computer", "context", "conversation", "could",
+        "decent", "decently", "definitely", "dictation", "different",
+        "document", "everything",
         "fast",
-        "first", "going", "great", "hello", "help", "hey", "important", "inference", "insert",
-        "insertion", "instant", "interesting", "kind", "language", "launch",
-        "logs", "make", "meaning", "model", "need", "notes", "obsidian",
-        "option", "people", "placement", "prediction", "prompt", "really",
-        "relaunch", "reliable", "retry", "right", "should", "slow", "something", "super",
-        "suggestion", "system", "test", "testing", "their", "there", "these", "thing",
-        "think", "this", "trying", "typing", "trace", "tracing",
-        "transcripted", "understand", "version", "want",
-        "verification", "what", "when", "where", "which", "while", "window",
+        "first", "going", "hello", "help", "hey", "important",
+        "instant", "interesting", "kind", "language", "launch",
+        "make", "meaning", "need", "notes",
+        "option", "people", "really",
+        "reliable", "right", "should", "slow", "something",
+        "system", "their", "there", "these", "thing",
+        "think", "this", "trying", "typing", "understand", "want",
+        "what", "when", "where", "which", "while", "window",
         "without", "working", "would", "writing"
+    ]
+
+    private static let ambiguousTwoLetterStaticFragments: Set<String> = [
+        "ap", "co", "in", "re", "th"
     ]
 
     private struct Candidate: Equatable {

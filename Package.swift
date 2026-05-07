@@ -33,7 +33,8 @@ let package = Package(
                 "Runtime/AGENTS.md",
                 "Session/AGENTS.md",
                 "Suggestions/AGENTS.md",
-                "Text/AGENTS.md"
+                "Text/AGENTS.md",
+                "Tracing/AGENTS.md"
             ]
         ),
         .executableTarget(
@@ -57,6 +58,11 @@ let package = Package(
         .testTarget(
             name: "AutocompleteLabCoreTests",
             dependencies: ["AutocompleteLabCore"],
+            exclude: ["AGENTS.md"]
+        ),
+        .testTarget(
+            name: "AutocompleteLabAppTests",
+            dependencies: ["AutocompleteLabApp"],
             exclude: ["AGENTS.md"]
         )
     ]

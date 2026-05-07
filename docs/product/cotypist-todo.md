@@ -2,7 +2,8 @@
 
 This is the working list for making the lab feel like a real Mac autocomplete app.
 
-The deeper research-backed queue now lives in `docs/product/research-backed-autocomplete-queue.md`.
+Research-backed caret-locking work now lives in
+`docs/product/caret-locked-research-queue.md`.
 
 ## Now
 
@@ -18,7 +19,7 @@ The deeper research-backed queue now lives in `docs/product/research-backed-auto
   - Notes: title/body/list fields use key-event insertion because AX selected-text insertion can report success without moving the caret.
   - Obsidian: keep CodeMirror behavior stable across AX element churn; do not suppress the whole field after one flaky key-event verification miss.
   - Mail: safe diagnostics pass shows compose body as AXWebArea with empty direct value, no selected range, and no selected-text insertion; profile is diagnostics-only until a safe adapter is verified.
-  - Chrome: local textarea passed AX capability checks; live one-word and full accept verified with mirror anchoring and AX value replacement because Chrome's selected-text insert is a no-op.
+  - Chrome: local textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture paths have distinct smoke proof labels.
   - Atlas: keep unsupported until the focused AX element is reliably available.
   - [x] Capture the current app stance in `docs/product/compatibility-matrix.md`.
 
@@ -75,19 +76,22 @@ The deeper research-backed queue now lives in `docs/product/research-backed-auto
 ## QA
 
 - [x] Build repeatable smoke checks.
-  - [x] Add a manual smoke checklist for TextEdit, Notes, Obsidian, and Chrome.
+  - [x] Add a manual smoke checklist for TextEdit, Notes, Obsidian, Chrome, Codex, and Claude Code.
   - [x] Add a manual smoke recorder that validates per-app diagnostics.
   - [x] Record successful manual app passes in an append-only smoke-run ledger.
   - [x] Add a self-test for the manual smoke recorder across target app profiles.
   - [x] Add a status command and proof gate for missing manual app passes.
   - [x] Verify launch/runtime/status diagnostics in the smoke script.
-  - [x] Wait for Gemma 4 MLX readiness in the smoke script.
+  - [x] Wait for Qwen3.5 4B MLX readiness in the smoke script.
   - [x] Gate smoke on trace eval self-test coverage.
   - App-specific checks below should only be marked done after `docs/product/manual-smoke-runs.md` has a matching pass.
   - [x] TextEdit one-word accept and full accept.
   - [x] Notes one-word accept and full accept.
   - [x] Obsidian one-word accept and full accept.
-  - [x] Chrome text field one-word and full accept.
+  - [x] Chrome text field and local editor fixture one-word and full accept.
+  - [ ] Codex one-word no-submit accept; full accept stays disabled until separately proven.
+  - [ ] Claude Code one-word no-submit accept; full accept stays disabled until separately proven.
+  - [ ] Claude desktop one-word no-submit accept; full accept stays disabled until separately proven.
 
 - [x] Build the local eval loop.
   - [x] Add local prompt/output tracing for private local tuning.

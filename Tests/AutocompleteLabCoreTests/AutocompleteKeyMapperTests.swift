@@ -15,6 +15,7 @@ struct AutocompleteKeyMapperTests {
         let mapper = AutocompleteKeyMapper()
 
         #expect(mapper.key(physicalKey: .tab, modifiers: [.option]) == .optionTab)
+        #expect(AcceptAllShortcut.optionTab.autocompleteKey == .optionTab)
     }
 
     @Test("System Tab shortcuts pass through")
@@ -49,5 +50,14 @@ struct AutocompleteKeyMapperTests {
 
         #expect(mapper.key(physicalKey: .escape, modifiers: []) == .escape)
         #expect(mapper.key(physicalKey: .escape, modifiers: [.command]) == .other)
+    }
+
+    @Test("Shortcut configuration falls back to backtick")
+    func shortcutConfigurationFallsBackToBacktick() {
+        #expect(KeyboardShortcutConfiguration.default.acceptAllShortcut == .backtick)
+        #expect(KeyboardShortcutConfiguration(persistedAcceptAllShortcutRawValue: "optionTab").acceptAllShortcut == .optionTab)
+        #expect(KeyboardShortcutConfiguration(persistedAcceptAllShortcutRawValue: "unknown").acceptAllShortcut == .backtick)
+        #expect(AcceptAllShortcut.backtick.next == .optionTab)
+        #expect(AcceptAllShortcut.optionTab.next == .backtick)
     }
 }

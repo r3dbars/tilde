@@ -1,17 +1,14 @@
 # Transcripted Autocomplete Lab
 
-A standalone Mac lab for testing whether quiet autocomplete makes writing
-easier.
+A standalone lab for testing a Co-Typist-style Mac autocomplete experience.
 
-This is intentionally separate from Transcripted. The goal is to learn fast
-without adding risk or clutter to the main app.
+This is intentionally separate from Transcripted. The goal is to learn fast without adding risk or clutter to the main app.
 
 ## The Bet
 
 Transcripted helps people get thoughts out.
 
-This app tests the next step: helping people keep typing everywhere without
-opening a prompt box.
+This app explores the next step: helping people keep typing everywhere without opening a prompt box.
 
 The magic feeling we are testing:
 
@@ -21,69 +18,31 @@ The magic feeling we are testing:
 
 - menu bar Mac app
 - reads the active text field through Accessibility
-- shows a small suggestion near the cursor
+- shows a small floating suggestion near the cursor
 - `Tab` accepts one word
 - backtick/tilde accepts the whole visible suggestion
 - `Esc` dismisses
 - local-only by default
-- app-owned MLX runtime
-- preferred beta model: Qwen3.5 4B 4-bit
+- default model target: Qwen3.5 4B on Apple Silicon / 16 GB
 - starts with a small app allowlist
 
-Target apps for the first private beta:
+Target apps for the first pass:
 
 - TextEdit
 - Notes
-- Chrome local textareas
-- Obsidian or another CodeMirror editor
-- one Electron writing app for dogfood
-- Mail as diagnostics-only
+- Obsidian
+- Chrome text fields
+- Codex and Claude Code prompt fields
+
+Mail is diagnostics-only until compose insertion is proven safe.
 
 ## Model Decision
 
-Run the beta path on Qwen3.5 4B 4-bit through the app-owned MLX runtime.
+Run the MVP on Qwen3.5 4B through MLX.
 
-The expected preferred asset is:
+The first supported hardware target is Apple Silicon with 16 GB RAM. The app should not expose a broad model picker yet. The product question is whether the typing experience feels useful, so the model layer should stay boring: local, warm, short completions, and tuned for speed.
 
-```text
-~/Library/Application Support/AutocompleteLab/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
-```
-
-Users should never need to start a model server. Ollama, llama.cpp, and local
-Python download helpers are development tools only, not the product experience.
-If the app falls back to mock output, it is not beta-ready.
-
-## Privacy Promise
-
-By default, Autocomplete Lab does not upload typed text, prompts, model output,
-accepted text, screenshots, document names, URLs, recipients, or subject lines.
-
-The default trace is redacted and local. Raw text and screenshots are explicit
-local debug opt-ins.
-
-Controls live in the menu bar and Diagnostics:
-
-- `Disable <App Name>` turns suggestions off for the current app.
-- `Pause Tracing` stops redacted trace writes.
-- `Export Report` creates a redacted local report.
-- `Delete Traces` removes local trace files.
-
-More detail: `docs/product/privacy-and-controls.md`.
-
-## Readiness
-
-Before a private beta:
-
-```bash
-./script/beta_readiness.sh
-```
-
-Use these docs as the product gate:
-
-- `docs/product/private-beta-plan.md`
-- `docs/product/beta-readiness-checklist.md`
-- `docs/product/compatibility-matrix.md`
-- `docs/product/eval-and-tracing.md`
+Users should never need to start a model server. The model runtime is owned by the app. Any Ollama or llama.cpp run is only a private benchmark tool, not part of the product experience.
 
 ## What We Are Not Building Yet
 
@@ -96,7 +55,7 @@ Use these docs as the product gate:
 
 ## Success Test
 
-Give it to 4 people for 10 days and ask:
+Give it to 3-5 people for a week and ask:
 
 - Did it help?
 - Did it interrupt you?
@@ -104,5 +63,4 @@ Give it to 4 people for 10 days and ask:
 - Where did it break?
 - Would you miss it if it disappeared?
 
-If the answer is yes and trust stays intact, then we can decide whether it
-deserves another beta.
+If the answer is yes, then we can decide whether it graduates into Transcripted.

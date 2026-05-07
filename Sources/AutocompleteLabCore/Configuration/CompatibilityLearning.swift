@@ -7,6 +7,7 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
     public var yOffset: CGFloat
     public var renderModeOverride: SuggestionRenderMode?
     public var screenshotTracingEnabled: Bool
+    public var screenshotTracingExpiresAt: String?
     public var observations: Int
     public var confidence: Double
     public var lastReason: String
@@ -18,6 +19,7 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         yOffset: CGFloat = 0,
         renderModeOverride: SuggestionRenderMode? = nil,
         screenshotTracingEnabled: Bool = false,
+        screenshotTracingExpiresAt: String? = nil,
         observations: Int = 0,
         confidence: Double = 0,
         lastReason: String = "",
@@ -28,6 +30,7 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         self.yOffset = yOffset
         self.renderModeOverride = renderModeOverride
         self.screenshotTracingEnabled = screenshotTracingEnabled
+        self.screenshotTracingExpiresAt = screenshotTracingExpiresAt
         self.observations = observations
         self.confidence = confidence
         self.lastReason = lastReason
@@ -36,6 +39,14 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
 
     public var hasVisualAdjustment: Bool {
         abs(xOffset) > 0.01 || abs(yOffset) > 0.01
+    }
+
+    public var hasTrustedVisualAdjustment: Bool {
+        guard hasVisualAdjustment else {
+            return false
+        }
+
+        return lastReason == "manual-visual-nudge" || lastReason == "screenshot-visual-correction"
     }
 
     public var debugSummary: String {
@@ -82,11 +93,21 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
         )
     }
 
+    public var trustedVisualOffsetOnly: CompatibilityLearningAdjustment {
+        guard let profile,
+              !profile.hasTrustedVisualAdjustment else {
+            return self
+        }
+
+        return withoutVisualOffset
+    }
+
     public var metadata: [String: String] {
         guard let profile else {
             return [
                 "learningApplied": "false",
-                "learningRenderMode": effectiveRenderMode.rawValue
+                "learningRenderMode": effectiveRenderMode.rawValue,
+                "learningVisualOffsetTrusted": "false"
             ]
         }
 
@@ -95,6 +116,7 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
             "learningRenderMode": effectiveRenderMode.rawValue,
             "learningXOffset": String(format: "%.1f", Double(profile.xOffset)),
             "learningYOffset": String(format: "%.1f", Double(profile.yOffset)),
+            "learningVisualOffsetTrusted": String(profile.hasTrustedVisualAdjustment),
             "learningConfidence": String(format: "%.2f", profile.confidence),
             "learningObservations": String(profile.observations),
             "learningScreenshotTracing": String(profile.screenshotTracingEnabled)

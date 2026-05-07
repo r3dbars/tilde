@@ -2,6 +2,7 @@
 set -euo pipefail
 
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ ! -s "$LOG_PATH" ]]; then
   echo "diagnostics log is missing or empty: $LOG_PATH" >&2
@@ -49,15 +50,6 @@ require_latest_launch_line() {
   local pattern="$1"
   if ! grep -F "$pattern" <<<"$LATEST_LAUNCH_LINES" >/dev/null; then
     echo "missing latest-launch diagnostics pattern: $pattern" >&2
-    echo "log: $LOG_PATH" >&2
-    exit 1
-  fi
-}
-
-require_latest_launch_regex() {
-  local pattern="$1"
-  if ! grep -E "$pattern" <<<"$LATEST_LAUNCH_LINES" >/dev/null; then
-    echo "missing latest-launch diagnostics regex: $pattern" >&2
     echo "log: $LOG_PATH" >&2
     exit 1
   fi
@@ -150,8 +142,15 @@ if [[ -n "${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-}" ]]; then
 fi
 
 if [[ "${AUTOCOMPLETE_LAB_REQUIRE_READY:-0}" == "1" ]]; then
-  require_latest_launch_regex "runtime .*readinessAction=none .*readinessStage=ready .*state=ready [(]MLX[)]"
+  require_latest_launch_line "readinessAction=none readinessStage=ready state=ready (MLX)"
   reject_latest_launch_pattern "runtime-warm-failed"
+fi
+
+if [[ "${AUTOCOMPLETE_LAB_REQUIRE_TYPING_FAST:-0}" == "1" ]]; then
+  reject_recent_pattern "keyboard-action .*key=other"
+  reject_recent_pattern "keyboard-event-tap-disabled"
+  reject_recent_pattern "keyboard-event-tap-latency-slow"
+  "$SCRIPT_DIR/check_typing_performance_log.sh"
 fi
 
 echo "Diagnostics log verified: $LOG_PATH"
