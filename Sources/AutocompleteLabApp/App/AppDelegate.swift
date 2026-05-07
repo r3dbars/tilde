@@ -14,15 +14,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wordBoundaryDelayMilliseconds: 0,
         pauseDelayMilliseconds: 15
     )
-    private let localModelInstaller = LocalModelInstaller()
-    private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
+    private let runtimeLifecycle = AppRuntimeLifecycleController()
     private var completionLengthConfiguration: CompletionLengthConfiguration {
-        modelRuntimeBundle.lengthConfiguration
+        runtimeLifecycle.completionLengthConfiguration
     }
-    private var modelRuntime: any ModelRuntime {
-        modelRuntimeBundle.runtime
+    private var engine: any CompletionEngine {
+        runtimeLifecycle.engine
     }
-    private lazy var engine: any CompletionEngine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
     private let keyboardCapturePolicy = KeyboardCapturePolicy()
     private let insertionVerification = InsertionVerification()
@@ -117,9 +115,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var disabledBundleIdentifiers: Set<String> = []
     private var debounceTask: Task<Void, Never>?
     private var insertionVerificationTask: Task<Void, Never>?
-    private var runtimeWarmTask: Task<Void, Never>?
-    private var modelInstallTask: Task<Void, Never>?
-    private var modelInstallProgress: LocalModelInstallProgress?
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private var isFocusedTextPollInFlight = false
     private var latestFocusedTextReadRequestID: UInt64?
@@ -147,7 +142,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastSyntheticCaretDiagnosticSignature: String?
     private var lastEligibleTargetApp: RunningApplicationInfo?
     private var lastObservedSettingsApp: RunningApplicationInfo?
-    private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
     private let focusedTextPollInterval: TimeInterval = 0.05
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 220
@@ -165,7 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadKeyboardShortcutConfiguration()
         configureStatusItem()
         DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
-        DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
+        DiagnosticsLog.shared.record("runtime-bootstrap", metadata: runtimeLifecycle.bootstrapMetadata)
         accessibilityClient.requestPermissionIfNeeded()
         warmModelRuntime()
         if shouldShowSettingsForCurrentReadiness {
@@ -186,10 +180,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debounceTask?.cancel()
         keyboardEventTapStopTask?.cancel()
         insertionVerificationTask?.cancel()
-        runtimeWarmTask?.cancel()
-        modelInstallTask?.cancel()
+        runtimeLifecycle.cancel()
         invalidatePendingSuggestionRequest()
-        modelRuntime.cancel()
         pollTimer?.invalidate()
         accessibilityObserver.stopTrackingAll()
         stopKeyboardEventTapNow(reason: "terminate")
@@ -281,175 +273,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func warmModelRuntime() {
-        let candidate = modelRuntimeBundle.activeCandidate
-        let runtime = modelRuntime
-
-        applyRuntimeState(.warming(candidate: candidate))
-        DiagnosticsLog.shared.record(
-            "runtime-warm-start",
-            metadata: [
-                "candidate": candidate.rawValue,
-                "modelDirectory": modelRuntimeBundle.modelDirectoryURL.path
-            ]
-        )
-
-        runtimeWarmTask?.cancel()
-        runtimeWarmTask = Task { [weak self, runtime, candidate] in
-            do {
-                try await runtime.warm()
-            } catch {
-                await MainActor.run {
-                    DiagnosticsLog.shared.record(
-                        "runtime-warm-failed",
-                        metadata: [
-                            "candidate": candidate.rawValue,
-                            "reason": error.localizedDescription
-                        ]
-                    )
-                    self?.applyRuntimeState(.failed(candidate: candidate, reason: error.localizedDescription))
-                }
-                return
-            }
-
-            let state = await runtime.state
-            await MainActor.run {
-                DiagnosticsLog.shared.record(
-                    "runtime-warm-succeeded",
-                    metadata: [
-                        "candidate": candidate.rawValue,
-                        "state": state.statusSummary
-                    ]
-                )
-                self?.applyRuntimeState(state)
-            }
-        }
+        runtimeLifecycle.warmModelRuntime(onStateApplied: handleRuntimeStateApplication)
     }
 
     private func reloadModelRuntime(reason: String) {
-        runtimeWarmTask?.cancel()
-        modelRuntime.cancel()
-        modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
-        engine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
-        currentRuntimeState = .unavailable(reason: reason)
-
-        var metadata = modelRuntimeBundle.diagnosticsMetadata
-        metadata["reason"] = reason
-        DiagnosticsLog.shared.record("runtime-bootstrap", metadata: metadata)
-        refreshRuntimeChrome()
-        warmModelRuntime()
+        runtimeLifecycle.reloadModelRuntime(
+            reason: reason,
+            onBootstrap: { metadata in
+                DiagnosticsLog.shared.record("runtime-bootstrap", metadata: metadata)
+            },
+            refreshChrome: refreshRuntimeChrome,
+            onStateApplied: handleRuntimeStateApplication
+        )
     }
 
     private func installLocalModel(action: RuntimeReadinessAction) {
-        guard modelInstallTask == nil else {
-            return
-        }
-
-        let manifest = modelRuntimeBundle.bootstrapPlan.preferredAsset
-        let destination = modelRuntimeBundle.modelDirectoryURL
-        modelInstallProgress = LocalModelInstallProgress(completedUnitCount: 0, totalUnitCount: 0)
-        refreshRuntimeChrome()
-        DiagnosticsLog.shared.record(
-            "model-install-start",
-            metadata: [
-                "action": action.rawValue,
-                "model": manifest.model.rawValue,
-                "repo": manifest.source?.repoID ?? "",
-                "destination": destination.path
-            ]
+        runtimeLifecycle.installLocalModel(
+            action: action,
+            refreshChrome: refreshRuntimeChrome,
+            showSettings: showSettings,
+            onBootstrap: { metadata in
+                DiagnosticsLog.shared.record("runtime-bootstrap", metadata: metadata)
+            },
+            onStateApplied: handleRuntimeStateApplication
         )
-
-        let installer = localModelInstaller
-        modelInstallTask = Task { [weak self, installer, manifest, destination, action] in
-            do {
-                _ = try await installer.install(
-                    manifest: manifest,
-                    to: destination,
-                    progressHandler: { [weak self] progress in
-                        guard let self else {
-                            return
-                        }
-
-                        self.modelInstallProgress = progress
-                        self.refreshRuntimeChrome()
-                    }
-                )
-
-                await MainActor.run {
-                    guard let self else {
-                        return
-                    }
-
-                    DiagnosticsLog.shared.record(
-                        "model-install-complete",
-                        metadata: [
-                            "action": action.rawValue,
-                            "model": manifest.model.rawValue,
-                            "destination": destination.path
-                        ]
-                    )
-                    self.modelInstallTask = nil
-                    self.modelInstallProgress = nil
-                    self.reloadModelRuntime(reason: "model install complete")
-                }
-            } catch is CancellationError {
-                await MainActor.run {
-                    guard let self else {
-                        return
-                    }
-
-                    DiagnosticsLog.shared.record(
-                        "model-install-cancelled",
-                        metadata: [
-                            "action": action.rawValue,
-                            "model": manifest.model.rawValue
-                        ]
-                    )
-                    self.modelInstallTask = nil
-                    self.modelInstallProgress = nil
-                    self.refreshRuntimeChrome()
-                }
-            } catch {
-                await MainActor.run {
-                    guard let self else {
-                        return
-                    }
-
-                    DiagnosticsLog.shared.record(
-                        "model-install-failed",
-                        metadata: [
-                            "action": action.rawValue,
-                            "model": manifest.model.rawValue,
-                            "reason": error.localizedDescription
-                        ]
-                    )
-                    self.modelInstallTask = nil
-                    self.modelInstallProgress = nil
-                    self.refreshRuntimeChrome()
-                    self.showSettings()
-                }
-            }
-        }
     }
 
-    private func applyRuntimeState(_ state: LocalRuntimeState) {
-        let wasReadyForSuggestions = runtimeReadinessReport.allowsSuggestions
-        currentRuntimeState = state
+    private func handleRuntimeStateApplication(_ application: AppRuntimeStateApplication) {
         refreshRuntimeChrome()
-        let report = runtimeReadinessReport
-        if !wasReadyForSuggestions && report.allowsSuggestions {
+        if application.shouldRearmFocusedText {
             rearmFocusedTextAfterRuntimeReady()
         }
-        if report.stage == .failed {
+        if application.shouldShowSettings {
             showSettings()
         }
         DiagnosticsLog.shared.record(
             "runtime",
-            metadata: [
-                "state": state.statusSummary,
-                "completionLength": completionLengthConfiguration.displaySummary,
-                "readinessStage": report.stage.rawValue,
-                "readinessAction": report.action.rawValue
-            ]
+            metadata: application.diagnosticsMetadata
         )
     }
 
@@ -472,7 +332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshRuntimeChrome() {
-        runtimeMenuItem?.title = "Model: \(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(runtimeReadinessReport.summary) • \(completionLengthConfiguration.displaySummary)"
+        runtimeMenuItem?.title = runtimeLifecycle.runtimeMenuTitle
         if settingsWindow.isShowing {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,
@@ -489,20 +349,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var runtimeReadinessReport: RuntimeReadinessReport {
-        if let modelInstallProgress {
-            return RuntimeReadinessReport(
-                stage: .installing,
-                summary: "installing \(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) \(modelInstallProgress.percentageText)",
-                detail: "Downloading to \(modelDirectoryPath)",
-                action: .wait
-            )
-        }
-
-        return modelRuntimeBundle.bootstrapPlan.readinessReport(for: currentRuntimeState)
+        runtimeLifecycle.readinessReport
     }
 
     private var modelDirectoryPath: String {
-        modelRuntimeBundle.modelDirectoryURL.path
+        runtimeLifecycle.modelDirectoryPath
     }
 
     private var settingsCurrentAppState: SettingsCurrentAppState {
@@ -576,7 +427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var runtimeTargetSummary: String {
-        "\(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(completionLengthConfiguration.displaySummary)"
+        runtimeLifecycle.runtimeTargetSummary
     }
 
     private var shouldShowSettingsForCurrentReadiness: Bool {
@@ -3195,10 +3046,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func revealModelFolder() {
         do {
             try FileManager.default.createDirectory(
-                at: modelRuntimeBundle.modelDirectoryURL,
+                at: runtimeLifecycle.modelDirectoryURL,
                 withIntermediateDirectories: true
             )
-            NSWorkspace.shared.activateFileViewerSelecting([modelRuntimeBundle.modelDirectoryURL])
+            NSWorkspace.shared.activateFileViewerSelecting([runtimeLifecycle.modelDirectoryURL])
             DiagnosticsLog.shared.record(
                 "reveal-model-folder",
                 metadata: ["path": modelDirectoryPath]
