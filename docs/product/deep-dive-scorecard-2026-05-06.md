@@ -52,7 +52,7 @@ stay lower until those rows are closed.
 | Onboarding | 8/10 | Settings explains runtime readiness, but model install/repair is still not fully in-app. |
 | User control | 8.5/10 | Pause, current-app enablement, privacy controls, and full-accept toggle exist; shortcut editing is still thin. |
 | Diagnostics | 9.5/10 | Placement, event-tap latency, focused poll latency, insertion, trace, screenshot, and smoke logs are strong. |
-| Automated tests | 9.6/10 | `swift test` passes 273 tests and smoke script self-tests are green. |
+| Automated tests | 9.6/10 | `swift test` passes 274 tests and smoke script self-tests are green. |
 | Real-app smoke | 8.5/10 | TextEdit and core Chrome fixtures are green on the current build. Chrome chat-like no-submit, Notes title/body/checklist, and Claude Code remain honest gaps. |
 | Release readiness | 7.8/10 | Packaging is in decent shape, but beta readiness now correctly fails unless all required manual and screenshot-backed proof rows are closed. Notarization/stapling and beta onboarding still need a final product pass. |
 | Architecture | 8.5/10 | Core policy and geometry are tested; AppDelegate still owns too much orchestration. |
@@ -79,6 +79,8 @@ stay lower until those rows are closed.
 ## Latest Proof
 
 - Prior full `swift test`: 273 tests passed before this script/docs-only no-submit fixture pass; no Swift sources changed in this loop.
+- Apple-native placement pass: `swift test` now passes 274 tests after adding the inline frame guard that clips at the caret and suppresses too-narrow inline panels instead of showing invisible or wrong-side ghost text.
+- `./script/manual_smoke_self_test.sh`: passed after adding Chrome chat-like no-submit to the self-test proof ledger.
 - `bash -n script/real_app_smoke.sh script/real_app_smoke_self_test.sh script/manual_smoke_session.sh script/manual_smoke_status.sh`: passed after adding the chat-like no-submit guard.
 - `./script/real_app_smoke_self_test.sh`: passed, including dry-run coverage for the Chrome chat-like fixture and the all-fixtures plan.
 - `AUTOCOMPLETE_LAB_CHROME_FIXTURE=chat-like ./script/manual_smoke_session.sh chrome --print`: passed and points chat-like proof toward `script/real_app_smoke.sh chrome --fixture chat-like` so submit count is checked.
@@ -159,6 +161,9 @@ stay lower until those rows are closed.
   paragraph, so long prompts cannot make wrapping work grow without bound.
 - Inline and floating frames now clamp vertically to editor clipping bounds, and
   stale text-line rectangles far from the caret are ignored.
+- Inline ghost frames now prefer staying attached to the caret over sliding left
+  to fit inside cramped bounds; if too little visible width remains, the
+  suggestion is suppressed so Tab cannot accept invisible text.
 - A local Chrome chat-like no-submit fixture now tracks form submissions and
   fails the smoke run if Tab/full accept submits the disposable composer.
 - A 15-minute Codex automation exists outside this repo to check this scorecard;

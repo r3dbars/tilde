@@ -23,6 +23,21 @@ public enum SuggestionPanelFrameCalculator {
             || abs(previousFrame.height - nextFrame.height) > movementTolerance
     }
 
+    public static func isUsableInlineGhostFrame(
+        _ frame: CGRect,
+        minimumVisibleWidth: CGFloat = 24
+    ) -> Bool {
+        frame.minX.isFinite
+            && frame.minY.isFinite
+            && frame.maxX.isFinite
+            && frame.maxY.isFinite
+            && frame.width.isFinite
+            && frame.height.isFinite
+            && !frame.isNull
+            && frame.width >= minimumVisibleWidth
+            && frame.height >= 1
+    }
+
     public static func inlineGhostFrame(
         caretRect: CGRect,
         textLineRect: CGRect? = nil,
@@ -37,9 +52,8 @@ public enum SuggestionPanelFrameCalculator {
         let horizontalBounds = horizontalBounds(screenFrame: screenFrame, clippingFrame: clippingFrame)
         let verticalBounds = verticalBounds(screenFrame: screenFrame, clippingFrame: clippingFrame)
         let preferredWidth = textSize.width + 6
-        let preferredX = clampedOrigin(
-            preferred: caretRect.maxX,
-            length: min(minimumWidth, horizontalBounds.upper - horizontalBounds.lower),
+        let preferredX = inlineOriginAfterCaret(
+            caretX: caretRect.maxX,
             lowerBound: horizontalBounds.lower,
             upperBound: horizontalBounds.upper
         )
@@ -173,5 +187,14 @@ public enum SuggestionPanelFrameCalculator {
     ) -> CGFloat {
         let maxOrigin = max(lowerBound, upperBound - length)
         return min(max(preferred, lowerBound), maxOrigin)
+    }
+
+    private static func inlineOriginAfterCaret(
+        caretX: CGFloat,
+        lowerBound: CGFloat,
+        upperBound: CGFloat
+    ) -> CGFloat {
+        let lastUsableOrigin = max(lowerBound, upperBound - 1)
+        return min(max(caretX, lowerBound), lastUsableOrigin)
     }
 }

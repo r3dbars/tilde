@@ -161,6 +161,7 @@ run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror'
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent editor-like
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent monaco-like
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent prosemirror-like
+run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent chat-like
 run_passing_case codex Codex com.openai.codex 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_passing_case claude-code "Claude Code" com.anthropic.claude-code 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_passing_case claude Claude com.anthropic.claudefordesktop 'inlineAdjacent|floatingMirror' inlineAdjacent
@@ -279,7 +280,7 @@ if ! grep -F "Insertion proof status: $REPORT_PATH" "$STATUS_OUTPUT" >/dev/null;
   exit 1
 fi
 
-for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" Codex "Claude Code"; do
+for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome chat-like no-submit" Codex "Claude Code"; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
     exit 1

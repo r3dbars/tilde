@@ -16,6 +16,7 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(frame.minX == 100)
         #expect(frame.minY == 790)
         #expect(frame.width == 166)
+        #expect(SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(frame))
     }
 
     @Test("Keeps ghost text inside the screen")
@@ -27,7 +28,23 @@ struct SuggestionPanelFrameCalculatorTests {
         )
 
         #expect(frame.maxX <= 1192)
+        #expect(frame.minX == 1180)
         #expect(frame.minY >= 4)
+        #expect(!SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(frame))
+    }
+
+    @Test("Clips inline ghost instead of moving it before the caret")
+    func clipsInlineGhostInsteadOfMovingBeforeCaret() {
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            caretRect: CGRect(x: 390, y: 240, width: 0, height: 20),
+            textSize: CGSize(width: 180, height: 20),
+            screenFrame: CGRect(x: 0, y: 0, width: 500, height: 500),
+            clippingFrame: CGRect(x: 20, y: 180, width: 380, height: 80)
+        )
+
+        #expect(frame.minX == 390)
+        #expect(frame.maxX <= 392)
+        #expect(!SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(frame))
     }
 
     @Test("Keeps inline ghost text inside the focused editor bounds")
@@ -87,7 +104,9 @@ struct SuggestionPanelFrameCalculatorTests {
 
         #expect(frame.minX >= 8)
         #expect(frame.maxX <= 88)
-        #expect(frame.width == 40)
+        #expect(frame.minX >= 87)
+        #expect(frame.width == 1)
+        #expect(!SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(frame))
     }
 
     @Test("Mirror fallback anchors in the middle of large focused elements")
