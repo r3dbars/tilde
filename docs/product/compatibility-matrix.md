@@ -14,9 +14,9 @@ For screenshot-backed app-by-app grades and gaps, use
 | Notes | supported | inline, mirror fallback | key events only | requires title, body, and checklist proof labels |
 | Obsidian | supported | synthetic caret mirror, no detached fallback | AX then key events, key fallback | recorded CodeMirror smoke pass with two verified accepts; detached whole-editor anchors stay suppressed |
 | Chrome | supported for local text fields and local editor fixtures | synthetic inline, mirror fallback | key events, AX value fallback | repeatable textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture commands with screenshot-backed proof labels |
-| Codex | dogfood target | synthetic inline caret, no detached fallback | AX value replacement, key fallback | recorded manual smoke pass |
+| Codex | dogfood target | synthetic inline caret, no detached fallback | AX value replacement, key fallback | prior manual pass; current one-word no-submit visual slice pending |
 | Claude Code | dogfood target | synthetic inline caret, no detached fallback | key events, AX fallback | pending manual smoke pass |
-| Claude desktop | dogfood target | synthetic inline caret, no detached fallback | AX value replacement | recorded manual smoke pass |
+| Claude desktop | dogfood target | synthetic inline caret, no detached fallback | AX value replacement | prior manual pass; current one-word no-submit visual slice pending |
 | Mail | diagnostics only | disabled | disabled | blocked until safe compose adapter exists |
 | Atlas | unsupported | disabled | disabled | blocked until focused AX element is reliable |
 
@@ -26,10 +26,12 @@ Run:
 ./script/manual_smoke_status.sh --strict
 ```
 
-TextEdit, Notes title/body/checklist, Obsidian, Chrome, Codex, Claude Code, and
-Claude desktop must have full accept proof. Screenshot-backed visual proof is
+TextEdit, Notes title/body/checklist, Obsidian, and Chrome must have full
+accept proof. Codex, Claude Code, and Claude desktop must have one-word
+no-submit proof before they can graduate; full accept stays disabled in prompt
+apps until separate no-submit proof exists. Screenshot-backed visual proof is
 also enforced by strict mode, so Codex, Obsidian, Notes, Claude Code, and Claude
-desktop do not look finished just because Tab insertion passed. A
+desktop do not look finished just because insertion passed. A
 detached-suppression Obsidian row is useful safety evidence, but it is not
 enough for a green manual smoke status. The status command also prints
 remaining sub-10 scorecard gaps so release risk is visible beside the smoke

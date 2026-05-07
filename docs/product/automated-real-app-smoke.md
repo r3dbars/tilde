@@ -37,7 +37,8 @@ What this proves:
 - the app can build and relaunch
 - a real target app can receive normal typing
 - a suggestion is shown with the expected render mode
-- Tab and the full-accept key are handled only while a suggestion is visible
+- Tab and, where the profile allows it, the full-accept key are handled only
+  while a suggestion is visible
 - insertion is verified in diagnostics and traces
 - strict screenshot trace evidence can be required with `--visual` through the
   manual recorder or by setting `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1`
@@ -47,7 +48,9 @@ What this proves:
 
 Notes, Obsidian, Codex, Claude desktop, and Claude Code checks are manual-gated.
 Do not use real notes, vault content, or live prompts for proof. Use disposable
-smoke text only, and never press Enter in an agent prompt pass.
+smoke text only, and never press Enter in an agent prompt pass. Codex, Claude
+desktop, and Claude Code use one-word accept proof until no-submit full accept
+is separately proven.
 
 All Chrome fixtures are local and dependency-free. The Monaco-like and
 ProseMirror-like fixtures copy the DOM shape and focus behavior those editors

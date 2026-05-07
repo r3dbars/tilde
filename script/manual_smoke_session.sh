@@ -180,7 +180,9 @@ case "$APP" in
     BUNDLE_ID="com.openai.codex"
     DISPLAY_NAME="Codex"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
-    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once, then the key above Tab for full visible accept.\n- Do not press Enter as part of the smoke pass.'
+    REQUIRES_FULL_ACCEPT=0
+    MIN_VERIFIED_ACCEPTS=1
+    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept is not required until the profile enables it.'
     ;;
   claude-code)
     BUNDLE_ID="com.anthropic.claude-code"
@@ -194,7 +196,9 @@ case "$APP" in
     BUNDLE_ID="com.anthropic.claudefordesktop"
     DISPLAY_NAME="Claude"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
-    STEPS=$'- Focus the Claude prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once, then the key above Tab for full visible accept.\n- Do not press Enter as part of the smoke pass.'
+    REQUIRES_FULL_ACCEPT=0
+    MIN_VERIFIED_ACCEPTS=1
+    STEPS=$'- Focus the Claude prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept is not required until the profile enables it.'
     ;;
   *)
     usage >&2

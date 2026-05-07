@@ -52,9 +52,9 @@ declare -a APPS=(
   "Chrome Monaco-like|Chrome|com.google.Chrome|full|monaco-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=monaco-like script/manual_smoke_session.sh chrome --visual"
   "Chrome ProseMirror-like|Chrome|com.google.Chrome|full|prosemirror-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=prosemirror-like script/manual_smoke_session.sh chrome --visual"
   "Chrome chat-like no-submit|Chrome|com.google.Chrome|full|chat-like|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture chat-like"
-  "Codex|Codex|com.openai.codex|full|default|script/manual_smoke_session.sh codex --visual"
+  "Codex|Codex|com.openai.codex|one-word|default|script/manual_smoke_session.sh codex --visual"
   "Claude Code|Claude Code|com.anthropic.claude-code|one-word|default|script/manual_smoke_session.sh claude-code --visual"
-  "Claude desktop|Claude|com.anthropic.claudefordesktop|full|default|script/manual_smoke_session.sh claude --visual"
+  "Claude desktop|Claude|com.anthropic.claudefordesktop|one-word|default|script/manual_smoke_session.sh claude --visual"
 )
 
 trim() {
@@ -230,6 +230,10 @@ for app_entry in "${APPS[@]}"; do
     required_verified_regex='[1-9][0-9]*'
     pass_suffix=" (one-word profile)"
   fi
+  limited_reason="needs full accept proof"
+  if [[ "$proof_mode" == "one-word" ]]; then
+    limited_reason="needs one-word no-submit proof"
+  fi
 
   if [[ -f "$REPORT_PATH" ]] &&
     grep -E "\\| $report_name \\| \`$bundle_id\` \\| \`$proof_label\` \\| $required_verified_regex \\|" "$REPORT_PATH" >/dev/null; then
@@ -240,7 +244,7 @@ for app_entry in "${APPS[@]}"; do
     echo "- $display_name: passed$pass_suffix"
   elif [[ -f "$REPORT_PATH" ]] &&
     grep -E "\\| $report_name \\| \`$bundle_id\` \\| (\`$proof_label\` \\| )?0 \\| \`detached-suppressed\` \\|" "$REPORT_PATH" >/dev/null; then
-    echo "- $display_name: limited pass (needs full accept proof; run $run_hint)"
+    echo "- $display_name: limited pass ($limited_reason; run $run_hint)"
     missing=$((missing + 1))
     pending_apps+=("$display_name - $run_hint")
   else

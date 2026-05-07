@@ -44,7 +44,11 @@ The live suggestion quality layer is intentionally conservative. Streaming phras
 
 Focused-text Accessibility reads are serialized off the main app path. Slow
 queue or read durations are logged as `focused-text-ax-read-slow`; normal fast
-polls stay quiet so diagnostics do not become typing overhead.
+polls stay quiet so diagnostics do not become typing overhead. Repeated slow
+reads for the same app start a short app-specific cooldown and log
+`focused-text-ax-health-cooldown-started`, active cooldown polls log
+`focused-text-ax-health-cooldown`, and recovery logs
+`focused-text-ax-health-recovered`.
 
 For quick visual calibration, use the menu bar nudge actions while the target app is focused:
 
@@ -82,7 +86,11 @@ Track these rates per app and request mode:
 - suppressed as empty, meta, repeated context, or invalid word completion
 - insertion verification failures
 
-Use the in-app Diagnostics window for the quickest read. It shows the current suggestion verdict, recent trace events, top misses, accept rates by app/mode, pause/delete controls, screenshot tracing, current learned adapter state, and an HTML export.
+Use the in-app Diagnostics window for the quickest read. It shows the current
+suggestion verdict, typing health split into key capture versus AX polling,
+recent trace events, top misses, accept rates by app/mode, pause/delete
+controls, screenshot tracing, current learned adapter state, and an HTML
+export.
 
 Use the command-line checker for repeatable proof:
 
@@ -173,7 +181,7 @@ For Codex dogfooding, use:
 
 ```bash
 START_LINE=$(wc -l < "$HOME/Library/Logs/AutocompleteLab/traces.jsonl" | tr -d ' ')
-# type in the Codex message box, accept with Tab/backtick, but do not submit
+# type in the Codex message box, accept one word with Tab, but do not submit
 AUTOCOMPLETE_LAB_TRACE_START_LINE=$START_LINE \
 AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP=com.openai.codex \
   ./script/check_trace_eval.sh
@@ -183,7 +191,7 @@ For Claude Code dogfooding, use the same flow with the Claude Code bundle:
 
 ```bash
 START_LINE=$(wc -l < "$HOME/Library/Logs/AutocompleteLab/traces.jsonl" | tr -d ' ')
-# type in the Claude Code prompt, accept with Tab/backtick, but do not submit
+# type in the Claude Code prompt, accept one word with Tab, but do not submit
 AUTOCOMPLETE_LAB_TRACE_START_LINE=$START_LINE \
 AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP=com.anthropic.claude-code \
   ./script/check_trace_eval.sh

@@ -202,6 +202,7 @@ final class DiagnosticsWindowController {
 
         sections.append(diagnostics?.summary ?? "Focused text diagnostics: unavailable")
         sections.append(recentTraceText(recentTraceEvents))
+        sections.append(typingHealthText(recentEvents))
         sections.append(recentDiagnosticsText(recentEvents))
 
         textView.string = sections.joined(separator: "\n\n")
@@ -310,6 +311,17 @@ final class DiagnosticsWindowController {
         """
     }
 
+    private func typingHealthText(_ events: [String]) -> String {
+        let health = DiagnosticsTypingHealth(events: events)
+        return """
+        Typing health:
+          key capture: \(health.keyCaptureStatus)
+          key samples: \(health.keySampleDescription)
+          AX polling: \(health.axPollingStatus)
+          AX samples: \(health.axSampleDescription)
+        """
+    }
+
     private static func percent(_ value: Double) -> String {
         "\(Int((value * 100).rounded()))%"
     }
@@ -346,5 +358,155 @@ final class DiagnosticsWindowController {
     @objc
     private func deleteTraces() {
         deleteTracesAction?()
+    }
+}
+
+struct DiagnosticsTypingHealth {
+    private var keySamples = 0
+    private var keySummarySamples = 0
+    private var keyMaxMicros: Int?
+    private var keyP95Micros: Int?
+    private var slowKeyMarkers = 0
+    private var disabledKeyEvents = 0
+
+    private var axSummarySamples = 0
+    private var axP95Milliseconds: Int?
+    private var axMaxMilliseconds: Int?
+    private var slowAXMarkers = 0
+    private var skippedAXPolls = 0
+    private var axCooldowns = 0
+
+    init(events: [String]) {
+        for event in events {
+            ingest(event)
+        }
+    }
+
+    var keyCaptureStatus: String {
+        if disabledKeyEvents > 0 {
+            return "needs attention - event tap disabled \(disabledKeyEvents)x"
+        }
+
+        if slowKeyMarkers > 0 {
+            return "needs attention - slow key capture \(slowKeyMarkers)x"
+        }
+
+        if keySamples + keySummarySamples == 0 {
+            return "no recent key samples"
+        }
+
+        return "healthy"
+    }
+
+    var keySampleDescription: String {
+        "raw=\(keySamples), summary=\(keySummarySamples), p95=\(microseconds(keyP95Micros)), max=\(microseconds(keyMaxMicros))"
+    }
+
+    var axPollingStatus: String {
+        if axCooldowns > 0 {
+            return "cooling down slow app reads, typing should pass through"
+        }
+
+        if slowAXMarkers > 0 || skippedAXPolls > 0 {
+            return "warning - suggestions may lag, typing should pass through"
+        }
+
+        if axSummarySamples == 0 {
+            return "no recent AX samples"
+        }
+
+        return "healthy"
+    }
+
+    var axSampleDescription: String {
+        "summary=\(axSummarySamples), p95=\(milliseconds(axP95Milliseconds)), max=\(milliseconds(axMaxMilliseconds)), slow=\(slowAXMarkers), skipped=\(skippedAXPolls), cooldowns=\(axCooldowns)"
+    }
+
+    private mutating func ingest(_ line: String) {
+        let parts = line.split(separator: " ").map(String.init)
+        guard parts.count >= 2 else {
+            return
+        }
+
+        let event = parts[1]
+        let fields = Self.fields(from: parts.dropFirst(2))
+
+        switch event {
+        case "keyboard-event-tap-latency":
+            keySamples += 1
+            keyMaxMicros = maxOptional(keyMaxMicros, fields.intValue(for: "durationMicros"))
+        case "keyboard-event-tap-latency-summary":
+            keySummarySamples += fields.intValue(for: "count") ?? 0
+            keyP95Micros = maxOptional(keyP95Micros, fields.intValue(for: "p95Micros"))
+            keyMaxMicros = maxOptional(keyMaxMicros, fields.intValue(for: "maxMicros"))
+        case "keyboard-event-tap-latency-slow":
+            slowKeyMarkers += 1
+            keyMaxMicros = maxOptional(keyMaxMicros, fields.intValue(for: "durationMicros"))
+        case "keyboard-event-tap-disabled":
+            disabledKeyEvents += 1
+        case "focused-text-poll-latency-summary":
+            axSummarySamples += fields.intValue(for: "count") ?? 0
+            axP95Milliseconds = maxOptional(axP95Milliseconds, fields.intValue(for: "p95Milliseconds"))
+            axMaxMilliseconds = maxOptional(axMaxMilliseconds, fields.intValue(for: "maxMilliseconds"))
+        case "focused-text-poll-latency-slow":
+            slowAXMarkers += 1
+            axMaxMilliseconds = maxOptional(axMaxMilliseconds, fields.intValue(for: "durationMilliseconds"))
+        case "focused-text-ax-read-slow":
+            slowAXMarkers += 1
+            axMaxMilliseconds = maxOptional(
+                axMaxMilliseconds,
+                fields.intValue(for: "readDurationMilliseconds")
+            )
+        case "focused-text-poll-skipped":
+            skippedAXPolls += fields.intValue(for: "count") ?? 1
+        case "focused-text-poll-skip-summary":
+            skippedAXPolls += fields.intValue(for: "count") ?? 0
+        case "focused-text-ax-health-cooldown", "focused-text-ax-health-cooldown-started":
+            axCooldowns += 1
+        default:
+            return
+        }
+    }
+
+    private func maxOptional(_ lhs: Int?, _ rhs: Int?) -> Int? {
+        switch (lhs, rhs) {
+        case let (.some(lhs), .some(rhs)):
+            return max(lhs, rhs)
+        case let (.some(lhs), .none):
+            return lhs
+        case let (.none, .some(rhs)):
+            return rhs
+        case (.none, .none):
+            return nil
+        }
+    }
+
+    private static func fields<S: Sequence>(from parts: S) -> [String: String] where S.Element == String {
+        var result: [String: String] = [:]
+        for part in parts {
+            let pieces = part.split(separator: "=", maxSplits: 1).map(String.init)
+            guard pieces.count == 2 else {
+                continue
+            }
+            result[pieces[0]] = pieces[1]
+        }
+        return result
+    }
+
+    private func microseconds(_ value: Int?) -> String {
+        value.map { "\($0)us" } ?? "n/a"
+    }
+
+    private func milliseconds(_ value: Int?) -> String {
+        value.map { "\($0)ms" } ?? "n/a"
+    }
+}
+
+private extension Dictionary where Key == String, Value == String {
+    func intValue(for key: String) -> Int? {
+        guard let value = self[key] else {
+            return nil
+        }
+        return Int(value)
     }
 }
