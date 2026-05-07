@@ -53,25 +53,25 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P0: AX Geometry Validation
 
-- [ ] Capture `AXVisibleCharacterRange`.
-- [ ] Capture `AXInsertionPointLineNumber`.
+- [x] Capture `AXVisibleCharacterRange`.
+- [x] Capture `AXInsertionPointLineNumber`.
 - [x] Capture supported AX attributes and parameterized attributes as a compact capability snapshot.
-- [ ] Record AX errors by attribute without raw text.
-- [ ] Record AX timeout/cannot-complete errors.
+- [x] Record AX errors by attribute without raw text.
+- [x] Record AX timeout/cannot-complete errors.
 - [x] Validate caret rect against element rect.
 - [x] Validate caret rect against window rect.
 - [x] Validate caret rect against current screen frame after coordinate conversion.
 - [x] Validate text line rect against element/window rect.
-- [ ] Reject jumps that move too far from the previous caret while text did not change.
-- [ ] Reject stale caret rects after scroll or focus churn.
-- [ ] Add a short geometry history per field.
+- [x] Reject jumps that move too far from the previous caret while text did not change.
+- [x] Reject stale caret rects after scroll or focus churn.
+- [x] Add a short geometry history per field.
 - [x] Add reason codes: zeroHeight, nonfinite, outsideElement, outsideWindow, offScreen, stale, jumpedTooFar, missingBounds.
 - [x] Add tests for zero-width caret rects.
 - [x] Add tests for browser zero-height caret rects.
 - [x] Add tests for outside-field and outside-window rects.
-- [ ] Add tests for stale geometry rejection.
-- [ ] Add tests for wrapped line rect validation.
-- [ ] Add tests for visible range mismatch.
+- [x] Add tests for stale geometry rejection.
+- [x] Add tests for wrapped line rect validation.
+- [x] Add tests for visible range mismatch.
 
 ## P0: Observer-First Updates
 
@@ -106,8 +106,8 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Keep clipboard fallback opt-in only.
 - [x] Never use clipboard fallback for sensitive profiles.
 - [x] Add insertion failure trace buckets by app and mode.
-- [ ] Add tests for Notes-style AX no-op success.
-- [ ] Add tests for Chrome-style value replacement.
+- [x] Add tests for Notes-style AX no-op success.
+- [x] Add tests for Chrome-style value replacement.
 - [x] Add tests for retry exhaustion.
 
 ## P0: Suggestion Quality
