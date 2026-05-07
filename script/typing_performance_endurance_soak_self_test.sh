@@ -14,9 +14,9 @@ script/typing_performance_endurance_soak.sh --dry-run >"$TMP_DIR/default.txt"
 for expected in \
   "Typing endurance soak" \
   "Duration target: 10 minute(s)" \
-  "Computed text: 100000 generated chars" \
-  "Underlying command: script/typing_performance_soak.sh --characters 100000 --chunk-size 20 --delay-ms 120 --require-event-tap-samples 500 --require-ax-samples 0" \
-  "Synthetic text: 100000 generated chars from a built-in neutral fixture"; do
+  "Computed text: 60000 generated chars" \
+  "Underlying command: script/typing_performance_soak.sh --characters 60000 --chunk-size 20 --delay-ms 120 --require-event-tap-samples 500 --require-ax-samples 0" \
+  "Synthetic text: 60000 generated chars from a built-in neutral fixture"; do
   if ! grep -F "$expected" "$TMP_DIR/default.txt" >/dev/null; then
     echo "endurance soak self-test missing default output: $expected" >&2
     cat "$TMP_DIR/default.txt" >&2
@@ -36,7 +36,7 @@ script/typing_performance_endurance_soak.sh \
 
 for expected in \
   "Duration target: 1 minute(s)" \
-  "Computed text: 6000 generated chars" \
+  "Computed text: 3330 generated chars" \
   "Build: skipped; using an already-running app" \
   "AX warnings: strict; slow or skipped focused-text polling fails the soak" \
   "AX sample proof: require at least 5 focused-text poll samples"; do
