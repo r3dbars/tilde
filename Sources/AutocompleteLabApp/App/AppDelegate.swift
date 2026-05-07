@@ -744,7 +744,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let previousSnapshot,
            previousSnapshot.fieldIdentity == fieldIdentity,
            context.textBeforeCursor.count < previousSnapshot.textBeforeCursor.count {
-            recordPrefixFamilyCooldown(.deletion, input: prefixCooldownInput)
+            _ = recordPrefixFamilyCooldown(.deletion, input: prefixCooldownInput)
         }
 
         switch prefixFamilyCooldownPolicy.decision(for: prefixCooldownInput) {
