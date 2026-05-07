@@ -248,9 +248,11 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         appBundleIdentifier: String,
         acceptedText: String,
         remainingVisibleText: String?,
+        displayedText: String = "",
         suggestionID: String = "",
         fieldIdentity: String = "",
-        requestMode: String = ""
+        requestMode: String = "",
+        metadata: [String: String] = [:]
     ) {
         guard isEnabled else {
             return
@@ -262,9 +264,11 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             appBundleIdentifier: appBundleIdentifier,
             fieldIdentity: fieldIdentity,
             requestMode: requestMode,
+            displayedText: displayedText,
             acceptedText: acceptedText,
             remainingVisibleText: remainingVisibleText ?? "",
-            outcome: action
+            outcome: action,
+            metadata: metadata
         )
     }
 

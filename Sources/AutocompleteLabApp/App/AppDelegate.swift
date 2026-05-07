@@ -1441,12 +1441,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             let verificationBaseline = insertionVerificationBaseline()
-            guard let acceptedText = suggestionSession.nextWordAcceptance(),
-                  insertAcceptedText(acceptedText) else {
+            guard let acceptance = suggestionSession.nextWordAcceptancePreview() else {
+                recordKeyboardAction(key: key, action: action, handled: false, reason: "no-visible-acceptance")
+                return false
+            }
+            guard visibleAcceptanceMatchesDisplayedSuggestion(acceptance) else {
+                setSuggestionDecision("Blocked: visible suggestion changed")
+                hideSuggestion(reason: "visible-acceptance-mismatch")
+                recordKeyboardAction(key: key, action: action, handled: false, reason: "visible-acceptance-mismatch")
+                return false
+            }
+            guard insertAcceptedText(acceptance.acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return false
             }
 
+            let acceptedText = acceptance.acceptedText
             suggestionSession.commitNextWordAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
             advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
@@ -1455,7 +1465,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 mode: currentSuggestionRequestMode,
                 scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
             )
-            recordRawAcceptance(action: action, acceptedText: acceptedText)
+            recordRawAcceptance(action: action, acceptance: acceptance)
             setSuggestionDecision("Accepted: next word")
             if suggestionSession.hasVisibleSuggestion {
                 refreshVisibleSuggestion()
@@ -1474,12 +1484,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             let verificationBaseline = insertionVerificationBaseline()
-            guard let acceptedText = suggestionSession.allVisibleAcceptance(),
-                  insertAcceptedText(acceptedText) else {
+            guard let acceptance = suggestionSession.allVisibleAcceptancePreview() else {
+                recordKeyboardAction(key: key, action: action, handled: false, reason: "no-visible-acceptance")
+                return false
+            }
+            guard visibleAcceptanceMatchesDisplayedSuggestion(acceptance) else {
+                setSuggestionDecision("Blocked: visible suggestion changed")
+                hideSuggestion(reason: "visible-acceptance-mismatch")
+                recordKeyboardAction(key: key, action: action, handled: false, reason: "visible-acceptance-mismatch")
+                return false
+            }
+            guard insertAcceptedText(acceptance.acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return false
             }
 
+            let acceptedText = acceptance.acceptedText
             suggestionSession.commitAllVisibleAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
             suggestionRepetitionSuppressor.recordAcceptance(
@@ -1487,7 +1507,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 mode: currentSuggestionRequestMode,
                 scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
             )
-            recordRawAcceptance(action: action, acceptedText: acceptedText)
+            recordRawAcceptance(action: action, acceptance: acceptance)
             setSuggestionDecision("Accepted: full suggestion")
             hideSuggestion(reason: "accepted-all")
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
@@ -2585,22 +2605,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return result.succeeded
     }
 
-    private func recordRawAcceptance(action: KeyboardAction, acceptedText: String) {
+    private func recordRawAcceptance(action: KeyboardAction, acceptance: SuggestionAcceptancePreview) {
         guard let appBundleIdentifier = currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier else {
             return
         }
 
+        var metadata = acceptance.traceMetadata
+        metadata["acceptMode"] = action == .acceptNextWord ? "tab" : "full"
+
         RawAutocompleteTraceLog.shared.recordAcceptance(
             action: action.diagnosticName,
             appBundleIdentifier: appBundleIdentifier,
-            acceptedText: acceptedText,
-            remainingVisibleText: suggestionSession.visibleSuggestion?.visibleText,
+            acceptedText: acceptance.acceptedText,
+            remainingVisibleText: acceptance.remainingVisibleTextAfterAccept,
+            displayedText: acceptance.visibleTextBeforeAccept,
             suggestionID: currentSuggestionID ?? "",
             fieldIdentity: currentSuggestionFieldIdentity?.traceDescription
                 ?? currentFieldIdentity?.traceDescription
                 ?? "",
-            requestMode: currentSuggestionRequestMode?.rawValue ?? ""
+            requestMode: currentSuggestionRequestMode?.rawValue ?? "",
+            metadata: metadata
         )
+    }
+
+    private func visibleAcceptanceMatchesDisplayedSuggestion(_ acceptance: SuggestionAcceptancePreview) -> Bool {
+        guard let currentSuggestionDisplayedText else {
+            return false
+        }
+
+        return currentSuggestionDisplayedText == acceptance.visibleTextBeforeAccept
     }
 
     private func refreshVisibleSuggestion() {
