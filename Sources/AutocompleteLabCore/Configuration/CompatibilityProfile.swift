@@ -235,9 +235,10 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .keyEvents,
             fieldIdentityMode: .stableBounds,
+            supportsFullAcceptance: false,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Dogfood target. Prefer caret-bound inline suggestions and AX value replacement in the prompt editor. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions."
+            notes: "Dogfood target. Prefer caret-bound inline suggestions and AX value replacement in the prompt editor. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Full accept stays disabled until no-submit prompt proof is current."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claude-code",
@@ -263,9 +264,10 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             insertionMode: .axValueReplacement,
             fallbackRenderMode: .floatingMirror,
             fieldIdentityMode: .stableBounds,
+            supportsFullAcceptance: false,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Dogfood target for Claude desktop. Prefer prompt-bound inline suggestions when the composer exposes bounds; otherwise use mirror placement without showing detached whole-window suggestions."
+            notes: "Dogfood target for Claude desktop. Prefer prompt-bound inline suggestions when the composer exposes bounds; otherwise use mirror placement without showing detached whole-window suggestions. Full accept stays disabled until no-submit prompt proof is current."
         )
     ])
 

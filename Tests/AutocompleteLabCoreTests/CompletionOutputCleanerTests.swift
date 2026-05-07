@@ -51,6 +51,26 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("enhance the experience") == nil)
     }
 
+    @Test("Suppresses unsafe prompt action suggestions")
+    func suppressesUnsafePromptActionSuggestions() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("Press Enter to send the prompt", after: "Now") == nil)
+        #expect(cleaner.clean("submit the prompt", after: "Then") == nil)
+        #expect(cleaner.clean("click send", after: "Next") == nil)
+        #expect(cleaner.clean("run this command in Claude Code", after: "Please") == nil)
+    }
+
+    @Test("Suppresses assistant replies when user is drafting an agent request")
+    func suppressesAssistantRepliesForAgentRequests() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("I'll inspect the file now", after: "Can you") == nil)
+        #expect(cleaner.clean("First, open the logs", after: "Please debug this") == nil)
+        #expect(cleaner.clean("we need to check the trace", after: "Could you look at") == nil)
+        #expect(cleaner.clean("I'll bring snacks", after: "Tomorrow")?.visibleText == " I'll bring snacks")
+    }
+
     @Test("Uses only first line")
     func usesOnlyFirstLine() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)

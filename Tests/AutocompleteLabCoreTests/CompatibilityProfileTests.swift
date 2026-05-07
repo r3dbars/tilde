@@ -44,6 +44,8 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.insertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.openai.codex")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "com.openai.codex")?.fieldIdentityMode == .stableBounds)
+        #expect(store.profile(for: "com.openai.codex")?.supportsOneWordAcceptance == true)
+        #expect(store.profile(for: "com.openai.codex")?.supportsFullAcceptance == false)
         #expect(store.profile(for: "com.openai.codex")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claude-code")?.displayName == "Claude Code")
         #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .yellow)
@@ -63,6 +65,8 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.insertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackInsertionMode == nil)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fieldIdentityMode == .stableBounds)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportsOneWordAcceptance == true)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportsFullAcceptance == false)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.allowsDetachedSuggestions == false)
     }
 
@@ -160,13 +164,19 @@ struct CompatibilityProfileTests {
     @Test("Unproven real app profiles fail closed on risky affordances")
     func unprovenRealAppProfilesFailClosedOnRiskyAffordances() throws {
         let notes = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.Notes"))
+        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
         let claudeCode = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claude-code"))
+        let claude = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claudefordesktop"))
 
         #expect(notes.allowsDetachedSuggestions == false)
         #expect(notes.fallbackInsertionMode == .disabled)
+        #expect(codex.supportsOneWordAcceptance == true)
+        #expect(codex.supportsFullAcceptance == false)
         #expect(claudeCode.supportsOneWordAcceptance == true)
         #expect(claudeCode.supportsFullAcceptance == false)
         #expect(claudeCode.canPresentSuggestions == true)
+        #expect(claude.supportsOneWordAcceptance == true)
+        #expect(claude.supportsFullAcceptance == false)
     }
 
     @Test("Insertion mode plans can skip failed primary modes")
