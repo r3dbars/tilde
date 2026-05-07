@@ -66,6 +66,14 @@ require_pattern "Tests/AutocompleteLabCoreTests/AcceptanceSurvivalClassifierTest
 require_pattern "Tests/AutocompleteLabCoreTests/AcceptanceSurvivalClassifierTests.swift" "Classifies immediate deletes as rejected" "accepted-and-kept rejection coverage"
 require_file "Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift" "summarizes field-kind slices" "field-kind trace slice coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift" "summarizes caret geometry failures" "caret failure trace slice coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift" "overlayFlicker" "overlay flicker trace coverage"
+
+require_file "Tests/AutocompleteLabCoreTests/SyntheticCaretEstimatorTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/SyntheticCaretEstimatorTests.swift" "Estimates caret position on the current wrapped line" "synthetic caret wrapping coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/SyntheticCaretEstimatorTests.swift" "safe eligibility gate across app families" "synthetic caret app-family coverage"
+require_file "Tests/AutocompleteLabCoreTests/SuggestionPanelFrameCalculatorTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/SuggestionPanelFrameCalculatorTests.swift" "cramped clipping bounds" "cramped overlay clipping coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/AutocompleteTraceEventTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceEventTests.swift" "Encodes current schema and privacy versions" "trace schema version coverage"

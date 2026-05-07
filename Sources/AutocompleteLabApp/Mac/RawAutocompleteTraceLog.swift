@@ -420,6 +420,10 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         let suppressedFieldKinds = sortedCountList(summary.suppressedByFieldKind)
         let actionableSuppressedApps = sortedCountList(summary.actionableSuppressedByApp)
         let actionableSuppressedModes = sortedCountList(summary.actionableSuppressedByMode)
+        let caretFailuresByApp = sortedCountList(summary.caretGeometryFailuresByApp)
+        let caretFailureRatesByApp = sortedRateList(summary.caretGeometryFailureRateByApp)
+        let caretFailuresByRenderMode = sortedCountList(summary.caretGeometryFailuresByRenderMode)
+        let caretFailureRatesByRenderMode = sortedRateList(summary.caretGeometryFailureRateByRenderMode)
         let annoyanceSignals = sortedCountList(summary.annoyanceSignalCounts)
         let supportStates = CompatibilitySupportEvaluator()
             .evaluations(for: events)
@@ -464,6 +468,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             <div class="metric"><b>\(Int((summary.acceptedAndKeptRateAccepted * 100).rounded()))%</b>kept / accepted</div>
             <div class="metric"><b>\(Int((summary.tabAcceptShare * 100).rounded()))%</b>Tab accept share</div>
             <div class="metric"><b>\(Int((summary.insertionVerificationSuccessRate * 100).rounded()))%</b>verified inserts</div>
+            <div class="metric"><b>\(Int((summary.caretGeometryFailureRate * 100).rounded()))%</b>caret failure rate</div>
             <div class="metric"><b>\(String(format: "%.2f", summary.annoyanceScore))</b>annoyance score</div>
           </div>
           <h2>Accept rate by app</h2>
@@ -500,6 +505,14 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           <ul>\(actionableSuppressedApps)</ul>
           <h2>Actionable suppressed by mode</h2>
           <ul>\(actionableSuppressedModes)</ul>
+          <h2>Caret failures by app</h2>
+          <ul>\(caretFailuresByApp)</ul>
+          <h2>Caret failure rate by app</h2>
+          <ul>\(caretFailureRatesByApp)</ul>
+          <h2>Caret failures by render mode</h2>
+          <ul>\(caretFailuresByRenderMode)</ul>
+          <h2>Caret failure rate by render mode</h2>
+          <ul>\(caretFailureRatesByRenderMode)</ul>
           <h2>Annoyance signals</h2>
           <ul>\(annoyanceSignals)</ul>
           <h2>Support state by app</h2>
@@ -529,6 +542,19 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
                 return lhs.value > rhs.value
             }
             .map { "<li><code>\(escape($0.key))</code>: \($0.value)</li>" }
+            .joined(separator: "\n")
+    }
+
+    private static func sortedRateList(_ buckets: [String: Double]) -> String {
+        buckets
+            .sorted { lhs, rhs in
+                if lhs.value == rhs.value {
+                    return lhs.key < rhs.key
+                }
+
+                return lhs.value > rhs.value
+            }
+            .map { "<li><code>\(escape($0.key))</code>: \(Int(($0.value * 100).rounded()))%</li>" }
             .joined(separator: "\n")
     }
 

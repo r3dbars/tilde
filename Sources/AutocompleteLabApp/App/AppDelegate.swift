@@ -425,6 +425,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             supportsInlineSuggestions: context.capabilities.supportsInlineSuggestions,
             hasMirrorAnchor: context.elementRect != nil || context.windowRect != nil
         )
+        if profile.renderMode == .inlineAdjacent,
+           !context.capabilities.supportsInlineSuggestions {
+            recordCaretGeometryFailure(
+                suggestionID: UUID().uuidString,
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                requestMode: activationDecision.requestMode,
+                triggerReason: "render-mode-plan",
+                reason: baseRenderMode == .floatingMirror
+                    ? "inline-caret-unavailable-fell-back"
+                    : "inline-caret-unavailable"
+            )
+        }
 
         guard let baseRenderMode else {
             recordBlockedSuggestionEvent(
@@ -442,15 +456,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let renderMode = compatibilityLearningStore.engine()
             .adjustment(for: profile.bundleIdentifier, profileRenderMode: baseRenderMode)
             .effectiveRenderMode
+        if renderMode != profile.renderMode {
+            recordRenderModeChanged(
+                suggestionID: UUID().uuidString,
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                requestMode: activationDecision.requestMode,
+                from: profile.renderMode,
+                to: renderMode,
+                reason: baseRenderMode != profile.renderMode
+                    ? "inline-caret-unavailable-fallback"
+                    : "compatibility-learning"
+            )
+        }
 
         if shouldSuppressDetachedSuggestion(
             profile: profile,
             context: context,
             renderMode: renderMode
         ) {
+            let suggestionID = UUID().uuidString
+            recordCaretGeometryFailure(
+                suggestionID: suggestionID,
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                requestMode: activationDecision.requestMode,
+                triggerReason: "policy",
+                reason: "detached-suggestion-disabled",
+                renderMode: renderMode,
+                severe: true
+            )
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
-                suggestionID: UUID().uuidString,
+                suggestionID: suggestionID,
                 appBundleIdentifier: profile.bundleIdentifier,
                 fieldIdentity: fieldIdentity.traceDescription,
                 requestMode: (activationDecision.requestMode ?? .phraseContinuation).rawValue,
@@ -517,9 +557,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         app: RunningApplicationInfo,
         profile: CompatibilityProfile
     ) -> FocusedTextContext {
-        guard app.bundleIdentifier == "com.openai.codex",
-              context.caretRect == nil,
-              let syntheticCaret = codexSyntheticCaretRect(for: context) else {
+        guard context.caretRect == nil,
+              let syntheticCaret = syntheticCaretRect(for: context, app: app, profile: profile) else {
             return context
         }
 
@@ -531,7 +570,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             canSetSelectedText: context.capabilities.canSetSelectedText
         )
 
-        recordSyntheticCaretIfNeeded(syntheticCaret, context: context, profile: profile)
+        recordSyntheticCaretIfNeeded(
+            syntheticCaret.rect,
+            source: syntheticCaret.source,
+            context: context,
+            profile: profile
+        )
 
         return FocusedTextContext(
             elementIdentifier: context.elementIdentifier,
@@ -539,10 +583,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             subrole: context.subrole,
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
-            caretRect: syntheticCaret,
+            caretRect: syntheticCaret.rect,
             elementRect: context.elementRect,
             windowRect: context.windowRect,
-            textLineRect: syntheticCaret,
+            textLineRect: syntheticCaret.rect,
             textStyle: context.textStyle,
             isSecure: context.isSecure,
             fieldKind: context.fieldKind,
@@ -551,95 +595,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func codexSyntheticCaretRect(for context: FocusedTextContext) -> CGRect? {
-        guard context.role == "AXTextArea",
-              let elementRect = context.elementRect,
-              elementRect.width > 80,
-              elementRect.height > 20 else {
+    private func syntheticCaretRect(
+        for context: FocusedTextContext,
+        app: RunningApplicationInfo,
+        profile: CompatibilityProfile
+    ) -> (rect: CGRect, source: SyntheticCaretSource)? {
+        guard let elementRect = context.elementRect,
+              let source = SyntheticCaretEligibility.source(
+                  bundleIdentifier: app.bundleIdentifier,
+                  role: context.role,
+                  subrole: context.subrole,
+                  elementRect: elementRect,
+                  canReadValue: context.capabilities.canReadValue,
+                  canReadSelectedTextRange: context.capabilities.canReadSelectedTextRange
+              ) else {
             return nil
         }
 
         let font = context.textStyle?.font ?? NSFont.systemFont(ofSize: 18)
         let lineHeight = max(font.ascender - font.descender + font.leading, 20)
-        let horizontalPadding: CGFloat = 18
-        let verticalPadding: CGFloat = 4
-        let codexVisualBaselineLift = lineHeight * 0.85
-        let maxLineWidth = max(40, elementRect.width - (horizontalPadding * 2))
-        let visualLines = wrappedVisualLines(
-            for: context.textBeforeCursor,
-            font: font,
-            maxLineWidth: maxLineWidth
-        )
-        let currentLine = visualLines.last ?? ""
-        let lineIndex = max(0, visualLines.count - 1)
-        let currentLineWidth = min(width(of: currentLine, font: font), maxLineWidth)
-        let caretHeight = max(lineHeight, 16)
-        let inlineGap: CGFloat = 8
-        let inlineVerticalDrop = lineHeight * 0.85
-        let preferredY = elementRect.minY
-            + verticalPadding
-            - codexVisualBaselineLift
-            + inlineVerticalDrop
-            + (CGFloat(lineIndex) * lineHeight)
-        let y = clampedCodexCaretY(
-            preferredY,
-            caretHeight: caretHeight,
+        let input = SyntheticCaretEstimateInput(
+            textBeforeCursor: context.textBeforeCursor,
             elementRect: elementRect,
-            windowRect: context.windowRect
+            windowRect: context.windowRect,
+            lineHeight: lineHeight
         )
 
-        return CGRect(
-            x: min(
-                elementRect.minX + horizontalPadding + currentLineWidth + inlineGap,
-                elementRect.maxX - horizontalPadding
-            ),
-            y: y,
-            width: 0,
-            height: caretHeight
-        )
-    }
-
-    private func clampedCodexCaretY(
-        _ preferredY: CGFloat,
-        caretHeight: CGFloat,
-        elementRect: CGRect,
-        windowRect: CGRect?
-    ) -> CGFloat {
-        let boundingRect = windowRect ?? elementRect
-        let upperPadding: CGFloat = 8
-        let lowerPadding: CGFloat = 8
-        let minY = min(elementRect.minY - (caretHeight * 1.25), boundingRect.maxY - caretHeight - lowerPadding)
-        let maxY = max(elementRect.maxY + (caretHeight * 6), minY)
-        let boundedMinY = max(boundingRect.minY + upperPadding, minY)
-        let boundedMaxY = min(boundingRect.maxY - caretHeight - lowerPadding, maxY)
-
-        guard boundedMaxY >= boundedMinY else {
-            return preferredY
+        guard let caret = SyntheticCaretEstimator.estimate(input: input, widthOf: { text in
+            width(of: text, font: font)
+        }) else {
+            return nil
         }
 
-        return min(max(preferredY, boundedMinY), boundedMaxY)
-    }
-
-    private func wrappedVisualLines(for text: String, font: NSFont, maxLineWidth: CGFloat) -> [String] {
-        var lines: [String] = []
-
-        for paragraph in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
-            var current = ""
-
-            for character in paragraph {
-                let next = current + String(character)
-                if !current.isEmpty, width(of: next, font: font) > maxLineWidth {
-                    lines.append(current)
-                    current = String(character)
-                } else {
-                    current = next
-                }
-            }
-
-            lines.append(current)
-        }
-
-        return lines.isEmpty ? [""] : lines
+        return (caret, source)
     }
 
     private func width(of text: String, font: NSFont) -> CGFloat {
@@ -652,11 +640,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func recordSyntheticCaretIfNeeded(
         _ caret: CGRect,
+        source: SyntheticCaretSource,
         context: FocusedTextContext,
         profile: CompatibilityProfile
     ) {
         let signature = [
             profile.bundleIdentifier,
+            source.rawValue,
             String(context.textBeforeCursor.count),
             compactRectDescription(caret)
         ].joined(separator: "|")
@@ -670,7 +660,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "synthetic-caret",
             metadata: [
                 "app": profile.bundleIdentifier,
-                "source": "codex-textarea-estimate",
+                "source": source.rawValue,
                 "caret": compactRectDescription(caret),
                 "beforeChars": String(context.textBeforeCursor.count)
             ]
@@ -1400,6 +1390,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
 
                     guard anchorRect != nil else {
+                        self.recordCaretGeometryFailure(
+                            suggestionID: suggestionID,
+                            context: context,
+                            profile: profile,
+                            fieldIdentity: fieldIdentity,
+                            requestMode: request.mode,
+                            triggerReason: "model-result",
+                            reason: "missing-anchor",
+                            renderMode: renderMode,
+                            severe: true
+                        )
                         RawAutocompleteTraceLog.shared.record(
                             type: .suggestionSuppressed,
                             suggestionID: suggestionID,
@@ -1530,6 +1531,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let adjustedClippingRect = context.elementRect ?? context.windowRect
 
         guard let anchorRect else {
+            recordCaretGeometryFailure(
+                suggestionID: suggestionID,
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                requestMode: request.mode,
+                triggerReason: triggerReason,
+                reason: "missing-anchor",
+                renderMode: effectiveRenderMode,
+                severe: true
+            )
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
                 suggestionID: suggestionID,
@@ -1666,6 +1678,101 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "hasWindowRect": String(context.windowRect != nil),
             "canReadBounds": String(context.capabilities.canReadBoundsForRange)
         ]
+    }
+
+    private func recordCaretGeometryFailure(
+        suggestionID: String,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        requestMode: CompletionRequestMode?,
+        triggerReason: String,
+        reason: String,
+        renderMode: SuggestionRenderMode? = nil,
+        severe: Bool = false
+    ) {
+        let effectiveRenderMode = renderMode ?? profile.renderMode
+        let metadata = traceGeometryMetadata(context: context, renderMode: effectiveRenderMode)
+            .merging([
+                "profileRenderMode": profile.renderMode.rawValue,
+                "fallbackRenderMode": profile.fallbackRenderMode?.rawValue ?? "none",
+                "severe": String(severe)
+            ]) { current, _ in current }
+        RawAutocompleteTraceLog.shared.record(
+            type: .caretGeometryFailed,
+            suggestionID: suggestionID,
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldIdentity: fieldIdentity.traceDescription,
+            requestMode: requestMode?.rawValue ?? "none",
+            triggerReason: triggerReason,
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            reason: reason,
+            metadata: metadata
+        )
+        DiagnosticsLog.shared.record(
+            "caret-geometry-failed",
+            metadata: [
+                "app": profile.bundleIdentifier,
+                "reason": reason,
+                "renderMode": effectiveRenderMode.rawValue,
+                "hasCaretRect": String(context.caretRect != nil),
+                "hasElementRect": String(context.elementRect != nil),
+                "hasWindowRect": String(context.windowRect != nil)
+            ]
+        )
+
+        guard severe else {
+            return
+        }
+
+        recordAnnoyanceSignal(
+            .caretGeometryFailed,
+            reason: reason,
+            context: AnnoyanceContext(
+                appBundleIdentifier: profile.bundleIdentifier,
+                fieldIdentifier: fieldIdentity.traceDescription,
+                requestMode: requestMode,
+                fieldKind: context.fieldKind
+            )
+        )
+    }
+
+    private func recordRenderModeChanged(
+        suggestionID: String,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        requestMode: CompletionRequestMode?,
+        from oldMode: SuggestionRenderMode,
+        to newMode: SuggestionRenderMode,
+        reason: String
+    ) {
+        RawAutocompleteTraceLog.shared.record(
+            type: .renderModeChanged,
+            suggestionID: suggestionID,
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldIdentity: fieldIdentity.traceDescription,
+            requestMode: requestMode?.rawValue ?? "none",
+            triggerReason: "render-mode-plan",
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            reason: reason,
+            metadata: traceGeometryMetadata(context: context, renderMode: newMode)
+                .merging([
+                    "oldRenderMode": oldMode.rawValue,
+                    "newRenderMode": newMode.rawValue
+                ]) { current, _ in current }
+        )
+        DiagnosticsLog.shared.record(
+            "render-mode-changed",
+            metadata: [
+                "app": profile.bundleIdentifier,
+                "from": oldMode.rawValue,
+                "to": newMode.rawValue,
+                "reason": reason
+            ]
+        )
     }
 
     private func recordSuggestionEvent(

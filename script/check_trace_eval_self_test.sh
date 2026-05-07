@@ -29,6 +29,7 @@ cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionSuppressed","experimentArm":"length_1_word","suggestionID":"twelve","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"is","reason":"repeated-miss","metadata":{"fieldKind":"form"}}
 {"type":"suggestionSuppressed","experimentArm":"length_1_word","suggestionID":"thirteen","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"e","reason":"repeated-miss","metadata":{"fieldKind":"search"}}
 {"type":"suggestionSuppressed","experimentArm":"length_1_word","suggestionID":"fourteen","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","reason":"no-fast-word-candidate"}
+{"type":"caretGeometryFailed","experimentArm":"length_3_word","suggestionID":"fifteen","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","reason":"detached-suggestion-disabled","metadata":{"effectiveRenderMode":"floatingMirror"}}
 JSONL
 
 AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
@@ -121,6 +122,24 @@ fi
 
 if ! grep -F "Insertion verification success: 100%" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not report insertion verification success" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Caret placement failures: 1" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report caret placement failures" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "md.obsidian: 50% (1/2)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report caret failures by app" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "floatingMirror: 100% (1/1)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report caret failures by render mode" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
   exit 1
 fi
@@ -284,7 +303,7 @@ if ! grep -F "Start line: 3" /tmp/autocomplete-trace-eval-self-test-slice.txt >/
   exit 1
 fi
 
-if [[ "$(AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh --quiet)" != "24" ]]; then
+if [[ "$(AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh --quiet)" != "25" ]]; then
   echo "trace mark self-test did not report the current trace line" >&2
   AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh >&2
   exit 1
@@ -295,7 +314,7 @@ AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
 AUTOCOMPLETE_LAB_TRACE_MARK_PATH="$MARK_FILE" \
   script/trace_mark.sh --save >/tmp/autocomplete-trace-mark-save.txt
 
-if ! grep -F "Saved trace mark: 24" /tmp/autocomplete-trace-mark-save.txt >/dev/null; then
+if ! grep -F "Saved trace mark: 25" /tmp/autocomplete-trace-mark-save.txt >/dev/null; then
   echo "trace mark self-test did not save the current trace line" >&2
   cat /tmp/autocomplete-trace-mark-save.txt >&2
   exit 1

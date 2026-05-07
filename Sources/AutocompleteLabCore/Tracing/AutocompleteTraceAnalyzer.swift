@@ -49,6 +49,12 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let fullAcceptShare: Double
     public let duplicateTextCount: Int
     public let appDisableCount: Int
+    public let caretGeometryFailureCount: Int
+    public let caretGeometryFailureRate: Double
+    public let caretGeometryFailuresByApp: [String: Int]
+    public let caretGeometryFailureRateByApp: [String: Double]
+    public let caretGeometryFailuresByRenderMode: [String: Int]
+    public let caretGeometryFailureRateByRenderMode: [String: Double]
     public let annoyanceScore: Double
     public let annoyanceSignalCounts: [String: Int]
     public let acceptRate: Double
@@ -96,6 +102,12 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         fullAcceptShare: Double = 0,
         duplicateTextCount: Int = 0,
         appDisableCount: Int = 0,
+        caretGeometryFailureCount: Int = 0,
+        caretGeometryFailureRate: Double = 0,
+        caretGeometryFailuresByApp: [String: Int] = [:],
+        caretGeometryFailureRateByApp: [String: Double] = [:],
+        caretGeometryFailuresByRenderMode: [String: Int] = [:],
+        caretGeometryFailureRateByRenderMode: [String: Double] = [:],
         annoyanceScore: Double = 0,
         annoyanceSignalCounts: [String: Int] = [:],
         acceptRate: Double,
@@ -142,6 +154,12 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.fullAcceptShare = fullAcceptShare
         self.duplicateTextCount = duplicateTextCount
         self.appDisableCount = appDisableCount
+        self.caretGeometryFailureCount = caretGeometryFailureCount
+        self.caretGeometryFailureRate = caretGeometryFailureRate
+        self.caretGeometryFailuresByApp = caretGeometryFailuresByApp
+        self.caretGeometryFailureRateByApp = caretGeometryFailureRateByApp
+        self.caretGeometryFailuresByRenderMode = caretGeometryFailuresByRenderMode
+        self.caretGeometryFailureRateByRenderMode = caretGeometryFailureRateByRenderMode
         self.annoyanceScore = annoyanceScore
         self.annoyanceSignalCounts = annoyanceSignalCounts
         self.acceptRate = acceptRate
@@ -190,6 +208,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let actionableSuppressed = suppressed.filter { isActionableSuppression($0) }
         let insertionFailures = events.filter { $0.type == .insertionFailed }
         let insertionVerified = events.filter { $0.type == .insertionVerified }
+        let caretGeometryFailures = events.filter { $0.type == .caretGeometryFailed }
         let acceptedTextEdited = events.filter { $0.type == .acceptedTextEdited }
         let firstShownLatencies = firstPresentedByID.values.compactMap(\.latencyMilliseconds).sorted()
         let acceptedEventIDs = Set(accepted.map(acceptanceIdentifier))
@@ -236,6 +255,23 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             fullAcceptShare: accepted.isEmpty ? 0 : Double(accepted.filter(isFullAccept).count) / Double(accepted.count),
             duplicateTextCount: insertionFailures.filter(isDuplicateTextEvent).count,
             appDisableCount: events.filter { $0.type == .appDisabled }.count,
+            caretGeometryFailureCount: caretGeometryFailures.count,
+            caretGeometryFailureRate: rate(
+                numerator: caretGeometryFailures.count,
+                denominator: firstPresentedByID.count + caretGeometryFailures.count
+            ),
+            caretGeometryFailuresByApp: counts(caretGeometryFailures, key: \.appBundleIdentifier),
+            caretGeometryFailureRateByApp: failureRates(
+                presented: Array(firstPresentedByID.values),
+                failures: caretGeometryFailures,
+                key: \.appBundleIdentifier
+            ),
+            caretGeometryFailuresByRenderMode: counts(caretGeometryFailures, key: renderMode),
+            caretGeometryFailureRateByRenderMode: failureRates(
+                presented: Array(firstPresentedByID.values),
+                failures: caretGeometryFailures,
+                key: renderMode
+            ),
             annoyanceScore: annoyanceScore(signalCounts: annoyanceSignals, presentedCount: firstPresentedByID.count),
             annoyanceSignalCounts: annoyanceSignals,
             acceptRate: presentedIDs.isEmpty ? 0 : Double(acceptedIDs.count) / Double(presentedIDs.count),
@@ -322,6 +358,11 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         return arm.isEmpty ? "unknown" : arm
     }
 
+    private func renderMode(_ event: AutocompleteTraceEvent) -> String {
+        let mode = event.metadata["effectiveRenderMode"] ?? event.metadata["renderMode"] ?? ""
+        return mode.isEmpty ? "unknown" : mode
+    }
+
     private func acceptanceIdentifier(_ event: AutocompleteTraceEvent) -> String {
         event.metadata["acceptanceID"] ?? event.suggestionID
     }
@@ -382,6 +423,28 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
     private func isActionableSuppression(_ event: AutocompleteTraceEvent) -> Bool {
         event.reason != "no-fast-word-candidate"
+    }
+
+    private func rate(numerator: Int, denominator: Int) -> Double {
+        denominator == 0 ? 0 : Double(numerator) / Double(denominator)
+    }
+
+    private func failureRates(
+        presented: [AutocompleteTraceEvent],
+        failures: [AutocompleteTraceEvent],
+        key: (AutocompleteTraceEvent) -> String
+    ) -> [String: Double] {
+        let presentedCounts = counts(presented, key: key)
+        let failureCounts = counts(failures, key: key)
+        var rates: [String: Double] = [:]
+
+        for bucket in Set(presentedCounts.keys).union(failureCounts.keys) {
+            let failures = failureCounts[bucket] ?? 0
+            let shown = presentedCounts[bucket] ?? 0
+            rates[bucket] = rate(numerator: failures, denominator: shown + failures)
+        }
+
+        return rates
     }
 
     private func rates(
