@@ -217,7 +217,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P1: AppDelegate Refactor
 
-- [ ] Extract presentation policy out of `AppDelegate`.
+- [x] Extract presentation policy out of `AppDelegate`.
 - [ ] Extract observer coordination out of `AppDelegate`.
 - [x] Extract insertion verification scheduling out of `AppDelegate`.
 - [ ] Extract trace screenshot capture out of `AppDelegate`.
