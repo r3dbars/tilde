@@ -13,14 +13,15 @@ CHROME_FIXTURE_WAS_SET=0
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|all>]
+Usage: script/real_app_smoke.sh <textedit|chrome|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|chat-like|all>]
 
 Runs a real app smoke pass where it is safe to automate. Notes, Obsidian,
 Codex, Claude Code, and Claude desktop are manual-gated so this script never
 types into private notes, vaults, or agent prompts by surprise.
 
-Chrome defaults to the textarea fixture. Use --fixture all to run every local
-Chrome browser/editor fixture with one app build.
+Chrome defaults to the textarea fixture. Use --fixture chat-like to prove
+Tab/full-accept do not submit a chat-style composer. Use --fixture all to run
+every local Chrome browser/editor fixture with one app build.
 EOF
 }
 
@@ -71,7 +72,7 @@ case "$APP" in
 esac
 
 case "$CHROME_FIXTURE" in
-  textarea|contenteditable|editor-like|monaco-like|prosemirror-like|all)
+  textarea|contenteditable|editor-like|monaco-like|prosemirror-like|chat-like|all)
     ;;
   *)
     echo "Unknown Chrome fixture: $CHROME_FIXTURE" >&2
@@ -296,6 +297,27 @@ APPLESCRIPT
   wait_for_frontmost_app "TextEdit" 5
 }
 
+assert_chrome_chat_fixture_not_submitted() {
+  local label="$1"
+  local submit_count
+
+  submit_count="$(osascript <<'APPLESCRIPT'
+tell application "Google Chrome"
+  try
+    return (execute javascript "String(window.autocompleteSmokeSubmitCount || 0)" in active tab of front window)
+  on error
+    return "unknown"
+  end try
+end tell
+APPLESCRIPT
+)"
+
+  if [[ "$submit_count" != "0" ]]; then
+    echo "Chrome chat-like fixture submitted unexpectedly during $label; submit count was $submit_count." >&2
+    exit 1
+  fi
+}
+
 chrome_fixture_html() {
   local fixture="${1:-$CHROME_FIXTURE}"
 
@@ -479,6 +501,93 @@ window.addEventListener("load", window.focusSmokeEditor);
 </script>
 HTML
       ;;
+    chat-like)
+      cat <<'HTML'
+<!doctype html>
+<meta charset="utf-8">
+<title>Autocomplete Lab Chrome Chat-Like No-Submit Smoke</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
+<style>
+body {
+  margin: 0;
+  background: #f6f6f6;
+  color: #1f2328;
+  font: 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.thread {
+  width: 760px;
+  margin: 70px auto;
+}
+.message {
+  max-width: 520px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: white;
+  border: 1px solid #ddd;
+}
+form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 22px;
+  padding: 12px;
+  border: 1px solid #d7d7d7;
+  border-radius: 16px;
+  background: white;
+}
+[data-smoke-editor] {
+  min-height: 44px;
+  max-height: 140px;
+  padding: 10px 12px;
+  border: 1px solid #cfcfcf;
+  border-radius: 10px;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+button {
+  min-width: 72px;
+  min-height: 38px;
+}
+.meter {
+  margin-top: 10px;
+  color: #666;
+  font-size: 13px;
+}
+</style>
+<section class="thread" aria-label="Local chat-like smoke fixture">
+  <div class="message">Local disposable chat fixture.</div>
+  <form data-smoke-form>
+    <div data-smoke-editor role="textbox" aria-label="Chat message composer" aria-multiline="true" contenteditable="true" spellcheck="false"></div>
+    <button type="submit">Send</button>
+  </form>
+  <div class="meter" aria-live="polite">Submits: <span data-smoke-submit-count>0</span></div>
+</section>
+<script>
+window.autocompleteSmokeSubmitCount = 0;
+window.autocompleteSmokeEditorText = function () {
+  return document.querySelector("[data-smoke-editor]").innerText;
+};
+window.focusSmokeEditor = function () {
+  const editor = document.querySelector("[data-smoke-editor]");
+  editor.focus();
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+document.querySelector("[data-smoke-form]").addEventListener("submit", function (event) {
+  event.preventDefault();
+  window.autocompleteSmokeSubmitCount += 1;
+  document.querySelector("[data-smoke-submit-count]").textContent = String(window.autocompleteSmokeSubmitCount);
+});
+window.addEventListener("load", window.focusSmokeEditor);
+</script>
+HTML
+      ;;
   esac
 }
 
@@ -493,7 +602,7 @@ describe_plan() {
     chrome)
       echo "Chrome fixture: $CHROME_FIXTURE"
       if [[ "$CHROME_FIXTURE" == "all" ]]; then
-        echo "Plan: build/relaunch AutocompleteLab, then run disposable Chrome textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like local fixtures."
+        echo "Plan: build/relaunch AutocompleteLab, then run disposable Chrome textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, and chat-like no-submit local fixtures."
       else
         echo "Plan: build/relaunch AutocompleteLab, open a disposable Chrome $CHROME_FIXTURE fixture, type a test fragment, then validate logs and traces."
       fi
@@ -635,9 +744,16 @@ APPLESCRIPT
     "action=acceptNextWord" \
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.google.Chrome .*result=verified" "Chrome $fixture first verified insertion"
+  if [[ "$fixture" == "chat-like" ]]; then
+    assert_chrome_chat_fixture_not_submitted "Tab acceptance"
+  fi
   assert_frontmost_app "Google Chrome" "Chrome $fixture"
   focus_chrome_smoke_editor
   press_key_code 50
+
+  if [[ "$fixture" == "chat-like" ]]; then
+    assert_chrome_chat_fixture_not_submitted "full acceptance"
+  fi
 
   sleep 1
   AUTOCOMPLETE_LAB_CHROME_FIXTURE="$fixture" \
@@ -664,6 +780,7 @@ run_chrome() {
     run_chrome_fixture editor-like
     run_chrome_fixture monaco-like
     run_chrome_fixture prosemirror-like
+    run_chrome_fixture chat-like
   else
     run_chrome_fixture "$CHROME_FIXTURE"
   fi

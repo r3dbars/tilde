@@ -11,6 +11,7 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture co
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture editor-like
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-like
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-like
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture chat-like
 ```
 
 Run all local Chrome browser/editor fixtures with one build:
@@ -41,7 +42,8 @@ What this proves:
 - strict screenshot trace evidence can be required with `--visual` through the
   manual recorder or by setting `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1`
 - Chrome works in plain textareas, contenteditable fields, editor-like nested
-  contenteditables, Monaco-like editors, and ProseMirror-like editors
+  contenteditables, Monaco-like editors, ProseMirror-like editors, and a
+  chat-style composer fixture that fails if Tab/full-accept submits the form
 
 Notes, Obsidian, Codex, Claude desktop, and Claude Code checks are manual-gated.
 Do not use real notes, vault content, or live prompts for proof. Use disposable
@@ -49,4 +51,6 @@ smoke text only, and never press Enter in an agent prompt pass.
 
 All Chrome fixtures are local and dependency-free. The Monaco-like and
 ProseMirror-like fixtures copy the DOM shape and focus behavior those editors
-usually expose, but they do not load the real upstream libraries.
+usually expose, but they do not load the real upstream libraries. The chat-like
+fixture is not a real Codex or Claude proof; it is a local no-submit guardrail
+that must pass before trusting prompt app smoke results.
