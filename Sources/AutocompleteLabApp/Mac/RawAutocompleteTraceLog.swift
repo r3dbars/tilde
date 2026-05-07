@@ -207,6 +207,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         prompt: CompletionPrompt,
         rawOutput: String,
         cleanedSuggestion: CompletionSuggestion?,
+        cleanedCandidateCount: Int = 0,
         suggestionID: String = "",
         latencyMilliseconds: Int? = nil,
         firstTokenLatencyMilliseconds: Int? = nil
@@ -217,6 +218,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
 
         var metadata = [
             "cleanedWordCount": String(cleanedSuggestion?.visibleWordCount ?? 0),
+            "cleanedCandidateCount": String(cleanedCandidateCount),
             "emptyResult": String(cleanedSuggestion == nil)
         ]
         metadata.merge(request.behaviorProfileTraceMetadata) { current, _ in current }

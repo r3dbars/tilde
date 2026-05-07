@@ -22,6 +22,35 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         clean(rawOutput, after: textBeforeCursor, mode: .phraseContinuation)
     }
 
+    public func cleanCandidates(
+        _ rawOutput: String,
+        after textBeforeCursor: String?,
+        mode: CompletionRequestMode,
+        limit: Int = 3
+    ) -> [CompletionSuggestion] {
+        let maxCandidateCount = max(1, limit)
+        var seen: Set<String> = []
+        var suggestions: [CompletionSuggestion] = []
+
+        for candidateLine in candidateLines(from: rawOutput) {
+            guard let suggestion = clean(candidateLine, after: textBeforeCursor, mode: mode) else {
+                continue
+            }
+
+            let key = normalizedCandidateKey(suggestion.visibleText)
+            guard seen.insert(key).inserted else {
+                continue
+            }
+
+            suggestions.append(suggestion)
+            if suggestions.count >= maxCandidateCount {
+                break
+            }
+        }
+
+        return suggestions
+    }
+
     public func clean(_ rawOutput: String, after textBeforeCursor: String?, mode: CompletionRequestMode) -> CompletionSuggestion? {
         let withoutThinking = rawOutput
             .replacingOccurrences(
@@ -143,6 +172,44 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return suggestion
     }
 
+    private func candidateLines(from rawOutput: String) -> [String] {
+        let withoutThinking = rawOutput
+            .replacingOccurrences(
+                of: #"<think>[\s\S]*?</think>"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: #"</?think>"#,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+
+        let lines = withoutThinking
+            .components(separatedBy: .newlines)
+            .map(strippingCandidatePrefix)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+        return lines.isEmpty ? [withoutThinking] : lines
+    }
+
+    private func strippingCandidatePrefix(from text: String) -> String {
+        text.replacingOccurrences(
+            of: #"^\s*(?:[-*•]|\d+[\).:]|[A-Za-z][\).:])\s+"#,
+            with: "",
+            options: .regularExpression
+        )
+    }
+
+    private func normalizedCandidateKey(_ text: String) -> String {
+        text
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+    }
+
     private func isNoSuggestionSentinel(_ text: String) -> Bool {
         let trimmed = text
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -191,6 +258,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("inline autocomplete")
             || normalized.hasPrefix("inline word completion")
             || normalized.hasPrefix("return only")
+            || normalized.hasPrefix("return exactly")
             || normalized.hasPrefix("no spaces")
             || normalized.hasPrefix("continue the current sentence")
             || normalized.hasPrefix("start the next sentence")

@@ -64,7 +64,8 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
             : "Phrase mode: continue only the current local thought."
         let base = """
         Inline autocomplete.
-        Return only the next \(effectiveMaxVisibleWords) words or fewer.
+        Return 1 to 3 candidate suffixes, one per line, best first.
+        Each candidate must be only the next \(effectiveMaxVisibleWords) words or fewer.
         Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, chatty, or likely to answer the prompt instead of continuing it.
         Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens.
         \(behaviorProfile.promptGuidance.joined(separator: "\n"))

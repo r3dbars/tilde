@@ -10,6 +10,8 @@ struct CompletionPromptBuilderTests {
 
         #expect(prompt.system.contains("next 5 words or fewer"))
         #expect(prompt.system.contains("Inline autocomplete"))
+        #expect(prompt.system.contains("Return 1 to 3 candidate suffixes"))
+        #expect(prompt.system.contains("best first"))
         #expect(prompt.system.contains("return exactly <NO_SUGGESTION>"))
         #expect(prompt.system.contains("confidence is low"))
         #expect(prompt.system.contains("boring connective tissue"))

@@ -79,6 +79,60 @@ struct CompletionOutputCleanerTests {
         #expect(suggestion?.visibleText == " ship this today")
     }
 
+    @Test("Cleans numbered multiline candidates")
+    func cleansNumberedMultilineCandidates() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 5)
+        let suggestions = cleaner.cleanCandidates(
+            """
+            1. make this feel calm
+            2. make this feel calm
+            3. make this easier to ship
+            """,
+            after: "Can we",
+            mode: .phraseContinuation
+        )
+
+        #expect(suggestions.map(\.visibleText) == [
+            " make this feel calm",
+            " make this easier to ship"
+        ])
+    }
+
+    @Test("Cleans bulleted multiline candidates")
+    func cleansBulletedMultilineCandidates() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 5)
+        let suggestions = cleaner.cleanCandidates(
+            """
+            - keep this small
+            * make it easy to trust
+            A. return exactly <NO_SUGGESTION>
+            """,
+            after: "We should",
+            mode: .phraseContinuation
+        )
+
+        #expect(suggestions.map(\.visibleText) == [
+            " keep this small",
+            " make it easy to trust"
+        ])
+    }
+
+    @Test("Suppresses unsafe multiline candidates")
+    func suppressesUnsafeMultilineCandidates() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+        let suggestions = cleaner.cleanCandidates(
+            """
+            1. <NO_SUGGESTION>
+            2. press Enter to send the prompt
+            3. Inline autocomplete. Return only the continuation.
+            """,
+            after: "Can you",
+            mode: .phraseContinuation
+        )
+
+        #expect(suggestions.isEmpty)
+    }
+
     @Test("Strips echoed prompt labels")
     func stripsEchoedPromptLabels() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
