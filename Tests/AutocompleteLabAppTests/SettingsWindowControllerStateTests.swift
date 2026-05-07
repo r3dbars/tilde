@@ -295,22 +295,24 @@ struct SettingsWindowControllerStateTests {
                 == "Start here: allow Accessibility so Autocomplete Lab can read cursor text and bounds, then insert only what you accept. Text stays on this Mac."
         )
         #expect(permissionNeeded.textEditTestButtonTitle == "Open TextEdit Test")
-        #expect(!permissionNeeded.canOpenTextEditTest)
         #expect(
-            SettingsFirstRunState(
-                isTrusted: true,
-                suggestionsPaused: true,
-                runtimeReport: missingModelReport,
-                currentApp: textEdit
-            ).message.contains("Model missing")
+            permissionNeeded.textEditTestButtonToolTip
+                == "Allow Accessibility before opening the disposable TextEdit test."
+        )
+        #expect(!permissionNeeded.canOpenTextEditTest)
+        let missingModel = SettingsFirstRunState(
+            isTrusted: true,
+            suggestionsPaused: true,
+            runtimeReport: missingModelReport,
+            currentApp: textEdit
+        )
+        #expect(missingModel.message.contains("Model missing"))
+        #expect(
+            missingModel.textEditTestButtonToolTip
+                == "The local model must be ready before the disposable TextEdit test starts."
         )
         #expect(
-            !SettingsFirstRunState(
-                isTrusted: true,
-                suggestionsPaused: true,
-                runtimeReport: missingModelReport,
-                currentApp: textEdit
-            ).canOpenTextEditTest
+            !missingModel.canOpenTextEditTest
         )
         #expect(
             SettingsFirstRunState(
@@ -330,6 +332,10 @@ struct SettingsWindowControllerStateTests {
         #expect(
             readyTextEdit.message
                 == "Ready: TextEdit is the first test app. Use a disposable document; Tab accepts one word and Esc dismisses."
+        )
+        #expect(
+            readyTextEdit.textEditTestButtonToolTip
+                == "Opens a disposable TextEdit document for the first safe writing test."
         )
         #expect(readyTextEdit.canOpenTextEditTest)
         #expect(
