@@ -32,10 +32,10 @@ write_passing_trace() {
   local bundle_id="$1"
 
   cat >"$TRACE_PATH" <<EOF
-{"type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","latencyMilliseconds":0}
+{"type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"anchorSource":"caret","anchorQuality":"trusted","anchorReason":"caretBoundsTrusted","anchorCanPresent":"true","anchorRect":"10,20,0,18","hasCaretRect":"true"}}
 {"type":"suggestionAccepted","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","acceptedText":"make"}
 {"type":"insertionVerified","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","acceptedText":"make"}
-{"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","latencyMilliseconds":110}
+{"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","latencyMilliseconds":110,"metadata":{"anchorSource":"caret","anchorQuality":"trusted","anchorReason":"caretBoundsTrusted","anchorCanPresent":"true","anchorRect":"10,20,0,18","hasCaretRect":"true"}}
 {"type":"suggestionAccepted","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","acceptedText":" this work"}
 {"type":"insertionVerified","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","acceptedText":" this work"}
 EOF
@@ -75,6 +75,62 @@ run_passing_case obsidian Obsidian md.obsidian floatingMirror floatingMirror
 run_passing_case chrome Chrome com.google.Chrome floatingMirror floatingMirror
 run_passing_case codex Codex com.openai.codex 'inlineAdjacent|floatingMirror' inlineAdjacent
 
+run_diagnostics_blocked_case() {
+  local app="$1"
+  local display_name="$2"
+  local bundle_id="$3"
+
+  cat >"$LOG_PATH" <<EOF
+2026-04-26T08:00:00Z status accessibility=AX ok app=$display_name enabled=on profile=$display_name
+2026-04-26T08:00:01Z suggestion-blocked afterChars=0 app=$bundle_id beforeChars=6 canReadBounds=true canReadRange=true canReadValue=String(6 chars) canSetSelectedText=String(4 chars) fieldIdentityMode=stableBounds hasCaretRect=false hasElementRect=true hasWindowRect=true insertionMode=disabled reason=profile-diagnostics-only renderMode=disabled role=AXTextArea subrole=none
+EOF
+  : >"$TRACE_PATH"
+
+  AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+    AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+    AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+    AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+    AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+    script/manual_smoke_session.sh "$app" --check >/dev/null
+
+  if ! grep -F "| $display_name | \`$bundle_id\` | 0 | \`diagnostics-only-blocked\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
+    echo "manual smoke self-test did not record the blocked $display_name diagnostics-only pass" >&2
+    exit 1
+  fi
+}
+
+run_unsupported_blocked_case() {
+  local app="$1"
+  local display_name="$2"
+  local bundle_id="$3"
+
+  cat >"$LOG_PATH" <<EOF
+2026-04-26T08:00:00Z status accessibility=AX ok app=$display_name enabled=off profile=unsupported
+EOF
+  : >"$TRACE_PATH"
+
+  AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+    AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+    AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+    AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+    AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+    script/manual_smoke_session.sh "$app" --check >/dev/null
+
+  if ! grep -F "| $display_name | \`$bundle_id\` | 0 | \`unsupported-blocked\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
+    echo "manual smoke self-test did not record the blocked $display_name unsupported pass" >&2
+    exit 1
+  fi
+}
+
+run_diagnostics_blocked_case mail Mail com.apple.mail
+run_diagnostics_blocked_case safari Safari com.apple.Safari
+run_diagnostics_blocked_case slack Slack com.tinyspeck.slackmacgap
+run_diagnostics_blocked_case vscode "VS Code" com.microsoft.VSCode
+run_diagnostics_blocked_case cursor Cursor com.todesktop.230313mzl4w4u92
+run_unsupported_blocked_case atlas Atlas com.openai.atlas
+run_unsupported_blocked_case terminal Terminal com.apple.Terminal
+run_unsupported_blocked_case onepassword 1Password com.1password.1password
+
 cat >"$LOG_PATH" <<'EOF'
 2026-04-26T08:00:00Z suggestion-blocked app=md.obsidian reason=detached-suggestion-disabled hasCaretRect=false
 EOF
@@ -101,6 +157,20 @@ AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
 for app_name in TextEdit Notes Chrome Codex; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
+    exit 1
+  fi
+done
+
+for app_name in Mail Safari Slack "VS Code" Cursor; do
+  if ! grep -F -- "- $app_name: diagnostics-only blocked" "$STATUS_OUTPUT" >/dev/null; then
+    echo "manual smoke self-test did not report $app_name as diagnostics-only blocked" >&2
+    exit 1
+  fi
+done
+
+for app_name in Atlas Terminal 1Password; do
+  if ! grep -F -- "- $app_name: unsupported blocked" "$STATUS_OUTPUT" >/dev/null; then
+    echo "manual smoke self-test did not report $app_name as unsupported blocked" >&2
     exit 1
   fi
 done

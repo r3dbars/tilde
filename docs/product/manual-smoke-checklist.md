@@ -71,6 +71,40 @@ Recorder: `script/manual_smoke_session.sh codex`
 - Press the key above Tab for full visible accept.
 - Do not press Enter as part of the smoke pass.
 
+## Diagnostics-Only Apps
+
+Recorders:
+
+- `script/manual_smoke_session.sh mail`
+- `script/manual_smoke_session.sh safari`
+- `script/manual_smoke_session.sh slack`
+- `script/manual_smoke_session.sh vscode`
+- `script/manual_smoke_session.sh cursor`
+
+Use only disposable local drafts, local pages, or local files.
+
+- Type `Can we`.
+- Confirm no suggestion appears.
+- Confirm Tab is not captured by autocomplete.
+- Confirm the key above Tab is not captured by autocomplete.
+- Confirm diagnostics show `suggestion-blocked` with `reason=profile-diagnostics-only`.
+
+## Unsupported And High-Risk Apps
+
+Recorders:
+
+- `script/manual_smoke_session.sh atlas`
+- `script/manual_smoke_session.sh terminal`
+- `script/manual_smoke_session.sh onepassword`
+
+Do not type secrets, commands, payment details, tokens, or real messages.
+
+- Focus only a safe disposable field or prompt.
+- Confirm the menu status shows `unsupported`.
+- Confirm no suggestion appears.
+- Confirm Tab is not captured by autocomplete.
+- Confirm no insert or insertion verification is recorded.
+
 ## Hold For Explicit Confirmation
 
 - Mail compose body insertion. Mail is diagnostics-only until a safe adapter is verified.

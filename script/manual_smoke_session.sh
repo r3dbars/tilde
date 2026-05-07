@@ -9,7 +9,12 @@ REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-r
 
 usage() {
   cat <<'EOF'
-Usage: script/manual_smoke_session.sh <textedit|notes|obsidian|chrome|codex> [--print|--check]
+Usage: script/manual_smoke_session.sh <app> [--print|--check]
+
+Supported apps:
+  textedit notes obsidian chrome codex
+  mail safari slack vscode cursor
+  atlas terminal onepassword
 
 Default mode prints the local manual steps, records the current diagnostics log
 line, waits for Enter, validates the new diagnostics for that app, then appends
@@ -28,6 +33,7 @@ fi
 BUNDLE_ID=""
 DISPLAY_NAME=""
 EXPECTED_RENDER=""
+PROOF_KIND="accept"
 STEPS=""
 
 case "$APP" in
@@ -60,6 +66,62 @@ case "$APP" in
     DISPLAY_NAME="Codex"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once, then the key above Tab for full visible accept.\n- Do not press Enter as part of the smoke pass.'
+    ;;
+  mail)
+    BUNDLE_ID="com.apple.mail"
+    DISPLAY_NAME="Mail"
+    EXPECTED_RENDER="disabled"
+    PROOF_KIND="diagnostics-only"
+    STEPS=$'- Open a disposable Mail compose draft with no recipient.\n- Type `Can we` in the body.\n- Confirm no suggestion appears.\n- Confirm Tab and the key above Tab are not captured by autocomplete.\n- Delete the draft after the pass only if you are sure it is disposable.'
+    ;;
+  safari)
+    BUNDLE_ID="com.apple.Safari"
+    DISPLAY_NAME="Safari"
+    EXPECTED_RENDER="disabled"
+    PROOF_KIND="diagnostics-only"
+    STEPS=$'- Open a local textarea or disposable local test page in Safari.\n- Type `Can we`.\n- Confirm no suggestion appears.\n- Confirm Tab and the key above Tab are not captured by autocomplete.'
+    ;;
+  slack)
+    BUNDLE_ID="com.tinyspeck.slackmacgap"
+    DISPLAY_NAME="Slack"
+    EXPECTED_RENDER="disabled"
+    PROOF_KIND="diagnostics-only"
+    STEPS=$'- Focus only a disposable Slack draft or your own test space.\n- Type `Can we` without sending.\n- Confirm no suggestion appears.\n- Confirm Tab and the key above Tab are not captured by autocomplete.\n- Do not send the message as part of the smoke pass.'
+    ;;
+  vscode)
+    BUNDLE_ID="com.microsoft.VSCode"
+    DISPLAY_NAME="VS Code"
+    EXPECTED_RENDER="disabled"
+    PROOF_KIND="diagnostics-only"
+    STEPS=$'- Open a disposable local text file in VS Code.\n- Type `Can we`.\n- Confirm no suggestion appears.\n- Confirm Tab and the key above Tab are not captured by autocomplete.'
+    ;;
+  cursor)
+    BUNDLE_ID="com.todesktop.230313mzl4w4u92"
+    DISPLAY_NAME="Cursor"
+    EXPECTED_RENDER="disabled"
+    PROOF_KIND="diagnostics-only"
+    STEPS=$'- Open a disposable local text file in Cursor.\n- Type `Can we`.\n- Confirm no suggestion appears.\n- Confirm Tab and the key above Tab are not captured by autocomplete.'
+    ;;
+  atlas)
+    BUNDLE_ID="com.openai.atlas"
+    DISPLAY_NAME="Atlas"
+    EXPECTED_RENDER="disabled"
+    PROOF_KIND="unsupported"
+    STEPS=$'- Focus Atlas in a harmless disposable prompt or local field.\n- Type `Can we`.\n- Confirm the menu status shows `unsupported`.\n- Confirm no suggestion appears and autocomplete does not capture Tab.'
+    ;;
+  terminal)
+    BUNDLE_ID="com.apple.Terminal"
+    DISPLAY_NAME="Terminal"
+    EXPECTED_RENDER="disabled"
+    PROOF_KIND="unsupported"
+    STEPS=$'- Focus a local Terminal prompt.\n- Type a harmless fragment, then delete it without pressing Enter.\n- Confirm the menu status shows `unsupported`.\n- Confirm no suggestion appears and autocomplete does not capture Tab.'
+    ;;
+  onepassword)
+    BUNDLE_ID="com.1password.1password"
+    DISPLAY_NAME="1Password"
+    EXPECTED_RENDER="disabled"
+    PROOF_KIND="unsupported"
+    STEPS=$'- Focus a safe non-secret area in 1Password, not a real secret field.\n- Confirm the menu status shows `unsupported`.\n- Confirm no suggestion appears and autocomplete does not capture Tab.\n- Do not type or reveal any real password, token, key, or payment data.'
     ;;
   *)
     usage >&2
@@ -180,6 +242,20 @@ reject_pattern() {
   fi
 }
 
+reject_line_with_fields() {
+  local label="$1"
+  shift
+
+  local count
+  count="$(count_line_with_fields "$@")"
+  if [[ "$count" != "0" ]]; then
+    echo "failed $DISPLAY_NAME diagnostics: $label" >&2
+    echo "log: $LOG_PATH" >&2
+    print_failure_summary
+    exit 1
+  fi
+}
+
 append_report_row() {
   local verified_count="$1"
   local render_expectation="${2:-$EXPECTED_RENDER}"
@@ -235,6 +311,34 @@ if [[ "$APP" == "obsidian" ]] &&
 
   append_report_row 0 "detached-suppressed"
   echo "$DISPLAY_NAME manual smoke verified detached suggestion suppression."
+  echo "Recorded pass in $REPORT_PATH."
+  exit 0
+fi
+
+if [[ "$PROOF_KIND" == "diagnostics-only" ]]; then
+  require_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=profile-diagnostics-only" "diagnostics-only profile blocked suggestion"
+  reject_pattern "suggestion-presented .*app=$BUNDLE_ID" "suggestion shown for diagnostics-only app"
+  reject_line_with_fields "Tab captured for diagnostics-only app" "keyboard-action" "app=$BUNDLE_ID" "key=tab" "handled=true"
+  reject_line_with_fields "full accept captured for diagnostics-only app" "keyboard-action" "app=$BUNDLE_ID" "key=backtick" "handled=true"
+  reject_pattern "insert .*app=$BUNDLE_ID .*success=true" "insert attempted for diagnostics-only app"
+  reject_pattern "insert-verification .*app=$BUNDLE_ID .*result=verified" "insertion verified for diagnostics-only app"
+
+  append_report_row 0 "diagnostics-only-blocked"
+  echo "$DISPLAY_NAME manual smoke verified diagnostics-only suppression."
+  echo "Recorded pass in $REPORT_PATH."
+  exit 0
+fi
+
+if [[ "$PROOF_KIND" == "unsupported" ]]; then
+  require_line_with_fields "unsupported app status" "status" "profile=unsupported" "enabled=off"
+  reject_pattern "suggestion-presented" "suggestion shown while unsupported app was frontmost"
+  reject_line_with_fields "Tab captured while unsupported app was frontmost" "keyboard-action" "key=tab" "handled=true"
+  reject_line_with_fields "full accept captured while unsupported app was frontmost" "keyboard-action" "key=backtick" "handled=true"
+  reject_pattern "insert .*success=true" "insert attempted while unsupported app was frontmost"
+  reject_pattern "insert-verification .*result=verified" "insertion verified while unsupported app was frontmost"
+
+  append_report_row 0 "unsupported-blocked"
+  echo "$DISPLAY_NAME manual smoke verified unsupported-app suppression."
   echo "Recorded pass in $REPORT_PATH."
   exit 0
 fi
