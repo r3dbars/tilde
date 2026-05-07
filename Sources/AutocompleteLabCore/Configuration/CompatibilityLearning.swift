@@ -202,7 +202,8 @@ public extension PlacementTrustPolicy {
 
         return PlacementTrustPolicy(
             allowsLowConfidencePlacement: isGreenProfile || hasTrustedVisualAdjustment,
-            allowsSyntheticCaretPlacement: isGreenProfile || hasTrustedVisualAdjustment
+            allowsSyntheticCaretPlacement: isGreenProfile || hasTrustedVisualAdjustment,
+            allowsDetachedAnchorPlacement: isGreenProfile || hasTrustedVisualAdjustment
         )
     }
 }
