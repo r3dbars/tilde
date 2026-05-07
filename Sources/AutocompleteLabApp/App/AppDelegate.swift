@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
+    private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private let suggestionPanel = SuggestionPanelController()
@@ -97,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private var isFocusedTextPollInFlight = false
     private var latestFocusedTextReadRequestID: UInt64?
+    private var focusedTextAXHealthState = FocusedTextAXHealthState()
     private var focusedTextPollLatencyStats = FocusedTextPollLatencyStats()
     private var focusedTextPollSkipStats = FocusedTextPollSkipStats()
     private var suggestionRequestGate = SuggestionRequestGate()
@@ -504,6 +506,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        guard allowFocusedTextAXRead(for: frontmostApp.bundleIdentifier) else {
+            return
+        }
+
         let requestID = focusedTextReader.readFocusedTextContext(
             for: frontmostApp,
             allowDescendantTextFallback: profile.allowsDescendantTextFallback
@@ -551,6 +557,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "hasContext": String(result.context != nil)
                 ]
             )
+        }
+
+        if applyFocusedTextAXHealthObservation(result) {
+            return
         }
 
         guard let activeApp = accessibilityClient.frontmostApplication(),
@@ -790,6 +800,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             delayMilliseconds: delayMilliseconds,
             requestMode: requestMode
         )
+    }
+
+    private func allowFocusedTextAXRead(for bundleIdentifier: String) -> Bool {
+        switch focusedTextAXHealthPolicy.pollDecision(
+            for: bundleIdentifier,
+            now: Date(),
+            state: &focusedTextAXHealthState
+        ) {
+        case let .allowed(recovery?):
+            DiagnosticsLog.shared.record(
+                "focused-text-ax-health-recovered",
+                metadata: [
+                    "app": recovery.bundleIdentifier,
+                    "reason": recovery.reason.rawValue,
+                    "cooldownMilliseconds": String(recovery.cooldownMilliseconds)
+                ]
+            )
+            return true
+        case .allowed(nil):
+            return true
+        case let .coolingDown(cooldown):
+            invalidatePendingSuggestionRequest()
+            if suggestionSession.hasVisibleSuggestion {
+                hideSuggestion(reason: "focused-text-ax-health-\(cooldown.reason.rawValue)")
+            }
+            setSuggestionDecision("Waiting: AX cooldown")
+            return false
+        }
+    }
+
+    private func applyFocusedTextAXHealthObservation(_ result: FocusedTextAXReadResult) -> Bool {
+        let observation = focusedTextAXHealthPolicy.recordRead(
+            bundleIdentifier: result.app.bundleIdentifier,
+            queueDelayMilliseconds: result.queueDelayMilliseconds,
+            readDurationMilliseconds: result.readDurationMilliseconds,
+            now: Date(),
+            state: &focusedTextAXHealthState
+        )
+
+        guard observation.didStartCooldown,
+              let cooldown = observation.cooldown else {
+            return false
+        }
+
+        DiagnosticsLog.shared.record(
+            "focused-text-ax-health-cooldown-started",
+            metadata: [
+                "app": cooldown.bundleIdentifier,
+                "reason": cooldown.reason.rawValue,
+                "slowReadCount": String(cooldown.slowReadCount),
+                "cooldownMilliseconds": String(cooldown.cooldownMilliseconds),
+                "queueDelayMilliseconds": String(result.queueDelayMilliseconds),
+                "readDurationMilliseconds": String(result.readDurationMilliseconds),
+                "hasContext": String(result.context != nil)
+            ]
+        )
+        invalidatePendingSuggestionRequest()
+        if suggestionSession.hasVisibleSuggestion {
+            hideSuggestion(reason: "focused-text-ax-health-\(cooldown.reason.rawValue)")
+        }
+        setSuggestionDecision("Waiting: AX cooldown")
+        return true
     }
 
     private func recordFocusedTextPollLatency(_ durationMilliseconds: Int) {
