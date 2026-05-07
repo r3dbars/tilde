@@ -293,6 +293,25 @@ struct CompletionActivationPolicyTests {
         ) == .allow(.wordCompletion))
     }
 
+    @Test("Allows checklist completions after constrained item text")
+    func allowsChecklistCompletionsAfterConstrainedItemText() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "- [ ] Follow upd",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.wordCompletion))
+
+        #expect(policy.decision(
+            textBeforeCursor: "- [ ] Follow up with ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.phraseContinuation))
+    }
+
     @Test("Blocks common complete one word context")
     func blocksCommonCompleteOneWordContext() {
         let policy = CompletionActivationPolicy()

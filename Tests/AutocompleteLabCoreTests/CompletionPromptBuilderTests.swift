@@ -71,6 +71,36 @@ struct CompletionPromptBuilderTests {
         #expect(!prompt.system.contains("Transcrip"))
     }
 
+    @Test("Prompt includes trace safe list shape")
+    func promptIncludesTraceSafeListShape() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Plan\n  - [ ] Follow u"
+        ))
+
+        #expect(prompt.system.contains("Behavior profile: bullets"))
+        #expect(prompt.system.contains("Current line shape: unchecked checklist item"))
+        #expect(prompt.system.contains("marker style dash"))
+        #expect(prompt.system.contains("indentation 2 columns"))
+        #expect(prompt.system.contains("2 content words"))
+        #expect(prompt.system.contains("do not repeat the marker or checkbox"))
+        #expect(!prompt.system.contains("Follow u"))
+    }
+
+    @Test("Prompt keeps AI chat safety while adding list shape")
+    func promptKeepsAIChatSafetyWhileAddingListShape() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "- [ ] Make autocomplete",
+            appBundleIdentifier: "com.openai.codex"
+        ))
+
+        #expect(prompt.system.contains("Behavior profile: ai_chat"))
+        #expect(prompt.system.contains("Current line shape: unchecked checklist item"))
+        #expect(prompt.system.contains("Never suggest sending, submitting"))
+        #expect(prompt.system.contains("do not repeat the marker or checkbox"))
+    }
+
     @Test("Codex prompt does not force dogfood topics into normal writing")
     func codexPromptDoesNotForceDogfoodTopicsIntoNormalWriting() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)

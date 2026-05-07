@@ -154,6 +154,16 @@ struct SuggestionTriggerPolicyTests {
             previousTextBeforeCursor: "I think this works.\n- New pla",
             currentTextBeforeCursor: "I think this works.\n- New plan"
         ) == .request(delayMilliseconds: 120))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\n- [ ] ",
+            currentTextBeforeCursor: "I think this works.\n- [ ] N"
+        ) == .skip)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\n- [ ] Follow upd",
+            currentTextBeforeCursor: "I think this works.\n- [ ] Follow upda"
+        ) == .request(delayMilliseconds: 120))
     }
 
     @Test("Large pasted text waits before requesting")

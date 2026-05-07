@@ -173,9 +173,9 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Accept-and-keep probability threshold | 86 | Durable learning now gates by app, field kind, mode, and behavior profile after enough evidence, with 14-day half-life decay, and Settings can clear learned suggestion state without deleting logs. | Prove thresholds with fresh real-app traces and expose tuning controls. |
 | Candidate generation | 72 | Phrase/sentence prompts ask for 1-3 candidates; `CompletionOutputCleaner.cleanCandidates` strips list prefixes, filters unsafe/sentinel lines, dedupes, and `CompletionCandidateRanker` picks only high-score/high-margin top candidates. | Prove real model outputs produce useful candidate sets and tune score/margin thresholds from traces. |
 | Context budget | 76 | Prompt uses bounded recent context from current sentence/paragraph. | Use 48-96 tokens plus prior sentence/paragraph only when useful. |
-| Metadata in prompt | 86 | App bundle, field kind, request mode, behavior profile, aggregate accepted-kept style sketch, and trace-safe partial-word shape now affect prompt/generation/scoring/tracing. | Include document title and privacy-safe accepted-kept suffix features. |
+| Metadata in prompt | 89 | App bundle, field kind, request mode, behavior profile, aggregate accepted-kept style sketch, trace-safe partial-word shape, and trace-safe current-line list shape now affect prompt/generation/scoring/tracing. | Include document title and privacy-safe accepted-kept suffix features. |
 | Hard `<NO_SUGGESTION>` path | 86 | Word/phrase/sentence prompts include `<NO_SUGGESTION>` guidance, and cleaner suppresses direct sentinels plus prompt-echo sentinel lines. | Prove sentinel behavior in fresh real model traces. |
-| Privacy-first tracing | 91 | Raw content is redacted by default, raw/screenshot capture is opt-in with expiry, and Settings can clear learned suggestion state separately from local logs. | Store prefix hashes and make compact style/learning features inspectable. |
+| Privacy-first tracing | 92 | Raw content is redacted by default, raw/screenshot capture is opt-in with expiry, line/list shape metadata avoids item text, and Settings can clear learned suggestion state separately from local logs. | Store prefix hashes and make compact style/learning features inspectable. |
 | Local runtime ownership | 92 | App-owned embedded runtime and no user-managed server dependency. | Keep this stance through beta and fail clearly if model assets are missing. |
 | Warm/runtime cache | 75 | Model container is warm and reused. Each request builds a new `ChatSession`. | Add static prompt prefix cache and per-field session/KV cache. |
 | Generated length | 90 | MVP defaults to 5 visible words / 10 generated tokens, behavior profiles stay shorter by mode, and env overrides now clamp at 7 visible words / 16 generated tokens. | Tune defaults from fresh traces and keep sentence mode from using all 16 tokens. |
@@ -189,10 +189,10 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Atomic undo | 78 | Accepted insertions now arm an 8s one-step Command-Z restore for the same focused app/field; raw accepted text stays only in ephemeral memory and diagnostics log lengths/status only. | Prove the restore path per app and decide whether native undo grouping can replace the app-level fallback. |
 | Casual chat profile | 78 | `AutocompleteBehaviorProfile.casualChat` caps at 4 words and suppresses questions/emotional text. | Fresh chat-app proof and learned style fit. |
 | Email profile | 72 | Mail resolves to an email profile with 2-6 word cap, blank/fresh paragraph suppression, and no invented commitments/names/deadlines guidance. | Real Mail proof plus safe free-form exceptions. |
-| Notes profile | 74 | Notes app profile exists with terse 1-5 word guidance and blank-line suppression. | Bullet/list-aware proof for title, body, and checklist surfaces. |
+| Notes profile | 76 | Notes app profile exists with terse 1-5 word guidance and blank-line suppression; list/checklist prompt guidance now applies from trace-safe current-line shape. | Bullet/list-aware proof for title, body, and checklist surfaces. |
 | Coding profile | 72 | Coding profile caps at 1-5 tokens and warns against invented APIs/imports/blocks. | Syntax-aware scoring and opt-in proof in real editors. |
 | Docs/prose profile | 76 | Docs/prose profile matches rhythm/vocabulary and suppresses fresh paragraphs/blank lines. | Fresh prose proof and learned rhythm/style fit. |
-| Bullets profile | 68 | Bullet profile exists with marker/indent/checklist preservation guidance. | Bullet-mode activation and screenshot-backed same-slice accepts. |
+| Bullets profile | 82 | Bullet/checklist/numbered current-line shape is now detected without item text, feeds trace metadata and prompt guidance, maps generic list-shaped writing to the bullets profile, and keeps AI/search/form safety profiles ahead of list shape. | Screenshot-backed same-slice accepts in Notes/TextEdit plus checklist undo proof. |
 | Forms profile | 82 | Field-kind resolver maps forms/secure/url to a suppressed-by-default form profile with full accept disabled. | Proven non-sensitive free-form exceptions only. |
 | Search profile | 82 | Search field kind maps to a suppressed-by-default search profile with full accept disabled. | Proven across browser/native search fields. |
 | AI chat profile | 82 | Codex/Claude profiles are conservative, one-word biased, block submit/run/Enter suggestions, and disable full accept. | Same-slice visual plus one-word no-submit proof for Codex, Claude Code, Claude desktop. |
@@ -420,10 +420,12 @@ these are true.
 17. Done: add trace-safe partial-word shape metadata to prompts and traces.
 18. Done: add one-step Command-Z restore for accepted insertions in the same
    app/field.
-19. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
-   checklist acceptance/proof slices are still missing.
+19. Done: add trace-safe bullet/checklist/numbered current-line shape, prompt
+   guidance, generic bullet-profile activation, and trigger/activation tests.
 20. Partial: build the replay-first proof command. The command exists; a fresh
    post-pass trace proof still has to pass.
+21. Pending: capture screenshot-backed same-slice bullet/checklist accepts in
+   Notes/TextEdit and prove Command-Z restore on those accepted items.
 
 ## Goal Status
 

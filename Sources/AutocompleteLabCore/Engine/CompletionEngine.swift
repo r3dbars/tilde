@@ -52,7 +52,8 @@ public struct CompletionRequest: Equatable, Sendable {
         AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
             requestedProfileID: behaviorProfileID,
             appBundleIdentifier: appBundleIdentifier,
-            fieldKind: fieldKind
+            fieldKind: fieldKind,
+            currentLineStructure: currentLineStructure
         ))
     }
 
@@ -65,11 +66,18 @@ public struct CompletionRequest: Equatable, Sendable {
         if let partialWordShape {
             metadata.merge(partialWordShape.traceMetadata) { current, _ in current }
         }
+        if let currentLineStructure {
+            metadata.merge(currentLineStructure.traceMetadata) { current, _ in current }
+        }
         return metadata
     }
 
     public var partialWordShape: PartialWordShape? {
         PartialWordShape.from(textBeforeCursor: textBeforeCursor)
+    }
+
+    public var currentLineStructure: CurrentLineStructure? {
+        CurrentLineStructure.from(textBeforeCursor: textBeforeCursor)
     }
 }
 
