@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
+    private let screenshotTraceCapturePolicy = ScreenshotTraceCapturePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
     private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
     private let recentWordExtractor = RecentWordExtractor()
@@ -2240,17 +2241,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         triggerReason: String,
         appScreenshotTracingEnabled: Bool
     ) -> TraceScreenshotCapture {
-        guard (RawAutocompleteTraceLog.shared.screenshotTracingEnabled || appScreenshotTracingEnabled),
-              triggerReason != "model-stream",
-              let captureRect = ScreenshotCaptureRegion.enclosing(rects) else {
+        guard let captureRect = ScreenshotCaptureRegion.enclosing(rects) else {
             return .none
         }
+
         if scheduledScreenshotSuggestionIDs.count >= maxScheduledScreenshotSuggestionIDs {
             scheduledScreenshotSuggestionIDs.removeAll(keepingCapacity: true)
         }
-        guard scheduledScreenshotSuggestionIDs.insert(suggestionID).inserted else {
+
+        let globalScreenshotTracingEnabled = RawAutocompleteTraceLog.shared.screenshotTracingEnabled
+        guard screenshotTraceCapturePolicy.shouldCapture(
+            triggerReason: triggerReason,
+            globalScreenshotTracingEnabled: globalScreenshotTracingEnabled,
+            appScreenshotTracingEnabled: appScreenshotTracingEnabled,
+            hasCaptureRegion: true,
+            hasAlreadyCapturedSuggestionID: scheduledScreenshotSuggestionIDs.contains(suggestionID)
+        ) else {
             return .none
         }
+        scheduledScreenshotSuggestionIDs.insert(suggestionID)
 
         let folderURL = RawAutocompleteTraceLog.shared.screenshotFolderURL
         let screenshotURL = folderURL.appendingPathComponent("\(suggestionID).png")
