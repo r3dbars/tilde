@@ -55,15 +55,6 @@ require_latest_launch_line() {
   fi
 }
 
-require_latest_launch_regex() {
-  local pattern="$1"
-  if ! grep -E "$pattern" <<<"$LATEST_LAUNCH_LINES" >/dev/null; then
-    echo "missing latest-launch diagnostics regex: $pattern" >&2
-    echo "log: $LOG_PATH" >&2
-    exit 1
-  fi
-}
-
 reject_recent_pattern() {
   local pattern="$1"
   if grep -E "$pattern" <<<"$RECENT_LINES" >/dev/null; then
@@ -151,7 +142,7 @@ if [[ -n "${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-}" ]]; then
 fi
 
 if [[ "${AUTOCOMPLETE_LAB_REQUIRE_READY:-0}" == "1" ]]; then
-  require_latest_launch_regex "runtime .*readinessAction=none .*readinessStage=ready .*state=ready [(]MLX[)]"
+  require_latest_launch_line "readinessAction=none readinessStage=ready state=ready (MLX)"
   reject_latest_launch_pattern "runtime-warm-failed"
 fi
 

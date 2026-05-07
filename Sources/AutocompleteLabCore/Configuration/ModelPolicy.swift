@@ -66,8 +66,8 @@ public struct CompletionModelPolicy: Equatable, Sendable {
         model: .qwen35FourB,
         runtimeOwnership: .appOwnedEmbedded,
         minimumMemoryGB: 16,
-        maxGeneratedTokens: 9,
-        maxVisibleWords: 3,
+        maxGeneratedTokens: 10,
+        maxVisibleWords: 5,
         debounceMilliseconds: 15,
         targetLatencyMilliseconds: 50,
         reasoningEnabled: false
@@ -123,13 +123,24 @@ public struct CompletionLengthConfiguration: Equatable, Sendable {
 
     public static func fromEnvironment(_ environment: [String: String]) -> CompletionLengthConfiguration {
         let arm = AutocompleteExperimentArm.fromEnvironment(environment)
-        let hasVisibleOverride = parsedInt(environment["AUTOCOMPLETE_LAB_VISIBLE_WORDS"]) != nil
+        let visibleWords = parsedInt(environment["AUTOCOMPLETE_LAB_VISIBLE_WORDS"])
+        let generatedTokens = parsedInt(environment["AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS"])
+        let hasExperimentOverride = environment["AUTOCOMPLETE_LAB_EXPERIMENT_ARM"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty == false
+
+        guard hasExperimentOverride || visibleWords != nil || generatedTokens != nil else {
+            return CompletionLengthConfiguration(
+                experimentArm: arm,
+                maxVisibleWords: CompletionModelPolicy.mvp.maxVisibleWords,
+                maxGeneratedTokens: CompletionModelPolicy.mvp.maxGeneratedTokens
+            )
+        }
+
         return CompletionLengthConfiguration(
             experimentArm: arm,
-            maxVisibleWords: parsedInt(environment["AUTOCOMPLETE_LAB_VISIBLE_WORDS"])
-                ?? arm.defaultMaxVisibleWords,
-            maxGeneratedTokens: parsedInt(environment["AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS"])
-                ?? (hasVisibleOverride ? nil : arm.defaultMaxGeneratedTokens)
+            maxVisibleWords: visibleWords ?? arm.defaultMaxVisibleWords,
+            maxGeneratedTokens: generatedTokens ?? (visibleWords == nil ? arm.defaultMaxGeneratedTokens : nil)
         )
     }
 

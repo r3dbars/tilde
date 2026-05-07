@@ -216,11 +216,11 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         }
 
         var metadata = [
-            "cleanedWordCount": String(cleanedSuggestion?.visibleWordCount ?? 0)
+            "cleanedWordCount": String(cleanedSuggestion?.visibleWordCount ?? 0),
+            "emptyResult": String(cleanedSuggestion == nil)
         ]
         if let latencyMilliseconds {
             metadata["totalGenerationLatencyMilliseconds"] = String(latencyMilliseconds)
-            metadata["firstVisibleLatencyMilliseconds"] = String(latencyMilliseconds)
         }
         if let firstTokenLatencyMilliseconds {
             metadata["firstTokenLatencyMilliseconds"] = String(firstTokenLatencyMilliseconds)
@@ -238,6 +238,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             rawOutput: rawOutput,
             cleanedVisibleText: cleanedSuggestion?.visibleText ?? "",
             displayedText: cleanedSuggestion?.visibleText ?? "",
+            latencyMilliseconds: latencyMilliseconds,
             metadata: metadata
         )
     }

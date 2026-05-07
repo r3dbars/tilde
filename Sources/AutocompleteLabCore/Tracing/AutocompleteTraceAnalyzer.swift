@@ -1065,18 +1065,6 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             }
 
             if event.type == .modelResult,
-               event.requestMode == "wordCompletion",
-               isTooShortWordCompletion(event.cleanedVisibleText.isEmpty ? event.rawOutput : event.cleanedVisibleText) {
-                add(
-                    key: "Too-short word completion",
-                    event: event,
-                    cause: "Word-completion mode returned a tiny suffix that is likely to twitch more than help.",
-                    category: "word-completion issue",
-                    buckets: &buckets
-                )
-            }
-
-            if event.type == .modelResult,
                event.rawOutput.localizedCaseInsensitiveContains("<think>") {
                 add(
                     key: "Model leaked thinking text",
@@ -1151,32 +1139,6 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 )
             }
 
-            if event.type == .suggestionSuppressed,
-               event.reason == "panel-frame-unusable" {
-                let mode = placementRenderMode(for: event)
-                add(
-                    key: "Panel frame unusable in \(event.appBundleIdentifier)",
-                    event: event,
-                    cause: "The \(mode) panel frame was suppressed before display because it was too small or invalid.",
-                    category: "renderer/caret bug",
-                    buckets: &buckets
-                )
-            }
-
-            if event.type == .suggestionSuppressed,
-               isPlacementSuppression(event),
-               event.reason != "detached-suggestion-disabled",
-               event.reason != "panel-frame-unusable" {
-                let reason = placementHealthReason(for: event)
-                add(
-                    key: "Placement suppressed in \(event.appBundleIdentifier)",
-                    event: event,
-                    cause: "The suggestion was suppressed by placement health: \(reason).",
-                    category: "renderer/caret bug",
-                    buckets: &buckets
-                )
-            }
-
             if event.type == .suggestionPresented,
                event.metadata["effectiveRenderMode"] == "floatingMirror",
                event.metadata["hasCaretRect"] == "false" {
@@ -1189,108 +1151,9 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 )
             }
 
-            if isCaretUnavailable(event) {
-                add(
-                    key: "Caret unavailable in \(appName(for: event))",
-                    event: event,
-                    cause: "No caret anchor was available, so the app had to suppress the suggestion or fall back to a less precise anchor.",
-                    category: "renderer/caret bug",
-                    buckets: &buckets
-                )
-            }
-
-            if isCaretInvalid(event) {
-                add(
-                    key: "Caret invalid in \(appName(for: event))",
-                    event: event,
-                    cause: "Caret geometry was rejected by validation. Reason: \(geometryReason(for: event)).",
-                    category: "renderer/caret bug",
-                    buckets: &buckets
-                )
-            }
-
-            if anchorSource(for: event) == "field" {
-                add(
-                    key: "Field anchor used in \(appName(for: event))",
-                    event: event,
-                    cause: "The suggestion used the focused field bounds instead of a caret or line anchor.",
-                    category: "renderer/caret bug",
-                    buckets: &buckets
-                )
-            }
-
-            if anchorSource(for: event) == "window" {
-                add(
-                    key: "Window anchor used in \(appName(for: event))",
-                    event: event,
-                    cause: "The suggestion used window bounds, which is only safe for diagnostics or explicit invocation.",
-                    category: "renderer/caret bug",
-                    buckets: &buckets
-                )
-            }
-
-            if isObserverMissedUpdate(event) {
-                add(
-                    key: "Observer missed update in \(appName(for: event))",
-                    event: event,
-                    cause: "A poll or fallback refresh noticed a change that the Accessibility observer should have delivered.",
-                    category: "observer/update bug",
-                    buckets: &buckets
-                )
-            }
-
-            if isPollRecoveredUpdate(event) {
-                add(
-                    key: "Poll recovered update in \(appName(for: event))",
-                    event: event,
-                    cause: "Polling recovered the typing or geometry state after an observer miss.",
-                    category: "observer/update bug",
-                    buckets: &buckets
-                )
-            }
-
-            if event.type == .suggestionPresented,
-               event.metadata["placementSelfHealingApplied"] == "true" {
-                let reason = event.metadata["placementHealthReason"] ?? "unknown"
-                let action = event.metadata["placementSelfHealingAction"] ?? "unknown"
-                let requestedMode = event.metadata["placementRequestedRenderMode"] ?? "unknown"
-                let effectiveMode = placementRenderMode(for: event)
-                add(
-                    key: "Placement self-healed in \(event.appBundleIdentifier)",
-                    event: event,
-                    cause: "Placement recovered from \(reason) with \(action), moving \(requestedMode) to \(effectiveMode).",
-                    category: "renderer/caret bug",
-                    buckets: &buckets
-                )
-            }
-
-            if event.type == .suggestionPresented,
-               inlinePlacementLooksClipped(event) {
-                let width = traceRect(from: event.metadata["suggestionPanelRect"])?.width ?? 0
-                add(
-                    key: "Inline placement clipped in \(event.appBundleIdentifier)",
-                    event: event,
-                    cause: "The inline panel was constrained by editor clipping bounds and only had \(Int(width.rounded())) px of visible width.",
-                    category: "renderer/caret bug",
-                    buckets: &buckets
-                )
-            }
-
-            if event.type == .suggestionPresented,
-               event.metadata["placementConfidenceBand"] == "low" {
-                let score = event.metadata["placementConfidenceScore"] ?? "unknown"
-                add(
-                    key: "Low-confidence placement in \(event.appBundleIdentifier)",
-                    event: event,
-                    cause: "Placement confidence was \(score), so this app needs a better caret anchor.",
-                    category: "renderer/caret bug",
-                    buckets: &buckets
-                )
-            }
-
             if event.type == .suggestionPresented,
                let latencyMilliseconds = event.latencyMilliseconds,
-               latencyMilliseconds >= slowSuggestionThresholdMilliseconds(for: event.requestMode) {
+               latencyMilliseconds >= 1_000 {
                 add(
                     key: "Slow suggestion: \(event.requestMode)",
                     event: event,
@@ -1320,7 +1183,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
                 return lhs.count > rhs.count
             }
-            .prefix(10)
+            .prefix(5)
             .map { $0 }
     }
 
