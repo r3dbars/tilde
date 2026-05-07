@@ -225,7 +225,11 @@ autocomplete suggestion.
 - [ ] Esc must always dismiss without changing text.
 - [ ] Undo after accept must behave like normal typed text in each supported app.
 - [x] Full accept should be disabled by default in any app without proof.
-- [ ] The visible suggestion must exactly match the accepted text.
+- [x] The visible suggestion must exactly match the accepted text.
+  Code-backed: acceptance now previews the visible slice before insertion, inserts
+  that exact slice, and writes log-safe match/count metadata for visible prefix
+  and full-visible acceptance. If the panel's displayed text no longer matches
+  the acceptance preview, the app hides instead of inserting.
 
 ## Category 4: Cross-App Reliability
 
