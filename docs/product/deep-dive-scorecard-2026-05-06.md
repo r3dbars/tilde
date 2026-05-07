@@ -25,8 +25,9 @@ words like `table`, `model`, or `test` do not bias normal writing. The latest
 wave also added expiring debug capture, green/yellow/diagnostics-only app
 support status, a wired serial AX reader for focused-text polling, app-specific
 AX cooldowns, stronger assistant-y output filtering, safer Codex/Claude prompt
-profiles, calmer menu/status copy, Settings "why hidden" copy, and
-screenshot-backed Chrome chat-like no-submit proof.
+profiles, calmer menu/status copy, Settings "why hidden" copy,
+placement-confidence diagnostics, and screenshot-backed Chrome chat-like
+no-submit proof.
 
 It is not a 10/10 yet. The biggest remaining gap is still recorder-grade visual
 placement in real production editors, especially Notes, Obsidian, Claude Code,
@@ -62,8 +63,8 @@ evidence-backed score should stay lower until those rows are closed.
 | Privacy | 9.6/10 | Local-first, secure fields suppressed, password/token/API-key-like fingerprints blocked before text reads, diagnostics redact text by default, screenshots are opt-in, recent word memory is app-scoped, and raw/global/per-app screenshot debug capture now expires from app UI. Plain-language permission copy still needs polish. |
 | Onboarding | 8.2/10 | Settings explains runtime readiness, current app state, and local privacy controls more clearly, but model install/repair and first-run permission explanation are still not fully in-app. |
 | User control | 9.2/10 | Pause, current-app enablement, green/yellow/diagnostics-only/unsupported support status, privacy controls, temporary screenshot/raw trace toggles, local log deletion, full-accept shortcut state, and Settings "why hidden" copy are clearer; full shortcut editing is still thin. |
-| Diagnostics | 9.8/10 | Placement, event-tap latency, focused poll latency, AX cooldowns, insertion, trace, screenshot-file evidence, and smoke logs are strong. The Diagnostics window now separates key capture health from AX polling health so slow app reads do not look like missed keys. |
-| Automated tests | 10/10 | `swift test` passes 326 tests, including app-target settings state tests, diagnostics typing-health tests, scoped recent-word memory, privacy expiry, support status, serial AX reader, focused AX-health cooldown, focused-poll backoff, dogfood false-positive coverage, neutral word-completion vocabulary, screenshot trace capture policy, placement trust policy, and trace visual evidence. Script self-tests now cover strict score targets, the 10-pass score loop path, manual smoke status, visual proof, typing performance, and the 10-minute endurance soak command. |
+| Diagnostics | 9.9/10 | Placement, event-tap latency, focused poll latency, AX cooldowns, insertion, trace, screenshot-file evidence, and smoke logs are strong. The Diagnostics window now separates key capture health from AX polling health and exposes placement confidence, anchor source, render fallback, self-healing action, clipping state, screenshot state, and caret failure rates without suggestion text. |
+| Automated tests | 10/10 | `swift test` passes 521 tests, including app-target settings state tests, diagnostics typing-health tests, placement diagnostics tests, scoped recent-word memory, privacy expiry, support status, serial AX reader, focused AX-health cooldown, focused-poll backoff, dogfood false-positive coverage, neutral word-completion vocabulary, screenshot trace capture policy, placement trust policy, and trace visual evidence. Script self-tests now cover strict score targets, the 10-pass score loop path, manual smoke status, visual proof, typing performance, and the 10-minute endurance soak command. |
 | Real-app smoke | 8.8/10 | TextEdit, core Chrome fixtures, and Chrome chat-like no-submit are green on the current build. The latest TextEdit strict visual smoke passed after the accept-all shortcut/race fix. Notes title/body/checklist, Codex, Claude Code, and Claude desktop remain honest insertion-proof gaps. |
 | Release readiness | 8/10 | Packaging is in decent shape, but beta readiness still correctly fails unless all required manual and screenshot-backed proof rows are closed. Notarization/stapling and beta onboarding still need a final product pass. |
 | Architecture | 9.1/10 | Core policy, geometry, scoped word memory, trace analysis, privacy expiry, support status, serial AX focused-text reads, and AX-health cooldowns are tested and wired. AppDelegate still owns too much orchestration. |
