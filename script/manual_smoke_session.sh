@@ -18,7 +18,7 @@ BUILD_PROOF="${AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF:-}"
 
 usage() {
   cat <<'EOF'
-Usage: script/manual_smoke_session.sh <textedit|notes|notes-title|notes-body|notes-checklist|obsidian|chrome|codex|claude-code|claude> [--print|--check] [--visual]
+Usage: script/manual_smoke_session.sh <textedit|textedit-multiline|textedit-wrapped|notes|notes-title|notes-body|notes-checklist|obsidian|chrome|codex|claude-code|claude> [--print|--check] [--visual]
 
 Default mode prints the local manual steps, records the current diagnostics log
 line, waits for Enter, validates the new diagnostics for that app, then appends
@@ -38,6 +38,14 @@ if [[ -z "$APP" || "$APP" == "-h" || "$APP" == "--help" ]]; then
 fi
 
 case "$APP" in
+  textedit-multiline)
+    APP="textedit"
+    PROOF_LABEL="multiline"
+    ;;
+  textedit-wrapped)
+    APP="textedit"
+    PROOF_LABEL="wrapped-line"
+    ;;
   notes-title)
     APP="notes"
     NOTES_SURFACE="title"
@@ -131,7 +139,24 @@ case "$APP" in
     BUNDLE_ID="com.apple.TextEdit"
     DISPLAY_NAME="TextEdit"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
-    STEPS=$'- Open a disposable TextEdit document.\n- Type `Can we`.\n- Wait for a suggestion.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
+    case "$PROOF_LABEL" in
+      default|option-tab)
+        STEPS=$'- Open a disposable TextEdit document.\n- Type `Can we`.\n- Wait for a suggestion.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
+        ;;
+      multiline)
+        SESSION_NAME="TextEdit multiline"
+        STEPS=$'- Open a disposable TextEdit document.\n- Type one setup line, press Return, then type `Can we` on the next line.\n- Wait for a suggestion on the second line.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
+        ;;
+      wrapped-line)
+        SESSION_NAME="TextEdit wrapped line"
+        STEPS=$'- Open a disposable TextEdit document in a narrow window.\n- Type a long disposable sentence so the caret is on a visually wrapped line.\n- End with `Can we`.\n- Wait for a suggestion on the wrapped visual line.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
+        ;;
+      *)
+        echo "unknown TextEdit proof label: $PROOF_LABEL" >&2
+        echo "expected default, multiline, or wrapped-line" >&2
+        exit 2
+        ;;
+    esac
     ;;
   notes)
     BUNDLE_ID="com.apple.Notes"

@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 APP="${1:-}"
 REQUESTED_APP="$APP"
 NOTES_SESSION_APP=""
+TEXTEDIT_SESSION_APP="textedit"
 DRY_RUN=0
 MANUAL_GATE=0
 SKIP_BUILD="${AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD:-0}"
@@ -15,7 +16,7 @@ CHROME_FIXTURE_WAS_SET=0
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|chat-like|all>]
+Usage: script/real_app_smoke.sh <textedit|textedit-multiline|textedit-wrapped|chrome|notes-title|notes-body|notes-checklist|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|chat-like|all>]
 
 Runs a real app smoke pass where it is safe to automate. Notes, Obsidian,
 Codex, Claude Code, and Claude desktop are manual-gated so this script never
@@ -68,6 +69,14 @@ while (($#)); do
 done
 
 case "$APP" in
+  textedit-multiline)
+    APP="textedit"
+    TEXTEDIT_SESSION_APP="textedit-multiline"
+    ;;
+  textedit-wrapped)
+    APP="textedit"
+    TEXTEDIT_SESSION_APP="textedit-wrapped"
+    ;;
   notes-title)
     APP="notes"
     NOTES_SESSION_APP="notes-title"
@@ -690,7 +699,17 @@ describe_plan() {
   echo "Trace log: $TRACE_PATH"
   case "$APP" in
     textedit)
-      echo "Plan: build/relaunch AutocompleteLab, open a disposable TextEdit file, type a test fragment, then validate logs and traces."
+      case "$TEXTEDIT_SESSION_APP" in
+        textedit-multiline)
+          echo "Plan: build/relaunch AutocompleteLab, open a disposable TextEdit file, type a two-line test fragment, then validate logs and traces."
+          ;;
+        textedit-wrapped)
+          echo "Plan: build/relaunch AutocompleteLab, open a disposable TextEdit file in a narrow window, type a wrapped-line test fragment, then validate logs and traces."
+          ;;
+        *)
+          echo "Plan: build/relaunch AutocompleteLab, open a disposable TextEdit file, type a test fragment, then validate logs and traces."
+          ;;
+      esac
       ;;
     chrome)
       echo "Chrome fixture: $CHROME_FIXTURE"
@@ -765,7 +784,38 @@ run_textedit() {
   open -a TextEdit "$tmp_file"
   sleep 1
 
-  osascript <<'APPLESCRIPT'
+  case "$TEXTEDIT_SESSION_APP" in
+    textedit-multiline)
+      osascript <<'APPLESCRIPT'
+tell application "TextEdit" to activate
+delay 0.4
+tell application "System Events"
+  keystroke "a" using command down
+  key code 51
+  keystroke "Autocomplete smoke"
+  key code 36
+  keystroke "Can we make this feel "
+end tell
+APPLESCRIPT
+      ;;
+    textedit-wrapped)
+      osascript <<'APPLESCRIPT'
+tell application "TextEdit" to activate
+delay 0.4
+tell application "TextEdit"
+  try
+    set bounds of front window to {80, 80, 500, 520}
+  end try
+end tell
+tell application "System Events"
+  keystroke "a" using command down
+  key code 51
+  keystroke "This is a disposable autocomplete smoke paragraph that should wrap before the caret. Can we make this feel "
+end tell
+APPLESCRIPT
+      ;;
+    *)
+      osascript <<'APPLESCRIPT'
 tell application "TextEdit" to activate
 delay 0.4
 tell application "System Events"
@@ -774,6 +824,8 @@ tell application "System Events"
   keystroke "Can we make this feel "
 end tell
 APPLESCRIPT
+      ;;
+  esac
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
@@ -804,7 +856,7 @@ APPLESCRIPT
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
     AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
     AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
-    ./script/manual_smoke_session.sh textedit --check
+    ./script/manual_smoke_session.sh "$TEXTEDIT_SESSION_APP" --check
 }
 
 run_chrome_fixture() {

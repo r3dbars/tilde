@@ -190,12 +190,12 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Add "Esc does not calm the field" as a hard fail.
 - [x] Add "suggestion shown over sensitive field" as a hard fail.
 - [x] Add "detached bubble over whole editor" as a hard fail unless explicitly allowed.
-- [ ] Add TextEdit multiline/wrapped-line smoke.
-- [ ] Add Notes rich-text smoke.
-- [ ] Add Chrome textarea smoke.
-- [ ] Add Chrome contenteditable smoke.
-- [ ] Add Obsidian CodeMirror smoke.
-- [ ] Add Codex prompt smoke.
+- [x] Add TextEdit multiline/wrapped-line smoke.
+- [x] Add Notes rich-text smoke.
+- [x] Add Chrome textarea smoke.
+- [x] Add Chrome contenteditable smoke.
+- [x] Add Obsidian CodeMirror smoke.
+- [x] Add Codex prompt smoke.
 - [x] Add unsupported-app smoke.
 - [x] Add no-Accessibility-permission smoke.
 

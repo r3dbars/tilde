@@ -53,6 +53,8 @@ Recorder:
 
 ```bash
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-multiline
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-wrapped
 ```
 
 - Type `Can we`.
@@ -60,6 +62,7 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit
 - Press Tab and expect `Can we make`.
 - Press the key above Tab and expect the rest of the visible suggestion.
 - Confirm `insert-verification result=verified`.
+- Run the multiline and wrapped-line variants before treating TextEdit as fully current.
 
 ## Notes
 
