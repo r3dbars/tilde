@@ -40,6 +40,16 @@ struct SettingsCurrentAppState: Equatable {
         return profile.renderMode != .disabled
     }
 
+    var canStartProof: Bool {
+        guard bundleIdentifier != nil,
+              case let .supported(profile) = supportStatus,
+              !profile.isSensitive else {
+            return false
+        }
+
+        return supportStatus.supportLevel != .unsupported
+    }
+
     var statusText: String {
         guard bundleIdentifier != nil else {
             return "Current app: no app selected"
@@ -132,6 +142,10 @@ struct SettingsCurrentAppState: Equatable {
 
     var modeButtonTitle: String {
         renderModeOverride == .floatingMirror ? "Use Profile Mode" : "Force Mirror Mode"
+    }
+
+    var proofButtonTitle: String {
+        "Start App Proof"
     }
 
     var blockedAppsText: String {
@@ -321,6 +335,7 @@ final class SettingsWindowController: NSObject {
         action: nil
     )
     private let forceMirrorModeButton = NSButton(title: "Force Mirror Mode", target: nil, action: nil)
+    private let startAppProofButton = NSButton(title: "Start App Proof", target: nil, action: nil)
     private let enableAllAppsButton = NSButton(title: "Clear Blocked Apps", target: nil, action: nil)
     private let privacyLabel = NSTextField(labelWithString: "")
     private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
@@ -355,6 +370,7 @@ final class SettingsWindowController: NSObject {
     private let performRuntimeAction: (RuntimeReadinessAction) -> Void
     private let toggleCurrentApp: () -> Void
     private let toggleCurrentAppMirrorMode: () -> Void
+    private let startCurrentAppProof: () -> Void
     private let enableAllApps: () -> Void
     private let toggleTracingPaused: () -> Void
     private let toggleRawContentTracing: () -> Void
@@ -372,6 +388,7 @@ final class SettingsWindowController: NSObject {
         performRuntimeAction: @escaping (RuntimeReadinessAction) -> Void,
         toggleCurrentApp: @escaping () -> Void,
         toggleCurrentAppMirrorMode: @escaping () -> Void,
+        startCurrentAppProof: @escaping () -> Void,
         enableAllApps: @escaping () -> Void,
         toggleTracingPaused: @escaping () -> Void,
         toggleRawContentTracing: @escaping () -> Void,
@@ -387,6 +404,7 @@ final class SettingsWindowController: NSObject {
         self.performRuntimeAction = performRuntimeAction
         self.toggleCurrentApp = toggleCurrentApp
         self.toggleCurrentAppMirrorMode = toggleCurrentAppMirrorMode
+        self.startCurrentAppProof = startCurrentAppProof
         self.enableAllApps = enableAllApps
         self.toggleTracingPaused = toggleTracingPaused
         self.toggleRawContentTracing = toggleRawContentTracing
@@ -490,6 +508,8 @@ final class SettingsWindowController: NSObject {
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
         forceMirrorModeButton.title = currentApp.modeButtonTitle
         forceMirrorModeButton.isEnabled = currentApp.canOverrideMode
+        startAppProofButton.title = currentApp.proofButtonTitle
+        startAppProofButton.isEnabled = currentApp.canStartProof
         disabledAppsLabel.stringValue = currentApp.blockedAppsText
         enableAllAppsButton.isEnabled = currentApp.disabledAppCount > 0
         privacyLabel.stringValue = privacy.statusText
@@ -582,6 +602,10 @@ final class SettingsWindowController: NSObject {
         forceMirrorModeButton.action = #selector(toggleCurrentAppMirrorModeControl)
         forceMirrorModeButton.bezelStyle = .rounded
         forceMirrorModeButton.toolTip = "Forces mirror placement for this app, or resets to its profile mode."
+        startAppProofButton.target = self
+        startAppProofButton.action = #selector(startAppProofControl)
+        startAppProofButton.bezelStyle = .rounded
+        startAppProofButton.toolTip = "Turns on temporary screenshot proof for the current app and opens Diagnostics."
         enableAllAppsButton.target = self
         enableAllAppsButton.action = #selector(enableAllAppsControl)
         enableAllAppsButton.bezelStyle = .rounded
@@ -644,7 +668,7 @@ final class SettingsWindowController: NSObject {
                     currentAppDetailLabel,
                     currentAppModeLabel,
                     currentAppAcceptanceLabel,
-                    makeButtonRow([forceMirrorModeButton]),
+                    makeButtonRow([forceMirrorModeButton, startAppProofButton]),
                     toggleCurrentAppButton,
                     makeButtonRow([disabledAppsLabel, enableAllAppsButton])
                 ]
@@ -748,6 +772,11 @@ final class SettingsWindowController: NSObject {
     @objc
     private func toggleCurrentAppMirrorModeControl() {
         toggleCurrentAppMirrorMode()
+    }
+
+    @objc
+    private func startAppProofControl() {
+        startCurrentAppProof()
     }
 
     @objc
