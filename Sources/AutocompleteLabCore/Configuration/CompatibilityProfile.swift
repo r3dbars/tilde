@@ -15,6 +15,26 @@ public enum InsertionMode: String, Equatable, Hashable, Sendable {
     case disabled
 }
 
+public enum CompatibilityInteractionMode: String, Equatable, Sendable {
+    case inline
+    case mirror
+    case commandOnly
+    case disabled
+
+    public var displayName: String {
+        switch self {
+        case .inline:
+            return "inline"
+        case .mirror:
+            return "mirror"
+        case .commandOnly:
+            return "command-only"
+        case .disabled:
+            return "disabled"
+        }
+    }
+}
+
 public enum FocusedFieldIdentityMode: String, Equatable, Sendable {
     case accessibilityElement
     case stableBounds
@@ -148,6 +168,24 @@ public struct CompatibilityProfile: Equatable, Sendable {
         renderMode != .disabled
             && insertionMode != .disabled
             && (supportsOneWordAcceptance || supportsFullAcceptance)
+    }
+
+    public var interactionMode: CompatibilityInteractionMode {
+        let canAcceptText = insertionMode != .disabled
+            && (supportsOneWordAcceptance || supportsFullAcceptance)
+
+        guard canAcceptText else {
+            return .disabled
+        }
+
+        switch renderMode {
+        case .inlineAdjacent:
+            return .inline
+        case .floatingMirror:
+            return .mirror
+        case .disabled:
+            return .commandOnly
+        }
     }
 
     public var userFacingSafetySummary: String {
@@ -572,6 +610,15 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
         }
 
         return profile.canPresentSuggestions && !profile.isSensitive
+    }
+
+    public var interactionMode: CompatibilityInteractionMode {
+        switch self {
+        case let .supported(profile):
+            return profile.isSensitive ? .disabled : profile.interactionMode
+        case .denylisted, .unsupported:
+            return .disabled
+        }
     }
 
     public func menuText(appDisplayName: String, isEnabled: Bool) -> String {

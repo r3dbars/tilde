@@ -120,7 +120,7 @@ struct SettingsWindowControllerStateTests {
             unsupported.detailText
                 == "No compatibility profile yet; broad unknown-app support stays off until proven apps feel safe. Suggestions are intentionally off until this app is tested."
         )
-        #expect(unsupported.modeText == "Mode: not tested yet")
+        #expect(unsupported.modeText == "Mode: disabled")
         #expect(unsupported.acceptanceText == "Acceptance: off here")
         #expect(
             unsupported.safetyText
