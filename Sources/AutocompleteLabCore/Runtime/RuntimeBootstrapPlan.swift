@@ -37,6 +37,7 @@ public enum RuntimeReadinessStage: String, Equatable, Sendable {
 public enum RuntimeReadinessAction: String, Equatable, Sendable {
     case installModel
     case repairModel
+    case cancelModelInstall
     case revealModelFolder
     case wait
     case retry
@@ -48,6 +49,8 @@ public enum RuntimeReadinessAction: String, Equatable, Sendable {
             return "Install Model"
         case .repairModel:
             return "Repair Model"
+        case .cancelModelInstall:
+            return "Cancel Model Install"
         case .revealModelFolder:
             return "Reveal Model Folder"
         case .wait:

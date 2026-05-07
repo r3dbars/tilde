@@ -157,6 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
     private var modelInstallTask: Task<Void, Never>?
     private var modelInstallStatusText: String?
+    private var isModelInstallCancelRequested = false
     private let focusedTextPollInterval: TimeInterval = 0.05
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 220
@@ -4443,6 +4444,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let manifest = modelRuntimeBundle.bootstrapPlan.preferredAsset
         let destinationURL = modelRuntimeBundle.modelDirectoryURL
+        isModelInstallCancelRequested = false
         modelInstallStatusText = "Model install: preparing download"
         refreshRuntimeChrome()
         DiagnosticsLog.shared.record(
@@ -4479,6 +4481,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             } catch {
                 await MainActor.run {
+                    if error is CancellationError || self?.isModelInstallCancelRequested == true {
+                        DiagnosticsLog.shared.record(
+                            "model-install-canceled",
+                            metadata: [
+                                "model": manifest.model.rawValue
+                            ]
+                        )
+                        self?.modelInstallTask = nil
+                        self?.isModelInstallCancelRequested = false
+                        self?.modelInstallStatusText = "Model install canceled."
+                        self?.refreshRuntimeChrome()
+                        self?.showSettings()
+                        return
+                    }
+
                     DiagnosticsLog.shared.record(
                         "model-install-failed",
                         metadata: [
@@ -4505,10 +4522,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         warmModelRuntime()
     }
 
+    private func cancelModelInstall() {
+        guard let modelInstallTask else {
+            return
+        }
+
+        isModelInstallCancelRequested = true
+        modelInstallStatusText = "Model install: canceling"
+        DiagnosticsLog.shared.record(
+            "model-install-cancel-requested",
+            metadata: [
+                "model": modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue
+            ]
+        )
+        refreshRuntimeChrome()
+        modelInstallTask.cancel()
+    }
+
     private func performRuntimeAction(_ action: RuntimeReadinessAction) {
         switch action {
         case .installModel, .repairModel:
             startModelInstall()
+        case .cancelModelInstall:
+            cancelModelInstall()
         case .revealModelFolder:
             revealModelFolder()
         case .retry:
