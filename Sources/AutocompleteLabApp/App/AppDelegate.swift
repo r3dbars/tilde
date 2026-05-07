@@ -38,8 +38,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionDiagnostics = SuggestionDiagnosticsRecorder()
     private let focusedTextUpdateSourcePolicy = FocusedTextUpdateSourcePolicy()
     private let focusedTextPollingCadencePolicy = FocusPollingCadencePolicy()
-    private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
-    private let focusedTextPollingThrottleVisibilityPolicy = FocusedTextPollingThrottleVisibilityPolicy()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private lazy var compatibilityLearningActions = CompatibilityLearningActions(
@@ -122,8 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private var focusedTextPollLifecycle = FocusedTextPollLifecycle()
     private var focusedTextAXHealthCoordinator = FocusedTextAXHealthCoordinator()
-    private var focusedTextPollLatencyStats = FocusedTextPollLatencyStats()
-    private var focusedTextPollSkipStats = FocusedTextPollSkipStats()
+    private var focusedTextPollingTelemetry = FocusedTextPollingTelemetryCoordinator()
     private var completionRequestLifecycle = CompletionRequestLifecycle()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
     private var recentWordMemory = ScopedRecentWordMemory()
@@ -139,7 +136,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let postTypingPollPauseMilliseconds = 220
     private let postInsertionPollPauseMilliseconds = 220
     private let slowFocusedTextPollLatencyMilliseconds = 80
-    private var focusedTextPollingPause = FocusedTextPollingPause()
     private var suggestionsPaused = false
     private var keyboardShortcutConfiguration = KeyboardShortcutConfiguration.default
 
@@ -475,7 +471,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let beginDecision = focusedTextPollLifecycle.beginPoll(source: updateSource)
         guard beginDecision.shouldStart,
               let startedAt = beginDecision.startedAt else {
-            if let notice = focusedTextPollSkipStats.recordSkippedInFlight(now: Date()) {
+            if let notice = focusedTextPollingTelemetry.recordSkippedInFlight(now: Date()) {
                 DiagnosticsLog.shared.record(
                     "focused-text-poll-skipped",
                     metadata: [
@@ -533,7 +529,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if focusedTextPollingPause.isPaused(now: Date()), !updateSource.bypassesTypingPause {
+        if focusedTextPollingTelemetry.isPaused(now: Date()), !updateSource.bypassesTypingPause {
             setSuggestionDecision("Waiting: typing")
             return
         }
@@ -959,7 +955,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func recordFocusedTextPollLatency(_ durationMilliseconds: Int) {
-        if durationMilliseconds >= slowFocusedTextPollLatencyMilliseconds {
+        let update = focusedTextPollingTelemetry.recordLatency(
+            durationMilliseconds,
+            now: Date(),
+            hasVisibleSuggestion: visibleSuggestionState.hasVisibleSuggestion
+        )
+        recordFocusedTextPollingTelemetryUpdate(update)
+    }
+
+    private func recordFocusedTextPollSkipSummaryIfNeeded() {
+        guard let update = focusedTextPollingTelemetry.drainSkipSummary(
+            now: Date(),
+            hasVisibleSuggestion: visibleSuggestionState.hasVisibleSuggestion
+        ) else {
+            return
+        }
+
+        recordFocusedTextPollingTelemetryUpdate(update)
+    }
+
+    private func recordFocusedTextPollingTelemetryUpdate(
+        _ update: FocusedTextPollingTelemetryUpdate
+    ) {
+        if let durationMilliseconds = update.slowLatencyMilliseconds {
             DiagnosticsLog.shared.record(
                 "focused-text-poll-latency-slow",
                 metadata: [
@@ -968,7 +986,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
-        if let summary = focusedTextPollLatencyStats.record(durationMilliseconds) {
+        if let summary = update.latencySummary {
             DiagnosticsLog.shared.record(
                 "focused-text-poll-latency-summary",
                 metadata: [
@@ -978,60 +996,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "maxMilliseconds": String(summary.maxMilliseconds)
                 ]
             )
-            applyFocusedTextPollingThrottleIfNeeded(
-                focusedTextPollingBackoffPolicy.throttleRecommendation(
-                    latencySummary: summary,
-                    skipSummary: nil
-                )
+        }
+
+        if let summary = update.skipSummary {
+            DiagnosticsLog.shared.record(
+                "focused-text-poll-skip-summary",
+                metadata: [
+                    "reason": "in-flight",
+                    "count": String(summary.count),
+                    "durationMilliseconds": String(summary.durationMilliseconds)
+                ]
             )
+        }
+
+        if let throttle = update.throttle {
+            applyFocusedTextPollingThrottle(throttle)
         }
     }
 
-    private func recordFocusedTextPollSkipSummaryIfNeeded() {
-        guard let summary = focusedTextPollSkipStats.drain(now: Date()) else {
-            return
-        }
-
-        DiagnosticsLog.shared.record(
-            "focused-text-poll-skip-summary",
-            metadata: [
-                "reason": "in-flight",
-                "count": String(summary.count),
-                "durationMilliseconds": String(summary.durationMilliseconds)
-            ]
-        )
-        applyFocusedTextPollingThrottleIfNeeded(
-            focusedTextPollingBackoffPolicy.throttleRecommendation(
-                latencySummary: nil,
-                skipSummary: summary
-            )
-        )
-    }
-
-    private func applyFocusedTextPollingThrottleIfNeeded(
-        _ recommendation: FocusedTextPollingThrottleRecommendation
+    private func applyFocusedTextPollingThrottle(
+        _ throttle: FocusedTextPollingThrottleEffect
     ) {
-        guard recommendation.shouldThrottle,
-              let reason = recommendation.reason,
-              recommendation.pauseMilliseconds > 0 else {
-            return
-        }
-
-        focusedTextPollingPause.pause(
-            now: Date(),
-            durationMilliseconds: recommendation.pauseMilliseconds,
-            policy: focusedTextPollingBackoffPolicy
-        )
         invalidatePendingSuggestionRequest()
-        if visibleSuggestionState.hasVisibleSuggestion,
-           focusedTextPollingThrottleVisibilityPolicy.shouldHideVisibleSuggestion(for: reason) {
-            hideSuggestion(reason: "focused-text-poll-\(reason.rawValue)")
+        if throttle.shouldHideVisibleSuggestion {
+            hideSuggestion(reason: "focused-text-poll-\(throttle.reason.rawValue)")
         }
         DiagnosticsLog.shared.record(
             "focused-text-poll-throttled",
             metadata: [
-                "reason": reason.rawValue,
-                "pauseMilliseconds": String(recommendation.pauseMilliseconds)
+                "reason": throttle.reason.rawValue,
+                "pauseMilliseconds": String(throttle.pauseMilliseconds)
             ]
         )
     }
@@ -1358,7 +1352,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func observePassthroughTypingKeyDown() {
-        focusedTextPollingPause.pause(
+        focusedTextPollingTelemetry.pause(
             now: Date(),
             durationMilliseconds: postTypingPollPauseMilliseconds
         )
@@ -2277,7 +2271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         if result.succeeded {
-            focusedTextPollingPause.pause(
+            focusedTextPollingTelemetry.pause(
                 now: Date(),
                 durationMilliseconds: postInsertionPollPauseMilliseconds
             )

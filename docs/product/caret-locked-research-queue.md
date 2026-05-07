@@ -244,10 +244,11 @@ Manual proof blocker evidence: `./script/manual_smoke_status.sh --strict` report
 - [x] Extract focused text AX health coordination out of `AppDelegate`.
 - [x] Extract visible suggestion acceptance coordination out of `AppDelegate`.
 - [x] Extract fast word-completion request planning out of `AppDelegate`.
+- [x] Extract focused text polling telemetry and throttle bookkeeping out of `AppDelegate`.
 - [ ] Keep `AppDelegate` mostly as wiring.
 - [x] Add unit tests for each extracted policy.
 
-Blocker evidence: `AppDelegate` is still 3,108 lines after extracting presentation, observer coordination, insertion verification scheduling/coordination, trace screenshot capture, compatibility learning actions, status menu state, runtime lifecycle, local privacy controls, suggestion diagnostics, visible suggestion panel placement, visible suggestion session state, visible suggestion outcome policy, completion request lifecycle, visible suggestion keyboard acceptance decisions, focused text poll lifecycle, focused text suggestion planning, focused text AX health coordination, visible suggestion acceptance coordination, and fast word-completion request planning. The remaining heavy owners are focused text side effects and model request orchestration.
+Blocker evidence: `AppDelegate` is still 3,104 lines after extracting presentation, observer coordination, insertion verification scheduling/coordination, trace screenshot capture, compatibility learning actions, status menu state, runtime lifecycle, local privacy controls, suggestion diagnostics, visible suggestion panel placement, visible suggestion session state, visible suggestion outcome policy, completion request lifecycle, visible suggestion keyboard acceptance decisions, focused text poll lifecycle, focused text suggestion planning, focused text AX health coordination, visible suggestion acceptance coordination, fast word-completion request planning, and focused text polling telemetry. The remaining heavy owners are focused text side effects and model request orchestration.
 
 ## P2: Self-Healing Compatibility
 
