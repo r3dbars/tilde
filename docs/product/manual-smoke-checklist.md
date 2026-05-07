@@ -28,6 +28,8 @@ manual proof pass.
 ## Setup
 
 - Launch `dist/AutocompleteLab.app`.
+- Prefer `./script/build_and_run.sh --verify` before using `--skip-build`; the
+  recorder rejects stale app processes from other checkouts.
 - Confirm the menu says `AX ok`.
 - Keep test text local and disposable.
 - Watch `~/Library/Logs/AutocompleteLab/diagnostics.log` for `suggestion-presented`, `keyboard-action`, `insert`, and `insert-verification`.
