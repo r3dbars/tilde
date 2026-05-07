@@ -387,4 +387,13 @@ struct SettingsWindowControllerStateTests {
         #expect(paused.contentStatusText == "Raw text capture: on temporarily")
         #expect(paused.screenRecordingPermissionText == nil)
     }
+
+    @Test("Keyboard shortcut state exposes explicit picker choices")
+    func keyboardShortcutStateExposesExplicitPickerChoices() {
+        let shortcuts = SettingsKeyboardShortcutState(acceptAllShortcut: .optionTab)
+
+        #expect(shortcuts.statusText == "Shortcuts: Tab next word | Option-Tab all")
+        #expect(shortcuts.pickerTitles == ["Backtick", "Option-Tab"])
+        #expect(shortcuts.selectedShortcutTitle == "Option-Tab")
+    }
 }

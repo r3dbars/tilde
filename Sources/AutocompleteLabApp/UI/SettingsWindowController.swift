@@ -295,8 +295,12 @@ struct SettingsKeyboardShortcutState: Equatable {
         "Shortcuts: Tab next word | \(acceptAllShortcut.displayName) all"
     }
 
-    var cycleButtonTitle: String {
-        "Use \(acceptAllShortcut.next.displayName)"
+    var pickerTitles: [String] {
+        AcceptAllShortcut.allCases.map(\.displayName)
+    }
+
+    var selectedShortcutTitle: String {
+        acceptAllShortcut.displayName
     }
 }
 
@@ -391,7 +395,7 @@ final class SettingsWindowController: NSObject {
     )
     private let deleteLocalLogsButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
     private let shortcutLabel = NSTextField(labelWithString: "")
-    private let cycleAcceptAllShortcutButton = NSButton(title: "Use Option-Tab", target: nil, action: nil)
+    private let acceptAllShortcutPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
     private let requestPermission: () -> Void
     private let openAccessibilitySettings: () -> Void
@@ -406,7 +410,7 @@ final class SettingsWindowController: NSObject {
     private let toggleRawContentTracing: () -> Void
     private let toggleScreenshotTracing: () -> Void
     private let deleteLocalLogs: () -> Void
-    private let cycleAcceptAllShortcut: () -> Void
+    private let setAcceptAllShortcut: (AcceptAllShortcut) -> Void
     private var currentRuntimeAction: RuntimeReadinessAction = .none
     private var currentProofCommand: String?
 
@@ -424,7 +428,7 @@ final class SettingsWindowController: NSObject {
         toggleRawContentTracing: @escaping () -> Void,
         toggleScreenshotTracing: @escaping () -> Void,
         deleteLocalLogs: @escaping () -> Void,
-        cycleAcceptAllShortcut: @escaping () -> Void
+        setAcceptAllShortcut: @escaping (AcceptAllShortcut) -> Void
     ) {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
@@ -439,7 +443,7 @@ final class SettingsWindowController: NSObject {
         self.toggleRawContentTracing = toggleRawContentTracing
         self.toggleScreenshotTracing = toggleScreenshotTracing
         self.deleteLocalLogs = deleteLocalLogs
-        self.cycleAcceptAllShortcut = cycleAcceptAllShortcut
+        self.setAcceptAllShortcut = setAcceptAllShortcut
 
         let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 760))
         contentView.material = .contentBackground
@@ -548,7 +552,7 @@ final class SettingsWindowController: NSObject {
         toggleRawTraceButton.state = privacy.rawContentTracingEnabled ? .on : .off
         toggleScreenshotTraceButton.state = privacy.screenshotTracingEnabled ? .on : .off
         shortcutLabel.stringValue = keyboardShortcuts.statusText
-        cycleAcceptAllShortcutButton.title = keyboardShortcuts.cycleButtonTitle
+        acceptAllShortcutPopup.selectItem(withTitle: keyboardShortcuts.selectedShortcutTitle)
         firstRunLabel.stringValue = onboardingText(
             isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
@@ -644,9 +648,13 @@ final class SettingsWindowController: NSObject {
         deleteLocalLogsButton.target = self
         deleteLocalLogsButton.action = #selector(deleteLocalLogsControl)
         deleteLocalLogsButton.bezelStyle = .rounded
-        cycleAcceptAllShortcutButton.target = self
-        cycleAcceptAllShortcutButton.action = #selector(cycleAcceptAllShortcutControl)
-        cycleAcceptAllShortcutButton.bezelStyle = .rounded
+        acceptAllShortcutPopup.removeAllItems()
+        keyboardShortcutPopupItems().forEach { item in
+            acceptAllShortcutPopup.menu?.addItem(item)
+        }
+        acceptAllShortcutPopup.target = self
+        acceptAllShortcutPopup.action = #selector(selectAcceptAllShortcutControl)
+        acceptAllShortcutPopup.toolTip = "Chooses the shortcut for accepting all visible suggestion text."
 
         [
             title,
@@ -711,7 +719,7 @@ final class SettingsWindowController: NSObject {
                 title: "Keyboard",
                 views: [
                     shortcutLabel,
-                    makeButtonRow([cycleAcceptAllShortcutButton])
+                    makeButtonRow([acceptAllShortcutPopup])
                 ]
             )
         ].forEach {
@@ -756,6 +764,14 @@ final class SettingsWindowController: NSObject {
         row.alignment = .centerY
         row.spacing = 8
         return row
+    }
+
+    private func keyboardShortcutPopupItems() -> [NSMenuItem] {
+        AcceptAllShortcut.allCases.map { shortcut in
+            let item = NSMenuItem(title: shortcut.displayName, action: nil, keyEquivalent: "")
+            item.representedObject = shortcut.rawValue
+            return item
+        }
     }
 
     private func onboardingText(
@@ -842,7 +858,12 @@ final class SettingsWindowController: NSObject {
     }
 
     @objc
-    private func cycleAcceptAllShortcutControl() {
-        cycleAcceptAllShortcut()
+    private func selectAcceptAllShortcutControl() {
+        guard let rawValue = acceptAllShortcutPopup.selectedItem?.representedObject as? String,
+              let shortcut = AcceptAllShortcut(rawValue: rawValue) else {
+            return
+        }
+
+        setAcceptAllShortcut(shortcut)
     }
 }

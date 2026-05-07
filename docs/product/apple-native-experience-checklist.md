@@ -356,7 +356,7 @@ Native target: a user can understand and control the app in 20 seconds.
 - [x] Settings uses clearer controls for suggestions, current app, tracing, raw text capture, screenshot capture, and local log deletion.
 - [x] Settings and menu copy now expose green/yellow/diagnostics-only/unsupported app stance.
 - [x] Settings shows the current app safety stance, including mirror-only, detached-suggestion suppression, and prompt-app full-accept limits.
-- [ ] Shortcut editing should be first-class.
+- [x] Shortcut editing should be first-class.
 - [ ] Per-app mode should be visible: inline, mirror, command-only, disabled.
 - [x] User should be able to force mirror mode for an app.
 - [x] User should be able to disable suggestions for current field/session.
