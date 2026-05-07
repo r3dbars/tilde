@@ -229,7 +229,12 @@ open_app() {
     launchctl unsetenv AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS >/dev/null 2>&1 || true
   fi
 
-  /usr/bin/open -n "$APP_BUNDLE"
+  if [[ "${AUTOCOMPLETE_LAB_DIRECT_LAUNCH:-}" =~ ^(1|true|yes|on)$ ]]; then
+    nohup "$APP_BINARY" >"$DIST_DIR/$APP_NAME.launch.log" 2>&1 </dev/null &
+    disown "$!" 2>/dev/null || true
+  else
+    /usr/bin/open -n "$APP_BUNDLE"
+  fi
 }
 
 case "$MODE" in
@@ -251,6 +256,8 @@ case "$MODE" in
     open_app
     for _ in {1..30}; do
       if current_bundle_is_running; then
+        sleep 2
+        current_bundle_is_running
         exit 0
       fi
       sleep 1
