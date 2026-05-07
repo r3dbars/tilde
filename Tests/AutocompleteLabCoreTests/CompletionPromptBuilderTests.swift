@@ -57,6 +57,20 @@ struct CompletionPromptBuilderTests {
         #expect(!prompt.system.contains("make this simpler"))
     }
 
+    @Test("Prompt includes trace safe partial word shape")
+    func promptIncludesTraceSafePartialWordShape() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Please open Transcrip",
+            mode: .wordCompletion
+        ))
+
+        #expect(prompt.system.contains("Partial word shape"))
+        #expect(prompt.system.contains("9 characters"))
+        #expect(prompt.system.contains("titlecase casing"))
+        #expect(!prompt.system.contains("Transcrip"))
+    }
+
     @Test("Codex prompt does not force dogfood topics into normal writing")
     func codexPromptDoesNotForceDogfoodTopicsIntoNormalWriting() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)

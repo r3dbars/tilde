@@ -62,7 +62,14 @@ public struct CompletionRequest: Equatable, Sendable {
         if let acceptedTextStyleSketch {
             metadata.merge(acceptedTextStyleSketch.traceMetadata) { current, _ in current }
         }
+        if let partialWordShape {
+            metadata.merge(partialWordShape.traceMetadata) { current, _ in current }
+        }
         return metadata
+    }
+
+    public var partialWordShape: PartialWordShape? {
+        PartialWordShape.from(textBeforeCursor: textBeforeCursor)
     }
 }
 
