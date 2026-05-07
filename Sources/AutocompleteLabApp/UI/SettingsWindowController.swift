@@ -402,6 +402,11 @@ final class SettingsWindowController: NSObject {
         target: nil,
         action: nil
     )
+    private let openCommandContextButton = NSButton(
+        title: "Command Context...",
+        target: nil,
+        action: nil
+    )
     private let toggleCurrentAppButton = NSButton(
         checkboxWithTitle: "Allow suggestions in this app",
         target: nil,
@@ -441,6 +446,7 @@ final class SettingsWindowController: NSObject {
     private let toggleMirrorMode: () -> Void
     private let quietCurrentField: () -> Void
     private let copyProofCommand: (String) -> Void
+    private let openCommandContext: () -> Void
     private let enableAllApps: () -> Void
     private let toggleTracingPaused: () -> Void
     private let toggleRawContentTracing: () -> Void
@@ -462,6 +468,7 @@ final class SettingsWindowController: NSObject {
         toggleMirrorMode: @escaping () -> Void,
         quietCurrentField: @escaping () -> Void,
         copyProofCommand: @escaping (String) -> Void,
+        openCommandContext: @escaping () -> Void,
         enableAllApps: @escaping () -> Void,
         toggleTracingPaused: @escaping () -> Void,
         toggleRawContentTracing: @escaping () -> Void,
@@ -479,6 +486,7 @@ final class SettingsWindowController: NSObject {
         self.toggleMirrorMode = toggleMirrorMode
         self.quietCurrentField = quietCurrentField
         self.copyProofCommand = copyProofCommand
+        self.openCommandContext = openCommandContext
         self.enableAllApps = enableAllApps
         self.toggleTracingPaused = toggleTracingPaused
         self.toggleRawContentTracing = toggleRawContentTracing
@@ -694,6 +702,10 @@ final class SettingsWindowController: NSObject {
         copyProofCommandButton.action = #selector(copyProofCommandControl)
         copyProofCommandButton.bezelStyle = .rounded
         copyProofCommandButton.toolTip = "Copies the exact local smoke command for this app."
+        openCommandContextButton.target = self
+        openCommandContextButton.action = #selector(openCommandContextControl)
+        openCommandContextButton.bezelStyle = .rounded
+        openCommandContextButton.toolTip = "Opens a separate copy-only suggestion panel for uncertain apps."
         enableAllAppsButton.target = self
         enableAllAppsButton.action = #selector(enableAllAppsControl)
         enableAllAppsButton.bezelStyle = .rounded
@@ -763,7 +775,7 @@ final class SettingsWindowController: NSObject {
                     currentAppProofLabel,
                     toggleMirrorModeButton,
                     toggleCurrentAppButton,
-                    makeButtonRow([copyProofCommandButton, quietCurrentFieldButton]),
+                    makeButtonRow([openCommandContextButton, copyProofCommandButton, quietCurrentFieldButton]),
                     makeButtonRow([disabledAppsLabel, enableAllAppsButton])
                 ]
             ),
@@ -904,6 +916,11 @@ final class SettingsWindowController: NSObject {
         }
 
         copyProofCommand(currentProofCommand)
+    }
+
+    @objc
+    private func openCommandContextControl() {
+        openCommandContext()
     }
 
     @objc

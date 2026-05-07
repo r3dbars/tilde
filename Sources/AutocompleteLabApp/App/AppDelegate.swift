@@ -65,6 +65,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         copyProofCommand: { [weak self] command in
             self?.copyProofCommandToPasteboard(command)
         },
+        openCommandContext: { [weak self] in
+            self?.showCommandContextPanel()
+        },
         enableAllApps: { [weak self] in
             self?.enableAllDisabledApps()
         },
@@ -88,6 +91,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         setSuggestionPace: { [weak self] pace in
             self?.setSuggestionPace(pace)
+        }
+    )
+    private lazy var commandContextPanel = CommandContextPanelController(
+        requestSuggestion: { [weak self] in
+            self?.requestCommandContextSuggestion()
+        },
+        copySuggestion: { [weak self] in
+            self?.copyCommandContextSuggestionToPasteboard()
+        },
+        closePanel: { [weak self] in
+            self?.cancelCommandContextRequest()
         }
     )
 
@@ -115,6 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debounceTask: Task<Void, Never>?
     private var insertionVerificationTask: Task<Void, Never>?
     private var runtimeWarmTask: Task<Void, Never>?
+    private var commandContextRequestTask: Task<Void, Never>?
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private var isFocusedTextPollInFlight = false
     private var latestFocusedTextReadRequestID: UInt64?
@@ -147,6 +162,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastEligibleTargetApp: RunningApplicationInfo?
     private var lastObservedSettingsApp: RunningApplicationInfo?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
+    private var commandContextDraft: CommandContextDraft?
+    private var commandContextSuggestionText: String?
+    private var commandContextStatusMessage = ""
+    private var commandContextIsLoading = false
+    private var commandContextRequestID: String?
     private let focusedTextPollInterval: TimeInterval = 0.05
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 220
@@ -194,6 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyboardEventTapStopTask?.cancel()
         insertionVerificationTask?.cancel()
         runtimeWarmTask?.cancel()
+        commandContextRequestTask?.cancel()
         invalidatePendingSuggestionRequest()
         modelRuntime.cancel()
         pollTimer?.invalidate()
@@ -220,6 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(pauseItem)
         menu.addItem(toggleItem)
         menu.addItem(quietFieldItem)
+        menu.addItem(NSMenuItem(title: "Command Context...", action: #selector(showCommandContextPanel), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Request Accessibility", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
@@ -1130,6 +1152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fingerprint: context.fingerprint,
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
+            selectedText: context.selectedText,
             selectedTextLength: context.selectedTextLength,
             caretRect: syntheticCaret,
             elementRect: context.elementRect,
@@ -3408,6 +3431,235 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
+    private func showCommandContextPanel() {
+        cancelCommandContextRequest()
+        commandContextDraft = makeCommandContextDraft()
+        commandContextSuggestionText = nil
+        commandContextStatusMessage = ""
+        commandContextIsLoading = false
+
+        let state = commandContextPanelState()
+        commandContextPanel.show(state: state)
+        DiagnosticsLog.shared.record(
+            "command-context-opened",
+            metadata: [
+                "app": state.bundleIdentifier ?? "none",
+                "support": state.supportStatus.summary,
+                "hasContext": String(state.context != nil),
+                "source": state.context?.sourceName ?? "none"
+            ]
+        )
+    }
+
+    private func makeCommandContextDraft() -> CommandContextDraft {
+        guard let app = appForCommandContext() else {
+            return CommandContextDraft(app: nil, supportStatus: .unsupported, context: nil)
+        }
+
+        let supportStatus = profileStore.supportStatus(for: app.bundleIdentifier)
+        let profile = profileStore.profile(for: app.bundleIdentifier)
+        let canReadContext: Bool
+        switch supportStatus {
+        case let .supported(profile):
+            canReadContext = !profile.isSensitive
+        case .denylisted:
+            canReadContext = false
+        case .unsupported:
+            canReadContext = true
+        }
+
+        let context = canReadContext
+            ? accessibilityClient.focusedTextContext(
+                for: app,
+                allowDescendantTextFallback: profile?.allowsDescendantTextFallback == true
+            )
+            : nil
+
+        return CommandContextDraft(
+            app: app,
+            supportStatus: supportStatus,
+            context: context
+        )
+    }
+
+    private func appForCommandContext() -> RunningApplicationInfo? {
+        if let app = accessibilityClient.frontmostApplication(),
+           app.bundleIdentifier != Bundle.main.bundleIdentifier {
+            return app
+        }
+
+        return lastObservedSettingsApp ?? lastEligibleTargetApp
+    }
+
+    private func commandContextPanelState() -> CommandContextPanelState {
+        let app = commandContextDraft?.app
+        let bundleIdentifier = app?.bundleIdentifier
+        let supportStatus = commandContextDraft?.supportStatus ?? .unsupported
+
+        return CommandContextPanelState(
+            appDisplayName: app?.localizedName ?? "None",
+            bundleIdentifier: bundleIdentifier,
+            supportStatus: supportStatus,
+            isAppEnabled: bundleIdentifier.map { !disabledBundleIdentifiers.contains($0) } ?? false,
+            runtimeReport: runtimeReadinessReport,
+            context: commandContextDraft?.context.map(CommandContextSnapshot.init(context:)),
+            suggestionText: commandContextSuggestionText,
+            isLoading: commandContextIsLoading,
+            statusMessage: commandContextStatusMessage
+        )
+    }
+
+    private func requestCommandContextSuggestion() {
+        let state = commandContextPanelState()
+        guard state.canRequestSuggestion,
+              let draft = commandContextDraft,
+              let requestText = commandContextRequestText(from: draft) else {
+            commandContextStatusMessage = "Not ready: \(state.requestUnavailableReason ?? "No context available.")"
+            commandContextPanel.refresh(state: commandContextPanelState())
+            return
+        }
+
+        let requestID = UUID().uuidString
+        let request = CompletionRequest(
+            textBeforeCursor: requestText,
+            textAfterCursor: draft.context?.textAfterCursor ?? "",
+            appBundleIdentifier: draft.app?.bundleIdentifier,
+            maxVisibleWords: completionLengthConfiguration.maxVisibleWords,
+            mode: .phraseContinuation,
+            suggestionID: requestID
+        )
+
+        commandContextRequestTask?.cancel()
+        commandContextRequestID = requestID
+        commandContextSuggestionText = nil
+        commandContextStatusMessage = "Thinking locally..."
+        commandContextIsLoading = true
+        commandContextPanel.refresh(state: commandContextPanelState())
+
+        DiagnosticsLog.shared.record(
+            "command-context-requested",
+            metadata: [
+                "app": draft.app?.bundleIdentifier ?? "none",
+                "source": draft.context?.selectedText.isEmpty == false ? "selected-text" : "current-field",
+                "contextChars": String(requestText.count)
+            ]
+        )
+
+        commandContextRequestTask = Task { [weak self, engine, request, requestID] in
+            do {
+                let suggestion = try await engine.suggestion(for: request)
+                guard !Task.isCancelled else {
+                    return
+                }
+
+                await MainActor.run {
+                    self?.completeCommandContextRequest(
+                        requestID: requestID,
+                        suggestionText: suggestion?.visibleText,
+                        errorMessage: nil
+                    )
+                }
+            } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+
+                await MainActor.run {
+                    self?.completeCommandContextRequest(
+                        requestID: requestID,
+                        suggestionText: nil,
+                        errorMessage: error.localizedDescription
+                    )
+                }
+            }
+        }
+    }
+
+    private func commandContextRequestText(from draft: CommandContextDraft) -> String? {
+        guard let context = draft.context, !context.isSecure else {
+            return nil
+        }
+
+        let selectedText = context.selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !selectedText.isEmpty {
+            return context.selectedText
+        }
+
+        let textBeforeCursor = context.textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !textBeforeCursor.isEmpty else {
+            return nil
+        }
+
+        return context.textBeforeCursor
+    }
+
+    private func completeCommandContextRequest(
+        requestID: String,
+        suggestionText: String?,
+        errorMessage: String?
+    ) {
+        guard commandContextRequestID == requestID else {
+            return
+        }
+
+        commandContextRequestTask = nil
+        commandContextRequestID = nil
+        commandContextIsLoading = false
+
+        if let errorMessage {
+            commandContextSuggestionText = nil
+            commandContextStatusMessage = "Model error: \(errorMessage)"
+        } else if let suggestionText,
+                  !suggestionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            commandContextSuggestionText = suggestionText
+            commandContextStatusMessage = "Ready: copy when you want it."
+        } else {
+            commandContextSuggestionText = nil
+            commandContextStatusMessage = "No suggestion returned."
+        }
+
+        commandContextPanel.refresh(state: commandContextPanelState())
+        DiagnosticsLog.shared.record(
+            "command-context-result",
+            metadata: [
+                "app": commandContextDraft?.app?.bundleIdentifier ?? "none",
+                "hasSuggestion": String(commandContextSuggestionText != nil),
+                "suggestionChars": String(commandContextSuggestionText?.count ?? 0)
+            ]
+        )
+    }
+
+    private func copyCommandContextSuggestionToPasteboard() {
+        let state = commandContextPanelState()
+        guard state.canCopySuggestion,
+              let suggestionText = commandContextSuggestionText else {
+            commandContextStatusMessage = "Nothing to copy yet."
+            commandContextPanel.refresh(state: commandContextPanelState())
+            return
+        }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(suggestionText, forType: .string)
+        commandContextStatusMessage = "Copied to clipboard. Paste it where you want it."
+        commandContextPanel.refresh(state: commandContextPanelState())
+
+        DiagnosticsLog.shared.record(
+            "command-context-copied",
+            metadata: [
+                "app": commandContextDraft?.app?.bundleIdentifier ?? "none",
+                "suggestionChars": String(suggestionText.count)
+            ]
+        )
+    }
+
+    private func cancelCommandContextRequest() {
+        commandContextRequestTask?.cancel()
+        commandContextRequestTask = nil
+        commandContextRequestID = nil
+        commandContextIsLoading = false
+    }
+
+    @objc
     private func revealModelFolder() {
         do {
             try FileManager.default.createDirectory(
@@ -3876,6 +4128,12 @@ private struct TraceScreenshotCapture {
     let rectDescription: String
 
     static let none = TraceScreenshotCapture(path: "", rectDescription: "none")
+}
+
+private struct CommandContextDraft {
+    let app: RunningApplicationInfo?
+    let supportStatus: CompatibilitySupportStatus
+    let context: FocusedTextContext?
 }
 
 private extension AppDelegate {
