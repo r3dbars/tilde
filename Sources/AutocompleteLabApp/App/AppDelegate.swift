@@ -604,11 +604,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isPollInFlight: isFocusedTextPollInFlight,
             isTrustedForAccessibility: accessibilityClient.isTrusted,
             hasSupportedProfile: hasSupportedProfileForFocusedTextPoll,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+            isPausedForTyping: focusedTextPollingPause.isPaused(now: now)
         )
 
         switch gateDecision {
         case .waitForCadence:
+            return
+        case .waitForTypingPause:
+            setSuggestionDecision("Waiting: typing")
             return
         case .skipInFlight:
             if let notice = focusedTextPollSkipStats.recordSkippedInFlight(now: now) {
