@@ -183,7 +183,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 ## P1: Manual QA And Proof
 
 - [ ] Refresh Codex dogfood manual smoke proof.
-- [ ] Require manual smoke proof from the current commit or current archive.
+- [x] Require manual smoke proof from the current commit or current archive.
 - [x] Add smoke rows for anchor source: caret, line, field, window, off.
 - [x] Add "wrong app insertion" as a hard fail.
 - [x] Add "Tab stolen with no visible suggestion" as a hard fail.

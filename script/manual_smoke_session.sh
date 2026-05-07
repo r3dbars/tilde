@@ -14,6 +14,7 @@ TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/tr
 REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-runs.md}"
 PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-default}"
 ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-backtick}"
+BUILD_PROOF="${AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF:-}"
 
 usage() {
   cat <<'EOF'
@@ -396,6 +397,10 @@ append_report_row() {
     trace_summary="$trace_summary; visual \`not-claimed\`"
   fi
 
+  local build_proof
+  build_proof="$(manual_smoke_build_proof)"
+  trace_summary="$trace_summary; build \`$build_proof\`"
+
   if [[ ! -f "$REPORT_PATH" ]]; then
     mkdir -p "$(dirname "$REPORT_PATH")"
     cat >"$REPORT_PATH" <<'EOF'
@@ -412,6 +417,9 @@ historical evidence only.
 When a trace slice says `visual strict-complete`, strict screenshot evidence was
 required and passed. Rows without that marker are insertion proof only.
 
+Rows also include a build proof token in the trace slice. Current proof must
+match either the current Git commit or the current release archive checksum.
+
 | Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
 | --- | --- | --- | --- | ---: | --- | --- | --- |
 EOF
@@ -427,6 +435,37 @@ EOF
     "$((START_LINE + 1))" \
     "$LOG_PATH" \
     "$trace_summary" >>"$REPORT_PATH"
+}
+
+manual_smoke_build_proof() {
+  if [[ -n "$BUILD_PROOF" ]]; then
+    printf '%s' "$BUILD_PROOF"
+    return
+  fi
+
+  local proof_parts=()
+  local commit
+  commit="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
+  if [[ -n "$commit" ]]; then
+    proof_parts+=("commit:$commit")
+  fi
+
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/AutocompleteLab.zip}"
+  if [[ -s "$archive_path" ]]; then
+    local archive_sha
+    archive_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
+    if [[ -n "$archive_sha" ]]; then
+      proof_parts+=("archive-sha256:$archive_sha")
+    fi
+  fi
+
+  if (( ${#proof_parts[@]} == 0 )); then
+    printf 'commit:unknown'
+    return
+  fi
+
+  local IFS=','
+  printf '%s' "${proof_parts[*]}"
 }
 
 if [[ "$APP" == "obsidian" ]] &&

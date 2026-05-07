@@ -17,6 +17,8 @@ REPORT_PATH="$TMP_DIR/manual-smoke-runs.md"
 SCORECARD_PATH="$TMP_DIR/deep-dive-scorecard.md"
 FAILURE_OUTPUT="$TMP_DIR/failure-output.txt"
 
+export AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF="commit:selftest"
+
 write_passing_log() {
   local bundle_id="$1"
   local render_mode="$2"
@@ -128,7 +130,7 @@ run_passing_case() {
   fi
 
   if ! grep -F " | lines 1+ in \`$TRACE_PATH\` |" "$REPORT_PATH" >/dev/null; then
-    if ! grep -F " | lines 1+ in \`$TRACE_PATH\`; visual \`not-claimed\` |" "$REPORT_PATH" >/dev/null; then
+    if ! grep -F " | lines 1+ in \`$TRACE_PATH\`; visual \`not-claimed\`; build \`commit:selftest\` |" "$REPORT_PATH" >/dev/null; then
       echo "manual smoke self-test did not record the successful $display_name trace slice" >&2
       exit 1
     fi
@@ -178,7 +180,7 @@ run_strict_visual_case() {
     exit 1
   fi
 
-  if ! grep -F " | lines 1+ in \`$TRACE_PATH\`; visual \`strict-complete\` |" "$REPORT_PATH" >/dev/null; then
+  if ! grep -F " | lines 1+ in \`$TRACE_PATH\`; visual \`strict-complete\`; build \`commit:selftest\` |" "$REPORT_PATH" >/dev/null; then
     echo "manual smoke self-test did not record the successful $proof_label strict visual trace slice" >&2
     exit 1
   fi
@@ -439,6 +441,21 @@ EOF
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   AUTOCOMPLETE_LAB_SCORECARD="$COMPLETE_SCORECARD_PATH" \
   script/manual_smoke_status.sh --require-all >/dev/null
+
+STALE_REPORT="$TMP_DIR/stale-manual-smoke-runs.md"
+sed -E 's/; build `[^`]+`//g' "$REPORT_PATH" >"$STALE_REPORT"
+
+if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$STALE_REPORT" \
+  AUTOCOMPLETE_LAB_SCORECARD="$COMPLETE_SCORECARD_PATH" \
+  script/manual_smoke_status.sh --require-all >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected strict status to fail on stale build proof" >&2
+  exit 1
+fi
+
+if ! grep -F 'stale pass (needs current commit/archive proof' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not explain stale manual smoke proof" >&2
+  exit 1
+fi
 
 BELOW_TARGET_SCORECARD_PATH="$TMP_DIR/deep-dive-scorecard-below-target.md"
 cat >"$BELOW_TARGET_SCORECARD_PATH" <<'EOF'

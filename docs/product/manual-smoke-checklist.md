@@ -13,6 +13,8 @@ release/beta work. The status command also lists the current scorecard rows
 that are still below 10/10. In strict mode it also runs the screenshot evidence
 gate, so stale screenshot rows, unreferenced screenshot files, and below-target
 visual rows without a clear `Pending` label block the pass.
+It only counts manual smoke rows that include the current Git commit or current
+release archive checksum in the trace slice.
 
 ## Setup
 
