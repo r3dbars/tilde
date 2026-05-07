@@ -121,6 +121,14 @@ evidence-backed score should stay lower until those rows are closed.
   desktop; remaining screenshot gaps are Obsidian, Notes title/body/checklist,
   Claude Code, and Claude desktop; Codex still needs same-slice one-word
   no-submit visual proof.
+- `./script/check_score_targets.sh`: exits 1 honestly on the current docs with
+  78 target misses across this scorecard, the Apple-native checklist, and the
+  app proof matrix. This makes the requested "all 10s / all 100s / all As"
+  target executable instead of subjective.
+- `./script/scorecard_goal_loop.sh --iterations 10`: completed all 10 requested
+  proof-loop iterations and still failed, as expected, because the same manual
+  app-proof gaps remain. It is now the repeatable repo command for grinding
+  against the score targets without inflating grades.
 - Latest live TextEdit proof: `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit --skip-build`
   passed at 2026-05-07T02:28:19Z with two verified accepts and strict screenshot
   trace evidence after the real-app smoke harness started pressing whichever
@@ -290,6 +298,10 @@ evidence-backed score should stay lower until those rows are closed.
 - The post-typing focused-text poll pause increased from 120ms to 220ms so
   repeated normal typing gives AX reads more room before the app resumes chasing
   the caret.
+- Score targets are now checked by `script/check_score_targets.sh`, self-tested
+  by `script/check_score_targets_self_test.sh`, and looped by
+  `script/scorecard_goal_loop.sh --iterations 10` together with strict manual
+  smoke status and strict visual evidence.
 
 ## Remaining Gaps
 
@@ -316,3 +328,7 @@ evidence-backed score should stay lower until those rows are closed.
 9. Run explicit disposable raw-content dogfood audits for suggestion quality;
    default tracing correctly protects privacy, but it cannot fully grade output
    relevance without opt-in raw text.
+10. Keep `./script/check_score_targets.sh` and
+    `./script/scorecard_goal_loop.sh --iterations 10` failing until every target
+    row has real app proof, then raise scores only in the same commit as the
+    proof.
