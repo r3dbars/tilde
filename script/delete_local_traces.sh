@@ -7,6 +7,7 @@ rm -f "$TRACE_FOLDER/traces.jsonl"
 rm -f "$TRACE_FOLDER/raw-traces.jsonl"
 rm -f "$TRACE_FOLDER/trace-report.html"
 rm -f "$TRACE_FOLDER/survival-report.json"
+rm -rf "$TRACE_FOLDER/privacy-export"
 rm -rf "$TRACE_FOLDER/screenshots"
 
 echo "Deleted Autocomplete Lab local traces: $TRACE_FOLDER"

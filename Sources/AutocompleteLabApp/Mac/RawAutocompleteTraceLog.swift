@@ -410,31 +410,15 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         AutocompleteTraceAnalyzer().summary(for: recentEvents(limit: limit))
     }
 
+    func exportPrivacyBundle(limit: Int = 2_000) -> URL? {
+        queue.sync { [folderURL] in
+            LocalReportExporter(folderURL: folderURL).exportPrivacyBundle(limit: limit)
+        }
+    }
+
     func exportHTMLReport(limit: Int = 2_000) -> URL? {
-        queue.sync { [folderURL, decoder] in
-            let logURL = folderURL.appendingPathComponent("traces.jsonl")
-            guard let contents = try? String(contentsOf: logURL, encoding: .utf8) else {
-                return nil
-            }
-
-            let events = contents
-                .split(separator: "\n", omittingEmptySubsequences: true)
-                .suffix(limit)
-                .compactMap { line in
-                    try? decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
-                }
-
-            let summary = AutocompleteTraceAnalyzer().summary(for: events)
-            let html = Self.htmlReport(summary: summary, events: events)
-            let reportURL = folderURL.appendingPathComponent("trace-report.html")
-
-            do {
-                try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
-                try html.write(to: reportURL, atomically: true, encoding: .utf8)
-                return reportURL
-            } catch {
-                return nil
-            }
+        queue.sync { [folderURL] in
+            LocalReportExporter(folderURL: folderURL).exportHTMLReport(limit: limit)
         }
     }
 

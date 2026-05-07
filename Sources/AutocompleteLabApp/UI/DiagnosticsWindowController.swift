@@ -32,7 +32,7 @@ final class DiagnosticsWindowController {
         pauseTracingButton = NSButton(title: "Pause", target: nil, action: nil)
         screenshotTracingButton = NSButton(title: "Screenshots", target: nil, action: nil)
         openTraceFolderButton = NSButton(title: "Trace Folder", target: nil, action: nil)
-        exportReportButton = NSButton(title: "Export", target: nil, action: nil)
+        exportReportButton = NSButton(title: "Export Privacy Bundle", target: nil, action: nil)
         deleteTracesButton = NSButton(title: "Delete", target: nil, action: nil)
 
         let scrollView = NSScrollView(frame: .zero)
