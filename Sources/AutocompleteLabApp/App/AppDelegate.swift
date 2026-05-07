@@ -2706,6 +2706,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(suppression.metadata) { current, _ in current }
             )
+            let placementMetadata = traceGeometryMetadata(context: context, renderMode: learningAdjustment.effectiveRenderMode)
+                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
+                .merging(learningAdjustment.metadata) { current, _ in current }
+                .merging(suppression.metadata) { current, _ in current }
+            recordPlacementUncertainty(
+                suggestionID: suggestionID,
+                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity,
+                requestMode: request.mode,
+                context: context,
+                reason: suppression.reason.rawValue,
+                metadata: placementMetadata
+            )
+            hideSuggestion(reason: "placement-\(suppression.reason.rawValue)")
             return
         }
 
@@ -2807,6 +2821,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(displayScoreMetadata) { current, _ in current }
                 .merging(replacementMetadata) { current, _ in current }
             )
+            let placementMetadata = traceGeometryMetadata(context: context, renderMode: placement.renderMode)
+                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
+                .merging(learningAdjustment.metadata) { current, _ in current }
+                .merging(placement.metadata) { current, _ in current }
+                .merging(displayScoreMetadata) { current, _ in current }
+                .merging(replacementMetadata) { current, _ in current }
+            recordPlacementUncertainty(
+                suggestionID: suggestionID,
+                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity,
+                requestMode: request.mode,
+                context: context,
+                reason: reason,
+                metadata: placementMetadata
+            )
+            hideSuggestion(reason: reason)
             return
         }
 
@@ -4065,6 +4095,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         return cooldown.metadata
+    }
+
+    private func recordPlacementUncertainty(
+        suggestionID: String,
+        appBundleIdentifier: String,
+        fieldIdentity: FocusedFieldIdentity,
+        requestMode: CompletionRequestMode,
+        context: FocusedTextContext,
+        reason: String,
+        metadata: [String: String]
+    ) {
+        RawAutocompleteTraceLog.shared.record(
+            type: .caretGeometryFailed,
+            suggestionID: suggestionID,
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentity: fieldIdentity.traceDescription,
+            requestMode: requestMode.rawValue,
+            triggerReason: "placement-uncertainty",
+            reason: reason,
+            metadata: metadata
+        )
+
+        let classification = fieldClassification(for: context)
+        recordAnnoyanceSignal(
+            .caretGeometryFailed,
+            context: annoyanceContext(
+                appBundleIdentifier: appBundleIdentifier,
+                fieldIdentity: fieldIdentity,
+                requestMode: requestMode,
+                fieldKind: classification.kind
+            ),
+            suggestionID: suggestionID,
+            reason: reason,
+            metadata: metadata
+        )
     }
 
     private func recordAnnoyanceSignal(
