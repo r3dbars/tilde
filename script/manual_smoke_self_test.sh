@@ -122,13 +122,13 @@ run_passing_case() {
     AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
     script/manual_smoke_session.sh "$app" --check >/dev/null
 
-  if ! grep -F "| $display_name | \`$bundle_id\` | \`$proof_label\` | 2 | \`$expected_render\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
+  if ! grep -F "| $display_name | \`$bundle_id\` | \`$proof_label\` | 2 | \`$expected_render\` | lines 1-" "$REPORT_PATH" >/dev/null; then
     echo "manual smoke self-test did not record the successful $display_name pass" >&2
     exit 1
   fi
 
-  if ! grep -F " | lines 1+ in \`$TRACE_PATH\` |" "$REPORT_PATH" >/dev/null; then
-    if ! grep -F " | lines 1+ in \`$TRACE_PATH\`; visual \`not-claimed\` |" "$REPORT_PATH" >/dev/null; then
+  if ! grep -F " | lines 1-" "$REPORT_PATH" | grep -F "in \`$TRACE_PATH\` |" >/dev/null; then
+    if ! grep -F " | lines 1-" "$REPORT_PATH" | grep -F "in \`$TRACE_PATH\`; visual \`not-claimed\` |" >/dev/null; then
       echo "manual smoke self-test did not record the successful $display_name trace slice" >&2
       exit 1
     fi
@@ -153,7 +153,7 @@ run_one_word_case() {
     AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
     script/manual_smoke_session.sh "$app" --check >/dev/null
 
-  if ! grep -F "| $report_name | \`$bundle_id\` | \`default\` | 1 | \`$expected_render\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
+  if ! grep -F "| $report_name | \`$bundle_id\` | \`default\` | 1 | \`$expected_render\` | lines 1-" "$REPORT_PATH" >/dev/null; then
     echo "manual smoke self-test did not record one-word no-submit proof for $status_name" >&2
     exit 1
   fi
@@ -173,12 +173,12 @@ run_strict_visual_case() {
     AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
     script/manual_smoke_session.sh "$app" --check --visual >/dev/null
 
-  if ! grep -F "| Notes | \`com.apple.Notes\` | \`$proof_label\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
+  if ! grep -F "| Notes | \`com.apple.Notes\` | \`$proof_label\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-" "$REPORT_PATH" >/dev/null; then
     echo "manual smoke self-test did not record the strict visual $proof_label pass" >&2
     exit 1
   fi
 
-  if ! grep -F " | lines 1+ in \`$TRACE_PATH\`; visual \`strict-complete\` |" "$REPORT_PATH" >/dev/null; then
+  if ! grep -F " | lines 1-" "$REPORT_PATH" | grep -F "in \`$TRACE_PATH\`; visual \`strict-complete\` |" >/dev/null; then
     echo "manual smoke self-test did not record the successful $proof_label strict visual trace slice" >&2
     exit 1
   fi
@@ -207,7 +207,7 @@ AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
   AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   script/manual_smoke_session.sh textedit --check >/dev/null
 
-if ! grep -F "| TextEdit | \`com.apple.TextEdit\` | \`option-tab\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
+if ! grep -F "| TextEdit | \`com.apple.TextEdit\` | \`option-tab\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-" "$REPORT_PATH" >/dev/null; then
   echo "manual smoke self-test did not record the Option-Tab full accept pass" >&2
   exit 1
 fi
@@ -326,8 +326,8 @@ AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
   AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   script/manual_smoke_session.sh obsidian --check >/dev/null
 
-if ! grep -F "| Obsidian | \`md.obsidian\` | 0 | \`detached-suppressed\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
-  if ! grep -F "| Obsidian | \`md.obsidian\` | \`default\` | 0 | \`detached-suppressed\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
+if ! grep -F "| Obsidian | \`md.obsidian\` | 0 | \`detached-suppressed\` | lines 1-" "$REPORT_PATH" >/dev/null; then
+  if ! grep -F "| Obsidian | \`md.obsidian\` | \`default\` | 0 | \`detached-suppressed\` | lines 1-" "$REPORT_PATH" >/dev/null; then
     echo "manual smoke self-test did not record the successful Obsidian detached-suppression proof" >&2
     exit 1
   fi

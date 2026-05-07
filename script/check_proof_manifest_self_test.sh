@@ -14,14 +14,61 @@ RUNTIME_PROOF_VERSION="$(awk -F '"' '/runtimeProofVersion/ { print $2; exit }' S
 
 write_manual_smoke() {
   local path="$1"
-  cat >"$path" <<'MARKDOWN'
+  local trace_path="$2"
+  cat >"$path" <<MARKDOWN
 # Manual Smoke Runs
 
 | Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
 | --- | --- | --- | --- | ---: | --- | --- | --- |
-| 2026-05-07T12:00:00Z | TextEdit | `com.apple.TextEdit` | `default` | 2 | `inlineAdjacent|floatingMirror` | lines 10+ | lines 20+; visual `strict-complete` |
-| 2026-05-07T12:05:00Z | Codex | `com.openai.codex` | `default` | 1 | `inlineAdjacent` | lines 30+ | lines 40+; visual `strict-complete` |
+| 2026-05-07T12:00:00Z | TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 10+ | lines 20-25 in \`$trace_path\`; visual \`strict-complete\` |
+| 2026-05-07T12:05:00Z | Codex | \`com.openai.codex\` | \`default\` | 1 | \`inlineAdjacent\` | lines 30+ | lines 40-44 in \`$trace_path\`; visual \`strict-complete\` |
 MARKDOWN
+}
+
+write_unbounded_manual_smoke() {
+  local path="$1"
+  local trace_path="$2"
+  cat >"$path" <<MARKDOWN
+# Manual Smoke Runs
+
+| Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
+| --- | --- | --- | --- | ---: | --- | --- | --- |
+| 2026-05-07T12:00:00Z | TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 10+ | lines 20+ in \`$trace_path\`; visual \`strict-complete\` |
+MARKDOWN
+}
+
+write_trace() {
+  local path="$1"
+  : >"$path"
+  for _ in $(seq 1 19); do
+    printf '{"type":"renderModeChanged","appBundleIdentifier":"com.example.other","metadata":{}}\n' >>"$path"
+  done
+
+  cat >>"$path" <<JSONL
+{"type":"suggestionRequested","appBundleIdentifier":"com.apple.TextEdit","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","screenshotPath":"docs/product/visual-placement-screenshots/textedit-inline.png","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+JSONL
+}
+
+write_stale_trace() {
+  local path="$1"
+  : >"$path"
+  for _ in $(seq 1 19); do
+    printf '{"type":"renderModeChanged","appBundleIdentifier":"com.example.other","metadata":{}}\n' >>"$path"
+  done
+
+  cat >>"$path" <<'JSONL'
+{"type":"suggestionRequested","appBundleIdentifier":"com.apple.TextEdit","metadata":{}}
+{"type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","screenshotPath":"docs/product/visual-placement-screenshots/textedit-inline.png","metadata":{}}
+{"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{}}
+{"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{}}
+{"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{}}
+{"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{}}
+JSONL
 }
 
 write_scorecard() {
@@ -85,6 +132,9 @@ JSON
 }
 
 MANUAL_SMOKE="$TMP_DIR/manual-smoke-runs.md"
+UNBOUNDED_MANUAL_SMOKE="$TMP_DIR/manual-smoke-runs-unbounded.md"
+TRACE_FILE="$TMP_DIR/traces.jsonl"
+STALE_TRACE_FILE="$TMP_DIR/stale-traces.jsonl"
 SCORECARD="$TMP_DIR/scorecard.md"
 PASS_MANIFEST="$TMP_DIR/pass.json"
 PENDING_MANIFEST="$TMP_DIR/pending.json"
@@ -92,7 +142,10 @@ STALE_MANIFEST="$TMP_DIR/stale.json"
 MISSING_SMOKE_MANIFEST="$TMP_DIR/missing-smoke.json"
 MISSING_SCREENSHOT_MANIFEST="$TMP_DIR/missing-screenshot.json"
 
-write_manual_smoke "$MANUAL_SMOKE"
+write_trace "$TRACE_FILE"
+write_stale_trace "$STALE_TRACE_FILE"
+write_manual_smoke "$MANUAL_SMOKE" "$TRACE_FILE"
+write_unbounded_manual_smoke "$UNBOUNDED_MANUAL_SMOKE" "$TRACE_FILE"
 write_scorecard "$SCORECARD"
 write_manifest "$PASS_MANIFEST" complete "docs/product/visual-placement-screenshots/textedit-inline.png"
 write_manifest "$PENDING_MANIFEST" pending "docs/product/visual-placement-screenshots/textedit-inline.png"
@@ -111,6 +164,54 @@ if ! grep -F "Proof manifest verified." "$TMP_DIR/pass.out" >/dev/null; then
   cat "$TMP_DIR/pass.out" >&2
   exit 1
 fi
+
+script/check_proof_manifest.sh \
+  --manifest "$PASS_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --verify-trace-slices >"$TMP_DIR/pass-trace.out"
+
+if ! grep -F "Verified trace slices: 1" "$TMP_DIR/pass-trace.out" >/dev/null; then
+  echo "proof manifest self-test did not verify the trace slice" >&2
+  cat "$TMP_DIR/pass-trace.out" >&2
+  exit 1
+fi
+
+if script/check_proof_manifest.sh \
+  --manifest "$PASS_MANIFEST" \
+  --manual-smoke "$UNBOUNDED_MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --strict >"$TMP_DIR/unbounded-strict.out" 2>&1; then
+  echo "proof manifest self-test expected strict unbounded trace proof to fail" >&2
+  cat "$TMP_DIR/unbounded-strict.out" >&2
+  exit 1
+fi
+
+if ! grep -F "trace proof must use bounded line evidence" "$TMP_DIR/unbounded-strict.out" >/dev/null; then
+  echo "proof manifest self-test did not explain unbounded trace proof" >&2
+  cat "$TMP_DIR/unbounded-strict.out" >&2
+  exit 1
+fi
+
+write_manual_smoke "$MANUAL_SMOKE" "$STALE_TRACE_FILE"
+
+if script/check_proof_manifest.sh \
+  --manifest "$PASS_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --strict >"$TMP_DIR/stale-trace.out" 2>&1; then
+  echo "proof manifest self-test expected stale trace proof to fail" >&2
+  cat "$TMP_DIR/stale-trace.out" >&2
+  exit 1
+fi
+
+if ! grep -F "proof events are missing current proof fingerprints" "$TMP_DIR/stale-trace.out" >/dev/null; then
+  echo "proof manifest self-test did not explain stale trace proof" >&2
+  cat "$TMP_DIR/stale-trace.out" >&2
+  exit 1
+fi
+
+write_manual_smoke "$MANUAL_SMOKE" "$TRACE_FILE"
 
 script/check_proof_manifest.sh \
   --manifest "$PENDING_MANIFEST" \

@@ -136,9 +136,13 @@ evidence-backed score should stay lower until those rows are closed.
 - `./script/check_proof_manifest.sh`: verifies the machine-readable
   `docs/product/proof-manifest.json` against current proof-fingerprint
   constants, tracked screenshots, scorecard links, and matching manual smoke
-  rows. It passes in report mode and fails with `--require-all` because only
-  TextEdit is currently complete; the other target surfaces are still partial
-  or pending.
+  rows. It passes in report mode. Strict mode now also parses each matched
+  trace JSONL slice, requires bounded line evidence, screenshot-backed
+  presented events for strict visual proof, verified insertions, and current
+  proof fingerprints. It fails with 18 issues: the open-ended TextEdit,
+  Chrome chat-like, Obsidian, and Claude desktop slices predate the current
+  proof fingerprints, and the remaining target surfaces are still partial or
+  pending.
 - `./script/typing_performance_endurance_soak.sh --minutes 1 --strict-ax --require-event-tap-samples 50 --require-ax-samples 5`:
   passed with exact 1,200-character TextEdit verification, event-tap p95 max
   36us, p99 max 95us, max 95us, zero slow tap markers, zero tap-disable events,
