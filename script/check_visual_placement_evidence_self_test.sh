@@ -28,6 +28,9 @@ INVALID_OUTPUT="$TMP_DIR/invalid-output.txt"
 TINY_OUTPUT="$TMP_DIR/tiny-output.txt"
 PENDING_OUTPUT="$TMP_DIR/pending-output.txt"
 PENDING_STRICT_OUTPUT="$TMP_DIR/pending-strict-output.txt"
+BELOW_TARGET_STRICT_OUTPUT="$TMP_DIR/below-target-strict-output.txt"
+PENDING_LABEL_STRICT_OUTPUT="$TMP_DIR/pending-label-strict-output.txt"
+STALE_STRICT_OUTPUT="$TMP_DIR/stale-strict-output.txt"
 
 expect_failure() {
   local scorecard_path="$1"
@@ -37,6 +40,26 @@ expect_failure() {
 
   if AUTOCOMPLETE_LAB_SCORECARD="$scorecard_path" \
     script/check_visual_placement_evidence.sh >"$output_path" 2>&1; then
+    echo "$failure_message" >&2
+    cat "$output_path" >&2
+    exit 1
+  fi
+
+  if ! grep -F "$expected_text" "$output_path" >/dev/null; then
+    echo "visual evidence self-test did not explain: $expected_text" >&2
+    cat "$output_path" >&2
+    exit 1
+  fi
+}
+
+expect_strict_failure() {
+  local scorecard_path="$1"
+  local output_path="$2"
+  local expected_text="$3"
+  local failure_message="$4"
+
+  if AUTOCOMPLETE_LAB_SCORECARD="$scorecard_path" \
+    script/check_visual_placement_evidence.sh --require-all >"$output_path" 2>&1; then
     echo "$failure_message" >&2
     cat "$output_path" >&2
     exit 1
@@ -73,6 +96,47 @@ if ! grep -F "All visual placement audit rows are screenshot-backed." "$GOOD_OUT
   cat "$GOOD_OUTPUT" >&2
   exit 1
 fi
+
+expect_strict_failure \
+  "$TMP_DIR/scorecard-good.md" \
+  "$BELOW_TARGET_STRICT_OUTPUT" \
+  "Below-target visual score rows without pending labels" \
+  "visual evidence self-test expected strict below-target visual scoring to fail"
+
+cat >"$TMP_DIR/scorecard-pending-label.md" <<'MARKDOWN'
+# Scorecard
+
+## Visual Placement And Text Box Audit
+
+| App or surface | Grade | Evidence | What is good | What still needs work |
+| --- | ---: | --- | --- | --- |
+| Chrome textarea | 9/10 | [good.png](visual-placement-screenshots/good.png) | Good. | Pending real-site confidence. |
+MARKDOWN
+
+AUTOCOMPLETE_LAB_SCORECARD="$TMP_DIR/scorecard-pending-label.md" \
+  script/check_visual_placement_evidence.sh --require-all >"$PENDING_LABEL_STRICT_OUTPUT" 2>&1
+
+if ! grep -F "Visual placement evidence verified: 1 screenshot(s)." "$PENDING_LABEL_STRICT_OUTPUT" >/dev/null; then
+  echo "visual evidence self-test did not allow an explicitly pending below-target visual row" >&2
+  cat "$PENDING_LABEL_STRICT_OUTPUT" >&2
+  exit 1
+fi
+
+cat >"$TMP_DIR/scorecard-stale.md" <<'MARKDOWN'
+# Scorecard
+
+## Visual Placement And Text Box Audit
+
+| App or surface | Grade | Evidence | What is good | What still needs work |
+| --- | ---: | --- | --- | --- |
+| Codex | 10/10 | [good.png](visual-placement-screenshots/good.png) | Prompt screenshot exists. | Needs a fresh screenshot proof. |
+MARKDOWN
+
+expect_strict_failure \
+  "$TMP_DIR/scorecard-stale.md" \
+  "$STALE_STRICT_OUTPUT" \
+  "Stale screenshot-backed visual rows" \
+  "visual evidence self-test expected strict stale screenshot rows to fail"
 
 cat >"$TMP_DIR/scorecard-pending.md" <<'MARKDOWN'
 # Scorecard

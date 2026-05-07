@@ -6,6 +6,7 @@ SCORECARD_PATH="${AUTOCOMPLETE_LAB_SCORECARD:-docs/product/deep-dive-scorecard-2
 MODE=""
 REQUIRE_ALL=0
 VISUAL_PROOF_GAPS=0
+STRICT_VISUAL_EVIDENCE_FAILED=0
 
 for arg in "$@"; do
   case "$arg" in
@@ -34,7 +35,7 @@ Notes title, body, and checklist are separate proof targets.
 
 Use --require-all or --strict when you want the command to fail until every
 target app has a recorded pass and every visual audit row has screenshot-backed
-proof.
+proof, valid screenshot evidence, and honest visual score labels.
 EOF
   exit 0
 fi
@@ -188,6 +189,20 @@ print_visual_audit_status() {
   VISUAL_PROOF_GAPS="$missing"
 }
 
+run_strict_visual_evidence_gate() {
+  if (( REQUIRE_ALL != 1 )); then
+    return 0
+  fi
+
+  echo
+  echo "Strict visual evidence gate:"
+  if script/check_visual_placement_evidence.sh --require-all; then
+    echo "Strict visual evidence gate passed."
+  else
+    STRICT_VISUAL_EVIDENCE_FAILED=1
+  fi
+}
+
 if [[ ! -f "$REPORT_PATH" ]]; then
   echo "Insertion proof status: no report yet ($REPORT_PATH)"
 else
@@ -251,7 +266,8 @@ fi
 
 print_visual_audit_status
 print_scorecard_gaps
+run_strict_visual_evidence_gate
 
-if (( REQUIRE_ALL == 1 && (missing > 0 || VISUAL_PROOF_GAPS > 0) )); then
+if (( REQUIRE_ALL == 1 && (missing > 0 || VISUAL_PROOF_GAPS > 0 || STRICT_VISUAL_EVIDENCE_FAILED > 0) )); then
   exit 1
 fi

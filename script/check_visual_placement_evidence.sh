@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 SCORECARD_PATH="${AUTOCOMPLETE_LAB_SCORECARD:-docs/product/deep-dive-scorecard-2026-05-06.md}"
 MIN_WIDTH="${AUTOCOMPLETE_LAB_VISUAL_EVIDENCE_MIN_WIDTH:-64}"
 MIN_HEIGHT="${AUTOCOMPLETE_LAB_VISUAL_EVIDENCE_MIN_HEIGHT:-32}"
+TARGET_GRADE="${AUTOCOMPLETE_LAB_VISUAL_EVIDENCE_TARGET:-10}"
 REQUIRE_ALL=0
 
 for arg in "$@"; do
@@ -19,7 +20,8 @@ Verifies linked visual placement screenshots and reports scorecard rows that
 still need screenshot-backed proof.
 
 Use --require-all or --strict to fail when any visual placement row is still
-pending screenshot proof.
+pending screenshot proof, points at stale screenshot proof, or has a below-target
+score without an explicit pending label.
 EOF
       exit 0
       ;;
@@ -63,12 +65,23 @@ visual_rows=0
 pending_visual_rows=0
 png_link_regex='visual-placement-screenshots/[^)]*[.]png'
 declare -a pending_visuals=()
+declare -a stale_screenshot_rows=()
+declare -a below_target_rows=()
 
 trim() {
   local value="$1"
   value="${value#"${value%%[![:space:]]*}"}"
   value="${value%"${value##*[![:space:]]}"}"
   printf '%s' "$value"
+}
+
+has_pending_label() {
+  printf '%s\n' "$1" | grep -Eiq '(^|[^[:alpha:]])pending([^[:alpha:]]|$)'
+}
+
+has_stale_screenshot_language() {
+  printf '%s\n' "$1" | grep -Eiq \
+    'stale|outdated|old[[:space:]-]+screenshot|older[[:space:]-]+screenshot|prior[[:space:]-]+screenshot|fresh[[:space:]-]+screenshot|current[[:space:]-]+screenshot|needs[[:space:]]+(a[[:space:]]+)?(fresh[[:space:]]+|current[[:space:]]+|recorder-grade[[:space:]]+)?(screenshot|screenshot-backed|visual[[:space:]]+pass|visual[[:space:]]+proof|visual[[:space:]]+audit)|same[[:space:]-]+trace[[:space:]]+slice|same[[:space:]-]+strict[[:space:]]+trace[[:space:]]+slice|same[[:space:]-]+slice'
 }
 
 for link in "${links[@]}"; do
@@ -127,18 +140,34 @@ while IFS= read -r line; do
 
   IFS='|' read -r _ surface grade evidence good work _ <<<"$line"
   surface="$(trim "$surface")"
+  grade="$(trim "$grade")"
   evidence="$(trim "$evidence")"
+  good="$(trim "$good")"
   work="$(trim "$work")"
+  row_text="$surface $grade $evidence $good $work"
 
   [[ -n "$surface" ]] || continue
   visual_rows=$((visual_rows + 1))
 
-  if [[ ! "$evidence" =~ $png_link_regex ]]; then
+  if [[ "$evidence" =~ $png_link_regex ]]; then
+    if has_stale_screenshot_language "$evidence $work"; then
+      stale_screenshot_rows+=("$surface: $grade - $work")
+    fi
+  else
     pending_visual_rows=$((pending_visual_rows + 1))
     if [[ -n "$work" ]]; then
       pending_visuals+=("$surface: $evidence - next: $work")
     else
       pending_visuals+=("$surface: $evidence")
+    fi
+  fi
+
+  if [[ "$grade" =~ ^([0-9]+([.][0-9]+)?)/10$ ]]; then
+    score="${BASH_REMATCH[1]}"
+    if awk -v score="$score" -v target="$TARGET_GRADE" "BEGIN { exit !(score < target) }"; then
+      if ! has_pending_label "$row_text"; then
+        below_target_rows+=("$surface: $grade - add an explicit pending label or raise the score after proof")
+      fi
     fi
   fi
 done <"$SCORECARD_PATH"
@@ -157,6 +186,28 @@ if (( pending_visual_rows > 0 )); then
   fi
 elif (( visual_rows > 0 )); then
   echo "All visual placement audit rows are screenshot-backed."
+fi
+
+if ((${#stale_screenshot_rows[@]} > 0)); then
+  echo "Stale screenshot-backed visual rows:" >&2
+  for stale_row in "${stale_screenshot_rows[@]}"; do
+    echo "- $stale_row" >&2
+  done
+
+  if (( REQUIRE_ALL == 1 )); then
+    failures=$((failures + ${#stale_screenshot_rows[@]}))
+  fi
+fi
+
+if ((${#below_target_rows[@]} > 0)); then
+  echo "Below-target visual score rows without pending labels:" >&2
+  for below_target_row in "${below_target_rows[@]}"; do
+    echo "- $below_target_row" >&2
+  done
+
+  if (( REQUIRE_ALL == 1 )); then
+    failures=$((failures + ${#below_target_rows[@]}))
+  fi
 fi
 
 if [[ -d "$VISUAL_DIR" ]]; then
