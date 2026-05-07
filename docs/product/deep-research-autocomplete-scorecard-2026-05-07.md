@@ -3,14 +3,14 @@
 Source research:
 `/Users/redbars/Library/Caches/com.apple.SwiftUI.Drag-9DB841D4-8068-4044-B0CF-B2F61B9E12BB/deep-research-report (5).md`
 
-Repo state graded: `codex/deep-research-scorecard` after the punctuation-boundary
-timing pass, based on `origin/main`.
+Repo state graded: `codex/deep-research-scorecard` after the generated-token
+cap pass, based on `origin/main`.
 
 ## Executive Grade
 
 Baseline deep research score: **78/100**.
 
-Current implementation score after the current build pass: **96/100**.
+Current implementation score after the current build pass: **97/100**.
 
 This is a strong prototype with real engineering depth. It has local MLX
 runtime support, app compatibility profiles, privacy-safe tracing defaults,
@@ -77,6 +77,8 @@ Pass 1 shipped these improvements:
   enough to replace.
 - Trigger timing now separates whitespace, comma/semicolon, colon, closing
   punctuation, sentence punctuation, newline, and bullet-line starts.
+- Ambient generation is now hard-capped at 16 generated tokens even when env
+  overrides request more.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -94,6 +96,8 @@ Remaining high-impact gaps:
   needs screenshot-backed proof in narrow editors and streaming model output.
 - Punctuation handling now has separate tested timing lanes; it still needs
   profile-aware email/bullet exceptions and real trace proof.
+- Generated length now has the requested hard cap; remaining runtime polish is
+  mostly cache and latency-slice proof.
 - Replay-first real-app proof is still missing. The command exists, but the
   current local trace corpus fails the proof gate because it predates display
   scoring, candidate-selection metadata, kept-horizon events, and researched
@@ -166,7 +170,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Privacy-first tracing | 91 | Raw content is redacted by default, raw/screenshot capture is opt-in with expiry, and Settings can clear learned suggestion state separately from local logs. | Store prefix hashes and make compact style/learning features inspectable. |
 | Local runtime ownership | 92 | App-owned embedded runtime and no user-managed server dependency. | Keep this stance through beta and fail clearly if model assets are missing. |
 | Warm/runtime cache | 75 | Model container is warm and reused. Each request builds a new `ChatSession`. | Add static prompt prefix cache and per-field session/KV cache. |
-| Generated length | 78 | MVP is 5 visible words / 10 generated tokens; policy allows up to 7 words / 32 tokens. | Hard cap ambient suggestions to 2-8 words and 16 generated tokens, with shorter defaults by mode. |
+| Generated length | 90 | MVP defaults to 5 visible words / 10 generated tokens, behavior profiles stay shorter by mode, and env overrides now clamp at 7 visible words / 16 generated tokens. | Tune defaults from fresh traces and keep sentence mode from using all 16 tokens. |
 | Stale cancellation | 86 | Request IDs, text snapshots, and keydown invalidation are strong. | Add app-level async race tests and cancellation proof in replay rig. |
 | One visible suggestion | 95 | Single `SuggestionSession`, no dropdown or carousel. | Keep this invariant. |
 | Single-line under 42 chars | 90 | `CompletionSuggestion` caps visible text to one line, bounded words, and 42 visible characters. | Add screenshot proof across narrow editors and long wrapped lines. |
@@ -250,6 +254,9 @@ Strong evidence in current code:
 - `Sources/AutocompleteLabCore/Session/SuggestionTriggerPolicy.swift:20-41`
   defines separate punctuation delay lanes, and `:84-94` applies sentence,
   punctuation, and whitespace boundary timing in that order.
+- `Sources/AutocompleteLabCore/Configuration/ModelPolicy.swift:30-34` caps
+  ambient generated tokens at 16, and `:88-90` clamps every length
+  configuration through that cap.
 - `docs/product/app-proof-matrix.md:24-40` honestly marks target proof as
   still failing and lists pending surfaces.
 
@@ -385,9 +392,10 @@ these are true.
    lifetime tests.
 15. Done: add separate comma/semicolon, colon, closing punctuation, whitespace,
    newline, and bullet-line trigger tests.
-16. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
+16. Done: hard cap ambient generated tokens at 16.
+17. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
    checklist acceptance/proof slices are still missing.
-17. Partial: build the replay-first proof command. The command exists; a fresh
+18. Partial: build the replay-first proof command. The command exists; a fresh
    post-pass trace proof still has to pass.
 
 ## Goal Status
@@ -397,7 +405,7 @@ every scored item reaches 100/100.
 
 Baseline status: **78/100**.
 
-Current implementation status: **96/100**. Not complete.
+Current implementation status: **97/100**. Not complete.
 
 Replay proof status:
 

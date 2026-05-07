@@ -72,8 +72,8 @@ struct ModelPolicyTests {
         #expect(short.maxGeneratedTokens == 9)
         #expect(short.displaySummary == "3 words / 9 tokens")
         #expect(long.maxVisibleWords == 7)
-        #expect(long.maxGeneratedTokens == 32)
-        #expect(long.displaySummary == "7 words / 32 tokens")
+        #expect(long.maxGeneratedTokens == 16)
+        #expect(long.displaySummary == "7 words / 16 tokens")
     }
 
     @Test("Experiment arms set default completion lengths")
