@@ -41,6 +41,9 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
     public let candidateSelectionCoveredCount: Int
     public let proofFingerprintCandidateCount: Int
     public let proofFingerprintCoveredCount: Int
+    public let placementCandidateCount: Int
+    public let placementCoveredCount: Int
+    public let trustedPlacementCount: Int
     public let staleCancellationCount: Int
     public let keptHorizonEventCount: Int
     public let keptFinalHorizonEventCount: Int
@@ -65,6 +68,10 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
         rate(proofFingerprintCoveredCount, proofFingerprintCandidateCount)
     }
 
+    public var placementCoverageRate: Double {
+        rate(placementCoveredCount, placementCandidateCount)
+    }
+
     public var passesReplayProofGate: Bool {
         requirements.allSatisfy(\.passed)
     }
@@ -80,6 +87,7 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
             "- display score coverage: \(Self.percent(displayScoreCoverageRate)) (\(displayScoreCoveredCount)/\(displayScoreCandidateCount))",
             "- candidate selection coverage: \(Self.percent(candidateSelectionCoverageRate)) (\(candidateSelectionCoveredCount)/\(candidateSelectionCandidateCount))",
             "- proof fingerprint coverage: \(Self.percent(proofFingerprintCoverageRate)) (\(proofFingerprintCoveredCount)/\(proofFingerprintCandidateCount))",
+            "- placement coverage: \(Self.percent(placementCoverageRate)) (\(placementCoveredCount)/\(placementCandidateCount), trusted=\(trustedPlacementCount))",
             "- stale cancellations: \(staleCancellationCount)",
             "- kept horizon events: \(keptHorizonEventCount)",
             "- final kept horizon events: \(keptFinalHorizonEventCount)",
@@ -143,6 +151,9 @@ public struct AutocompleteTraceReplay: Sendable {
         let proofFingerprintCovered = proofFingerprintCandidates.filter {
             AutocompleteTraceProofMetadata.isCurrent($0.metadata)
         }
+        let presentedEvents = events.filter { $0.type == .suggestionPresented }
+        let placementCovered = presentedEvents.filter(hasPlacementMetadata)
+        let trustedPlacementCount = presentedEvents.filter(hasTrustedPlacement).count
         let acceptedTextEdited = events.filter { $0.type == .acceptedTextEdited }
         let finalHorizonEvents = acceptedTextEdited.filter(isFinalKeptHorizonEvent)
         let staleCancellations = events.filter(isStaleCancellation)
@@ -183,6 +194,13 @@ public struct AutocompleteTraceReplay: Sendable {
                 detail: "\(proofFingerprintCovered.count)/\(proofFingerprintCandidates.count) proof events match \(AutocompleteTraceProofMetadata.traceProofVersion)"
             ),
             TraceReplayRequirement(
+                name: "placement replay",
+                passed: !presentedEvents.isEmpty
+                    && placementCovered.count == presentedEvents.count
+                    && trustedPlacementCount > 0,
+                detail: "\(placementCovered.count)/\(presentedEvents.count) presented events include placement metadata, \(trustedPlacementCount) trusted"
+            ),
+            TraceReplayRequirement(
                 name: "kept horizon replay",
                 passed: !acceptedTextEdited.isEmpty && !finalHorizonEvents.isEmpty,
                 detail: "\(acceptedTextEdited.count) survival events, \(finalHorizonEvents.count) final horizon events"
@@ -214,6 +232,9 @@ public struct AutocompleteTraceReplay: Sendable {
             candidateSelectionCoveredCount: candidateSelectionCovered.count,
             proofFingerprintCandidateCount: proofFingerprintCandidates.count,
             proofFingerprintCoveredCount: proofFingerprintCovered.count,
+            placementCandidateCount: presentedEvents.count,
+            placementCoveredCount: placementCovered.count,
+            trustedPlacementCount: trustedPlacementCount,
             staleCancellationCount: staleCancellations.count,
             keptHorizonEventCount: acceptedTextEdited.count,
             keptFinalHorizonEventCount: finalHorizonEvents.count,
@@ -280,6 +301,28 @@ public struct AutocompleteTraceReplay: Sendable {
                 return false
             }
         }
+    }
+
+    private func hasPlacementMetadata(_ event: AutocompleteTraceEvent) -> Bool {
+        event.metadata["placementAnchorSource"] != nil
+            && event.metadata["placementConfidenceBand"] != nil
+            && event.metadata["hasCaretRect"] != nil
+    }
+
+    private func hasTrustedPlacement(_ event: AutocompleteTraceEvent) -> Bool {
+        guard hasPlacementMetadata(event) else {
+            return false
+        }
+
+        let anchor = event.metadata["placementAnchorSource"] ?? ""
+        let confidence = event.metadata["placementConfidenceBand"] ?? ""
+        let hasCaretRect = event.metadata["hasCaretRect"] ?? "false"
+
+        return hasCaretRect == "true"
+            && (
+                (anchor == "caret" && confidence == "high")
+                    || (anchor == "synthetic-caret" && confidence == "medium")
+            )
     }
 
     private func hasResearchedTriggerDelay(_ event: AutocompleteTraceEvent) -> Bool {

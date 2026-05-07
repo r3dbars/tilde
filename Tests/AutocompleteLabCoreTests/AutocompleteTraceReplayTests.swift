@@ -60,6 +60,8 @@ struct AutocompleteTraceReplayTests {
         #expect(report.displayScoreCoverageRate == 1)
         #expect(report.candidateSelectionCoverageRate == 1)
         #expect(report.proofFingerprintCoverageRate == 1)
+        #expect(report.placementCoverageRate == 1)
+        #expect(report.trustedPlacementCount == 1)
         #expect(report.keptFinalHorizonEventCount == 1)
         #expect(report.latencyByApp.first?.p50Milliseconds == 220)
         #expect(report.latencyByMode.first?.key == CompletionRequestMode.phraseContinuation.rawValue)
@@ -270,6 +272,46 @@ struct AutocompleteTraceReplayTests {
         #expect(report.proofFingerprintCoverageRate == 0)
     }
 
+    @Test("Missing placement metadata fails replay proof")
+    func missingPlacementMetadataFailsReplayProof() {
+        let events = [
+            event(
+                .suggestionRequested,
+                suggestionID: "one",
+                metadata: ["delayMilliseconds": "180"]
+            ),
+            event(
+                .modelResult,
+                suggestionID: "one",
+                metadata: candidateSelectionMetadata()
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "one",
+                latencyMilliseconds: 180,
+                metadata: displayMetadata(decision: "display"),
+                includePlacementMetadata: false
+            ),
+            event(
+                .acceptedTextEdited,
+                suggestionID: "one",
+                metadata: [
+                    "checkpoint": AcceptanceSurvivalCheckpoint.thirtySeconds.rawValue,
+                    "survivalClass": AcceptanceSurvivalClass.exactKept.rawValue
+                ]
+            )
+        ]
+
+        let report = AutocompleteTraceReplay().report(for: events)
+
+        #expect(!report.passesReplayProofGate)
+        #expect(report.placementCoverageRate == 0)
+        #expect(report.requirements.contains {
+            $0.name == "placement replay" && !$0.passed
+        })
+    }
+
+
 
     private func event(
         _ type: AutocompleteTraceEventType,
@@ -280,11 +322,16 @@ struct AutocompleteTraceReplayTests {
         outcome: String = "",
         reason: String = "",
         metadata: [String: String] = [:],
-        includeProofMetadata: Bool = true
+        includeProofMetadata: Bool = true,
+        includePlacementMetadata: Bool = true
     ) -> AutocompleteTraceEvent {
-        let traceMetadata = includeProofMetadata
-            ? metadata.merging(AutocompleteTraceProofMetadata.current) { _, current in current }
-            : metadata
+        var traceMetadata = metadata
+        if includePlacementMetadata, type == .suggestionPresented {
+            traceMetadata = traceMetadata.merging(placementMetadata()) { _, current in current }
+        }
+        if includeProofMetadata {
+            traceMetadata = traceMetadata.merging(AutocompleteTraceProofMetadata.current) { _, current in current }
+        }
 
         return AutocompleteTraceEvent(
             timestamp: "2026-05-07T12:00:00Z",
@@ -336,5 +383,17 @@ struct AutocompleteTraceReplayTests {
         var metadata = AutocompleteTraceProofMetadata.current
         metadata["placementProofVersion"] = "placement-old"
         return metadata
+    }
+
+    private func placementMetadata(
+        anchor: String = "caret",
+        confidence: String = "high",
+        hasCaretRect: String = "true"
+    ) -> [String: String] {
+        [
+            "placementAnchorSource": anchor,
+            "placementConfidenceBand": confidence,
+            "hasCaretRect": hasCaretRect
+        ]
     }
 }
