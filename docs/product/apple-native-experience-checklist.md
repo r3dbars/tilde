@@ -163,7 +163,7 @@ cheap, even if the model output is good.
 - [ ] Real Google Docs needs a distinct proof path or an explicit unsupported state.
 - [ ] Real Notion needs a distinct proof path or an explicit unsupported state.
 - [ ] Real Slack/Discord chat boxes need no-submit proof before enablement.
-- [ ] The app should hide inline suggestions when there is less than one useful word of room after the caret.
+- [x] The app should hide inline suggestions when there is less than one useful word of room after the caret.
 - [x] The app should prefer mirror mode over visually lying about inline placement.
 - [ ] Placement should use screenshot-derived correction only after explicit opt-in proof.
 - [ ] A learned visual offset must expire after app version, screen, or field-shape changes.
