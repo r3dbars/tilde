@@ -5,6 +5,27 @@ public enum SuggestionTriggerDecision: Equatable, Sendable {
     case request(delayMilliseconds: Int)
 }
 
+public enum SuggestionLineStartBehavior: Equatable, Sendable {
+    case plain
+    case listItem
+    case email
+
+    public static func behavior(
+        for profileID: AutocompleteBehaviorProfileID?,
+        currentLineStructure: CurrentLineStructure?
+    ) -> SuggestionLineStartBehavior {
+        if currentLineStructure?.isListLike == true {
+            return .listItem
+        }
+
+        if profileID == .email {
+            return .email
+        }
+
+        return .plain
+    }
+}
+
 public struct SuggestionTriggerPolicy: Equatable, Sendable {
     public let charactersBeforePauseRequest: Int
     public let wordCompletionDelayMilliseconds: Int
@@ -43,11 +64,13 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
 
     public func shouldRequestSuggestion(
         previousTextBeforeCursor: String?,
-        currentTextBeforeCursor: String
+        currentTextBeforeCursor: String,
+        lineStartBehavior: SuggestionLineStartBehavior = .plain
     ) -> Bool {
         switch decision(
             previousTextBeforeCursor: previousTextBeforeCursor,
-            currentTextBeforeCursor: currentTextBeforeCursor
+            currentTextBeforeCursor: currentTextBeforeCursor,
+            lineStartBehavior: lineStartBehavior
         ) {
         case .request:
             return true
@@ -58,9 +81,13 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
 
     public func decision(
         previousTextBeforeCursor: String?,
-        currentTextBeforeCursor: String
+        currentTextBeforeCursor: String,
+        lineStartBehavior: SuggestionLineStartBehavior = .plain
     ) -> SuggestionTriggerDecision {
-        if shouldSuppressAtLineStart(currentTextBeforeCursor) {
+        if shouldSuppressAtLineStart(
+            currentTextBeforeCursor,
+            behavior: lineStartBehavior
+        ) {
             return .skip
         }
 
@@ -135,13 +162,26 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         }
     }
 
-    private func shouldSuppressAtLineStart(_ text: String) -> Bool {
+    private func shouldSuppressAtLineStart(
+        _ text: String,
+        behavior: SuggestionLineStartBehavior
+    ) -> Bool {
         let currentLine = text.split(
             omittingEmptySubsequences: false,
             whereSeparator: \.isNewline
         ).last.map(String.init) ?? ""
 
-        return contentWordCount(in: currentLine) < 2
+        let contentWords = contentWordCount(in: currentLine)
+        guard contentWords < 2 else {
+            return false
+        }
+
+        switch behavior {
+        case .plain:
+            return true
+        case .listItem, .email:
+            return !hasLineStartWordCompletionFragment(in: currentLine)
+        }
     }
 
     private func contentWordCount(in text: String) -> Int {
@@ -162,6 +202,19 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         }
 
         return text.split(whereSeparator: { $0.isWhitespace }).last.map(String.init)
+    }
+
+    private func hasLineStartWordCompletionFragment(in text: String) -> Bool {
+        guard let fragment = trailingWordFragment(in: text),
+              text.last?.isLetter == true else {
+            return false
+        }
+
+        let normalized = fragment
+            .trimmingCharacters(in: .punctuationCharacters)
+
+        return normalized.count >= 3
+            && normalized.allSatisfy { $0.isLetter }
     }
 }
 

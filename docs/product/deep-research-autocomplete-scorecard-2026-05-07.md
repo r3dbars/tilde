@@ -128,6 +128,9 @@ Pass 1 shipped these improvements:
   casing, digits, hyphen, and apostrophe only.
 - Accepted insertions now arm a one-step Command-Z restore path for the same
   focused app/field, with an 8s expiry and trace-safe diagnostics.
+- Line-start cadence now stays quiet in plain prose while allowing constrained
+  one-word completions in list/checklist and email contexts, so `- Pri` or
+  `Tha` can complete without allowing phrase suggestions after a bare marker.
 - Trace events now carry a proof fingerprint for the current trace, placement,
   key-capture, and runtime proof versions; replay fails stale proof that predates
   those versions.
@@ -238,7 +241,7 @@ Weighted total: **79.2/100**, rounded to **79/100**.
 | Within-word mode | 86 | Word completion requires 3+ alphabetic chars with 90-140ms delay, and word suffix cleaning rejects spaces/punctuation. | Perfect casing/punctuation preservation and fresh app-slice proof. |
 | Phrase mode | 84 | Word-boundary phrase requests use 140-240ms delay, phrase display threshold, behavior-profile prompt caps, and candidate ranking. | Fresh real-app proof and learned score margins. |
 | Sentence mode | 78 | First-class `sentenceContinuation` mode exists with activation, prompt guidance, stricter display threshold, streaming behavior, replay delay gate, and ranker penalties for question/planning drift. | Real-app proof that it does not take over the writer's next thought. |
-| Line/paragraph start | 80 | Trigger policy suppresses line starts until two content words, and bullet-line starts stay quiet until the bullet text is constrained. | Add profile-aware bullet/email exceptions and screenshot proof. |
+| Line/paragraph start | 84 | Trigger policy suppresses plain line starts until two content words, keeps bare markers quiet, and now allows constrained one-word completions in list/checklist and email contexts. | Add screenshot proof and tune profile-specific exceptions against real traces. |
 | After deletion | 82 | Deletion skips requests and records a 250ms prefix-family cooldown. | Prove the live cooldown in fresh traces and feed longer-term deletion outcomes into learning. |
 | After accept | 90 | Tab accepts one word, full accept is profile-gated, accepted-and-kept horizons feed durable display affinity, and the app now discards residual Tab text so the next follow-on must be recomputed and rescored. | Prove the recompute behavior in fresh real-app traces. |
 | After typed-over | 82 | Typed-over is traced, learned as a miss, and starts a 5s app/field/mode/prefix-family cooldown. | Add longer-term decay/threshold learning and fresh real-app proof. |
