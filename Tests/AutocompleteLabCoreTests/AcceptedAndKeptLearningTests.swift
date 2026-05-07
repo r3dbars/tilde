@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import AutocompleteLabCore
 
@@ -22,10 +23,11 @@ struct AcceptedAndKeptLearningTests {
     func outcomesMoveProbabilityAndAffinity() {
         var store = AcceptedAndKeptLearningStore(priorWeight: 2)
         let learningKey = key(mode: .phraseContinuation)
+        let now = Date(timeIntervalSince1970: 1_000)
 
-        _ = store.record(.kept, key: learningKey)
-        _ = store.record(.kept, key: learningKey)
-        let positive = store.signal(for: learningKey)
+        _ = store.record(.kept, key: learningKey, now: now)
+        _ = store.record(.kept, key: learningKey, now: now)
+        let positive = store.signal(for: learningKey, now: now)
 
         #expect(positive.sampleCount == 2)
         #expect(positive.keptCount == 2)
@@ -33,11 +35,11 @@ struct AcceptedAndKeptLearningTests {
         #expect(positive.probability > positive.priorProbability)
         #expect(positive.userAffinityAdjustment > 0)
 
-        _ = store.record(.rejected, key: learningKey)
-        _ = store.record(.rejected, key: learningKey)
-        _ = store.record(.rejected, key: learningKey)
-        _ = store.record(.rejected, key: learningKey)
-        let negative = store.signal(for: learningKey)
+        _ = store.record(.rejected, key: learningKey, now: now)
+        _ = store.record(.rejected, key: learningKey, now: now)
+        _ = store.record(.rejected, key: learningKey, now: now)
+        _ = store.record(.rejected, key: learningKey, now: now)
+        let negative = store.signal(for: learningKey, now: now)
 
         #expect(negative.sampleCount == 6)
         #expect(negative.rejectedCount == 4)
@@ -59,6 +61,47 @@ struct AcceptedAndKeptLearningTests {
         #expect(store.signal(for: docsKey).rejectedCount == 0)
         #expect(store.signal(for: chatKey).keptCount == 0)
         #expect(store.signal(for: chatKey).rejectedCount == 1)
+    }
+
+    @Test("Learning store persists and restores buckets")
+    func learningStorePersistsAndRestoresBuckets() throws {
+        var store = AcceptedAndKeptLearningStore(priorWeight: 2)
+        let learningKey = key(mode: .sentenceContinuation)
+        let now = Date(timeIntervalSince1970: 2_000)
+
+        _ = store.record(.kept, key: learningKey, now: now)
+        _ = store.record(.rejected, key: learningKey, now: now)
+
+        let data = try #require(store.jsonData())
+        let restored = try #require(AcceptedAndKeptLearningStore(jsonData: data))
+        let signal = restored.signal(for: learningKey, now: now)
+
+        #expect(signal.sampleCount == 2)
+        #expect(signal.keptCount == 1)
+        #expect(signal.rejectedCount == 1)
+        #expect(signal.decayFactor == 1)
+    }
+
+    @Test("Old evidence decays toward the prior")
+    func oldEvidenceDecaysTowardThePrior() {
+        var store = AcceptedAndKeptLearningStore(
+            priorWeight: 2,
+            halfLifeSeconds: 60
+        )
+        let learningKey = key(mode: .phraseContinuation)
+        let now = Date(timeIntervalSince1970: 1_000)
+
+        _ = store.record(.kept, key: learningKey, now: now)
+        _ = store.record(.kept, key: learningKey, now: now)
+        let fresh = store.signal(for: learningKey, now: now)
+        let stale = store.signal(
+            for: learningKey,
+            now: now.addingTimeInterval(60)
+        )
+
+        #expect(stale.decayFactor == 0.5)
+        #expect(stale.probability < fresh.probability)
+        #expect(stale.probability > stale.priorProbability)
     }
 
     private func key(

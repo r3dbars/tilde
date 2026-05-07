@@ -148,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadPauseState()
         loadDisabledApps()
         loadKeyboardShortcutConfiguration()
+        loadAcceptedAndKeptLearning()
         configureStatusItem()
         DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
@@ -2055,7 +2056,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
-        return acceptedAndKeptLearning.record(
+        let signal = acceptedAndKeptLearning.record(
             outcome,
             key: AcceptedAndKeptLearningKey(
                 appBundleIdentifier: result.tracker.appBundleIdentifier,
@@ -2064,6 +2065,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 behaviorProfileID: result.tracker.behaviorProfileID
             )
         )
+        persistAcceptedAndKeptLearning()
+        return signal
     }
 
     private func scheduleSuggestion(
@@ -4411,6 +4414,10 @@ private extension AppDelegate {
         "AcceptAllShortcut"
     }
 
+    static var acceptedAndKeptLearningDefaultsKey: String {
+        "AcceptedAndKeptLearning"
+    }
+
     func loadPauseState() {
         suggestionsPaused = UserDefaults.standard.bool(forKey: Self.suggestionsPausedDefaultsKey)
     }
@@ -4447,6 +4454,27 @@ private extension AppDelegate {
         UserDefaults.standard.set(
             keyboardShortcutConfiguration.acceptAllShortcut.rawValue,
             forKey: Self.acceptAllShortcutDefaultsKey
+        )
+    }
+
+    func loadAcceptedAndKeptLearning() {
+        guard let data = UserDefaults.standard.data(forKey: Self.acceptedAndKeptLearningDefaultsKey),
+              let store = AcceptedAndKeptLearningStore(jsonData: data) else {
+            acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
+            return
+        }
+
+        acceptedAndKeptLearning = store
+    }
+
+    func persistAcceptedAndKeptLearning() {
+        guard let data = acceptedAndKeptLearning.jsonData() else {
+            return
+        }
+
+        UserDefaults.standard.set(
+            data,
+            forKey: Self.acceptedAndKeptLearningDefaultsKey
         )
     }
 }
