@@ -135,6 +135,44 @@ struct CompatibilityLearningTests {
         #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "true")
     }
 
+    @Test("Learning keeps screenshot visual corrections from detector")
+    func keepsScreenshotVisualCorrectionsFromDetector() {
+        let detection = ScreenshotPlacementOffsetDetection(
+            dx: 4,
+            dy: -6,
+            confidence: 0.91,
+            signalPixelCount: 64,
+            signalBounds: CGRect(x: 24, y: 12, width: 16, height: 4),
+            reason: .detected
+        )
+        let correction = VisualPlacementCorrectionPolicy().correction(
+            dx: detection.dx,
+            dy: detection.dy,
+            observations: 3,
+            confidence: detection.confidence
+        )
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "md.obsidian",
+            xOffset: correction.dx,
+            yOffset: correction.dy,
+            observations: 3,
+            confidence: detection.confidence,
+            lastReason: "screenshot-visual-correction"
+        )
+        let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+        let adjustment = engine.adjustment(
+            for: "md.obsidian",
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly
+
+        let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
+
+        #expect(correction.decision == .accepted)
+        #expect(adjustment.adjusted(rect) == CGRect(x: 104, y: 194, width: 0, height: 20))
+        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "true")
+        #expect(adjustment.metadata["learningConfidence"] == "0.91")
+    }
+
     @Test("Missing learning profile leaves geometry alone")
     func missingProfileLeavesGeometryAlone() {
         let engine = CompatibilityLearningEngine()
