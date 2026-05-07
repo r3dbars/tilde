@@ -818,19 +818,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textAfterCursor: context.textAfterCursor,
             isSecure: context.isSecure,
             selectedTextLength: context.selectedTextLength,
-            isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity)
+            isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
+            fieldKind: context.fieldClassification.kind
         )
 
         guard activationDecision.canSuggest else {
-            setSuggestionDecision("Blocked: \(activationDecision.blockReasonDescription)")
+            let decisionText = activationBlockDecisionText(
+                activationDecision,
+                fieldClassification: context.fieldClassification
+            )
+            setSuggestionDecision("Blocked: \(decisionText)")
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
                 profile: profile,
                 fieldIdentity: fieldIdentity,
-                metadata: [
-                    "reason": activationDecision.blockReasonDescription
-                ]
+                metadata: ["reason": activationDecision.blockReasonDescription]
+                    .merging(context.fieldClassification.traceMetadata) { current, _ in current }
             )
             hideSuggestion()
             return
@@ -1133,6 +1137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textLineRect: syntheticCaret,
             textStyle: context.textStyle,
             isSecure: context.isSecure,
+            fieldClassification: context.fieldClassification,
             caretIsSynthetic: true,
             capabilities: capabilities
         )
@@ -2535,6 +2540,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "hasWindowRect": String(context.windowRect != nil),
             "canReadBounds": String(context.capabilities.canReadBoundsForRange)
         ]
+        .merging(context.fieldClassification.traceMetadata) { current, _ in current }
     }
 
     private func recordSuggestionEvent(
@@ -2552,6 +2558,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         safeMetadata["subrole"] = context.subrole ?? "none"
         safeMetadata["beforeChars"] = String(context.textBeforeCursor.count)
         safeMetadata["afterChars"] = String(context.textAfterCursor.count)
+        safeMetadata["fieldKind"] = context.fieldClassification.kind.rawValue
+        safeMetadata["fieldKindReason"] = context.fieldClassification.reason
+        safeMetadata["fieldKindSuppressed"] = String(context.fieldClassification.suppressesSuggestionsByDefault)
         safeMetadata["hasCaretRect"] = String(context.caretRect != nil)
         safeMetadata["hasElementRect"] = String(context.elementRect != nil)
         safeMetadata["hasWindowRect"] = String(context.windowRect != nil)
@@ -2561,6 +2570,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         safeMetadata["canSetSelectedText"] = String(context.capabilities.canSetSelectedText)
 
         DiagnosticsLog.shared.record(event, metadata: safeMetadata)
+    }
+
+    private func activationBlockDecisionText(
+        _ decision: CompletionActivationDecision,
+        fieldClassification: AXFieldClassification
+    ) -> String {
+        guard case .block(.blockedFieldKind) = decision else {
+            return decision.blockReasonDescription
+        }
+
+        switch fieldClassification.kind {
+        case .search:
+            return "search field"
+        case .form:
+            return "form field"
+        case .secure:
+            return "secure field"
+        case .url:
+            return "URL field"
+        case .unprovenSurface:
+            return "unproven surface"
+        case .multilineCompose, .singlelineCompose, .unknown:
+            return "blocked field kind"
+        }
     }
 
     @discardableResult

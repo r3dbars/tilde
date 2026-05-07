@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import AutocompleteLabCore
 @testable import AutocompleteLabApp
 
 @Suite("Serial focused text AX reader")
@@ -159,6 +160,7 @@ private func focusedTextContext(textBeforeCursor: String) -> FocusedTextContext 
         textLineRect: nil,
         textStyle: nil,
         isSecure: false,
+        fieldClassification: AXFieldClassification(kind: .unknown, reason: "unknown"),
         caretIsSynthetic: false,
         capabilities: FocusedTextCapabilities(
             canReadValue: true,
