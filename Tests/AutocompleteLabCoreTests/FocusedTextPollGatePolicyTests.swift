@@ -62,4 +62,33 @@ struct FocusedTextPollGatePolicyTests {
             hasVisibleSuggestion: true
         ) == .startPoll)
     }
+
+    @Test("Typing pause waits before starting or counting skipped polls")
+    func typingPauseWaitsBeforeStartingOrCountingSkippedPolls() {
+        let policy = FocusedTextPollGatePolicy(cadencePolicy: FocusPollingCadencePolicy(
+            activeSuggestionIntervalSeconds: 0.05,
+            supportedTypingWatchIntervalSeconds: 0.2
+        ))
+        let startedAt = Date(timeIntervalSince1970: 1_000)
+
+        #expect(policy.decision(
+            now: startedAt.addingTimeInterval(1),
+            lastPollAt: nil,
+            isPollInFlight: false,
+            isTrustedForAccessibility: true,
+            hasSupportedProfile: true,
+            hasVisibleSuggestion: false,
+            isPausedForTyping: true
+        ) == .waitForTypingPause)
+
+        #expect(policy.decision(
+            now: startedAt.addingTimeInterval(1),
+            lastPollAt: startedAt,
+            isPollInFlight: true,
+            isTrustedForAccessibility: true,
+            hasSupportedProfile: true,
+            hasVisibleSuggestion: false,
+            isPausedForTyping: true
+        ) == .waitForTypingPause)
+    }
 }

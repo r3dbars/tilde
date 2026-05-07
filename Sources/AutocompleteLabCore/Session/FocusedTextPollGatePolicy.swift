@@ -3,6 +3,7 @@ import Foundation
 public enum FocusedTextPollGateDecision: Equatable, Sendable {
     case startPoll
     case waitForCadence
+    case waitForTypingPause
     case skipInFlight
 }
 
@@ -19,8 +20,13 @@ public struct FocusedTextPollGatePolicy: Equatable, Sendable {
         isPollInFlight: Bool,
         isTrustedForAccessibility: Bool,
         hasSupportedProfile: Bool,
-        hasVisibleSuggestion: Bool
+        hasVisibleSuggestion: Bool,
+        isPausedForTyping: Bool = false
     ) -> FocusedTextPollGateDecision {
+        guard !isPausedForTyping else {
+            return .waitForTypingPause
+        }
+
         guard cadencePolicy.shouldPoll(
             now: now,
             lastPollAt: lastPollAt,
