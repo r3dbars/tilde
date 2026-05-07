@@ -79,6 +79,13 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportsFullAcceptance == false)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.apple.Safari")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.openai.atlas")?.displayName == "Atlas")
+        #expect(store.profile(for: "com.openai.atlas")?.appFamily == .chromium)
+        #expect(store.profile(for: "com.openai.atlas")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.openai.atlas")?.renderMode == .disabled)
+        #expect(store.profile(for: "com.openai.atlas")?.insertionMode == .disabled)
+        #expect(store.profile(for: "com.openai.atlas")?.anchorLadder == [.none])
+        #expect(store.profile(for: "com.openai.atlas")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.tinyspeck.slackmacgap")?.appFamily == .electron)
         #expect(store.profiles["com.microsoft.VSCode"]?.anchorLadder == [.none])
         #expect(store.profiles["com.todesktop.230313mzl4w4u92"]?.renderMode == .disabled)
@@ -133,7 +140,7 @@ struct CompatibilityProfileTests {
         let store = CompatibilityProfileStore.mvp
 
         #expect(!store.allows(bundleIdentifier: "com.example.UnknownEditor"))
-        #expect(!store.allows(bundleIdentifier: "com.openai.atlas"))
+        #expect(!store.allows(bundleIdentifier: "com.example.UnprofiledBrowser"))
     }
 
     @Test("Support status explains unsupported and denylisted apps")
@@ -141,9 +148,10 @@ struct CompatibilityProfileTests {
         let store = CompatibilityProfileStore.mvp
 
         #expect(store.supportStatus(for: "com.apple.Terminal") == .denylisted)
-        #expect(store.supportStatus(for: "com.openai.atlas") == .unsupported)
+        #expect(store.supportStatus(for: "com.example.UnprofiledBrowser") == .unsupported)
         #expect(store.supportStatus(for: "com.apple.TextEdit").summary == "green: TextEdit")
         #expect(store.supportStatus(for: "com.apple.mail").summary == "diagnostics only: Mail")
+        #expect(store.supportStatus(for: "com.openai.atlas").summary == "diagnostics only: Atlas")
     }
 
     @Test("Support status exposes user-facing stance copy")
@@ -173,11 +181,18 @@ struct CompatibilityProfileTests {
         #expect(diagnosticsOnly.menuText(appDisplayName: "Mail", isEnabled: true) == "Mail diagnostics-only")
         #expect(!diagnosticsOnly.canToggleSuggestions)
 
-        let unsupported = store.supportStatus(for: "com.openai.atlas")
+        let atlas = store.supportStatus(for: "com.openai.atlas")
+        #expect(atlas.supportLevel == .diagnosticsOnly)
+        #expect(atlas.userFacingSummary == "Diagnostics-only: Atlas")
+        #expect(atlas.userFacingReason == "Atlas editor and browser surfaces need app-specific proof.")
+        #expect(atlas.menuText(appDisplayName: "Atlas", isEnabled: true) == "Atlas diagnostics-only")
+        #expect(!atlas.canToggleSuggestions)
+
+        let unsupported = store.supportStatus(for: "com.example.UnprofiledBrowser")
         #expect(unsupported.supportLevel == .unsupported)
         #expect(unsupported.userFacingSummary == "Unsupported: not tested yet")
         #expect(unsupported.userFacingReason == "No compatibility profile yet.")
-        #expect(unsupported.menuText(appDisplayName: "Atlas", isEnabled: true) == "Atlas unsupported")
+        #expect(unsupported.menuText(appDisplayName: "Unknown", isEnabled: true) == "Unknown unsupported")
         #expect(!unsupported.canToggleSuggestions)
     }
 
@@ -204,6 +219,7 @@ struct CompatibilityProfileTests {
         let claudeCode = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claude-code"))
         let claude = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claudefordesktop"))
         let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
+        let atlas = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.atlas"))
 
         #expect(InsertionModePlan.modes(for: textEdit) == [.axSelectedText, .axValueReplacement])
         #expect(InsertionModePlan.modes(for: notes) == [.keyEvents])
@@ -212,6 +228,7 @@ struct CompatibilityProfileTests {
         #expect(InsertionModePlan.modes(for: claudeCode) == [.keyEvents, .axThenKeyEvents])
         #expect(InsertionModePlan.modes(for: claude) == [.axValueReplacement])
         #expect(InsertionModePlan.modes(for: mail) == [])
+        #expect(InsertionModePlan.modes(for: atlas) == [])
     }
 
     @Test("Unproven real app profiles fail closed on risky affordances")
@@ -269,6 +286,7 @@ struct CompatibilityProfileTests {
         let claudeCode = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claude-code"))
         let claude = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claudefordesktop"))
         let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
+        let atlas = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.atlas"))
 
         #expect(RenderModePlan.effectiveMode(
             for: textEdit,
@@ -322,6 +340,11 @@ struct CompatibilityProfileTests {
         ) == .floatingMirror)
         #expect(RenderModePlan.effectiveMode(
             for: mail,
+            supportsInlineSuggestions: true,
+            hasMirrorAnchor: true
+        ) == nil)
+        #expect(RenderModePlan.effectiveMode(
+            for: atlas,
             supportsInlineSuggestions: true,
             hasMirrorAnchor: true
         ) == nil)

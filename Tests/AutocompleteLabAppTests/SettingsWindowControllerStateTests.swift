@@ -69,7 +69,7 @@ struct SettingsWindowControllerStateTests {
         #expect(diagnosticsOnly.menuToggleTitle == "Suggestions unavailable in Mail")
         #expect(!diagnosticsOnly.canToggle)
 
-        let unsupported = SettingsCurrentAppState(
+        let atlas = SettingsCurrentAppState(
             displayName: "Atlas",
             bundleIdentifier: "com.openai.atlas",
             supportStatus: store.supportStatus(for: "com.openai.atlas"),
@@ -77,11 +77,29 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 1
         )
 
-        #expect(unsupported.statusText == "Current app: Atlas is unsupported")
+        #expect(atlas.statusText == "Current app: Atlas is diagnostics-only")
+        #expect(
+            atlas.detailText
+                == "Atlas editor and browser surfaces need app-specific proof. Suggestions stay off here."
+        )
+        #expect(atlas.modeText == "Mode: disabled")
+        #expect(atlas.acceptanceText == "Acceptance: off here")
+        #expect(atlas.menuToggleTitle == "Suggestions unavailable in Atlas")
+        #expect(!atlas.canToggle)
+
+        let unsupported = SettingsCurrentAppState(
+            displayName: "Unknown",
+            bundleIdentifier: "com.example.UnknownEditor",
+            supportStatus: store.supportStatus(for: "com.example.UnknownEditor"),
+            isEnabled: false,
+            disabledAppCount: 1
+        )
+
+        #expect(unsupported.statusText == "Current app: Unknown is unsupported")
         #expect(unsupported.detailText == "No compatibility profile yet. Suggestions stay off here.")
         #expect(unsupported.modeText == "Mode: not tested yet")
         #expect(unsupported.acceptanceText == "Acceptance: off here")
-        #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Atlas")
+        #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Unknown")
         #expect(!unsupported.canToggle)
 
         let missing = SettingsCurrentAppState(

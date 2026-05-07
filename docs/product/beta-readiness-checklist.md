@@ -28,6 +28,7 @@ Use this before inviting private beta testers.
 - [ ] Obsidian or CodeMirror suppresses detached whole-editor suggestions.
 - [ ] One Electron writing app has its own trace slice before beta use.
 - [ ] Mail is diagnostics-only.
+- [ ] Atlas is diagnostics-only.
 - [ ] Any blocked app stays off.
 
 ## Privacy Gate

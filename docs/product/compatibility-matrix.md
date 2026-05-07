@@ -31,7 +31,7 @@ When code lands, update these surfaces in the same PR:
 | Claude Code | dogfood target | synthetic inline caret, no detached fallback | key events, AX fallback | pending manual smoke pass |
 | Claude desktop | dogfood target | synthetic inline caret, no detached fallback | AX value replacement | prior manual pass is stale for this gate; current one-word no-submit proof pending |
 | Mail | diagnostics only | disabled | disabled | blocked until safe compose adapter exists |
-| Atlas | unsupported | disabled | disabled | blocked until focused AX element is reliable |
+| Atlas | diagnostics only | disabled | disabled | focused AX is reliable enough to collect diagnostics; suggestions stay blocked until Atlas has app-specific proof |
 
 Run:
 
