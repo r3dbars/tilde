@@ -34,17 +34,20 @@ public enum CompletionActivationBlockReason: String, Equatable, Sendable {
 public struct CompletionActivationPolicy: Equatable, Sendable {
     public let minimumContextCharacters: Int
     public let minimumContextWords: Int
+    public let minimumPhraseContinuationWords: Int
     public let minimumWordCompletionCharacters: Int
     public let maximumWordCompletionCharacters: Int
 
     public init(
         minimumContextCharacters: Int = 3,
         minimumContextWords: Int = 2,
+        minimumPhraseContinuationWords: Int = 4,
         minimumWordCompletionCharacters: Int = 2,
         maximumWordCompletionCharacters: Int = 4
     ) {
         self.minimumContextCharacters = max(1, minimumContextCharacters)
         self.minimumContextWords = max(1, minimumContextWords)
+        self.minimumPhraseContinuationWords = max(self.minimumContextWords, minimumPhraseContinuationWords)
         self.minimumWordCompletionCharacters = max(1, minimumWordCompletionCharacters)
         self.maximumWordCompletionCharacters = max(self.minimumWordCompletionCharacters, maximumWordCompletionCharacters)
     }
@@ -78,8 +81,9 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         }
 
         let trimmedContext = textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines)
+        let contextWordCount = trimmedContext.split(whereSeparator: { $0.isWhitespace }).count
         guard trimmedContext.count >= minimumContextCharacters,
-              trimmedContext.split(whereSeparator: { $0.isWhitespace }).count >= minimumContextWords else {
+              contextWordCount >= minimumContextWords else {
             if isWordCompletionEligible(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
                 return .allow(.wordCompletion)
             }
@@ -97,6 +101,10 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
 
         if endsInsideWord(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
             return .block(.unfinishedWord)
+        }
+
+        guard contextWordCount >= minimumPhraseContinuationWords else {
+            return .block(.tooLittleContext)
         }
 
         return .allow(.phraseContinuation)
