@@ -30,13 +30,15 @@ public struct PrefixFamilyCooldown: Equatable, Sendable {
     public let until: Date
     public let durationMilliseconds: Int
     public let prefixTokenCount: Int
+    public let isEscalated: Bool
 
     public var metadata: [String: String] {
         [
             "prefixCooldownReason": reason.rawValue,
             "prefixCooldownUntil": ISO8601DateFormatter().string(from: until),
             "prefixCooldownDurationMilliseconds": String(durationMilliseconds),
-            "prefixFamilyTokenCount": String(prefixTokenCount)
+            "prefixFamilyTokenCount": String(prefixTokenCount),
+            "prefixCooldownEscalated": String(isEscalated)
         ]
     }
 }
@@ -53,6 +55,7 @@ public enum PrefixFamilyCooldownDecision: Equatable, Sendable {
 public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
     public let typedOverCooldownMilliseconds: Int
     public let escapeCooldownMilliseconds: Int
+    public let repeatedEscapeCooldownMilliseconds: Int
     public let deletionCooldownMilliseconds: Int
     public let prefixFamilyTokenLimit: Int
 
@@ -61,11 +64,13 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
     public init(
         typedOverCooldownMilliseconds: Int = 5_000,
         escapeCooldownMilliseconds: Int = 15_000,
+        repeatedEscapeCooldownMilliseconds: Int = 60_000,
         deletionCooldownMilliseconds: Int = 250,
         prefixFamilyTokenLimit: Int = 3
     ) {
         self.typedOverCooldownMilliseconds = max(0, typedOverCooldownMilliseconds)
         self.escapeCooldownMilliseconds = max(0, escapeCooldownMilliseconds)
+        self.repeatedEscapeCooldownMilliseconds = max(self.escapeCooldownMilliseconds, repeatedEscapeCooldownMilliseconds)
         self.deletionCooldownMilliseconds = max(0, deletionCooldownMilliseconds)
         self.prefixFamilyTokenLimit = max(1, prefixFamilyTokenLimit)
     }
@@ -75,17 +80,19 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
         input: PrefixFamilyCooldownInput,
         now: Date = Date()
     ) -> PrefixFamilyCooldown? {
-        let durationMilliseconds = duration(for: reason)
+        let key = key(for: input)
+        let isEscalated = shouldEscalate(reason, existing: cooldowns[key], now: now)
+        let durationMilliseconds = isEscalated ? repeatedEscapeCooldownMilliseconds : duration(for: reason)
         guard durationMilliseconds > 0 else {
             return nil
         }
 
-        let key = key(for: input)
         let cooldown = PrefixFamilyCooldown(
             reason: reason,
             until: now.addingTimeInterval(TimeInterval(durationMilliseconds) / 1_000),
             durationMilliseconds: durationMilliseconds,
-            prefixTokenCount: key.prefixTokenCount
+            prefixTokenCount: key.prefixTokenCount,
+            isEscalated: isEscalated
         )
         cooldowns[key] = cooldown
         return cooldown
@@ -119,6 +126,16 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
         case .deletion:
             deletionCooldownMilliseconds
         }
+    }
+
+    private func shouldEscalate(
+        _ reason: PrefixFamilyCooldownReason,
+        existing: PrefixFamilyCooldown?,
+        now: Date
+    ) -> Bool {
+        reason == .escapeDismissal
+            && existing?.reason == .escapeDismissal
+            && (existing?.until ?? now) > now
     }
 
     private func key(for input: PrefixFamilyCooldownInput) -> PrefixFamilyCooldownKey {

@@ -28,8 +28,30 @@ struct PrefixFamilyCooldownPolicyTests {
         let cooldown = policy.record(.escapeDismissal, input: input, now: now)
 
         #expect(cooldown?.durationMilliseconds == 15_000)
+        #expect(cooldown?.isEscalated == false)
         #expect(policy.decision(for: input, now: now.addingTimeInterval(14.9)).canRequest == false)
         #expect(policy.decision(for: input, now: now.addingTimeInterval(15.1)) == .allowed)
+    }
+
+    @Test("Repeated Escape escalates to a longer cooldown")
+    func repeatedEscapeEscalatesToLongerCooldown() throws {
+        var policy = PrefixFamilyCooldownPolicy()
+        let now = Date(timeIntervalSince1970: 1_000)
+        let input = input(textBeforeCursor: "Can you please")
+
+        _ = policy.record(.escapeDismissal, input: input, now: now)
+        let maybeRepeated = policy.record(
+            .escapeDismissal,
+            input: input,
+            now: now.addingTimeInterval(5)
+        )
+        let repeated = try #require(maybeRepeated)
+
+        #expect(repeated.durationMilliseconds == 60_000)
+        #expect(repeated.isEscalated)
+        #expect(repeated.metadata["prefixCooldownEscalated"] == "true")
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(64.9)).canRequest == false)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(65.1)) == .allowed)
     }
 
     @Test("Deletion starts a short stabilization cooldown")
@@ -73,6 +95,7 @@ struct PrefixFamilyCooldownPolicyTests {
         #expect(cooldown.metadata["prefixCooldownReason"] == "typedOver")
         #expect(cooldown.metadata["prefixCooldownDurationMilliseconds"] == "5000")
         #expect(cooldown.metadata["prefixFamilyTokenCount"] == "3")
+        #expect(cooldown.metadata["prefixCooldownEscalated"] == "false")
         #expect(!cooldown.metadata.values.joined(separator: " ").contains("secret"))
     }
 
