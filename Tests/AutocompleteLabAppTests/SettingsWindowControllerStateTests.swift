@@ -130,6 +130,8 @@ struct SettingsWindowControllerStateTests {
         #expect(forcedMirror.modeText == "Mode: mirror forced (profile inline)")
         #expect(forcedMirror.modeButtonTitle == "Use Profile Mode")
         #expect(forcedMirror.canOverrideMode)
+        #expect(forcedMirror.proofButtonTitle == "Start App Proof")
+        #expect(forcedMirror.canStartProof)
 
         let profileMode = SettingsCurrentAppState(
             displayName: "TextEdit",
@@ -141,6 +143,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(profileMode.modeButtonTitle == "Force Mirror Mode")
         #expect(profileMode.canOverrideMode)
+        #expect(profileMode.canStartProof)
 
         let diagnosticsOnly = SettingsCurrentAppState(
             displayName: "Mail",
@@ -151,6 +154,7 @@ struct SettingsWindowControllerStateTests {
         )
 
         #expect(!diagnosticsOnly.canOverrideMode)
+        #expect(!diagnosticsOnly.canStartProof)
     }
 
     @Test("Accessibility permission copy says what the app reads and keeps local")

@@ -65,6 +65,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleCurrentAppMirrorMode: { [weak self] in
             self?.toggleCurrentAppMirrorMode()
         },
+        startCurrentAppProof: { [weak self] in
+            self?.startCurrentAppProof()
+        },
         enableAllApps: { [weak self] in
             self?.enableAllDisabledApps()
         },
@@ -4806,6 +4809,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             appEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier)
         )
+    }
+
+    @objc
+    private func startCurrentAppProof() {
+        guard let app = targetAppForControls(),
+              let profile = profileStore.profile(for: app.bundleIdentifier),
+              !profile.isSensitive else {
+            return
+        }
+
+        compatibilityLearningStore.setScreenshotTracing(true, for: app.bundleIdentifier)
+        setSuggestionDecision("Ready: app proof started")
+        DiagnosticsLog.shared.record(
+            "app-proof-started",
+            metadata: [
+                "app": app.bundleIdentifier,
+                "support": profile.supportLevel.rawValue
+            ]
+        )
+        refreshRuntimeChrome()
+        showDiagnostics()
     }
 
     private func enableAllDisabledApps() {
