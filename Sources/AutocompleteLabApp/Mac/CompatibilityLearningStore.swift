@@ -54,19 +54,32 @@ final class CompatibilityLearningStore: @unchecked Sendable {
         }
     }
 
-    func updateOffset(x: Double, y: Double, for bundleIdentifier: String, reason: String) {
+    func updateOffset(
+        x: Double,
+        y: Double,
+        for bundleIdentifier: String,
+        reason: String,
+        visualTrustContext: CompatibilityLearningVisualTrustContext? = nil
+    ) {
         update(bundleIdentifier: bundleIdentifier, reason: reason) { profile in
             profile.xOffset = x
             profile.yOffset = y
+            profile.applyVisualTrustContext(visualTrustContext)
             profile.observations += 1
             profile.confidence = min(1, max(profile.confidence, 0.25))
         }
     }
 
-    func nudgeOffset(dx: Double, dy: Double, for bundleIdentifier: String) {
+    func nudgeOffset(
+        dx: Double,
+        dy: Double,
+        for bundleIdentifier: String,
+        visualTrustContext: CompatibilityLearningVisualTrustContext? = nil
+    ) {
         update(bundleIdentifier: bundleIdentifier, reason: "manual-visual-nudge") { profile in
             profile.xOffset += dx
             profile.yOffset += dy
+            profile.applyVisualTrustContext(visualTrustContext)
             profile.observations += 1
             profile.confidence = min(1, max(profile.confidence, 0.35))
         }
@@ -246,5 +259,13 @@ final class CompatibilityLearningStore: @unchecked Sendable {
         }
 
         return expiresAt > now()
+    }
+}
+
+private extension CompatibilityLearningProfile {
+    mutating func applyVisualTrustContext(_ context: CompatibilityLearningVisualTrustContext?) {
+        visualAppVersion = context?.appVersion
+        visualScreenFingerprint = context?.screenFingerprint
+        visualFieldShapeFingerprint = context?.fieldShapeFingerprint
     }
 }

@@ -45,7 +45,7 @@ evidence-backed score should stay lower until those rows are closed.
 | Keyboard capture safety | 9.8/10 | Capture starts only after a suggestion panel frame is actually usable, passes ordinary typing through, blocks selected-text replacement, fails closed if macOS disables the tap, and replays accept keys when focus moves to a protected field. |
 | Acceptance reliability | 9.1/10 | TextEdit, core Chrome fixtures, and Chrome chat-like verify Tab plus full accept. Prompt-app full accept is intentionally disabled until separate full-accept no-submit proof exists. Selected text is blocked before suggestions/acceptance and AX insertion is faster, but Notes surface-specific proof and current Codex, Claude Code, and Claude desktop one-word no-submit proof still need live runs. |
 | Visual caret alignment | 9/10 | TextEdit, core Chrome fixtures, Chrome chat-like, and a disposable Codex prompt now have screenshot-backed proof. Stale line rects are dropped, vertical clipping is enforced, too-narrow inline space suppresses display instead of showing a sliver, and async suggestions refresh current geometry before display, but Obsidian, Notes title/body/checklist, Claude Code, and Claude desktop proof is incomplete. |
-| Self-healing behavior | 9.3/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, applies only explicit trusted visual offsets, manual nudges move the visible ghost immediately, and untrusted placement suppression now hides any stale ghost. A unit-tested pixel detector can now identify screenshot offset from synthetic pixels, screenshot capture logs diagnostics-only offset metadata, and the detector feeds the existing trust gate. Live screenshot auto-apply still needs real-app proof before it can count as complete. |
+| Self-healing behavior | 9.4/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, applies only explicit trusted visual offsets, manual nudges move the visible ghost immediately, untrusted placement suppression now hides any stale ghost, and trusted visual offsets expire when the target app version, screen, or field shape changes. A unit-tested pixel detector can now identify screenshot offset from synthetic pixels, screenshot capture logs diagnostics-only offset metadata, and the detector feeds the existing trust gate. Live screenshot auto-apply still needs real-app proof before it can count as complete. |
 | Screenshot tracing | 9.4/10 | Screen Recording is preflighted, capture runs off the hot path, screenshots include editor bounds plus ghost text, traces/logs include capture rect plus rendered panel rect, and capture now has a backlog guard plus timeout. |
 | TextEdit support | 9.6/10 | Fresh screenshot-backed run at 2026-05-07T02:28:19Z shows ghost text aligned after the caret and two verified accepts. The smoke harness now respects the active full-accept shortcut instead of assuming Backtick. |
 | Notes support | 6.5/10 | Profile is safer than before. A disposable Notes note produced partial screenshot/Tab evidence, but title/body/checklist are separate proof targets and none are recorder-grade yet. |
@@ -125,7 +125,7 @@ evidence-backed score should stay lower until those rows are closed.
   Claude Code, and Claude desktop; Codex still needs same-slice one-word
   no-submit visual proof.
 - `./script/check_score_targets.sh`: exits 1 honestly on the current docs with
-  77 target misses across this scorecard, the Apple-native checklist, and the
+  70 target misses across this scorecard, the Apple-native checklist, and the
   app proof matrix. This makes the requested "all 10s / all 100s / all As"
   target executable instead of subjective.
 - `./script/typing_performance_endurance_soak.sh --dry-run`: verifies the new
@@ -210,6 +210,9 @@ evidence-backed score should stay lower until those rows are closed.
   placement proof, and the visual evidence check can fail on pending audit rows.
 - Trusted learned visual offsets now apply to synthetic-caret apps such as
   Codex, Obsidian, and Chrome; untrusted stale offsets are still ignored.
+- Trusted visual offsets are now scoped to target app version, screen, and field
+  shape, so a manual or future screenshot correction expires when that context
+  changes instead of silently applying to a different layout.
 - Manual visual nudges now target the visible suggestion's app instead of
   relying on frontmost-app state after the menu opens, and the visible ghost
   moves immediately after the nudge.
@@ -330,8 +333,8 @@ evidence-backed score should stay lower until those rows are closed.
    and `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`.
    Codex has visual proof now, but still needs one-word accept/no-submit proof
    in the same strict visual trace slice.
-2. Build automatic screenshot-driven self-healing: detect visible offset from
-   pixels, write a trusted per-app correction, rerun smoke, and keep the proof.
+2. Finish automatic screenshot-driven self-healing: write the detected offset
+   as a trusted scoped correction, rerun smoke, and keep the proof.
 3. Test real production Monaco, ProseMirror, and CodeMirror apps, not just local
    fixtures.
 4. Add a guided post-enable proof pass so first-run setup can confirm TextEdit
