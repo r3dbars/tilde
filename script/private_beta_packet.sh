@@ -11,6 +11,7 @@ INSTALL_PATH="$PACKET_DIR/install-checklist.md"
 FEEDBACK_PATH="$PACKET_DIR/feedback-log.md"
 SESSION_REPORT_PATH="$PACKET_DIR/session-report.md"
 MODEL_ASSET_PATH="$PACKET_DIR/model-asset.md"
+PRIVACY_STATUS_PATH="$PACKET_DIR/privacy-status.md"
 CHECKSUM_PATH="$PACKET_DIR/checksums.txt"
 
 cd "$ROOT_DIR"
@@ -93,6 +94,9 @@ Useful commands:
 ./script/model_latency_report.py --latest
 open "\$HOME/Library/Logs/AutocompleteLab"
 \`\`\`
+
+Default beta feedback uses only the redacted privacy bundle. Do not ask testers
+for raw traces, screenshots, prompts, typed text, or accepted text by default.
 EOF
 
   cat >"$INSTALL_PATH" <<'EOF'
@@ -108,6 +112,7 @@ EOF
 8. Use Tab for one-word accept.
 9. Use the key above Tab for full accept only in non-prompt apps where the profile allows it.
 10. Press Esc if a suggestion feels wrong.
+11. After the session, open Diagnostics and choose `Export Privacy Bundle`.
 
 Stop the test if suggestions feel distracting, appear in the wrong app, or
 insert text somewhere surprising.
@@ -148,10 +153,12 @@ EOF
 # Feedback Log
 
 Use one short row per real writing session.
+Do not paste typed text, prompts, model output, accepted text, screenshots, URLs,
+document names, recipients, or subject lines into this file.
 
-| Date | Tester | App | Minutes | Helped? | Annoyed? | Broke trust? | Notes |
-| --- | --- | --- | ---: | --- | --- | --- | --- |
-|  |  | TextEdit / Notes / Obsidian / Chrome |  | yes/no | yes/no | yes/no |  |
+| Date | Tester | App | Minutes | Privacy bundle exported? | Helped? | Annoyed? | Broke trust? | Notes |
+| --- | --- | --- | ---: | --- | --- | --- | --- | --- |
+|  |  | TextEdit / Notes / Obsidian / Chrome |  | yes/no | yes/no | yes/no | yes/no |  |
 
 Questions to answer after each session:
 
@@ -178,9 +185,41 @@ Use this after each real beta writing session.
 ## Notes
 
 - Record the app, minutes, and whether Tab felt predictable.
+- Attach or review only the redacted privacy bundle from Diagnostics.
 - Copy the top repeated misses from Diagnostics or the trace eval report.
 - If the latency report has no samples, type one short sentence, wait for a phrase suggestion, and rerun it.
 - Fix the top repeated miss before inviting more testers.
+EOF
+
+  cat >"$PRIVACY_STATUS_PATH" <<'EOF'
+# Privacy Status
+
+Default beta feedback is redacted and local.
+
+Allowed by default:
+
+- `privacy-export/PRIVACY-CHECKLIST.md`
+- `privacy-export/manifest.json`
+- `privacy-export/redacted-traces.jsonl`
+- `privacy-export/survival-report.json`
+- `privacy-export/trace-report.html`
+- `privacy-export/visual-calibration-report.txt`
+
+Not requested by default:
+
+- raw traces,
+- screenshots,
+- typed text,
+- prompts,
+- model output,
+- accepted text,
+- document names,
+- URLs,
+- recipients,
+- subject lines.
+
+Use raw text or screenshots only for an explicit debug session, and write that
+consent in the session notes before collecting them.
 EOF
 
   printf 'AutocompleteLab.zip  %s\n' "$sha" >"$CHECKSUM_PATH"
@@ -197,7 +236,7 @@ check_packet() {
     exit 1
   }
 
-  for path in "$README_PATH" "$INSTALL_PATH" "$MODEL_ASSET_PATH" "$FEEDBACK_PATH" "$SESSION_REPORT_PATH" "$CHECKSUM_PATH"; do
+  for path in "$README_PATH" "$INSTALL_PATH" "$MODEL_ASSET_PATH" "$FEEDBACK_PATH" "$SESSION_REPORT_PATH" "$PRIVACY_STATUS_PATH" "$CHECKSUM_PATH"; do
     if [[ ! -s "$path" ]]; then
       echo "missing beta packet file: $path" >&2
       exit 1

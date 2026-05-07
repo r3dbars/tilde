@@ -21,6 +21,7 @@ That must create and verify:
 - `dist/private-beta/install-checklist.md`
 - `dist/private-beta/feedback-log.md`
 - `dist/private-beta/session-report.md`
+- `dist/private-beta/privacy-status.md`
 - `dist/private-beta/checksums.txt`
 
 Also read:
@@ -146,6 +147,10 @@ capture:
 - best app,
 - worst app,
 - pause or disable reason.
+
+Do not ask for raw traces, screenshots, prompts, typed text, accepted text,
+document names, URLs, recipients, or subject lines by default. Use the redacted
+privacy bundle unless a specific debug session has explicit written consent.
 
 Run the trace checker before trusting the session:
 

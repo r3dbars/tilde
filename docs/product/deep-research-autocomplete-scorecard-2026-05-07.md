@@ -100,6 +100,9 @@ Pass 1 shipped these improvements:
 - Fresh installs now start with suggestion-capable apps off, keep Settings open
   until a test app is enabled, and use plainer local-model recovery copy that
   says Ollama or another model server is not needed.
+- Settings now shows share-safe privacy status, and the private beta packet
+  requires a privacy status file that allows only the redacted privacy bundle
+  by default.
 - Prompt/context metadata now includes trace-safe partial-word shape: counts,
   casing, digits, hyphen, and apostrophe only.
 - Accepted insertions now arm a one-step Command-Z restore path for the same

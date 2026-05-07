@@ -212,6 +212,14 @@ struct SettingsPrivacyState: Equatable {
         return "Raw text capture: \(state)"
     }
 
+    var sharingStatusText: String {
+        if rawContentTracingEnabled || screenshotTracingEnabled {
+            return "Sharing: use Export Privacy Bundle; do not share debug traces or screenshots."
+        }
+
+        return "Sharing: Export Privacy Bundle excludes raw text, prompts, accepted text, and screenshots."
+    }
+
     var learningStatusText: String {
         "Learning: accepted-kept scores, style sketch, and recent words stay local"
     }
@@ -345,6 +353,7 @@ final class SettingsWindowController: NSObject {
     private let privacyLabel = NSTextField(labelWithString: "")
     private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
     private let rawContentStatusLabel = NSTextField(labelWithString: "")
+    private let privacySharingStatusLabel = NSTextField(labelWithString: "")
     private let learningStatusLabel = NSTextField(labelWithString: "")
     private let screenRecordingPermissionLabel = NSTextField(labelWithString: "")
     private let privacyPathLabel = NSTextField(labelWithString: "")
@@ -540,6 +549,7 @@ final class SettingsWindowController: NSObject {
         privacyLabel.stringValue = privacy.statusText
         diagnosticsStatusLabel.stringValue = privacy.diagnosticsStatusText
         rawContentStatusLabel.stringValue = privacy.contentStatusText
+        privacySharingStatusLabel.stringValue = privacy.sharingStatusText
         learningStatusLabel.stringValue = privacy.learningStatusText
         let screenRecordingText = privacy.screenRecordingPermissionText
         screenRecordingPermissionLabel.stringValue = screenRecordingText ?? ""
@@ -596,6 +606,7 @@ final class SettingsWindowController: NSObject {
         privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(diagnosticsStatusLabel)
         configureSecondaryLabel(rawContentStatusLabel)
+        configureSecondaryLabel(privacySharingStatusLabel)
         configureSecondaryLabel(learningStatusLabel)
         configureSecondaryLabel(screenRecordingPermissionLabel)
         privacyPathLabel.font = NSFont.systemFont(ofSize: 11)
@@ -712,6 +723,7 @@ final class SettingsWindowController: NSObject {
                     privacyLabel,
                     diagnosticsStatusLabel,
                     rawContentStatusLabel,
+                    privacySharingStatusLabel,
                     screenRecordingPermissionLabel,
                     toggleTracingButton,
                     toggleRawTraceButton,
