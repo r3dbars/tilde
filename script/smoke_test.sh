@@ -22,6 +22,7 @@ swift test
 ./script/check_score_targets_self_test.sh
 ./script/check_visual_placement_evidence_self_test.sh
 ./script/check_visual_placement_evidence.sh
+./script/visual_calibration_report_self_test.sh
 ./script/check_trace_eval_self_test.sh
 ./script/check_typing_performance_log_self_test.sh
 ./script/typing_performance_soak_self_test.sh

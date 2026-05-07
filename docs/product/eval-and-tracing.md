@@ -71,6 +71,17 @@ For quick visual calibration, use the menu bar nudge actions while the target ap
 - `Nudge Suggestion Up/Down/Left/Right`
 - `Reset Current App Learning`
 
+Nudges are explicit local opt-in actions. Autocomplete Lab must not infer,
+store, or apply visual calibration automatically for a beta/customer user.
+Only local dogfood/lab runs may use screenshot-backed visual calibration, and
+only after screenshot tracing is explicitly enabled for that app or run.
+
+ScreenCaptureKit and Vision are useful dogfood candidates for measuring
+caret/suggestion alignment from local screenshots, but they stay out of the
+private beta path for now. The product path remains AX geometry plus explicit
+local nudges until screenshot/Vision calibration has fixture proof, current app
+smoke proof, and a visible opt-in control.
+
 Nudges are local, per app, and take effect on the next suggestion.
 For a screenshot-free placement readout, run:
 
@@ -79,7 +90,8 @@ script/visual_calibration_report.py
 ```
 
 The report uses redacted caret, render-mode, learning-offset, flicker, and
-caret-failure metadata only. It does not read or link screenshots.
+caret-failure metadata only. It does not read or link screenshots. Its
+self-test uses a fixture JSONL slice and is part of `script/smoke_test.sh`.
 
 ## Trace Events
 
