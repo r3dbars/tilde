@@ -228,10 +228,11 @@ Manual proof blocker evidence: `./script/manual_smoke_status.sh --strict` report
 - [x] Extract compatibility learning actions out of `AppDelegate`.
 - [x] Extract runtime lifecycle out of `AppDelegate`.
 - [x] Extract local privacy controls out of `AppDelegate`.
+- [x] Extract suggestion diagnostics out of `AppDelegate`.
 - [ ] Keep `AppDelegate` mostly as wiring.
 - [x] Add unit tests for each extracted policy.
 
-Blocker evidence: `AppDelegate` is still 3,485 lines after extracting presentation, observer coordination, insertion verification scheduling, trace screenshot capture, compatibility learning actions, status menu state, runtime lifecycle, and local privacy controls. The remaining heavy owners are focused text polling, suggestion request orchestration, and visible suggestion lifecycle.
+Blocker evidence: `AppDelegate` is still 3,384 lines after extracting presentation, observer coordination, insertion verification scheduling, trace screenshot capture, compatibility learning actions, status menu state, runtime lifecycle, local privacy controls, and suggestion diagnostics. The remaining heavy owners are focused text polling, suggestion request orchestration, and visible suggestion lifecycle.
 
 ## P2: Self-Healing Compatibility
 
