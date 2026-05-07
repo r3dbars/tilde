@@ -307,6 +307,27 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.axFailureReasonByApp["com.google.Chrome"]?["zeroHeight"] == 1)
     }
 
+    @Test("summarizes trust-critical suppressed reasons")
+    func summarizesTrustCriticalSuppressedReasons() {
+        let events = [
+            event(.suggestionSuppressed, suggestionID: "secure", reason: "secureField"),
+            event(.suggestionSuppressed, suggestionID: "sensitive", reason: "sensitiveContent"),
+            event(.suggestionSuppressed, suggestionID: "diagnostics", reason: "profile-diagnostics-only"),
+            event(.suggestionSuppressed, suggestionID: "paused", reason: "suppressedField"),
+            event(.suggestionSuppressed, suggestionID: "fast", reason: "no-fast-word-candidate")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.suppressedCount == 5)
+        #expect(summary.actionableSuppressedCount == 4)
+        #expect(summary.suppressedByReason["secureField"] == 1)
+        #expect(summary.suppressedByReason["sensitiveContent"] == 1)
+        #expect(summary.suppressedByReason["profile-diagnostics-only"] == 1)
+        #expect(summary.suppressedByReason["suppressedField"] == 1)
+        #expect(summary.suppressedByReason["no-fast-word-candidate"] == 1)
+    }
+
     @Test("flags repeated unaccepted suggestions")
     func flagsRepeatedUnacceptedSuggestions() {
         let events = [

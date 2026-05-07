@@ -68,7 +68,16 @@ Track these rates per app and request mode:
 - suppressed as empty, meta, repeated context, or invalid word completion
 - insertion verification failures
 
-Use the in-app Diagnostics window for the quickest read. It shows recent trace events, top misses, accept rates by app/mode, pause/delete controls, screenshot tracing, current learned adapter state, and an HTML export.
+Use the in-app Diagnostics window for the quickest read. It shows why a
+suggestion is missing right now, recent suppressed reasons in plain language,
+top misses, accept rates by app/mode, pause/delete controls, screenshot tracing,
+current learned adapter state, and an HTML export.
+
+When a tester says "nothing showed up," check `Why no suggestion` first. It
+should name the active blocker: missing Accessibility permission, app paused or
+disabled, model not ready, diagnostics-only profile, secure/sensitive field,
+missing caret/anchor trust, or no focused text field. Then check `Recent trace
+events` for the exact event and `Suppressed by reason` for repeats.
 
 Use the command-line checker for repeatable proof:
 

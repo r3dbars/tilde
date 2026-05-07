@@ -130,6 +130,16 @@ final class DiagnosticsWindowController {
         if let anchorDecisionSummary {
             sections.append("Anchor: \(anchorDecisionSummary)")
         }
+        sections.append(whyNoSuggestionText(
+            diagnostics: diagnostics,
+            profile: profile,
+            compatibilityStatus: compatibilityStatus,
+            appEnabled: appEnabled,
+            appTrusted: appTrusted,
+            runtimeReport: runtimeReport,
+            anchorDecisionSummary: anchorDecisionSummary,
+            traceSummary: traceSummary
+        ))
         sections.append(traceSummaryText(
             traceSummary,
             tracePath: tracePath,
@@ -230,6 +240,133 @@ final class DiagnosticsWindowController {
           p90 latency: \(Self.latency(summary.p90LatencyMilliseconds))
           p95 latency: \(Self.latency(summary.p95LatencyMilliseconds))
         """
+    }
+
+    private func whyNoSuggestionText(
+        diagnostics: FocusedTextDiagnostics?,
+        profile: CompatibilityProfile?,
+        compatibilityStatus: CompatibilitySupportStatus,
+        appEnabled: Bool,
+        appTrusted: Bool,
+        runtimeReport: RuntimeReadinessReport,
+        anchorDecisionSummary: String?,
+        traceSummary: AutocompleteTraceSummary
+    ) -> String {
+        let currentReason = currentNoSuggestionReason(
+            diagnostics: diagnostics,
+            profile: profile,
+            compatibilityStatus: compatibilityStatus,
+            appEnabled: appEnabled,
+            appTrusted: appTrusted,
+            runtimeReport: runtimeReport,
+            anchorDecisionSummary: anchorDecisionSummary
+        )
+        let recentReasons = recentNoSuggestionReasons(traceSummary.suppressedByReason)
+
+        return """
+        Why no suggestion:
+          now: \(currentReason)
+        \(recentReasons)
+        """
+    }
+
+    private func currentNoSuggestionReason(
+        diagnostics: FocusedTextDiagnostics?,
+        profile: CompatibilityProfile?,
+        compatibilityStatus: CompatibilitySupportStatus,
+        appEnabled: Bool,
+        appTrusted: Bool,
+        runtimeReport: RuntimeReadinessReport,
+        anchorDecisionSummary: String?
+    ) -> String {
+        if !appTrusted {
+            return "Accessibility permission is missing, so the app cannot read the focused field."
+        }
+
+        if !appEnabled {
+            return "Suggestions are paused or disabled for the current app."
+        }
+
+        if !runtimeReport.allowsSuggestions {
+            return "The local model is not ready. Next action: \(runtimeReport.action.displayName)."
+        }
+
+        guard let profile else {
+            return "The current app is not allowed yet. \(compatibilityStatus.summary)."
+        }
+
+        if !profile.canPresentSuggestions {
+            return "\(profile.displayName) is diagnostics-only until insertion and caret behavior are proven."
+        }
+
+        if diagnostics?.isSecure == true {
+            return "The focused field looks private or secure, so suggestions stay off."
+        }
+
+        if let anchorDecisionSummary, anchorDecisionSummary.contains("canPresent=false") {
+            return "Caret placement is not trusted enough to show a suggestion: \(anchorDecisionSummary)."
+        }
+
+        if diagnostics == nil {
+            return "No focused text field is visible to Accessibility right now."
+        }
+
+        return "Nothing is blocked right now. If no text appears, check recent suppressed reasons below."
+    }
+
+    private func recentNoSuggestionReasons(_ buckets: [String: Int]) -> String {
+        let topReasons = buckets
+            .sorted { lhs, rhs in
+                if lhs.value == rhs.value {
+                    return lhs.key < rhs.key
+                }
+
+                return lhs.value > rhs.value
+            }
+            .prefix(5)
+
+        guard !topReasons.isEmpty else {
+            return "  recent: none recorded yet"
+        }
+
+        let lines = topReasons.map { reason, count in
+            "  recent: \(reason) (\(count)) - \(plainNoSuggestionReason(reason))"
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    private func plainNoSuggestionReason(_ reason: String) -> String {
+        switch reason {
+        case "profile-diagnostics-only":
+            return "this app is being observed only, not completed into yet"
+        case "runtime-not-ready":
+            return "the local model is missing, loading, or failed"
+        case "secure-field", "secureField":
+            return "the field looks private or password-like"
+        case "suppressed-field", "suppressedField":
+            return "Esc or a failed insertion calmed this field until focus changes"
+        case "sensitiveContent":
+            return "the nearby text looks like payment, token, password, or key material"
+        case "tooLittleContext":
+            return "there is not enough typed context yet"
+        case "middleOfLine":
+            return "the cursor is in the middle of existing text"
+        case "unfinishedWord":
+            return "the app is waiting for a clearer word or phrase boundary"
+        case "missing-inline-capabilities":
+            return "the app did not expose enough Accessibility data for inline placement"
+        case "detached-suggestion-disabled":
+            return "only a whole-field/window anchor was available, so the bubble stayed hidden"
+        case "empty-suggestion":
+            return "the model returned nothing useful"
+        case "repeated-miss":
+            return "the same bad suggestion was typed over too often"
+        case "no-fast-word-candidate":
+            return "word completion did not have a confident local candidate"
+        default:
+            return "see recent trace events for the exact context"
+        }
     }
 
     private func topMissesText(_ misses: [AutocompleteTraceMiss]) -> String {
