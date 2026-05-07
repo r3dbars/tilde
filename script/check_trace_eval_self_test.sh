@@ -3,7 +3,17 @@ set -euo pipefail
 
 TRACE_FILE="$(mktemp)"
 BAD_TRACE_FILE="$(mktemp)"
-trap 'rm -f "$TRACE_FILE" "$BAD_TRACE_FILE"' EXIT
+VISUAL_GOOD_SCREENSHOT="$(mktemp)"
+VISUAL_STREAM_SCREENSHOT="$(mktemp)"
+VISUAL_GEOMETRY_SCREENSHOT="$(mktemp)"
+VISUAL_EMPTY_SCREENSHOT="$(mktemp)"
+VISUAL_MISSING_SCREENSHOT="$(mktemp)"
+rm -f "$VISUAL_MISSING_SCREENSHOT"
+trap 'rm -f "$TRACE_FILE" "$BAD_TRACE_FILE" "$VISUAL_GOOD_SCREENSHOT" "$VISUAL_STREAM_SCREENSHOT" "$VISUAL_GEOMETRY_SCREENSHOT" "$VISUAL_EMPTY_SCREENSHOT" "$VISUAL_MISSING_SCREENSHOT"' EXIT
+
+printf 'fake screenshot\n' >"$VISUAL_GOOD_SCREENSHOT"
+printf 'fake screenshot\n' >"$VISUAL_STREAM_SCREENSHOT"
+printf 'fake screenshot\n' >"$VISUAL_GEOMETRY_SCREENSHOT"
 
 cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0}
@@ -267,10 +277,10 @@ if ! grep -F "missing-place: missing placementConfidenceBand" /tmp/autocomplete-
   exit 1
 fi
 
-cat >"$BAD_TRACE_FILE" <<'JSONL'
-{"type":"suggestionPresented","suggestionID":"visual-good","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":80,"screenshotPath":"/tmp/visual-good.png","metadata":{"anchorRect":"x=100,y=200,w=0,h=22","suggestionPanelRect":"x=100,y=200,w=120,h=22","screenshotCaptureRect":"x=90,y=180,w=180,h=60","placementConfidenceBand":"medium"}}
+cat >"$BAD_TRACE_FILE" <<JSONL
+{"type":"suggestionPresented","suggestionID":"visual-good","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":80,"screenshotPath":"$VISUAL_GOOD_SCREENSHOT","metadata":{"anchorRect":"x=100,y=200,w=0,h=22","suggestionPanelRect":"x=100,y=200,w=120,h=22","screenshotCaptureRect":"x=90,y=180,w=180,h=60","placementConfidenceBand":"medium"}}
 {"type":"suggestionPresented","suggestionID":"visual-stream","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","triggerReason":"model-stream","latencyMilliseconds":90,"metadata":{"anchorRect":"x=100,y=200,w=0,h=22","placementConfidenceBand":"medium"}}
-{"type":"suggestionPresented","suggestionID":"visual-stream","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":120,"screenshotPath":"/tmp/visual-stream.png","metadata":{"anchorRect":"x=100,y=200,w=0,h=22","suggestionPanelRect":"x=100,y=200,w=120,h=22","screenshotCaptureRect":"x=90,y=180,w=180,h=60","placementConfidenceBand":"medium"}}
+{"type":"suggestionPresented","suggestionID":"visual-stream","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":120,"screenshotPath":"$VISUAL_STREAM_SCREENSHOT","metadata":{"anchorRect":"x=100,y=200,w=0,h=22","suggestionPanelRect":"x=100,y=200,w=120,h=22","screenshotCaptureRect":"x=90,y=180,w=180,h=60","placementConfidenceBand":"medium"}}
 JSONL
 
 AUTOCOMPLETE_LAB_TRACE_PATH="$BAD_TRACE_FILE" \
@@ -283,8 +293,8 @@ if ! grep -F "Visual evidence complete: 2/2" /tmp/autocomplete-trace-eval-visual
   exit 1
 fi
 
-cat >"$BAD_TRACE_FILE" <<'JSONL'
-{"type":"suggestionPresented","suggestionID":"visual-missing","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":80,"screenshotPath":"/tmp/visual-missing.png","metadata":{"anchorRect":"x=100,y=200,w=0,h=22","placementConfidenceBand":"medium"}}
+cat >"$BAD_TRACE_FILE" <<JSONL
+{"type":"suggestionPresented","suggestionID":"visual-missing-geometry","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":80,"screenshotPath":"$VISUAL_GEOMETRY_SCREENSHOT","metadata":{"anchorRect":"x=100,y=200,w=0,h=22","placementConfidenceBand":"medium"}}
 JSONL
 
 if AUTOCOMPLETE_LAB_TRACE_PATH="$BAD_TRACE_FILE" \
@@ -301,9 +311,45 @@ if ! grep -F "visual evidence guardrail failed" /tmp/autocomplete-trace-eval-vis
   exit 1
 fi
 
-if ! grep -F "visual-missing: missing suggestionPanelRect, screenshotCaptureRect" /tmp/autocomplete-trace-eval-visual-evidence-fail.txt >/dev/null; then
+if ! grep -F "visual-missing-geometry: missing geometry: suggestionPanelRect, screenshotCaptureRect" /tmp/autocomplete-trace-eval-visual-evidence-fail.txt >/dev/null; then
   echo "trace eval self-test did not report missing visual geometry metadata" >&2
   cat /tmp/autocomplete-trace-eval-visual-evidence-fail.txt >&2
+  exit 1
+fi
+
+cat >"$BAD_TRACE_FILE" <<JSONL
+{"type":"suggestionPresented","suggestionID":"visual-missing-file","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":80,"screenshotPath":"$VISUAL_MISSING_SCREENSHOT","metadata":{"anchorRect":"x=100,y=200,w=0,h=22","suggestionPanelRect":"x=100,y=200,w=120,h=22","screenshotCaptureRect":"x=90,y=180,w=180,h=60","placementConfidenceBand":"medium"}}
+JSONL
+
+if AUTOCOMPLETE_LAB_TRACE_PATH="$BAD_TRACE_FILE" \
+   AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE=1 \
+   script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-visual-missing-file.txt 2>&1; then
+  echo "trace eval self-test expected missing screenshot file evidence to fail" >&2
+  cat /tmp/autocomplete-trace-eval-visual-missing-file.txt >&2
+  exit 1
+fi
+
+if ! grep -F "visual-missing-file: screenshotPath file missing: $VISUAL_MISSING_SCREENSHOT" /tmp/autocomplete-trace-eval-visual-missing-file.txt >/dev/null; then
+  echo "trace eval self-test did not report missing screenshotPath file" >&2
+  cat /tmp/autocomplete-trace-eval-visual-missing-file.txt >&2
+  exit 1
+fi
+
+cat >"$BAD_TRACE_FILE" <<JSONL
+{"type":"suggestionPresented","suggestionID":"visual-empty-file","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":80,"screenshotPath":"$VISUAL_EMPTY_SCREENSHOT","metadata":{"anchorRect":"x=100,y=200,w=0,h=22","suggestionPanelRect":"x=100,y=200,w=120,h=22","screenshotCaptureRect":"x=90,y=180,w=180,h=60","placementConfidenceBand":"medium"}}
+JSONL
+
+if AUTOCOMPLETE_LAB_TRACE_PATH="$BAD_TRACE_FILE" \
+   AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE=1 \
+   script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-visual-empty-file.txt 2>&1; then
+  echo "trace eval self-test expected empty screenshot file evidence to fail" >&2
+  cat /tmp/autocomplete-trace-eval-visual-empty-file.txt >&2
+  exit 1
+fi
+
+if ! grep -F "visual-empty-file: screenshotPath file empty: $VISUAL_EMPTY_SCREENSHOT" /tmp/autocomplete-trace-eval-visual-empty-file.txt >/dev/null; then
+  echo "trace eval self-test did not report empty screenshotPath file" >&2
+  cat /tmp/autocomplete-trace-eval-visual-empty-file.txt >&2
   exit 1
 fi
 

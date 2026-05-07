@@ -22,6 +22,7 @@ fi
 
 python3 - "$TRACE_PATH" "$START_LINE" "$END_LINE" "$REQUIRE_APP" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" "$REQUIRE_CONFIDENT_PLACEMENT" "$REQUIRE_VISUAL_EVIDENCE" "$MIN_USEFUL_RATE" "$MAX_REPEATED_UNACCEPTED" <<'PY'
 import json
+import os
 import sys
 from collections import Counter, defaultdict
 
@@ -279,19 +280,44 @@ def inline_clipping_summary(event):
         + f" panel={metadata.get('suggestionPanelRect')} clipping={metadata.get('clippingRect')}"
     )
 
-def missing_visual_evidence_parts(event):
+def screenshot_path_issue(event):
+    raw_path = event.get("screenshotPath")
+    if raw_path is None or str(raw_path).strip() == "":
+        return "missing screenshotPath"
+
+    screenshot_path = os.path.expanduser(os.path.expandvars(str(raw_path).strip()))
+    if not os.path.isfile(screenshot_path):
+        return f"screenshotPath file missing: {screenshot_path}"
+    try:
+        if os.path.getsize(screenshot_path) <= 0:
+            return f"screenshotPath file empty: {screenshot_path}"
+    except OSError as error:
+        return f"screenshotPath file unreadable: {screenshot_path} ({error})"
+
+    return None
+
+def visual_evidence_issues(event):
     metadata = event.get("metadata") or {}
-    missing_parts = []
+    issues = []
 
-    if not event.get("screenshotPath"):
-        missing_parts.append("screenshotPath")
+    screenshot_issue = screenshot_path_issue(event)
+    if screenshot_issue:
+        issues.append(screenshot_issue)
 
-    for key in ("anchorRect", "suggestionPanelRect", "screenshotCaptureRect", "placementConfidenceBand"):
+    missing_geometry = []
+    for key in ("anchorRect", "suggestionPanelRect", "screenshotCaptureRect"):
         value = metadata.get(key)
         if value is None or str(value).strip() in {"", "none"}:
-            missing_parts.append(key)
+            missing_geometry.append(key)
 
-    return missing_parts
+    if missing_geometry:
+        issues.append("missing geometry: " + ", ".join(missing_geometry))
+
+    value = metadata.get("placementConfidenceBand")
+    if value is None or str(value).strip() in {"", "none"}:
+        issues.append("missing placementConfidenceBand")
+
+    return issues
 
 for event in presented:
     metadata = metadata_for(event)
@@ -331,17 +357,17 @@ for event in presented:
 
 if require_visual_evidence:
     for suggestion_id, suggestion_events in sorted(presentations_by_id.items()):
-        missing_parts_by_event = [
-            missing_visual_evidence_parts(event)
+        issues_by_event = [
+            visual_evidence_issues(event)
             for event in suggestion_events
         ]
-        if any(not parts for parts in missing_parts_by_event):
+        if any(not issues for issues in issues_by_event):
             visual_evidence_count += 1
             continue
 
-        best_missing_parts = min(missing_parts_by_event, key=len)
+        best_issues = min(issues_by_event, key=len)
         visual_evidence_failures.append(
-            f"{suggestion_id}: missing " + ", ".join(best_missing_parts)
+            f"{suggestion_id}: " + "; ".join(best_issues)
         )
 
 for event in events:
