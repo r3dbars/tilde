@@ -348,6 +348,16 @@ EOF
 
 press_key_code() {
   local key_code="$1"
+  local modifier="${2:-}"
+
+  if [[ "$modifier" == "command" ]]; then
+    osascript <<APPLESCRIPT
+tell application "System Events"
+  key code $key_code using command down
+end tell
+APPLESCRIPT
+    return
+  fi
 
   osascript <<APPLESCRIPT
 tell application "System Events"
@@ -406,26 +416,50 @@ APPLESCRIPT
   focus_textedit_smoke_editor
 }
 
-wait_for_textedit_front_document_contains() {
-  local expected_text="$1"
-  local label="$2"
-  local timeout_seconds="${3:-8}"
+paste_text_preserving_clipboard() {
+  local text="$1"
+  AUTOCOMPLETE_LAB_TEXTEDIT_PASTE_TEXT="$text" osascript <<'APPLESCRIPT'
+set previousClipboard to the clipboard
+set the clipboard to (system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_PASTE_TEXT")
+delay 0.1
+tell application "System Events"
+  keystroke "v" using command down
+end tell
+delay 0.1
+set the clipboard to previousClipboard
+APPLESCRIPT
+}
+
+wait_for_textedit_document_path_contains() {
+  local document_path="$1"
+  local expected_text="$2"
+  local label="$3"
+  local timeout_seconds="${4:-8}"
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
     local contains_text
-    contains_text="$(osascript <<APPLESCRIPT
+    contains_text="$(
+      AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_PATH="$document_path" \
+      AUTOCOMPLETE_LAB_TEXTEDIT_EXPECTED_TEXT="$expected_text" \
+      osascript <<'APPLESCRIPT'
+set expectedPath to (system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_PATH")
+set expectedText to (system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_EXPECTED_TEXT")
 tell application "TextEdit"
-  if not (exists document 1) then
-    return "no"
-  end if
-  if ((text of document 1) as string) contains "$expected_text" then
-    return "yes"
-  end if
+  repeat with currentDocument in documents
+    try
+      if (path of currentDocument) is expectedPath then
+        if ((text of currentDocument) as string) contains expectedText then
+          return "yes"
+        end if
+        return "no"
+      end if
+    end try
+  end repeat
   return "no"
 end tell
 APPLESCRIPT
-)"
+    )"
     if [[ "$contains_text" == "yes" ]]; then
       return 0
     fi
@@ -893,17 +927,8 @@ APPLESCRIPT
     textedit-multiline)
       expected_text="Can we make this feel "
       typing_start_line="$(line_count "$LOG_PATH")"
-      osascript <<'APPLESCRIPT'
-tell application "TextEdit" to activate
-delay 0.4
-tell application "System Events"
-  keystroke "a" using command down
-  key code 51
-  keystroke "Autocomplete smoke"
-  key code 36
-  keystroke "Can we make this feel "
-end tell
-APPLESCRIPT
+      focus_textedit_document_path "$tmp_file"
+      paste_text_preserving_clipboard $'Autocomplete smoke\nCan we make this feel '
       ;;
     textedit-wrapped)
       expected_text="Can we make this feel "
@@ -917,37 +942,22 @@ tell application "TextEdit"
   set text of front document to "This is a disposable autocomplete smoke paragraph that should wrap before the caret. "
 end tell
 APPLESCRIPT
-      wait_for_textedit_front_document_contains "This is a disposable autocomplete smoke paragraph" "scripted TextEdit wrapped setup"
+      wait_for_textedit_document_path_contains "$tmp_file" "This is a disposable autocomplete smoke paragraph" "scripted TextEdit wrapped setup"
       sleep 1
       typing_start_line="$(line_count "$LOG_PATH")"
-      osascript <<'APPLESCRIPT'
-set previousClipboard to the clipboard
-set the clipboard to "Can we make this feel "
-delay 0.1
-tell application "System Events"
-  key code 124 using command down
-  keystroke "v" using command down
-end tell
-delay 0.1
-set the clipboard to previousClipboard
-APPLESCRIPT
+      focus_textedit_document_path "$tmp_file"
+      press_key_code 124 command
+      paste_text_preserving_clipboard "Can we make this feel "
       ;;
     *)
       expected_text="Can we make this feel "
       typing_start_line="$(line_count "$LOG_PATH")"
-      osascript <<'APPLESCRIPT'
-tell application "TextEdit" to activate
-delay 0.4
-tell application "System Events"
-  keystroke "a" using command down
-  key code 51
-  keystroke "Can we make this feel "
-end tell
-APPLESCRIPT
+      focus_textedit_document_path "$tmp_file"
+      paste_text_preserving_clipboard "Can we make this feel "
       ;;
   esac
 
-  wait_for_textedit_front_document_contains "$expected_text" "scripted TextEdit text"
+  wait_for_textedit_document_path_contains "$tmp_file" "$expected_text" "scripted TextEdit text"
   wait_for_log_pattern "$typing_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit stable suggestion"
   wait_for_screenshot_capture_if_enabled "$typing_start_line" "com.apple.TextEdit" "TextEdit"
   assert_frontmost_app "TextEdit" "TextEdit"
