@@ -11,13 +11,14 @@ MAX_POLL_SAMPLE_MS="${AUTOCOMPLETE_LAB_FOCUSED_TEXT_POLL_MAX_MS:-120}"
 MAX_POLL_SKIPPED="${AUTOCOMPLETE_LAB_FOCUSED_TEXT_POLL_MAX_SKIPPED:-0}"
 REQUIRE_SAMPLES="${AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES:-0}"
 REQUIRE_POLL_SAMPLES="${AUTOCOMPLETE_LAB_FOCUSED_TEXT_POLL_REQUIRE_SAMPLES:-0}"
+FAIL_ON_FOCUSED_POLL="${AUTOCOMPLETE_LAB_TYPING_PERF_FAIL_ON_FOCUSED_POLL:-0}"
 
 if [[ ! -f "$LOG_PATH" ]]; then
   echo "diagnostics log missing: $LOG_PATH" >&2
   exit 1
 fi
 
-python3 - "$LOG_PATH" "$START_LINE" "$LINE_LIMIT" "$MAX_SAMPLE_MICROS" "$MAX_P95_MICROS" "$MAX_POLL_P95_MS" "$MAX_POLL_SAMPLE_MS" "$MAX_POLL_SKIPPED" "$REQUIRE_SAMPLES" "$REQUIRE_POLL_SAMPLES" <<'PY'
+python3 - "$LOG_PATH" "$START_LINE" "$LINE_LIMIT" "$MAX_SAMPLE_MICROS" "$MAX_P95_MICROS" "$MAX_POLL_P95_MS" "$MAX_POLL_SAMPLE_MS" "$MAX_POLL_SKIPPED" "$REQUIRE_SAMPLES" "$REQUIRE_POLL_SAMPLES" "$FAIL_ON_FOCUSED_POLL" <<'PY'
 import sys
 
 path = sys.argv[1]
@@ -30,6 +31,7 @@ max_poll_sample_ms = int(sys.argv[7])
 max_poll_skipped = int(sys.argv[8])
 required_samples = int(sys.argv[9] or "0")
 required_poll_samples = int(sys.argv[10] or "0")
+fail_on_focused_poll = sys.argv[11].lower() in {"1", "true", "yes", "on"}
 
 
 def fields_from(parts):
@@ -283,6 +285,7 @@ print(
 )
 
 failures = []
+focused_poll_warnings = []
 
 failures.extend(malformed_events)
 
@@ -321,18 +324,18 @@ for item in slow_markers:
 
 for item in poll_summaries:
     if item["p95"] is not None and item["p95"] > max_poll_p95_ms:
-        failures.append(
+        focused_poll_warnings.append(
             f"{line_label(item)} focused text poll p95 {item['p95']}ms exceeds {max_poll_p95_ms}ms"
         )
     if item["max"] is not None and item["max"] > max_poll_sample_ms:
-        failures.append(
+        focused_poll_warnings.append(
             f"{line_label(item)} focused text poll max {item['max']}ms exceeds {max_poll_sample_ms}ms"
         )
 
 for item in poll_slow_markers:
     duration = item["duration"]
     duration_text = "unknown" if duration is None else f"{duration}ms"
-    failures.append(
+    focused_poll_warnings.append(
         f"{line_label(item)} slow focused text poll marker {duration_text}"
     )
 
@@ -348,10 +351,19 @@ if poll_skipped_evidence > max_poll_skipped:
         details.append(
             f"{line_label(item)} focused text poll skip summary reason={item['reason']} count={item['count']} duration={duration_text}"
         )
-    failures.append(
+    focused_poll_warnings.append(
         f"focused text poll skipped {poll_skipped_evidence} time(s) exceeds {max_poll_skipped}: "
         + "; ".join(details[:4])
     )
+
+if focused_poll_warnings:
+    print("Focused text poll warnings:")
+    for warning in focused_poll_warnings[:8]:
+        print(f"- {warning}")
+    if len(focused_poll_warnings) > 8:
+        print(f"- +{len(focused_poll_warnings) - 8} more")
+    if fail_on_focused_poll:
+        failures.extend(focused_poll_warnings)
 
 for item in disabled_events:
     failures.append(

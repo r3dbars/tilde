@@ -42,6 +42,10 @@ The live placement health layer runs before a suggestion is shown. It trusts a c
 
 The live suggestion quality layer is intentionally conservative. Streaming phrase partials do not show until they have enough visible words to be worth looking at, tiny repeated word completions are suppressed more aggressively, ignored suggestions are learned as misses, and any normal typing key invalidates the current visible suggestion before Tab/backtick can accept it. The app should feel calmer, even if that means showing fewer completions.
 
+Focused-text Accessibility reads are serialized off the main app path. Slow
+queue or read durations are logged as `focused-text-ax-read-slow`; normal fast
+polls stay quiet so diagnostics do not become typing overhead.
+
 For quick visual calibration, use the menu bar nudge actions while the target app is focused:
 
 - `Nudge Suggestion Up/Down/Left/Right`
@@ -86,6 +90,13 @@ Use the command-line checker for repeatable proof:
 ./script/check_trace_eval.sh
 ```
 
+Use the manual smoke status command when release or beta work should fail until
+both insertion proof and screenshot-backed placement proof are complete:
+
+```bash
+./script/manual_smoke_status.sh --strict
+```
+
 Fail a slice when any shown suggestion has missing or low placement confidence:
 
 ```bash
@@ -127,6 +138,12 @@ The typing guard fails on `keyboard-event-tap-latency-slow`,
 whose p95/max is above 8000us. Use
 `AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES=1` when the slice must prove real
 event-tap traffic.
+
+Focused-text AX polling is reported in the same command, but it is a
+suggestion-responsiveness warning by default because the live reader is now
+off-main. Use `AUTOCOMPLETE_LAB_TYPING_PERF_FAIL_ON_FOCUSED_POLL=1` when a
+strict app-adapter pass should fail on slow AX reads or skipped focused-text
+polls.
 
 For a clean app-specific slice:
 

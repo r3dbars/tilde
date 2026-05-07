@@ -8,8 +8,9 @@ you test, then validates the new diagnostics and matching JSONL trace coverage.
 Successful runs are recorded in `docs/product/manual-smoke-runs.md`.
 Run `script/manual_smoke_status.sh` to see insertion proof and separate
 screenshot-backed placement proof. Use `script/manual_smoke_status.sh --strict`
-when missing insertion proof should block release/beta work. The status command
-also lists the current scorecard rows that are still below 10/10.
+when missing insertion proof or missing screenshot proof should block
+release/beta work. The status command also lists the current scorecard rows
+that are still below 10/10.
 
 ## Setup
 

@@ -83,12 +83,17 @@ EOF
 
 write_passing_visual_trace() {
   local bundle_id="$1"
+  local screenshot_one="$TMP_DIR/autocomplete-lab-one.png"
+  local screenshot_two="$TMP_DIR/autocomplete-lab-two.png"
+
+  cp docs/product/visual-placement-screenshots/textedit-inline.png "$screenshot_one"
+  cp docs/product/visual-placement-screenshots/textedit-inline.png "$screenshot_two"
 
   cat >"$TRACE_PATH" <<EOF
-{"type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","latencyMilliseconds":0,"screenshotPath":"/tmp/autocomplete-lab-one.png","metadata":{"anchorRect":"{{10,10},{4,18}}","suggestionPanelRect":"{{14,10},{90,18}}","screenshotCaptureRect":"{{0,0},{200,120}}","placementConfidenceBand":"medium"}}
+{"type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","latencyMilliseconds":0,"screenshotPath":"$screenshot_one","metadata":{"anchorRect":"{{10,10},{4,18}}","suggestionPanelRect":"{{14,10},{90,18}}","screenshotCaptureRect":"{{0,0},{200,120}}","placementConfidenceBand":"medium"}}
 {"type":"suggestionAccepted","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","acceptedText":"make"}
 {"type":"insertionVerified","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","acceptedText":"make"}
-{"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","latencyMilliseconds":110,"screenshotPath":"/tmp/autocomplete-lab-two.png","metadata":{"anchorRect":"{{10,32},{4,18}}","suggestionPanelRect":"{{14,32},{120,18}}","screenshotCaptureRect":"{{0,0},{200,120}}","placementConfidenceBand":"medium"}}
+{"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","latencyMilliseconds":110,"screenshotPath":"$screenshot_two","metadata":{"anchorRect":"{{10,32},{4,18}}","suggestionPanelRect":"{{14,32},{120,18}}","screenshotCaptureRect":"{{0,0},{200,120}}","placementConfidenceBand":"medium"}}
 {"type":"suggestionAccepted","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","acceptedText":" this work"}
 {"type":"insertionVerified","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","acceptedText":" this work"}
 EOF
@@ -322,8 +327,33 @@ if grep -F -- "- Diagnostics: 10/10" "$STATUS_OUTPUT" >/dev/null; then
   exit 1
 fi
 
-AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
+  script/manual_smoke_status.sh --require-all >/dev/null 2>&1; then
+  echo "manual smoke self-test expected --require-all to fail while screenshot proof is pending" >&2
+  exit 1
+fi
+
+COMPLETE_SCORECARD_PATH="$TMP_DIR/deep-dive-scorecard-complete.md"
+cat >"$COMPLETE_SCORECARD_PATH" <<'EOF'
+# Deep Dive Scorecard
+
+## Area Ratings
+
+| Area | Rating | Why |
+| --- | ---: | --- |
+| Diagnostics | 10/10 | Clear enough. |
+
+## Visual Placement And Text Box Audit
+
+| App or surface | Grade | Evidence | What is good | What still needs work |
+| --- | ---: | --- | --- | --- |
+| TextEdit | 9.5/10 | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Inline proof exists. | More variants. |
+| Codex | 9/10 | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Prompt screenshot exists. | Same-slice accepts. |
+EOF
+
+AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  AUTOCOMPLETE_LAB_SCORECARD="$COMPLETE_SCORECARD_PATH" \
   script/manual_smoke_status.sh --require-all >/dev/null
 
 GENERIC_NOTES_REPORT="$TMP_DIR/generic-notes-manual-smoke-runs.md"
