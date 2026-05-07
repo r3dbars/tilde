@@ -122,10 +122,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var focusedTextAXHealthState = FocusedTextAXHealthState()
     private var focusedTextPollLatencyStats = FocusedTextPollLatencyStats()
     private var focusedTextPollSkipStats = FocusedTextPollSkipStats()
-    private var suggestionRequestGate = SuggestionRequestGate()
+    private var completionRequestLifecycle = CompletionRequestLifecycle()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
-    private var currentCompletionRequest: CompletionRequest?
-    private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
     private var recentWordMemory = ScopedRecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var lastStatusLine: String?
@@ -1692,9 +1690,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mode: requestMode,
             suggestionID: suggestionID
         )
-        currentCompletionRequest = request
-        streamingPresentationStates[suggestionID] = StreamingPresentationState()
-        let requestTicket = suggestionRequestGate.issue(request: request)
+        let requestTicket = completionRequestLifecycle.issue(request)
         let requestStartedAt = Date()
         let fieldIdentityDescription = fieldIdentity.traceDescription
         let updateSourceMetadata = suggestionDiagnostics.traceUpdateSourceMetadata(updateSource)
@@ -1809,10 +1805,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     onPartialSuggestion: { partialSuggestion in
                         Task { @MainActor in
                             let latencyMilliseconds = max(0, Int(Date().timeIntervalSince(requestStartedAt) * 1000))
-                            guard self.suggestionRequestGate.allows(
-                                requestTicket,
-                                currentRequest: self.currentCompletionRequest
-                            ), self.currentFieldIdentity == fieldIdentity else {
+                            guard self.completionRequestLifecycle.allows(requestTicket),
+                                  self.currentFieldIdentity == fieldIdentity else {
                                 return
                             }
 
@@ -1825,8 +1819,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 return
                             }
 
-                            var streamingState = self.streamingPresentationStates[suggestionID]
-                                ?? StreamingPresentationState()
+                            var streamingState = self.completionRequestLifecycle.streamingState(for: suggestionID)
                             guard self.suggestionPresentationGate.shouldPresentStreamingPartial(
                                 partialSuggestion,
                                 mode: request.mode,
@@ -1835,7 +1828,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             ) else {
                                 return
                             }
-                            self.streamingPresentationStates[suggestionID] = streamingState
+                            self.completionRequestLifecycle.setStreamingState(
+                                streamingState,
+                                for: suggestionID
+                            )
 
                             self.presentSuggestion(
                                 partialSuggestion,
@@ -1854,10 +1850,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 await MainActor.run {
                     let latencyMilliseconds = max(0, Int(Date().timeIntervalSince(requestStartedAt) * 1000))
-                    guard self.suggestionRequestGate.allows(
-                        requestTicket,
-                        currentRequest: self.currentCompletionRequest
-                    ), self.currentFieldIdentity == fieldIdentity else {
+                    guard self.completionRequestLifecycle.allows(requestTicket),
+                          self.currentFieldIdentity == fieldIdentity else {
                         return
                     }
 
@@ -1970,11 +1964,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         triggerReason: "model-result",
                         updateSource: updateSource
                     )
-                    self.streamingPresentationStates[suggestionID] = nil
+                    self.completionRequestLifecycle.clearStreamingState(for: suggestionID)
                 }
             } catch {
                 await MainActor.run {
-                    self.streamingPresentationStates[suggestionID] = nil
+                    self.completionRequestLifecycle.clearStreamingState(for: suggestionID)
                     self.hideSuggestion(reason: "engine-error")
                 }
             }
@@ -2607,7 +2601,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         visibleSuggestionState.dismiss()
-        streamingPresentationStates.removeAll(keepingCapacity: true)
+        completionRequestLifecycle.clearStreamingStates()
         visibleSuggestionPanel.hide()
         updateKeyboardEventTapSnapshot()
         scheduleKeyboardEventTapStopIfIdle()
@@ -2729,9 +2723,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func invalidatePendingSuggestionRequest() {
         debounceTask?.cancel()
         debounceTask = nil
-        currentCompletionRequest = nil
-        streamingPresentationStates.removeAll(keepingCapacity: true)
-        suggestionRequestGate.invalidate()
+        completionRequestLifecycle.invalidate()
     }
 
     @objc
