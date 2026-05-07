@@ -940,8 +940,6 @@ APPLESCRIPT
 run_chrome_fixture() {
   local fixture="$1"
   local start_line trace_start_line tmp_dir html_file
-  start_line="$(line_count "$LOG_PATH")"
-  trace_start_line="$(line_count "$TRACE_PATH")"
   tmp_dir="$(make_tmp_dir)"
   html_file="$tmp_dir/autocomplete-lab-chrome-$fixture-smoke.html"
 
@@ -968,6 +966,16 @@ end tell
 APPLESCRIPT
 
   wait_for_frontmost_app "Google Chrome" 5
+
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  keystroke "a" using command down
+  key code 51
+end tell
+APPLESCRIPT
+
+  start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
 
   osascript <<'APPLESCRIPT'
 tell application "System Events"
