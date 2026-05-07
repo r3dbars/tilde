@@ -34,6 +34,22 @@ running_app_services() {
     awk -v needle="application.$BUNDLE_ID." 'index($0, needle) { print $NF }'
 }
 
+stale_app_bundles() {
+  local search_root="$HOME/.codex/worktrees"
+  [[ -d "$search_root" ]] || return 0
+  find "$search_root" -path "*/dist/$APP_NAME.app" -type d -prune 2>/dev/null || true
+}
+
+unregister_stale_app_bundles() {
+  local bundle
+  [[ -x "$LSREGISTER" ]] || return 0
+
+  while IFS= read -r bundle; do
+    [[ -z "$bundle" || "$bundle" == "$APP_BUNDLE" ]] && continue
+    "$LSREGISTER" -u "$bundle" >/dev/null 2>&1 || true
+  done < <(stale_app_bundles)
+}
+
 stop_running_apps() {
   local pid
   local service
@@ -101,6 +117,7 @@ print_running_apps() {
   done < <(running_app_pids)
 }
 
+unregister_stale_app_bundles
 stop_running_apps
 
 find_signing_identity() {
@@ -251,6 +268,7 @@ fi
 
 open_app() {
   stop_running_apps
+  unregister_stale_app_bundles
 
   if [[ "${AUTOCOMPLETE_LAB_TRACE:-}" =~ ^(0|false|no|off)$ ]]; then
     launchctl setenv AUTOCOMPLETE_LAB_TRACE "$AUTOCOMPLETE_LAB_TRACE"
@@ -301,7 +319,7 @@ open_app() {
     if [[ -x "$LSREGISTER" ]]; then
       "$LSREGISTER" -f "$APP_BUNDLE" >/dev/null 2>&1 || true
     fi
-    /usr/bin/open -n -a "$APP_BUNDLE"
+    /usr/bin/open -n -F -a "$APP_BUNDLE"
   fi
 }
 
