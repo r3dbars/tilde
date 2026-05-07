@@ -125,7 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var completionRequestLifecycle = CompletionRequestLifecycle()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
     private var recentWordMemory = ScopedRecentWordMemory()
-    private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
+    private var visibleSuggestionKeyboardHandler = VisibleSuggestionKeyboardHandler()
     private var lastStatusLine: String?
     private var lastSuggestionDecision = "Starting"
     private var lastSyntheticCaretDiagnosticSignature: String?
@@ -1423,60 +1423,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isAutorepeat: Bool = false,
         didObservePassthroughKeyDown: Bool = false
     ) -> Bool {
-        if didObservePassthroughKeyDown {
-            visibleSuggestionState.markInvalidatedByUserKeyDown()
-        }
-
-        guard visibleSuggestionState.hasVisibleSuggestion else {
-            suppressKeyUntil[key] = nil
-            return false
-        }
-
-        guard focusedFieldMatchesCurrentSuggestion() else {
-            setSuggestionDecision("Blocked: focus changed")
-            hideSuggestion(reason: "focus-changed")
-            recordKeyboardAction(
-                key: key,
-                action: .passThrough,
-                handled: false,
-                reason: "focus-changed"
-            )
-            return false
-        }
-
-        if visibleSuggestionState.isInvalidatedByUserKeyDown {
-            setSuggestionDecision("Blocked: stale suggestion passed through")
-            hideSuggestion(reason: "stale-after-keydown")
-            recordKeyboardAction(
-                key: key,
-                action: .passThrough,
-                handled: false,
-                reason: "stale-after-keydown"
-            )
-            return false
-        }
-
-        if shouldSuppressKey(key, isAutorepeat: isAutorepeat) {
-            recordKeyboardAction(key: key, action: .passThrough, handled: true, reason: "suppressed-autorepeat")
-            return true
-        }
-
-        let action = KeyboardActionRouter(shortcutConfiguration: keyboardShortcutConfiguration).action(
+        let hasVisibleSuggestion = visibleSuggestionState.hasVisibleSuggestion
+        let focusedFieldMatchesSuggestion = hasVisibleSuggestion
+            ? focusedFieldMatchesCurrentSuggestion()
+            : true
+        let plan = visibleSuggestionKeyboardHandler.plan(
             for: key,
-            hasVisibleSuggestion: visibleSuggestionState.hasVisibleSuggestion
+            isAutorepeat: isAutorepeat,
+            didObservePassthroughKeyDown: didObservePassthroughKeyDown,
+            state: &visibleSuggestionState,
+            context: VisibleSuggestionKeyboardContext(
+                focusedFieldMatchesCurrentSuggestion: focusedFieldMatchesSuggestion,
+                supportsOneWordAcceptance: currentProfile?.supportsOneWordAcceptance == true,
+                supportsFullAcceptance: currentProfile?.supportsFullAcceptance == true,
+                shortcutConfiguration: keyboardShortcutConfiguration
+            )
         )
 
-        switch action {
-        case .acceptNextWord:
-            guard currentProfile?.supportsOneWordAcceptance == true else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-one-word")
-                return false
-            }
+        switch plan {
+        case .noVisibleSuggestion:
+            return false
 
+        case let .hideAndPassThrough(action, decision, reason):
+            setSuggestionDecision(decision)
+            hideSuggestion(reason: reason)
+            recordKeyboardAction(
+                key: key,
+                action: action,
+                handled: false,
+                reason: reason
+            )
+            return false
+
+        case .suppressAutorepeat:
+            recordKeyboardAction(key: key, action: .passThrough, handled: true, reason: "suppressed-autorepeat")
+            return true
+
+        case let .acceptNextWord(acceptedText):
             let verificationBaseline = insertionVerificationBaseline()
-            guard let acceptedText = visibleSuggestionState.nextWordAcceptance(),
+            guard let acceptedText,
                   insertAcceptedText(acceptedText) else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
+                recordKeyboardAction(key: key, action: .acceptNextWord, handled: false, reason: "insert-failed")
                 return false
             }
 
@@ -1488,7 +1475,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 mode: visibleSuggestionState.requestMode,
                 scope: visibleSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
             )
-            recordRawAcceptance(action: action, acceptedText: acceptedText)
+            recordRawAcceptance(action: .acceptNextWord, acceptedText: acceptedText)
             setSuggestionDecision("Accepted: next word")
             if visibleSuggestionState.hasVisibleSuggestion {
                 refreshVisibleSuggestion()
@@ -1496,20 +1483,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 hideSuggestion(reason: "accepted-next-word-final")
             }
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
-            suppressKey(key)
-            recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
+            visibleSuggestionKeyboardHandler.suppressKey(key)
+            recordKeyboardAction(key: key, action: .acceptNextWord, handled: true, reason: "accepted")
             return true
 
-        case .acceptAllVisible:
-            guard currentProfile?.supportsFullAcceptance == true else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-full")
-                return false
-            }
-
+        case let .acceptAllVisible(acceptedText):
             let verificationBaseline = insertionVerificationBaseline()
-            guard let acceptedText = visibleSuggestionState.allVisibleAcceptance(),
+            guard let acceptedText,
                   insertAcceptedText(acceptedText) else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
+                recordKeyboardAction(key: key, action: .acceptAllVisible, handled: false, reason: "insert-failed")
                 return false
             }
 
@@ -1520,24 +1502,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 mode: visibleSuggestionState.requestMode,
                 scope: visibleSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
             )
-            recordRawAcceptance(action: action, acceptedText: acceptedText)
+            recordRawAcceptance(action: .acceptAllVisible, acceptedText: acceptedText)
             setSuggestionDecision("Accepted: full suggestion")
             hideSuggestion(reason: "accepted-all")
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
-            suppressKey(key)
-            recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
+            visibleSuggestionKeyboardHandler.suppressKey(key)
+            recordKeyboardAction(key: key, action: .acceptAllVisible, handled: true, reason: "accepted")
             return true
 
         case .dismiss:
             suppressCurrentField(reason: "escape")
             hideSuggestion(reason: "escape")
-            suppressKey(key)
-            recordKeyboardAction(key: key, action: action, handled: true, reason: "dismissed")
+            visibleSuggestionKeyboardHandler.suppressKey(key)
+            recordKeyboardAction(key: key, action: .dismiss, handled: true, reason: "dismissed")
             return true
 
-        case .passThrough:
-            if key != .other {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "pass-through")
+        case let .passThrough(action, reason, shouldRecord):
+            if shouldRecord {
+                recordKeyboardAction(key: key, action: action, handled: false, reason: reason)
             }
             return false
         }
@@ -1585,28 +1567,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "reason": reason
             ]
         )
-    }
-
-    private func shouldSuppressKey(_ key: AutocompleteKey, isAutorepeat: Bool) -> Bool {
-        guard isAutorepeat else {
-            suppressKeyUntil[key] = nil
-            return false
-        }
-
-        guard let until = suppressKeyUntil[key] else {
-            return false
-        }
-
-        if until > Date() {
-            return true
-        }
-
-        suppressKeyUntil[key] = nil
-        return false
-    }
-
-    private func suppressKey(_ key: AutocompleteKey) {
-        suppressKeyUntil[key] = Date().addingTimeInterval(0.25)
     }
 
     private func insertionVerificationBaseline() -> InsertionVerificationBaseline? {
