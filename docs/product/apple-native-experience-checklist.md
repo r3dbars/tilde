@@ -63,7 +63,7 @@ unsure. Wrong-place text is worse than no suggestion.
 | Failure restraint | 8 | 86 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, stale geometry suppresses display, event-tap disablement fails closed, prompt full accept requires proof, and unsupported apps now explain their stance. Low-confidence inline mode still needs stricter real-app gating. |
 | User control | 6 | 88 | 100 | Settings now exposes pause, app blocking, support status, privacy diagnostics, temporary raw/screenshot capture, local log deletion, shortcut state, and why the last suggestion was hidden. Per-app modes remain open. |
 | Onboarding and setup | 4 | 73 | 100 | Settings is clearer, but first-run permission flow and model install/repair are still not one calm native flow. |
-| Evidence and QA loop | 4 | 96 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
+| Evidence and QA loop | 4 | 97 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
 
 Weighted score: 82/100.
 
@@ -381,7 +381,7 @@ Native target: setup feels like a normal Mac utility, not a developer tool.
 
 ## Category 11: Evidence And QA Loop
 
-Current score: 96/100.
+Current score: 97/100.
 
 Native target: every claim has proof.
 
@@ -396,6 +396,8 @@ Native target: every claim has proof.
 - [x] Trace eval now verifies required screenshot files exist and are non-empty.
 - [x] App-target settings state tests exist.
 - [x] App proof matrix separates product confidence from proof confidence.
+- [x] All requested score targets are executable with `script/check_score_targets.sh`.
+- [x] The requested 10-pass score loop exists as `script/scorecard_goal_loop.sh --iterations 10`.
 - [x] Beta readiness fails when proof rows are missing.
 - [ ] All pending screenshot rows need real proof.
 - [x] Performance proof defaults to a fresh bounded log slice.

@@ -12,6 +12,19 @@ Source docs: `manual-smoke-runs.md`,
 
 Grades are evidence grades, not product grades.
 
+## Executable Target Gates
+
+The target state is now machine-checked:
+
+```bash
+./script/check_score_targets.sh
+./script/scorecard_goal_loop.sh --iterations 10
+```
+
+Current result: the target gate still fails, and that is correct. Every non-A
+row below must stay non-A until the required screenshot-backed and accept-proof
+evidence exists in the repo.
+
 | Surface | Grade | Screenshot proof | Accept proof | Current read | Evidence gap |
 | --- | --- | --- | --- | --- | --- |
 | TextEdit | A | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Fresh strict visual smoke at 2026-05-07T02:28:19Z with 2 verified accepts | Strongest native-app proof. Ghost text is readable, on the same line, and Tab/full accept verifies against the configured shortcut. | More dark/light document variants. |

@@ -60,3 +60,13 @@ ProseMirror-like fixtures copy the DOM shape and focus behavior those editors
 usually expose, but they do not load the real upstream libraries. The chat-like
 fixture is not a real Codex or Claude proof; it is a local no-submit guardrail
 that must pass before trusting prompt app smoke results.
+
+Run the score target loop when working toward the product scorecards:
+
+```bash
+./script/check_score_targets.sh
+./script/scorecard_goal_loop.sh --iterations 10
+```
+
+The loop should keep failing until the deep dive scorecard is all 10/10, the
+Apple-native checklist is all 100/100, and the app proof matrix is all A.
