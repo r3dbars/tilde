@@ -577,7 +577,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var runtimeTargetSummary: String {
-        "\(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(completionLengthConfiguration.displaySummary)"
+        let manifest = modelRuntimeBundle.bootstrapPlan.preferredAsset
+        let sourceSummary = manifest.source.map { " • source: \($0.displaySummary)" } ?? ""
+        return "\(manifest.model.rawValue) • \(completionLengthConfiguration.displaySummary)\(sourceSummary)"
     }
 
     private var shouldShowSettingsForCurrentReadiness: Bool {

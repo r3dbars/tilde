@@ -205,6 +205,7 @@ struct RuntimePolicyTests {
         #expect(manifest.source?.repoID == "mlx-community/Qwen3.5-4B-MLX-4bit")
         #expect(manifest.source?.allowPatterns.contains("*.safetensors") == true)
         #expect(manifest.source?.estimatedBytes == 3_030_000_000)
+        #expect(manifest.source?.displaySummary == "mlx-community/Qwen3.5-4B-MLX-4bit • about 2.8 GiB")
         #expect(manifest.requiredFileNames.contains("config.json"))
         #expect(manifest.requiredModelFileExtension == "safetensors")
         #expect(!manifest.requiresVisionLanguageFactory)

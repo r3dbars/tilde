@@ -307,6 +307,31 @@ public struct LocalModelAssetSource: Equatable, Sendable {
         estimatedBytes: 3_030_000_000,
         licenseURL: "https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit"
     )
+
+    public var displaySummary: String {
+        guard let estimatedBytes else {
+            return repoID
+        }
+
+        return "\(repoID) • about \(Self.formatBytes(estimatedBytes))"
+    }
+
+    private static func formatBytes(_ bytes: Int64) -> String {
+        let units = ["B", "KiB", "MiB", "GiB", "TiB"]
+        var size = Double(max(bytes, 0))
+        for unit in units {
+            if size < 1024 || unit == units.last {
+                if unit == "B" {
+                    return "\(Int(size)) \(unit)"
+                }
+
+                return String(format: "%.1f %@", size, unit)
+            }
+            size /= 1024
+        }
+
+        return "\(bytes) B"
+    }
 }
 
 public struct RuntimeBootstrapPlan: Equatable, Sendable {
