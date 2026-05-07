@@ -7,8 +7,8 @@ struct CommandContextPanelStateTests {
     @Test("Unsupported apps require selected-text copy fallback")
     func unsupportedAppsRequireSelectedTextCopyFallback() {
         let state = CommandContextPanelState(
-            appDisplayName: "Atlas",
-            bundleIdentifier: "com.openai.atlas",
+            appDisplayName: "Unknown",
+            bundleIdentifier: "com.example.UnknownEditor",
             supportStatus: .unsupported,
             isAppEnabled: false,
             runtimeReport: readyRuntime,
@@ -40,8 +40,8 @@ struct CommandContextPanelStateTests {
     @Test("Unsupported apps can suggest from selected text")
     func unsupportedAppsCanSuggestFromSelectedText() {
         let state = CommandContextPanelState(
-            appDisplayName: "Atlas",
-            bundleIdentifier: "com.openai.atlas",
+            appDisplayName: "Unknown",
+            bundleIdentifier: "com.example.UnknownEditor",
             supportStatus: .unsupported,
             isAppEnabled: false,
             runtimeReport: readyRuntime,
@@ -54,6 +54,28 @@ struct CommandContextPanelStateTests {
         #expect(state.canRequestSuggestion)
         #expect(state.contextText.contains("selected text, 18 chars"))
         #expect(state.statusText == "Ready: press Suggest. Copy writes to clipboard only.")
+    }
+
+    @Test("Sensitive diagnostics-only apps cannot request context suggestions")
+    func sensitiveDiagnosticsOnlyAppsCannotRequestContextSuggestions() {
+        let state = CommandContextPanelState(
+            appDisplayName: "Atlas",
+            bundleIdentifier: "com.openai.atlas",
+            supportStatus: CompatibilityProfileStore.mvp.supportStatus(for: "com.openai.atlas"),
+            isAppEnabled: false,
+            runtimeReport: readyRuntime,
+            context: nil,
+            suggestionText: nil,
+            isLoading: false,
+            statusMessage: ""
+        )
+
+        #expect(state.appText == "App: Atlas | Diagnostics-only: ChatGPT Atlas")
+        #expect(state.pathText == "Path: off for sensitive app")
+        #expect(!state.canRequestSuggestion)
+        #expect(!state.canCopySuggestion)
+        #expect(state.requestUnavailableReason == "Sensitive apps stay off here.")
+        #expect(state.statusText == "Not ready: Sensitive apps stay off here.")
     }
 
     @Test("Denylisted apps cannot request context suggestions")
