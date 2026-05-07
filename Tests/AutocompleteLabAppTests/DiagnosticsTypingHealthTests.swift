@@ -4,6 +4,47 @@ import AutocompleteLabCore
 
 @Suite("Diagnostics typing health")
 struct DiagnosticsTypingHealthTests {
+    @Test("Diagnostics inspector summary leads with current utility state")
+    func diagnosticsInspectorSummaryLeadsWithCurrentUtilityState() {
+        let state = DiagnosticsInspectorState(
+            appTrusted: true,
+            appEnabled: false,
+            compatibilityStatus: CompatibilityProfileStore.mvp.supportStatus(for: "com.apple.Notes"),
+            lastSuggestionDecision: "Blocked: field quieted",
+            runtimeReport: RuntimeReadinessReport(
+                stage: .ready,
+                summary: "ready",
+                action: .none,
+                isReady: true
+            ),
+            runtimeTargetSummary: "Qwen3.5 4B MLX",
+            tracePath: "/tmp/traces.jsonl",
+            tracingPaused: false,
+            screenshotTracingEnabled: true,
+            compatibilityLearningPath: "/tmp/learning.json",
+            compatibilityLearningProfile: nil
+        )
+
+        #expect(
+            state.summaryText
+                == """
+                Current state:
+                  Accessibility: allowed
+                  Suggestions: Blocked: field quieted
+                  App: Yellow: Notes, blocked
+                  Mode: mirror
+                  Local model: ready
+                  Runtime target: Qwen3.5 4B MLX
+                  Next action: None
+                  Traces: recording
+                  Screenshots: on
+                  Trace file: /tmp/traces.jsonl
+                  Learning file: /tmp/learning.json
+                  Learned adapter: none
+                """
+        )
+    }
+
     @Test("Separates healthy key capture from AX polling warnings")
     func separatesKeyCaptureFromAXPollingWarnings() {
         let health = DiagnosticsTypingHealth(events: [

@@ -271,7 +271,7 @@ Native target: nothing looks like a web widget floating on top of macOS.
 - [x] Inline text is subdued.
 - [x] Settings now uses clearer native sections, checkboxes, button rows, and calmer app/privacy labels.
 - [x] Menu bar copy should be short and calm.
-- [ ] Diagnostics should look like a utility inspector, not a debug dump.
+- [x] Diagnostics should look like a utility inspector, not a debug dump.
 - [x] Onboarding should use system language for Accessibility and Screen Recording.
 - [ ] Dark Mode and increased contrast need visual QA.
 - [ ] Reduce custom visual language unless system controls cannot do the job.
