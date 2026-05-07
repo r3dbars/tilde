@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
     private let focusChangePolicy = SuggestionFocusChangePolicy()
     private let geometryChangePolicy = SuggestionGeometryChangePolicy()
+    private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private let suggestionPanel = SuggestionPanelController()
@@ -2661,6 +2662,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> Bool {
         guard let profile = currentProfile else {
             return accessibilityClient.insertText(acceptedText)
+        }
+
+        let safetyDecision = acceptedTextSafetyPolicy.decision(
+            acceptedText: acceptedText,
+            profile: profile
+        )
+        guard safetyDecision.canInsert else {
+            let reason = safetyDecision.blockReason ?? "accepted-text-blocked"
+            setSuggestionDecision("Blocked: \(reason)")
+            DiagnosticsLog.shared.record(
+                "insert-blocked",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "reason": reason,
+                    "acceptedChars": String(acceptedText.count),
+                    "profileInsertionMode": profile.insertionMode.rawValue
+                ]
+            )
+            RawAutocompleteTraceLog.shared.record(
+                type: .insertionFailed,
+                suggestionID: currentSuggestionID ?? "",
+                appBundleIdentifier: profile.bundleIdentifier,
+                fieldIdentity: currentSuggestionFieldIdentity?.traceDescription
+                    ?? currentFieldIdentity?.traceDescription
+                    ?? "",
+                requestMode: currentSuggestionRequestMode?.rawValue ?? "",
+                acceptedText: acceptedText,
+                reason: reason,
+                metadata: [
+                    "profileInsertionMode": profile.insertionMode.rawValue,
+                    "safetyGate": "acceptedText"
+                ]
+            )
+            hideSuggestion(reason: "insert-\(reason)")
+            return false
         }
 
         keyboardEventTap?.suppressPassthroughObservation(

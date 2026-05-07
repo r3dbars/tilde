@@ -220,6 +220,7 @@ autocomplete suggestion.
 - [x] Chat-like fixture exists to prove accept does not submit a form.
 - [x] Keyboard capture starts after a usable panel is shown, not before.
 - [x] Keyboard event tap disablement fails closed and hides the suggestion.
+- [x] Accepted text with line breaks, literal tabs, or control characters is blocked before insertion.
 - [x] AX value replacement confirms the edited value without fixed sleeps, then later async verification catches delayed editor drift.
 - [x] Chat-like fixture has a live run with screenshot proof.
 - [ ] Codex/Claude prompt proof must verify one-word accept without submit.
