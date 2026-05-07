@@ -10,10 +10,10 @@ usage() {
   cat <<'EOF'
 Usage: script/scorecard_goal_loop.sh [--iterations N]
 
-Runs the scorecard target gate, strict manual smoke status, and strict visual
-evidence gate repeatedly. This is intentionally a proof loop, not a score
-inflator: it exits 1 until every score and required app proof is actually
-complete.
+Runs the scorecard target gate, strict manual smoke status, strict visual
+evidence gate, and strict proof manifest gate repeatedly. This is intentionally
+a proof loop, not a score inflator: it exits 1 until every score and required
+app proof is actually complete.
 EOF
 }
 
@@ -64,6 +64,10 @@ run_iteration() {
     failed=1
   fi
 
+  if ! ./script/check_proof_manifest.sh --require-all >"$prefix-proof-manifest.txt" 2>&1; then
+    failed=1
+  fi
+
   return "$failed"
 }
 
@@ -82,6 +86,10 @@ print_final_output() {
   echo
   echo "Final strict visual evidence output:"
   sed -n '1,220p' "$prefix-visual-evidence.txt"
+
+  echo
+  echo "Final proof manifest output:"
+  sed -n '1,220p' "$prefix-proof-manifest.txt"
 }
 
 for ((iteration = 1; iteration <= ITERATIONS; iteration++)); do

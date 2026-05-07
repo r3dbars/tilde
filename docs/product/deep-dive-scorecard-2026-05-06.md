@@ -133,6 +133,12 @@ evidence-backed score should stay lower until those rows are closed.
   70 target misses across this scorecard, the Apple-native checklist, and the
   app proof matrix. This makes the requested "all 10s / all 100s / all As"
   target executable instead of subjective.
+- `./script/check_proof_manifest.sh`: verifies the machine-readable
+  `docs/product/proof-manifest.json` against current proof-fingerprint
+  constants, tracked screenshots, scorecard links, and matching manual smoke
+  rows. It passes in report mode and fails with `--require-all` because only
+  TextEdit is currently complete; the other target surfaces are still partial
+  or pending.
 - `./script/typing_performance_endurance_soak.sh --minutes 1 --strict-ax --require-event-tap-samples 50 --require-ax-samples 5`:
   passed with exact 1,200-character TextEdit verification, event-tap p95 max
   36us, p99 max 95us, max 95us, zero slow tap markers, zero tap-disable events,
@@ -339,7 +345,7 @@ evidence-backed score should stay lower until those rows are closed.
 - Score targets are now checked by `script/check_score_targets.sh`, self-tested
   by `script/check_score_targets_self_test.sh`, and looped by
   `script/scorecard_goal_loop.sh --iterations 10` together with strict manual
-  smoke status and strict visual evidence.
+  smoke status, strict visual evidence, and the proof manifest gate.
 - `script/typing_performance_endurance_soak.sh` now wraps the safe TextEdit
   soak with a 10-minute default, typing-like 5-character chunks, exact named
   TextEdit document verification, temporary TextEdit enablement, temporary
