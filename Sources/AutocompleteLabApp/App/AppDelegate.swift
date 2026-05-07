@@ -2861,6 +2861,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return 0.85
             }
             return 0.65
+        case .sentenceContinuation:
+            switch visibleWordCount {
+            case 3...5:
+                return 0.64
+            case 2, 6:
+                return 0.52
+            default:
+                return 0.38
+            }
         case .phraseContinuation:
             switch visibleWordCount {
             case 2...4:
@@ -2923,6 +2932,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch mode {
         case .wordCompletion:
             return 0.20
+        case .sentenceContinuation:
+            return 0.10
         case .phraseContinuation:
             return 0.15
         }

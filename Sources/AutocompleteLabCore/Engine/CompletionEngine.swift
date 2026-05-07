@@ -2,7 +2,17 @@ import Foundation
 
 public enum CompletionRequestMode: String, Equatable, Sendable {
     case phraseContinuation
+    case sentenceContinuation
     case wordCompletion
+
+    public var isContinuation: Bool {
+        switch self {
+        case .phraseContinuation, .sentenceContinuation:
+            true
+        case .wordCompletion:
+            false
+        }
+    }
 }
 
 public struct CompletionRequest: Equatable, Sendable {

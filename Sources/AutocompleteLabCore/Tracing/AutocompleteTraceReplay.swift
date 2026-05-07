@@ -221,8 +221,10 @@ public struct AutocompleteTraceReplay: Sendable {
         switch event.requestMode {
         case CompletionRequestMode.wordCompletion.rawValue:
             return (90...140).contains(delay)
+        case CompletionRequestMode.sentenceContinuation.rawValue:
+            return (280...450).contains(delay)
         case CompletionRequestMode.phraseContinuation.rawValue:
-            return (140...450).contains(delay)
+            return (140...240).contains(delay)
         default:
             return delay >= 90 && delay <= 450
         }
