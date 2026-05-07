@@ -193,7 +193,11 @@ public enum PlacementHealth {
                 renderMode: .inlineAdjacent,
                 anchorRect: validCaret,
                 anchorSource: caretIsSynthetic ? .syntheticCaret : .caret,
-                textLineRect: textLineRect.flatMap(validContainerRect),
+                textLineRect: validTextLineRect(
+                    textLineRect,
+                    caretRect: validCaret,
+                    clippingRect: clippingRect
+                ),
                 clippingRect: clippingRect,
                 reason: .healthy
             ))
@@ -337,6 +341,34 @@ public enum PlacementHealth {
               rect.width >= 1,
               rect.height >= 1 else {
             return nil
+        }
+
+        return rect
+    }
+
+    private static func validTextLineRect(
+        _ rect: CGRect?,
+        caretRect: CGRect,
+        clippingRect: CGRect?
+    ) -> CGRect? {
+        guard let rect,
+              rect.isPlacementFinite,
+              !rect.isNull,
+              rect.width >= 0,
+              rect.height >= 1,
+              rect.height <= 240 else {
+            return nil
+        }
+
+        let maxVerticalDistance = max(8, caretRect.height * 1.5)
+        guard abs(rect.midY - caretRect.midY) <= maxVerticalDistance else {
+            return nil
+        }
+
+        if let clippingRect {
+            guard clippingRect.insetBy(dx: -8, dy: -8).intersects(rect) else {
+                return nil
+            }
         }
 
         return rect

@@ -187,18 +187,27 @@ final class SuggestionPanelController {
 
     private func screen(containing accessibilityRect: CGRect) -> NSScreen? {
         let screenHeight = Self.accessibilityScreenHeight()
-        return NSScreen.screens.first { screen in
+        let candidates = NSScreen.screens.compactMap { screen -> (screen: NSScreen, area: CGFloat)? in
             let probeRect = AccessibilityCoordinateConverter.appKitProbeRect(
                 fromAccessibilityRect: accessibilityRect,
                 screenHeight: screenHeight
             )
+            let intersection = screen.frame.intersection(probeRect)
+            guard !intersection.isNull, intersection.width > 0, intersection.height > 0 else {
+                return nil
+            }
 
-            return screen.frame.intersects(probeRect)
+            return (screen, intersection.width * intersection.height)
         }
+
+        return candidates.max { $0.area < $1.area }?.screen
     }
 
     private static func accessibilityScreenHeight() -> CGFloat {
-        NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 0
+        NSScreen.screens.first { $0.frame.origin == .zero }?.frame.height
+            ?? NSScreen.screens.first?.frame.height
+            ?? NSScreen.main?.frame.height
+            ?? 0
     }
 
     private func textColor(matching _: NSColor?, renderMode: SuggestionRenderMode) -> NSColor {

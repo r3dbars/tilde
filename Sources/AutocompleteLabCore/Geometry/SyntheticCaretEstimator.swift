@@ -2,6 +2,8 @@ import CoreGraphics
 import Foundation
 
 public enum SyntheticCaretEstimator {
+    private static let maxMeasuredCharacters = 4_000
+
     public static func caretRect(
         textBeforeCursor: String,
         elementRect: CGRect,
@@ -24,7 +26,7 @@ public enum SyntheticCaretEstimator {
         let lineHeight = max(rawLineHeight, 20)
         let maxLineWidth = max(40, elementRect.width - (horizontalPadding * 2))
         let visualLines = wrappedVisualLines(
-            for: textBeforeCursor,
+            for: boundedTextBeforeCursor(textBeforeCursor),
             maxLineWidth: maxLineWidth,
             widthOfText: widthOfText
         )
@@ -79,6 +81,21 @@ public enum SyntheticCaretEstimator {
         }
 
         return lines.isEmpty ? [""] : lines
+    }
+
+    private static func boundedTextBeforeCursor(_ text: String) -> String {
+        guard text.count > maxMeasuredCharacters else {
+            return text
+        }
+
+        let paragraphStart = text.lastIndex(of: "\n").map { text.index(after: $0) } ?? text.startIndex
+        let currentParagraph = text[paragraphStart...]
+        guard currentParagraph.count > maxMeasuredCharacters else {
+            return String(currentParagraph)
+        }
+
+        let start = currentParagraph.index(currentParagraph.endIndex, offsetBy: -maxMeasuredCharacters)
+        return String(currentParagraph[start...])
     }
 
     public static func clampedCaretY(
