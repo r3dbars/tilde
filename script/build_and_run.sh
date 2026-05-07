@@ -22,7 +22,37 @@ MLX_METALLIB="$ROOT_DIR/.build/mlx-metal/default.metallib"
 
 cd "$ROOT_DIR"
 
-pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+kill_running_app_instances() {
+  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+  pkill -f "/${APP_NAME}.app/Contents/MacOS/${APP_NAME}" >/dev/null 2>&1 || true
+
+  for _ in {1..20}; do
+    if ! pgrep -f "/${APP_NAME}.app/Contents/MacOS/${APP_NAME}" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for existing $APP_NAME instances to exit." >&2
+  pgrep -fl "/${APP_NAME}.app/Contents/MacOS/${APP_NAME}" >&2 || true
+  exit 1
+}
+
+wait_for_current_app_instance() {
+  for _ in {1..20}; do
+    if pgrep -fl "$APP_BINARY" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "$APP_NAME did not launch from the current bundle:" >&2
+  echo "$APP_BINARY" >&2
+  pgrep -fl "/${APP_NAME}.app/Contents/MacOS/${APP_NAME}" >&2 || true
+  exit 1
+}
+
+kill_running_app_instances
 
 find_signing_identity() {
   if [[ -n "${SIGN_IDENTITY:-}" ]]; then
@@ -208,6 +238,7 @@ open_app() {
   fi
 
   /usr/bin/open -n "$APP_BUNDLE"
+  wait_for_current_app_instance
 }
 
 case "$MODE" in
