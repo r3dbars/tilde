@@ -58,7 +58,8 @@ Invite testers only when every applicable box is checked.
 
 - Manual proof is still pending for Notes title, Notes body, Notes checklist,
   Codex one-word no-submit, Claude Code one-word no-submit, and Claude desktop
-  one-word no-submit.
+  one-word no-submit. Run `script/manual_proof_queue.sh --print` for the
+  exact user-gated proof sequence.
 - Screenshot-backed proof is still pending for Obsidian, Notes title, Notes
   body, Notes checklist, Claude Code, and Claude desktop.
 - Codex has a screenshot, but still needs one strict same-slice proof that shows

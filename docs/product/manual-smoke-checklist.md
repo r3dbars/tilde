@@ -14,6 +14,15 @@ that are still below 10/10. In strict mode it also runs the screenshot evidence
 gate, so stale screenshot rows, unreferenced screenshot files, and below-target
 visual rows without a clear `Pending` label block the pass.
 
+For the full remaining manual beta proof sequence, run:
+
+```bash
+script/manual_proof_queue.sh --print
+```
+
+Use `script/manual_proof_queue.sh --run` only when you are ready to walk
+through each manual-gated recorder with disposable content.
+
 ## Setup
 
 - Launch `dist/AutocompleteLab.app`.
