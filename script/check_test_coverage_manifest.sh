@@ -48,6 +48,9 @@ require_pattern "Tests/AutocompleteLabCoreTests/ModelPolicyTests.swift" "app-own
 require_file "Tests/AutocompleteLabCoreTests/CompatibilityProfileTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/CompatibilityProfileTests.swift" "MVP target apps are explicitly profiled" "target app profile coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/CompatibilityProfileTests.swift" "Denylisted apps are never allowed" "denylist coverage"
+require_file "Tests/AutocompleteLabCoreTests/CompatibilitySupportEvaluatorTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/CompatibilitySupportEvaluatorTests.swift" "TextEdit can pass supported gates" "compatibility supported-state coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/CompatibilitySupportEvaluatorTests.swift" "Obsidian detached suppression is a caveat" "compatibility caveat coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/DiagnosticValueRedactorTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/DiagnosticValueRedactorTests.swift" "without raw text" "privacy-safe diagnostics coverage"

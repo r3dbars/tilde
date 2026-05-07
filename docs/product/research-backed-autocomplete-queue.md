@@ -120,12 +120,12 @@ The north star is simple: a build is better only when accepted text survives, wr
 
 - [ ] Replace "useful rate" as the main dashboard proxy with accepted-and-kept.
 - [ ] Add daily summary: active writing time, shown, accepts, accepted-and-kept, p50/p95 latency, severe failures, pauses, disables.
-- [ ] Add per-app table: shows, accept rate, kept rate, verification success, caret failure, annoyance score, support state.
+- [x] Add per-app table: shows, accept rate, kept rate, verification success, caret failure, annoyance score, support state.
 - [ ] Add top failure reasons: insertion failed, duplicate text, Tab conflict, search/form leakage, caret failed, flicker.
 - [ ] Add latency percentiles: first-visible p50/p90/p95 and total-generation p50/p90/p95.
 - [ ] Add acceptance funnel: requested, model returned, shown, accepted, kept at 10s, kept at 30s/blur.
 - [ ] Add annoyance funnel: shown, ignored, typed over, Esc dismiss, accepted then deleted, paused, disabled.
-- [ ] Add current compatibility state: supported, supported with caveats, experimental, blocked.
+- [x] Add current compatibility state: supported, supported with caveats, experimental, blocked.
 - [ ] Add recommended-next-fix rule engine.
 - [ ] Make duplicate/focus failures outrank model tuning.
 - [ ] Make caret/verification failures outrank prompt tuning.
@@ -133,21 +133,21 @@ The north star is simple: a build is better only when accepted text survives, wr
 
 ## P1 - Compatibility Gates
 
-- [ ] Add `CompatibilitySupportEvaluator`.
-- [ ] Gate TextEdit, Notes, Mail, Chrome textareas, Obsidian/CodeMirror, and Electron separately.
+- [x] Add `CompatibilitySupportEvaluator`.
+- [x] Gate TextEdit, Notes, Mail, Chrome textareas, Obsidian/CodeMirror, and Electron separately.
 - [ ] Track minimum sample size per app family.
-- [ ] Gate caret placement reliability.
-- [ ] Gate insertion verification success.
-- [ ] Gate duplicate text rate.
-- [ ] Gate Tab conflict rate.
-- [ ] Gate p95 first-visible latency.
-- [ ] Gate accepted-and-kept shown rate.
-- [ ] Gate annoyance score.
-- [ ] Mark any wrong insertion, duplicate text, focus steal, or major Tab conflict as blocked.
-- [ ] Make `check_trace_eval.sh` print supported / caveated / experimental / blocked.
-- [ ] Update `compatibility-matrix.md` from smoke-pass status to beta-readiness status.
-- [ ] Keep Mail diagnostics-only until compose insertion is proven safe.
-- [ ] Keep Atlas unsupported until focused AX element reliability is proven.
+- [x] Gate caret placement reliability.
+- [x] Gate insertion verification success.
+- [x] Gate duplicate text rate.
+- [x] Gate Tab conflict rate.
+- [x] Gate p95 first-visible latency.
+- [x] Gate accepted-and-kept shown rate.
+- [x] Gate annoyance score.
+- [x] Mark any wrong insertion, duplicate text, focus steal, or major Tab conflict as blocked.
+- [x] Make `check_trace_eval.sh` print supported / caveated / experimental / blocked.
+- [x] Update `compatibility-matrix.md` from smoke-pass status to beta-readiness status.
+- [x] Keep Mail diagnostics-only until compose insertion is proven safe.
+- [x] Keep Atlas unsupported until focused AX element reliability is proven.
 
 ## P1 - Experiments
 

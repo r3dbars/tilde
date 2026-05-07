@@ -1,16 +1,16 @@
 # Compatibility Matrix
 
-Current compatibility stance for the lab build.
+Current beta-readiness stance for the lab build.
 
 | App | Status | Render | Insert | Proof |
 | --- | --- | --- | --- | --- |
-| TextEdit | supported | inline, mirror fallback | AX selected text, value fallback | recorded manual smoke pass |
-| Notes | supported | inline, mirror fallback | key events, AX selected text fallback | recorded manual smoke pass |
-| Obsidian | supported only when caret bounds are available | mirror | AX then key events, key fallback | detached CodeMirror suggestions are suppressed because whole-editor anchors look wrong |
-| Chrome | supported for local text fields | mirror | AX value replacement, key fallback | recorded local textarea pass |
-| Codex | dogfood target | synthetic inline caret, no detached fallback | key events, AX fallback | pending manual smoke pass |
-| Mail | diagnostics only | disabled | disabled | blocked until safe compose adapter exists |
-| Atlas | unsupported | disabled | disabled | blocked until focused AX element is reliable |
+| TextEdit | supported only after support gates pass | inline, mirror fallback | AX selected text, value fallback | needs 20 shown, 3 kept, 98% insert success, p95 <= 750ms, zero caret failures |
+| Notes | caveated until rich-text insertion stays verified | inline, mirror fallback | key events, AX selected text fallback | needs verified key-event insertion and accepted-and-kept proof |
+| Obsidian | caveated only when detached suggestions are suppressed | mirror | AX then key events, key fallback | detached CodeMirror suggestions must be suppressed, never shown from a whole-editor anchor |
+| Chrome | caveated for local text fields | mirror | AX value replacement, key fallback | local textarea proof only until broader browser fields pass support gates |
+| Codex | experimental dogfood target | synthetic inline caret, no detached fallback | key events, AX fallback | needs enough dogfood traces before caveated/supported |
+| Mail | blocked, diagnostics only | disabled | disabled | keep blocked until a safe compose adapter exists |
+| Atlas | blocked, unsupported | disabled | disabled | keep blocked until focused AX element reliability is proven |
 
 Run:
 
@@ -18,6 +18,14 @@ Run:
 ./script/manual_smoke_status.sh --require-all
 ```
 
-TextEdit, Notes, Chrome, and Codex must have full accept proof. Obsidian may
-pass as limited proof when CodeMirror does not expose caret bounds and detached
-suggestions are suppressed instead of shown.
+Run trace gates with:
+
+```bash
+AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP="com.apple.TextEdit" \
+AUTOCOMPLETE_LAB_TRACE_REQUIRE_SUPPORT_STATE="caveated" \
+  ./script/check_trace_eval.sh
+```
+
+The support evaluator treats wrong insertion, duplicate insertion, focus steal,
+major Tab conflict, sensitive-field display, whole-anchor detached display, app
+disable, high caret failure, high p95 latency, or high annoyance as blocked.
