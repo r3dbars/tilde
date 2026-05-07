@@ -4,6 +4,8 @@ Use this before inviting private beta testers.
 
 ## Build Gate
 
+- [ ] `./script/beta_readiness.sh --check-only` reports only expected external
+  blockers before the full gate.
 - [ ] `./script/beta_readiness.sh` passes.
 - [ ] `dist/AutocompleteLab.zip` exists.
 - [ ] `dist/private-beta/checksums.txt` matches the archive.
@@ -50,3 +52,17 @@ Use this before inviting private beta testers.
 - [ ] Focus steal is zero.
 
 Invite testers only when every applicable box is checked.
+
+## Current Blockers - 2026-05-07
+
+- Manual proof is still pending for Notes title, Notes body, Notes checklist,
+  Codex one-word no-submit, Claude Code one-word no-submit, and Claude desktop
+  one-word no-submit.
+- Screenshot-backed proof is still pending for Obsidian, Notes title, Notes
+  body, Notes checklist, Claude Code, and Claude desktop.
+- Codex has a screenshot, but still needs one strict same-slice proof that shows
+  screenshot, one-word Tab accept, verified insertion, and no prompt submit.
+- `dist/AutocompleteLab.zip` has not been created in the current worktree.
+- `NOTARYTOOL_PROFILE` is not set, so notarization cannot be submitted yet.
+- All-history trace eval is diagnostic only; beta proof must use fresh marked
+  slices from disposable text.
