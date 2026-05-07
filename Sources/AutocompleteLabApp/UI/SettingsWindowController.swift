@@ -40,6 +40,48 @@ struct SettingsCurrentAppState: Equatable {
         return "\(supportStatus.userFacingReason) Suggestions are blocked by your app list."
     }
 
+    var modeText: String {
+        guard bundleIdentifier != nil else {
+            return "Mode: choose a writing app"
+        }
+
+        guard case let .supported(profile) = supportStatus else {
+            return "Mode: not tested yet"
+        }
+
+        let primary = Self.renderModeName(profile.renderMode)
+        guard let fallback = profile.fallbackRenderMode,
+              fallback != profile.renderMode,
+              fallback != .disabled else {
+            return "Mode: \(primary)"
+        }
+
+        return "Mode: \(primary), \(Self.renderModeName(fallback)) fallback"
+    }
+
+    var acceptanceText: String {
+        guard bundleIdentifier != nil else {
+            return "Acceptance: off until an app is selected"
+        }
+
+        guard case let .supported(profile) = supportStatus,
+              profile.canPresentSuggestions,
+              !profile.isSensitive else {
+            return "Acceptance: off here"
+        }
+
+        switch (profile.supportsOneWordAcceptance, profile.supportsFullAcceptance) {
+        case (true, true):
+            return "Acceptance: Tab next word + full accept"
+        case (true, false):
+            return "Acceptance: Tab next word only; full accept is off for safety"
+        case (false, true):
+            return "Acceptance: full accept only"
+        case (false, false):
+            return "Acceptance: off here"
+        }
+    }
+
     var toggleTitle: String {
         canToggle ? "Allow suggestions in this app" : "Suggestions unavailable in this app"
     }
@@ -62,6 +104,33 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         return "Blocked apps: \(disabledAppCount)"
+    }
+
+    private static func renderModeName(_ mode: SuggestionRenderMode) -> String {
+        switch mode {
+        case .inlineAdjacent:
+            return "inline"
+        case .floatingMirror:
+            return "mirror"
+        case .disabled:
+            return "disabled"
+        }
+    }
+}
+
+struct SettingsPermissionState: Equatable {
+    let isTrusted: Bool
+
+    var statusText: String {
+        isTrusted ? "Accessibility permission: allowed" : "Accessibility permission: needed"
+    }
+
+    var detailText: String {
+        if isTrusted {
+            return "Autocomplete Lab can read the active text field and insert accepted suggestions. Text stays on this Mac."
+        }
+
+        return "Allow Accessibility so Autocomplete Lab can read the active text field, find the cursor, and insert accepted suggestions. Text stays on this Mac."
     }
 }
 
@@ -93,6 +162,18 @@ struct SettingsPrivacyState: Equatable {
         return "Raw text capture: \(state)"
     }
 
+    var screenRecordingPermissionText: String? {
+        guard screenshotTracingEnabled else {
+            return nil
+        }
+
+        if screenshotTracingExpiresAt == nil {
+            return "Screen Recording: only used for placement screenshots while this debug switch is on."
+        }
+
+        return "Screen Recording: only used for temporary placement screenshots."
+    }
+
     var pathText: String {
         "Logs: \(diagnosticsPath) | Traces: \(tracePath)"
     }
@@ -114,6 +195,7 @@ struct SettingsKeyboardShortcutState: Equatable {
 final class SettingsWindowController: NSObject {
     private let window: NSWindow
     private let permissionLabel = NSTextField(labelWithString: "")
+    private let permissionDetailLabel = NSTextField(labelWithString: "")
     private let runtimeLabel = NSTextField(labelWithString: "")
     private let runtimeDetailLabel = NSTextField(labelWithString: "")
     private let runtimeActionLabel = NSTextField(labelWithString: "")
@@ -124,6 +206,8 @@ final class SettingsWindowController: NSObject {
     private let runtimeActionButton = NSButton(title: "Open Model Folder", target: nil, action: nil)
     private let currentAppLabel = NSTextField(labelWithString: "")
     private let currentAppDetailLabel = NSTextField(labelWithString: "")
+    private let currentAppModeLabel = NSTextField(labelWithString: "")
+    private let currentAppAcceptanceLabel = NSTextField(labelWithString: "")
     private let disabledAppsLabel = NSTextField(labelWithString: "")
     private let suggestionDecisionLabel = NSTextField(labelWithString: "")
     private let toggleCurrentAppButton = NSButton(
@@ -135,6 +219,7 @@ final class SettingsWindowController: NSObject {
     private let privacyLabel = NSTextField(labelWithString: "")
     private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
     private let rawContentStatusLabel = NSTextField(labelWithString: "")
+    private let screenRecordingPermissionLabel = NSTextField(labelWithString: "")
     private let privacyPathLabel = NSTextField(labelWithString: "")
     private let toggleTracingButton = NSButton(
         checkboxWithTitle: "Performance and placement traces",
@@ -257,7 +342,9 @@ final class SettingsWindowController: NSObject {
         lastSuggestionDecision: String
     ) {
         let guidance = RuntimeReadinessGuidance(report: runtimeReport)
-        permissionLabel.stringValue = isTrusted ? "Accessibility: on" : "Accessibility: needed"
+        let permission = SettingsPermissionState(isTrusted: isTrusted)
+        permissionLabel.stringValue = permission.statusText
+        permissionDetailLabel.stringValue = permission.detailText
         controlLabel.stringValue = suggestionsPaused ? "Suggestions: paused" : "Suggestions: ready"
         suggestionDecisionLabel.stringValue = "Why: \(lastSuggestionDecision)"
         togglePauseButton.state = suggestionsPaused ? .off : .on
@@ -272,6 +359,8 @@ final class SettingsWindowController: NSObject {
         modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
         currentAppLabel.stringValue = currentApp.statusText
         currentAppDetailLabel.stringValue = currentApp.detailText
+        currentAppModeLabel.stringValue = currentApp.modeText
+        currentAppAcceptanceLabel.stringValue = currentApp.acceptanceText
         toggleCurrentAppButton.title = currentApp.toggleTitle
         toggleCurrentAppButton.state = currentApp.isEnabled ? .on : .off
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
@@ -280,6 +369,9 @@ final class SettingsWindowController: NSObject {
         privacyLabel.stringValue = privacy.statusText
         diagnosticsStatusLabel.stringValue = privacy.diagnosticsStatusText
         rawContentStatusLabel.stringValue = privacy.contentStatusText
+        let screenRecordingText = privacy.screenRecordingPermissionText
+        screenRecordingPermissionLabel.stringValue = screenRecordingText ?? ""
+        screenRecordingPermissionLabel.isHidden = screenRecordingText == nil
         privacyPathLabel.stringValue = privacy.pathText
         toggleTracingButton.state = privacy.tracingPaused ? .off : .on
         toggleRawTraceButton.state = privacy.rawContentTracingEnabled ? .on : .off
@@ -303,6 +395,7 @@ final class SettingsWindowController: NSObject {
         let title = NSTextField(labelWithString: "Autocomplete Lab")
         title.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
         permissionLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(permissionDetailLabel)
         runtimeLabel.lineBreakMode = .byWordWrapping
         runtimeLabel.maximumNumberOfLines = 0
         runtimeLabel.preferredMaxLayoutWidth = 470
@@ -319,11 +412,14 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(firstRunLabel)
         currentAppLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(currentAppDetailLabel)
+        configureSecondaryLabel(currentAppModeLabel)
+        configureSecondaryLabel(currentAppAcceptanceLabel)
         configureSecondaryLabel(disabledAppsLabel)
         configureSecondaryLabel(suggestionDecisionLabel)
         privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(diagnosticsStatusLabel)
         configureSecondaryLabel(rawContentStatusLabel)
+        configureSecondaryLabel(screenRecordingPermissionLabel)
         privacyPathLabel.font = NSFont.systemFont(ofSize: 11)
         privacyPathLabel.textColor = .secondaryLabelColor
         privacyPathLabel.lineBreakMode = .byTruncatingMiddle
@@ -331,10 +427,10 @@ final class SettingsWindowController: NSObject {
         privacyPathLabel.preferredMaxLayoutWidth = 470
         shortcutLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
 
-        let requestButton = NSButton(title: "Request Access", target: self, action: #selector(requestAccessibility))
+        let requestButton = NSButton(title: "Allow Accessibility", target: self, action: #selector(requestAccessibility))
         requestButton.bezelStyle = .rounded
         let openSettingsButton = NSButton(
-            title: "Open Settings",
+            title: "Open Privacy Settings",
             target: self,
             action: #selector(openAccessibilitySettingsPane)
         )
@@ -367,22 +463,13 @@ final class SettingsWindowController: NSObject {
         cycleAcceptAllShortcutButton.action = #selector(cycleAcceptAllShortcutControl)
         cycleAcceptAllShortcutButton.bezelStyle = .rounded
 
-        let screenRecording = NSButton(checkboxWithTitle: "Screen Recording", target: nil, action: nil)
-        screenRecording.isEnabled = false
-
-        let clipboardFallback = NSButton(checkboxWithTitle: "Clipboard fallback", target: nil, action: nil)
-        clipboardFallback.isEnabled = false
-
-        let note = NSTextField(wrappingLabelWithString: "Clipboard fallback stays off unless a debug build explicitly enables it.")
-        note.font = NSFont.systemFont(ofSize: 12)
-        note.textColor = .secondaryLabelColor
-
         [
             title,
             makeSection(
                 title: "Access",
                 views: [
                     permissionLabel,
+                    permissionDetailLabel,
                     makeButtonRow([requestButton, openSettingsButton])
                 ]
             ),
@@ -411,6 +498,8 @@ final class SettingsWindowController: NSObject {
                 views: [
                     currentAppLabel,
                     currentAppDetailLabel,
+                    currentAppModeLabel,
+                    currentAppAcceptanceLabel,
                     toggleCurrentAppButton,
                     makeButtonRow([disabledAppsLabel, enableAllAppsButton])
                 ]
@@ -421,6 +510,7 @@ final class SettingsWindowController: NSObject {
                     privacyLabel,
                     diagnosticsStatusLabel,
                     rawContentStatusLabel,
+                    screenRecordingPermissionLabel,
                     toggleTracingButton,
                     toggleRawTraceButton,
                     toggleScreenshotTraceButton,
@@ -433,14 +523,6 @@ final class SettingsWindowController: NSObject {
                 views: [
                     shortcutLabel,
                     makeButtonRow([cycleAcceptAllShortcutButton])
-                ]
-            ),
-            makeSection(
-                title: "Safety",
-                views: [
-                    screenRecording,
-                    clipboardFallback,
-                    note
                 ]
             )
         ].forEach {
@@ -493,7 +575,7 @@ final class SettingsWindowController: NSObject {
         guidance: RuntimeReadinessGuidance
     ) -> String {
         if !isTrusted {
-            return "Grant Accessibility to read the active text field locally."
+            return "Finish Accessibility setup above, then open a writing app to test suggestions."
         }
 
         if suggestionsPaused {
