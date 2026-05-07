@@ -38,7 +38,8 @@ Use this before inviting private beta testers.
 - [ ] The tester knows how to pause tracing.
 - [ ] The tester knows how to disable the current app.
 - [ ] The tester knows how to delete traces.
-- [ ] A redacted report export works.
+- [x] A redacted report export works through
+  `./script/check_redacted_report_export.sh`.
 
 ## Trust Gate
 
@@ -62,7 +63,9 @@ Invite testers only when every applicable box is checked.
   body, Notes checklist, Claude Code, and Claude desktop.
 - Codex has a screenshot, but still needs one strict same-slice proof that shows
   screenshot, one-word Tab accept, verified insertion, and no prompt submit.
-- `dist/AutocompleteLab.zip` has not been created in the current worktree.
+- `dist/AutocompleteLab.zip` and `dist/private-beta/checksums.txt` have been
+  created and verified locally, but `dist/` is ignored; recreate them after the
+  remaining proof and notarization blockers close.
 - `NOTARYTOOL_PROFILE` is not set, so notarization cannot be submitted yet.
 - All-history trace eval is diagnostic only; beta proof must use fresh marked
   slices from disposable text.
