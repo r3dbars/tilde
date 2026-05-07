@@ -21,7 +21,9 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
         rect: CGRect,
         to screenshotURL: URL,
         bundleIdentifier: String,
-        expectedSignalRect: CGRect? = nil
+        expectedSignalRect: CGRect? = nil,
+        visualTrustContext: CompatibilityLearningVisualTrustContext? = nil,
+        allowsLearningCorrection: Bool = false
     ) {
         guard reserveCaptureSlot(bundleIdentifier: bundleIdentifier) else {
             return
@@ -95,10 +97,16 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
                     for: bundleIdentifier,
                     reason: "screenshot-captured"
                 )
-                let offsetMetadata = self.offsetDetectionMetadata(
+                let offsetResult = self.offsetDetectionResult(
                     screenshotURL: screenshotURL,
                     captureRect: rect,
                     expectedSignalRect: expectedSignalRect
+                )
+                let correctionMetadata = self.offsetCorrectionMetadata(
+                    detection: offsetResult.detection,
+                    bundleIdentifier: bundleIdentifier,
+                    visualTrustContext: visualTrustContext,
+                    allowsLearningCorrection: allowsLearningCorrection
                 )
                 DiagnosticsLog.shared.record(
                     "screenshot-captured",
@@ -107,7 +115,9 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
                         "path": screenshotURL.path,
                         "rect": Self.compactRectDescription(rect),
                         "durationMilliseconds": String(Self.milliseconds(from: startedAt, to: Date()))
-                    ].merging(offsetMetadata) { current, _ in current }
+                    ]
+                    .merging(offsetResult.metadata) { current, _ in current }
+                    .merging(correctionMetadata) { current, _ in current }
                 )
             } catch {
                 DiagnosticsLog.shared.record(
@@ -121,17 +131,28 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
         }
     }
 
-    private func offsetDetectionMetadata(
+    private struct OffsetDetectionResult {
+        var metadata: [String: String]
+        var detection: ScreenshotPlacementOffsetDetection?
+    }
+
+    private func offsetDetectionResult(
         screenshotURL: URL,
         captureRect: CGRect,
         expectedSignalRect: CGRect?
-    ) -> [String: String] {
+    ) -> OffsetDetectionResult {
         guard let expectedSignalRect else {
-            return ["screenshotOffsetDetection": "not-requested"]
+            return OffsetDetectionResult(
+                metadata: ["screenshotOffsetDetection": "not-requested"],
+                detection: nil
+            )
         }
 
         guard let bitmap = pixelBuffer(from: screenshotURL) else {
-            return ["screenshotOffsetDetection": "image-unreadable"]
+            return OffsetDetectionResult(
+                metadata: ["screenshotOffsetDetection": "image-unreadable"],
+                detection: nil
+            )
         }
 
         let detection = ScreenshotPlacementOffsetDetector().detection(
@@ -150,6 +171,62 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
         if let bounds = detection.signalBounds {
             metadata["screenshotOffsetSignalBounds"] = Self.compactRectDescription(bounds)
         }
+
+        return OffsetDetectionResult(metadata: metadata, detection: detection)
+    }
+
+    private func offsetCorrectionMetadata(
+        detection: ScreenshotPlacementOffsetDetection?,
+        bundleIdentifier: String,
+        visualTrustContext: CompatibilityLearningVisualTrustContext?,
+        allowsLearningCorrection: Bool
+    ) -> [String: String] {
+        guard let detection,
+              detection.isDetected else {
+            return ["screenshotOffsetCorrection": "not-detected"]
+        }
+
+        guard allowsLearningCorrection else {
+            return ["screenshotOffsetCorrection": "diagnostics-only"]
+        }
+
+        let profile = CompatibilityLearningStore.shared.profile(for: bundleIdentifier)
+        let observations = max(profile?.observations ?? 0, 1)
+        let correction = VisualPlacementCorrectionPolicy().correction(
+            dx: detection.dx,
+            dy: detection.dy,
+            observations: observations,
+            confidence: detection.confidence
+        )
+
+        var metadata = [
+            "screenshotOffsetCorrection": correction.decision.rawValue,
+            "screenshotOffsetCorrectionReason": correction.reason.rawValue,
+            "screenshotOffsetCorrectionObservations": String(observations),
+            "screenshotOffsetAppliedDX": String(format: "%.1f", Double(correction.dx)),
+            "screenshotOffsetAppliedDY": String(format: "%.1f", Double(correction.dy))
+        ]
+
+        guard correction.isApplied else {
+            return metadata
+        }
+
+        let trustedBase = profile?.hasTrustedVisualAdjustment(in: visualTrustContext) == true
+            ? profile
+            : nil
+        let xOffset = Double((trustedBase?.xOffset ?? 0) + correction.dx)
+        let yOffset = Double((trustedBase?.yOffset ?? 0) + correction.dy)
+        metadata["screenshotOffsetStoredX"] = String(format: "%.1f", xOffset)
+        metadata["screenshotOffsetStoredY"] = String(format: "%.1f", yOffset)
+
+        CompatibilityLearningStore.shared.updateOffset(
+            x: xOffset,
+            y: yOffset,
+            for: bundleIdentifier,
+            reason: "screenshot-visual-correction",
+            visualTrustContext: visualTrustContext,
+            confidence: detection.confidence
+        )
 
         return metadata
     }

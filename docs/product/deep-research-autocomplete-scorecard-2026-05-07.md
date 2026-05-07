@@ -127,8 +127,9 @@ Pass 1 shipped these improvements:
 - Screenshot placement now has a pure pixel offset detector that can identify
   bounded ghost/panel drift, reject blank or low-contrast images, reject
   excessive outliers, and feed the existing trusted visual correction policy.
-  Screenshot capture now logs diagnostics-only offset metadata after a PNG is
-  captured. Live auto-apply still waits for fresh real-app screenshot proof.
+  Screenshot capture now logs offset metadata after a PNG is captured, and
+  explicit per-app screenshot tracing can write scoped trusted corrections.
+  Fresh real-app proof still needs to show the correction loop working.
 - Trusted visual offsets now expire when the target app version, screen, or
   field shape changes. Legacy offsets stay trusted until resaved with scoped
   context, so older local profiles do not break abruptly.
@@ -537,9 +538,9 @@ these are true.
    passes the fresh slice, checks frozen bounds, and covers `trace_mark
    --replay`.
 44. Done: add a pure screenshot pixel offset detector with synthetic image
-   tests and visual correction trust-gate coverage, then log diagnostics-only
-   offset metadata after screenshot capture. Pending: wire live screenshot
-   auto-apply only after recorder-grade screenshot proof.
+   tests and visual correction trust-gate coverage, then log offset metadata
+   after screenshot capture and wire live scoped correction behind explicit
+   per-app screenshot tracing. Pending: recorder-grade real-app proof.
 45. Done: scope trusted visual offsets to target app version, screen, and field
    shape so manual and future screenshot corrections expire when the layout
    context changes.
