@@ -222,7 +222,10 @@ autocomplete suggestion.
 - [x] AX value replacement confirms the edited value without fixed sleeps, then later async verification catches delayed editor drift.
 - [x] Chat-like fixture has a live run with screenshot proof.
 - [ ] Codex/Claude prompt proof must verify one-word accept without submit.
-- [ ] Esc must always dismiss without changing text.
+- [x] Esc must always dismiss without changing text.
+  Code-backed: Escape only routes to dismissal while a suggestion is visible,
+  does not call insertion, cancels pending suggestion work, and suppresses the
+  current field until focus changes.
 - [ ] Undo after accept must behave like normal typed text in each supported app.
 - [x] Full accept should be disabled by default in any app without proof.
 - [x] The visible suggestion must exactly match the accepted text.
