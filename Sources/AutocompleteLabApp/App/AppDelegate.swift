@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private let suggestionPanel = SuggestionPanelController()
+    private lazy var focusedTextReader = SerialFocusedTextAXReader(accessibilityClient: accessibilityClient)
     private let diagnosticsWindow = DiagnosticsWindowController()
     private lazy var settingsWindow = SettingsWindowController(
         requestPermission: { [weak self] in
@@ -95,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var runtimeWarmTask: Task<Void, Never>?
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private var isFocusedTextPollInFlight = false
+    private var latestFocusedTextReadRequestID: UInt64?
     private var focusedTextPollLatencyStats = FocusedTextPollLatencyStats()
     private var focusedTextPollSkipStats = FocusedTextPollSkipStats()
     private var suggestionRequestGate = SuggestionRequestGate()
@@ -431,18 +433,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         isFocusedTextPollInFlight = true
         let startedAt = DispatchTime.now().uptimeNanoseconds
-        defer {
-            let endedAt = DispatchTime.now().uptimeNanoseconds
-            let durationMilliseconds = Int((endedAt - startedAt) / 1_000_000)
-            isFocusedTextPollInFlight = false
-            recordFocusedTextPollLatency(durationMilliseconds)
-            recordFocusedTextPollSkipSummaryIfNeeded()
+        var completesAsync = false
+        pollFocusedText(startedAt: startedAt, completesAsync: &completesAsync)
+        if !completesAsync {
+            finishFocusedTextPoll(startedAt: startedAt)
         }
-
-        pollFocusedText()
     }
 
-    private func pollFocusedText() {
+    private func finishFocusedTextPoll(startedAt: UInt64) {
+        let endedAt = DispatchTime.now().uptimeNanoseconds
+        let durationMilliseconds = Int((endedAt - startedAt) / 1_000_000)
+        isFocusedTextPollInFlight = false
+        latestFocusedTextReadRequestID = nil
+        recordFocusedTextPollLatency(durationMilliseconds)
+        recordFocusedTextPollSkipSummaryIfNeeded()
+    }
+
+    private func pollFocusedText(startedAt: UInt64, completesAsync: inout Bool) {
         if case let .blocked(reason) = suggestionControlPolicy.suggestionAvailability(for: suggestionControlState) {
             setSuggestionDecision(reason.decisionText)
             let frontmostApp = accessibilityClient.frontmostApplication()
@@ -497,9 +504,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        guard let rawContext = accessibilityClient.focusedTextContext(
+        let requestID = focusedTextReader.readFocusedTextContext(
+            for: frontmostApp,
             allowDescendantTextFallback: profile.allowsDescendantTextFallback
-        ), !rawContext.isSecure else {
+        ) { [weak self, profile, startedAt] result in
+            Task { @MainActor [weak self, profile, startedAt] in
+                self?.completeFocusedTextPoll(
+                    result: result,
+                    profile: profile,
+                    startedAt: startedAt
+                )
+            }
+        }
+        latestFocusedTextReadRequestID = requestID
+        completesAsync = true
+    }
+
+    private func completeFocusedTextPoll(
+        result: FocusedTextAXReadResult,
+        profile: CompatibilityProfile,
+        startedAt: UInt64
+    ) {
+        defer {
+            finishFocusedTextPoll(startedAt: startedAt)
+        }
+
+        guard latestFocusedTextReadRequestID == result.requestID else {
+            DiagnosticsLog.shared.record(
+                "focused-text-ax-read-dropped",
+                metadata: [
+                    "reason": "stale-request",
+                    "requestID": String(result.requestID)
+                ]
+            )
+            return
+        }
+
+        if result.queueDelayMilliseconds >= slowFocusedTextPollLatencyMilliseconds
+            || result.readDurationMilliseconds >= slowFocusedTextPollLatencyMilliseconds {
+            DiagnosticsLog.shared.record(
+                "focused-text-ax-read-slow",
+                metadata: [
+                    "app": result.app.bundleIdentifier,
+                    "queueDelayMilliseconds": String(result.queueDelayMilliseconds),
+                    "readDurationMilliseconds": String(result.readDurationMilliseconds),
+                    "hasContext": String(result.context != nil)
+                ]
+            )
+        }
+
+        guard let activeApp = accessibilityClient.frontmostApplication(),
+              activeApp.bundleIdentifier == result.app.bundleIdentifier,
+              activeApp.processIdentifier == result.app.processIdentifier else {
+            setSuggestionDecision("Blocked: focus changed")
+            hideSuggestion(reason: "focus-changed")
+            return
+        }
+
+        guard let rawContext = result.context, !rawContext.isSecure else {
             clearFocusedFieldState()
             currentProfile = profile
             setSuggestionDecision("Blocked: no editable text field or secure field")
@@ -507,6 +569,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        processFocusedTextContext(
+            rawContext,
+            frontmostApp: result.app,
+            profile: profile
+        )
+    }
+
+    private func processFocusedTextContext(
+        _ rawContext: FocusedTextContext,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile
+    ) {
         let promptMatch = promptTextAreaMatch(
             for: frontmostApp.bundleIdentifier,
             context: rawContext

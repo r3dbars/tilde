@@ -5,6 +5,7 @@ REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-r
 SCORECARD_PATH="${AUTOCOMPLETE_LAB_SCORECARD:-docs/product/deep-dive-scorecard-2026-05-06.md}"
 MODE=""
 REQUIRE_ALL=0
+VISUAL_PROOF_GAPS=0
 
 for arg in "$@"; do
   case "$arg" in
@@ -32,7 +33,8 @@ real-app visual gaps stay visible after insertion passes.
 Notes title, body, and checklist are separate proof targets.
 
 Use --require-all or --strict when you want the command to fail until every
-target app has a recorded pass for the behavior its profile currently allows.
+target app has a recorded pass and every visual audit row has screenshot-backed
+proof.
 EOF
   exit 0
 fi
@@ -182,6 +184,8 @@ print_visual_audit_status() {
     echo
     echo "All visual placement rows are screenshot-backed."
   fi
+
+  VISUAL_PROOF_GAPS="$missing"
 }
 
 if [[ ! -f "$REPORT_PATH" ]]; then
@@ -248,6 +252,6 @@ fi
 print_visual_audit_status
 print_scorecard_gaps
 
-if (( missing > 0 && REQUIRE_ALL == 1 )); then
+if (( REQUIRE_ALL == 1 && (missing > 0 || VISUAL_PROOF_GAPS > 0) )); then
   exit 1
 fi

@@ -12,7 +12,7 @@ The product bar is not "AI appears everywhere." The bar is:
 
 ## Current Executive Score
 
-Overall Apple-native feel: 80/100.
+Overall Apple-native feel: 81/100.
 
 This app has real engineering depth now. It is not a toy. It has local model
 runtime support, strong privacy defaults, app compatibility profiles, insertion
@@ -23,7 +23,8 @@ slow focused-text polling now throttles, stale async suggestions re-check the
 focused field before showing, keyboard capture fails closed when macOS disables
 the event tap, AX value replacement removed fixed hot-path sleeps, fast word
 completion honors repeated-miss suppression, recent-word memory is scoped per
-app, raw/screenshot debug capture now expires from Settings, lab/debug
+app, focused-text AX reads now run through a serial off-main reader,
+raw/screenshot debug capture now expires from Settings, lab/debug
 vocabulary was removed from the global word list, Chrome chat-like no-submit
 now has screenshot-backed proof, app support status is visible in Settings and
 the menu, and Settings now reads more like a Mac utility.
@@ -48,7 +49,7 @@ unsure. Wrong-place text is worse than no suggestion.
 
 | Category | Weight | Current | Target | Why |
 | --- | ---: | ---: | ---: | --- |
-| Typing must feel untouched | 15 | 84 | 100 | Event tap is fast, performance checks use a fresh bounded window, slow poll summaries throttle polling, and AX insertion no longer has fixed sleeps. A tested serial AX reader now exists, but polling is not wired through it yet. |
+| Typing must feel untouched | 15 | 88 | 100 | Event tap is fast, performance checks use a fresh bounded window, slow poll summaries throttle polling, AX insertion no longer has fixed sleeps, focused-text AX reads now run through the serial off-main reader, and the checker separates hard key latency from off-main AX warnings. Live long-form typing proof in the worst apps is still needed. |
 | Visual placement and caret alignment | 18 | 64 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, and Chrome chat-like now has proof. Notes, Obsidian, Claude Code, and Claude desktop are still the blocker. |
 | Acceptance safety | 10 | 89 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, the event tap fails closed, and Chrome chat-like proved Tab/full accept without submit. Prompt-app no-submit proof is still incomplete. |
 | Cross-app reliability | 10 | 70 | 100 | The proof matrix now has 8 screenshot rows and the app exposes green/yellow/diagnostics-only/unsupported status. Many real apps are still yellow or pending screenshot proof. |
@@ -58,9 +59,9 @@ unsure. Wrong-place text is worse than no suggestion.
 | Failure restraint | 8 | 83 | 100 | Slow polling can hide suggestions, stale geometry suppresses display, event-tap disablement fails closed, and unsupported apps now explain their stance. Low-confidence inline mode still needs stricter real-app gating. |
 | User control | 6 | 85 | 100 | Settings now exposes pause, app blocking, support status, privacy diagnostics, temporary raw/screenshot capture, local log deletion, and shortcut state. Per-app modes and "why hidden" UI remain open. |
 | Onboarding and setup | 4 | 72 | 100 | Settings is clearer, but first-run permission flow and model install/repair are still not one calm native flow. |
-| Evidence and QA loop | 4 | 94 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, trace eval, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
+| Evidence and QA loop | 4 | 95 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, trace eval, strict manual-smoke status, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
 
-Weighted score: 80/100.
+Weighted score: 81/100.
 
 ## Non-Negotiable Native Feel Rules
 
@@ -82,7 +83,7 @@ Weighted score: 80/100.
 
 ## Category 1: Typing Must Feel Untouched
 
-Current score: 83/100.
+Current score: 88/100.
 
 Native target: the user cannot tell the app is running unless a suggestion is
 visible.
@@ -101,7 +102,8 @@ visible.
 - [x] Slow focused-text polling hides visible suggestions instead of fighting the user.
 - [x] AX value replacement removed fixed 30ms/40ms sleeps from the accept hot path while preserving immediate read-back confirmation.
 - [x] A serial off-main focused-text AX reader exists and is tested.
-- [ ] Focused-text polling must be wired through the serial AX reader instead of reading synchronously in the polling path.
+- [x] Focused-text polling must be wired through the serial AX reader instead of reading synchronously in the polling path.
+- [x] Typing performance checks treat event-tap latency as the hard guard and report off-main AX poll slowness separately.
 - [ ] Slow app-specific AX calls should disable suggestions temporarily for that app.
 - [ ] Diagnostics should distinguish event-tap latency from AX polling latency in the UI.
 
@@ -373,7 +375,7 @@ Native target: setup feels like a normal Mac utility, not a developer tool.
 
 ## Category 11: Evidence And QA Loop
 
-Current score: 94/100.
+Current score: 95/100.
 
 Native target: every claim has proof.
 
@@ -382,6 +384,7 @@ Native target: every claim has proof.
 - [x] `swift test` covers core behavior.
 - [x] Manual smoke recorder exists.
 - [x] Manual smoke status separates insertion proof from screenshot proof.
+- [x] Strict manual smoke status fails on pending screenshot proof, not only missing insertion proof.
 - [x] Visual placement evidence checker exists.
 - [x] Trace eval has strict visual evidence gates.
 - [x] Trace eval now verifies required screenshot files exist and are non-empty.

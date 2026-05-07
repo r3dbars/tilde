@@ -9,7 +9,7 @@ to break or annoy users.
 
 ## Executive Rating
 
-Overall: 8.7/10.
+Overall: 8.8/10.
 
 The app is much better than a raw lab prototype now. TextEdit and local Chrome
 fixtures can show readable inline ghost text, accept with Tab/full accept, and
@@ -23,8 +23,9 @@ word completion obey repeated-miss suppression, removed lab/debug vocabulary
 from the global word list, and tightened dogfood prompt detection so loose
 words like `table`, `model`, or `test` do not bias normal writing. The latest
 wave also added expiring debug capture, green/yellow/diagnostics-only app
-support status, a tested serial AX reader foundation, stronger assistant-y
-output filtering, and screenshot-backed Chrome chat-like no-submit proof.
+support status, a wired serial AX reader for focused-text polling, stronger
+assistant-y output filtering, and screenshot-backed Chrome chat-like no-submit
+proof.
 
 It is not a 10/10 yet. The biggest remaining gap is still recorder-grade visual
 placement in real production editors, especially Notes, Obsidian, Claude Code,
@@ -36,7 +37,7 @@ stay lower until those rows are closed.
 
 | Area | Rating | Why |
 | --- | ---: | --- |
-| Normal typing passthrough | 9.5/10 | Event-tap summaries remain in microseconds, performance checks now default to a fresh bounded log window, slow focused-text polling throttles/hides suggestions, AX value replacement no longer blocks on fixed sleeps, and a tested serial AX reader now exists. AppDelegate still needs to route polling through that reader. |
+| Normal typing passthrough | 9.6/10 | Event-tap summaries remain in microseconds, performance checks now default to a fresh bounded log window, slow focused-text polling throttles/hides suggestions, AX value replacement no longer blocks on fixed sleeps, and focused-text AX reads now run through a serial off-main reader. It still needs live long-form typing proof in the worst real apps. |
 | Keyboard capture safety | 9.7/10 | Capture starts only after a suggestion panel frame is actually usable, passes ordinary typing through, blocks selected-text replacement, fails closed if macOS disables the tap, and replays accept keys when focus moves to a protected field. |
 | Acceptance reliability | 9/10 | TextEdit, core Chrome fixtures, and Chrome chat-like verify Tab plus full accept. Selected text is blocked before suggestions/acceptance and AX insertion is faster, but Notes surface-specific proof and Claude Code proof still need live runs. |
 | Visual caret alignment | 8.9/10 | TextEdit, core Chrome fixtures, Chrome chat-like, and a disposable Codex prompt now have screenshot-backed proof. Stale line rects are dropped, vertical clipping is enforced, and async suggestions refresh current geometry before display, but Obsidian, Notes title/body/checklist, Claude Code, and Claude desktop proof is incomplete. |
@@ -61,10 +62,10 @@ stay lower until those rows are closed.
 | Onboarding | 8.2/10 | Settings explains runtime readiness, current app state, and local privacy controls more clearly, but model install/repair and first-run permission explanation are still not fully in-app. |
 | User control | 9/10 | Pause, current-app enablement, green/yellow/diagnostics-only/unsupported support status, privacy controls, temporary screenshot/raw trace toggles, local log deletion, and full-accept shortcut state are clearer; full shortcut editing is still thin. |
 | Diagnostics | 9.7/10 | Placement, event-tap latency, focused poll latency, insertion, trace, screenshot-file evidence, and smoke logs are strong. |
-| Automated tests | 9.9/10 | `swift test` passes 303 tests, including app-target settings state tests, scoped recent-word memory, privacy expiry, support status, serial AX reader, focused-poll backoff, dogfood false-positive coverage, neutral word-completion vocabulary, and trace visual evidence. |
+| Automated tests | 9.9/10 | `swift test` passes 303 tests, including app-target settings state tests, scoped recent-word memory, privacy expiry, support status, serial AX reader, focused-poll backoff, dogfood false-positive coverage, neutral word-completion vocabulary, and trace visual evidence. Manual smoke status self-tests now also prove strict mode fails while screenshot proof is pending. |
 | Real-app smoke | 8.8/10 | TextEdit, core Chrome fixtures, and Chrome chat-like no-submit are green on the current build. Notes title/body/checklist and Claude Code remain honest gaps. |
 | Release readiness | 8/10 | Packaging is in decent shape, but beta readiness still correctly fails unless all required manual and screenshot-backed proof rows are closed. Notarization/stapling and beta onboarding still need a final product pass. |
-| Architecture | 8.9/10 | Core policy, geometry, scoped word memory, trace analysis, privacy expiry, support status, and serial AX reader are tested; AppDelegate still owns too much orchestration and AX polling is not yet wired through the reader. |
+| Architecture | 9/10 | Core policy, geometry, scoped word memory, trace analysis, privacy expiry, support status, and serial AX focused-text reads are tested and wired. AppDelegate still owns too much orchestration. |
 
 ## Visual Placement And Text Box Audit
 
@@ -88,8 +89,11 @@ stay lower until those rows are closed.
 ## Latest Proof
 
 - Current multi-agent hardening pass: `swift test` passed 303 tests after wiring slow-poll throttle, stale-context suppression, event-tap fail-closed handling, app-scoped recent-word memory, fast-word repeated-miss suppression, dogfood false-positive tests, neutral word-completion vocabulary tests, privacy-expiry tests, support-status tests, serial AX reader tests, settings state tests, and faster AX value replacement.
+- Follow-up strictness/performance pass: `swift test` passed after AppDelegate routed focused-text polling through the serial off-main AX reader; `./script/manual_smoke_self_test.sh` passed after `manual_smoke_status.sh --strict` started failing on pending screenshot proof, not just missing insertion proof.
+- `./script/smoke_test.sh`: passed after the serial AX polling and checker split. The final diagnostics slice started at line 75648 and showed no event-tap latency samples, no slow tap markers, no tap disable events, focused poll p95 max 3ms, focused poll max 21ms, and zero focused-poll skips.
 - `./script/check_trace_eval_self_test.sh`: passed after trace evaluation started verifying screenshot files and placement failure details.
 - `./script/check_typing_performance_log_self_test.sh`: passed after typing performance checks defaulted to a bounded recent log window.
+- `AUTOCOMPLETE_LAB_LOG_START_LINE=75390 AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES=1 ./script/check_typing_performance_log.sh`: passed on the fresh TextEdit smoke slice with event-tap p95 96us. Off-main focused-text poll warnings are reported separately so slow AX reads do not masquerade as key latency.
 - `git diff --check`: passed for the current hardening patch before commit.
 - Settings polish pass: `swift build --target AutocompleteLabApp`, `swift test --filter AutocompleteLabAppTests`, and full `swift test` passed before commit `95f9583`.
 - Screenshot-evidence pass: `script/check_trace_eval_self_test.sh`, `script/check_visual_placement_evidence_self_test.sh`, and `script/check_visual_placement_evidence.sh` passed before commit `faffcad`.
@@ -114,7 +118,7 @@ stay lower until those rows are closed.
 - `script/beta_readiness.sh` now includes `./script/check_visual_placement_evidence.sh --require-all`, so beta readiness cannot pass while screenshot proof rows are still pending.
 - Local chat-like Chrome fixture was added to prove Tab/full accept does not submit a chat-style composer. This is the safe precursor to Codex/Claude no-submit proof, not a substitute for real prompt-app proof.
 - Parent handoff: a disposable Notes note produced screenshot-backed suggestion presentation and at least one verified Tab insertion, but this is not enough to mark title/body/checklist complete.
-- `./script/manual_smoke_status.sh --strict`: now shows Chrome chat-like no-submit as passed; it still fails honestly on Notes title/body/checklist and Claude Code insertion proof gaps, and separately reports Obsidian, Apple Notes title/body/checklist, Claude Code, and Claude desktop screenshot proof gaps.
+- `./script/manual_smoke_status.sh --strict`: now shows Chrome chat-like no-submit as passed and fails honestly on both missing insertion proof and pending screenshot proof. The current blockers remain Notes title/body/checklist, Claude Code insertion proof, and Obsidian/Notes/Claude Code/Claude desktop screenshot proof.
 - `./script/check_visual_placement_evidence_self_test.sh`: passed, including missing, empty, invalid, too-small, unreferenced, and pending strict screenshot failure cases.
 - `./script/check_visual_placement_evidence.sh`: passed with eight verified visual-placement screenshots and reports six pending screenshot audits.
 - `./script/check_visual_placement_evidence.sh --require-all`: fails honestly on the six pending screenshot audits.
@@ -186,7 +190,9 @@ stay lower until those rows are closed.
 - A 15-minute Codex automation exists outside this repo to check this scorecard;
   the repository itself still treats the below-10 rows as open work.
 - Typing performance checks now scan the last bounded log window by default
-  while preserving an all-history override.
+  while preserving an all-history override. The checker now treats event-tap
+  latency as the hard typing guard and reports off-main focused-text poll
+  slowness as a separate warning unless strict AX-poll enforcement is requested.
 - Slow focused-text poll summaries and overlapping-poll summaries now apply
   throttle/backoff and hide visible suggestions instead of continuing to chase
   the caret during a slow AX stretch.
@@ -216,8 +222,8 @@ stay lower until those rows are closed.
   disables those capture modes where possible.
 - Settings and menu copy now expose green/yellow/diagnostics-only/unsupported
   app support status and disable toggles for unavailable apps.
-- A serial off-main focused-text AX reader now exists with tests; AppDelegate
-  still needs to route polling through it.
+- A serial off-main focused-text AX reader now exists with tests, and AppDelegate
+  routes live focused-text polling through it.
 - Output cleaning suppresses more assistant-y starts and rejects unrelated
   whole-word completions in word-completion mode.
 - Chrome chat-like no-submit proof now uses a tab-title submit counter so the
@@ -236,9 +242,8 @@ stay lower until those rows are closed.
 4. Build a fully in-app model install/repair flow.
 5. Add a fuller shortcut editor if beta users need more than Tab plus the
    current full-accept toggle.
-6. Wire focused-text polling through the new serial AX reader or make it
-   adaptive/event-driven. The app now throttles slow polling and has a reader
-   foundation, but the live polling path still reads AX synchronously.
+6. Keep focused-text polling on the serial AX reader and collect live long-form
+   typing proof in the worst real apps.
 7. Use the same no-submit expectation for Codex/Claude prompt-app proof now
    that the local Chrome chat-like fixture has screenshot-backed proof.
 8. Split AppDelegate into focused services around polling, insertion,
