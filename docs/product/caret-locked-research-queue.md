@@ -211,7 +211,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Add summary by app and insertion mode.
 - [x] Add summary by app and update source.
 - [x] Add summary by app and AX failure reason.
-- [ ] Add `script/geometry_trace_report.py`.
+- [x] Add `script/geometry_trace_report.py`.
 - [x] Extend `script/check_trace_eval.sh` to enforce geometry proof.
 - [x] Export a short local HTML report for manual review.
 
