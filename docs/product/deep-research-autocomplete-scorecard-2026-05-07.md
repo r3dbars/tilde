@@ -8,7 +8,9 @@ Repo state graded: `codex/deep-research-scorecard` at `46ee5f4`, based on
 
 ## Executive Grade
 
-Deep research score: **78/100**.
+Baseline deep research score: **78/100**.
+
+Current implementation score after the first build pass: **84/100**.
 
 This is a strong prototype with real engineering depth. It has local MLX
 runtime support, app compatibility profiles, privacy-safe tracing defaults,
@@ -31,6 +33,31 @@ The repo's existing Apple-native score is **82/100**. This score is lower
 because it grades against the research definition of "magical autocomplete,"
 not only Mac plumbing, safety, and proof infrastructure.
 
+## Implementation Progress
+
+Pass 1 shipped these improvements:
+
+- Hard `<NO_SUGGESTION>` prompt and cleaner path.
+- Live field classification in activation and trace metadata.
+- Live accepted-and-kept tracking at 2s, 10s, 30s, and blur.
+- Live annoyance quiet mode for typed-over, Esc, insertion failure, repeated
+  rejection, accepted-then-deleted, manual pause, and app disable.
+- Mode-aware trigger timing: 90-140ms word, 140-240ms phrase, 280-450ms
+  sentence boundary, plus line-start suppression.
+- Prefix-family cooldowns: 5s typed-over, 15s Esc, 250ms deletion.
+- Display-score object and live presentation gate with trace-safe components.
+- One-line visible suggestion cap under 42 characters.
+
+Remaining high-impact gaps:
+
+- Display score is heuristic; it does not yet use real accepted-and-kept
+  probability or multi-candidate ranking.
+- Sentence mode is still a stricter boundary path, not a full first-class lane.
+- Behavior profiles for email, bullets, code, docs/prose, notes, and AI chat
+  are still thin.
+- Replay-first real-app proof is still missing.
+- Cross-app proof rows still need fresh screenshot-backed acceptance slices.
+
 ## Research Bar
 
 The report defines "magical" autocomplete as low-amplification translating
@@ -48,6 +75,8 @@ the field is eligible, text is stable, recent behavior says help is welcome,
 expected utility is positive, and the app/field/prefix is outside cooldown.
 
 ## Scorecard
+
+Baseline scorecard from the initial audit:
 
 | Category | Weight | Score | Weighted | Current read |
 | --- | ---: | ---: | ---: | --- |
@@ -122,7 +151,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Replay-first test rig | 68 | Trace eval and smoke scripts exist. | One rig that replays recorded real app sessions with caret, screenshots, accepts, kept horizon, and latency. |
 | Cross-app proof honesty | 90 | App proof matrix explicitly keeps failing rows non-A until evidence exists. | Close every pending proof row and make stale proof fail automatically. |
 
-## Evidence Notes
+## Baseline Evidence Notes
 
 Strong evidence in current code:
 
@@ -291,4 +320,6 @@ these are true.
 Active goal: grade the app, write this scorecard, then keep iterating until
 every scored item reaches 100/100.
 
-Current status: **78/100**. Not complete.
+Baseline status: **78/100**.
+
+Current implementation status: **84/100**. Not complete.
