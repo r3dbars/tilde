@@ -293,10 +293,19 @@ struct SettingsWindowControllerStateTests {
         #expect(
             SettingsFirstRunState(
                 isTrusted: true,
-                suggestionsPaused: false,
+                suggestionsPaused: true,
                 runtimeReport: missingModelReport,
                 currentApp: textEdit
             ).message.contains("Model missing")
+        )
+        #expect(
+            SettingsFirstRunState(
+                isTrusted: true,
+                suggestionsPaused: true,
+                runtimeReport: readyReport,
+                currentApp: textEdit
+            ).message
+                == "Start paused: open TextEdit with a disposable document, then turn on Suggestions when you are ready to test."
         )
         #expect(
             SettingsFirstRunState(

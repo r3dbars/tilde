@@ -311,12 +311,12 @@ struct SettingsFirstRunState: Equatable {
             return "Start here: allow Accessibility so Autocomplete Lab can read the current text field and insert accepted suggestions. Text stays on this Mac."
         }
 
-        if suggestionsPaused {
-            return "Paused. Resume when you want to test suggestions."
-        }
-
         guard runtimeReport.stage == .ready else {
             return RuntimeReadinessGuidance(report: runtimeReport).message
+        }
+
+        if suggestionsPaused {
+            return "Start paused: open TextEdit with a disposable document, then turn on Suggestions when you are ready to test."
         }
 
         if currentApp.bundleIdentifier == "com.apple.TextEdit" {

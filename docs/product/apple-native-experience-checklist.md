@@ -378,7 +378,7 @@ Native target: setup feels like a normal Mac utility, not a developer tool.
 - [x] First run should explain Accessibility in one short paragraph.
 - [x] Screen Recording should be explained only when screenshot proof is enabled.
 - [ ] Local model install/repair should be fully in-app.
-- [ ] The app should start disabled until the user enables a test app.
+- [x] Fresh installs should start paused until the user chooses to test suggestions in TextEdit.
 - [x] First success should happen in TextEdit.
 - [x] Onboarding should never ask users to test in private notes first.
 
