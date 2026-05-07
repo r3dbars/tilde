@@ -18,6 +18,7 @@ struct AutocompleteTraceEventTests {
 
         #expect(object["schemaVersion"] as? Int == AutocompleteTraceEvent.currentSchemaVersion)
         #expect(object["privacyVersion"] as? Int == AutocompleteTraceEvent.currentPrivacyVersion)
+        #expect(object["experimentArm"] as? String == "length_3_word")
     }
 
     @Test("Decodes old trace events without schema fields")
@@ -36,6 +37,7 @@ struct AutocompleteTraceEventTests {
 
         #expect(event.schemaVersion == 1)
         #expect(event.privacyVersion == 0)
+        #expect(event.experimentArm == "length_3_word")
         #expect(event.type == .suggestionPresented)
         #expect(event.metadata["fieldKind"] == "multilineCompose")
     }

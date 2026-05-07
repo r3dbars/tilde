@@ -58,8 +58,13 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let p95LatencyMilliseconds: Int?
     public let acceptRateByApp: [String: Double]
     public let acceptRateByMode: [String: Double]
+    public let acceptRateByExperimentArm: [String: Double]
     public let usefulRateByApp: [String: Double]
     public let usefulRateByMode: [String: Double]
+    public let usefulRateByExperimentArm: [String: Double]
+    public let presentedByExperimentArm: [String: Int]
+    public let acceptedAndKeptByExperimentArm: [String: Int]
+    public let suppressedByExperimentArm: [String: Int]
     public let presentedByFieldKind: [String: Int]
     public let acceptedAndKeptByFieldKind: [String: Int]
     public let suppressedByFieldKind: [String: Int]
@@ -100,8 +105,13 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         p95LatencyMilliseconds: Int?,
         acceptRateByApp: [String: Double] = [:],
         acceptRateByMode: [String: Double] = [:],
+        acceptRateByExperimentArm: [String: Double] = [:],
         usefulRateByApp: [String: Double] = [:],
         usefulRateByMode: [String: Double] = [:],
+        usefulRateByExperimentArm: [String: Double] = [:],
+        presentedByExperimentArm: [String: Int] = [:],
+        acceptedAndKeptByExperimentArm: [String: Int] = [:],
+        suppressedByExperimentArm: [String: Int] = [:],
         presentedByFieldKind: [String: Int] = [:],
         acceptedAndKeptByFieldKind: [String: Int] = [:],
         suppressedByFieldKind: [String: Int] = [:],
@@ -141,8 +151,13 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.p95LatencyMilliseconds = p95LatencyMilliseconds
         self.acceptRateByApp = acceptRateByApp
         self.acceptRateByMode = acceptRateByMode
+        self.acceptRateByExperimentArm = acceptRateByExperimentArm
         self.usefulRateByApp = usefulRateByApp
         self.usefulRateByMode = usefulRateByMode
+        self.usefulRateByExperimentArm = usefulRateByExperimentArm
+        self.presentedByExperimentArm = presentedByExperimentArm
+        self.acceptedAndKeptByExperimentArm = acceptedAndKeptByExperimentArm
+        self.suppressedByExperimentArm = suppressedByExperimentArm
         self.presentedByFieldKind = presentedByFieldKind
         self.acceptedAndKeptByFieldKind = acceptedAndKeptByFieldKind
         self.suppressedByFieldKind = suppressedByFieldKind
@@ -238,6 +253,11 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 outcomeIDs: acceptedIDs,
                 key: \.requestMode
             ),
+            acceptRateByExperimentArm: rates(
+                presentedByID: firstPresentedByID,
+                outcomeIDs: acceptedIDs,
+                key: experimentArm
+            ),
             usefulRateByApp: rates(
                 presentedByID: firstPresentedByID,
                 outcomeIDs: usefulIDs,
@@ -248,6 +268,17 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 outcomeIDs: usefulIDs,
                 key: \.requestMode
             ),
+            usefulRateByExperimentArm: rates(
+                presentedByID: firstPresentedByID,
+                outcomeIDs: usefulIDs,
+                key: experimentArm
+            ),
+            presentedByExperimentArm: counts(Array(firstPresentedByID.values), key: experimentArm),
+            acceptedAndKeptByExperimentArm: counts(
+                acceptedTextEdited.filter(isAcceptedAndKeptEvent),
+                key: experimentArm
+            ),
+            suppressedByExperimentArm: counts(suppressed, key: experimentArm),
             presentedByFieldKind: counts(Array(firstPresentedByID.values), key: fieldKind),
             acceptedAndKeptByFieldKind: counts(
                 acceptedTextEdited.filter(isAcceptedAndKeptEvent),
@@ -282,6 +313,13 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     private func fieldKind(_ event: AutocompleteTraceEvent) -> String {
         let kind = event.metadata["fieldKind"] ?? ""
         return kind.isEmpty ? "unknown" : kind
+    }
+
+    private func experimentArm(_ event: AutocompleteTraceEvent) -> String {
+        let arm = event.experimentArm.isEmpty
+            ? event.metadata["experimentArm"] ?? ""
+            : event.experimentArm
+        return arm.isEmpty ? "unknown" : arm
     }
 
     private func acceptanceIdentifier(_ event: AutocompleteTraceEvent) -> String {

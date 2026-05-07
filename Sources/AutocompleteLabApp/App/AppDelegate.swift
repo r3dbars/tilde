@@ -85,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         ProcessInfo.processInfo.disableAutomaticTermination("AutocompleteLab runs as a persistent menu bar agent.")
         NSApp.setActivationPolicy(.accessory)
+        RawAutocompleteTraceLog.shared.configureRuntimeMetadata(modelRuntimeBundle.diagnosticsMetadata)
         configureStatusItem()
         loadDisabledApps()
         DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
@@ -211,6 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "runtime",
             metadata: [
                 "state": state.statusSummary,
+                "experimentArm": modelRuntimeBundle.experimentArm.rawValue,
                 "completionLength": completionLengthConfiguration.displaySummary,
                 "readinessStage": report.stage.rawValue,
                 "readinessAction": report.action.rawValue
@@ -219,7 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshRuntimeChrome() {
-        runtimeMenuItem?.title = "Model: \(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(runtimeReadinessReport.summary) • \(completionLengthConfiguration.displaySummary)"
+        runtimeMenuItem?.title = "Model: \(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(runtimeReadinessReport.summary) • \(modelRuntimeBundle.experimentArm.rawValue) • \(completionLengthConfiguration.displaySummary)"
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
             runtimeReport: runtimeReadinessReport,
@@ -237,7 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var runtimeTargetSummary: String {
-        "\(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(completionLengthConfiguration.displaySummary)"
+        "\(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(modelRuntimeBundle.experimentArm.rawValue) • \(completionLengthConfiguration.displaySummary)"
     }
 
     private func pollFocusedText() {

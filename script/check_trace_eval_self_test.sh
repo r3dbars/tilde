@@ -5,30 +5,30 @@ TRACE_FILE="$(mktemp)"
 trap 'rm -f "$TRACE_FILE"' EXIT
 
 cat >"$TRACE_FILE" <<'JSONL'
-{"type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"fieldKind":"multilineCompose"}}
-{"type":"suggestionAccepted","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at"}
-{"type":"insertionVerified","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at"}
-{"type":"acceptedTextEdited","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","metadata":{"fieldKind":"multilineCompose","checkpoint":"10s","survivalClass":"exactKept","tokenRecall":"1.000","normalizedEditDistance":"0.000","strongAcceptedAndKept":"true"}}
-{"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","latencyMilliseconds":120}
-{"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","latencyMilliseconds":220}
-{"type":"suggestionPresented","suggestionID":"three","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":" I   think so. ","latencyMilliseconds":80}
-{"type":"suggestionPresented","suggestionID":"four","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":"i think so.","latencyMilliseconds":90}
-{"type":"suggestionPresented","suggestionID":"five","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":"I think so.","latencyMilliseconds":100}
-{"type":"suggestionPresented","suggestionID":"six","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":"that works","latencyMilliseconds":100}
-{"type":"suggestionPresented","suggestionID":"seven","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":"that works","latencyMilliseconds":100}
-{"type":"suggestionPresented","suggestionID":"eight","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":"that works","latencyMilliseconds":100}
-{"type":"suggestionAccepted","suggestionID":"six","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"that"}
-{"type":"suggestionAccepted","suggestionID":"seven","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"that"}
-{"type":"suggestionAccepted","suggestionID":"eight","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"that"}
-{"type":"suggestionPresented","suggestionID":"nine","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","latencyMilliseconds":0}
-{"type":"suggestionPresented","suggestionID":"ten","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","latencyMilliseconds":0}
-{"type":"suggestionPresented","suggestionID":"eleven","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","latencyMilliseconds":0}
-{"type":"suggestionHidden","suggestionID":"nine","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","outcome":"typed-through"}
-{"type":"suggestionHidden","suggestionID":"ten","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","outcome":"typed-through"}
-{"type":"suggestionHidden","suggestionID":"eleven","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","outcome":"typed-through"}
-{"type":"suggestionSuppressed","suggestionID":"twelve","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"is","reason":"repeated-miss","metadata":{"fieldKind":"form"}}
-{"type":"suggestionSuppressed","suggestionID":"thirteen","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"e","reason":"repeated-miss","metadata":{"fieldKind":"search"}}
-{"type":"suggestionSuppressed","suggestionID":"fourteen","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","reason":"no-fast-word-candidate"}
+{"type":"suggestionPresented","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"fieldKind":"multilineCompose"}}
+{"type":"suggestionAccepted","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at"}
+{"type":"insertionVerified","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at"}
+{"type":"acceptedTextEdited","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","metadata":{"fieldKind":"multilineCompose","checkpoint":"10s","survivalClass":"exactKept","tokenRecall":"1.000","normalizedEditDistance":"0.000","strongAcceptedAndKept":"true"}}
+{"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"two","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","latencyMilliseconds":120}
+{"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"two","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","latencyMilliseconds":220}
+{"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"three","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":" I   think so. ","latencyMilliseconds":80}
+{"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"four","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":"i think so.","latencyMilliseconds":90}
+{"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"five","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":"I think so.","latencyMilliseconds":100}
+{"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"six","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":"that works","latencyMilliseconds":100}
+{"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"seven","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":"that works","latencyMilliseconds":100}
+{"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"eight","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":"that works","latencyMilliseconds":100}
+{"type":"suggestionAccepted","experimentArm":"length_3_word","suggestionID":"six","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"that"}
+{"type":"suggestionAccepted","experimentArm":"length_3_word","suggestionID":"seven","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"that"}
+{"type":"suggestionAccepted","experimentArm":"length_3_word","suggestionID":"eight","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"that"}
+{"type":"suggestionPresented","experimentArm":"length_1_word","suggestionID":"nine","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","latencyMilliseconds":0}
+{"type":"suggestionPresented","experimentArm":"length_1_word","suggestionID":"ten","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","latencyMilliseconds":0}
+{"type":"suggestionPresented","experimentArm":"length_1_word","suggestionID":"eleven","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","latencyMilliseconds":0}
+{"type":"suggestionHidden","experimentArm":"length_1_word","suggestionID":"nine","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","outcome":"typed-through"}
+{"type":"suggestionHidden","experimentArm":"length_1_word","suggestionID":"ten","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","outcome":"typed-through"}
+{"type":"suggestionHidden","experimentArm":"length_1_word","suggestionID":"eleven","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","outcome":"typed-through"}
+{"type":"suggestionSuppressed","experimentArm":"length_1_word","suggestionID":"twelve","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"is","reason":"repeated-miss","metadata":{"fieldKind":"form"}}
+{"type":"suggestionSuppressed","experimentArm":"length_1_word","suggestionID":"thirteen","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"e","reason":"repeated-miss","metadata":{"fieldKind":"search"}}
+{"type":"suggestionSuppressed","experimentArm":"length_1_word","suggestionID":"fourteen","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","reason":"no-fast-word-candidate"}
 JSONL
 
 AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
@@ -131,6 +131,24 @@ if ! grep -F "com.openai.codex: 67% (6/9)" /tmp/autocomplete-trace-eval-self-tes
   exit 1
 fi
 
+if ! grep -F "length_1_word: 25% (1/4)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report accept rate by experiment arm" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "length_1_word: 100% (4/4)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not report useful rate by experiment arm" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Accepted and kept by experiment arm:" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not print accepted-and-kept experiment-arm slices" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
 if ! grep -F "wordCompletion: 100% (4/4)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not report useful rate by mode" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
@@ -151,6 +169,12 @@ fi
 
 if ! grep -F "search: 1" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not report suppressed search fields" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Suppressed by experiment arm:" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not print suppressed experiment-arm slices" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
   exit 1
 fi
@@ -179,7 +203,7 @@ if grep -F "that works" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; t
   exit 1
 fi
 
-if grep -F "ng" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+if grep -F "wordCompletion: ng" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test incorrectly reported typed-through suggestions as repeated misses" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
   exit 1
@@ -196,6 +220,30 @@ fi
 if ! grep -F "md.obsidian: accepted suggestion" /tmp/autocomplete-trace-eval-self-test-fail.txt >/dev/null; then
   echo "trace eval self-test did not explain the missing accepted suggestion" >&2
   cat /tmp/autocomplete-trace-eval-self-test-fail.txt >&2
+  exit 1
+fi
+
+AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
+AUTOCOMPLETE_LAB_TRACE_REQUIRE_EXPERIMENT_ARM="length_1_word" \
+  script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-self-test-arm.txt
+
+if ! grep -F "length_1_word: 4" /tmp/autocomplete-trace-eval-self-test-arm.txt >/dev/null; then
+  echo "trace eval self-test did not pass the experiment-arm gate" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-arm.txt >&2
+  exit 1
+fi
+
+if AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
+   AUTOCOMPLETE_LAB_TRACE_REQUIRE_EXPERIMENT_ARM="missing_arm" \
+   script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-self-test-arm-fail.txt 2>&1; then
+  echo "trace eval self-test expected the experiment-arm gate to fail" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-arm-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "missing_arm: suggestionPresented" /tmp/autocomplete-trace-eval-self-test-arm-fail.txt >/dev/null; then
+  echo "trace eval self-test did not explain the missing experiment arm" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-arm-fail.txt >&2
   exit 1
 fi
 
