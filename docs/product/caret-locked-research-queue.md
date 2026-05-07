@@ -231,10 +231,10 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Add confidence thresholds for "learning should become code".
 - [x] Add a local report that lists apps with repeated visual nudges.
 - [x] Add a local report that lists apps with repeated detached suppression.
-- [ ] Add fixture-based visual calibration tests.
-- [ ] Explore ScreenCaptureKit for local screenshot capture.
-- [ ] Explore Vision-based caret/suggestion alignment only as a dogfood tool.
-- [ ] Never run visual calibration without explicit local opt-in.
+- [x] Add fixture-based visual calibration tests.
+- [x] Explore ScreenCaptureKit for local screenshot capture.
+- [x] Explore Vision-based caret/suggestion alignment only as a dogfood tool.
+- [x] Never run visual calibration without explicit local opt-in.
 
 ## P2: Packaging And Beta
 
