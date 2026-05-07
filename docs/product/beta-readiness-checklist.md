@@ -16,6 +16,8 @@ Use this before inviting private beta testers.
 - [ ] The preferred asset is `Qwen3.5-4B-4bit`.
 - [ ] Suggestions stay off while the runtime warms or fails.
 - [ ] Mock fallback is not used for beta.
+- [ ] Missing or invalid model setup is handled by Settings `Install Model` or
+  `Repair Model`.
 - [ ] Testers do not run Ollama, llama.cpp, Python, or a model server.
 
 ## Compatibility Gate

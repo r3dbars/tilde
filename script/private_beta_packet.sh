@@ -104,10 +104,12 @@ Verify it in the app:
 2. Check \`Local model\`.
 3. Confirm Settings says the model is ready.
 
-If the model is missing, invalid, or needs repair, stop the beta session.
+If the model is missing, invalid, or needs repair, use the Settings \`Install
+Model\` or \`Repair Model\` button and wait for it to finish. If that in-app setup
+fails, stop the beta session.
+
 Do not ask testers to run Python, shell scripts, Ollama, llama.cpp, or any
-separate model server. Give them a new app/model packet after the operator fixes
-the asset.
+separate model server.
 EOF
 }
 
@@ -185,7 +187,7 @@ EOF
 2. Open `AutocompleteLab.app`.
 3. Grant Accessibility when macOS asks.
 4. Open Settings from the menu bar item.
-5. If the local model is not ready, use the Local model action and follow the shown model folder path.
+5. If the local model is not ready, use `Install Model` or `Repair Model` in Settings and wait for it to finish.
 6. Confirm Settings says the model is ready.
 7. Open TextEdit and type a normal sentence.
 8. Use Tab for one-word accept.

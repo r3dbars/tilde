@@ -29,12 +29,13 @@ Also read:
 - `docs/product/compatibility-matrix.md`
 - `docs/product/privacy-and-controls.md`
 
-If the build needs a user-started model server, Python setup, Ollama,
-llama.cpp, or mock fallback, do not invite testers.
+If the build needs a user-started model server, tester-side Python setup,
+Ollama, llama.cpp, or mock fallback, do not invite testers.
 
 The generated private-beta packet must also keep tester model setup inside the
-app. If the model is missing or invalid, stop the session and issue a fixed
-packet instead of giving testers shell commands.
+app. If the model is missing or invalid, testers should use Settings
+`Install Model` or `Repair Model`; if that in-app setup fails, stop the session
+instead of giving testers shell commands.
 
 ## Test Shape
 
@@ -69,7 +70,8 @@ Walk each tester through this in 15 minutes or less:
 - Smoke check: open TextEdit, type a normal sentence, accept one word with
   `Tab`, dismiss with `Esc`, then export the redacted report.
 - Stop rules: one wrong insertion, sensitive-field suggestion, unreliable
-  `Tab`, mock fallback, or manual model setup ends the beta.
+  `Tab`, mock fallback, failed in-app model setup, or tester-side shell/Python
+  setup ends the beta.
 
 ## Daily 2-Minute Survey
 
