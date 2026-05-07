@@ -1,6 +1,38 @@
 import AppKit
 import AutocompleteLabCore
 
+struct DiagnosticsInspectorState: Equatable {
+    let appTrusted: Bool
+    let appEnabled: Bool
+    let compatibilityStatus: CompatibilitySupportStatus
+    let lastSuggestionDecision: String
+    let runtimeReport: RuntimeReadinessReport
+    let runtimeTargetSummary: String
+    let tracePath: String
+    let tracingPaused: Bool
+    let screenshotTracingEnabled: Bool
+    let compatibilityLearningPath: String
+    let compatibilityLearningProfile: CompatibilityLearningProfile?
+
+    var summaryText: String {
+        """
+        Current state:
+          Accessibility: \(appTrusted ? "allowed" : "needed")
+          Suggestions: \(lastSuggestionDecision)
+          App: \(compatibilityStatus.userFacingSummary), \(appEnabled ? "allowed" : "blocked")
+          Mode: \(compatibilityStatus.interactionMode.displayName)
+          Local model: \(runtimeReport.summary)
+          Runtime target: \(runtimeTargetSummary)
+          Next action: \(runtimeReport.action.displayName)
+          Traces: \(tracingPaused ? "paused" : "recording")
+          Screenshots: \(screenshotTracingEnabled ? "on" : "off")
+          Trace file: \(tracePath)
+          Learning file: \(compatibilityLearningPath)
+          Learned adapter: \(compatibilityLearningProfile?.debugSummary ?? "none")
+        """
+    }
+}
+
 @MainActor
 final class DiagnosticsWindowController {
     private let window: NSWindow
@@ -144,20 +176,20 @@ final class DiagnosticsWindowController {
 
         var sections: [String] = []
 
-        sections.append("Accessibility: \(appTrusted ? "on" : "needed")")
-        sections.append("Suggestion: \(lastSuggestionDecision)")
-        sections.append(
-            """
-            Local model: \(runtimeReport.summary)
-              target: \(runtimeTargetSummary)
-              stage: \(runtimeReport.stage.rawValue)
-              action: \(runtimeReport.action.displayName)
-              detail: \(runtimeReport.detail ?? "none")
-            """
-        )
+        sections.append(DiagnosticsInspectorState(
+            appTrusted: appTrusted,
+            appEnabled: appEnabled,
+            compatibilityStatus: compatibilityStatus,
+            lastSuggestionDecision: lastSuggestionDecision,
+            runtimeReport: runtimeReport,
+            runtimeTargetSummary: runtimeTargetSummary,
+            tracePath: tracePath,
+            tracingPaused: tracingPaused,
+            screenshotTracingEnabled: screenshotTracingEnabled,
+            compatibilityLearningPath: compatibilityLearningPath,
+            compatibilityLearningProfile: compatibilityLearningProfile
+        ).summaryText)
         sections.append("Model folder: \(modelDirectoryPath)")
-        sections.append("Compatibility: \(compatibilityStatus.summary)")
-        sections.append("App enabled: \(appEnabled)")
         sections.append(traceSummaryText(
             traceSummary,
             tracePath: tracePath,
