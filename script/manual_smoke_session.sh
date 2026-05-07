@@ -196,7 +196,7 @@ case "$APP" in
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     REQUIRES_FULL_ACCEPT=0
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- When the recorder asks, type NO-SUBMIT only after confirming the prompt was not sent.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   claude-code)
     BUNDLE_ID="com.anthropic.claude-code"
@@ -204,7 +204,7 @@ case "$APP" in
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     REQUIRES_FULL_ACCEPT=0
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Claude Code prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS=$'- Focus the Claude Code prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- When the recorder asks, type NO-SUBMIT only after confirming the prompt was not sent.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   claude)
     BUNDLE_ID="com.anthropic.claudefordesktop"
@@ -212,7 +212,7 @@ case "$APP" in
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     REQUIRES_FULL_ACCEPT=0
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Claude prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS=$'- Focus the Claude prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- When the recorder asks, type NO-SUBMIT only after confirming the prompt was not sent.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   *)
     usage >&2

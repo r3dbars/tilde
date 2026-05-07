@@ -194,7 +194,7 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(
             codex.proofGuideText
-                == "Proof: use a harmless prompt fragment; press Tab only, never Enter."
+                == "Proof: use harmless prompt text; press Tab only, never Enter; confirm NO-SUBMIT only after checking it was not sent."
         )
         #expect(
             codex.proofCommandText
