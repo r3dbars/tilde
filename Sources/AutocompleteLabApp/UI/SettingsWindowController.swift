@@ -195,6 +195,24 @@ struct SettingsKeyboardShortcutState: Equatable {
     }
 }
 
+struct SettingsOnboardingState: Equatable {
+    let isTrusted: Bool
+    let suggestionsPaused: Bool
+    let runtimeGuidance: RuntimeReadinessGuidance
+
+    var text: String {
+        if !isTrusted {
+            return "Allow Accessibility so the app can read the active text field, find the cursor, and insert only what you accept. Text stays on this Mac."
+        }
+
+        if suggestionsPaused {
+            return "Paused. Resume when you want to test suggestions."
+        }
+
+        return runtimeGuidance.message
+    }
+}
+
 @MainActor
 final class SettingsWindowController: NSObject {
     private let window: NSWindow
@@ -388,11 +406,11 @@ final class SettingsWindowController: NSObject {
         toggleScreenshotTraceButton.state = privacy.screenshotTracingEnabled ? .on : .off
         shortcutLabel.stringValue = keyboardShortcuts.statusText
         cycleAcceptAllShortcutButton.title = keyboardShortcuts.cycleButtonTitle
-        firstRunLabel.stringValue = onboardingText(
+        firstRunLabel.stringValue = SettingsOnboardingState(
             isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
-            guidance: guidance
-        )
+            runtimeGuidance: guidance
+        ).text
     }
 
     private func buildContent(in contentView: NSView) {
@@ -582,22 +600,6 @@ final class SettingsWindowController: NSObject {
         row.alignment = .centerY
         row.spacing = 8
         return row
-    }
-
-    private func onboardingText(
-        isTrusted: Bool,
-        suggestionsPaused: Bool,
-        guidance: RuntimeReadinessGuidance
-    ) -> String {
-        if !isTrusted {
-            return "Finish Accessibility setup above, then open a writing app to test suggestions."
-        }
-
-        if suggestionsPaused {
-            return "Paused. Resume when you want to test suggestions."
-        }
-
-        return guidance.message
     }
 
     @objc
