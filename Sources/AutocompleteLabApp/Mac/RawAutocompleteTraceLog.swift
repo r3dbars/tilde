@@ -250,7 +250,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         remainingVisibleText: String?,
         suggestionID: String = "",
         fieldIdentity: String = "",
-        requestMode: String = ""
+        requestMode: String = "",
+        metadata: [String: String] = [:]
     ) {
         guard isEnabled else {
             return
@@ -264,7 +265,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             requestMode: requestMode,
             acceptedText: acceptedText,
             remainingVisibleText: remainingVisibleText ?? "",
-            outcome: action
+            outcome: action,
+            metadata: metadata
         )
     }
 
