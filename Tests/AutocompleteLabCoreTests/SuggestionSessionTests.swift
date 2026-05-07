@@ -65,6 +65,16 @@ struct SuggestionSessionTests {
         #expect(session.visibleSuggestion?.visibleText == " should ship")
     }
 
+    @Test("Tab can require recompute after one accepted word")
+    func tabCanRequireRecomputeAfterOneAcceptedWord() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: " we should ship", maxVisibleWords: 8)
+        )
+
+        #expect(session.acceptNextWord(keepsResidual: false) == " we")
+        #expect(!session.hasVisibleSuggestion)
+    }
+
     @Test("Previewing next word does not consume the suggestion")
     func previewingNextWordDoesNotConsumeSuggestion() {
         var session = SuggestionSession(
