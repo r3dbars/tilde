@@ -31,4 +31,15 @@ struct CompletionRequestTests {
         #expect(request.behaviorProfileTraceMetadata["behaviorProfile"] == "ai_chat")
         #expect(request.behaviorProfileTraceMetadata["requestFieldKind"] == "multilineCompose")
     }
+
+    @Test("Trace metadata includes partial word shape only")
+    func traceMetadataIncludesPartialWordShapeOnly() {
+        let request = CompletionRequest(textBeforeCursor: "Please open Transcrip")
+        let metadata = request.behaviorProfileTraceMetadata
+
+        #expect(metadata["partialWordCharacters"] == "9")
+        #expect(metadata["partialWordLetters"] == "9")
+        #expect(metadata["partialWordCasing"] == "titlecase")
+        #expect(!metadata.values.joined(separator: " ").contains("Transcrip"))
+    }
 }

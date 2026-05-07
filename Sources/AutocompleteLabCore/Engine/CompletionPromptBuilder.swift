@@ -36,10 +36,12 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let behaviorProfile = behaviorProfile(for: request)
 
         if request.mode == .wordCompletion {
+            let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
             return CompletionPrompt(
                 system: """
                 Inline word completion.
                 Return only the missing suffix for the current word.
+                \(partialWordGuidance)
                 Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, or the suffix would complete the wrong word.
                 No spaces, punctuation, quotes, reasoning, or extra words.
                 """,
@@ -60,6 +62,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let effectiveMaxVisibleWords = min(maxVisibleWords, request.maxVisibleWords, behaviorProfile.maxVisibleWords)
         let sentenceGuidance = sentenceGuidance(for: request)
         let styleGuidance = request.acceptedTextStyleSketch?.promptGuidance ?? ""
+        let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
         let modeGuidance = request.mode == .sentenceContinuation
             ? "Sentence mode: start only the next sentence's first few words. Require higher confidence and return <NO_SUGGESTION> when the next sentence is not obvious."
             : "Phrase mode: continue only the current local thought."
@@ -70,6 +73,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, chatty, or likely to answer the prompt instead of continuing it.
         Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens.
         \(styleGuidance)
+        \(partialWordGuidance)
         \(behaviorProfile.promptGuidance.joined(separator: "\n"))
         \(modeGuidance)
         Prefer boring connective tissue, names, repeated local terms, closers, and the next few words the user was already likely to type.

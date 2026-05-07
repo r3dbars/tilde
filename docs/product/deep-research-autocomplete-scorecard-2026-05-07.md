@@ -3,14 +3,14 @@
 Source research:
 `/Users/redbars/Library/Caches/com.apple.SwiftUI.Drag-9DB841D4-8068-4044-B0CF-B2F61B9E12BB/deep-research-report (5).md`
 
-Repo state graded: `codex/deep-research-scorecard` after the generated-token
-cap pass, based on `origin/main`.
+Repo state graded: `codex/deep-research-scorecard` after the partial-word-shape
+prompt pass, based on `origin/main`.
 
 ## Executive Grade
 
 Baseline deep research score: **78/100**.
 
-Current implementation score after the current build pass: **97/100**.
+Current implementation score after the current build pass: **98/100**.
 
 This is a strong prototype with real engineering depth. It has local MLX
 runtime support, app compatibility profiles, privacy-safe tracing defaults,
@@ -79,6 +79,8 @@ Pass 1 shipped these improvements:
   punctuation, sentence punctuation, newline, and bullet-line starts.
 - Ambient generation is now hard-capped at 16 generated tokens even when env
   overrides request more.
+- Prompt/context metadata now includes trace-safe partial-word shape: counts,
+  casing, digits, hyphen, and apostrophe only.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -98,6 +100,8 @@ Remaining high-impact gaps:
   profile-aware email/bullet exceptions and real trace proof.
 - Generated length now has the requested hard cap; remaining runtime polish is
   mostly cache and latency-slice proof.
+- Prompt metadata now includes partial-word shape; accepted-kept raw suffixes
+  are still intentionally absent until there is a privacy-safe design.
 - Replay-first real-app proof is still missing. The command exists, but the
   current local trace corpus fails the proof gate because it predates display
   scoring, candidate-selection metadata, kept-horizon events, and researched
@@ -165,7 +169,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Accept-and-keep probability threshold | 86 | Durable learning now gates by app, field kind, mode, and behavior profile after enough evidence, with 14-day half-life decay, and Settings can clear learned suggestion state without deleting logs. | Prove thresholds with fresh real-app traces and expose tuning controls. |
 | Candidate generation | 72 | Phrase/sentence prompts ask for 1-3 candidates; `CompletionOutputCleaner.cleanCandidates` strips list prefixes, filters unsafe/sentinel lines, dedupes, and `CompletionCandidateRanker` picks only high-score/high-margin top candidates. | Prove real model outputs produce useful candidate sets and tune score/margin thresholds from traces. |
 | Context budget | 76 | Prompt uses bounded recent context from current sentence/paragraph. | Use 48-96 tokens plus prior sentence/paragraph only when useful. |
-| Metadata in prompt | 78 | App bundle, field kind, request mode, behavior profile, and aggregate accepted-kept style sketch now affect prompt/generation/scoring/tracing. | Include document title, partial word shape, and up to 3 accepted-kept suffixes. |
+| Metadata in prompt | 86 | App bundle, field kind, request mode, behavior profile, aggregate accepted-kept style sketch, and trace-safe partial-word shape now affect prompt/generation/scoring/tracing. | Include document title and privacy-safe accepted-kept suffix features. |
 | Hard `<NO_SUGGESTION>` path | 86 | Word/phrase/sentence prompts include `<NO_SUGGESTION>` guidance, and cleaner suppresses direct sentinels plus prompt-echo sentinel lines. | Prove sentinel behavior in fresh real model traces. |
 | Privacy-first tracing | 91 | Raw content is redacted by default, raw/screenshot capture is opt-in with expiry, and Settings can clear learned suggestion state separately from local logs. | Store prefix hashes and make compact style/learning features inspectable. |
 | Local runtime ownership | 92 | App-owned embedded runtime and no user-managed server dependency. | Keep this stance through beta and fail clearly if model assets are missing. |
@@ -257,6 +261,12 @@ Strong evidence in current code:
 - `Sources/AutocompleteLabCore/Configuration/ModelPolicy.swift:30-34` caps
   ambient generated tokens at 16, and `:88-90` clamps every length
   configuration through that cap.
+- `Sources/AutocompleteLabCore/Engine/PartialWordShape.swift:35-60` exposes
+  shape-only prompt and trace metadata, and `:62-95` derives it without storing
+  the raw partial word.
+- `Sources/AutocompleteLabCore/Engine/CompletionPromptBuilder.swift:38-47`
+  feeds partial-word shape into word-completion prompts, and `:62-77` adds it
+  to phrase/sentence prompts.
 - `docs/product/app-proof-matrix.md:24-40` honestly marks target proof as
   still failing and lists pending surfaces.
 
@@ -393,9 +403,10 @@ these are true.
 15. Done: add separate comma/semicolon, colon, closing punctuation, whitespace,
    newline, and bullet-line trigger tests.
 16. Done: hard cap ambient generated tokens at 16.
-17. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
+17. Done: add trace-safe partial-word shape metadata to prompts and traces.
+18. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
    checklist acceptance/proof slices are still missing.
-18. Partial: build the replay-first proof command. The command exists; a fresh
+19. Partial: build the replay-first proof command. The command exists; a fresh
    post-pass trace proof still has to pass.
 
 ## Goal Status
@@ -405,7 +416,7 @@ every scored item reaches 100/100.
 
 Baseline status: **78/100**.
 
-Current implementation status: **97/100**. Not complete.
+Current implementation status: **98/100**. Not complete.
 
 Replay proof status:
 
