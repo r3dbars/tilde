@@ -342,6 +342,27 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             notes: "Diagnostics-only rich-text compose target until Mail insertion has a verified safe adapter."
         ),
         CompatibilityProfile(
+            bundleIdentifier: "com.openai.atlas",
+            displayName: "ChatGPT Atlas",
+            appFamily: .chromium,
+            supportLevel: .diagnosticsOnly,
+            supportReason: "Atlas can contain private browser text and prompt chats; no no-submit proof exists.",
+            safetyOwnerNote: "Owner: Atlas remains diagnostics-only because browser fields and ChatGPT prompts can contain private text and no one-word no-submit proof exists.",
+            renderMode: .disabled,
+            insertionMode: .disabled,
+            fallbackRenderMode: .disabled,
+            fallbackInsertionMode: .disabled,
+            fieldIdentityMode: .stableBounds,
+            anchorLadder: [.none],
+            knownFailureModes: ["browser fields can contain private content", "prompt composer needs no-submit proof"],
+            allowsFieldAnchor: false,
+            allowsWindowAnchor: false,
+            supportsOneWordAcceptance: false,
+            supportsFullAcceptance: false,
+            isSensitive: true,
+            notes: "Diagnostics-only prompt/browser target until disposable prompt proof verifies placement and Tab accept cannot submit."
+        ),
+        CompatibilityProfile(
             bundleIdentifier: "com.google.Chrome",
             displayName: "Chrome",
             appFamily: .chromium,
