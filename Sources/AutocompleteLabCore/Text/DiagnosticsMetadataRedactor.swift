@@ -24,6 +24,7 @@ public enum DiagnosticsMetadataRedactor {
             "completion",
             "suggestion",
             "selected",
+            "typed",
             "value"
         ].contains { normalized.contains($0) }
     }
@@ -34,6 +35,8 @@ public enum DiagnosticsMetadataRedactor {
             || normalized.hasSuffix("count")
             || normalized.hasSuffix("length")
             || normalized.hasSuffix("milliseconds")
+            || normalized.hasSuffix("rect")
+            || normalized.hasSuffix("frame")
             || normalized.hasPrefix("has")
     }
 

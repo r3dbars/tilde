@@ -18,9 +18,9 @@ public struct InsertionRetryPolicy: Equatable, Sendable {
         }
 
         switch insertionMode {
-        case .keyEvents, .axThenKeyEvents:
+        case .axValueReplacement, .keyEvents, .axThenKeyEvents:
             return true
-        case .axSelectedText, .axValueReplacement, .clipboardFallbackOptIn, .disabled:
+        case .axSelectedText, .clipboardFallbackOptIn, .disabled:
             return false
         }
     }

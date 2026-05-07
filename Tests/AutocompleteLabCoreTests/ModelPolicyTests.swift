@@ -57,6 +57,7 @@ struct ModelPolicyTests {
 
     @Test("Completion length configuration reads environment overrides")
     func completionLengthConfigurationReadsEnvironmentOverrides() {
+        let defaultConfiguration = CompletionLengthConfiguration.fromEnvironment([:])
         let short = CompletionLengthConfiguration.fromEnvironment([
             "AUTOCOMPLETE_LAB_VISIBLE_WORDS": "3"
         ])
@@ -65,6 +66,9 @@ struct ModelPolicyTests {
             "AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS": "99"
         ])
 
+        #expect(defaultConfiguration.maxVisibleWords == 3)
+        #expect(defaultConfiguration.maxGeneratedTokens == 9)
+        #expect(defaultConfiguration.displaySummary == "3 words / 9 tokens")
         #expect(short.maxVisibleWords == 3)
         #expect(short.experimentArm == .length3Word)
         #expect(short.maxGeneratedTokens == 9)

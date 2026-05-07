@@ -2,6 +2,7 @@
 set -euo pipefail
 
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ ! -s "$LOG_PATH" ]]; then
   echo "diagnostics log is missing or empty: $LOG_PATH" >&2
@@ -152,6 +153,13 @@ fi
 if [[ "${AUTOCOMPLETE_LAB_REQUIRE_READY:-0}" == "1" ]]; then
   require_latest_launch_regex "runtime .*readinessAction=none .*readinessStage=ready .*state=ready [(]MLX[)]"
   reject_latest_launch_pattern "runtime-warm-failed"
+fi
+
+if [[ "${AUTOCOMPLETE_LAB_REQUIRE_TYPING_FAST:-0}" == "1" ]]; then
+  reject_recent_pattern "keyboard-action .*key=other"
+  reject_recent_pattern "keyboard-event-tap-disabled"
+  reject_recent_pattern "keyboard-event-tap-latency-slow"
+  "$SCRIPT_DIR/check_typing_performance_log.sh"
 fi
 
 echo "Diagnostics log verified: $LOG_PATH"
