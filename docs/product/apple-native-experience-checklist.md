@@ -342,7 +342,9 @@ Native target: when the app is unsure, the user feels nothing.
 - [x] Low placement confidence should suppress inline mode.
 - [x] Prompt apps should require no-submit proof before full accept.
 - [ ] Unsupported apps should not appear broken.
-- [ ] The app should never leave a ghost after focus moves.
+- [x] The app should never leave a ghost after focus moves.
+  Code-backed: workspace app activation now clears any visible suggestion
+  immediately, and field transitions already hide before tracking the new field.
 - [x] The app should hide after repeated placement uncertainty in the same field.
 
 ## Category 9: User Control
