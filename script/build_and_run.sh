@@ -245,7 +245,7 @@ open_app() {
     launchctl unsetenv AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS >/dev/null 2>&1 || true
   fi
 
-  /usr/bin/open -n "$APP_BUNDLE"
+  "$APP_BINARY" >/tmp/autocomplete-lab-run.log 2>&1 &
   wait_for_current_app_instance
 }
 
