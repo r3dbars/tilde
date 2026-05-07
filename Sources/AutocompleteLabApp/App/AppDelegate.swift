@@ -73,6 +73,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         deleteLocalLogs: { [weak self] in
             self?.deleteLocalPrivacyLogs()
         },
+        clearLearningData: { [weak self] in
+            self?.clearLearningData()
+        },
         cycleAcceptAllShortcut: { [weak self] in
             self?.cycleAcceptAllShortcut()
         }
@@ -4134,6 +4137,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if refreshSettings {
             refreshRuntimeChrome()
         }
+    }
+
+    private func clearLearningData() {
+        acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
+        acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
+        recentWordMemory = ScopedRecentWordMemory()
+        suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
+        prefixFamilyCooldownPolicy = PrefixFamilyCooldownPolicy()
+        UserDefaults.standard.removeObject(forKey: Self.acceptedAndKeptLearningDefaultsKey)
+        UserDefaults.standard.removeObject(forKey: Self.acceptedTextStyleMemoryDefaultsKey)
+        DiagnosticsLog.shared.record(
+            "learning-data-cleared",
+            metadata: ["surface": "settings"]
+        )
+        refreshRuntimeChrome()
     }
 
     private func cycleAcceptAllShortcut() {
