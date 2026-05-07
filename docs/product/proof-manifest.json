@@ -43,7 +43,7 @@
         "docs/product/visual-placement-screenshots/chrome-prosemirror-like.png"
       ],
       "gaps": [
-        "Needs real Obsidian/CodeMirror, real Monaco, and real ProseMirror screenshots."
+        "Needs real Monaco and real ProseMirror screenshots beyond local fixtures."
       ]
     },
     {
@@ -75,17 +75,18 @@
     },
     {
       "surface": "Obsidian",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Obsidian",
         "bundle": "md.obsidian",
         "proof": "default",
-        "minVerifiedAccepts": 2
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
       },
-      "screenshots": [],
-      "gaps": [
-        "Needs screenshot-backed proof in a disposable vault note."
-      ]
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/obsidian.png"
+      ],
+      "gaps": []
     },
     {
       "surface": "Apple Notes title",
