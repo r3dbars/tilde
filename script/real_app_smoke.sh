@@ -381,10 +381,26 @@ delay 0.1
 tell application "System Events"
   tell process "TextEdit"
     set frontmost to true
+    set texteditPosition to position of window 1
+    click at {(item 1 of texteditPosition) + 120, (item 2 of texteditPosition) + 120}
   end tell
 end tell
 APPLESCRIPT
   wait_for_frontmost_app "TextEdit" 5
+}
+
+close_textedit_smoke_documents() {
+  osascript >/dev/null <<'APPLESCRIPT'
+tell application "TextEdit"
+  repeat with currentDocument in (documents as list)
+    try
+      if (name of currentDocument) contains "autocomplete-lab-textedit-smoke" then
+        close currentDocument saving no
+      end if
+    end try
+  end repeat
+end tell
+APPLESCRIPT
 }
 
 assert_chrome_chat_fixture_not_submitted() {
@@ -780,9 +796,16 @@ run_textedit() {
   tmp_dir="$(make_tmp_dir)"
   tmp_file="$tmp_dir/autocomplete-lab-textedit-smoke.txt"
 
+  close_textedit_smoke_documents
   : >"$tmp_file"
-  open -a TextEdit "$tmp_file"
+  osascript >/dev/null <<APPLESCRIPT
+tell application "TextEdit"
+  activate
+  open POSIX file "$tmp_file"
+end tell
+APPLESCRIPT
   sleep 1
+  focus_textedit_smoke_editor
 
   case "$TEXTEDIT_SESSION_APP" in
     textedit-multiline)
