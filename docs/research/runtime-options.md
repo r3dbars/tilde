@@ -2,24 +2,62 @@
 
 ## Decision
 
-Do not make users start Ollama, llama.cpp, or any other model server.
+Do not make users start Ollama, llama.cpp, Python helper scripts, or any other
+model server.
 
-The product should own the model runtime. The user launches one Mac app and autocomplete works.
+The product should own the model runtime. The user launches one Mac app and
+autocomplete works.
 
-## First Candidate: MLX
+## Current Preferred Path: MLX + Qwen3.5 4B
 
-MLX is the first practical runtime candidate for this Mac prototype because it is Apple Silicon native and can live behind the app-owned `ModelRuntime` boundary. Qwen3.5 4B is the documented default because it is the current low-latency quality target for short autocomplete completions. LiteRT-LM stays tracked as a fallback candidate for future app-owned packaging work.
+MLX is the current runtime path because it is Apple Silicon native and already
+lives behind the app-owned `ModelRuntime` boundary.
+
+The preferred beta model asset is Qwen3.5 4B 4-bit:
+
+```text
+~/Library/Application Support/AutocompleteLab/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
+```
+
+The matching development download alias is:
+
+```bash
+script/download_mlx_model.py --model qwen35-4b
+```
+
+That helper is for local development and packaging prep. It should not be part
+of tester onboarding.
 
 Sources:
 
 - [MLX Swift LM GitHub](https://github.com/ml-explore/mlx-swift-lm)
 - [MLX Swift LM package](https://github.com/ml-explore/mlx-swift-lm/blob/main/Package.swift)
+- [Qwen3.5 4B MLX model](https://huggingface.co/mlx-community/Qwen3.5-4B-4bit)
+
+## Other Local Trial Models
+
+These are useful for developer trials, not the default beta promise:
+
+- `qwen35-4b` or `qwen3.5-4b`: preferred Qwen3.5 4B beta asset.
+- `qwen35-9b` or `qwen3.5-9b`: Qwen3.5 9B 4-bit, better quality trial with higher cost.
+- `qwen3-1.7b`: smaller Qwen3 baseline.
+- `qwen3-0.6b`: very small smoke-test baseline.
+- `gemma-4-e2b`: historical Gemma E2B candidate.
+- `gemma-4-e4b`, `gemma4-e4b`, or `gemma-4-e4b-4bit`: Gemma 4 E4B MLX trial.
+- `gemma-4-e4b-it-optiq`, `gemma-4-e4b-it-optiq-4bit`, or `gemma4-e4b-it-optiq`: Gemma 4 E4B OptiQ trial.
+- `gemma-4-26b`: larger Gemma 4 trial.
+
+Gemma 4 E2B is no longer the beta target. It remains a historical candidate
+because earlier MLX loading did not make it the fastest path to a playable
+native build.
 
 ## Model Asset Format
 
 Use the MLX/Hugging Face directory format under:
 
-`~/Library/Application Support/AutocompleteLab/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit`
+```text
+~/Library/Application Support/AutocompleteLab/Models/<ModelName>/MLX/<AssetFolder>
+```
 
 The directory should contain at least:
 
@@ -27,11 +65,10 @@ The directory should contain at least:
 - tokenizer files such as `tokenizer.json` or `tokenizer_config.json`
 - one or more `.safetensors` weight files
 
-The default model repo is `mlx-community/Qwen3.5-4B-4bit`.
-
 ## Fallback Candidate: LiteRT-LM
 
-LiteRT-LM should be revisited once the Swift/macOS path is ready enough. If MLX binding work gets too heavy, LiteRT-LM may still become the better packaged embedded route.
+LiteRT-LM stays tracked as a future packaged runtime candidate, especially for
+Gemma-family edge models. It is not the current beta path.
 
 Sources:
 
@@ -40,12 +77,13 @@ Sources:
 
 ## Product Constraints
 
-- app-owned runtime
-- no user-managed server
-- Qwen3.5 4B
-- macOS 26 on Apple Silicon for the private beta
-- reasoning off
-- 8-16 generated tokens
-- 2-8 visible words
-- average latency under 700ms
-- stretch latency under 300ms after warmup
+- app-owned runtime,
+- no user-managed server,
+- Qwen3.5 4B 4-bit preferred beta asset,
+- Apple Silicon with 16 GB RAM first target,
+- reasoning off,
+- 9 generated tokens by default,
+- 1-3 visible words by default,
+- p95 first-visible latency at or below 750ms for supported status,
+- p95 first-visible latency at or below 1000ms for caveated status,
+- no beta if runtime falls back to mock output.

@@ -109,6 +109,20 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(!SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(frame))
     }
 
+    @Test("Keeps inline panel valid inside cramped clipping bounds")
+    func keepsInlinePanelValidInsideCrampedClippingBounds() {
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            caretRect: CGRect(x: 38, y: 40, width: 0, height: 18),
+            textSize: CGSize(width: 180, height: 18),
+            screenFrame: CGRect(x: 0, y: 0, width: 120, height: 100),
+            clippingFrame: CGRect(x: 10, y: 10, width: 40, height: 60)
+        )
+
+        #expect(frame.minX >= 18)
+        #expect(frame.maxX <= 42)
+        #expect(frame.width > 0)
+    }
+
     @Test("Mirror fallback anchors in the middle of large focused elements")
     func mirrorFallbackAnchorsInMiddleOfLargeFocusedElements() {
         let frame = SuggestionPanelFrameCalculator.floatingMirrorFrame(
@@ -147,6 +161,20 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(frame.minX == 88)
         #expect(frame.maxY == 618)
         #expect(frame.width == 190)
+    }
+
+    @Test("Keeps mirror panel inside cramped clipping bounds")
+    func keepsMirrorPanelInsideCrampedClippingBounds() {
+        let frame = SuggestionPanelFrameCalculator.floatingMirrorFrame(
+            anchorRect: CGRect(x: 22, y: 30, width: 0, height: 22),
+            textSize: CGSize(width: 240, height: 18),
+            screenFrame: CGRect(x: 0, y: 0, width: 120, height: 100),
+            clippingFrame: CGRect(x: 10, y: 10, width: 44, height: 70)
+        )
+
+        #expect(frame.minX >= 18)
+        #expect(frame.maxX <= 46)
+        #expect(frame.width > 0)
     }
 
     @Test("Skips refreshing identical panel presentations")

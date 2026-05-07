@@ -11,6 +11,8 @@ public struct CompletionPrompt: Equatable, Sendable {
 }
 
 public struct CompletionPromptBuilder: Equatable, Sendable {
+    public static let promptStyleIdentifier = "tiny-continuation-v1"
+
     public let maxContextCharacters: Int
     public let maxCurrentParagraphCharacters: Int
     public let maxCurrentSentenceCharacters: Int

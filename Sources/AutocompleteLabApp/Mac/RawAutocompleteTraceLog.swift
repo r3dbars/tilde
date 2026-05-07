@@ -207,10 +207,23 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         prompt: CompletionPrompt,
         rawOutput: String,
         cleanedSuggestion: CompletionSuggestion?,
-        suggestionID: String = ""
+        suggestionID: String = "",
+        latencyMilliseconds: Int? = nil,
+        firstTokenLatencyMilliseconds: Int? = nil
     ) {
         guard isEnabled else {
             return
+        }
+
+        var metadata = [
+            "cleanedWordCount": String(cleanedSuggestion?.visibleWordCount ?? 0),
+            "emptyResult": String(cleanedSuggestion == nil)
+        ]
+        if let latencyMilliseconds {
+            metadata["totalGenerationLatencyMilliseconds"] = String(latencyMilliseconds)
+        }
+        if let firstTokenLatencyMilliseconds {
+            metadata["firstTokenLatencyMilliseconds"] = String(firstTokenLatencyMilliseconds)
         }
 
         record(
@@ -225,9 +238,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             rawOutput: rawOutput,
             cleanedVisibleText: cleanedSuggestion?.visibleText ?? "",
             displayedText: cleanedSuggestion?.visibleText ?? "",
-            metadata: [
-                "cleanedWordCount": String(cleanedSuggestion?.visibleWordCount ?? 0)
-            ]
+            latencyMilliseconds: latencyMilliseconds,
+            metadata: metadata
         )
     }
 
