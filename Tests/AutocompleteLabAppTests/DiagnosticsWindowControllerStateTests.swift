@@ -5,6 +5,133 @@ import AutocompleteLabCore
 
 @Suite("Diagnostics window state")
 struct DiagnosticsWindowControllerStateTests {
+    @Test("Placement diagnostics expose confidence without suggestion text")
+    func placementDiagnosticsExposeConfidenceWithoutSuggestionText() {
+        let diagnostics = PlacementDiagnostics(
+            summary: AutocompleteTraceSummary(
+                totalEvents: 8,
+                presentedCount: 3,
+                acceptedCount: 1,
+                typedThroughCount: 0,
+                typedOverCount: 0,
+                ignoredCount: 0,
+                insertionFailureCount: 0,
+                caretGeometryFailureCount: 2,
+                caretGeometryFailureRate: 0.4,
+                caretGeometryFailuresByApp: ["com.apple.TextEdit": 1, "md.obsidian": 1],
+                caretGeometryFailureRateByApp: ["com.apple.TextEdit": 0.25, "md.obsidian": 0.5],
+                caretGeometryFailuresByRenderMode: ["inlineAdjacent": 2],
+                caretGeometryFailureRateByRenderMode: ["inlineAdjacent": 0.67],
+                acceptRate: 0.33,
+                usefulRate: 0.33,
+                p50LatencyMilliseconds: nil,
+                p90LatencyMilliseconds: nil,
+                p95LatencyMilliseconds: nil,
+                anchorQualityByApp: [
+                    "com.apple.TextEdit": ["valid": 3, "invalid": 1],
+                    "md.obsidian": ["synthetic": 2]
+                ],
+                topMisses: []
+            ),
+            recentEvents: [
+                event(
+                    metadata: [
+                        "placementRequestedRenderMode": "inlineAdjacent",
+                        "placementEffectiveRenderMode": "inlineAdjacent",
+                        "placementAnchorSource": "caret",
+                        "placementHealthReason": "healthy",
+                        "placementSelfHealingApplied": "false",
+                        "placementSelfHealingAction": "none",
+                        "placementConfidenceScore": "1.00",
+                        "placementConfidenceBand": "high",
+                        "clippingRect": "x=10,y=20,w=300,h=40",
+                        "screenshotCaptured": "true"
+                    ],
+                    type: .suggestionPresented,
+                    appBundleIdentifier: "com.apple.TextEdit",
+                    displayedText: "private words"
+                ),
+                event(
+                    metadata: [
+                        "placementRequestedRenderMode": "inlineAdjacent",
+                        "placementEffectiveRenderMode": "floatingMirror",
+                        "placementAnchorSource": "synthetic-caret",
+                        "placementHealthReason": "missing-caret",
+                        "placementSelfHealingApplied": "true",
+                        "placementSelfHealingAction": "fallback-floating-mirror",
+                        "placementConfidenceScore": "0.40",
+                        "placementConfidenceBand": "low",
+                        "clippingRect": "x=10,y=20,w=300,h=40",
+                        "screenshotCaptured": "true"
+                    ],
+                    type: .suggestionPresented,
+                    appBundleIdentifier: "md.obsidian",
+                    displayedText: "more private words"
+                ),
+                event(
+                    metadata: [
+                        "placementRequestedRenderMode": "inlineAdjacent",
+                        "placementSelfHealingAction": "suppress",
+                        "placementConfidenceScore": "0.00",
+                        "placementConfidenceBand": "none",
+                        "placementClipped": "false"
+                    ],
+                    type: .suggestionSuppressed,
+                    appBundleIdentifier: "md.obsidian",
+                    displayedText: "suppressed private words"
+                )
+            ]
+        )
+
+        #expect(diagnostics.text.contains("Placement diagnostics: caret failures 2 (40%), recent placement events 3"))
+        #expect(diagnostics.text.contains("confidence=0.00 (none)"))
+        #expect(diagnostics.text.contains("render=inlineAdjacent->unknown"))
+        #expect(diagnostics.text.contains("selfHealing=unknown/suppress"))
+        #expect(diagnostics.text.contains("clipping=false"))
+        #expect(diagnostics.text.contains("screenshot=false"))
+        #expect(diagnostics.text.contains("Recent confidence bands:"))
+        #expect(diagnostics.text.contains("low: 1"))
+        #expect(diagnostics.text.contains("none: 1"))
+        #expect(diagnostics.text.contains("Placement self-healing actions:"))
+        #expect(diagnostics.text.contains("fallback-floating-mirror: 1"))
+        #expect(diagnostics.text.contains("suppress: 1"))
+        #expect(diagnostics.text.contains("inlineAdjacent->floatingMirror: 1"))
+        #expect(diagnostics.text.contains("com.apple.TextEdit: valid=3, invalid=1"))
+        #expect(diagnostics.text.contains("com.apple.TextEdit: 1 (25%)"))
+        #expect(diagnostics.text.contains("inlineAdjacent: 2 (67%)"))
+        #expect(!diagnostics.text.contains("private words"))
+    }
+
+    @Test("Placement diagnostics stay useful before placement data exists")
+    func placementDiagnosticsStayUsefulBeforePlacementDataExists() {
+        let diagnostics = PlacementDiagnostics(
+            summary: AutocompleteTraceSummary(
+                totalEvents: 0,
+                presentedCount: 0,
+                acceptedCount: 0,
+                typedThroughCount: 0,
+                typedOverCount: 0,
+                ignoredCount: 0,
+                insertionFailureCount: 0,
+                acceptRate: 0,
+                usefulRate: 0,
+                p50LatencyMilliseconds: nil,
+                p90LatencyMilliseconds: nil,
+                p95LatencyMilliseconds: nil,
+                topMisses: []
+            ),
+            recentEvents: []
+        )
+
+        #expect(diagnostics.text.contains("Placement diagnostics: caret failures 0 (0%), recent placement events 0"))
+        #expect(diagnostics.text.contains("Current placement: no recent placement metadata"))
+        #expect(diagnostics.text.contains("Recent confidence bands: none yet"))
+        #expect(diagnostics.text.contains("Placement self-healing actions: none yet"))
+        #expect(diagnostics.text.contains("Render mode transitions: none yet"))
+        #expect(diagnostics.text.contains("Anchor quality by app: none yet"))
+        #expect(diagnostics.text.contains("Caret failures by app: none yet"))
+    }
+
     @Test("Learning diagnostics expose kept annoyance and miss state")
     func learningDiagnosticsExposeKeptAnnoyanceAndMissState() {
         let diagnostics = SuggestionLearningDiagnostics(
@@ -97,12 +224,19 @@ struct DiagnosticsWindowControllerStateTests {
         #expect(diagnostics.text.contains("Style sketch: no recent aggregate style metadata"))
     }
 
-    private func event(metadata: [String: String]) -> AutocompleteTraceEvent {
+    private func event(
+        metadata: [String: String],
+        type: AutocompleteTraceEventType = .suggestionSuppressed,
+        appBundleIdentifier: String = "",
+        displayedText: String = ""
+    ) -> AutocompleteTraceEvent {
         AutocompleteTraceEvent(
             timestamp: "2026-05-07T00:00:00Z",
             sessionID: "session",
             suggestionID: UUID().uuidString,
-            type: .suggestionSuppressed,
+            type: type,
+            appBundleIdentifier: appBundleIdentifier,
+            displayedText: displayedText,
             metadata: metadata
         )
     }

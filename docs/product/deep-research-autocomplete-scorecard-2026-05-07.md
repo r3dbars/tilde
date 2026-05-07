@@ -69,6 +69,9 @@ Pass 1 shipped these improvements:
 - Accepted-and-kept suggestions now feed a durable aggregate style-memory store
   with a 14-day half-life; prompts receive only a trace-safe style sketch, not
   raw accepted text.
+- Diagnostics now exposes placement confidence, anchor source, render-mode
+  fallback, self-healing action, clipping state, screenshot state, and caret
+  failure rates without showing suggestion text.
 - Settings now has a Clear Learned Suggestions control that resets
   accepted-kept scores, aggregate style memory, recent words, repetition
   suppression, and prefix-family cooldowns without deleting logs.
@@ -175,7 +178,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Context budget | 84 | Prompt context now uses a 48-96 token budget, keeps the current local fragment, borrows the prior sentence when the current fragment is tiny or sentence mode needs it, and borrows the prior paragraph only for tiny sentence-mode starts. | Tune the usefulness rules against fresh real-model traces and add document-title context without storing raw text. |
 | Metadata in prompt | 89 | App bundle, field kind, request mode, behavior profile, aggregate accepted-kept style sketch, trace-safe partial-word shape, and trace-safe current-line list shape now affect prompt/generation/scoring/tracing. | Include document title and privacy-safe accepted-kept suffix features. |
 | Hard `<NO_SUGGESTION>` path | 86 | Word/phrase/sentence prompts include `<NO_SUGGESTION>` guidance, and cleaner suppresses direct sentinels plus prompt-echo sentinel lines. | Prove sentinel behavior in fresh real model traces. |
-| Privacy-first tracing | 92 | Raw content is redacted by default, raw/screenshot capture is opt-in with expiry, line/list shape metadata avoids item text, and Settings can clear learned suggestion state separately from local logs. | Store prefix hashes and make compact style/learning features inspectable. |
+| Privacy-first tracing | 93 | Raw content is redacted by default, raw/screenshot capture is opt-in with expiry, line/list shape metadata avoids item text, Settings can clear learned suggestion state separately from local logs, and Diagnostics now exposes placement confidence/anchor/render/self-healing evidence without suggestion text. | Store prefix hashes and make compact style/learning features inspectable. |
 | Local runtime ownership | 92 | App-owned embedded runtime and no user-managed server dependency. | Keep this stance through beta and fail clearly if model assets are missing. |
 | Warm/runtime cache | 75 | Model container is warm and reused. Each request builds a new `ChatSession`. | Add static prompt prefix cache and per-field session/KV cache. |
 | Generated length | 90 | MVP defaults to 5 visible words / 10 generated tokens, behavior profiles stay shorter by mode, and env overrides now clamp at 7 visible words / 16 generated tokens. | Tune defaults from fresh traces and keep sentence mode from using all 16 tokens. |
@@ -450,6 +453,9 @@ these are true.
 30. Done: extend profile-aware candidate ranking to casual chat, notes,
    docs/prose, and bullets so the runtime suppresses question/emotional
    steering, flowery note text, new prose points, and repeated list markers.
+31. Done: add placement diagnostics to the Diagnostics window so confidence,
+   anchor source, render-mode fallback, self-healing action, clipping state,
+   screenshot state, and caret failure rates are inspectable without raw text.
 
 ## Goal Status
 

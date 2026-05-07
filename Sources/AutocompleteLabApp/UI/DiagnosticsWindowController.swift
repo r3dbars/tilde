@@ -170,6 +170,10 @@ final class DiagnosticsWindowController {
             summary: traceSummary,
             recentEvents: recentTraceEvents
         ).text)
+        sections.append(PlacementDiagnostics(
+            summary: traceSummary,
+            recentEvents: recentTraceEvents
+        ).text)
         sections.append(acceptRateBucketsText(title: "Accept rate by app", buckets: traceSummary.acceptRateByApp))
         sections.append(acceptRateBucketsText(title: "Accept rate by mode", buckets: traceSummary.acceptRateByMode))
         sections.append(acceptRateBucketsText(title: "Useful rate by app", buckets: traceSummary.usefulRateByApp))
@@ -362,6 +366,184 @@ final class DiagnosticsWindowController {
     @objc
     private func deleteTraces() {
         deleteTracesAction?()
+    }
+}
+
+struct PlacementDiagnostics: Equatable {
+    let summary: AutocompleteTraceSummary
+    let recentEvents: [AutocompleteTraceEvent]
+
+    var text: String {
+        [
+            headlineText,
+            latestPlacementText,
+            countBucketsText(title: "Recent confidence bands", buckets: confidenceBandCounts),
+            countBucketsText(title: "Placement self-healing actions", buckets: selfHealingActionCounts),
+            countBucketsText(title: "Render mode transitions", buckets: renderModeTransitionCounts),
+            nestedCountBucketsText(title: "Anchor quality by app", buckets: summary.anchorQualityByApp),
+            failureRatesText(
+                title: "Caret failures by app",
+                counts: summary.caretGeometryFailuresByApp,
+                rates: summary.caretGeometryFailureRateByApp
+            ),
+            failureRatesText(
+                title: "Caret failures by render mode",
+                counts: summary.caretGeometryFailuresByRenderMode,
+                rates: summary.caretGeometryFailureRateByRenderMode
+            )
+        ].joined(separator: "\n")
+    }
+
+    private var headlineText: String {
+        "Placement diagnostics: caret failures \(summary.caretGeometryFailureCount) (\(Self.percent(summary.caretGeometryFailureRate))), recent placement events \(recentPlacementEvents.count)"
+    }
+
+    private var latestPlacementText: String {
+        guard let event = latestEvent(containingAny: [
+            "placementConfidenceScore",
+            "placementConfidenceBand",
+            "placementAnchorSource",
+            "placementRequestedRenderMode",
+            "placementEffectiveRenderMode",
+            "placementSelfHealingAction"
+        ]) else {
+            return "Current placement: no recent placement metadata"
+        }
+
+        let score = event.metadata["placementConfidenceScore"] ?? "unknown"
+        let band = event.metadata["placementConfidenceBand"] ?? "unknown"
+        let anchor = event.metadata["placementAnchorSource"] ?? "unknown"
+        let requestedRenderMode = event.metadata["placementRequestedRenderMode"]
+            ?? event.metadata["requestedRenderMode"]
+            ?? "unknown"
+        let effectiveRenderMode = event.metadata["placementEffectiveRenderMode"]
+            ?? event.metadata["effectiveRenderMode"]
+            ?? "unknown"
+        let selfHealingApplied = event.metadata["placementSelfHealingApplied"] ?? "unknown"
+        let selfHealingAction = event.metadata["placementSelfHealingAction"] ?? "unknown"
+        let eventReason = event.reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reason = event.metadata["placementHealthReason"] ?? (eventReason.isEmpty ? "none" : eventReason)
+
+        return "Current placement: confidence=\(score) (\(band)), anchor=\(anchor), render=\(requestedRenderMode)->\(effectiveRenderMode), selfHealing=\(selfHealingApplied)/\(selfHealingAction), clipping=\(clippingDescription(for: event)), screenshot=\(screenshotDescription(for: event)), reason=\(reason)"
+    }
+
+    private var recentPlacementEvents: [AutocompleteTraceEvent] {
+        recentEvents.filter { event in
+            event.metadata.keys.contains { $0.hasPrefix("placement") }
+        }
+    }
+
+    private var confidenceBandCounts: [String: Int] {
+        counts(for: recentPlacementEvents.compactMap { $0.metadata["placementConfidenceBand"] })
+    }
+
+    private var selfHealingActionCounts: [String: Int] {
+        counts(for: recentPlacementEvents.compactMap { $0.metadata["placementSelfHealingAction"] })
+    }
+
+    private var renderModeTransitionCounts: [String: Int] {
+        counts(for: recentPlacementEvents.compactMap { event in
+            guard let requested = event.metadata["placementRequestedRenderMode"],
+                  let effective = event.metadata["placementEffectiveRenderMode"] else {
+                return nil
+            }
+
+            return "\(requested)->\(effective)"
+        })
+    }
+
+    private func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
+        recentEvents.reversed().first { event in
+            !keys.isDisjoint(with: Set(event.metadata.keys))
+        }
+    }
+
+    private func clippingDescription(for event: AutocompleteTraceEvent) -> String {
+        if let clipped = event.metadata["placementClipped"] {
+            return clipped
+        }
+
+        guard let clippingRect = event.metadata["clippingRect"] else {
+            return "unknown"
+        }
+
+        return clippingRect == "none" ? "missing" : "available"
+    }
+
+    private func screenshotDescription(for event: AutocompleteTraceEvent) -> String {
+        if let screenshotCaptured = event.metadata["screenshotCaptured"] {
+            return screenshotCaptured
+        }
+
+        return event.screenshotPath.isEmpty ? "false" : "true"
+    }
+
+    private func countBucketsText(title: String, buckets: [String: Int]) -> String {
+        guard !buckets.isEmpty else {
+            return "\(title): none yet"
+        }
+
+        return """
+        \(title):
+        \(buckets.sorted { lhs, rhs in
+            if lhs.value == rhs.value {
+                return lhs.key < rhs.key
+            }
+
+            return lhs.value > rhs.value
+        }.map { key, value in
+            "  \(key): \(value)"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func nestedCountBucketsText(title: String, buckets: [String: [String: Int]]) -> String {
+        guard !buckets.isEmpty else {
+            return "\(title): none yet"
+        }
+
+        return """
+        \(title):
+        \(buckets.sorted { $0.key < $1.key }.map { app, counts in
+            let countText = counts
+                .sorted { lhs, rhs in
+                    if lhs.value == rhs.value {
+                        return lhs.key < rhs.key
+                    }
+
+                    return lhs.value > rhs.value
+                }
+                .map { "\($0.key)=\($0.value)" }
+                .joined(separator: ", ")
+            return "  \(app): \(countText)"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func failureRatesText(title: String, counts: [String: Int], rates: [String: Double]) -> String {
+        let keys = Set(counts.keys).union(rates.keys)
+        guard !keys.isEmpty else {
+            return "\(title): none yet"
+        }
+
+        return """
+        \(title):
+        \(keys.sorted().map { key in
+            let count = counts[key] ?? 0
+            let rate = rates[key] ?? 0
+            return "  \(key): \(count) (\(Self.percent(rate)))"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func counts(for values: [String]) -> [String: Int] {
+        values.reduce(into: [:]) { result, value in
+            result[value, default: 0] += 1
+        }
+    }
+
+    private static func percent(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
     }
 }
 
