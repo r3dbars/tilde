@@ -14,6 +14,7 @@ public enum PlacementHealthReason: String, Equatable, Sendable {
     case missingFloatingFallback = "missing-floating-fallback"
     case lowConfidencePlacement = "low-confidence-placement"
     case untrustedSyntheticCaret = "untrusted-synthetic-caret"
+    case untrustedDetachedAnchor = "untrusted-detached-anchor"
 }
 
 public enum PlacementAnchorSource: String, Equatable, Sendable {
@@ -26,13 +27,16 @@ public enum PlacementAnchorSource: String, Equatable, Sendable {
 public struct PlacementTrustPolicy: Equatable, Sendable {
     public let allowsLowConfidencePlacement: Bool
     public let allowsSyntheticCaretPlacement: Bool
+    public let allowsDetachedAnchorPlacement: Bool
 
     public init(
         allowsLowConfidencePlacement: Bool = true,
-        allowsSyntheticCaretPlacement: Bool = true
+        allowsSyntheticCaretPlacement: Bool = true,
+        allowsDetachedAnchorPlacement: Bool = true
     ) {
         self.allowsLowConfidencePlacement = allowsLowConfidencePlacement
         self.allowsSyntheticCaretPlacement = allowsSyntheticCaretPlacement
+        self.allowsDetachedAnchorPlacement = allowsDetachedAnchorPlacement
     }
 
     public static let permissive = PlacementTrustPolicy()
@@ -375,6 +379,11 @@ public enum PlacementHealth {
         if presentation.anchorSource == .syntheticCaret,
            !trustPolicy.allowsSyntheticCaretPlacement {
             return suppress(presentation.requestedRenderMode, reason: .untrustedSyntheticCaret)
+        }
+
+        if (presentation.anchorSource == .element || presentation.anchorSource == .window),
+           !trustPolicy.allowsDetachedAnchorPlacement {
+            return suppress(presentation.requestedRenderMode, reason: .untrustedDetachedAnchor)
         }
 
         if presentation.isLowConfidence,

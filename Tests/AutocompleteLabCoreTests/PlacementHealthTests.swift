@@ -346,6 +346,33 @@ struct PlacementHealthTests {
         #expect(presentation.reason == .healthy)
     }
 
+    @Test("Suppresses detached mirror anchors unless trusted")
+    func suppressesDetachedMirrorAnchorsUnlessTrusted() {
+        let plan = PlacementHealth.plan(
+            requestedRenderMode: .floatingMirror,
+            fallbackRenderMode: .floatingMirror,
+            caretRect: nil,
+            elementRect: CGRect(x: 100, y: 200, width: 500, height: 180),
+            windowRect: CGRect(x: 80, y: 160, width: 560, height: 300),
+            textLineRect: nil,
+            allowsDetachedSuggestions: true,
+            trustPolicy: PlacementTrustPolicy(
+                allowsLowConfidencePlacement: true,
+                allowsSyntheticCaretPlacement: true,
+                allowsDetachedAnchorPlacement: false
+            )
+        )
+
+        guard case let .suppress(suppression) = plan else {
+            Issue.record("Expected untrusted detached mirror placement to suppress")
+            return
+        }
+
+        #expect(suppression.reason == .untrustedDetachedAnchor)
+        #expect(suppression.metadata["placementHealthReason"] == "untrusted-detached-anchor")
+        #expect(suppression.metadata["placementSelfHealingAction"] == "suppress")
+    }
+
     @Test("Keeps non-detached mirror placement on the caret")
     func keepsNonDetachedMirrorPlacementOnCaret() {
         let caret = CGRect(x: 320, y: 260, width: 0, height: 22)

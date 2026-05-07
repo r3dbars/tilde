@@ -320,6 +320,7 @@ struct CompatibilityLearningTests {
         )
         #expect(greenPolicy.allowsLowConfidencePlacement)
         #expect(greenPolicy.allowsSyntheticCaretPlacement)
+        #expect(greenPolicy.allowsDetachedAnchorPlacement)
 
         let unprovenPolicy = PlacementTrustPolicy.compatibility(
             profile: notes,
@@ -330,6 +331,7 @@ struct CompatibilityLearningTests {
         )
         #expect(!unprovenPolicy.allowsLowConfidencePlacement)
         #expect(!unprovenPolicy.allowsSyntheticCaretPlacement)
+        #expect(!unprovenPolicy.allowsDetachedAnchorPlacement)
 
         let untrustedLearningPolicy = PlacementTrustPolicy.compatibility(
             profile: notes,
@@ -347,6 +349,7 @@ struct CompatibilityLearningTests {
         )
         #expect(!untrustedLearningPolicy.allowsLowConfidencePlacement)
         #expect(!untrustedLearningPolicy.allowsSyntheticCaretPlacement)
+        #expect(!untrustedLearningPolicy.allowsDetachedAnchorPlacement)
 
         let trustedLearningPolicy = PlacementTrustPolicy.compatibility(
             profile: notes,
@@ -369,5 +372,6 @@ struct CompatibilityLearningTests {
         )
         #expect(trustedLearningPolicy.allowsLowConfidencePlacement)
         #expect(trustedLearningPolicy.allowsSyntheticCaretPlacement)
+        #expect(trustedLearningPolicy.allowsDetachedAnchorPlacement)
     }
 }
