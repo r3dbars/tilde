@@ -139,7 +139,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Add Slack diagnostics profile.
 - [x] Add VS Code diagnostics profile.
 - [x] Add Cursor diagnostics profile.
-- [ ] Add Atlas diagnostics profile once focused AX is reliable.
+- [x] Add Atlas diagnostics profile once focused AX is reliable.
 - [x] Keep Mail compose diagnostics-only.
 - [x] Add explicit unsupported records for high-risk apps.
 - [x] Add tests for profile defaults.

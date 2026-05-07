@@ -432,7 +432,7 @@ Native target: every claim has proof.
 
 - [ ] Green apps: TextEdit, Chrome textarea, Chrome contenteditable.
 - [ ] Yellow apps: Codex, Claude desktop, Obsidian, Notes.
-- [ ] Red/disabled apps: Mail compose, Atlas, terminals unless explicitly scoped.
+- [ ] Red/disabled apps: Mail compose, Atlas diagnostics, terminals unless explicitly scoped.
 - [x] Add per-app support mode to settings.
 - [x] Add "why disabled" text.
 

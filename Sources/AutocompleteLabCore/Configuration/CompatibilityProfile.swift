@@ -355,6 +355,25 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             notes: "Diagnostics-only WebKit browser profile until textarea and rich-editor behavior are proven separately."
         ),
         CompatibilityProfile(
+            bundleIdentifier: "com.openai.atlas",
+            displayName: "Atlas",
+            appFamily: .chromium,
+            supportLevel: .diagnosticsOnly,
+            supportReason: "Atlas editor and browser surfaces need app-specific proof.",
+            renderMode: .disabled,
+            insertionMode: .disabled,
+            fallbackRenderMode: .disabled,
+            fallbackInsertionMode: .disabled,
+            fieldIdentityMode: .stableBounds,
+            anchorLadder: [.none],
+            knownFailureModes: ["browser and prompt surfaces need separate proof"],
+            allowsFieldAnchor: false,
+            allowsWindowAnchor: false,
+            supportsOneWordAcceptance: false,
+            supportsFullAcceptance: false,
+            notes: "Diagnostics-only Atlas profile. Collect focused AX, geometry, and insertion evidence, but do not present or insert suggestions until Atlas has current app-specific proof."
+        ),
+        CompatibilityProfile(
             bundleIdentifier: "com.tinyspeck.slackmacgap",
             displayName: "Slack",
             appFamily: .electron,
