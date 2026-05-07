@@ -51,6 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleSuggestionsPaused: { [weak self] in
             self?.togglePauseSuggestions()
         },
+        openTextEditTest: { [weak self] in
+            self?.openDisposableTextEditTest()
+        },
         performRuntimeAction: { [weak self] action in
             self?.performRuntimeAction(action)
         },
@@ -3709,6 +3712,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         commandContextRequestTask = nil
         commandContextRequestID = nil
         commandContextIsLoading = false
+    }
+
+    private func openDisposableTextEditTest() {
+        let fileName = "autocomplete-lab-textedit-test-\(UUID().uuidString).txt"
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+
+        do {
+            try "".write(to: fileURL, atomically: true, encoding: .utf8)
+            NSWorkspace.shared.open(fileURL)
+            DiagnosticsLog.shared.record(
+                "open-textedit-test",
+                metadata: ["path": fileURL.path]
+            )
+        } catch {
+            DiagnosticsLog.shared.record(
+                "open-textedit-test-failed",
+                metadata: ["reason": error.localizedDescription]
+            )
+        }
     }
 
     @objc
