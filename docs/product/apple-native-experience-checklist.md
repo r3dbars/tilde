@@ -54,7 +54,7 @@ unsure. Wrong-place text is worse than no suggestion.
 | Category | Weight | Current | Target | Why |
 | --- | ---: | ---: | ---: | --- |
 | Typing must feel untouched | 15 | 93 | 100 | Live TextEdit soak proves event tap p95 max 35us, p99 max 95us, max 161us over 600 samples with zero slow markers and zero tap disable events. A 10-minute endurance soak command now exists and is self-tested. Slow AX polling is off the hot key path but still warned in the same run, with p95 max 59ms and max 209ms, so worst-app AX proof remains open. |
-| Visual placement and caret alignment | 18 | 64 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, and Chrome chat-like now has proof. Notes, Obsidian, Claude Code, and Claude desktop are still the blocker. |
+| Visual placement and caret alignment | 18 | 64 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, unproven Notes/prompt apps are mirror-first, and Chrome chat-like now has proof. Notes, Obsidian, Claude Code, and Claude desktop are still the blocker. |
 | Acceptance safety | 10 | 90 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Prompt-app one-word no-submit proof is still incomplete. |
 | Cross-app reliability | 10 | 70 | 100 | The proof matrix now has 8 screenshot rows and the app exposes green/yellow/diagnostics-only/unsupported status. Many real apps are still yellow or pending screenshot proof. |
 | Native macOS visual feel | 8 | 80 | 100 | Settings moved toward native sections, checkboxes, clearer privacy/app controls, support status, "why hidden" copy, and calmer menu copy. Diagnostics and onboarding still need polish. |
@@ -152,6 +152,7 @@ cheap, even if the model output is good.
 - [x] Keyboard capture now starts only after the panel frame is proven usable.
 - [x] Trace eval now surfaces panel-frame failures, inline clipping, placement health reasons, and screenshot-file evidence.
 - [x] Chrome chat-like no-submit fixture has live screenshot-backed no-submit proof.
+- [x] Unproven Notes and prompt-app profiles are mirror-first until current screenshot/no-submit proof exists.
 - [ ] Obsidian needs fresh screenshot-backed placement proof.
 - [ ] Apple Notes title needs screenshot-backed proof.
 - [ ] Apple Notes body needs screenshot-backed proof.
@@ -163,7 +164,7 @@ cheap, even if the model output is good.
 - [ ] Real Notion needs a distinct proof path or an explicit unsupported state.
 - [ ] Real Slack/Discord chat boxes need no-submit proof before enablement.
 - [ ] The app should hide inline suggestions when there is less than one useful word of room after the caret.
-- [ ] The app should prefer mirror mode over visually lying about inline placement.
+- [x] The app should prefer mirror mode over visually lying about inline placement.
 - [ ] Placement should use screenshot-derived correction only after explicit opt-in proof.
 - [ ] A learned visual offset must expire after app version, screen, or field-shape changes.
 - [ ] The UI should expose placement confidence in diagnostics without exposing user text.
@@ -418,6 +419,7 @@ Native target: every claim has proof.
 - [x] Refresh focused context before showing async suggestions.
 - [x] Start keyboard capture only after panel display succeeds.
 - [x] Run screenshot proof for Chrome chat-like fixture.
+- [x] Make unproven Notes and prompt-app profiles mirror-first until proof is current.
 - [ ] Run screenshot proof for Codex with one-word no-submit accept.
 
 ### Pass 2: Make Typing Untouchable

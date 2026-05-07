@@ -212,15 +212,14 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Notes",
             appFamily: .swiftUIAppKit,
             supportLevel: .yellow,
-            supportReason: "Rich text can drift; display can fall back to floating, and insertion fails closed.",
-            renderMode: .inlineAdjacent,
+            supportReason: "Rich text can drift; display stays mirror-first and insertion fails closed until each Notes surface is proven.",
+            renderMode: .floatingMirror,
             insertionMode: .keyEvents,
-            fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .disabled,
             knownFailureModes: ["AX selected-text insertion can report success without moving the caret"],
             supportsObserverUpdates: true,
             allowsDetachedSuggestions: false,
-            notes: "Yellow rich-text target. Use key events only, fail closed on unchanged verification, and suppress detached mirror placement until fresh title/body/checklist proof exists because Notes can report AX selected-text insertion success without moving the caret."
+            notes: "Yellow rich-text target. Use key events only, fail closed on unchanged verification, and use caret-bound mirror placement until fresh title/body/checklist proof exists. Suppress detached mirror placement because Notes can report AX selected-text insertion success without moving the caret."
         ),
         CompatibilityProfile(
             bundleIdentifier: "md.obsidian",
@@ -282,10 +281,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Codex",
             appFamily: .customCanvas,
             supportLevel: .yellow,
-            supportReason: "Dogfood prompt support still needs one-word no-submit proof before it is green.",
-            renderMode: .inlineAdjacent,
+            supportReason: "Dogfood prompt support stays mirror-first until one-word no-submit proof is current.",
+            renderMode: .floatingMirror,
             insertionMode: .axValueReplacement,
-            fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .keyEvents,
             fieldIdentityMode: .stableBounds,
             anchorLadder: [.caret],
@@ -295,7 +293,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportsFullAcceptance: false,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Dogfood target. Prefer caret-bound inline suggestions and AX value replacement in the prompt editor. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
+            notes: "Dogfood target. Prefer caret-bound mirror suggestions and AX value replacement in the prompt editor until same-slice screenshot and one-word no-submit proof is current. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claude-code",
@@ -303,9 +301,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .customCanvas,
             supportLevel: .yellow,
             supportReason: "Prompt insertion requires one-word no-submit proof and stays limited to next-word accept until full accept is separately proven safe.",
-            renderMode: .inlineAdjacent,
+            renderMode: .floatingMirror,
             insertionMode: .keyEvents,
-            fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .axThenKeyEvents,
             fieldIdentityMode: .stableBounds,
             anchorLadder: [.caret],
@@ -315,17 +312,16 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportsFullAcceptance: false,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Dogfood target. Prefer caret-bound inline suggestions when the prompt editor exposes bounds. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
+            notes: "Dogfood target. Prefer caret-bound mirror suggestions when the prompt editor exposes bounds until live no-submit proof is current. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claudefordesktop",
             displayName: "Claude",
             appFamily: .electron,
             supportLevel: .yellow,
-            supportReason: "Composer placement still needs one-word no-submit proof before it is green.",
-            renderMode: .inlineAdjacent,
+            supportReason: "Composer placement stays mirror-first until one-word no-submit proof is current.",
+            renderMode: .floatingMirror,
             insertionMode: .axValueReplacement,
-            fallbackRenderMode: .floatingMirror,
             fieldIdentityMode: .stableBounds,
             anchorLadder: [.caret],
             knownFailureModes: ["composer may hide caret bounds", "detached whole-window suggestions are disallowed"],
@@ -334,7 +330,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportsFullAcceptance: false,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Dogfood target for Claude desktop. Prefer prompt-bound inline suggestions when the composer exposes bounds; otherwise use mirror placement without showing detached whole-window suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
+            notes: "Dogfood target for Claude desktop. Prefer prompt-bound mirror suggestions when the composer exposes bounds and suppress detached whole-window suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.apple.Safari",
