@@ -437,6 +437,34 @@ APPLESCRIPT
   exit 1
 }
 
+wait_for_chrome_smoke_editor_contains() {
+  local expected_text="$1"
+  local label="$2"
+  local timeout_seconds="${3:-8}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    local current_text
+    current_text="$(osascript <<'APPLESCRIPT'
+tell application "Google Chrome"
+  try
+    tell active tab of front window to execute javascript "(() => { const editor = document.querySelector('[data-smoke-editor]'); if (!editor) return ''; return 'value' in editor ? editor.value : editor.innerText; })();"
+  on error
+    return ""
+  end try
+end tell
+APPLESCRIPT
+)"
+    if [[ "$current_text" == *"$expected_text"* ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for $label to land in Chrome." >&2
+  exit 1
+}
+
 close_textedit_smoke_documents() {
   osascript >/dev/null <<'APPLESCRIPT'
 tell application "TextEdit"
@@ -940,7 +968,7 @@ APPLESCRIPT
 
 run_chrome_fixture() {
   local fixture="$1"
-  local start_line trace_start_line tmp_dir html_file
+  local start_line trace_start_line stable_start_line tmp_dir html_file
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
   tmp_dir="$(make_tmp_dir)"
@@ -982,8 +1010,10 @@ tell application "System Events"
 end tell
 APPLESCRIPT
 
-  wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
-  wait_for_screenshot_capture_if_enabled "$start_line" "com.google.Chrome" "Chrome $fixture"
+  wait_for_chrome_smoke_editor_contains "Can we make this feel " "scripted Chrome text"
+  stable_start_line="$(line_count "$LOG_PATH")"
+  wait_for_log_pattern "$stable_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture stable suggestion"
+  wait_for_screenshot_capture_if_enabled "$stable_start_line" "com.google.Chrome" "Chrome $fixture"
   focus_chrome_smoke_editor
   assert_frontmost_app "Google Chrome" "Chrome $fixture"
   sleep 0.5
