@@ -921,10 +921,15 @@ APPLESCRIPT
       sleep 1
       typing_start_line="$(line_count "$LOG_PATH")"
       osascript <<'APPLESCRIPT'
+set previousClipboard to the clipboard
+set the clipboard to "Can we make this feel "
+delay 0.1
 tell application "System Events"
   key code 124 using command down
-  keystroke "Can we make this feel "
+  keystroke "v" using command down
 end tell
+delay 0.1
+set the clipboard to previousClipboard
 APPLESCRIPT
       ;;
     *)
