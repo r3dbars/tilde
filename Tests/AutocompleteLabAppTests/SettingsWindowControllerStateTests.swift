@@ -396,4 +396,24 @@ struct SettingsWindowControllerStateTests {
         #expect(shortcuts.pickerTitles == ["Backtick", "Option-Tab"])
         #expect(shortcuts.selectedShortcutTitle == "Option-Tab")
     }
+
+    @Test("Suggestion control state exposes quiet normal eager choices")
+    func suggestionControlStateExposesPaceChoices() {
+        let control = SettingsSuggestionControlState(
+            suggestionsPaused: false,
+            pace: .quiet
+        )
+
+        #expect(control.statusText == "Suggestions: ready | Pace: Quiet")
+        #expect(control.detailText == "Quiet waits for more context before phrase suggestions.")
+        #expect(control.pickerTitles == ["Quiet", "Normal", "Eager"])
+        #expect(control.selectedPaceTitle == "Quiet")
+
+        #expect(
+            SettingsSuggestionControlState(
+                suggestionsPaused: true,
+                pace: .eager
+            ).statusText == "Suggestions: paused | Pace: Eager"
+        )
+    }
 }

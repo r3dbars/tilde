@@ -61,7 +61,7 @@ unsure. Wrong-place text is worse than no suggestion.
 | Privacy and permissions trust | 9 | 93 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, and raw/screenshot debug capture now expires when enabled from the app UI. Stronger plain-language warnings remain open. |
 | Suggestion quality | 8 | 87 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, learned word completion is app-scoped, dogfood prompts are stricter, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
 | Failure restraint | 8 | 86 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, stale geometry suppresses display, event-tap disablement fails closed, prompt full accept requires proof, and unsupported apps now explain their stance. Low-confidence inline mode still needs stricter real-app gating. |
-| User control | 6 | 88 | 100 | Settings and the menu now expose pause, app blocking, current-field quieting, support status, per-app mode and safety stance, a force-mirror toggle for inline apps, privacy diagnostics, temporary raw/screenshot capture, local log deletion, shortcut state, and why the last suggestion was hidden. Quiet/eager tuning remains open. |
+| User control | 6 | 88 | 100 | Settings and the menu now expose pause, app blocking, current-field quieting, support status, per-app mode and safety stance, a force-mirror toggle for inline apps, privacy diagnostics, temporary raw/screenshot capture, local log deletion, shortcut state, quiet/normal/eager pace, and why the last suggestion was hidden. Per-app mode visibility remains open. |
 | Onboarding and setup | 4 | 73 | 100 | Settings is clearer, but first-run permission flow and model install/repair are still not one calm native flow. |
 | Evidence and QA loop | 4 | 98 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
 
@@ -317,7 +317,7 @@ like an assistant trying to talk.
 - [ ] Suggestions should not duplicate the user's visible text.
 - [ ] Suggestions should be less eager after repeated typed-over misses.
 - [ ] Different app modes should have different suggestion aggressiveness.
-- [ ] User should be able to choose quiet, normal, or eager suggestions.
+- [x] User should be able to choose quiet, normal, or eager suggestions.
 - [ ] Dogfood agent prompts should avoid generic productivity filler.
 
 ## Category 8: Failure Restraint

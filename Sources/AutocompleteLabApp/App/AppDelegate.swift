@@ -7,7 +7,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let profileStore = CompatibilityProfileStore.mvp
     private let promptEditorPolicy = PromptEditorFingerprintPolicy()
     private let suggestionControlPolicy = SuggestionControlPolicy()
-    private let activationPolicy = CompletionActivationPolicy()
     private let triggerPolicy = SuggestionTriggerPolicy(
         charactersBeforePauseRequest: 1,
         wordCompletionDelayMilliseconds: 0,
@@ -79,6 +78,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         setAcceptAllShortcut: { [weak self] shortcut in
             self?.setAcceptAllShortcut(shortcut)
+        },
+        setSuggestionPace: { [weak self] pace in
+            self?.setSuggestionPace(pace)
         }
     )
 
@@ -141,7 +143,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let slowFocusedTextPollLatencyMilliseconds = 80
     private var focusedTextPollingPause = FocusedTextPollingPause()
     private var suggestionsPaused = false
+    private var suggestionPace = SuggestionPace.normal
     private var keyboardShortcutConfiguration = KeyboardShortcutConfiguration.default
+    private var activationPolicy: CompletionActivationPolicy {
+        CompletionActivationPolicy(pace: suggestionPace)
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ProcessInfo.processInfo.disableAutomaticTermination("AutocompleteLab runs as a persistent menu bar agent.")
@@ -149,6 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadPauseState()
         loadDisabledApps()
         loadKeyboardShortcutConfiguration()
+        loadSuggestionPace()
         configureStatusItem()
         DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
@@ -320,6 +327,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,
                 suggestionsPaused: suggestionsPaused,
+                suggestionPace: suggestionPace,
                 runtimeReport: runtimeReadinessReport,
                 runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath,
@@ -2772,7 +2780,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             supportStatus: supportStatus,
             appEnabled: appEnabled
         )
-        let statusSignature = "\(control)|\(permission)|\(appStatus)|\(lastSuggestionDecision)|\(statusLine)"
+        let statusSignature = "\(control)|\(suggestionPace.rawValue)|\(permission)|\(appStatus)|\(lastSuggestionDecision)|\(statusLine)"
 
         statusMenuItem?.title = statusLine
         statusMenuItem?.toolTip = lastSuggestionDecision
@@ -2784,6 +2792,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,
                 suggestionsPaused: suggestionsPaused,
+                suggestionPace: suggestionPace,
                 runtimeReport: runtimeReadinessReport,
                 runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath,
@@ -2804,6 +2813,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "accessibility": permission,
                 "control": control,
+                "suggestionPace": suggestionPace.rawValue,
                 "app": appName,
                 "profile": profileName,
                 "enabled": enabled,
@@ -2969,6 +2979,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
             suggestionsPaused: suggestionsPaused,
+            suggestionPace: suggestionPace,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
@@ -2995,6 +3006,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.show(
             isTrusted: accessibilityClient.isTrusted,
             suggestionsPaused: suggestionsPaused,
+            suggestionPace: suggestionPace,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
@@ -3163,6 +3175,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "surface": "settings",
                 "acceptAllShortcut": keyboardShortcutConfiguration.acceptAllShortcut.rawValue
+            ]
+        )
+        refreshRuntimeChrome()
+    }
+
+    private func setSuggestionPace(_ pace: SuggestionPace) {
+        guard suggestionPace != pace else {
+            refreshRuntimeChrome()
+            return
+        }
+
+        suggestionPace = pace
+        persistSuggestionPace()
+        invalidatePendingSuggestionRequest()
+        hideSuggestion(reason: "suggestion-pace-changed")
+        lastTextSnapshot = nil
+        setSuggestionDecision("Ready: \(pace.displayName.lowercased()) pace")
+        DiagnosticsLog.shared.record(
+            "suggestion-pace-control",
+            metadata: [
+                "surface": "settings",
+                "pace": pace.rawValue
             ]
         )
         refreshRuntimeChrome()
@@ -3448,6 +3482,10 @@ private extension AppDelegate {
         "AcceptAllShortcut"
     }
 
+    static var suggestionPaceDefaultsKey: String {
+        "SuggestionPace"
+    }
+
     func loadPauseState() {
         let persistedPause: Bool?
         if UserDefaults.standard.object(forKey: Self.suggestionsPausedDefaultsKey) == nil {
@@ -3493,6 +3531,19 @@ private extension AppDelegate {
         UserDefaults.standard.set(
             keyboardShortcutConfiguration.acceptAllShortcut.rawValue,
             forKey: Self.acceptAllShortcutDefaultsKey
+        )
+    }
+
+    func loadSuggestionPace() {
+        suggestionPace = SuggestionPace(
+            persistedRawValue: UserDefaults.standard.string(forKey: Self.suggestionPaceDefaultsKey)
+        )
+    }
+
+    func persistSuggestionPace() {
+        UserDefaults.standard.set(
+            suggestionPace.rawValue,
+            forKey: Self.suggestionPaceDefaultsKey
         )
     }
 }
