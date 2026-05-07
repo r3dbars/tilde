@@ -29,6 +29,11 @@ require_file "Tests/AutocompleteLabCoreTests/AXFieldClassifierTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/AXFieldClassifierTests.swift" "Classifies search and URL fields" "field-kind classifier coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/AXFieldClassifierTests.swift" "Classifies form fields" "unsafe form-field coverage"
 
+require_file "Tests/AutocompleteLabCoreTests/AnnoyanceSuppressorTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/AnnoyanceSuppressorTests.swift" "Decays scores by half-life" "annoyance half-life coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/AnnoyanceSuppressorTests.swift" "Repeated severe failures quiet the app" "app quiet-mode coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/AnnoyanceSuppressorTests.swift" "Wrong insertion hard-stops the field" "severe hard-stop coverage"
+
 require_file "Tests/AutocompleteLabCoreTests/KeyboardActionRouterTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/KeyboardActionRouterTests.swift" "Option Tab passes through" "Option+Tab passthrough coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/KeyboardActionRouterTests.swift" "Backtick accepts all visible text" "full-accept key routing coverage"

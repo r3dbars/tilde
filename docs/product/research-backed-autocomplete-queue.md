@@ -46,15 +46,15 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Count app pause and app disable events.
 - [x] Emit trace events when tracing is paused manually.
 - [x] Emit trace events when the current app is disabled manually.
-- [ ] Build an `AnnoyanceSuppressor` with field, app, and global EMA scores.
-- [ ] Use a 20-minute half-life for annoyance decay.
-- [ ] Suppress a field for 15 minutes when field annoyance crosses the threshold.
-- [ ] Auto-pause an app for 30 minutes after repeated severe annoyance.
+- [x] Build an `AnnoyanceSuppressor` with field, app, and global EMA scores.
+- [x] Use a 20-minute half-life for annoyance decay.
+- [x] Suppress a field for 15 minutes when field annoyance crosses the threshold.
+- [x] Auto-pause an app for 30 minutes after repeated severe annoyance.
 - [ ] Mark an app default-off after repeated manual disables over 7 days.
 - [ ] Hard-stop a field immediately after wrong insertion, duplicate insertion, or focus stealing.
 - [ ] Treat two severe events in one app/day as an app auto-pause.
-- [ ] Record why a quiet mode started and when it expires.
-- [ ] Surface quiet mode in the menu bar and Diagnostics.
+- [x] Record why a quiet mode started and when it expires.
+- [x] Surface quiet mode in the menu bar and Diagnostics.
 - [ ] Add tests for EMA decay, field quiet mode, app quiet mode, severe hard stop, and manual disable default-off.
 
 ## P0 - Privacy-Safe Tracing
