@@ -374,6 +374,39 @@ APPLESCRIPT
   wait_for_frontmost_app "Google Chrome" 5
 }
 
+require_chrome_javascript_apple_events() {
+  local output status
+
+  set +e
+  output="$(osascript <<'APPLESCRIPT' 2>&1
+tell application "Google Chrome"
+  activate
+  if not (exists window 1) then make new window
+  tell active tab of front window to execute javascript "1"
+end tell
+APPLESCRIPT
+)"
+  status=$?
+  set -e
+
+  if ((status == 0)); then
+    return 0
+  fi
+
+  if [[ "$output" == *"Executing JavaScript through AppleScript is turned off"* ]]; then
+    cat >&2 <<'EOF'
+Chrome smoke requires Chrome's "Allow JavaScript from Apple Events" developer setting.
+Open Chrome > View > Developer > Allow JavaScript from Apple Events, or run:
+  defaults write com.google.Chrome AppleScriptEnabled -bool true
+then restart Chrome and rerun the smoke.
+EOF
+  else
+    echo "Chrome JavaScript Apple Event preflight failed:" >&2
+    echo "$output" >&2
+  fi
+  exit 1
+}
+
 focus_textedit_smoke_editor() {
   osascript >/dev/null <<'APPLESCRIPT'
 tell application "TextEdit" to activate
@@ -805,6 +838,7 @@ describe_plan() {
       ;;
     chrome)
       echo "Chrome fixture: $CHROME_FIXTURE"
+      echo "Requirement: Chrome must allow JavaScript from Apple Events for fixture automation."
       if [[ "$CHROME_FIXTURE" == "all" ]]; then
         echo "Plan: build/relaunch AutocompleteLab, then run disposable Chrome textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, and chat-like no-submit local fixtures."
       else
@@ -1059,6 +1093,7 @@ run_chrome() {
     echo "Google Chrome is not installed or not scriptable on this machine." >&2
     exit 1
   fi
+  require_chrome_javascript_apple_events
 
   local runtime_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
