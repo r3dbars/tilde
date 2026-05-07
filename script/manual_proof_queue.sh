@@ -14,10 +14,11 @@ Prints or runs the remaining manual-gated beta proof queue.
 
 --print    Show the exact commands and safety rules. This is the default.
 --dry-run  Show each command that --run would invoke.
---run      Run each manual-gated recorder in sequence. The child recorders
-           print the safe steps and wait for you to press Enter before they
-           validate. This script never types into Notes, Obsidian, Codex,
-           Claude desktop, or Claude Code by itself.
+--run      Build and verify this checkout's app once, then run each
+           manual-gated recorder in sequence with rebuilds disabled. The child
+           recorders print the safe steps and wait for you to press Enter
+           before they validate. This script never types into Notes, Obsidian,
+           Codex, Claude desktop, or Claude Code by itself.
 EOF
 }
 
@@ -102,13 +103,19 @@ fi
 
 print_header
 
+echo "Verifying this checkout's app bundle before manual proof..."
+./script/build_and_run.sh --verify
+
 index=1
 for item in "${QUEUE[@]}"; do
   label="${item%%|*}"
   command="${item#*|}"
   printf '\n== %d/%d: %s ==\n' "$index" "${#QUEUE[@]}" "$label"
   printf '%s\n\n' "$command"
-  env AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 bash -c "$command"
+  env \
+    AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD=1 \
+    AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 \
+    bash -c "$command"
   index=$((index + 1))
 done
 

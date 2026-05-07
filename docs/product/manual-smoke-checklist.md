@@ -21,7 +21,9 @@ script/manual_proof_queue.sh --print
 ```
 
 Use `script/manual_proof_queue.sh --run` only when you are ready to walk
-through each manual-gated recorder with disposable content.
+through each manual-gated recorder with disposable content. The queue verifies
+the current checkout's app bundle once, then reuses that running app for each
+manual proof pass.
 
 ## Setup
 

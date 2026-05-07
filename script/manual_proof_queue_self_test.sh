@@ -9,6 +9,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 script/manual_proof_queue.sh --print >"$TMP_DIR/print.txt"
 script/manual_proof_queue.sh --dry-run >"$TMP_DIR/dry-run.txt"
+script/manual_proof_queue.sh --help >"$TMP_DIR/help.txt"
 
 for expected in \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate" \
@@ -30,6 +31,11 @@ done
 
 if ! grep -F "Do not press Enter in Codex, Claude desktop, or Claude Code." "$TMP_DIR/print.txt" >/dev/null; then
   echo "manual proof queue must include prompt no-submit safety copy" >&2
+  exit 1
+fi
+
+if ! grep -F "Build and verify this checkout's app once" "$TMP_DIR/help.txt" >/dev/null; then
+  echo "manual proof queue help must describe the single verified build behavior" >&2
   exit 1
 fi
 
