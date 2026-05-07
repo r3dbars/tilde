@@ -94,6 +94,9 @@ visible suggestion slice: accepted character count, pre-accept visible character
 count, remaining visible character count, visible-prefix/full-visible match
 flags, and the acceptance source. Raw text is still only available when local
 debug tracing is explicitly enabled.
+Set `AUTOCOMPLETE_LAB_TRACE_REQUIRE_ACCEPTANCE_SLICE_PROOF=1` with
+`script/check_trace_eval.sh` to fail any slice where accepted events lack this
+proof.
 
 The RAM-only audit proof is the `acceptanceRetentionCleared` event. It records
 the clear reason, accepted text length, fingerprint metadata, and
