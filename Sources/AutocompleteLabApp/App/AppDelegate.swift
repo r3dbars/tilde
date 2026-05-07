@@ -36,6 +36,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         openAccessibilitySettings: { [weak self] in
             self?.openAccessibilitySettings()
+        },
+        revealModelFolder: { [weak self] in
+            self?.revealModelFolder()
+        },
+        showDiagnostics: { [weak self] in
+            self?.showDiagnostics()
         }
     )
 
@@ -110,27 +116,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.title = "Autocomplete"
 
         let menu = NSMenu()
-        let statusMenu = NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: "")
-        let runtimeMenu = NSMenuItem(title: "Model: starting", action: nil, keyEquivalent: "")
-        let toggleItem = NSMenuItem(title: "Toggle Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
+        let titleMenu = NSMenuItem(title: "Autocomplete Lab", action: nil, keyEquivalent: "")
+        let statusMenu = NSMenuItem(title: "Status: Starting", action: nil, keyEquivalent: "")
+        let runtimeMenu = NSMenuItem(title: "Model: Starting", action: nil, keyEquivalent: "")
+        let toggleItem = NSMenuItem(title: "Current App Unavailable", action: #selector(toggleCurrentApp), keyEquivalent: "t")
+        titleMenu.isEnabled = false
+        statusMenu.isEnabled = false
+        runtimeMenu.isEnabled = false
+        toggleItem.isEnabled = false
 
-        menu.addItem(NSMenuItem(title: "Transcripted Autocomplete Lab", action: nil, keyEquivalent: ""))
+        let currentAppMenu = NSMenu(title: "Current App")
+        currentAppMenu.addItem(toggleItem)
+        currentAppMenu.addItem(NSMenuItem.separator())
+        currentAppMenu.addItem(NSMenuItem(title: "Nudge Up", action: #selector(nudgeCurrentAppSuggestionUp), keyEquivalent: ""))
+        currentAppMenu.addItem(NSMenuItem(title: "Nudge Down", action: #selector(nudgeCurrentAppSuggestionDown), keyEquivalent: ""))
+        currentAppMenu.addItem(NSMenuItem(title: "Nudge Left", action: #selector(nudgeCurrentAppSuggestionLeft), keyEquivalent: ""))
+        currentAppMenu.addItem(NSMenuItem(title: "Nudge Right", action: #selector(nudgeCurrentAppSuggestionRight), keyEquivalent: ""))
+        currentAppMenu.addItem(NSMenuItem.separator())
+        currentAppMenu.addItem(NSMenuItem(title: "Reset Learning", action: #selector(resetCurrentAppLearning), keyEquivalent: ""))
+        let currentAppMenuItem = NSMenuItem(title: "Current App", action: nil, keyEquivalent: "")
+        currentAppMenuItem.submenu = currentAppMenu
+
+        let setupMenu = NSMenu(title: "Setup")
+        setupMenu.addItem(NSMenuItem(title: "Request Access", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
+        setupMenu.addItem(NSMenuItem(title: "Open Privacy Settings", action: #selector(openAccessibilitySettings), keyEquivalent: ""))
+        setupMenu.addItem(NSMenuItem.separator())
+        setupMenu.addItem(NSMenuItem(title: "Reveal Model Folder", action: #selector(revealModelFolder), keyEquivalent: "m"))
+        let setupMenuItem = NSMenuItem(title: "Setup", action: nil, keyEquivalent: "")
+        setupMenuItem.submenu = setupMenu
+
+        menu.addItem(titleMenu)
         menu.addItem(statusMenu)
         menu.addItem(runtimeMenu)
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Settings", action: #selector(showSettings), keyEquivalent: ","))
-        menu.addItem(NSMenuItem(title: "Show Diagnostics", action: #selector(showDiagnostics), keyEquivalent: "d"))
-        menu.addItem(NSMenuItem(title: "Reveal Model Folder", action: #selector(revealModelFolder), keyEquivalent: "m"))
-        menu.addItem(toggleItem)
+        menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
+        menu.addItem(NSMenuItem(title: "Diagnostics...", action: #selector(showDiagnostics), keyEquivalent: "d"))
+        menu.addItem(currentAppMenuItem)
+        menu.addItem(setupMenuItem)
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Nudge Suggestion Up", action: #selector(nudgeCurrentAppSuggestionUp), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Nudge Suggestion Down", action: #selector(nudgeCurrentAppSuggestionDown), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Nudge Suggestion Left", action: #selector(nudgeCurrentAppSuggestionLeft), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Nudge Suggestion Right", action: #selector(nudgeCurrentAppSuggestionRight), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Reset Current App Learning", action: #selector(resetCurrentAppLearning), keyEquivalent: ""))
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Request Accessibility Permission", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Open Accessibility Settings", action: #selector(openAccessibilitySettings), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
 
         item.menu = menu
@@ -210,7 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshRuntimeChrome() {
-        runtimeMenuItem?.title = "Model: \(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(runtimeReadinessReport.summary) • \(completionLengthConfiguration.displaySummary)"
+        runtimeMenuItem?.title = runtimeMenuTitle(for: runtimeReadinessReport)
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
             runtimeReport: runtimeReadinessReport,
@@ -1687,10 +1710,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appName = app?.localizedName ?? "No app"
         let profileName = profile?.displayName ?? "unsupported"
         let enabled = appEnabled ? "on" : "off"
-        let statusLine = "Status: \(permission) | \(appName) | \(profileName) | \(enabled)"
+        let statusLine = statusMenuTitle(app: app, profile: profile, appEnabled: appEnabled)
 
         statusMenuItem?.title = statusLine
-        toggleAppMenuItem?.title = app.map { appEnabled ? "Disable \($0.localizedName)" : "Enable \($0.localizedName)" } ?? "Toggle Current App"
+        toggleAppMenuItem?.title = app.map {
+            compactMenuTitle(appEnabled ? "Turn Off for \($0.localizedName)" : "Turn On for \($0.localizedName)")
+        } ?? "Current App Unavailable"
+        toggleAppMenuItem?.isEnabled = app != nil && profile != nil
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
             runtimeReport: runtimeReadinessReport,
@@ -1712,6 +1738,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "enabled": enabled
             ]
         )
+    }
+
+    private func runtimeMenuTitle(for report: RuntimeReadinessReport) -> String {
+        switch report.stage {
+        case .downloadNeeded:
+            return "Model: Download Needed"
+        case .repairNeeded:
+            return "Model: Needs Repair"
+        case .runtimeUnavailable:
+            return "Model: Unavailable"
+        case .warming:
+            return "Model: Warming"
+        case .ready:
+            return report.isReady ? "Model: Ready" : "Model: Wrong Runtime"
+        case .failed:
+            return "Model: Failed"
+        }
+    }
+
+    private func statusMenuTitle(
+        app: RunningApplicationInfo?,
+        profile: CompatibilityProfile?,
+        appEnabled: Bool
+    ) -> String {
+        guard accessibilityClient.isTrusted else {
+            return "Status: Access Needed"
+        }
+
+        guard let app else {
+            return "Status: Waiting"
+        }
+
+        guard profile != nil else {
+            return compactMenuTitle("Status: \(app.localizedName) Unsupported")
+        }
+
+        return compactMenuTitle(appEnabled ? "Status: On in \(app.localizedName)" : "Status: Off in \(app.localizedName)")
+    }
+
+    private func compactMenuTitle(_ title: String, maxLength: Int = 30) -> String {
+        guard title.count > maxLength, maxLength > 3 else {
+            return title
+        }
+
+        let endIndex = title.index(title.startIndex, offsetBy: maxLength - 3)
+        return String(title[..<endIndex]) + "..."
     }
 
     private func suppressCurrentField(reason: String) {
