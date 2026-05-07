@@ -28,6 +28,12 @@ if ! grep -F "Raw event tap latency: n=2" "$TMP_DIR/pass.txt" >/dev/null; then
   exit 1
 fi
 
+if ! grep -F "Line limit: last 5000 non-empty line(s)" "$TMP_DIR/pass.txt" >/dev/null; then
+  echo "typing performance self-test did not report the default recent line window" >&2
+  cat "$TMP_DIR/pass.txt" >&2
+  exit 1
+fi
+
 if ! grep -F "Latency summary windows: n=1 samples=3" "$TMP_DIR/pass.txt" >/dev/null; then
   echo "typing performance self-test did not summarize latency windows" >&2
   cat "$TMP_DIR/pass.txt" >&2
@@ -259,6 +265,51 @@ AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES=1 \
 if ! grep -F "Start line: 1" "$TMP_DIR/sliced-pass.txt" >/dev/null; then
   echo "typing performance self-test did not honor AUTOCOMPLETE_LAB_LOG_START_LINE" >&2
   cat "$TMP_DIR/sliced-pass.txt" >&2
+  exit 1
+fi
+
+{
+  echo "2026-05-06T09:00:00Z keyboard-event-tap-latency-slow decision=consume durationMicros=9100 key=tab"
+  for index in $(seq 1 5000); do
+    echo "2026-05-06T09:00:00Z filler index=$index"
+  done
+  echo "2026-05-06T10:00:00Z keyboard-event-tap-latency decision=consume durationMicros=500 key=tab"
+} >"$LOG_PATH"
+
+AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES=1 \
+  script/check_typing_performance_log.sh >"$TMP_DIR/recent-window-pass.txt"
+
+if ! grep -F "Scanned lines: 5000" "$TMP_DIR/recent-window-pass.txt" >/dev/null; then
+  echo "typing performance self-test did not bound the default recent line window" >&2
+  cat "$TMP_DIR/recent-window-pass.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Typing performance log verified." "$TMP_DIR/recent-window-pass.txt" >/dev/null; then
+  echo "typing performance self-test did not ignore old historical latency outside the recent window" >&2
+  cat "$TMP_DIR/recent-window-pass.txt" >&2
+  exit 1
+fi
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+   AUTOCOMPLETE_LAB_TYPING_PERF_LOG_LINES=0 \
+   AUTOCOMPLETE_LAB_TYPING_PERF_REQUIRE_SAMPLES=1 \
+   script/check_typing_performance_log.sh >"$TMP_DIR/all-history-fail.txt" 2>&1; then
+  echo "typing performance self-test expected all-history override to include old slow latency" >&2
+  cat "$TMP_DIR/all-history-fail.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Line limit: all history after start line" "$TMP_DIR/all-history-fail.txt" >/dev/null; then
+  echo "typing performance self-test did not report all-history mode" >&2
+  cat "$TMP_DIR/all-history-fail.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "slow event tap latency marker 9100us" "$TMP_DIR/all-history-fail.txt" >/dev/null; then
+  echo "typing performance self-test did not let the all-history override catch old slow latency" >&2
+  cat "$TMP_DIR/all-history-fail.txt" >&2
   exit 1
 fi
 

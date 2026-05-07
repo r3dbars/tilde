@@ -3,7 +3,7 @@ set -euo pipefail
 
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
 START_LINE="${AUTOCOMPLETE_LAB_LOG_START_LINE:-0}"
-LINE_LIMIT="${AUTOCOMPLETE_LAB_TYPING_PERF_LOG_LINES:-0}"
+LINE_LIMIT="${AUTOCOMPLETE_LAB_TYPING_PERF_LOG_LINES:-5000}"
 MAX_SAMPLE_MICROS="${AUTOCOMPLETE_LAB_EVENT_TAP_MAX_MICROS:-8000}"
 MAX_P95_MICROS="${AUTOCOMPLETE_LAB_EVENT_TAP_MAX_P95_MICROS:-8000}"
 MAX_POLL_P95_MS="${AUTOCOMPLETE_LAB_FOCUSED_TEXT_POLL_MAX_P95_MS:-80}"
@@ -242,6 +242,13 @@ poll_skipped_evidence = max(poll_skipped_event_count, poll_skipped_summary_count
 
 print(f"Typing performance log: {path}")
 print(f"Start line: {start_line}")
+if line_limit > 0:
+    print(
+        f"Line limit: last {line_limit} non-empty line(s) "
+        "(set AUTOCOMPLETE_LAB_TYPING_PERF_LOG_LINES=0 for all history)"
+    )
+else:
+    print("Line limit: all history after start line")
 print(f"Scanned lines: {len(selected)}")
 print(f"Raw event tap latency: {metric_line(raw_values)}")
 print(
