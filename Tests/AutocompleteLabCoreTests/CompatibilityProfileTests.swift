@@ -9,18 +9,22 @@ struct CompatibilityProfileTests {
         let store = CompatibilityProfileStore.mvp
 
         #expect(store.profile(for: "com.apple.TextEdit")?.renderMode == .inlineAdjacent)
+        #expect(store.profile(for: "com.apple.TextEdit")?.supportLevel == .green)
         #expect(store.profile(for: "com.apple.TextEdit")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.apple.TextEdit")?.fallbackInsertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.apple.Notes")?.insertionMode == .keyEvents)
+        #expect(store.profile(for: "com.apple.Notes")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.apple.Notes")?.fallbackInsertionMode == .disabled)
         #expect(store.profile(for: "com.apple.Notes")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "md.obsidian")?.renderMode == .floatingMirror)
+        #expect(store.profile(for: "md.obsidian")?.supportLevel == .yellow)
         #expect(store.profile(for: "md.obsidian")?.insertionMode == .axThenKeyEvents)
         #expect(store.profile(for: "md.obsidian")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "md.obsidian")?.suppressesAfterInsertionFailure == false)
         #expect(store.profile(for: "md.obsidian")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "md.obsidian")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.apple.mail")?.displayName == "Mail")
+        #expect(store.profile(for: "com.apple.mail")?.supportLevel == .diagnosticsOnly)
         #expect(store.profile(for: "com.apple.mail")?.renderMode == .disabled)
         #expect(store.profile(for: "com.apple.mail")?.insertionMode == .disabled)
         #expect(store.profile(for: "com.apple.mail")?.fallbackInsertionMode == .disabled)
@@ -28,11 +32,13 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.mail")?.allowsDescendantTextFallback == true)
         #expect(store.profile(for: "com.apple.mail")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.google.Chrome")?.displayName == "Chrome")
+        #expect(store.profile(for: "com.google.Chrome")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.google.Chrome")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .keyEvents)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.openai.codex")?.displayName == "Codex")
+        #expect(store.profile(for: "com.openai.codex")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.openai.codex")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "com.openai.codex")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.openai.codex")?.insertionMode == .axValueReplacement)
@@ -40,6 +46,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "com.openai.codex")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claude-code")?.displayName == "Claude Code")
+        #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.anthropic.claude-code")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.anthropic.claude-code")?.insertionMode == .keyEvents)
@@ -50,6 +57,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.anthropic.claude-code")?.canPresentSuggestions == true)
         #expect(store.profile(for: "com.anthropic.claude-code")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.displayName == "Claude")
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.insertionMode == .axValueReplacement)
@@ -80,8 +88,43 @@ struct CompatibilityProfileTests {
 
         #expect(store.supportStatus(for: "com.apple.Terminal") == .denylisted)
         #expect(store.supportStatus(for: "com.openai.atlas") == .unsupported)
-        #expect(store.supportStatus(for: "com.apple.TextEdit").summary == "supported: TextEdit")
+        #expect(store.supportStatus(for: "com.apple.TextEdit").summary == "green: TextEdit")
         #expect(store.supportStatus(for: "com.apple.mail").summary == "diagnostics only: Mail")
+    }
+
+    @Test("Support status exposes user-facing stance copy")
+    func supportStatusExposesUserFacingStanceCopy() {
+        let store = CompatibilityProfileStore.mvp
+
+        let green = store.supportStatus(for: "com.apple.TextEdit")
+        #expect(green.supportLevel == .green)
+        #expect(green.userFacingSummary == "Green: TextEdit")
+        #expect(green.userFacingReason == "Verified inline suggestions and native text insertion.")
+        #expect(green.menuText(appDisplayName: "TextEdit", isEnabled: true) == "TextEdit green on")
+        #expect(green.canToggleSuggestions)
+
+        let yellow = store.supportStatus(for: "com.apple.Notes")
+        #expect(yellow.supportLevel == .yellow)
+        #expect(yellow.userFacingSummary == "Yellow: Notes")
+        #expect(
+            yellow.userFacingReason
+                == "Rich text can drift; display can fall back to floating, and insertion fails closed."
+        )
+        #expect(yellow.menuText(appDisplayName: "Notes", isEnabled: false) == "Notes yellow off")
+        #expect(yellow.canToggleSuggestions)
+
+        let diagnosticsOnly = store.supportStatus(for: "com.apple.mail")
+        #expect(diagnosticsOnly.supportLevel == .diagnosticsOnly)
+        #expect(diagnosticsOnly.userFacingSummary == "Diagnostics-only: Mail")
+        #expect(diagnosticsOnly.menuText(appDisplayName: "Mail", isEnabled: true) == "Mail diagnostics-only")
+        #expect(!diagnosticsOnly.canToggleSuggestions)
+
+        let unsupported = store.supportStatus(for: "com.openai.atlas")
+        #expect(unsupported.supportLevel == .unsupported)
+        #expect(unsupported.userFacingSummary == "Unsupported: not tested yet")
+        #expect(unsupported.userFacingReason == "No compatibility profile yet.")
+        #expect(unsupported.menuText(appDisplayName: "Atlas", isEnabled: true) == "Atlas unsupported")
+        #expect(!unsupported.canToggleSuggestions)
     }
 
     @Test("Profiles expose debug summaries with primary and fallback paths")

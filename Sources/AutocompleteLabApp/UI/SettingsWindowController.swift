@@ -4,40 +4,56 @@ import AutocompleteLabCore
 struct SettingsCurrentAppState: Equatable {
     let displayName: String
     let bundleIdentifier: String?
-    let isSupported: Bool
+    let supportStatus: CompatibilitySupportStatus
     let isEnabled: Bool
     let disabledAppCount: Int
 
     var canToggle: Bool {
-        bundleIdentifier != nil && isSupported
+        bundleIdentifier != nil && supportStatus.canToggleSuggestions
     }
 
     var statusText: String {
         guard bundleIdentifier != nil else {
-            return "Current app: no supported app selected"
+            return "Current app: no app selected"
         }
 
-        guard isSupported else {
-            return "Current app: \(displayName) is not on the test allowlist"
+        guard supportStatus.canToggleSuggestions else {
+            return "Current app: \(displayName) is \(supportStatus.supportLevel.menuName)"
         }
 
-        return "Current app: \(displayName) is \(isEnabled ? "allowed" : "blocked")"
+        return "Current app: \(displayName) is \(supportStatus.supportLevel.menuName) and \(isEnabled ? "allowed" : "blocked")"
     }
 
     var detailText: String {
         guard bundleIdentifier != nil else {
-            return "Open a supported writing app to control it here."
+            return "Open a writing app to see whether suggestions are supported."
         }
 
-        guard isSupported else {
-            return "Suggestions stay off until this app is added to the test allowlist."
+        guard supportStatus.canToggleSuggestions else {
+            return "\(supportStatus.userFacingReason) Suggestions stay off here."
         }
 
         if isEnabled {
-            return "On the test allowlist. Turn it off here if it gets annoying."
+            return "\(supportStatus.userFacingReason) Suggestions are on for this app."
         }
 
-        return "This app is in your blocked-app list."
+        return "\(supportStatus.userFacingReason) Suggestions are blocked by your app list."
+    }
+
+    var toggleTitle: String {
+        canToggle ? "Allow suggestions in this app" : "Suggestions unavailable in this app"
+    }
+
+    var menuToggleTitle: String {
+        guard bundleIdentifier != nil else {
+            return "Toggle Current App"
+        }
+
+        guard canToggle else {
+            return "Suggestions unavailable in \(displayName)"
+        }
+
+        return isEnabled ? "Disable \(displayName)" : "Enable \(displayName)"
     }
 
     var blockedAppsText: String {
@@ -52,7 +68,9 @@ struct SettingsCurrentAppState: Equatable {
 struct SettingsPrivacyState: Equatable {
     let tracingPaused: Bool
     let rawContentTracingEnabled: Bool
+    let rawContentTracingExpiresAt: Date?
     let screenshotTracingEnabled: Bool
+    let screenshotTracingExpiresAt: Date?
     let diagnosticsPath: String
     let tracePath: String
 
@@ -62,12 +80,17 @@ struct SettingsPrivacyState: Equatable {
 
     var diagnosticsStatusText: String {
         let traceState = tracingPaused ? "paused" : "recording"
-        let screenshotState = screenshotTracingEnabled ? "screenshots on" : "screenshots off"
+        let screenshotState = screenshotTracingEnabled
+            ? (screenshotTracingExpiresAt == nil ? "screenshots on" : "screenshots on temporarily")
+            : "screenshots off"
         return "Diagnostics: performance + placement traces \(traceState), \(screenshotState)"
     }
 
     var contentStatusText: String {
-        "Raw text capture: \(rawContentTracingEnabled ? "on" : "off")"
+        let state = rawContentTracingEnabled
+            ? (rawContentTracingExpiresAt == nil ? "on" : "on temporarily")
+            : "off"
+        return "Raw text capture: \(state)"
     }
 
     var pathText: String {
@@ -244,6 +267,7 @@ final class SettingsWindowController: NSObject {
         modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
         currentAppLabel.stringValue = currentApp.statusText
         currentAppDetailLabel.stringValue = currentApp.detailText
+        toggleCurrentAppButton.title = currentApp.toggleTitle
         toggleCurrentAppButton.state = currentApp.isEnabled ? .on : .off
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
         disabledAppsLabel.stringValue = currentApp.blockedAppsText

@@ -299,18 +299,25 @@ APPLESCRIPT
 
 assert_chrome_chat_fixture_not_submitted() {
   local label="$1"
-  local submit_count
+  local tab_title submit_count
 
-  submit_count="$(osascript <<'APPLESCRIPT'
+  tab_title="$(osascript <<'APPLESCRIPT'
 tell application "Google Chrome"
   try
-    return (execute javascript "String(window.autocompleteSmokeSubmitCount || 0)" in active tab of front window)
+    return title of active tab of front window
   on error
     return "unknown"
   end try
 end tell
 APPLESCRIPT
 )"
+
+  if [[ "$tab_title" =~ submits=([0-9]+) ]]; then
+    submit_count="${BASH_REMATCH[1]}"
+  else
+    echo "Could not read Chrome chat-like submit count during $label; expected tab title to contain [submits=N], got: $tab_title" >&2
+    exit 1
+  fi
 
   if [[ "$submit_count" != "0" ]]; then
     echo "Chrome chat-like fixture submitted unexpectedly during $label; submit count was $submit_count." >&2
@@ -505,7 +512,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>Autocomplete Lab Chrome Chat-Like No-Submit Smoke</title>
+<title>Autocomplete Lab Chrome Chat-Like No-Submit Smoke [submits=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body {
@@ -566,6 +573,10 @@ button {
 </section>
 <script>
 window.autocompleteSmokeSubmitCount = 0;
+window.updateSmokeSubmitCount = function () {
+  document.title = "Autocomplete Lab Chrome Chat-Like No-Submit Smoke [submits=" + window.autocompleteSmokeSubmitCount + "]";
+  document.querySelector("[data-smoke-submit-count]").textContent = String(window.autocompleteSmokeSubmitCount);
+};
 window.autocompleteSmokeEditorText = function () {
   return document.querySelector("[data-smoke-editor]").innerText;
 };
@@ -582,8 +593,9 @@ window.focusSmokeEditor = function () {
 document.querySelector("[data-smoke-form]").addEventListener("submit", function (event) {
   event.preventDefault();
   window.autocompleteSmokeSubmitCount += 1;
-  document.querySelector("[data-smoke-submit-count]").textContent = String(window.autocompleteSmokeSubmitCount);
+  window.updateSmokeSubmitCount();
 });
+window.updateSmokeSubmitCount();
 window.addEventListener("load", window.focusSmokeEditor);
 </script>
 HTML
@@ -734,8 +746,8 @@ APPLESCRIPT
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.google.Chrome" "Chrome $fixture"
-  assert_frontmost_app "Google Chrome" "Chrome $fixture"
   focus_chrome_smoke_editor
+  assert_frontmost_app "Google Chrome" "Chrome $fixture"
   press_key_code 48
   wait_for_log_fields "$start_line" "Chrome $fixture Tab acceptance" 12 \
     "keyboard-action" \
@@ -747,8 +759,8 @@ APPLESCRIPT
   if [[ "$fixture" == "chat-like" ]]; then
     assert_chrome_chat_fixture_not_submitted "Tab acceptance"
   fi
-  assert_frontmost_app "Google Chrome" "Chrome $fixture"
   focus_chrome_smoke_editor
+  assert_frontmost_app "Google Chrome" "Chrome $fixture"
   press_key_code 50
 
   if [[ "$fixture" == "chat-like" ]]; then

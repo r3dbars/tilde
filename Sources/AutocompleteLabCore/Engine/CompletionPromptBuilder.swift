@@ -140,18 +140,7 @@ private extension String {
             return true
         }
 
-        let tokens = Set(
-            lowercasedText
-                .components(separatedBy: CharacterSet.alphanumerics.inverted)
-                .filter { !$0.isEmpty }
-        )
-        let exactDogfoodTerms: Set<String> = [
-            "caret", "debug", "debugging", "latency", "placement",
-            "suggestion", "suggestions", "trace", "traces"
-        ]
-        if !tokens.isDisjoint(with: exactDogfoodTerms) {
-            return true
-        }
+        let tokens = Set(lowercasedWords(in: lowercasedText))
 
         guard tokens.contains("tab") else {
             return false
@@ -161,6 +150,12 @@ private extension String {
             "accept", "accepts", "accepted", "hit", "key", "press", "pressed"
         ]
         return !tokens.isDisjoint(with: tabContextTerms)
+    }
+
+    private func lowercasedWords(in text: String) -> [String] {
+        text
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
     }
 }
 

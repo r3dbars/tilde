@@ -7,6 +7,7 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
     public var yOffset: CGFloat
     public var renderModeOverride: SuggestionRenderMode?
     public var screenshotTracingEnabled: Bool
+    public var screenshotTracingExpiresAt: String?
     public var observations: Int
     public var confidence: Double
     public var lastReason: String
@@ -18,6 +19,7 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         yOffset: CGFloat = 0,
         renderModeOverride: SuggestionRenderMode? = nil,
         screenshotTracingEnabled: Bool = false,
+        screenshotTracingExpiresAt: String? = nil,
         observations: Int = 0,
         confidence: Double = 0,
         lastReason: String = "",
@@ -28,6 +30,7 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         self.yOffset = yOffset
         self.renderModeOverride = renderModeOverride
         self.screenshotTracingEnabled = screenshotTracingEnabled
+        self.screenshotTracingExpiresAt = screenshotTracingExpiresAt
         self.observations = observations
         self.confidence = confidence
         self.lastReason = lastReason

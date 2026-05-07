@@ -33,6 +33,10 @@ struct CompletionOutputCleanerTests {
 
         #expect(cleaner.clean("Okay, let's see. The user is trying to") == nil)
         #expect(cleaner.clean("The user is trying to write a sentence") == nil)
+        #expect(cleaner.clean("As an AI, I can help with that") == nil)
+        #expect(cleaner.clean("Here is a possible continuation") == nil)
+        #expect(cleaner.clean("It sounds like you want to keep going") == nil)
+        #expect(cleaner.clean("You could try another option") == nil)
     }
 
     @Test("Suppresses generic chat filler")
@@ -113,6 +117,16 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("dictation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
         #expect(cleaner.clean("tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
         #expect(cleaner.clean("tation next", after: "dic", mode: .wordCompletion) == nil)
+    }
+
+    @Test("Suppresses unrelated whole words in word completion mode")
+    func suppressesUnrelatedWholeWordsInWordCompletionMode() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("different", after: "dic", mode: .wordCompletion) == nil)
+        #expect(cleaner.clean("the", after: "dic", mode: .wordCompletion) == nil)
+        #expect(cleaner.clean("dictation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
+        #expect(cleaner.clean("tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
     }
 
     @Test("Suppresses punctuation in word completion suffixes")

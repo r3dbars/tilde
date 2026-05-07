@@ -20,9 +20,44 @@ public enum FocusedFieldIdentityMode: String, Equatable, Sendable {
     case stableBounds
 }
 
+public enum CompatibilitySupportLevel: String, Equatable, Sendable {
+    case green
+    case yellow
+    case diagnosticsOnly
+    case unsupported
+
+    public var displayName: String {
+        switch self {
+        case .green:
+            return "Green"
+        case .yellow:
+            return "Yellow"
+        case .diagnosticsOnly:
+            return "Diagnostics-only"
+        case .unsupported:
+            return "Unsupported"
+        }
+    }
+
+    public var menuName: String {
+        switch self {
+        case .green:
+            return "green"
+        case .yellow:
+            return "yellow"
+        case .diagnosticsOnly:
+            return "diagnostics-only"
+        case .unsupported:
+            return "unsupported"
+        }
+    }
+}
+
 public struct CompatibilityProfile: Equatable, Sendable {
     public let bundleIdentifier: String
     public let displayName: String
+    public let supportLevel: CompatibilitySupportLevel
+    public let supportReason: String
     public let renderMode: SuggestionRenderMode
     public let insertionMode: InsertionMode
     public let fallbackRenderMode: SuggestionRenderMode?
@@ -40,6 +75,8 @@ public struct CompatibilityProfile: Equatable, Sendable {
     public init(
         bundleIdentifier: String,
         displayName: String,
+        supportLevel: CompatibilitySupportLevel,
+        supportReason: String,
         renderMode: SuggestionRenderMode,
         insertionMode: InsertionMode,
         fallbackRenderMode: SuggestionRenderMode? = nil,
@@ -56,6 +93,8 @@ public struct CompatibilityProfile: Equatable, Sendable {
     ) {
         self.bundleIdentifier = bundleIdentifier
         self.displayName = displayName
+        self.supportLevel = supportLevel
+        self.supportReason = supportReason
         self.renderMode = renderMode
         self.insertionMode = insertionMode
         self.fallbackRenderMode = fallbackRenderMode
@@ -125,6 +164,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.apple.TextEdit",
             displayName: "TextEdit",
+            supportLevel: .green,
+            supportReason: "Verified inline suggestions and native text insertion.",
             renderMode: .inlineAdjacent,
             insertionMode: .axSelectedText,
             fallbackRenderMode: .floatingMirror,
@@ -134,6 +175,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.apple.Notes",
             displayName: "Notes",
+            supportLevel: .yellow,
+            supportReason: "Rich text can drift; display can fall back to floating, and insertion fails closed.",
             renderMode: .inlineAdjacent,
             insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
@@ -144,6 +187,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "md.obsidian",
             displayName: "Obsidian",
+            supportLevel: .yellow,
+            supportReason: "Electron editors can hide caret bounds, so this uses floating or synthetic placement.",
             renderMode: .floatingMirror,
             insertionMode: .axThenKeyEvents,
             fallbackRenderMode: .floatingMirror,
@@ -156,6 +201,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.apple.mail",
             displayName: "Mail",
+            supportLevel: .diagnosticsOnly,
+            supportReason: "Mail compose is sensitive and insertion is not proven.",
             renderMode: .disabled,
             insertionMode: .disabled,
             fallbackRenderMode: .disabled,
@@ -170,6 +217,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.google.Chrome",
             displayName: "Chrome",
+            supportLevel: .yellow,
+            supportReason: "Browser editors vary; display can fall back to floating and insertion can fall back to AX.",
             renderMode: .inlineAdjacent,
             insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
@@ -179,6 +228,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.openai.codex",
             displayName: "Codex",
+            supportLevel: .yellow,
+            supportReason: "Dogfood prompt support still needs wider live proof before it is green.",
             renderMode: .inlineAdjacent,
             insertionMode: .axValueReplacement,
             fallbackRenderMode: .floatingMirror,
@@ -191,6 +242,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claude-code",
             displayName: "Claude Code",
+            supportLevel: .yellow,
+            supportReason: "Prompt insertion is limited to next-word accept until full accept is proven safe.",
             renderMode: .inlineAdjacent,
             insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
@@ -204,6 +257,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claudefordesktop",
             displayName: "Claude",
+            supportLevel: .yellow,
+            supportReason: "Composer placement still needs broader proof before it is green.",
             renderMode: .inlineAdjacent,
             insertionMode: .axValueReplacement,
             fallbackRenderMode: .floatingMirror,
@@ -228,11 +283,20 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
     case denylisted
     case unsupported
 
+    public var supportLevel: CompatibilitySupportLevel {
+        switch self {
+        case let .supported(profile):
+            return profile.supportLevel
+        case .denylisted, .unsupported:
+            return .unsupported
+        }
+    }
+
     public var summary: String {
         switch self {
         case let .supported(profile):
             if profile.canPresentSuggestions {
-                return "supported: \(profile.displayName)"
+                return "\(profile.supportLevel.menuName): \(profile.displayName)"
             }
 
             return "diagnostics only: \(profile.displayName)"
@@ -240,6 +304,49 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
             return "blocked: denylisted app"
         case .unsupported:
             return "blocked: no MVP compatibility profile"
+        }
+    }
+
+    public var userFacingSummary: String {
+        switch self {
+        case let .supported(profile):
+            return "\(profile.supportLevel.displayName): \(profile.displayName)"
+        case .denylisted:
+            return "Unsupported: blocked app"
+        case .unsupported:
+            return "Unsupported: not tested yet"
+        }
+    }
+
+    public var userFacingReason: String {
+        switch self {
+        case let .supported(profile):
+            return profile.supportReason
+        case .denylisted:
+            return "Blocked because this kind of app can expose secrets or shell input."
+        case .unsupported:
+            return "No compatibility profile yet."
+        }
+    }
+
+    public var canToggleSuggestions: Bool {
+        guard case let .supported(profile) = self else {
+            return false
+        }
+
+        return profile.canPresentSuggestions && !profile.isSensitive
+    }
+
+    public func menuText(appDisplayName: String, isEnabled: Bool) -> String {
+        switch self {
+        case let .supported(profile):
+            guard profile.canPresentSuggestions, !profile.isSensitive else {
+                return "\(appDisplayName) \(profile.supportLevel.menuName)"
+            }
+
+            return "\(appDisplayName) \(profile.supportLevel.menuName) \(isEnabled ? "on" : "off")"
+        case .denylisted, .unsupported:
+            return "\(appDisplayName) unsupported"
         }
     }
 }
