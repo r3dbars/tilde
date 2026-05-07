@@ -127,7 +127,8 @@ Pass 1 shipped these improvements:
 - Screenshot placement now has a pure pixel offset detector that can identify
   bounded ghost/panel drift, reject blank or low-contrast images, reject
   excessive outliers, and feed the existing trusted visual correction policy.
-  Live auto-apply still waits for fresh real-app screenshot proof.
+  Screenshot capture now logs diagnostics-only offset metadata after a PNG is
+  captured. Live auto-apply still waits for fresh real-app screenshot proof.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -533,8 +534,9 @@ these are true.
    passes the fresh slice, checks frozen bounds, and covers `trace_mark
    --replay`.
 44. Done: add a pure screenshot pixel offset detector with synthetic image
-   tests and visual correction trust-gate coverage. Pending: wire live
-   screenshot auto-apply only after recorder-grade screenshot proof.
+   tests and visual correction trust-gate coverage, then log diagnostics-only
+   offset metadata after screenshot capture. Pending: wire live screenshot
+   auto-apply only after recorder-grade screenshot proof.
 
 ## Goal Status
 

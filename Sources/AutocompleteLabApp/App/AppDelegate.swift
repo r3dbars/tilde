@@ -3009,6 +3009,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 panelRect,
                 placement.clippingRect
             ].compactMap { $0 },
+            expectedSignalRect: screenshotExpectedSignalRect(panelRect: panelRect),
             suggestionID: suggestionID,
             bundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
             triggerReason: triggerReason,
@@ -3154,6 +3155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func captureTraceScreenshot(
         around rects: [CGRect],
+        expectedSignalRect: CGRect?,
         suggestionID: String,
         bundleIdentifier: String,
         triggerReason: String,
@@ -3185,11 +3187,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ScreenshotTraceCapture.shared.capture(
             rect: captureRect,
             to: screenshotURL,
-            bundleIdentifier: bundleIdentifier
+            bundleIdentifier: bundleIdentifier,
+            expectedSignalRect: expectedSignalRect
         )
         return TraceScreenshotCapture(
             path: screenshotURL.path,
             rectDescription: compactRectDescription(captureRect)
+        )
+    }
+
+    private func screenshotExpectedSignalRect(panelRect: CGRect) -> CGRect {
+        CGRect(
+            x: panelRect.minX,
+            y: panelRect.minY,
+            width: min(max(panelRect.width, 1), max(12, panelRect.height * 2)),
+            height: max(panelRect.height, 1)
         )
     }
 
