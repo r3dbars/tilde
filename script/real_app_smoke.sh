@@ -880,11 +880,11 @@ tell application "TextEdit"
   try
     set bounds of front window to {80, 80, 500, 520}
   end try
+  set text of front document to "This is a disposable autocomplete smoke paragraph that should wrap before the caret. "
 end tell
 tell application "System Events"
-  keystroke "a" using command down
-  key code 51
-  keystroke "This is a disposable autocomplete smoke paragraph that should wrap before the caret. Can we make this feel "
+  key code 124 using command down
+  keystroke "Can we make this feel "
 end tell
 APPLESCRIPT
       ;;
