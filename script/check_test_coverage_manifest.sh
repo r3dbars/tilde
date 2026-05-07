@@ -63,6 +63,10 @@ require_pattern "Tests/AutocompleteLabCoreTests/AcceptanceSurvivalClassifierTest
 require_file "Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift" "summarizes field-kind slices" "field-kind trace slice coverage"
 
+require_file "Tests/AutocompleteLabCoreTests/AutocompleteTraceEventTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceEventTests.swift" "Encodes current schema and privacy versions" "trace schema version coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceEventTests.swift" "Decodes old trace events without schema fields" "trace schema migration coverage"
+
 require_file "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Suppresses low value one word phrase completions" "model-output cleanup coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Allows single token word completion suffixes" "word-completion cleanup coverage"

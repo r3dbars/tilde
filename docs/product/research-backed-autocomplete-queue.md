@@ -62,7 +62,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [ ] Split tracing into default redacted trace and explicit raw local debug trace.
 - [ ] Make raw context, prompts, raw outputs, displayed text, accepted text, and screenshots opt-in debug fields.
 - [ ] Add a scary local-only debug toggle with visible state.
-- [ ] Add `schemaVersion` and `privacyVersion` to every durable event.
+- [x] Add `schemaVersion` and `privacyVersion` to every durable event.
 - [ ] Rotate `sessionID` daily for default tracing.
 - [ ] Add a Keychain-backed per-install HMAC secret.
 - [ ] Persist counts, lengths, buckets, fingerprints, and field metadata by default.
@@ -200,7 +200,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [ ] Extract `LocalReportExporter`.
 - [ ] Keep core logic AppKit-free.
 - [ ] Keep AX and AppKit adapters thin.
-- [ ] Add schema migration tests before changing trace storage format.
+- [x] Add schema migration tests before changing trace storage format.
 - [ ] Keep raw dogfood diagnostics separate from beta/customer telemetry.
 
 ## P2 - Docs And Product Surface
