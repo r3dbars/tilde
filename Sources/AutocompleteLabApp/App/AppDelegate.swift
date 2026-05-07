@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
     private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
     private let focusChangePolicy = SuggestionFocusChangePolicy()
+    private let geometryChangePolicy = SuggestionGeometryChangePolicy()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private let suggestionPanel = SuggestionPanelController()
@@ -132,6 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionTextBeforeCursor: String?
     private var currentSuggestionDisplayedText: String?
     private var currentSuggestionInvalidatedByUserKeyDown = false
+    private var lastScreenLayoutFingerprint: String?
     private var scheduledScreenshotSuggestionIDs: Set<String> = []
     private let maxScheduledScreenshotSuggestionIDs = 256
     private var recentWordMemory = ScopedRecentWordMemory()
@@ -170,13 +172,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if shouldShowSettingsForCurrentReadiness {
             showSettings()
         }
+        lastScreenLayoutFingerprint = screenLayoutFingerprint()
         observeWorkspaceActivation()
+        observeDisplayGeometryChanges()
         startPolling()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         DiagnosticsLog.shared.record("terminate")
         NSWorkspace.shared.notificationCenter.removeObserver(self)
+        NotificationCenter.default.removeObserver(self)
         debounceTask?.cancel()
         keyboardEventTapStopTask?.cancel()
         insertionVerificationTask?.cancel()
@@ -253,6 +258,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private func observeDisplayGeometryChanges() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(displayGeometryDidChange(_:)),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
+    }
+
     @objc
     private func workspaceDidActivateApplication(_ notification: Notification) {
         guard suggestionSession.hasVisibleSuggestion else {
@@ -278,6 +292,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         clearFocusedFieldState(hideReason: "focus-changed")
         setSuggestionDecision("Blocked: focus changed")
+    }
+
+    @objc
+    private func displayGeometryDidChange(_ notification: Notification) {
+        let previousFingerprint = lastScreenLayoutFingerprint
+        let currentFingerprint = screenLayoutFingerprint()
+        lastScreenLayoutFingerprint = currentFingerprint
+
+        let hasVisibleSuggestion = suggestionSession.hasVisibleSuggestion
+        let hasPendingSuggestionRequest = debounceTask != nil || currentCompletionRequest != nil
+        guard geometryChangePolicy.shouldInvalidateSuggestionState(
+            hasVisibleSuggestion: hasVisibleSuggestion,
+            hasPendingSuggestionRequest: hasPendingSuggestionRequest,
+            previousScreenLayoutFingerprint: previousFingerprint,
+            currentScreenLayoutFingerprint: currentFingerprint
+        ) else {
+            return
+        }
+
+        DiagnosticsLog.shared.record(
+            "display-geometry-changed",
+            metadata: [
+                "visibleSuggestionApp": currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? "unknown",
+                "hadVisibleSuggestion": String(hasVisibleSuggestion),
+                "hadPendingSuggestionRequest": String(hasPendingSuggestionRequest),
+                "previousScreenLayout": previousFingerprint ?? "unknown",
+                "currentScreenLayout": currentFingerprint
+            ]
+        )
+
+        if hasVisibleSuggestion {
+            clearFocusedFieldState(hideReason: "display-geometry-changed")
+        } else {
+            invalidatePendingSuggestionRequest()
+        }
+        setSuggestionDecision("Blocked: display changed")
     }
 
     private func warmModelRuntime() {
