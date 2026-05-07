@@ -29,8 +29,19 @@ running_app_pids() {
   pgrep -f "$app_process_pattern" 2>/dev/null || true
 }
 
+running_app_services() {
+  launchctl print "gui/$(id -u)" 2>/dev/null |
+    awk -v needle="application.$BUNDLE_ID." 'index($0, needle) { print $NF }'
+}
+
 stop_running_apps() {
   local pid
+  local service
+  while IFS= read -r service; do
+    [[ -z "$service" ]] && continue
+    launchctl bootout "gui/$(id -u)/$service" >/dev/null 2>&1 || true
+  done < <(running_app_services)
+
   pkill -x "$APP_NAME" >/dev/null 2>&1 || true
   while IFS= read -r pid; do
     [[ -z "$pid" ]] && continue
@@ -239,6 +250,8 @@ else
 fi
 
 open_app() {
+  stop_running_apps
+
   if [[ "${AUTOCOMPLETE_LAB_TRACE:-}" =~ ^(0|false|no|off)$ ]]; then
     launchctl setenv AUTOCOMPLETE_LAB_TRACE "$AUTOCOMPLETE_LAB_TRACE"
   else
