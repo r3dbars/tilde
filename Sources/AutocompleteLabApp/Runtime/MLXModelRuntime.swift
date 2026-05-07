@@ -167,7 +167,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         )
         let candidateSelection = candidateRanker.selection(
             cleanedCandidates,
-            mode: request.mode
+            mode: request.mode,
+            textBeforeCursor: request.textBeforeCursor
         )
         let cleanedSuggestion = candidateSelection.suggestion
         let candidateTopScore = candidateSelection.rankedCandidates.first?.score

@@ -157,11 +157,11 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Continuing a sentence | 80 | First-class `sentenceContinuation` mode exists with activation, prompt guidance, stricter display threshold, streaming behavior, replay delay gate, sentence candidate ranking, and low-score suppression. | Fresh real-app proof that it does not drift into planning or take over the writer's next thought. |
 | Rewriting | 86 | Ambient rewrite is effectively avoided, which matches the research. | Add explicit selected-text rewrite only if needed; never ambient. |
 | Suggesting next action | 90 | Ambient next actions are not part of the app, and prompt-app guards block submit/run/Enter-like suggestions. | Keep next actions behind explicit invocation only, with tests preventing inline leakage. |
-| Specificity with restraint | 80 | Prompt asks for boring connective tissue, cleaner suppresses filler, and candidate ranking now prefers restrained phrase/sentence lengths while penalizing questions. | Candidate scoring must reward one useful semantic commitment and penalize unsupported new facts/names. |
+| Specificity with restraint | 86 | Prompt asks for boring connective tissue, cleaner suppresses filler, and context-aware candidate ranking now prefers restrained lengths while penalizing questions, generic filler, sentence planning drift, and unsupported new names/dates. | Tune the semantic-commitment weights against fresh traces. |
 | Gate, not timer | 84 | Eligibility, stale request checks, repetition suppression, focus checks, mode-aware trigger delays, prefix-family cooldowns, and display scoring are live. | Prove the whole trigger/display decision from replayed real-app traces. |
 | Within-word mode | 86 | Word completion requires 3+ alphabetic chars with 90-140ms delay, and word suffix cleaning rejects spaces/punctuation. | Perfect casing/punctuation preservation and fresh app-slice proof. |
 | Phrase mode | 84 | Word-boundary phrase requests use 140-240ms delay, phrase display threshold, behavior-profile prompt caps, and candidate ranking. | Fresh real-app proof and learned score margins. |
-| Sentence mode | 70 | First-class `sentenceContinuation` mode exists with activation, prompt guidance, stricter display threshold, streaming behavior, and replay delay gate. | Real-app proof that it does not drift into planning or take over the writer's next thought. |
+| Sentence mode | 78 | First-class `sentenceContinuation` mode exists with activation, prompt guidance, stricter display threshold, streaming behavior, replay delay gate, and ranker penalties for question/planning drift. | Real-app proof that it does not take over the writer's next thought. |
 | Line/paragraph start | 80 | Trigger policy suppresses line starts until two content words, and bullet-line starts stay quiet until the bullet text is constrained. | Add profile-aware bullet/email exceptions and screenshot proof. |
 | After deletion | 82 | Deletion skips requests and records a 250ms prefix-family cooldown. | Prove the live cooldown in fresh traces and feed longer-term deletion outcomes into learning. |
 | After accept | 86 | Tab accepts one word, full accept is profile-gated, and accepted-and-kept horizons feed durable display affinity. | Only one follow-on after accept unless recomputed and scored high. |
@@ -171,7 +171,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Punctuation handling | 84 | Whitespace, comma/semicolon, colon, closing punctuation, and sentence punctuation now have separate clamped delay lanes; newline/bullet starts stay suppressed until constrained. | Add profile-aware punctuation exceptions and tune against fresh traces. |
 | Display score | 86 | Live display score includes utility, style fit, context fit, user affinity, risk, repetition, instability, accepted-and-kept probability, and trace metadata. Candidate count, top score, score margin, and suppression reason are logged at runtime. | Replace heuristic components with learned estimates and use fresh traces to tune thresholds. |
 | Accept-and-keep probability threshold | 86 | Durable learning now gates by app, field kind, mode, and behavior profile after enough evidence, with 14-day half-life decay, and Settings can clear learned suggestion state without deleting logs. | Prove thresholds with fresh real-app traces and expose tuning controls. |
-| Candidate generation | 72 | Phrase/sentence prompts ask for 1-3 candidates; `CompletionOutputCleaner.cleanCandidates` strips list prefixes, filters unsafe/sentinel lines, dedupes, and `CompletionCandidateRanker` picks only high-score/high-margin top candidates. | Prove real model outputs produce useful candidate sets and tune score/margin thresholds from traces. |
+| Candidate generation | 80 | Phrase/sentence prompts ask for 1-3 candidates; `CompletionOutputCleaner.cleanCandidates` strips list prefixes, filters unsafe/sentinel lines, dedupes, and context-aware `CompletionCandidateRanker` picks only high-score/high-margin candidates while penalizing unsupported names/dates and generic filler. | Prove real model outputs produce useful candidate sets and tune score/margin thresholds from traces. |
 | Context budget | 76 | Prompt uses bounded recent context from current sentence/paragraph. | Use 48-96 tokens plus prior sentence/paragraph only when useful. |
 | Metadata in prompt | 89 | App bundle, field kind, request mode, behavior profile, aggregate accepted-kept style sketch, trace-safe partial-word shape, and trace-safe current-line list shape now affect prompt/generation/scoring/tracing. | Include document title and privacy-safe accepted-kept suffix features. |
 | Hard `<NO_SUGGESTION>` path | 86 | Word/phrase/sentence prompts include `<NO_SUGGESTION>` guidance, and cleaner suppresses direct sentinels plus prompt-echo sentinel lines. | Prove sentinel behavior in fresh real model traces. |
@@ -432,6 +432,9 @@ these are true.
    trace-visible 60s cooldown on the same app/field/mode/prefix.
 24. Done: add half-life decay to repeated-miss suppression so typed-over and
    ignored miss learning ages out instead of permanently poisoning a prefix.
+25. Done: make candidate ranking context-aware so sentence/phrase candidates
+   lose score for unsupported names/dates, generic filler, and sentence-mode
+   planning drift, while local terms get a small tie breaker.
 
 ## Goal Status
 
