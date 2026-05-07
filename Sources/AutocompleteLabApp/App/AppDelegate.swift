@@ -40,6 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store: compatibilityLearningStore,
         profileStore: profileStore
     )
+    private lazy var privacyControls = LocalPrivacyControls(
+        traceLog: RawAutocompleteTraceLog.shared,
+        compatibilityLearningStore: compatibilityLearningStore
+    )
     private let suggestionPanel = SuggestionPanelController()
     private lazy var focusedTextReader = SerialFocusedTextAXReader(accessibilityClient: accessibilityClient)
     private lazy var accessibilityObserver = AccessibilityObserver(
@@ -409,15 +413,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var settingsPrivacyState: SettingsPrivacyState {
-        SettingsPrivacyState(
-            tracingPaused: RawAutocompleteTraceLog.shared.isPaused,
-            rawContentTracingEnabled: RawAutocompleteTraceLog.shared.rawContentTracingEnabled,
-            rawContentTracingExpiresAt: RawAutocompleteTraceLog.shared.rawContentTracingExpiresAt,
-            screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled,
-            screenshotTracingExpiresAt: RawAutocompleteTraceLog.shared.screenshotTracingExpiresAt,
-            diagnosticsPath: DiagnosticsLog.shared.path,
-            tracePath: RawAutocompleteTraceLog.shared.path
-        )
+        privacyControls.settingsPrivacyState(diagnosticsPath: DiagnosticsLog.shared.path)
     }
 
     private var settingsKeyboardShortcutState: SettingsKeyboardShortcutState {
@@ -3132,62 +3128,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func toggleTracing() {
-        let nextPaused = !RawAutocompleteTraceLog.shared.isPaused
-        RawAutocompleteTraceLog.shared.setPaused(nextPaused)
-        DiagnosticsLog.shared.record(
-            "trace-control",
-            metadata: ["paused": String(nextPaused)]
-        )
+        let result = privacyControls.toggleTracePause()
+        DiagnosticsLog.shared.record(result.eventName, metadata: result.metadata)
         showDiagnostics()
     }
 
     private func toggleSettingsTracingPaused() {
-        let nextPaused = !RawAutocompleteTraceLog.shared.isPaused
-        RawAutocompleteTraceLog.shared.setPaused(nextPaused)
-        DiagnosticsLog.shared.record(
-            "trace-control",
-            metadata: [
-                "surface": "settings",
-                "paused": String(nextPaused)
-            ]
-        )
+        let result = privacyControls.toggleTracePause(surface: "settings")
+        DiagnosticsLog.shared.record(result.eventName, metadata: result.metadata)
         refreshRuntimeChrome()
     }
 
     private func toggleRawContentTracing() {
-        let nextEnabled = !RawAutocompleteTraceLog.shared.rawContentTracingEnabled
-        RawAutocompleteTraceLog.shared.setRawContentTracingEnabled(nextEnabled)
-        DiagnosticsLog.shared.record(
-            "raw-trace-control",
-            metadata: [
-                "surface": "settings",
-                "enabled": String(nextEnabled)
-            ]
-        )
+        let result = privacyControls.toggleRawContentTracing(surface: "settings")
+        DiagnosticsLog.shared.record(result.eventName, metadata: result.metadata)
         refreshRuntimeChrome()
     }
 
     private func toggleGlobalScreenshotTracing() {
-        let nextEnabled = !RawAutocompleteTraceLog.shared.screenshotTracingEnabled
-        RawAutocompleteTraceLog.shared.setScreenshotTracingEnabled(nextEnabled)
-        DiagnosticsLog.shared.record(
-            "screenshot-trace-control",
-            metadata: [
-                "surface": "settings",
-                "enabled": String(nextEnabled)
-            ]
-        )
+        let result = privacyControls.toggleScreenshotTracing(surface: "settings")
+        DiagnosticsLog.shared.record(result.eventName, metadata: result.metadata)
         refreshRuntimeChrome()
     }
 
     private func deleteLocalPrivacyLogs(refreshSettings: Bool = true) {
-        RawAutocompleteTraceLog.shared.deleteAll()
-        compatibilityLearningStore.disableScreenshotTracing()
-        DiagnosticsLog.shared.deleteAll()
-        DiagnosticsLog.shared.record(
-            "local-privacy-logs-deleted",
-            metadata: ["surface": refreshSettings ? "settings" : "diagnostics"]
+        let result = privacyControls.deleteTraceAndCompatibilityLogs(
+            surface: refreshSettings ? "settings" : "diagnostics"
         )
+        DiagnosticsLog.shared.deleteAll()
+        DiagnosticsLog.shared.record(result.eventName, metadata: result.metadata)
         if refreshSettings {
             refreshRuntimeChrome()
         }
@@ -3209,7 +3178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func toggleScreenshotTracing(for bundleIdentifier: String) {
         guard !bundleIdentifier.isEmpty else {
-            RawAutocompleteTraceLog.shared.setScreenshotTracingEnabled(!RawAutocompleteTraceLog.shared.screenshotTracingEnabled)
+            _ = privacyControls.toggleScreenshotTracing()
             showDiagnostics()
             return
         }
