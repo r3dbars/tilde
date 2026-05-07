@@ -11,6 +11,18 @@ public struct DisabledAppSelection: Equatable, Sendable {
         self.init(bundleIdentifiers: Set(persistedBundleIdentifiers))
     }
 
+    public init(defaultOffProfileStore profileStore: CompatibilityProfileStore) {
+        self.init(bundleIdentifiers: Set(
+            profileStore.profiles.values.compactMap { profile in
+                guard profile.canPresentSuggestions, !profile.isSensitive else {
+                    return nil
+                }
+
+                return profile.bundleIdentifier
+            }
+        ))
+    }
+
     public var persistedBundleIdentifiers: [String] {
         bundleIdentifiers.sorted()
     }

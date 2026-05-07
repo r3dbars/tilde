@@ -364,7 +364,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
             return RuntimeReadinessReport(
                 stage: .downloadNeeded,
                 summary: fallbackSummary("download needed (\(preferredAsset.model.rawValue))", runtimeState: runtimeState),
-                detail: "Expected MLX model folder at \(expectedPath)",
+                detail: "The local model is not installed yet. Expected folder: \(expectedPath)",
                 action: preferredAsset.source == nil ? .revealModelFolder : .installModel
             )
 
@@ -372,7 +372,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
             return RuntimeReadinessReport(
                 stage: .repairNeeded,
                 summary: fallbackSummary("model folder needs repair", runtimeState: runtimeState),
-                detail: "\(path): \(reason)",
+                detail: "The local model folder is incomplete: \(reason). Folder: \(path)",
                 action: preferredAsset.source == nil ? .revealModelFolder : .repairModel
             )
 
@@ -384,7 +384,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
             return RuntimeReadinessReport(
                 stage: .runtimeUnavailable,
                 summary: fallbackSummary("runtime unavailable (\(decision.preferredCandidate.displayName))", runtimeState: runtimeState),
-                detail: "\(decision.preferredCandidate.displayName) runtime is not linked yet",
+                detail: "This build is missing its local model engine. A separate model server will not fix it.",
                 action: .none
             )
         }

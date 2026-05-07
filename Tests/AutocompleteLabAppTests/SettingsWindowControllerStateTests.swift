@@ -16,7 +16,7 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 0
         )
 
-        #expect(allowed.statusText == "Current app: TextEdit is green and allowed")
+        #expect(allowed.statusText == "Current app: TextEdit is green and on")
         #expect(
             allowed.detailText
                 == "Verified inline suggestions and native text insertion. Suggestions are on for this app."
@@ -36,10 +36,10 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 2
         )
 
-        #expect(blocked.statusText == "Current app: Notes is yellow and blocked")
+        #expect(blocked.statusText == "Current app: Notes is yellow and off")
         #expect(
             blocked.detailText
-                == "Rich text can drift; display can fall back to floating, and insertion fails closed. Suggestions are blocked by your app list."
+                == "Rich text can drift; display can fall back to floating, and insertion fails closed. Suggestions are off for this app. Turn them on only where you want to test."
         )
         #expect(blocked.modeText == "Mode: inline, mirror fallback")
         #expect(blocked.acceptanceText == "Acceptance: Tab next word + full accept")
@@ -270,7 +270,7 @@ struct SettingsWindowControllerStateTests {
             )
         )
 
-        #expect(ready.text == "Ready: open TextEdit, type a short sentence, press Tab for one word, or Esc to dismiss.")
+        #expect(ready.text == "Ready: open TextEdit, turn on suggestions for TextEdit, type a short sentence, press Tab for one word, or Esc to dismiss.")
         #expect(!ready.text.localizedCaseInsensitiveContains("Notes"))
     }
 

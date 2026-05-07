@@ -6,15 +6,15 @@ public struct RuntimeReadinessGuidance: Equatable, Sendable {
     public init(report: RuntimeReadinessReport) {
         switch report.stage {
         case .downloadNeeded:
-            message = "Model missing: install the app-owned MLX model. Suggestions stay off until this finishes."
+            message = "Install the local model here. You do not need Ollama or a model server. Suggestions stay off until this finishes."
             actionTitle = report.action == .installModel ? "Install Model" : "Open Model Folder"
             isActionEnabled = report.action != .none
         case .repairNeeded:
-            message = "Model repair needed: repair the app-owned MLX model. Suggestions stay off until the folder is valid."
+            message = "The local model files look incomplete. Repair them here. Suggestions stay off until the files are valid."
             actionTitle = report.action == .repairModel ? "Repair Model" : "Open Model Folder"
             isActionEnabled = report.action != .none
         case .runtimeUnavailable:
-            message = "Runtime unavailable: this build cannot start the preferred local runtime. Suggestions stay off in this build."
+            message = "This build is missing its local model engine. Starting Ollama or another model server will not fix it."
             actionTitle = "Unavailable"
             isActionEnabled = false
         case .warming:
@@ -22,11 +22,11 @@ public struct RuntimeReadinessGuidance: Equatable, Sendable {
             actionTitle = "Warming..."
             isActionEnabled = false
         case .failed:
-            message = "Model failed to start: retry the local model. Suggestions stay off until startup succeeds."
+            message = "The local model did not start. Retry here. Suggestions stay off until startup succeeds."
             actionTitle = "Retry Model"
             isActionEnabled = true
         case .ready:
-            message = "Ready: open TextEdit, type a short sentence, press Tab for one word, or Esc to dismiss."
+            message = "Ready: open TextEdit, turn on suggestions for TextEdit, type a short sentence, press Tab for one word, or Esc to dismiss."
             actionTitle = "Ready"
             isActionEnabled = false
         }

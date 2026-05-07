@@ -53,11 +53,11 @@ enum LocalModelAssetInstallerError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .missingSource(model):
-            return "No in-app download source is configured for \(model)."
+            return "This model cannot be installed in the app yet: \(model). Open the model folder or choose the default model."
         case let .invalidRepository(repoID):
-            return "Invalid model repository: \(repoID)."
+            return "The model download address is invalid: \(repoID)."
         case let .invalidAfterInstall(reason):
-            return "Downloaded model is still invalid: \(reason)."
+            return "The downloaded model files still look incomplete: \(reason)."
         }
     }
 }
