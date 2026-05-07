@@ -548,6 +548,7 @@ placement_failures = []
 visual_evidence_failures = []
 annoyance_failures = []
 insertion_failures = []
+geometry_failures = []
 
 def event_key(event):
     suggestion_id = event.get("suggestionID")
@@ -636,6 +637,81 @@ stale_mismatch_examples = []
 def metadata_for(event):
     metadata = event.get("metadata") or {}
     return metadata if isinstance(metadata, dict) else {}
+
+def metadata_text(metadata, *keys):
+    for key in keys:
+        value = metadata.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text and text != "none":
+            return text
+    return ""
+
+def geometry_source_for(event):
+    metadata = metadata_for(event)
+    source = metadata_text(
+        metadata,
+        "anchorSource",
+        "placementAnchorSource",
+        "effectiveAnchorSource",
+        "fallbackAnchorSource",
+        "suggestionAnchorSource",
+    )
+    if source:
+        if source == "element":
+            return "field"
+        return source
+
+    if truthy(metadata.get("hasCaretRect")):
+        return "caret"
+    if truthy(metadata.get("hasTextLineRect")):
+        return "line"
+    if truthy(metadata.get("hasElementRect")):
+        return "field"
+    if truthy(metadata.get("hasWindowRect")):
+        return "window"
+    return ""
+
+def has_geometry_proof(event):
+    metadata = metadata_for(event)
+    proof_keys = [
+        "anchorSource",
+        "placementAnchorSource",
+        "effectiveAnchorSource",
+        "fallbackAnchorSource",
+        "suggestionAnchorSource",
+        "anchorQuality",
+        "caretQuality",
+        "geometryQuality",
+        "anchorReason",
+        "placementHealthReason",
+        "placementConfidenceBand",
+        "anchorRect",
+        "suggestionPanelRect",
+        "screenshotCaptureRect",
+        "hasCaretRect",
+        "hasTextLineRect",
+        "hasElementRect",
+        "hasWindowRect",
+        "effectiveRenderMode",
+        "placementEffectiveRenderMode",
+    ]
+    return any(metadata_text(metadata, key) for key in proof_keys)
+
+geometry_sources_by_app = defaultdict(Counter)
+for event in presented_by_id.values():
+    if not has_geometry_proof(event):
+        app = event.get("appBundleIdentifier") or "unknown"
+        suggestion_id = event.get("suggestionID") or "unknown"
+        geometry_failures.append(f"{app}/{suggestion_id}: missing geometry proof")
+
+for event in presented:
+    source = geometry_source_for(event)
+    if not source:
+        continue
+    app = event.get("appBundleIdentifier") or "unknown"
+    geometry_sources_by_app[app][source] += 1
 
 def rect_from_text(value):
     if value is None:
@@ -1260,6 +1336,26 @@ if caret_failures_by_render_mode:
         print(f"  {mode}: {rate}% ({count}/{shown + count})")
 else:
     print("  none")
+print("Geometry proof:")
+print(f"  presented anchors checked: {len(presented_by_id)}")
+print(f"  failures: {len(geometry_failures)}")
+if geometry_failures:
+    for failure in geometry_failures[:5]:
+        print(f"  {failure}")
+    if len(geometry_failures) > 5:
+        print(f"  {len(geometry_failures) - 5} more")
+print("  anchor sources by app:")
+if geometry_sources_by_app:
+    source_order = ["caret", "line", "field", "window"]
+    for app in sorted(geometry_sources_by_app):
+        sources = geometry_sources_by_app[app]
+        ordered_sources = [
+            source for source in source_order if source in sources
+        ] + sorted(source for source in sources if source not in source_order)
+        summary = ", ".join(f"{source}={sources[source]}" for source in ordered_sources)
+        print(f"    {app}: {summary}")
+else:
+    print("    none")
 print("Hidden by reason:")
 hidden_reasons = Counter(
     event.get("reason") or "unknown"
@@ -1422,4 +1518,6 @@ if visual_evidence_failures:
     raise SystemExit("visual evidence guardrail failed: " + "; ".join(visual_evidence_failures))
 if annoyance_failures:
     raise SystemExit("suggestion annoyance guardrail failed: " + "; ".join(annoyance_failures))
+if geometry_failures:
+    raise SystemExit("geometry proof guardrail failed: " + "; ".join(geometry_failures))
 PY

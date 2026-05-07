@@ -3,6 +3,8 @@
 This is the working list for making the lab feel like a real Mac autocomplete app.
 
 The deeper research-backed queue now lives in `docs/product/research-backed-autocomplete-queue.md`.
+Research-backed caret-locking work now lives in
+`docs/product/caret-locked-research-queue.md`.
 
 ## Now
 

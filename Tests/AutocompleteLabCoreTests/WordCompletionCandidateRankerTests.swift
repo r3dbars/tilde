@@ -21,6 +21,14 @@ struct WordCompletionCandidateRankerTests {
         #expect(suggestion?.visibleText == "umentary")
     }
 
+    @Test("Suppresses ambiguous two-letter static fragments unless recent")
+    func suppressesAmbiguousTwoLetterStaticFragmentsUnlessRecent() {
+        let ranker = WordCompletionCandidateRanker(staticWords: ["there", "their", "thing"])
+
+        #expect(ranker.suggestion(for: "I saw th") == nil)
+        #expect(ranker.suggestion(for: "I saw th", recentWords: ["therefore"])?.visibleText == "erefore")
+    }
+
     @Test("common fragments complete without waiting for the model")
     func commonFragmentsComplete() {
         let ranker = WordCompletionCandidateRanker()
