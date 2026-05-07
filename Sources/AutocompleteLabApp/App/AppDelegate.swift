@@ -109,6 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastClippingRect: CGRect?
     private var lastTextStyle: FocusedTextStyle?
     private var lastRenderMode: SuggestionRenderMode?
+    private var lastCompatibilityLearningTrustContext: CompatibilityLearningVisualTrustContext?
     private var currentFieldIdentity: FocusedFieldIdentity?
     private var currentProfile: CompatibilityProfile?
     private var lastTextSnapshot: FocusedTextSnapshot?
@@ -2750,9 +2751,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: profile.bundleIdentifier,
             profileRenderMode: renderMode
         )
-        let learningAdjustment = supportsSyntheticTextAreaCaret(for: profile.bundleIdentifier)
-            ? storedLearningAdjustment.trustedVisualOffsetOnly
-            : storedLearningAdjustment
+        let visualTrustContext = compatibilityLearningVisualTrustContext(
+            for: context,
+            bundleIdentifier: profile.bundleIdentifier
+        )
+        let learningAdjustment = storedLearningAdjustment.trustedVisualOffsetOnly(context: visualTrustContext)
         let placementPlan = placementHealthPlan(
             context: context,
             profile: profile,
@@ -2936,6 +2939,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastClippingRect = placement.clippingRect
         lastTextStyle = context.textStyle
         lastRenderMode = placement.renderMode
+        lastCompatibilityLearningTrustContext = visualTrustContext
         guard let panelRect = suggestionPanel.show(
             text: suggestion.visibleText,
             near: placement.anchorRect,
@@ -3203,6 +3207,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             width: min(max(panelRect.width, 1), max(12, panelRect.height * 2)),
             height: max(panelRect.height, 1)
         )
+    }
+
+    private func compatibilityLearningVisualTrustContext(
+        for context: FocusedTextContext,
+        bundleIdentifier: String
+    ) -> CompatibilityLearningVisualTrustContext {
+        CompatibilityLearningVisualTrustContext(
+            appVersion: appVersionFingerprint(for: bundleIdentifier),
+            screenFingerprint: visualRectFingerprint(context.windowRect ?? context.elementRect ?? context.caretRect),
+            fieldShapeFingerprint: [
+                context.role ?? "unknown",
+                context.subrole ?? "none",
+                "synthetic=\(context.caretIsSynthetic)",
+                "inline=\(context.capabilities.supportsInlineSuggestions)",
+                visualRectFingerprint(context.elementRect) ?? "element=none",
+                visualRectFingerprint(context.textLineRect) ?? "line=none"
+            ].joined(separator: "|")
+        )
+    }
+
+    private func appVersionFingerprint(for bundleIdentifier: String) -> String? {
+        guard !bundleIdentifier.isEmpty,
+              let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier),
+              let bundle = Bundle(url: appURL) else {
+            return nil
+        }
+
+        let shortVersion = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let buildVersion = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        let versionParts = [shortVersion, buildVersion]
+            .compactMap { value -> String? in
+                guard let value,
+                      !value.isEmpty else {
+                    return nil
+                }
+                return value
+            }
+
+        guard !versionParts.isEmpty else {
+            return nil
+        }
+
+        return versionParts.joined(separator: "#")
+    }
+
+    private func visualRectFingerprint(_ rect: CGRect?) -> String? {
+        guard let rect else {
+            return nil
+        }
+
+        return [
+            Int((rect.minX / 8).rounded()),
+            Int((rect.minY / 8).rounded()),
+            Int((rect.width / 8).rounded()),
+            Int((rect.height / 8).rounded())
+        ].map(String.init).joined(separator: "x")
     }
 
     private func traceGeometryMetadata(
@@ -3687,9 +3747,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: profile.bundleIdentifier,
             profileRenderMode: renderMode
         )
-        let learningAdjustment = supportsSyntheticTextAreaCaret(for: profile.bundleIdentifier)
-            ? storedLearningAdjustment.trustedVisualOffsetOnly
-            : storedLearningAdjustment
+        let visualTrustContext = compatibilityLearningVisualTrustContext(
+            for: context,
+            bundleIdentifier: profile.bundleIdentifier
+        )
+        let learningAdjustment = storedLearningAdjustment.trustedVisualOffsetOnly(context: visualTrustContext)
         let placementPlan = placementHealthPlan(
             context: context,
             profile: profile,
@@ -3718,6 +3780,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastClippingRect = placement.clippingRect
         lastTextStyle = context.textStyle
         lastRenderMode = placement.renderMode
+        lastCompatibilityLearningTrustContext = visualTrustContext
         refreshVisibleSuggestion()
     }
 
@@ -3947,6 +4010,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastClippingRect = nil
         lastTextStyle = nil
         lastRenderMode = nil
+        lastCompatibilityLearningTrustContext = nil
         suggestionPanel.hide()
         updateKeyboardEventTapSnapshot()
         scheduleKeyboardEventTapStopIfIdle()
@@ -4768,7 +4832,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        compatibilityLearningStore.nudgeOffset(dx: dx, dy: dy, for: bundleIdentifier)
+        compatibilityLearningStore.nudgeOffset(
+            dx: dx,
+            dy: dy,
+            for: bundleIdentifier,
+            visualTrustContext: lastCompatibilityLearningTrustContext
+        )
         let appliedToVisibleSuggestion = applyVisibleSuggestionNudge(dx: dx, dy: dy, bundleIdentifier: bundleIdentifier)
         DiagnosticsLog.shared.record(
             "compatibility-learning-nudge",

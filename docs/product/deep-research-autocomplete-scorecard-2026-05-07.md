@@ -3,8 +3,8 @@
 Source research:
 `/Users/redbars/Library/Caches/com.apple.SwiftUI.Drag-9DB841D4-8068-4044-B0CF-B2F61B9E12BB/deep-research-report (5).md`
 
-Repo state graded: `codex/deep-research-scorecard` after the accepted-insertion
-undo pass, based on `origin/main`.
+Repo state graded: `codex/deep-research-scorecard` after the trusted visual
+offset expiry pass, based on `origin/main`.
 
 ## Executive Grade
 
@@ -27,7 +27,7 @@ It is not yet magical by the research bar. The biggest remaining misses are:
 - Cross-app proof is honest but incomplete for Notes, Obsidian, Codex, Claude
   Code, Claude desktop, and real production editors.
 
-The repo's existing Apple-native score is **82/100**. This score is lower
+The repo's existing Apple-native score is **85/100**. This score is lower
 because it grades against the research definition of "magical autocomplete,"
 not only Mac plumbing, safety, and proof infrastructure.
 
@@ -129,6 +129,9 @@ Pass 1 shipped these improvements:
   excessive outliers, and feed the existing trusted visual correction policy.
   Screenshot capture now logs diagnostics-only offset metadata after a PNG is
   captured. Live auto-apply still waits for fresh real-app screenshot proof.
+- Trusted visual offsets now expire when the target app version, screen, or
+  field shape changes. Legacy offsets stay trusted until resaved with scoped
+  context, so older local profiles do not break abruptly.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -537,6 +540,9 @@ these are true.
    tests and visual correction trust-gate coverage, then log diagnostics-only
    offset metadata after screenshot capture. Pending: wire live screenshot
    auto-apply only after recorder-grade screenshot proof.
+45. Done: scope trusted visual offsets to target app version, screen, and field
+   shape so manual and future screenshot corrections expire when the layout
+   context changes.
 
 ## Goal Status
 

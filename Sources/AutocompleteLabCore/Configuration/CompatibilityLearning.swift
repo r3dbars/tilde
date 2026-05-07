@@ -5,6 +5,9 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
     public let bundleIdentifier: String
     public var xOffset: CGFloat
     public var yOffset: CGFloat
+    public var visualAppVersion: String?
+    public var visualScreenFingerprint: String?
+    public var visualFieldShapeFingerprint: String?
     public var renderModeOverride: SuggestionRenderMode?
     public var screenshotTracingEnabled: Bool
     public var screenshotTracingExpiresAt: String?
@@ -17,6 +20,9 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         bundleIdentifier: String,
         xOffset: CGFloat = 0,
         yOffset: CGFloat = 0,
+        visualAppVersion: String? = nil,
+        visualScreenFingerprint: String? = nil,
+        visualFieldShapeFingerprint: String? = nil,
         renderModeOverride: SuggestionRenderMode? = nil,
         screenshotTracingEnabled: Bool = false,
         screenshotTracingExpiresAt: String? = nil,
@@ -28,6 +34,9 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         self.bundleIdentifier = bundleIdentifier
         self.xOffset = xOffset
         self.yOffset = yOffset
+        self.visualAppVersion = visualAppVersion
+        self.visualScreenFingerprint = visualScreenFingerprint
+        self.visualFieldShapeFingerprint = visualFieldShapeFingerprint
         self.renderModeOverride = renderModeOverride
         self.screenshotTracingEnabled = screenshotTracingEnabled
         self.screenshotTracingExpiresAt = screenshotTracingExpiresAt
@@ -42,11 +51,26 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
     }
 
     public var hasTrustedVisualAdjustment: Bool {
+        hasTrustedVisualAdjustment(in: nil)
+    }
+
+    public func hasTrustedVisualAdjustment(
+        in context: CompatibilityLearningVisualTrustContext?
+    ) -> Bool {
         guard hasVisualAdjustment else {
             return false
         }
 
-        return lastReason == "manual-visual-nudge" || lastReason == "screenshot-visual-correction"
+        guard lastReason == "manual-visual-nudge"
+                || lastReason == "screenshot-visual-correction" else {
+            return false
+        }
+
+        guard let context else {
+            return true
+        }
+
+        return matchesVisualTrustContext(context)
     }
 
     public var debugSummary: String {
@@ -60,6 +84,38 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
 
     private static func format(_ value: Double) -> String {
         String(format: "%.2f", value)
+    }
+
+    private func matchesVisualTrustContext(
+        _ context: CompatibilityLearningVisualTrustContext
+    ) -> Bool {
+        matches(visualAppVersion, context.appVersion)
+            && matches(visualScreenFingerprint, context.screenFingerprint)
+            && matches(visualFieldShapeFingerprint, context.fieldShapeFingerprint)
+    }
+
+    private func matches(_ stored: String?, _ current: String?) -> Bool {
+        guard let stored, !stored.isEmpty else {
+            return true
+        }
+
+        return stored == current
+    }
+}
+
+public struct CompatibilityLearningVisualTrustContext: Codable, Equatable, Sendable {
+    public let appVersion: String?
+    public let screenFingerprint: String?
+    public let fieldShapeFingerprint: String?
+
+    public init(
+        appVersion: String? = nil,
+        screenFingerprint: String? = nil,
+        fieldShapeFingerprint: String? = nil
+    ) {
+        self.appVersion = appVersion
+        self.screenFingerprint = screenFingerprint
+        self.fieldShapeFingerprint = fieldShapeFingerprint
     }
 }
 
@@ -94,8 +150,14 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
     }
 
     public var trustedVisualOffsetOnly: CompatibilityLearningAdjustment {
+        trustedVisualOffsetOnly(context: nil)
+    }
+
+    public func trustedVisualOffsetOnly(
+        context: CompatibilityLearningVisualTrustContext?
+    ) -> CompatibilityLearningAdjustment {
         guard let profile,
-              !profile.hasTrustedVisualAdjustment else {
+              !profile.hasTrustedVisualAdjustment(in: context) else {
             return self
         }
 

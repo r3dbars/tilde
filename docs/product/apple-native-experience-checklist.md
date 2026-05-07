@@ -12,7 +12,7 @@ The product bar is not "AI appears everywhere." The bar is:
 
 ## Current Executive Score
 
-Overall Apple-native feel: 84/100.
+Overall Apple-native feel: 85/100.
 
 This app has real engineering depth now. It is not a toy. It has local model
 runtime support, strong privacy defaults, app compatibility profiles, insertion
@@ -59,7 +59,7 @@ unsure. Wrong-place text is worse than no suggestion.
 | Category | Weight | Current | Target | Why |
 | --- | ---: | ---: | ---: | --- |
 | Typing must feel untouched | 15 | 93 | 100 | Live TextEdit soak proves event tap p95 max 35us, p99 max 95us, max 161us over 600 samples with zero slow markers and zero tap disable events. A 10-minute endurance soak command now exists and is self-tested. Slow AX polling is off the hot key path but still warned in the same run, with p95 max 59ms and max 209ms, so worst-app AX proof remains open. |
-| Visual placement and caret alignment | 18 | 66 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, inline mode now hides when less than one useful word fits after the caret, Chrome chat-like now has proof, and Diagnostics exposes placement confidence without suggestion text. Notes, Obsidian, Claude Code, and Claude desktop are still the blocker. |
+| Visual placement and caret alignment | 18 | 67 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, inline mode now hides when less than one useful word fits after the caret, learned visual offsets now expire when target app version, screen, or field shape changes, Chrome chat-like now has proof, and Diagnostics exposes placement confidence without suggestion text. Notes, Obsidian, Claude Code, and Claude desktop are still the blocker. |
 | Acceptance safety | 10 | 90 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Prompt-app one-word no-submit proof is still incomplete. |
 | Cross-app reliability | 10 | 70 | 100 | The proof matrix now has 8 screenshot rows and the app exposes green/yellow/diagnostics-only/unsupported status. Many real apps are still yellow or pending screenshot proof. |
 | Native macOS visual feel | 8 | 80 | 100 | Settings moved toward native sections, checkboxes, clearer privacy/app controls, support status, "why hidden" copy, and calmer menu copy. Diagnostics and onboarding still need polish. |
@@ -70,7 +70,7 @@ unsure. Wrong-place text is worse than no suggestion.
 | Onboarding and setup | 4 | 96 | 100 | Settings explains Accessibility in one short paragraph, only mentions Screen Recording when screenshot capture is on, starts fresh installs with suggestion-capable apps off, points first success at enabling TextEdit, and installs or repairs the local model in-app with plain no-model-server recovery copy, progress, cancellation, failure retry, validation, and runtime warmup. A guided post-enable proof pass remains open. |
 | Evidence and QA loop | 4 | 98 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
 
-Weighted score: 84/100.
+Weighted score: 85/100.
 
 ## Non-Negotiable Native Feel Rules
 
@@ -130,7 +130,7 @@ visible.
 
 ## Category 2: Visual Placement And Caret Alignment
 
-Current score: 66/100.
+Current score: 67/100.
 
 Native target: ghost text feels like it belongs to the host text field.
 
@@ -172,7 +172,7 @@ cheap, even if the model output is good.
 - [x] Screenshot pixel offset detection should be unit-tested before live
   auto-apply.
 - [ ] Placement should use screenshot-derived correction only after explicit opt-in proof.
-- [ ] A learned visual offset must expire after app version, screen, or field-shape changes.
+- [x] A learned visual offset must expire after app version, screen, or field-shape changes.
 - [x] The UI should expose placement confidence in diagnostics without exposing user text.
 
 ### Native Placement Rules
