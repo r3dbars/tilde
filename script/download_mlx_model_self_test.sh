@@ -26,8 +26,15 @@ for alias in \
 done
 
 script/download_mlx_model.py --model qwen35-4b --print-target >/tmp/autocomplete-download-model-target.txt
-if ! grep -F "repo_id=mlx-community/Qwen3.5-4B-4bit" /tmp/autocomplete-download-model-target.txt >/dev/null; then
+if ! grep -F "repo_id=mlx-community/Qwen3.5-4B-MLX-4bit" /tmp/autocomplete-download-model-target.txt >/dev/null; then
   echo "download helper did not point qwen35-4b at the preferred repo" >&2
+  cat /tmp/autocomplete-download-model-target.txt >&2
+  exit 1
+fi
+
+script/download_mlx_model.py --model qwen3.5-4b --print-target >/tmp/autocomplete-download-model-target.txt
+if ! grep -F "repo_id=mlx-community/Qwen3.5-4B-MLX-4bit" /tmp/autocomplete-download-model-target.txt >/dev/null; then
+  echo "download helper did not point qwen3.5-4b at the preferred repo" >&2
   cat /tmp/autocomplete-download-model-target.txt >&2
   exit 1
 fi

@@ -330,6 +330,22 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.topMisses.contains { $0.fixCategory == "trust issue" })
     }
 
+    @Test("flags repeated typed-over suggestions")
+    func flagsRepeatedTypedOverSuggestions() {
+        let events = [
+            event(.suggestionTypedOver, suggestionID: "one", requestMode: "phraseContinuation", displayedText: "sounds good"),
+            event(.suggestionTypedOver, suggestionID: "two", requestMode: "phraseContinuation", displayedText: " sounds   good ")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Repeated typed-over: sounds good"
+                && miss.count == 2
+                && miss.fixCategory == "prompt issue"
+        })
+    }
+
     @Test("summarizes annoyance signals")
     func summarizesAnnoyanceSignals() {
         let events = [

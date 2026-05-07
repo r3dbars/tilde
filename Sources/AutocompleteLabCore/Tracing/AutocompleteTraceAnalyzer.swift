@@ -416,6 +416,13 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     }
 }
 
+private struct TraceRect: Equatable, Sendable {
+    let x: Double
+    let y: Double
+    let width: Double
+    let height: Double
+}
+
 public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     public init() {}
 
@@ -952,9 +959,68 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
     private func topMisses(from events: [AutocompleteTraceEvent]) -> [AutocompleteTraceMiss] {
         var buckets: [String: (count: Int, example: AutocompleteTraceEvent, cause: String, category: String)] = [:]
+        let presentedByID = firstEventsBySuggestionID(from: events.filter { $0.type == .suggestionPresented })
         addRepeatedUnacceptedSuggestions(from: events, buckets: &buckets)
+        addRepeatedTypedOverSuggestions(from: events, buckets: &buckets)
 
         for event in events {
+            if event.type == .suggestionHidden,
+               let presented = presentedByID[event.suggestionID],
+               suggestionLifecycleScopeChanged(from: presented, to: event) {
+                add(
+                    key: "Suggestion hidden under a different field",
+                    event: event,
+                    cause: "The suggestion was presented for \(scopeDescription(presented)) but hidden for \(scopeDescription(event)).",
+                    category: "trace ownership bug",
+                    buckets: &buckets
+                )
+            }
+
+            if event.type == .suggestionHidden,
+               event.reason == "panel-frame-unusable" {
+                add(
+                    key: "Panel frame became unusable in \(event.appBundleIdentifier)",
+                    event: event,
+                    cause: "The visible suggestion was hidden because its panel frame stopped being usable.",
+                    category: "renderer/caret bug",
+                    buckets: &buckets
+                )
+            }
+
+            if event.type == .suggestionHidden,
+               event.reason == "focus-changed" {
+                add(
+                    key: "Suggestion hidden after focus changed",
+                    event: event,
+                    cause: "The suggestion was still visible when focus moved away from \(scopeDescription(event)).",
+                    category: "trace ownership bug",
+                    buckets: &buckets
+                )
+            }
+
+            if event.type == .suggestionHidden,
+               event.reason == "stale-after-keydown" {
+                add(
+                    key: "Stale suggestion passed through",
+                    event: event,
+                    cause: "The user typed after the suggestion became stale, so the app dismissed it instead of accepting it.",
+                    category: "stale suggestion bug",
+                    buckets: &buckets
+                )
+            }
+
+            if event.type == .suggestionHidden,
+               event.reason.hasPrefix("placement-") {
+                let reason = String(event.reason.dropFirst("placement-".count))
+                add(
+                    key: "Placement changed while suggestion was visible",
+                    event: event,
+                    cause: "The visible suggestion was hidden after placement changed: \(reason).",
+                    category: "renderer/caret bug",
+                    buckets: &buckets
+                )
+            }
+
             if event.type == .suggestionTypedOver {
                 let typedSuffix = event.metadata["typedSuffix"]?
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -1330,6 +1396,252 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         }
     }
 
+    private func isCaretUnavailable(_ event: AutocompleteTraceEvent) -> Bool {
+        metadataValue(event, keys: ["hasCaretRect", "caretAvailable"]) == "false"
+            || reasonContains(event, "caret-unavailable")
+            || reasonContains(event, "missing-caret")
+            || reasonContains(event, "missing-anchor")
+    }
+
+    private func isCaretInvalid(_ event: AutocompleteTraceEvent) -> Bool {
+        metadataValue(event, keys: ["anchorQuality", "caretQuality", "geometryQuality"]) == "invalid"
+            || metadataValue(event, keys: ["caretInvalid", "invalidCaret"]) == "true"
+            || reasonContains(event, "caret-invalid")
+            || invalidGeometryReasons.contains(geometryReason(for: event))
+    }
+
+    private var invalidGeometryReasons: Set<String> {
+        [
+            "zeroheight",
+            "nonfinite",
+            "outsideelement",
+            "outsidewindow",
+            "offscreen",
+            "stale",
+            "jumpedtoofar",
+            "missingbounds"
+        ]
+    }
+
+    private func anchorSource(for event: AutocompleteTraceEvent) -> String {
+        if let source = metadataValue(
+            event,
+            keys: ["anchorSource", "effectiveAnchorSource", "fallbackAnchorSource", "suggestionAnchorSource"]
+        ) {
+            return source
+        }
+
+        if reasonContains(event, "field-anchor") {
+            return "field"
+        }
+
+        if reasonContains(event, "window-anchor") {
+            return "window"
+        }
+
+        if event.type == .suggestionPresented,
+           event.metadata["effectiveRenderMode"] == "floatingMirror",
+           event.metadata["hasCaretRect"] == "false" {
+            if event.metadata["hasElementRect"] == "true" {
+                return "field"
+            }
+
+            if event.metadata["hasWindowRect"] == "true" {
+                return "window"
+            }
+        }
+
+        return ""
+    }
+
+    private func isObserverMissedUpdate(_ event: AutocompleteTraceEvent) -> Bool {
+        metadataValue(event, keys: ["observerMissedUpdate", "observerMissed"]) == "true"
+            || reasonContains(event, "observer-missed")
+            || (
+                metadataValue(event, keys: ["expectedUpdateSource", "expectedSource"]) == "observer"
+                    && updateSource(for: event).contains("poll")
+            )
+    }
+
+    private func isPollRecoveredUpdate(_ event: AutocompleteTraceEvent) -> Bool {
+        metadataValue(event, keys: ["pollRecoveredUpdate", "pollRecovered"]) == "true"
+            || reasonContains(event, "poll-recovered")
+            || (
+                updateSource(for: event).contains("poll")
+                    && isObserverMissedUpdate(event)
+            )
+    }
+
+    private func updateSource(for event: AutocompleteTraceEvent) -> String {
+        metadataValue(event, keys: ["updateSource", "refreshSource", "geometryUpdateSource"]) ?? ""
+    }
+
+    private func geometryReason(for event: AutocompleteTraceEvent) -> String {
+        let reason = metadataValue(
+            event,
+            keys: ["geometryReason", "anchorReason", "fallbackReason", "caretInvalidReason", "axFailureReason"]
+        ) ?? event.reason
+
+        return normalizedToken(reason)
+    }
+
+    private func metadataValue(_ event: AutocompleteTraceEvent, keys: [String]) -> String? {
+        for key in keys {
+            if let value = event.metadata[key]?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty {
+                return normalizedToken(value)
+            }
+        }
+
+        return nil
+    }
+
+    private func reasonContains(_ event: AutocompleteTraceEvent, _ token: String) -> Bool {
+        normalizedToken(event.reason).contains(normalizedToken(token))
+    }
+
+    private func normalizedToken(_ text: String) -> String {
+        text
+            .lowercased()
+            .filter { $0.isLetter || $0.isNumber }
+    }
+
+    private func appName(for event: AutocompleteTraceEvent) -> String {
+        event.appBundleIdentifier.isEmpty ? "unknown app" : event.appBundleIdentifier
+    }
+
+    private func slowSuggestionThresholdMilliseconds(for requestMode: String) -> Int {
+        requestMode == "wordCompletion" ? 25 : 225
+    }
+
+    private func suggestionLifecycleScopeChanged(
+        from presented: AutocompleteTraceEvent,
+        to hidden: AutocompleteTraceEvent
+    ) -> Bool {
+        presented.appBundleIdentifier != hidden.appBundleIdentifier
+            || (
+                !presented.fieldIdentity.isEmpty
+                    && !hidden.fieldIdentity.isEmpty
+                    && presented.fieldIdentity != hidden.fieldIdentity
+            )
+    }
+
+    private func scopeDescription(_ event: AutocompleteTraceEvent) -> String {
+        let app = event.appBundleIdentifier.isEmpty ? "unknown app" : event.appBundleIdentifier
+        guard !event.fieldIdentity.isEmpty else {
+            return app
+        }
+
+        return "\(app)/\(event.fieldIdentity)"
+    }
+
+    private func placementRenderMode(for event: AutocompleteTraceEvent) -> String {
+        event.metadata["placementEffectiveRenderMode"]
+            ?? event.metadata["effectiveRenderMode"]
+            ?? (event.requestMode.isEmpty ? "unknown" : event.requestMode)
+    }
+
+    private func placementHealthReason(for event: AutocompleteTraceEvent) -> String {
+        event.metadata["placementHealthReason"] ?? event.reason
+    }
+
+    private func isPlacementSuppression(_ event: AutocompleteTraceEvent) -> Bool {
+        guard event.type == .suggestionSuppressed else {
+            return false
+        }
+
+        if let action = event.metadata["placementSelfHealingAction"],
+           action == "suppress" {
+            return true
+        }
+
+        if event.metadata["placementHealthReason"] != nil {
+            return true
+        }
+
+        return [
+            "disabled",
+            "missing-anchor",
+            "missing-caret",
+            "invalid-caret",
+            "invalid-anchor",
+            "caret-outside-focused-bounds",
+            "missing-floating-fallback"
+        ].contains(event.reason)
+    }
+
+    private func inlinePlacementLooksClipped(_ event: AutocompleteTraceEvent) -> Bool {
+        guard event.metadata["effectiveRenderMode"] == "inlineAdjacent",
+              let panelRect = traceRect(from: event.metadata["suggestionPanelRect"]),
+              traceRect(from: event.metadata["clippingRect"]) != nil else {
+            return false
+        }
+
+        let visibleCharacters = Double(Int(event.metadata["visibleChars"] ?? "") ?? event.displayedText.count)
+        let expectedMinimumWidth = min(72, max(24, visibleCharacters * 3))
+        return panelRect.width < expectedMinimumWidth
+    }
+
+    private func traceRect(from value: String?) -> TraceRect? {
+        guard let value,
+              value != "none" else {
+            return nil
+        }
+
+        var values: [String: Double] = [:]
+        for part in value.split(separator: ",") {
+            let pieces = part.split(separator: "=", maxSplits: 1)
+            guard pieces.count == 2,
+                  let number = Double(pieces[1]) else {
+                continue
+            }
+            values[String(pieces[0])] = number
+        }
+
+        guard let x = values["x"],
+              let y = values["y"],
+              let width = values["w"],
+              let height = values["h"] else {
+            return nil
+        }
+
+        return TraceRect(x: x, y: y, width: width, height: height)
+    }
+
+    private func addRepeatedTypedOverSuggestions(
+        from events: [AutocompleteTraceEvent],
+        buckets: inout [String: (count: Int, example: AutocompleteTraceEvent, cause: String, category: String)]
+    ) {
+        let typedOver = events.filter { $0.type == .suggestionTypedOver }
+        let repeated = Dictionary(grouping: typedOver) { event in
+            "\(event.requestMode)|\(normalizedSuggestionText(event.displayedText))"
+        }
+
+        for (_, suggestions) in repeated {
+            guard suggestions.count >= 2,
+                  let example = suggestions.first,
+                  !normalizedSuggestionText(example.displayedText).isEmpty
+            else {
+                continue
+            }
+
+            let repeatedText = normalizedSuggestionText(example.displayedText)
+            let title = "Repeated typed-over: \(repeatedText)"
+            add(
+                key: title,
+                event: example,
+                cause: "The same \(example.requestMode) suggestion was typed over \(suggestions.count) times.",
+                category: example.requestMode == "wordCompletion" ? "word-completion issue" : "prompt issue",
+                buckets: &buckets
+            )
+
+            if var existing = buckets[title] {
+                existing.count = max(existing.count, suggestions.count)
+                buckets[title] = existing
+            }
+        }
+    }
+
     private func addRepeatedUnacceptedSuggestions(
         from events: [AutocompleteTraceEvent],
         buckets: inout [String: (count: Int, example: AutocompleteTraceEvent, cause: String, category: String)]
@@ -1472,6 +1784,17 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
     private func iso8601Date(from value: String) -> Date? {
         ISO8601DateFormatter().date(from: value)
+    }
+
+    private func isTooShortWordCompletion(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !trimmed.contains(where: { $0.isWhitespace }),
+              trimmed.allSatisfy({ $0.isLetter }) else {
+            return false
+        }
+
+        return trimmed.count <= 2
     }
 
     private func add(

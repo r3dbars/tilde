@@ -82,6 +82,29 @@ struct CompletionActivationPolicyTests {
         ) == .block(.suppressedField))
     }
 
+    @Test("Blocks unsafe field kinds")
+    func blocksUnsafeFieldKinds() {
+        let policy = CompletionActivationPolicy()
+
+        for fieldKind in [AXFieldKind.search, .form, .url] {
+            #expect(policy.decision(
+                textBeforeCursor: "I think this",
+                textAfterCursor: "",
+                isSecure: false,
+                isFieldSuppressed: false,
+                fieldKind: fieldKind
+            ) == .block(.blockedFieldKind))
+        }
+
+        #expect(policy.decision(
+            textBeforeCursor: "I think this through ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
+    }
+
     @Test("Blocks selected text so accept cannot overwrite user content")
     func blocksSelectedText() {
         let policy = CompletionActivationPolicy()
