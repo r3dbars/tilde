@@ -38,6 +38,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
+    private lazy var compatibilityLearningActions = CompatibilityLearningActions(
+        store: compatibilityLearningStore,
+        profileStore: profileStore
+    )
     private let suggestionPanel = SuggestionPanelController()
     private lazy var focusedTextReader = SerialFocusedTextAXReader(accessibilityClient: accessibilityClient)
     private lazy var accessibilityObserver = AccessibilityObserver(
@@ -3429,14 +3433,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let current = compatibilityLearningStore.profile(for: bundleIdentifier)?.screenshotTracingEnabled == true
-        compatibilityLearningStore.setScreenshotTracing(!current, for: bundleIdentifier)
+        guard let result = compatibilityLearningActions.toggleScreenshotTracing(for: bundleIdentifier) else {
+            return
+        }
         DiagnosticsLog.shared.record(
             "screenshot-trace-control",
-            metadata: [
-                "app": bundleIdentifier,
-                "enabled": String(!current)
-            ]
+            metadata: result.metadata
         )
         showDiagnostics()
     }
@@ -3462,9 +3464,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func nudgeCurrentAppSuggestion(dx: Double, dy: Double) {
-        guard let bundleIdentifier = visibleSuggestionBundleIdentifier
-                ?? targetAppForControls()?.bundleIdentifier,
-              profileStore.allows(bundleIdentifier: bundleIdentifier) else {
+        guard let result = compatibilityLearningActions.nudge(
+            dx: dx,
+            dy: dy,
+            visibleSuggestionBundleIdentifier: visibleSuggestionBundleIdentifier,
+            fallbackBundleIdentifier: targetAppForControls()?.bundleIdentifier,
+            applyVisibleSuggestionNudge: { [weak self] bundleIdentifier in
+                self?.applyVisibleSuggestionNudge(dx: dx, dy: dy, bundleIdentifier: bundleIdentifier) ?? false
+            }
+        ) else {
             DiagnosticsLog.shared.record(
                 "compatibility-learning-nudge-skipped",
                 metadata: ["reason": "no-eligible-app"]
@@ -3472,16 +3480,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        compatibilityLearningStore.nudgeOffset(dx: dx, dy: dy, for: bundleIdentifier)
-        let appliedToVisibleSuggestion = applyVisibleSuggestionNudge(dx: dx, dy: dy, bundleIdentifier: bundleIdentifier)
         DiagnosticsLog.shared.record(
             "compatibility-learning-nudge",
-            metadata: [
-                "app": bundleIdentifier,
-                "dx": String(dx),
-                "dy": String(dy),
-                "appliedToVisibleSuggestion": String(appliedToVisibleSuggestion)
-            ]
+            metadata: result.metadata
         )
     }
 
@@ -3511,15 +3512,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc
     private func resetCurrentAppLearning() {
-        guard let bundleIdentifier = visibleSuggestionBundleIdentifier
-                ?? targetAppForControls()?.bundleIdentifier else {
+        guard let result = compatibilityLearningActions.reset(
+            visibleSuggestionBundleIdentifier: visibleSuggestionBundleIdentifier,
+            fallbackBundleIdentifier: targetAppForControls()?.bundleIdentifier
+        ) else {
             return
         }
 
-        compatibilityLearningStore.reset(bundleIdentifier: bundleIdentifier)
         DiagnosticsLog.shared.record(
             "compatibility-learning-reset",
-            metadata: ["app": bundleIdentifier]
+            metadata: result.metadata
         )
     }
 
