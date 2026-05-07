@@ -60,6 +60,81 @@ struct TracePrivacyPolicyTests {
         #expect(safe.screenshotPath.isEmpty)
     }
 
+    @Test("Secure field traces keep only shape data by default")
+    func secureFieldTracesKeepOnlyShapeDataByDefault() {
+        var event = rawEvent()
+        event = AutocompleteTraceEvent(
+            timestamp: event.timestamp,
+            sessionID: event.sessionID,
+            suggestionID: event.suggestionID,
+            type: .suggestionSuppressed,
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldIdentity: "secure-field",
+            requestMode: event.requestMode,
+            triggerReason: event.triggerReason,
+            textBeforeCursor: "private password value",
+            rawOutput: "private output",
+            displayedText: "private display",
+            reason: "secure-field",
+            screenshotPath: "/tmp/secure-field.png",
+            metadata: [
+                "fieldKind": "secure",
+                "selectedText": "private selection"
+            ]
+        )
+
+        let safe = TracePrivacyPolicy.default.logSafeEvent(event)
+
+        #expect(safe.textBeforeCursor.isEmpty)
+        #expect(safe.rawOutput.isEmpty)
+        #expect(safe.displayedText.isEmpty)
+        #expect(safe.screenshotPath.isEmpty)
+        #expect(safe.metadata["fieldKind"] == "secure")
+        #expect(safe.metadata["selectedTextChars"] == "17")
+        #expect(safe.metadata["textBeforeCursorChars"] == "22")
+    }
+
+    @Test("Unsupported app traces redact typed content by default")
+    func unsupportedAppTracesRedactTypedContentByDefault() {
+        let event = AutocompleteTraceEvent(
+            timestamp: "2026-05-07T10:00:00Z",
+            sessionID: "session",
+            suggestionID: "unsupported",
+            type: .suggestionSuppressed,
+            appBundleIdentifier: "com.example.Unsupported",
+            fieldIdentity: "field",
+            requestMode: "phraseContinuation",
+            textBeforeCursor: "private unsupported draft",
+            displayedText: "private suggestion",
+            reason: "profile-diagnostics-only",
+            metadata: [
+                "supportState": "unsupported",
+                "typedSuffix": "private suffix"
+            ]
+        )
+
+        let safe = TracePrivacyPolicy.default.logSafeEvent(event)
+
+        #expect(safe.textBeforeCursor.isEmpty)
+        #expect(safe.displayedText.isEmpty)
+        #expect(safe.metadata["supportState"] == "unsupported")
+        #expect(safe.metadata["typedSuffixChars"] == "14")
+    }
+
+    @Test("Screenshot opt-in does not imply raw text opt-in")
+    func screenshotOptInDoesNotImplyRawTextOptIn() {
+        let policy = TracePrivacyPolicy.fromEnvironment([
+            "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE": "1"
+        ])
+        let event = rawEvent()
+
+        let safe = policy.logSafeEvent(event)
+
+        #expect(safe.textBeforeCursor.isEmpty)
+        #expect(safe.rawOutput.isEmpty)
+        #expect(safe.screenshotPath == "/tmp/private-screen.png")
+    }
+
     private func rawEvent() -> AutocompleteTraceEvent {
         AutocompleteTraceEvent(
             timestamp: "2026-05-07T10:00:00Z",

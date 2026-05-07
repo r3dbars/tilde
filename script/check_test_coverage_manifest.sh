@@ -79,6 +79,21 @@ require_file "Tests/AutocompleteLabCoreTests/SuggestionPresentationGateTests.swi
 require_pattern "Tests/AutocompleteLabCoreTests/SuggestionPresentationGateTests.swift" "streamed phrase partials wait for enough visible words" "streaming presentation coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/SuggestionPresentationGateTests.swift" "streaming suppresses duplicate and tiny same-word changes" "streaming churn coverage"
 
+require_file "Tests/AutocompleteLabCoreTests/SuggestionAcceptanceGuardTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/SuggestionAcceptanceGuardTests.swift" "Blocks accept after app bundle changes" "wrong-app accept guard coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/SuggestionAcceptanceGuardTests.swift" "Blocks accept when text before cursor changed" "text snapshot accept guard coverage"
+
+require_file "Tests/AutocompleteLabCoreTests/TypingBurstPolicyTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/TypingBurstPolicyTests.swift" "Fast repeated character inserts become a burst" "typing-burst silence coverage"
+
+require_file "Tests/AutocompleteLabCoreTests/CompletionConfidencePolicyTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/CompletionConfidencePolicyTests.swift" "Blocks thin-context phrase continuations" "low-confidence weak-context coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/CompletionConfidencePolicyTests.swift" "Yellow profiles make long phrase suggestions low confidence" "profile confidence penalty coverage"
+
+require_file "Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift" "Secure field traces keep only shape data by default" "secure-field trace privacy coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift" "Unsupported app traces redact typed content by default" "unsupported-app trace privacy coverage"
+
 require_file "Tests/AutocompleteLabCoreTests/WordCompletionCandidateRankerTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/WordCompletionCandidateRankerTests.swift" "suppresses tiny recent suffixes until the fragment is strong" "recent-word completion quality coverage"
 
