@@ -9,16 +9,21 @@ struct CompatibilityProfileTests {
         let store = CompatibilityProfileStore.mvp
 
         #expect(store.profile(for: "com.apple.TextEdit")?.renderMode == .inlineAdjacent)
+        #expect(store.profile(for: "com.apple.TextEdit")?.appFamily == .nativeAppKit)
         #expect(store.profile(for: "com.apple.TextEdit")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.apple.TextEdit")?.fallbackInsertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.apple.Notes")?.insertionMode == .keyEvents)
+        #expect(store.profile(for: "com.apple.Notes")?.appFamily == .swiftUIAppKit)
         #expect(store.profile(for: "com.apple.Notes")?.fallbackInsertionMode == .axSelectedText)
         #expect(store.profile(for: "md.obsidian")?.renderMode == .floatingMirror)
+        #expect(store.profile(for: "md.obsidian")?.appFamily == .electron)
         #expect(store.profile(for: "md.obsidian")?.insertionMode == .axThenKeyEvents)
         #expect(store.profile(for: "md.obsidian")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "md.obsidian")?.suppressesAfterInsertionFailure == false)
         #expect(store.profile(for: "md.obsidian")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "md.obsidian")?.allowsDetachedSuggestions == false)
+        #expect(store.profile(for: "md.obsidian")?.allowsFieldAnchor == false)
+        #expect(store.profile(for: "md.obsidian")?.anchorLadder == [.caret])
         #expect(store.profile(for: "com.apple.mail")?.displayName == "Mail")
         #expect(store.profile(for: "com.apple.mail")?.renderMode == .disabled)
         #expect(store.profile(for: "com.apple.mail")?.insertionMode == .disabled)
@@ -27,6 +32,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.mail")?.allowsDescendantTextFallback == true)
         #expect(store.profile(for: "com.apple.mail")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.google.Chrome")?.displayName == "Chrome")
+        #expect(store.profile(for: "com.google.Chrome")?.appFamily == .chromium)
         #expect(store.profile(for: "com.google.Chrome")?.renderMode == .floatingMirror)
         #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .keyEvents)
@@ -37,6 +43,28 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.fallbackInsertionMode == .axThenKeyEvents)
         #expect(store.profile(for: "com.openai.codex")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "com.openai.codex")?.allowsDetachedSuggestions == false)
+        #expect(store.profile(for: "com.openai.codex")?.allowsFieldAnchor == false)
+    }
+
+    @Test("Diagnostics-only profiles are explicit")
+    func diagnosticsOnlyProfilesAreExplicit() throws {
+        let store = CompatibilityProfileStore.mvp
+        let safari = try #require(store.profile(for: "com.apple.Safari"))
+        let slack = try #require(store.profile(for: "com.tinyspeck.slackmacgap"))
+        let vscode = try #require(store.profile(for: "com.microsoft.VSCode"))
+        let cursor = try #require(store.profile(for: "com.todesktop.230313mzl4w4u92"))
+
+        for profile in [safari, slack, vscode, cursor] {
+            #expect(profile.renderMode == .disabled)
+            #expect(profile.insertionMode == .disabled)
+            #expect(profile.anchorLadder == [.none])
+            #expect(!profile.canPresentSuggestions)
+        }
+
+        #expect(safari.appFamily == .webKit)
+        #expect(slack.appFamily == .electron)
+        #expect(vscode.knownFailureModes.contains("Monaco editor exposes custom text geometry"))
+        #expect(cursor.knownFailureModes.contains("Monaco editor exposes custom text geometry"))
     }
 
     @Test("Denylisted apps are never allowed")
@@ -45,6 +73,8 @@ struct CompatibilityProfileTests {
 
         #expect(!store.allows(bundleIdentifier: "com.apple.Terminal"))
         #expect(!store.allows(bundleIdentifier: "com.1password.1password"))
+        #expect(!store.allows(bundleIdentifier: "com.bitwarden.desktop"))
+        #expect(!store.allows(bundleIdentifier: "com.apple.systemsettings"))
     }
 
     @Test("Unknown apps are not globally enabled during the MVP")
@@ -70,10 +100,12 @@ struct CompatibilityProfileTests {
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
 
         #expect(profile.debugSummary.contains("primary render=floatingMirror"))
+        #expect(profile.debugSummary.contains("family=chromium"))
         #expect(profile.debugSummary.contains("insert=axValueReplacement"))
         #expect(profile.debugSummary.contains("fallback render=floatingMirror"))
         #expect(profile.debugSummary.contains("insert=keyEvents"))
         #expect(profile.debugSummary.contains("field=accessibilityElement"))
+        #expect(profile.debugSummary.contains("anchors=caret>field"))
     }
 
     @Test("Insertion mode plans try primary then safe fallback")

@@ -56,6 +56,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        if let textBeforeCursor,
+           restartsCurrentSentence(singleLine, after: textBeforeCursor) {
+            return nil
+        }
+
         let normalizedSuggestion = mode == .wordCompletion ? singleLine : ensureLeadingSpace(singleLine)
         let trimmedSuggestion: String
         if let textBeforeCursor {
@@ -107,8 +112,12 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("as a language model")
             || normalized.hasPrefix("here's")
             || normalized.hasPrefix("here is")
+            || normalized.hasPrefix("here are")
             || normalized.hasPrefix("you can")
+            || normalized.hasPrefix("you need to")
             || normalized.hasPrefix("you should")
+            || normalized.hasPrefix("the best way")
+            || normalized.hasPrefix("in order to")
             || normalized.hasPrefix("i'd suggest")
             || normalized.hasPrefix("i suggest")
             || normalized.hasPrefix("i recommend")
@@ -150,7 +159,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return false
         }
 
-        return trimmed.contains(where: { $0.isLetter })
+        return trimmed.allSatisfy(\.isLetter)
     }
 
     private func isLowValueSingleWordPhrase(_ text: String) -> Bool {
@@ -180,6 +189,24 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         return contextWords.windows(ofCount: leadPhrase.count).contains(leadPhrase)
+    }
+
+    private func restartsCurrentSentence(_ suggestion: String, after textBeforeCursor: String) -> Bool {
+        let currentSentenceWords = normalizedWords(in: currentSentence(in: textBeforeCursor))
+        let suggestionWords = normalizedWords(in: suggestion)
+
+        guard currentSentenceWords.count > 3,
+              suggestionWords.count >= 3 else {
+            return false
+        }
+
+        return Array(currentSentenceWords.prefix(3)) == Array(suggestionWords.prefix(3))
+    }
+
+    private func currentSentence(in text: String) -> String {
+        let separators = CharacterSet(charactersIn: ".!?\n")
+        let components = text.components(separatedBy: separators)
+        return components.last ?? text
     }
 
     private func normalizedWords(in text: String) -> [String] {

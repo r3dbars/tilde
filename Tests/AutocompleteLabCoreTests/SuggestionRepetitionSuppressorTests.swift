@@ -14,6 +14,17 @@ struct SuggestionRepetitionSuppressorTests {
         #expect(suppressor.shouldSuppress(" what kind of laptop", mode: .phraseContinuation))
     }
 
+    @Test("near duplicate typed-over misses suppress repeated bad phrases")
+    func nearDuplicateTypedOverMissesSuppressRepeatedBadPhrases() {
+        var suppressor = SuggestionRepetitionSuppressor(missThreshold: 2)
+
+        suppressor.recordMiss("  What   kind of laptop?", mode: .phraseContinuation)
+        suppressor.recordMiss("what kind of laptop", mode: .phraseContinuation)
+
+        #expect(suppressor.shouldSuppress("WHAT kind of laptop!", mode: .phraseContinuation))
+        #expect(suppressor.shouldSuppress("what \u{201C}kind\u{201D} of laptop\u{2026}", mode: .phraseContinuation))
+    }
+
     @Test("suppresses tiny repeated word-completion misses")
     func suppressesTinyRepeatedWordCompletionMisses() {
         var suppressor = SuggestionRepetitionSuppressor(missThreshold: 1)

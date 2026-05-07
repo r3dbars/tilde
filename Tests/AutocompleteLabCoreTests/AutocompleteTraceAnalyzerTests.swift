@@ -114,6 +114,20 @@ struct AutocompleteTraceAnalyzerTests {
                 requestMode: "phraseContinuation",
                 rawOutput: "Let me know when it's done.",
                 cleanedVisibleText: "Let me know when it's done."
+            ),
+            event(
+                .modelResult,
+                suggestionID: "four",
+                requestMode: "phraseContinuation",
+                rawOutput: "The best way is to restart.",
+                cleanedVisibleText: "The best way is to restart."
+            ),
+            event(
+                .modelResult,
+                suggestionID: "five",
+                requestMode: "wordCompletion",
+                rawOutput: "s",
+                cleanedVisibleText: "s"
             )
         ]
 
@@ -122,6 +136,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.topMisses.contains { $0.title == "Word mode returned phrase" })
         #expect(summary.topMisses.contains { $0.title == "Model leaked thinking text" })
         #expect(summary.topMisses.contains { $0.title == "Assistant-style completion" })
+        #expect(summary.topMisses.contains { $0.title == "Too-short word completion" })
         #expect(summary.topMisses.contains { $0.fixCategory == "output cleaning issue" })
     }
 
@@ -334,6 +349,22 @@ struct AutocompleteTraceAnalyzerTests {
         let summary = AutocompleteTraceAnalyzer().summary(for: events)
 
         #expect(!summary.topMisses.contains { $0.title == "Repeated unaccepted: ng" })
+    }
+
+    @Test("flags repeated typed-over suggestions")
+    func flagsRepeatedTypedOverSuggestions() {
+        let events = [
+            event(.suggestionTypedOver, suggestionID: "one", requestMode: "phraseContinuation", displayedText: "sounds good"),
+            event(.suggestionTypedOver, suggestionID: "two", requestMode: "phraseContinuation", displayedText: " sounds   good ")
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.topMisses.contains { miss in
+            miss.title == "Repeated typed-over: sounds good"
+                && miss.count == 2
+                && miss.fixCategory == "prompt issue"
+        })
     }
 
     private func event(

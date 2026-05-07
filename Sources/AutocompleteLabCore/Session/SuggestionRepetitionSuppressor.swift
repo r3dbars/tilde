@@ -73,7 +73,10 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
         let normalizedText = text
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: .punctuationCharacters)
+            .split(whereSeparator: \.isWhitespace)
+            .map { $0.trimmingCharacters(in: .punctuationCharacters) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
         guard !normalizedText.isEmpty else {
             return ""
         }

@@ -10,6 +10,10 @@ Current compatibility stance for the lab build.
 | Chrome | supported for local text fields | mirror | field fallback after browser caret rejection | AX value replacement, key fallback | recorded local textarea pass |
 | Codex | dogfood target | synthetic inline caret, no detached fallback | synthetic caret trusted; detached field/window anchors blocked | key events, AX fallback | pending manual smoke pass |
 | Mail | diagnostics only | disabled | off | disabled | blocked until safe compose adapter exists |
+| Safari | diagnostics only | disabled | off | disabled | browser textarea and rich-editor behavior need separate proof |
+| Slack | diagnostics only | disabled | off | disabled | Electron composer needs app-specific proof |
+| VS Code | diagnostics only | disabled | off | disabled | Monaco caret and Tab behavior need app-specific proof |
+| Cursor | diagnostics only | disabled | off | disabled | Monaco caret and Tab behavior need app-specific proof |
 | Atlas | unsupported | disabled | off | disabled | blocked until focused AX element is reliable |
 
 Run:

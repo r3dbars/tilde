@@ -26,11 +26,11 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Disable screenshot tracing outside lab/dogfood mode.
 - [x] Require a visible local toggle before screenshot tracing can start.
 - [x] Add a diagnostic banner when raw tracing is enabled.
-- [ ] Expand sensitive app denylist beyond Terminal and password managers.
+- [x] Expand sensitive app denylist beyond Terminal and password managers.
 - [x] Suppress in Mail compose until a safe adapter exists.
-- [ ] Suppress in payment, password, API key, and token-looking fields when detectable.
+- [x] Suppress in payment, password, API key, and token-looking fields when detectable.
 - [x] Suppress in unknown apps by default.
-- [ ] Add a "why no suggestion" reason for sensitive suppression.
+- [x] Add a "why no suggestion" reason for sensitive suppression.
 - [x] Add tests for sensitive profiles having no insertion modes.
 - [x] Add tests for trace redaction of diagnostics metadata.
 
@@ -112,38 +112,38 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P0: Suggestion Quality
 
-- [ ] Add stricter answer-like output suppression for `Here are`, `You need to`, `The best way`, and `In order to`.
-- [ ] Suppress completions that restart the current sentence.
-- [ ] Suppress completions that repeat any earlier 3-word phrase unless it is exactly the immediate suffix.
-- [ ] Suppress word-completion phrases that contain punctuation.
-- [ ] Suppress static dictionary completions for ambiguous two-letter fragments unless the word is recent.
-- [ ] Let recent words override static ambiguity.
-- [ ] Add typed-over miss learning for repeated bad words.
-- [ ] Add tests for near-duplicate repeated misses.
-- [ ] Add tests for smart quotes, ellipses, casing, and punctuation normalization.
-- [ ] Add trace buckets for answer-style completions.
-- [ ] Add trace buckets for repeated typed-over suggestions.
-- [ ] Add trace buckets for too-short word completions.
+- [x] Add stricter answer-like output suppression for `Here are`, `You need to`, `The best way`, and `In order to`.
+- [x] Suppress completions that restart the current sentence.
+- [x] Suppress completions that repeat any earlier 3-word phrase unless it is exactly the immediate suffix.
+- [x] Suppress word-completion phrases that contain punctuation.
+- [x] Suppress static dictionary completions for ambiguous two-letter fragments unless the word is recent.
+- [x] Let recent words override static ambiguity.
+- [x] Add typed-over miss learning for repeated bad words.
+- [x] Add tests for near-duplicate repeated misses.
+- [x] Add tests for smart quotes, ellipses, casing, and punctuation normalization.
+- [x] Add trace buckets for answer-style completions.
+- [x] Add trace buckets for repeated typed-over suggestions.
+- [x] Add trace buckets for too-short word completions.
 
 ## P0: App Compatibility Profiles
 
-- [ ] Add `appFamily`: nativeAppKit, swiftUIAppKit, WebKit, Chromium, Electron, customCanvas, unknown.
-- [ ] Add `anchorLadder` per profile.
-- [ ] Add `knownFailureModes` per profile.
-- [ ] Add `allowsFieldAnchor`.
-- [ ] Add `allowsWindowAnchor`.
-- [ ] Add `requiresValidatedCaret`.
-- [ ] Add `supportsObserverUpdates`.
-- [ ] Split browser textarea support from browser rich-editor support.
-- [ ] Add Safari diagnostics profile.
-- [ ] Add Slack diagnostics profile.
-- [ ] Add VS Code diagnostics profile.
-- [ ] Add Cursor diagnostics profile.
+- [x] Add `appFamily`: nativeAppKit, swiftUIAppKit, WebKit, Chromium, Electron, customCanvas, unknown.
+- [x] Add `anchorLadder` per profile.
+- [x] Add `knownFailureModes` per profile.
+- [x] Add `allowsFieldAnchor`.
+- [x] Add `allowsWindowAnchor`.
+- [x] Add `requiresValidatedCaret`.
+- [x] Add `supportsObserverUpdates`.
+- [x] Split browser textarea support from browser rich-editor support.
+- [x] Add Safari diagnostics profile.
+- [x] Add Slack diagnostics profile.
+- [x] Add VS Code diagnostics profile.
+- [x] Add Cursor diagnostics profile.
 - [ ] Add Atlas diagnostics profile once focused AX is reliable.
-- [ ] Keep Mail compose diagnostics-only.
+- [x] Keep Mail compose diagnostics-only.
 - [ ] Add explicit unsupported records for high-risk apps.
-- [ ] Add tests for profile defaults.
-- [ ] Add tests that unknown apps remain blocked.
+- [x] Add tests for profile defaults.
+- [x] Add tests that unknown apps remain blocked.
 
 ## P1: Panel And Window Polish
 
