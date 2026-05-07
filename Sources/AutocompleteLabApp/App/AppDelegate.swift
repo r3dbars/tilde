@@ -3675,6 +3675,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return context.selectedText
         }
 
+        if case .unsupported = draft.supportStatus {
+            return nil
+        }
+
         let textBeforeCursor = context.textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !textBeforeCursor.isEmpty else {
             return nil
