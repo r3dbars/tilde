@@ -66,6 +66,7 @@ public struct FocusedTextAXHealthPolicy: Equatable, Sendable {
     public let slowQueueDelayMilliseconds: Int
     public let slowReadDurationMilliseconds: Int
     public let repeatedSlowReadCount: Int
+    public let missingContextSlowReadCount: Int
     public let slowReadWindowMilliseconds: Int
     public let cooldownMilliseconds: Int
     public let maximumTrackedApps: Int
@@ -74,6 +75,7 @@ public struct FocusedTextAXHealthPolicy: Equatable, Sendable {
         slowQueueDelayMilliseconds: Int = 80,
         slowReadDurationMilliseconds: Int = 80,
         repeatedSlowReadCount: Int = 2,
+        missingContextSlowReadCount: Int = 1,
         slowReadWindowMilliseconds: Int = 1_000,
         cooldownMilliseconds: Int = 750,
         maximumTrackedApps: Int = 16
@@ -81,6 +83,7 @@ public struct FocusedTextAXHealthPolicy: Equatable, Sendable {
         self.slowQueueDelayMilliseconds = max(0, slowQueueDelayMilliseconds)
         self.slowReadDurationMilliseconds = max(0, slowReadDurationMilliseconds)
         self.repeatedSlowReadCount = max(1, repeatedSlowReadCount)
+        self.missingContextSlowReadCount = max(1, missingContextSlowReadCount)
         self.slowReadWindowMilliseconds = max(0, slowReadWindowMilliseconds)
         self.cooldownMilliseconds = max(0, cooldownMilliseconds)
         self.maximumTrackedApps = max(1, maximumTrackedApps)
@@ -124,6 +127,7 @@ public struct FocusedTextAXHealthPolicy: Equatable, Sendable {
         bundleIdentifier: String,
         queueDelayMilliseconds: Int,
         readDurationMilliseconds: Int,
+        hasContext: Bool = true,
         now: Date,
         state: inout FocusedTextAXHealthState
     ) -> FocusedTextAXHealthObservation {
@@ -179,7 +183,8 @@ public struct FocusedTextAXHealthPolicy: Equatable, Sendable {
         health.lastObservedAt = now
         health.lastSlowReason = reason
 
-        if health.slowReadCount >= repeatedSlowReadCount {
+        let requiredSlowReadCount = hasContext ? repeatedSlowReadCount : missingContextSlowReadCount
+        if health.slowReadCount >= requiredSlowReadCount {
             let cooldownUntil = now.addingTimeInterval(TimeInterval(cooldownMilliseconds) / 1000)
             health.cooldownStartedAt = now
             health.cooldownUntil = cooldownUntil

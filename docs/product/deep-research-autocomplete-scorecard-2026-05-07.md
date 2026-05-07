@@ -133,6 +133,9 @@ Pass 1 shipped these improvements:
 - Trusted visual offsets now expire when the target app version, screen, or
   field shape changes. Legacy offsets stay trusted until resaved with scoped
   context, so older local profiles do not break abruptly.
+- Slow focused-text AX reads that return no focused text context now start a
+  short app-specific cooldown immediately instead of requiring a repeated slow
+  read, so failing editors back off sooner without touching the key path.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 

@@ -1053,6 +1053,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             bundleIdentifier: result.app.bundleIdentifier,
             queueDelayMilliseconds: result.queueDelayMilliseconds,
             readDurationMilliseconds: result.readDurationMilliseconds,
+            hasContext: result.context != nil,
             now: Date(),
             state: &focusedTextAXHealthState
         )
