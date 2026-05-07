@@ -42,6 +42,8 @@ fi
 
 declare -a APPS=(
   "TextEdit|TextEdit|com.apple.TextEdit|full|default|script/manual_smoke_session.sh textedit --visual"
+  "TextEdit multiline|TextEdit|com.apple.TextEdit|full|multiline|script/real_app_smoke.sh textedit-multiline"
+  "TextEdit wrapped line|TextEdit|com.apple.TextEdit|full|wrapped-line|script/real_app_smoke.sh textedit-wrapped"
   "Notes title|Notes|com.apple.Notes|full|notes-title|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate"
   "Notes body|Notes|com.apple.Notes|full|notes-body|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate"
   "Notes checklist|Notes|com.apple.Notes|full|notes-checklist|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate"
