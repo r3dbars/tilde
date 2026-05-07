@@ -83,8 +83,8 @@ Pass 1 shipped these improvements:
   accepted-kept scores, aggregate style memory, recent words, repetition
   suppression, and prefix-family cooldowns without deleting logs.
 - Settings now turns missing or invalid app-owned MLX assets into an in-app
-  Install/Repair Model action with progress, validation, runtime reload, and
-  warmup instead of only revealing a folder.
+  Install/Repair Model action with progress, cancellation, validation, runtime
+  reload, and warmup instead of only revealing a folder.
 - Replacement now protects fresh visible ghost text for 1.2s unless the new
   suggestion has a clear score win, then treats 2s-old suggestions as stale
   enough to replace.

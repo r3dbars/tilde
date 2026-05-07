@@ -509,10 +509,17 @@ final class SettingsWindowController: NSObject {
         runtimeLabel.stringValue = "Local model: \(runtimeReport.summary)"
         runtimeDetailLabel.stringValue = runtimeReport.detail ?? ""
         runtimeDetailLabel.isHidden = runtimeReport.detail == nil
-        runtimeActionLabel.stringValue = "Next step: \(runtimeReport.action.displayName)"
-        runtimeActionButton.title = isModelInstallInProgress ? "Installing..." : guidance.actionTitle
-        runtimeActionButton.isEnabled = guidance.isActionEnabled && !isModelInstallInProgress
-        currentRuntimeAction = runtimeReport.action
+        if isModelInstallInProgress {
+            runtimeActionLabel.stringValue = "Next step: Wait for the model install or cancel it."
+            runtimeActionButton.title = "Cancel Install"
+            runtimeActionButton.isEnabled = true
+            currentRuntimeAction = .cancelModelInstall
+        } else {
+            runtimeActionLabel.stringValue = "Next step: \(runtimeReport.action.displayName)"
+            runtimeActionButton.title = guidance.actionTitle
+            runtimeActionButton.isEnabled = guidance.isActionEnabled
+            currentRuntimeAction = runtimeReport.action
+        }
         runtimeTargetLabel.stringValue = "Runtime target: \(runtimeTargetSummary)"
         modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
         modelInstallStatusLabel.stringValue = modelInstallStatusText ?? ""

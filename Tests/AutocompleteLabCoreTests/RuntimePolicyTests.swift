@@ -100,6 +100,7 @@ struct RuntimePolicyTests {
 
     @Test("Runtime readiness guidance gives stage-specific setup actions")
     func runtimeReadinessGuidanceGivesStageSpecificSetupActions() {
+        #expect(RuntimeReadinessAction.cancelModelInstall.displayName == "Cancel Model Install")
         let missing = RuntimeReadinessGuidance(
             report: RuntimeReadinessReport(
                 stage: .downloadNeeded,
