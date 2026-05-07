@@ -7,6 +7,7 @@ final class DiagnosticsWindowController {
     private let textView: NSTextView
     private let refreshButton: NSButton
     private let pauseTracingButton: NSButton
+    private let rawTextTracingButton: NSButton
     private let screenshotTracingButton: NSButton
     private let openTraceFolderButton: NSButton
     private let exportReportButton: NSButton
@@ -27,6 +28,7 @@ final class DiagnosticsWindowController {
 
         refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
         pauseTracingButton = NSButton(title: "Pause Tracing", target: nil, action: nil)
+        rawTextTracingButton = NSButton(title: "Raw Text Off", target: nil, action: nil)
         screenshotTracingButton = NSButton(title: "Screenshot Trace", target: nil, action: nil)
         openTraceFolderButton = NSButton(title: "Open Trace Folder", target: nil, action: nil)
         exportReportButton = NSButton(title: "Export Report", target: nil, action: nil)
@@ -39,6 +41,7 @@ final class DiagnosticsWindowController {
         let buttonStack = NSStackView(views: [
             refreshButton,
             pauseTracingButton,
+            rawTextTracingButton,
             screenshotTracingButton,
             openTraceFolderButton,
             exportReportButton,
@@ -67,6 +70,8 @@ final class DiagnosticsWindowController {
         refreshButton.action = #selector(refresh)
         pauseTracingButton.target = self
         pauseTracingButton.action = #selector(toggleTracing)
+        rawTextTracingButton.target = self
+        rawTextTracingButton.action = #selector(toggleRawTextTracing)
         screenshotTracingButton.target = self
         screenshotTracingButton.action = #selector(toggleScreenshotTracing)
         openTraceFolderButton.target = self
@@ -108,6 +113,7 @@ final class DiagnosticsWindowController {
         self.exportReportAction = exportReportAction
         self.deleteTracesAction = deleteTracesAction
         pauseTracingButton.title = tracingPaused ? "Resume Tracing" : "Pause Tracing"
+        rawTextTracingButton.title = RawAutocompleteTraceLog.shared.rawTextTracingEnabled ? "Raw Text On" : "Raw Text Off"
         screenshotTracingButton.title = screenshotTracingEnabled ? "Screenshots On" : "Screenshots Off"
 
         var sections: [String] = []
@@ -188,6 +194,7 @@ final class DiagnosticsWindowController {
         Trace eval:
           path: \(tracePath)
           tracing: \(tracingPaused ? "paused" : "on")
+          raw text tracing: \(RawAutocompleteTraceLog.shared.rawTextTracingEnabled ? "on" : "off")
           screenshot tracing: \(screenshotTracingEnabled ? "on" : "off")
           compatibility learning: \(compatibilityLearningPath)
           current learned adapter: \(compatibilityLearningProfile?.debugSummary ?? "none")
@@ -293,6 +300,12 @@ final class DiagnosticsWindowController {
     @objc
     private func toggleTracing() {
         toggleTracingAction?()
+    }
+
+    @objc
+    private func toggleRawTextTracing() {
+        RawAutocompleteTraceLog.shared.setRawTextTracingEnabled(!RawAutocompleteTraceLog.shared.rawTextTracingEnabled)
+        refreshAction?()
     }
 
     @objc
