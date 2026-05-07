@@ -61,7 +61,7 @@ unsure. Wrong-place text is worse than no suggestion.
 | Privacy and permissions trust | 9 | 93 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, and raw/screenshot debug capture now expires when enabled from the app UI. Stronger plain-language warnings remain open. |
 | Suggestion quality | 8 | 87 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, learned word completion is app-scoped, dogfood prompts are stricter, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
 | Failure restraint | 8 | 86 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, stale geometry suppresses display, event-tap disablement fails closed, prompt full accept requires proof, and unsupported apps now explain their stance. Low-confidence inline mode still needs stricter real-app gating. |
-| User control | 6 | 88 | 100 | Settings now exposes pause, app blocking, support status, privacy diagnostics, temporary raw/screenshot capture, local log deletion, shortcut state, and why the last suggestion was hidden. Per-app modes remain open. |
+| User control | 6 | 88 | 100 | Settings now exposes pause, app blocking, support status, per-app mode and safety stance, privacy diagnostics, temporary raw/screenshot capture, local log deletion, shortcut state, and why the last suggestion was hidden. Force-mode controls remain open. |
 | Onboarding and setup | 4 | 73 | 100 | Settings is clearer, but first-run permission flow and model install/repair are still not one calm native flow. |
 | Evidence and QA loop | 4 | 98 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
 
@@ -355,6 +355,7 @@ Native target: a user can understand and control the app in 20 seconds.
 - [x] Full-accept toggle exists.
 - [x] Settings uses clearer controls for suggestions, current app, tracing, raw text capture, screenshot capture, and local log deletion.
 - [x] Settings and menu copy now expose green/yellow/diagnostics-only/unsupported app stance.
+- [x] Settings shows the current app safety stance, including mirror-only, detached-suggestion suppression, and prompt-app full-accept limits.
 - [ ] Shortcut editing should be first-class.
 - [ ] Per-app mode should be visible: inline, mirror, command-only, disabled.
 - [ ] User should be able to force mirror mode for an app.
@@ -436,6 +437,7 @@ Native target: every claim has proof.
 - [ ] Yellow apps: Codex, Claude desktop, Obsidian, Notes.
 - [ ] Red/disabled apps: Mail compose, Atlas, terminals unless explicitly scoped.
 - [x] Add per-app support mode to settings.
+- [x] Add per-app safety stance to settings.
 - [x] Add "why disabled" text.
 
 ### Pass 4: Add Native Fallback Surface

@@ -23,6 +23,10 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(allowed.modeText == "Mode: inline, mirror fallback")
         #expect(allowed.acceptanceText == "Acceptance: Tab next word + full accept")
+        #expect(
+            allowed.safetyText
+                == "Safety: Inline when caret proof is trusted; mirror fallback if inline is unsafe."
+        )
         #expect(allowed.toggleTitle == "Allow suggestions in this app")
         #expect(allowed.menuToggleTitle == "Disable TextEdit")
         #expect(allowed.blockedAppsText == "Blocked apps: none")
@@ -43,6 +47,10 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(blocked.modeText == "Mode: mirror")
         #expect(blocked.acceptanceText == "Acceptance: Tab next word + full accept")
+        #expect(
+            blocked.safetyText
+                == "Safety: Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Insertion fails closed if the primary method is not verified."
+        )
         #expect(blocked.menuToggleTitle == "Enable Notes")
         #expect(blocked.blockedAppsText == "Blocked apps: 2")
         #expect(blocked.canToggle)
@@ -66,6 +74,7 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(diagnosticsOnly.modeText == "Mode: disabled")
         #expect(diagnosticsOnly.acceptanceText == "Acceptance: off here")
+        #expect(diagnosticsOnly.safetyText == "Safety: Suggestions stay off here.")
         #expect(diagnosticsOnly.menuToggleTitle == "Suggestions unavailable in Mail")
         #expect(!diagnosticsOnly.canToggle)
 
@@ -81,6 +90,10 @@ struct SettingsWindowControllerStateTests {
         #expect(unsupported.detailText == "No compatibility profile yet. Suggestions stay off here.")
         #expect(unsupported.modeText == "Mode: not tested yet")
         #expect(unsupported.acceptanceText == "Acceptance: off here")
+        #expect(
+            unsupported.safetyText
+                == "Safety: Suggestions stay off until this app has a compatibility profile."
+        )
         #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Atlas")
         #expect(!unsupported.canToggle)
 
@@ -96,6 +109,7 @@ struct SettingsWindowControllerStateTests {
         #expect(missing.detailText == "Open a writing app to see whether suggestions are supported.")
         #expect(missing.modeText == "Mode: choose a writing app")
         #expect(missing.acceptanceText == "Acceptance: off until an app is selected")
+        #expect(missing.safetyText == "Safety: choose a writing app first")
         #expect(missing.menuToggleTitle == "Toggle Current App")
         #expect(!missing.canToggle)
     }
@@ -113,6 +127,10 @@ struct SettingsWindowControllerStateTests {
 
         #expect(codex.modeText == "Mode: mirror")
         #expect(codex.acceptanceText == "Acceptance: Tab next word only; full accept is off for safety")
+        #expect(
+            codex.safetyText
+                == "Safety: Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Full accept stays off until no-submit proof exists."
+        )
     }
 
     @Test("Accessibility permission copy says what the app reads and keeps local")
