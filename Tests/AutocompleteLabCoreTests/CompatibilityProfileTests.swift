@@ -81,6 +81,11 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.apple.Safari")?.supportLevel == .diagnosticsOnly)
         #expect(store.profile(for: "com.tinyspeck.slackmacgap")?.appFamily == .electron)
+        #expect(store.profile(for: "notion.id")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "notion.id")?.canPresentSuggestions == false)
+        #expect(store.profile(for: "com.hnc.Discord")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.hnc.DiscordPTB")?.canPresentSuggestions == false)
+        #expect(store.profile(for: "com.hnc.DiscordCanary")?.canPresentSuggestions == false)
         #expect(store.profiles["com.microsoft.VSCode"]?.anchorLadder == [.none])
         #expect(store.profiles["com.todesktop.230313mzl4w4u92"]?.renderMode == .disabled)
     }
