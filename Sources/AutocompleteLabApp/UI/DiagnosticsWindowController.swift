@@ -166,6 +166,10 @@ final class DiagnosticsWindowController {
             compatibilityLearningPath: compatibilityLearningPath,
             compatibilityLearningProfile: compatibilityLearningProfile
         ))
+        sections.append(SuggestionLearningDiagnostics(
+            summary: traceSummary,
+            recentEvents: recentTraceEvents
+        ).text)
         sections.append(acceptRateBucketsText(title: "Accept rate by app", buckets: traceSummary.acceptRateByApp))
         sections.append(acceptRateBucketsText(title: "Accept rate by mode", buckets: traceSummary.acceptRateByMode))
         sections.append(acceptRateBucketsText(title: "Useful rate by app", buckets: traceSummary.usefulRateByApp))
@@ -358,6 +362,135 @@ final class DiagnosticsWindowController {
     @objc
     private func deleteTraces() {
         deleteTracesAction?()
+    }
+}
+
+struct SuggestionLearningDiagnostics: Equatable {
+    let summary: AutocompleteTraceSummary
+    let recentEvents: [AutocompleteTraceEvent]
+
+    var text: String {
+        [
+            headlineText,
+            acceptedAndKeptText(title: "Accepted-kept by app", buckets: summary.acceptedAndKeptRateByApp),
+            acceptedAndKeptText(title: "Accepted-kept by mode", buckets: summary.acceptedAndKeptRateByRequestMode),
+            countBucketsText(title: "Annoyance signals", buckets: summary.annoyanceSignalCounts),
+            recentDisplayAffinityText,
+            recentRepeatedMissText,
+            recentPrefixCooldownText,
+            recentStyleSketchText
+        ].joined(separator: "\n")
+    }
+
+    private var headlineText: String {
+        "Learning diagnostics: accepted-kept \(summary.acceptedAndKeptCount) (\(Self.percent(summary.acceptedAndKeptRateAccepted)) of accepted, \(Self.percent(summary.acceptedAndKeptRateShown)) of shown), typed-over \(summary.typedOverCount), ignored \(summary.ignoredCount), annoyance \(Self.score(summary.annoyanceScore))"
+    }
+
+    private var recentDisplayAffinityText: String {
+        guard let event = latestEvent(containingAny: [
+            "displayScoreAcceptedAndKeptProbability",
+            "displayScoreAcceptedAndKeptSamples"
+        ]) else {
+            return "Current display affinity: no recent accepted-kept gate metadata"
+        }
+
+        let probability = event.metadata["displayScoreAcceptedAndKeptProbability"] ?? "unknown"
+        let samples = event.metadata["displayScoreAcceptedAndKeptSamples"] ?? "0"
+        let threshold = event.metadata["displayScoreAcceptedAndKeptThreshold"] ?? "n/a"
+        return "Current display affinity: probability=\(probability), samples=\(samples), threshold=\(threshold)"
+    }
+
+    private var recentRepeatedMissText: String {
+        guard let event = latestEvent(containingAny: [
+            "repetitionMissTotal",
+            "repetitionMissSuppressed"
+        ]) else {
+            return "Repeated miss state: no recent miss-score metadata"
+        }
+
+        let kind = event.metadata["repetitionMissKind"] ?? "miss"
+        let total = event.metadata["repetitionMissTotal"] ?? "unknown"
+        let threshold = event.metadata["repetitionMissThreshold"] ?? "unknown"
+        let suppressed = event.metadata["repetitionMissSuppressed"] ?? "false"
+        let lifetime = event.metadata["repetitionMissLifetimeMs"].map { ", lifetime=\($0)ms" } ?? ""
+        return "Repeated miss state: kind=\(kind), score=\(total)/\(threshold), suppressed=\(suppressed)\(lifetime)"
+    }
+
+    private var recentPrefixCooldownText: String {
+        guard let event = latestEvent(containingAny: [
+            "prefixCooldownReason",
+            "prefixCooldownDurationMilliseconds"
+        ]) else {
+            return "Prefix cooldown: no recent cooldown metadata"
+        }
+
+        let reason = event.metadata["prefixCooldownReason"] ?? "unknown"
+        let duration = event.metadata["prefixCooldownDurationMilliseconds"] ?? "unknown"
+        let tokens = event.metadata["prefixFamilyTokenCount"] ?? "unknown"
+        let escalated = event.metadata["prefixCooldownEscalated"] ?? "false"
+        return "Prefix cooldown: reason=\(reason), duration=\(duration)ms, familyTokens=\(tokens), escalated=\(escalated)"
+    }
+
+    private var recentStyleSketchText: String {
+        guard let event = latestEvent(containingAny: [
+            "styleSketchSamples",
+            "styleSketchAverageWords"
+        ]) else {
+            return "Style sketch: no recent aggregate style metadata"
+        }
+
+        let samples = event.metadata["styleSketchSamples"] ?? "0"
+        let averageWords = event.metadata["styleSketchAverageWords"] ?? "unknown"
+        let punctuation = event.metadata["styleSketchTerminalPunctuationRate"] ?? "unknown"
+        let lowercase = event.metadata["styleSketchLowercaseStartRate"] ?? "unknown"
+        let questions = event.metadata["styleSketchQuestionEndingRate"] ?? "unknown"
+        return "Style sketch: samples=\(samples), avgWords=\(averageWords), terminalPunctuation=\(punctuation), lowercaseStarts=\(lowercase), questionEndings=\(questions)"
+    }
+
+    private func acceptedAndKeptText(title: String, buckets: [String: Double]) -> String {
+        guard !buckets.isEmpty else {
+            return "\(title): none yet"
+        }
+
+        return """
+        \(title):
+        \(buckets.sorted { $0.key < $1.key }.map { key, value in
+            "  \(key): \(Self.percent(value))"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func countBucketsText(title: String, buckets: [String: Int]) -> String {
+        guard !buckets.isEmpty else {
+            return "\(title): none yet"
+        }
+
+        return """
+        \(title):
+        \(buckets.sorted { lhs, rhs in
+            if lhs.value == rhs.value {
+                return lhs.key < rhs.key
+            }
+
+            return lhs.value > rhs.value
+        }.map { key, value in
+            "  \(key): \(value)"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
+        recentEvents.reversed().first { event in
+            !keys.isDisjoint(with: Set(event.metadata.keys))
+        }
+    }
+
+    private static func percent(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+
+    private static func score(_ value: Double) -> String {
+        String(format: "%.2f", value)
     }
 }
 

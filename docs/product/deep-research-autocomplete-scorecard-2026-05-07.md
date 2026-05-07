@@ -196,12 +196,12 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Forms profile | 84 | Field-kind resolver maps forms/secure/url to a suppressed-by-default form profile with full accept disabled, and runtime candidate ranking keeps generated form text below the display threshold. | Proven non-sensitive free-form exceptions only. |
 | Search profile | 84 | Search field kind maps to a suppressed-by-default search profile with full accept disabled, and runtime candidate ranking keeps generated search text below the display threshold. | Proven across browser/native search fields. |
 | AI chat profile | 84 | Codex/Claude profiles are conservative, one-word biased, block submit/run/Enter suggestions, disable full accept, and runtime candidate ranking suppresses submit-like action text if the model emits it anyway. | Same-slice visual plus one-word no-submit proof for Codex, Claude Code, Claude desktop. |
-| Accepted-and-kept learning | 84 | Live survival events update a persisted app/field/mode/profile learning store that feeds display policy and decays with a 14-day half-life. | Add diagnostics controls and fresh proof slices. |
-| Typed-over learning | 82 | Typed-over trace, 5s prefix-family cooldown, and repeated-miss suppression exist; repeated-miss scores now decay by half-life instead of poisoning a prefix indefinitely. | Prove thresholds with fresh real-app traces and expose current miss score in diagnostics. |
-| Ignored learning | 80 | Ignored hides now record a weak repetition signal scaled by visible lifetime, with trace-safe weight/total metadata and the same decaying repeated-miss bucket. | Prove thresholds with fresh real-app traces and separate passive ignored from explicit dismiss in diagnostics. |
-| Esc learning | 82 | Esc dismiss now records annoyance, suppresses eligible fields until blur, starts a 15s app/field/mode/prefix cooldown, and repeated Esc on the same prefix escalates to 60s with trace metadata. | Prove real-app thresholds and make repeated-dismiss state visible in diagnostics. |
-| Style memory | 88 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, and question rates with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, and Settings can clear it with the other learned suggestion state. | Add user controls to inspect the style sketch and tune it with fresh real-app traces. |
-| Annoyance index | 82 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, and quiets field/app/global scopes. | Make quiet-mode decisions easier to inspect in diagnostics and prove thresholds with fresh traces. |
+| Accepted-and-kept learning | 88 | Live survival events update a persisted app/field/mode/profile learning store that feeds display policy and decays with a 14-day half-life. Diagnostics now exposes accepted-kept rates and the current display-affinity probability/samples/threshold from trace metadata. | Prove thresholds with fresh real-app traces and add tuning controls. |
+| Typed-over learning | 86 | Typed-over trace, 5s prefix-family cooldown, and repeated-miss suppression exist; repeated-miss scores now decay by half-life instead of poisoning a prefix indefinitely, and Diagnostics exposes the current trace-safe miss score/threshold. | Prove thresholds with fresh real-app traces. |
+| Ignored learning | 84 | Ignored hides now record a weak repetition signal scaled by visible lifetime, with trace-safe weight/total metadata, the same decaying repeated-miss bucket, and Diagnostics visibility into passive ignored miss score/lifetime. | Prove thresholds with fresh real-app traces and separate passive ignored from explicit dismiss in diagnostics. |
+| Esc learning | 86 | Esc dismiss now records annoyance, suppresses eligible fields until blur, starts a 15s app/field/mode/prefix cooldown, repeated Esc on the same prefix escalates to 60s, and Diagnostics exposes prefix cooldown duration/escalation metadata. | Prove real-app thresholds. |
+| Style memory | 90 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, and question rates with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, Settings can clear it, and Diagnostics exposes the trace-safe aggregate sketch. | Add tuning controls and fresh real-app trace validation. |
+| Annoyance index | 86 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, and Diagnostics now exposes annoyance score plus signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
 | Replay-first test rig | 74 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. | Replay recorded real app sessions with caret, screenshots, accepts, kept horizon, and latency after every app/runtime change. |
 | Cross-app proof honesty | 90 | App proof matrix explicitly keeps failing rows non-A until evidence exists. | Close every pending proof row and make stale proof fail automatically. |
 
@@ -443,6 +443,10 @@ these are true.
 28. Done: pass the resolved behavior profile into runtime candidate ranking and
    add profile-specific penalties for email commitments, coding block/import
    drift, prompt-app submit actions, and form/search fills.
+29. Done: add learning diagnostics to the Diagnostics window so accepted-kept
+   rates, display-affinity probability, repeated miss score, prefix cooldown
+   escalation, annoyance counts, and aggregate style sketch are inspectable
+   without raw text.
 
 ## Goal Status
 
