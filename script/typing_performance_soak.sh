@@ -14,7 +14,11 @@ DELAY_MS="${AUTOCOMPLETE_LAB_SOAK_DELAY_MS:-15}"
 MIN_EVENT_TAP_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_EVENT_TAP_SAMPLES:-100}"
 MIN_AX_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_AX_SAMPLES:-0}"
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
+DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.autocomplete-lab}"
+TEXTEDIT_BUNDLE_ID="com.apple.TextEdit"
 declare -a SOAK_TMP_DIRS=()
+declare -a ORIGINAL_DISABLED_APPS=()
+TEXTEDIT_DISABLED_FOR_SOAK=0
 
 usage() {
   cat <<'EOF'
@@ -26,13 +30,17 @@ separately and stays non-fatal unless --strict-ax is set.
 EOF
 }
 
-cleanup_soak_tmp_dirs() {
+cleanup_soak() {
+  if ((TEXTEDIT_DISABLED_FOR_SOAK == 1)); then
+    restore_disabled_apps
+  fi
+
   if ((${#SOAK_TMP_DIRS[@]})); then
     rm -rf "${SOAK_TMP_DIRS[@]}"
   fi
 }
 
-trap cleanup_soak_tmp_dirs EXIT
+trap cleanup_soak EXIT
 
 make_tmp_dir() {
   local tmp_dir
@@ -106,6 +114,90 @@ generate_soak_text() {
   printf '%s' "${text:0:target}"
 }
 
+current_disabled_apps() {
+  { defaults read "$DEFAULTS_DOMAIN" DisabledBundleIdentifiers 2>/dev/null || true; } |
+    sed -n -E 's/^[[:space:]]*"?([A-Za-z0-9._-]+)"?,?$/\1/p'
+}
+
+write_disabled_apps() {
+  if (($# == 0)); then
+    defaults delete "$DEFAULTS_DOMAIN" DisabledBundleIdentifiers >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  defaults write "$DEFAULTS_DOMAIN" DisabledBundleIdentifiers -array "$@"
+}
+
+capture_original_disabled_apps() {
+  ORIGINAL_DISABLED_APPS=()
+  local bundle_identifier
+  while IFS= read -r bundle_identifier; do
+    [[ -n "$bundle_identifier" ]] || continue
+    ORIGINAL_DISABLED_APPS+=("$bundle_identifier")
+  done < <(current_disabled_apps)
+}
+
+textedit_is_disabled() {
+  if ((${#ORIGINAL_DISABLED_APPS[@]} == 0)); then
+    return 1
+  fi
+
+  local bundle_identifier
+  for bundle_identifier in "${ORIGINAL_DISABLED_APPS[@]}"; do
+    if [[ "$bundle_identifier" == "$TEXTEDIT_BUNDLE_ID" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+restore_disabled_apps() {
+  if ((${#ORIGINAL_DISABLED_APPS[@]} == 0)); then
+    write_disabled_apps
+  else
+    write_disabled_apps "${ORIGINAL_DISABLED_APPS[@]}"
+  fi
+}
+
+prepare_textedit_enablement() {
+  capture_original_disabled_apps
+
+  if ! textedit_is_disabled; then
+    echo "TextEdit enablement: already allowed"
+    return 0
+  fi
+
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    echo "TextEdit is disabled in $DEFAULTS_DOMAIN, and --skip-build cannot refresh the running app state." >&2
+    echo "Run without --skip-build so the soak can temporarily allow TextEdit before launching Autocomplete Lab." >&2
+    exit 1
+  fi
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "TextEdit enablement: would temporarily allow TextEdit before relaunch"
+    return 0
+  fi
+
+  local filtered=()
+  local bundle_identifier
+  if ((${#ORIGINAL_DISABLED_APPS[@]} > 0)); then
+    for bundle_identifier in "${ORIGINAL_DISABLED_APPS[@]}"; do
+      if [[ "$bundle_identifier" != "$TEXTEDIT_BUNDLE_ID" ]]; then
+        filtered+=("$bundle_identifier")
+      fi
+    done
+  fi
+
+  if ((${#filtered[@]} == 0)); then
+    write_disabled_apps
+  else
+    write_disabled_apps "${filtered[@]}"
+  fi
+  TEXTEDIT_DISABLED_FOR_SOAK=1
+  echo "TextEdit enablement: temporarily allowed TextEdit for this soak"
+}
+
 latest_runtime_is_ready() {
   local latest_runtime_line
   latest_runtime_line="$(grep -E " runtime .*readinessStage=" "$LOG_PATH" 2>/dev/null | tail -n 1 || true)"
@@ -148,6 +240,7 @@ describe_plan() {
   echo "Safe typing performance soak"
   echo "Target app: TextEdit disposable temp file"
   echo "Diagnostics log: $LOG_PATH"
+  echo "Defaults domain: $DEFAULTS_DOMAIN"
   if [[ "$SKIP_BUILD" == "1" ]]; then
     echo "Build: skipped; using an already-running app"
   else
@@ -338,6 +431,7 @@ if ((CHUNK_SIZE > 80)); then
 fi
 
 describe_plan
+prepare_textedit_enablement
 
 if [[ "$DRY_RUN" == "1" ]]; then
   exit 0
