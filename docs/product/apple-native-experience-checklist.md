@@ -346,7 +346,7 @@ Native target: when the app is unsure, the user feels nothing.
 - [x] Stale app, field, prompt target, or text suppresses async suggestions before display.
 - [x] Low placement confidence should suppress inline mode.
 - [x] Prompt apps should require no-submit proof before full accept.
-- [ ] Unsupported apps should not appear broken.
+- [x] Unsupported apps should not appear broken.
 - [x] The app should never leave a ghost after focus moves.
   Code-backed: workspace app activation now clears any visible suggestion
   immediately, and field transitions already hide before tracking the new field.

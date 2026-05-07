@@ -65,7 +65,7 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         guard supportStatus.canToggleSuggestions else {
-            return "\(supportStatus.userFacingReason) Suggestions stay off here."
+            return "\(supportStatus.userFacingReason) \(supportStatus.userFacingUnavailableText)"
         }
 
         if isEnabled {
