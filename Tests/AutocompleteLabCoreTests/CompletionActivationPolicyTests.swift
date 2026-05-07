@@ -82,6 +82,26 @@ struct CompletionActivationPolicyTests {
         ) == .block(.suppressedField))
     }
 
+    @Test("Blocks selected text so accept cannot overwrite user content")
+    func blocksSelectedText() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(!policy.canSuggest(
+            textBeforeCursor: "Replace this",
+            textAfterCursor: "",
+            isSecure: false,
+            selectedTextLength: 7,
+            isFieldSuppressed: false
+        ))
+        #expect(policy.decision(
+            textBeforeCursor: "Replace this",
+            textAfterCursor: "",
+            isSecure: false,
+            selectedTextLength: 7,
+            isFieldSuppressed: false
+        ) == .block(.selectedText))
+    }
+
     @Test("Blocks very short context")
     func blocksShortContext() {
         let policy = CompletionActivationPolicy()

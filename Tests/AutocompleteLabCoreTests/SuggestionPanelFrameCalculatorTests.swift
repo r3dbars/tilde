@@ -62,6 +62,21 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(frame.maxY <= screenFrame.maxY)
     }
 
+    @Test("Keeps inline ghost text inside vertical editor clipping")
+    func keepsInlineGhostTextInsideVerticalEditorClipping() {
+        let clippingFrame = CGRect(x: 100, y: 300, width: 500, height: 42)
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            caretRect: CGRect(x: 220, y: 260, width: 0, height: 20),
+            textLineRect: CGRect(x: 120, y: 260, width: 100, height: 20),
+            textSize: CGSize(width: 160, height: 20),
+            screenFrame: CGRect(x: 0, y: 0, width: 900, height: 700),
+            clippingFrame: clippingFrame
+        )
+
+        #expect(frame.minY >= clippingFrame.minY + 4)
+        #expect(frame.maxY <= clippingFrame.maxY - 4)
+    }
+
     @Test("Keeps panel valid on narrow screens")
     func keepsPanelValidOnNarrowScreens() {
         let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
@@ -86,6 +101,20 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(frame.minX == 88)
         #expect(frame.minY == 695)
         #expect(frame.width == 190)
+    }
+
+    @Test("Keeps floating mirror inside vertical editor clipping")
+    func keepsFloatingMirrorInsideVerticalEditorClipping() {
+        let clippingFrame = CGRect(x: 100, y: 300, width: 500, height: 60)
+        let frame = SuggestionPanelFrameCalculator.floatingMirrorFrame(
+            anchorRect: CGRect(x: 120, y: 260, width: 0, height: 22),
+            textSize: CGSize(width: 180, height: 18),
+            screenFrame: CGRect(x: 0, y: 0, width: 900, height: 700),
+            clippingFrame: clippingFrame
+        )
+
+        #expect(frame.minY >= clippingFrame.minY + 4)
+        #expect(frame.maxY <= clippingFrame.maxY - 4)
     }
 
     @Test("Mirror fallback still follows small caret-like anchors")

@@ -64,6 +64,24 @@ struct SyntheticCaretEstimatorTests {
         #expect(caret.maxY <= 332)
     }
 
+    @Test("Caps measured text for long prompts")
+    func capsMeasuredTextForLongPrompts() throws {
+        var measurementCount = 0
+        let caret = try #require(SyntheticCaretEstimator.caretRect(
+            textBeforeCursor: String(repeating: "w", count: 20_000),
+            elementRect: CGRect(x: 100, y: 200, width: 240, height: 180),
+            windowRect: CGRect(x: 80, y: 160, width: 320, height: 260),
+            lineHeight: 20,
+            widthOfText: { text in
+                measurementCount += 1
+                return CGFloat(text.count * 10)
+            }
+        ))
+
+        #expect(caret.minX >= 100)
+        #expect(measurementCount < 4_100)
+    }
+
     @Test("Keeps negative-origin synthetic carets inside focused bounds")
     func keepsNegativeOriginSyntheticCaretsInsideFocusedBounds() throws {
         let elementRect = CGRect(x: -1900, y: 81, width: 713, height: 105)

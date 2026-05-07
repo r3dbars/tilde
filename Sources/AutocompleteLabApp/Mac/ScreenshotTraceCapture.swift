@@ -8,6 +8,10 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
         label: "app.transcripted.autocomplete.screenshot-trace-capture",
         qos: .utility
     )
+    private let stateLock = NSLock()
+    private var pendingCaptureCount = 0
+    private let maxPendingCaptures = 2
+    private let captureTimeoutSeconds: TimeInterval = 2
 
     private init() {}
 
@@ -16,7 +20,16 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
         to screenshotURL: URL,
         bundleIdentifier: String
     ) {
+        guard reserveCaptureSlot(bundleIdentifier: bundleIdentifier) else {
+            return
+        }
+
         queue.async {
+            let startedAt = Date()
+            defer {
+                self.releaseCaptureSlot()
+            }
+
             guard CGPreflightScreenCaptureAccess() else {
                 DiagnosticsLog.shared.record(
                     "screenshot-capture-blocked",
@@ -44,7 +57,23 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
                     screenshotURL.path
                 ]
                 try process.run()
-                process.waitUntilExit()
+                let timeout = Date().addingTimeInterval(self.captureTimeoutSeconds)
+                while process.isRunning && Date() < timeout {
+                    Thread.sleep(forTimeInterval: 0.02)
+                }
+
+                if process.isRunning {
+                    process.terminate()
+                    DiagnosticsLog.shared.record(
+                        "screenshot-capture-failed",
+                        metadata: [
+                            "app": bundleIdentifier,
+                            "reason": "timeout",
+                            "durationMilliseconds": String(Self.milliseconds(from: startedAt, to: Date()))
+                        ]
+                    )
+                    return
+                }
 
                 guard process.terminationStatus == 0,
                       FileManager.default.fileExists(atPath: screenshotURL.path) else {
@@ -52,7 +81,8 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
                         "screenshot-capture-failed",
                         metadata: [
                             "app": bundleIdentifier,
-                            "status": String(process.terminationStatus)
+                            "status": String(process.terminationStatus),
+                            "durationMilliseconds": String(Self.milliseconds(from: startedAt, to: Date()))
                         ]
                     )
                     return
@@ -67,7 +97,8 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
                     metadata: [
                         "app": bundleIdentifier,
                         "path": screenshotURL.path,
-                        "rect": Self.compactRectDescription(rect)
+                        "rect": Self.compactRectDescription(rect),
+                        "durationMilliseconds": String(Self.milliseconds(from: startedAt, to: Date()))
                     ]
                 )
             } catch {
@@ -80,6 +111,38 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
                 )
             }
         }
+    }
+
+    private func reserveCaptureSlot(bundleIdentifier: String) -> Bool {
+        stateLock.lock()
+        if pendingCaptureCount < maxPendingCaptures {
+            pendingCaptureCount += 1
+            stateLock.unlock()
+            return true
+        }
+
+        let pending = pendingCaptureCount
+        stateLock.unlock()
+
+        DiagnosticsLog.shared.record(
+            "screenshot-capture-skipped",
+            metadata: [
+                "app": bundleIdentifier,
+                "reason": "backlog",
+                "pending": String(pending)
+            ]
+        )
+        return false
+    }
+
+    private func releaseCaptureSlot() {
+        stateLock.lock()
+        pendingCaptureCount = max(0, pendingCaptureCount - 1)
+        stateLock.unlock()
+    }
+
+    private static func milliseconds(from start: Date, to end: Date) -> Int {
+        max(0, Int(end.timeIntervalSince(start) * 1000))
     }
 
     private static func compactRectDescription(_ rect: CGRect) -> String {

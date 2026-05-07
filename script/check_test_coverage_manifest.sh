@@ -24,7 +24,12 @@ require_pattern() {
 
 require_file "Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift" "Blocks secure or suppressed fields" "secure-field activation coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift" "Blocks selected text" "selected-text activation coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift" "Blocks suggestions in the middle of existing text" "middle-of-line activation coverage"
+
+require_file "Tests/AutocompleteLabCoreTests/SensitiveTextFieldPolicyTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/SensitiveTextFieldPolicyTests.swift" "Blocks browser and Electron password-like fields" "password-like sensitive field coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/SensitiveTextFieldPolicyTests.swift" "Blocks token and API key fields" "token/API-key sensitive field coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/KeyboardActionRouterTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/KeyboardActionRouterTests.swift" "Option Tab passes through" "Option+Tab passthrough coverage"
@@ -45,6 +50,10 @@ require_file "Tests/AutocompleteLabCoreTests/PlacementHealthTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/PlacementHealthTests.swift" "Falls back when caret is outside focused bounds" "placement self-healing coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/PlacementHealthTests.swift" "Suppresses missing inline caret when detached anchors are disabled" "unsafe detached placement coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/PlacementHealthTests.swift" "placementConfidenceBand" "placement confidence metadata coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/PlacementHealthTests.swift" "Drops stale text line rects" "stale text-line rejection coverage"
+
+require_file "Tests/AutocompleteLabCoreTests/SuggestionPanelFrameCalculatorTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/SuggestionPanelFrameCalculatorTests.swift" "vertical editor clipping" "vertical clipping frame coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/PromptEditorFingerprintPolicyTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/PromptEditorFingerprintPolicyTests.swift" "Blocks large central dogfood text areas" "dogfood prompt textbox coverage"

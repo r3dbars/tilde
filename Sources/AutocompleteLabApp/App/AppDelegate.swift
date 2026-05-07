@@ -115,6 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastStatusLine: String?
     private var lastSuggestionDecision = "Starting"
     private var lastSyntheticCaretDiagnosticSignature: String?
+    private var lastEligibleTargetApp: RunningApplicationInfo?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
     private let focusedTextPollInterval: TimeInterval = 0.05
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
@@ -318,7 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var settingsCurrentAppState: SettingsCurrentAppState {
-        guard let app = accessibilityClient.frontmostApplication() else {
+        guard let app = targetAppForControls() else {
             return SettingsCurrentAppState(
                 displayName: "None",
                 bundleIdentifier: nil,
@@ -336,6 +337,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier),
             disabledAppCount: disabledBundleIdentifiers.count
         )
+    }
+
+    private func targetAppForControls() -> RunningApplicationInfo? {
+        if let app = accessibilityClient.frontmostApplication(),
+           profileStore.allows(bundleIdentifier: app.bundleIdentifier) {
+            rememberEligibleTargetApp(app)
+            return app
+        }
+
+        guard let app = lastEligibleTargetApp,
+              profileStore.allows(bundleIdentifier: app.bundleIdentifier) else {
+            return nil
+        }
+
+        return app
+    }
+
+    private func rememberEligibleTargetApp(_ app: RunningApplicationInfo) {
+        guard profileStore.allows(bundleIdentifier: app.bundleIdentifier) else {
+            return
+        }
+
+        lastEligibleTargetApp = app
     }
 
     private var settingsPrivacyState: SettingsPrivacyState {
@@ -442,6 +466,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        rememberEligibleTargetApp(frontmostApp)
         let appEnabled = !disabledBundleIdentifiers.contains(frontmostApp.bundleIdentifier)
         currentProfile = profile
         updateStatusMenu(app: frontmostApp, profile: profile, appEnabled: appEnabled)
@@ -568,6 +593,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             isSecure: context.isSecure,
+            selectedTextLength: context.selectedTextLength,
             isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity)
         )
 
@@ -759,6 +785,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fingerprint: context.fingerprint,
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
+            selectedTextLength: context.selectedTextLength,
             caretRect: syntheticCaret,
             elementRect: context.elementRect,
             windowRect: context.windowRect,
@@ -1176,6 +1203,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   allowDescendantTextFallback: profile.allowsDescendantTextFallback
               ),
               !rawContext.isSecure,
+              rawContext.selectedTextLength == 0,
               promptTextAreaMatch(
                   for: frontmostApp.bundleIdentifier,
                   context: rawContext
@@ -2483,7 +2511,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc
     private func showDiagnostics() {
-        let app = accessibilityClient.frontmostApplication()
+        let app = targetAppForControls()
         let compatibilityStatus = app
             .map { profileStore.supportStatus(for: $0.bundleIdentifier) }
             ?? .unsupported
@@ -2492,9 +2520,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let bundleIdentifier = app?.bundleIdentifier ?? ""
 
         diagnosticsWindow.show(
-            diagnostics: accessibilityClient.focusedTextDiagnostics(
-                allowDescendantTextFallback: profile?.allowsDescendantTextFallback == true
-            ),
+            diagnostics: app.flatMap {
+                accessibilityClient.focusedTextDiagnostics(
+                    for: $0,
+                    allowDescendantTextFallback: profile?.allowsDescendantTextFallback == true
+                )
+            },
             profile: profile,
             compatibilityStatus: compatibilityStatus,
             appEnabled: appEnabled,
@@ -2648,7 +2679,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func nudgeCurrentAppSuggestion(dx: Double, dy: Double) {
         guard let bundleIdentifier = visibleSuggestionBundleIdentifier
-                ?? accessibilityClient.frontmostApplication()?.bundleIdentifier,
+                ?? targetAppForControls()?.bundleIdentifier,
               profileStore.allows(bundleIdentifier: bundleIdentifier) else {
             DiagnosticsLog.shared.record(
                 "compatibility-learning-nudge-skipped",
@@ -2697,7 +2728,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     private func resetCurrentAppLearning() {
         guard let bundleIdentifier = visibleSuggestionBundleIdentifier
-                ?? accessibilityClient.frontmostApplication()?.bundleIdentifier else {
+                ?? targetAppForControls()?.bundleIdentifier else {
             return
         }
 
@@ -2740,7 +2771,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc
     private func toggleCurrentApp() {
-        guard let app = accessibilityClient.frontmostApplication(),
+        guard let app = targetAppForControls(),
               profileStore.allows(bundleIdentifier: app.bundleIdentifier) else {
             return
         }
@@ -2782,7 +2813,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         disabledBundleIdentifiers = selection.bundleIdentifiers
         persistDisabledApps()
 
-        let frontmostApp = accessibilityClient.frontmostApplication()
+        let frontmostApp = targetAppForControls()
         DiagnosticsLog.shared.record(
             "app-control",
             metadata: [
@@ -2820,7 +2851,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "paused": String(suggestionsPaused)
             ]
         )
-        let frontmostApp = accessibilityClient.frontmostApplication()
+        let frontmostApp = targetAppForControls()
         updateStatusMenu(
             app: frontmostApp,
             profile: frontmostApp.flatMap { profileStore.profile(for: $0.bundleIdentifier) },

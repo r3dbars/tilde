@@ -118,23 +118,38 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         var firstChunkMilliseconds: Int?
         var lastPartialVisibleText = ""
         let stream = session.streamResponse(to: prompt.user)
-        for try await chunk in stream {
-            if firstChunkMilliseconds == nil {
-                firstChunkMilliseconds = Self.milliseconds(from: sessionBuiltAt, to: Date())
-            }
+        do {
+            for try await chunk in stream {
+                try Task.checkCancellation()
 
-            rawOutput += chunk
+                if firstChunkMilliseconds == nil {
+                    firstChunkMilliseconds = Self.milliseconds(from: sessionBuiltAt, to: Date())
+                }
 
-            if let partialSuggestion = cleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode),
-               !partialSuggestion.isEmpty,
-               partialSuggestion.visibleText != lastPartialVisibleText {
-                lastPartialVisibleText = partialSuggestion.visibleText
-                onPartialSuggestion(partialSuggestion)
-            }
+                rawOutput += chunk
 
-            if shouldStopEarly(rawOutput, request: request) {
-                break
+                if let partialSuggestion = cleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode),
+                   !partialSuggestion.isEmpty,
+                   partialSuggestion.visibleText != lastPartialVisibleText {
+                    lastPartialVisibleText = partialSuggestion.visibleText
+                    onPartialSuggestion(partialSuggestion)
+                }
+
+                if shouldStopEarly(rawOutput, request: request) {
+                    break
+                }
             }
+        } catch is CancellationError {
+            DiagnosticsLog.shared.record(
+                "mlx-completion-cancelled",
+                metadata: [
+                    "app": request.appBundleIdentifier ?? "unknown",
+                    "mode": request.mode.rawValue,
+                    "generationMilliseconds": String(Self.milliseconds(from: sessionBuiltAt, to: Date())),
+                    "rawChars": String(rawOutput.count)
+                ]
+            )
+            throw CancellationError()
         }
         let generatedAt = Date()
         try Task.checkCancellation()

@@ -35,6 +35,7 @@ public enum SuggestionPanelFrameCalculator {
         let lineRect = textLineRect ?? caretRect
         let height = max(lineRect.height, textSize.height)
         let horizontalBounds = horizontalBounds(screenFrame: screenFrame, clippingFrame: clippingFrame)
+        let verticalBounds = verticalBounds(screenFrame: screenFrame, clippingFrame: clippingFrame)
         let preferredWidth = textSize.width + 6
         let preferredX = clampedOrigin(
             preferred: caretRect.maxX,
@@ -56,8 +57,8 @@ public enum SuggestionPanelFrameCalculator {
             y: clampedOrigin(
                 preferred: preferredY,
                 length: height,
-                lowerBound: screenFrame.minY + 4,
-                upperBound: screenFrame.maxY - 4
+                lowerBound: verticalBounds.lower,
+                upperBound: verticalBounds.upper
             ),
             width: width,
             height: height
@@ -73,6 +74,7 @@ public enum SuggestionPanelFrameCalculator {
         maximumWidth: CGFloat = 420
     ) -> CGRect {
         let horizontalBounds = horizontalBounds(screenFrame: screenFrame, clippingFrame: clippingFrame)
+        let verticalBounds = verticalBounds(screenFrame: screenFrame, clippingFrame: clippingFrame)
         let width = panelWidth(
             preferredWidth: textSize.width + 10,
             minimumWidth: minimumWidth,
@@ -96,8 +98,8 @@ public enum SuggestionPanelFrameCalculator {
             y: clampedOrigin(
                 preferred: preferredY,
                 length: height,
-                lowerBound: screenFrame.minY + 4,
-                upperBound: screenFrame.maxY - 4
+                lowerBound: verticalBounds.lower,
+                upperBound: verticalBounds.upper
             ),
             width: width,
             height: height
@@ -143,6 +145,23 @@ public enum SuggestionPanelFrameCalculator {
 
         let lower = max(screenLower, clippingFrame.minX + horizontalMargin)
         let upper = min(screenUpper, clippingFrame.maxX - horizontalMargin)
+        return (lower, max(lower + 1, upper))
+    }
+
+    private static func verticalBounds(
+        screenFrame: CGRect,
+        clippingFrame: CGRect?,
+        verticalMargin: CGFloat = 4
+    ) -> (lower: CGFloat, upper: CGFloat) {
+        let screenLower = screenFrame.minY + verticalMargin
+        let screenUpper = screenFrame.maxY - verticalMargin
+
+        guard let clippingFrame else {
+            return (screenLower, max(screenLower + 1, screenUpper))
+        }
+
+        let lower = max(screenLower, clippingFrame.minY + verticalMargin)
+        let upper = min(screenUpper, clippingFrame.maxY - verticalMargin)
         return (lower, max(lower + 1, upper))
     }
 

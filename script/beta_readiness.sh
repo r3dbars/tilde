@@ -16,6 +16,10 @@ echo "== Manual app proof =="
 ./script/manual_smoke_status.sh --require-all
 
 echo
+echo "== Visual placement proof =="
+./script/check_visual_placement_evidence.sh --require-all
+
+echo
 echo "== Release package =="
 ./script/package_release.sh --check
 ./script/package_release.sh archive
