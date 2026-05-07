@@ -363,7 +363,11 @@ struct SettingsKeyboardShortcutState: Equatable {
     let acceptAllShortcut: AcceptAllShortcut
 
     var statusText: String {
-        "Shortcuts: Tab next word | \(acceptAllShortcut.displayName) all"
+        if acceptAllShortcut == .disabled {
+            return "Shortcuts: Tab next word | full accept off"
+        }
+
+        return "Shortcuts: Tab next word | \(acceptAllShortcut.displayName) all"
     }
 
     var pickerTitles: [String] {

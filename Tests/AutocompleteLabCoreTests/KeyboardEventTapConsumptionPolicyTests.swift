@@ -75,6 +75,20 @@ struct KeyboardEventTapConsumptionPolicyTests {
         )))
     }
 
+    @Test("Disabled full accept never consumes full accept keys")
+    func disabledFullAcceptNeverConsumesFullAcceptKeys() {
+        #expect(!policy.shouldConsume(input(
+            key: .backtick,
+            supportsFullAcceptance: true,
+            acceptAllShortcut: .disabled
+        )))
+        #expect(!policy.shouldConsume(input(
+            key: .optionTab,
+            supportsFullAcceptance: true,
+            acceptAllShortcut: .disabled
+        )))
+    }
+
     @Test("Escape consumes only while a current suggestion is active")
     func escapeConsumesForActiveSuggestions() {
         #expect(policy.shouldConsume(input(key: .escape)))
