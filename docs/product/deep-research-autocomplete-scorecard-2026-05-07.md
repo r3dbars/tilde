@@ -198,7 +198,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | AI chat profile | 82 | Codex/Claude profiles are conservative, one-word biased, block submit/run/Enter suggestions, and disable full accept. | Same-slice visual plus one-word no-submit proof for Codex, Claude Code, Claude desktop. |
 | Accepted-and-kept learning | 84 | Live survival events update a persisted app/field/mode/profile learning store that feeds display policy and decays with a 14-day half-life. | Add diagnostics controls and fresh proof slices. |
 | Typed-over learning | 74 | Typed-over trace and repetition miss exist. | Prefix-family cooldown plus decay and threshold updates. |
-| Ignored learning | 66 | Hidden/ignored events can record misses. | Separate weak negative, lifetime-aware, not just repetition miss. |
+| Ignored learning | 76 | Ignored hides now record a weak repetition signal scaled by visible lifetime, with trace-safe weight/total metadata, instead of counting exactly like typed-over rejection. | Prove thresholds with fresh real-app traces and separate passive ignored from explicit dismiss in diagnostics. |
 | Esc learning | 70 | Field suppression exists. | Very strong prefix/mode negative with 15s cooldown and longer repeated-dismiss decay. |
 | Style memory | 88 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, and question rates with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, and Settings can clear it with the other learned suggestion state. | Add user controls to inspect the style sketch and tune it with fresh real-app traces. |
 | Annoyance index | 82 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, and quiets field/app/global scopes. | Make quiet-mode decisions easier to inspect in diagnostics and prove thresholds with fresh traces. |
@@ -426,6 +426,8 @@ these are true.
    post-pass trace proof still has to pass.
 21. Pending: capture screenshot-backed same-slice bullet/checklist accepts in
    Notes/TextEdit and prove Command-Z restore on those accepted items.
+22. Done: make ignored-hidden repetition learning weak, lifetime-aware, and
+   trace-safe instead of treating it like typed-over rejection.
 
 ## Goal Status
 
