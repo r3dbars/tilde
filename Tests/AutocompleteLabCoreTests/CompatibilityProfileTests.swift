@@ -28,6 +28,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "md.obsidian")?.suppressesAfterInsertionFailure == false)
         #expect(store.profile(for: "md.obsidian")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "md.obsidian")?.allowsDetachedSuggestions == false)
+        #expect(store.profile(for: "md.obsidian")?.allowsSyntheticCaretPlacement == true)
         #expect(store.profile(for: "com.apple.mail")?.displayName == "Mail")
         #expect(store.profile(for: "com.apple.mail")?.anchorLadder == [.none])
         #expect(store.profile(for: "com.apple.mail")?.supportLevel == .diagnosticsOnly)
@@ -45,6 +46,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.google.Chrome")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .keyEvents)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .axValueReplacement)
+        #expect(store.profile(for: "com.google.Chrome")?.allowsSyntheticCaretPlacement == false)
         #expect(store.profile(for: "com.openai.codex")?.displayName == "Codex")
         #expect(store.profile(for: "com.openai.codex")?.appFamily == .customCanvas)
         #expect(store.profile(for: "com.openai.codex")?.allowsFieldAnchor == false)
@@ -238,6 +240,7 @@ struct CompatibilityProfileTests {
             #expect(promptProfile.supportsOneWordAcceptance == true)
             #expect(promptProfile.supportsFullAcceptance == false)
             #expect(promptProfile.allowsDetachedSuggestions == false)
+            #expect(promptProfile.allowsSyntheticCaretPlacement == false)
         }
     }
 

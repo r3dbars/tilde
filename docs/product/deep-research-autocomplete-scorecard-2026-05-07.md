@@ -24,8 +24,8 @@ It is not yet magical by the research bar. The biggest remaining misses are:
   and proof that accepted-and-kept tuning improves real usage.
 - Phrase and sentence quality now has conservative candidate ranking and score
   margin suppression, but still needs real model proof and learned utility.
-- Cross-app proof is honest but incomplete for Notes, Obsidian, Codex, Claude
-  Code, Claude desktop, and real production editors.
+- Cross-app proof is honest but incomplete for Notes, Codex, Claude Code,
+  Claude desktop, and more production-editor variants.
 - Normal typing proof improved with an exact 1,200-character strict TextEdit
   endurance pass, and the current harness now revalidates named TextEdit focus
   in shorter CGEvent batches with bounded cleanup. The live 10-minute wrapper is
@@ -279,7 +279,7 @@ Weighted total: **79.2/100**, rounded to **79/100**.
 | Style memory | 90 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, and question rates with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, Settings can clear it, and Diagnostics exposes the trace-safe aggregate sketch. | Add tuning controls and fresh real-app trace validation. |
 | Annoyance index | 90 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, exposes current-field/session silence in Settings and the menu, records manual field pauses as scoped trace events, records placement uncertainty as caret-geometry failures, and Diagnostics now exposes annoyance score, active quiet-mode scope, and signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
 | Replay-first test rig | 84 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, placement metadata, trusted caret placement, stale cancellation, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. It can replay a fresh line-bounded trace slice, and the proof manifest now parses matched manual-smoke trace slices, requires bounded proof ranges, verifies accepts plus insertion verification, checks screenshot-backed strict visual trace events, and rejects stale proof fingerprints. | Replay recorded real app sessions with screenshots, accepts, kept horizon, and latency after every app/runtime change. |
-| Cross-app proof honesty | 94 | App proof matrix explicitly keeps failing rows non-A until evidence exists, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, and the proof manifest now verifies TextEdit with a bounded current-fingerprint trace while still failing strict mode on partial/pending surfaces plus old open-ended Chrome chat-like, Obsidian, and Claude desktop slices. | Close every pending proof row. |
+| Cross-app proof honesty | 95 | App proof matrix explicitly keeps failing rows non-A until evidence exists, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, and the proof manifest now verifies TextEdit, Chrome chat-like, and Obsidian with bounded current-fingerprint traces while still failing strict mode on partial/pending surfaces plus the old open-ended Claude desktop slice. | Close every pending proof row. |
 
 ## Baseline Evidence Notes
 
@@ -459,7 +459,7 @@ these are true.
 - Chrome text fields and local editor fixtures stay screenshot-backed.
 - Replace local editor fixture confidence with real CodeMirror, Monaco, and
   ProseMirror proof.
-- Obsidian gets disposable-vault screenshot plus same-slice accepts.
+- Obsidian has disposable-vault screenshot plus same-slice accepts; expand it across themes, panes, and long notes.
 - Notes gets separate title, body, and checklist proof.
 - Codex gets screenshot plus one-word accept plus no-submit in one strict slice.
 - Claude Code gets safe live prompt proof.

@@ -3201,7 +3201,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         return PlacementTrustPolicy(
             allowsLowConfidencePlacement: isGreenProfile || hasTrustedVisualAdjustment || hasDetachedMirrorFallback,
-            allowsSyntheticCaretPlacement: isGreenProfile || hasTrustedVisualAdjustment
+            allowsSyntheticCaretPlacement: isGreenProfile
+                || hasTrustedVisualAdjustment
+                || profile.allowsSyntheticCaretPlacement
         )
     }
 

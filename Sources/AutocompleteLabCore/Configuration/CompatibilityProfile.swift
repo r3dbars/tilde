@@ -86,6 +86,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
     public let suppressesAfterInsertionFailure: Bool
     public let allowsDescendantTextFallback: Bool
     public let allowsDetachedSuggestions: Bool
+    public let allowsSyntheticCaretPlacement: Bool
     public let isSensitive: Bool
     public let notes: String
 
@@ -112,6 +113,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         suppressesAfterInsertionFailure: Bool = true,
         allowsDescendantTextFallback: Bool = false,
         allowsDetachedSuggestions: Bool = true,
+        allowsSyntheticCaretPlacement: Bool = false,
         isSensitive: Bool = false,
         notes: String
     ) {
@@ -137,6 +139,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         self.suppressesAfterInsertionFailure = suppressesAfterInsertionFailure
         self.allowsDescendantTextFallback = allowsDescendantTextFallback
         self.allowsDetachedSuggestions = allowsDetachedSuggestions
+        self.allowsSyntheticCaretPlacement = allowsSyntheticCaretPlacement
         self.isSensitive = isSensitive
         self.notes = notes
     }
@@ -240,6 +243,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             requiresValidatedCaret: true,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
+            allowsSyntheticCaretPlacement: true,
             notes: "Yellow Electron target. Prefer capability probing, synthetic text-area caret placement, and verified AX before synthetic key insertion. Do not show detached suggestions when CodeMirror hides usable caret bounds."
         ),
         CompatibilityProfile(
