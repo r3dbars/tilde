@@ -1,0 +1,207 @@
+import Foundation
+
+public struct DisplayScore: Equatable, Sendable {
+    public static let componentBounds: ClosedRange<Double> = 0...1
+    public static let scoreBounds: ClosedRange<Double> = -3...4
+
+    public let utility: Double
+    public let styleFit: Double
+    public let contextFit: Double
+    public let userAffinity: Double
+    public let risk: Double
+    public let repetition: Double
+    public let instability: Double
+
+    public init(
+        utility: Double,
+        styleFit: Double,
+        contextFit: Double,
+        userAffinity: Double,
+        risk: Double,
+        repetition: Double,
+        instability: Double
+    ) {
+        self.utility = Self.component(utility)
+        self.styleFit = Self.component(styleFit)
+        self.contextFit = Self.component(contextFit)
+        self.userAffinity = Self.component(userAffinity)
+        self.risk = Self.component(risk)
+        self.repetition = Self.component(repetition)
+        self.instability = Self.component(instability)
+    }
+
+    public var rawScore: Double {
+        utility + styleFit + contextFit + userAffinity - risk - repetition - instability
+    }
+
+    public var finalScore: Double {
+        Self.bounded(rawScore, to: Self.scoreBounds)
+    }
+
+    public var traceMetadata: [String: String] {
+        [
+            "displayScoreUtility": Self.format(utility),
+            "displayScoreStyleFit": Self.format(styleFit),
+            "displayScoreContextFit": Self.format(contextFit),
+            "displayScoreUserAffinity": Self.format(userAffinity),
+            "displayScoreRisk": Self.format(risk),
+            "displayScoreRepetition": Self.format(repetition),
+            "displayScoreInstability": Self.format(instability),
+            "displayScoreRaw": Self.format(rawScore),
+            "displayScoreFinal": Self.format(finalScore)
+        ]
+    }
+
+    private static func component(_ value: Double) -> Double {
+        bounded(value, to: componentBounds)
+    }
+
+    static func bounded(_ value: Double, to range: ClosedRange<Double>) -> Double {
+        min(max(value, range.lowerBound), range.upperBound)
+    }
+
+    static func format(_ value: Double) -> String {
+        String(format: "%.2f", value)
+    }
+}
+
+public enum DisplayScoreSuppressionReason: String, Equatable, Sendable {
+    case highRisk = "high-risk"
+    case highRepetition = "high-repetition"
+    case highInstability = "high-instability"
+    case belowThreshold = "below-threshold"
+}
+
+public struct DisplayScoreTrace: Equatable, Sendable {
+    public let score: DisplayScore
+    public let mode: CompletionRequestMode
+    public let threshold: Double
+
+    public init(
+        score: DisplayScore,
+        mode: CompletionRequestMode,
+        threshold: Double
+    ) {
+        self.score = score
+        self.mode = mode
+        self.threshold = threshold
+    }
+
+    public var metadata: [String: String] {
+        var metadata = score.traceMetadata
+        metadata["displayScoreMode"] = mode.rawValue
+        metadata["displayScoreThreshold"] = DisplayScore.format(threshold)
+        return metadata
+    }
+}
+
+public struct DisplayScoreSuppression: Equatable, Sendable {
+    public let reason: DisplayScoreSuppressionReason
+    public let trace: DisplayScoreTrace
+
+    public init(
+        reason: DisplayScoreSuppressionReason,
+        trace: DisplayScoreTrace
+    ) {
+        self.reason = reason
+        self.trace = trace
+    }
+
+    public var metadata: [String: String] {
+        var metadata = trace.metadata
+        metadata["displayScoreDecision"] = "suppress"
+        metadata["displayScoreSuppressionReason"] = reason.rawValue
+        return metadata
+    }
+}
+
+public enum DisplayScoreDecision: Equatable, Sendable {
+    case display(DisplayScoreTrace)
+    case suppress(DisplayScoreSuppression)
+
+    public var shouldDisplay: Bool {
+        switch self {
+        case .display:
+            true
+        case .suppress:
+            false
+        }
+    }
+
+    public var metadata: [String: String] {
+        switch self {
+        case let .display(trace):
+            var metadata = trace.metadata
+            metadata["displayScoreDecision"] = "display"
+            return metadata
+        case let .suppress(suppression):
+            return suppression.metadata
+        }
+    }
+}
+
+public struct DisplayScorePolicy: Equatable, Sendable {
+    public let wordCompletionThreshold: Double
+    public let phraseContinuationThreshold: Double
+    public let highRiskThreshold: Double
+    public let highRepetitionThreshold: Double
+    public let highInstabilityThreshold: Double
+
+    public init(
+        wordCompletionThreshold: Double = 0.60,
+        phraseContinuationThreshold: Double = 1.00,
+        highRiskThreshold: Double = 0.85,
+        highRepetitionThreshold: Double = 0.85,
+        highInstabilityThreshold: Double = 0.85
+    ) {
+        self.wordCompletionThreshold = DisplayScore.bounded(
+            wordCompletionThreshold,
+            to: DisplayScore.scoreBounds
+        )
+        self.phraseContinuationThreshold = DisplayScore.bounded(
+            phraseContinuationThreshold,
+            to: DisplayScore.scoreBounds
+        )
+        self.highRiskThreshold = DisplayScore.bounded(highRiskThreshold, to: DisplayScore.componentBounds)
+        self.highRepetitionThreshold = DisplayScore.bounded(highRepetitionThreshold, to: DisplayScore.componentBounds)
+        self.highInstabilityThreshold = DisplayScore.bounded(highInstabilityThreshold, to: DisplayScore.componentBounds)
+    }
+
+    public func threshold(for mode: CompletionRequestMode) -> Double {
+        switch mode {
+        case .wordCompletion:
+            wordCompletionThreshold
+        case .phraseContinuation:
+            phraseContinuationThreshold
+        }
+    }
+
+    public func decision(
+        for score: DisplayScore,
+        mode: CompletionRequestMode
+    ) -> DisplayScoreDecision {
+        let trace = DisplayScoreTrace(
+            score: score,
+            mode: mode,
+            threshold: threshold(for: mode)
+        )
+
+        if score.risk >= highRiskThreshold {
+            return .suppress(DisplayScoreSuppression(reason: .highRisk, trace: trace))
+        }
+
+        if score.repetition >= highRepetitionThreshold {
+            return .suppress(DisplayScoreSuppression(reason: .highRepetition, trace: trace))
+        }
+
+        if score.instability >= highInstabilityThreshold {
+            return .suppress(DisplayScoreSuppression(reason: .highInstability, trace: trace))
+        }
+
+        guard score.finalScore >= trace.threshold else {
+            return .suppress(DisplayScoreSuppression(reason: .belowThreshold, trace: trace))
+        }
+
+        return .display(trace)
+    }
+}
