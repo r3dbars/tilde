@@ -2,33 +2,95 @@ import CoreGraphics
 import Foundation
 
 public enum AccessibilityTextBoundsPolicy {
+    public enum RejectionReason: String, CaseIterable, Codable, Equatable {
+        case missingBounds
+        case nonfinite
+        case zeroHeight
+        case outsideElement
+        case outsideWindow
+        case offScreen
+        case stale
+        case jumpedTooFar
+    }
+
+    public struct Evaluation: Equatable {
+        public let bounds: CGRect?
+        public let rejectionReason: RejectionReason?
+
+        public var isUsable: Bool {
+            bounds != nil && rejectionReason == nil
+        }
+
+        public static func usable(_ bounds: CGRect) -> Self {
+            Self(bounds: bounds, rejectionReason: nil)
+        }
+
+        public static func rejected(_ reason: RejectionReason) -> Self {
+            Self(bounds: nil, rejectionReason: reason)
+        }
+    }
+
     public static func usableTextBounds(
         _ rect: CGRect?,
         elementRect: CGRect? = nil,
         windowRect: CGRect? = nil,
+        convertedScreenRect: CGRect? = nil,
+        screenFrame: CGRect? = nil,
         tolerance: CGFloat = 24
     ) -> CGRect? {
-        guard let rect,
+        evaluateTextBounds(
+            rect,
+            elementRect: elementRect,
+            windowRect: windowRect,
+            convertedScreenRect: convertedScreenRect,
+            screenFrame: screenFrame,
+            tolerance: tolerance
+        ).bounds
+    }
+
+    public static func evaluateTextBounds(
+        _ rect: CGRect?,
+        elementRect: CGRect? = nil,
+        windowRect: CGRect? = nil,
+        convertedScreenRect: CGRect? = nil,
+        screenFrame: CGRect? = nil,
+        tolerance: CGFloat = 24
+    ) -> Evaluation {
+        guard let rect else {
+            return .rejected(.missingBounds)
+        }
+
+        guard
               rect.origin.x.isFinite,
               rect.origin.y.isFinite,
               rect.width.isFinite,
               rect.height.isFinite,
-              rect.width >= 0,
-              rect.height >= 1 else {
-            return nil
+              rect.width >= 0 else {
+            return .rejected(.nonfinite)
+        }
+
+        guard rect.height >= 1 else {
+            return .rejected(.zeroHeight)
         }
 
         if let elementRect,
            !isPlausiblyInside(rect, container: elementRect, tolerance: tolerance) {
-            return nil
+            return .rejected(.outsideElement)
         }
 
         if let windowRect,
            !isPlausiblyInside(rect, container: windowRect, tolerance: tolerance) {
-            return nil
+            return .rejected(.outsideWindow)
         }
 
-        return rect
+        if let screenFrame {
+            let screenRect = convertedScreenRect ?? rect
+            if !isPlausiblyInside(screenRect, container: screenFrame, tolerance: tolerance) {
+                return .rejected(.offScreen)
+            }
+        }
+
+        return .usable(rect)
     }
 
     private static func isPlausiblyInside(
