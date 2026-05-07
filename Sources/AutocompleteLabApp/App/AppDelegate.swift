@@ -3017,7 +3017,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionID: suggestionID,
             bundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
             triggerReason: triggerReason,
-            appScreenshotTracingEnabled: learningAdjustment.shouldCaptureScreenshot
+            appScreenshotTracingEnabled: learningAdjustment.shouldCaptureScreenshot,
+            visualTrustContext: visualTrustContext
         )
         compatibilityLearningStore.recordObservation(
             for: profile.bundleIdentifier,
@@ -3163,7 +3164,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionID: String,
         bundleIdentifier: String,
         triggerReason: String,
-        appScreenshotTracingEnabled: Bool
+        appScreenshotTracingEnabled: Bool,
+        visualTrustContext: CompatibilityLearningVisualTrustContext?
     ) -> TraceScreenshotCapture {
         guard let captureRect = ScreenshotCaptureRegion.enclosing(rects) else {
             return .none
@@ -3192,7 +3194,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rect: captureRect,
             to: screenshotURL,
             bundleIdentifier: bundleIdentifier,
-            expectedSignalRect: expectedSignalRect
+            expectedSignalRect: expectedSignalRect,
+            visualTrustContext: visualTrustContext,
+            allowsLearningCorrection: appScreenshotTracingEnabled
         )
         return TraceScreenshotCapture(
             path: screenshotURL.path,

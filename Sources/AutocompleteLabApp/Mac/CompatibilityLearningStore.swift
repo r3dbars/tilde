@@ -48,7 +48,11 @@ final class CompatibilityLearningStore: @unchecked Sendable {
     }
 
     func recordObservation(for bundleIdentifier: String, reason: String) {
-        update(bundleIdentifier: bundleIdentifier, reason: reason) { profile in
+        update(
+            bundleIdentifier: bundleIdentifier,
+            reason: reason,
+            preserveTrustedVisualReason: true
+        ) { profile in
             profile.observations += 1
             profile.confidence = min(1, profile.confidence + 0.05)
         }
@@ -59,14 +63,15 @@ final class CompatibilityLearningStore: @unchecked Sendable {
         y: Double,
         for bundleIdentifier: String,
         reason: String,
-        visualTrustContext: CompatibilityLearningVisualTrustContext? = nil
+        visualTrustContext: CompatibilityLearningVisualTrustContext? = nil,
+        confidence: Double? = nil
     ) {
         update(bundleIdentifier: bundleIdentifier, reason: reason) { profile in
             profile.xOffset = x
             profile.yOffset = y
             profile.applyVisualTrustContext(visualTrustContext)
             profile.observations += 1
-            profile.confidence = min(1, max(profile.confidence, 0.25))
+            profile.confidence = min(1, max(profile.confidence, confidence ?? 0.25))
         }
     }
 
@@ -194,6 +199,7 @@ final class CompatibilityLearningStore: @unchecked Sendable {
     private func update(
         bundleIdentifier: String,
         reason: String,
+        preserveTrustedVisualReason: Bool = false,
         mutate: (inout CompatibilityLearningProfile) -> Void
     ) {
         queue.sync { [fileURL, encoder, decoder] in
@@ -207,7 +213,9 @@ final class CompatibilityLearningStore: @unchecked Sendable {
 
             var profile = profiles[bundleIdentifier] ?? CompatibilityLearningProfile(bundleIdentifier: bundleIdentifier)
             mutate(&profile)
-            profile.lastReason = reason
+            if !(preserveTrustedVisualReason && profile.hasTrustedVisualAdjustment) {
+                profile.lastReason = reason
+            }
             profile.updatedAt = ISO8601DateFormatter().string(from: now())
             profiles[bundleIdentifier] = profile
 
