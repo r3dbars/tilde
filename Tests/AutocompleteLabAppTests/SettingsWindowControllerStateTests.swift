@@ -153,6 +153,10 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(privacy.contentStatusText == "Raw text capture: off")
         #expect(
+            privacy.learningStatusText
+                == "Learning: accepted-kept scores, style sketch, and recent words stay local"
+        )
+        #expect(
             privacy.screenRecordingPermissionText
                 == "Screen Recording: only used for placement screenshots while this debug switch is on."
         )

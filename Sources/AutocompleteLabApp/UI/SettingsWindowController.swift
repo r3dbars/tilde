@@ -162,6 +162,10 @@ struct SettingsPrivacyState: Equatable {
         return "Raw text capture: \(state)"
     }
 
+    var learningStatusText: String {
+        "Learning: accepted-kept scores, style sketch, and recent words stay local"
+    }
+
     var screenRecordingPermissionText: String? {
         guard screenshotTracingEnabled else {
             return nil
@@ -219,6 +223,7 @@ final class SettingsWindowController: NSObject {
     private let privacyLabel = NSTextField(labelWithString: "")
     private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
     private let rawContentStatusLabel = NSTextField(labelWithString: "")
+    private let learningStatusLabel = NSTextField(labelWithString: "")
     private let screenRecordingPermissionLabel = NSTextField(labelWithString: "")
     private let privacyPathLabel = NSTextField(labelWithString: "")
     private let toggleTracingButton = NSButton(
@@ -237,6 +242,7 @@ final class SettingsWindowController: NSObject {
         action: nil
     )
     private let deleteLocalLogsButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
+    private let clearLearningDataButton = NSButton(title: "Clear Learned Suggestions", target: nil, action: nil)
     private let shortcutLabel = NSTextField(labelWithString: "")
     private let cycleAcceptAllShortcutButton = NSButton(title: "Use Option-Tab", target: nil, action: nil)
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
@@ -250,6 +256,7 @@ final class SettingsWindowController: NSObject {
     private let toggleRawContentTracing: () -> Void
     private let toggleScreenshotTracing: () -> Void
     private let deleteLocalLogs: () -> Void
+    private let clearLearningData: () -> Void
     private let cycleAcceptAllShortcut: () -> Void
     private var currentRuntimeAction: RuntimeReadinessAction = .none
 
@@ -264,6 +271,7 @@ final class SettingsWindowController: NSObject {
         toggleRawContentTracing: @escaping () -> Void,
         toggleScreenshotTracing: @escaping () -> Void,
         deleteLocalLogs: @escaping () -> Void,
+        clearLearningData: @escaping () -> Void,
         cycleAcceptAllShortcut: @escaping () -> Void
     ) {
         self.requestPermission = requestPermission
@@ -276,6 +284,7 @@ final class SettingsWindowController: NSObject {
         self.toggleRawContentTracing = toggleRawContentTracing
         self.toggleScreenshotTracing = toggleScreenshotTracing
         self.deleteLocalLogs = deleteLocalLogs
+        self.clearLearningData = clearLearningData
         self.cycleAcceptAllShortcut = cycleAcceptAllShortcut
 
         let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 720))
@@ -369,6 +378,7 @@ final class SettingsWindowController: NSObject {
         privacyLabel.stringValue = privacy.statusText
         diagnosticsStatusLabel.stringValue = privacy.diagnosticsStatusText
         rawContentStatusLabel.stringValue = privacy.contentStatusText
+        learningStatusLabel.stringValue = privacy.learningStatusText
         let screenRecordingText = privacy.screenRecordingPermissionText
         screenRecordingPermissionLabel.stringValue = screenRecordingText ?? ""
         screenRecordingPermissionLabel.isHidden = screenRecordingText == nil
@@ -419,6 +429,7 @@ final class SettingsWindowController: NSObject {
         privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(diagnosticsStatusLabel)
         configureSecondaryLabel(rawContentStatusLabel)
+        configureSecondaryLabel(learningStatusLabel)
         configureSecondaryLabel(screenRecordingPermissionLabel)
         privacyPathLabel.font = NSFont.systemFont(ofSize: 11)
         privacyPathLabel.textColor = .secondaryLabelColor
@@ -459,6 +470,9 @@ final class SettingsWindowController: NSObject {
         deleteLocalLogsButton.target = self
         deleteLocalLogsButton.action = #selector(deleteLocalLogsControl)
         deleteLocalLogsButton.bezelStyle = .rounded
+        clearLearningDataButton.target = self
+        clearLearningDataButton.action = #selector(clearLearningDataControl)
+        clearLearningDataButton.bezelStyle = .rounded
         cycleAcceptAllShortcutButton.target = self
         cycleAcceptAllShortcutButton.action = #selector(cycleAcceptAllShortcutControl)
         cycleAcceptAllShortcutButton.bezelStyle = .rounded
@@ -514,8 +528,9 @@ final class SettingsWindowController: NSObject {
                     toggleTracingButton,
                     toggleRawTraceButton,
                     toggleScreenshotTraceButton,
+                    learningStatusLabel,
                     privacyPathLabel,
-                    makeButtonRow([deleteLocalLogsButton])
+                    makeButtonRow([deleteLocalLogsButton, clearLearningDataButton])
                 ]
             ),
             makeSection(
@@ -633,6 +648,11 @@ final class SettingsWindowController: NSObject {
     @objc
     private func deleteLocalLogsControl() {
         deleteLocalLogs()
+    }
+
+    @objc
+    private func clearLearningDataControl() {
+        clearLearningData()
     }
 
     @objc
