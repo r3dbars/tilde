@@ -252,6 +252,72 @@ struct SettingsWindowControllerStateTests {
         )
     }
 
+    @Test("First-run copy keeps setup focused on Accessibility model readiness and TextEdit")
+    func firstRunCopyKeepsSetupFocusedOnAccessibilityModelReadinessAndTextEdit() {
+        let store = CompatibilityProfileStore.mvp
+        let textEdit = SettingsCurrentAppState(
+            displayName: "TextEdit",
+            bundleIdentifier: "com.apple.TextEdit",
+            supportStatus: store.supportStatus(for: "com.apple.TextEdit"),
+            isEnabled: true,
+            disabledAppCount: 0
+        )
+        let notes = SettingsCurrentAppState(
+            displayName: "Notes",
+            bundleIdentifier: "com.apple.Notes",
+            supportStatus: store.supportStatus(for: "com.apple.Notes"),
+            isEnabled: true,
+            disabledAppCount: 0
+        )
+        let readyReport = RuntimeReadinessReport(
+            stage: .ready,
+            summary: "ready",
+            action: .none,
+            isReady: true
+        )
+        let missingModelReport = RuntimeReadinessReport(
+            stage: .downloadNeeded,
+            summary: "download needed",
+            action: .revealModelFolder
+        )
+
+        #expect(
+            SettingsFirstRunState(
+                isTrusted: false,
+                suggestionsPaused: false,
+                runtimeReport: readyReport,
+                currentApp: textEdit
+            ).message
+                == "Start here: allow Accessibility so Autocomplete Lab can read the current text field and insert accepted suggestions. Text stays on this Mac."
+        )
+        #expect(
+            SettingsFirstRunState(
+                isTrusted: true,
+                suggestionsPaused: false,
+                runtimeReport: missingModelReport,
+                currentApp: textEdit
+            ).message.contains("Model missing")
+        )
+        #expect(
+            SettingsFirstRunState(
+                isTrusted: true,
+                suggestionsPaused: false,
+                runtimeReport: readyReport,
+                currentApp: textEdit
+            ).message
+                == "Ready: TextEdit is the first test app. Use a disposable document; Tab accepts one word and Esc dismisses."
+        )
+        #expect(
+            SettingsFirstRunState(
+                isTrusted: true,
+                suggestionsPaused: false,
+                runtimeReport: readyReport,
+                currentApp: notes
+            ).message
+                == "Ready: start in TextEdit with a disposable document before testing Notes, Obsidian, or prompt apps."
+        )
+    }
+
     @Test("Accessibility permission copy says what the app reads and keeps local")
     func accessibilityPermissionCopySaysWhatTheAppReadsAndKeepsLocal() {
         let needed = SettingsPermissionState(isTrusted: false)

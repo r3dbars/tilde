@@ -300,6 +300,33 @@ struct SettingsKeyboardShortcutState: Equatable {
     }
 }
 
+struct SettingsFirstRunState: Equatable {
+    let isTrusted: Bool
+    let suggestionsPaused: Bool
+    let runtimeReport: RuntimeReadinessReport
+    let currentApp: SettingsCurrentAppState
+
+    var message: String {
+        if !isTrusted {
+            return "Start here: allow Accessibility so Autocomplete Lab can read the current text field and insert accepted suggestions. Text stays on this Mac."
+        }
+
+        if suggestionsPaused {
+            return "Paused. Resume when you want to test suggestions."
+        }
+
+        guard runtimeReport.stage == .ready else {
+            return RuntimeReadinessGuidance(report: runtimeReport).message
+        }
+
+        if currentApp.bundleIdentifier == "com.apple.TextEdit" {
+            return "Ready: TextEdit is the first test app. Use a disposable document; Tab accepts one word and Esc dismisses."
+        }
+
+        return "Ready: start in TextEdit with a disposable document before testing Notes, Obsidian, or prompt apps."
+    }
+}
+
 @MainActor
 final class SettingsWindowController: NSObject {
     private let window: NSWindow
@@ -525,7 +552,8 @@ final class SettingsWindowController: NSObject {
         firstRunLabel.stringValue = onboardingText(
             isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
-            guidance: guidance
+            runtimeReport: runtimeReport,
+            currentApp: currentApp
         )
     }
 
@@ -733,17 +761,15 @@ final class SettingsWindowController: NSObject {
     private func onboardingText(
         isTrusted: Bool,
         suggestionsPaused: Bool,
-        guidance: RuntimeReadinessGuidance
+        runtimeReport: RuntimeReadinessReport,
+        currentApp: SettingsCurrentAppState
     ) -> String {
-        if !isTrusted {
-            return "Finish Accessibility setup above, then open a writing app to test suggestions."
-        }
-
-        if suggestionsPaused {
-            return "Paused. Resume when you want to test suggestions."
-        }
-
-        return guidance.message
+        SettingsFirstRunState(
+            isTrusted: isTrusted,
+            suggestionsPaused: suggestionsPaused,
+            runtimeReport: runtimeReport,
+            currentApp: currentApp
+        ).message
     }
 
     @objc
