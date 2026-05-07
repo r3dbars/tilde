@@ -470,7 +470,7 @@ struct SettingsWindowControllerStateTests {
                     "Diagnostics: performance + placement traces recording, screenshots on",
                     "Raw text capture: off",
                     "Screen Recording: only captures placement screenshots while this debug switch is on. Normal suggestions do not need it.",
-                    "No raw text is included unless raw text capture is on.",
+                    "Leave raw text capture off for normal use.",
                     "Logs: /tmp/diagnostics.log",
                     "Traces: /tmp/traces.jsonl"
                 ].joined(separator: "\n")
@@ -490,7 +490,7 @@ struct SettingsWindowControllerStateTests {
             paused.diagnosticsStatusText
                 == "Diagnostics: performance + placement traces paused, screenshots off"
         )
-        #expect(paused.contentStatusText == "Raw text capture: on temporarily")
+        #expect(paused.contentStatusText == "Raw text capture: on temporarily; can include what you type")
         #expect(paused.screenRecordingPermissionText == nil)
         #expect(
             paused.statusPanelText.contains(
