@@ -231,4 +231,46 @@ struct SettingsWindowControllerStateTests {
         #expect(ready.text == "Ready: open TextEdit, type a short sentence, press Tab for one word, or Esc to dismiss.")
         #expect(!ready.text.localizedCaseInsensitiveContains("Notes"))
     }
+
+    @Test("Field control copy scopes silence to the current field")
+    func fieldControlCopyScopesSilenceToCurrentField() {
+        let missing = SettingsFieldControlState(
+            appDisplayName: nil,
+            hasFieldTarget: false,
+            isCurrentField: false,
+            isSilenced: false
+        )
+
+        #expect(missing.statusText == "Current field: no writing field selected")
+        #expect(missing.detailText == "Click into a writing field to silence only that field.")
+        #expect(missing.buttonTitle == "Silence This Field")
+        #expect(!missing.canSilence)
+
+        let active = SettingsFieldControlState(
+            appDisplayName: "TextEdit",
+            hasFieldTarget: true,
+            isCurrentField: true,
+            isSilenced: false
+        )
+
+        #expect(active.statusText == "Current field: active in TextEdit")
+        #expect(
+            active.detailText
+                == "Silence only this field for the current session; other fields and apps stay available."
+        )
+        #expect(active.buttonTitle == "Silence This Field")
+        #expect(active.canSilence)
+
+        let silenced = SettingsFieldControlState(
+            appDisplayName: "TextEdit",
+            hasFieldTarget: true,
+            isCurrentField: false,
+            isSilenced: true
+        )
+
+        #expect(silenced.statusText == "Last field: silenced for this session")
+        #expect(silenced.detailText == "Suggestions stay off here until you leave this field.")
+        #expect(silenced.buttonTitle == "Field Silenced")
+        #expect(!silenced.canSilence)
+    }
 }

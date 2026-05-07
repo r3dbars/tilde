@@ -150,13 +150,13 @@ Baseline scorecard from the initial audit:
 | Context and prompt hygiene | 9 | 73 | 6.6 | Context is small and local, but lacks field metadata, style sketch, recent kept suffixes, and a hard `<NO_SUGGESTION>` prompt path. |
 | Output shape and cleanup | 8 | 88 | 7.0 | Cleaner is one of the strongest parts of the app. |
 | Local runtime and latency | 10 | 84 | 8.4 | App-owned MLX runtime, warm model, streaming, timing slices; no KV/session cache and default length is still a little long. |
-| Ghost text UX and controls | 10 | 88 | 8.8 | One suggestion, Tab next word, full accept when allowed, Esc dismiss, stale hiding, and app-level Command-Z restore for accepted insertions. |
+| Ghost text UX and controls | 10 | 90 | 9.0 | One suggestion, Tab next word, full accept when allowed, Esc dismiss, stale hiding, current-field/session silence, and app-level Command-Z restore for accepted insertions. |
 | Mode profiles and cross-app safety | 10 | 74 | 7.4 | Strong app profiles, but behavior modes are not first-class for email, notes, bullets, docs, code, forms, search, and AI chat. |
 | Learning, annoyance, accepted-and-kept loop | 12 | 65 | 7.8 | Metrics and core types exist; live app wiring appears incomplete. |
 | Metrics, replay, and proof gates | 5 | 84 | 4.2 | Trace/report scripts are strong; true replay-first real-app rig is still missing. |
 | Architecture and tests | 2 | 91 | 1.8 | Good policy/test structure, though AppDelegate still owns too much orchestration. |
 
-Weighted total: **78.5/100**, rounded to **78/100**.
+Weighted total: **78.7/100**, rounded to **79/100**.
 
 ## Exact Research Items
 
@@ -211,7 +211,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Ignored learning | 84 | Ignored hides now record a weak repetition signal scaled by visible lifetime, with trace-safe weight/total metadata, the same decaying repeated-miss bucket, and Diagnostics visibility into passive ignored miss score/lifetime. | Prove thresholds with fresh real-app traces and separate passive ignored from explicit dismiss in diagnostics. |
 | Esc learning | 86 | Esc dismiss now records annoyance, suppresses eligible fields until blur, starts a 15s app/field/mode/prefix cooldown, repeated Esc on the same prefix escalates to 60s, and Diagnostics exposes prefix cooldown duration/escalation metadata. | Prove real-app thresholds. |
 | Style memory | 90 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, and question rates with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, Settings can clear it, and Diagnostics exposes the trace-safe aggregate sketch. | Add tuning controls and fresh real-app trace validation. |
-| Annoyance index | 88 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, records placement uncertainty as caret-geometry failures, and Diagnostics now exposes annoyance score, active quiet-mode scope, and signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
+| Annoyance index | 90 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, exposes current-field/session silence in Settings and the menu, records manual field pauses as scoped trace events, records placement uncertainty as caret-geometry failures, and Diagnostics now exposes annoyance score, active quiet-mode scope, and signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
 | Replay-first test rig | 74 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. | Replay recorded real app sessions with caret, screenshots, accepts, kept horizon, and latency after every app/runtime change. |
 | Cross-app proof honesty | 90 | App proof matrix explicitly keeps failing rows non-A until evidence exists. | Close every pending proof row and make stale proof fail automatically. |
 
@@ -470,6 +470,9 @@ these are true.
 34. Done: make first-run Settings guidance explain Accessibility in one short
    paragraph, hide Screen Recording copy unless screenshot capture is on, and
    point first success at TextEdit instead of private notes.
+35. Done: add a Settings and menu control to silence the current field/session
+   without disabling the whole app, recording a scoped manual pause and
+   reusing field quiet-mode suppression.
 
 ## Goal Status
 

@@ -213,6 +213,50 @@ struct SettingsOnboardingState: Equatable {
     }
 }
 
+struct SettingsFieldControlState: Equatable {
+    let appDisplayName: String?
+    let hasFieldTarget: Bool
+    let isCurrentField: Bool
+    let isSilenced: Bool
+
+    var statusText: String {
+        guard hasFieldTarget else {
+            return "Current field: no writing field selected"
+        }
+
+        let scope = isCurrentField ? "Current field" : "Last field"
+        if isSilenced {
+            return "\(scope): silenced for this session"
+        }
+
+        if let appDisplayName {
+            return "\(scope): active in \(appDisplayName)"
+        }
+
+        return "\(scope): active"
+    }
+
+    var detailText: String {
+        guard hasFieldTarget else {
+            return "Click into a writing field to silence only that field."
+        }
+
+        if isSilenced {
+            return "Suggestions stay off here until you leave this field."
+        }
+
+        return "Silence only this field for the current session; other fields and apps stay available."
+    }
+
+    var buttonTitle: String {
+        isSilenced ? "Field Silenced" : "Silence This Field"
+    }
+
+    var canSilence: Bool {
+        hasFieldTarget && !isSilenced
+    }
+}
+
 @MainActor
 final class SettingsWindowController: NSObject {
     private let window: NSWindow
@@ -225,6 +269,9 @@ final class SettingsWindowController: NSObject {
     private let modelDirectoryLabel = NSTextField(labelWithString: "")
     private let controlLabel = NSTextField(labelWithString: "")
     private let togglePauseButton = NSButton(checkboxWithTitle: "Suggestions", target: nil, action: nil)
+    private let fieldControlLabel = NSTextField(labelWithString: "")
+    private let fieldControlDetailLabel = NSTextField(labelWithString: "")
+    private let silenceFieldButton = NSButton(title: "Silence This Field", target: nil, action: nil)
     private let runtimeActionButton = NSButton(title: "Open Model Folder", target: nil, action: nil)
     private let currentAppLabel = NSTextField(labelWithString: "")
     private let currentAppDetailLabel = NSTextField(labelWithString: "")
@@ -267,6 +314,7 @@ final class SettingsWindowController: NSObject {
     private let requestPermission: () -> Void
     private let openAccessibilitySettings: () -> Void
     private let toggleSuggestionsPaused: () -> Void
+    private let silenceCurrentField: () -> Void
     private let performRuntimeAction: (RuntimeReadinessAction) -> Void
     private let toggleCurrentApp: () -> Void
     private let enableAllApps: () -> Void
@@ -282,6 +330,7 @@ final class SettingsWindowController: NSObject {
         requestPermission: @escaping () -> Void,
         openAccessibilitySettings: @escaping () -> Void,
         toggleSuggestionsPaused: @escaping () -> Void,
+        silenceCurrentField: @escaping () -> Void,
         performRuntimeAction: @escaping (RuntimeReadinessAction) -> Void,
         toggleCurrentApp: @escaping () -> Void,
         enableAllApps: @escaping () -> Void,
@@ -295,6 +344,7 @@ final class SettingsWindowController: NSObject {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
         self.toggleSuggestionsPaused = toggleSuggestionsPaused
+        self.silenceCurrentField = silenceCurrentField
         self.performRuntimeAction = performRuntimeAction
         self.toggleCurrentApp = toggleCurrentApp
         self.enableAllApps = enableAllApps
@@ -305,7 +355,7 @@ final class SettingsWindowController: NSObject {
         self.clearLearningData = clearLearningData
         self.cycleAcceptAllShortcut = cycleAcceptAllShortcut
 
-        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 720))
+        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 780))
         contentView.material = .contentBackground
         contentView.blendingMode = .behindWindow
         contentView.state = .active
@@ -318,7 +368,7 @@ final class SettingsWindowController: NSObject {
         window.title = "Autocomplete Lab"
         window.contentView = contentView
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 540, height: 660)
+        window.contentMinSize = NSSize(width: 540, height: 720)
         window.isMovableByWindowBackground = true
 
         super.init()
@@ -333,6 +383,7 @@ final class SettingsWindowController: NSObject {
         runtimeTargetSummary: String,
         modelDirectoryPath: String,
         currentApp: SettingsCurrentAppState,
+        fieldControl: SettingsFieldControlState,
         privacy: SettingsPrivacyState,
         keyboardShortcuts: SettingsKeyboardShortcutState,
         lastSuggestionDecision: String
@@ -344,6 +395,7 @@ final class SettingsWindowController: NSObject {
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
             currentApp: currentApp,
+            fieldControl: fieldControl,
             privacy: privacy,
             keyboardShortcuts: keyboardShortcuts,
             lastSuggestionDecision: lastSuggestionDecision
@@ -364,6 +416,7 @@ final class SettingsWindowController: NSObject {
         runtimeTargetSummary: String,
         modelDirectoryPath: String,
         currentApp: SettingsCurrentAppState,
+        fieldControl: SettingsFieldControlState,
         privacy: SettingsPrivacyState,
         keyboardShortcuts: SettingsKeyboardShortcutState,
         lastSuggestionDecision: String
@@ -375,6 +428,10 @@ final class SettingsWindowController: NSObject {
         controlLabel.stringValue = suggestionsPaused ? "Suggestions: paused" : "Suggestions: ready"
         suggestionDecisionLabel.stringValue = "Why: \(lastSuggestionDecision)"
         togglePauseButton.state = suggestionsPaused ? .off : .on
+        fieldControlLabel.stringValue = fieldControl.statusText
+        fieldControlDetailLabel.stringValue = fieldControl.detailText
+        silenceFieldButton.title = fieldControl.buttonTitle
+        silenceFieldButton.isEnabled = fieldControl.canSilence
         runtimeLabel.stringValue = "Local model: \(runtimeReport.summary)"
         runtimeDetailLabel.stringValue = runtimeReport.detail ?? ""
         runtimeDetailLabel.isHidden = runtimeReport.detail == nil
@@ -436,6 +493,8 @@ final class SettingsWindowController: NSObject {
         modelDirectoryLabel.maximumNumberOfLines = 1
         modelDirectoryLabel.preferredMaxLayoutWidth = 470
         controlLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        fieldControlLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(fieldControlDetailLabel)
         firstRunLabel.font = NSFont.systemFont(ofSize: 12)
         configureSecondaryLabel(firstRunLabel)
         currentAppLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
@@ -467,6 +526,10 @@ final class SettingsWindowController: NSObject {
         togglePauseButton.target = self
         togglePauseButton.action = #selector(togglePause)
         togglePauseButton.toolTip = "Turns suggestions on or off immediately."
+        silenceFieldButton.target = self
+        silenceFieldButton.action = #selector(silenceFieldControl)
+        silenceFieldButton.bezelStyle = .rounded
+        silenceFieldButton.toolTip = "Stops suggestions only in the current field until focus changes."
         runtimeActionButton.target = self
         runtimeActionButton.action = #selector(runRuntimeAction)
         runtimeActionButton.bezelStyle = .rounded
@@ -521,6 +584,9 @@ final class SettingsWindowController: NSObject {
                 views: [
                     controlLabel,
                     togglePauseButton,
+                    fieldControlLabel,
+                    fieldControlDetailLabel,
+                    makeButtonRow([silenceFieldButton]),
                     suggestionDecisionLabel,
                     firstRunLabel
                 ]
@@ -615,6 +681,11 @@ final class SettingsWindowController: NSObject {
     @objc
     private func togglePause() {
         toggleSuggestionsPaused()
+    }
+
+    @objc
+    private func silenceFieldControl() {
+        silenceCurrentField()
     }
 
     @objc
