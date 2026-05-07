@@ -21,7 +21,7 @@ final class SettingsWindowController: NSObject {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
 
-        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 392))
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 420))
         window = NSWindow(
             contentRect: contentView.frame,
             styleMask: [.titled, .closable],
@@ -117,9 +117,12 @@ final class SettingsWindowController: NSObject {
         let clipboardFallback = NSButton(checkboxWithTitle: "Clipboard fallback", target: nil, action: nil)
         clipboardFallback.isEnabled = false
 
-        let note = NSTextField(wrappingLabelWithString: "Clipboard fallback stays off unless a debug build explicitly enables it.")
+        let note = NSTextField(wrappingLabelWithString: "No cloud model, no clipboard context, no screen recording. Raw traces are local debugging only.")
         note.font = NSFont.systemFont(ofSize: 12)
         note.textColor = .secondaryLabelColor
+        note.lineBreakMode = .byWordWrapping
+        note.maximumNumberOfLines = 0
+        note.preferredMaxLayoutWidth = 390
 
         [
             title,
@@ -150,14 +153,14 @@ final class SettingsWindowController: NSObject {
 
     private func onboardingText(isTrusted: Bool, runtimeReport: RuntimeReadinessReport) -> String {
         if !isTrusted {
-            return "First run: grant Accessibility, then return here. The app only reads the active text field locally."
+            return "First run: grant Accessibility so the app can read the active text field on this Mac. Suggestions stay local."
         }
 
         if !runtimeReport.isReady {
-            return "First run: keep this app open while the local model warms. Suggestions stay off until the model is ready."
+            return "First run: keep this app open while the local model warms. Suggestions stay off until it is ready."
         }
 
-        return "First run: open TextEdit, type a short sentence, press Tab for one word, Esc to dismiss, or disable the current app from the menu."
+        return "First run: open TextEdit, type a short sentence, press Tab for one word, backtick for the visible suggestion, or Esc to snooze the field."
     }
 
     @objc

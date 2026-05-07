@@ -128,7 +128,9 @@ never make the user wonder where their typing went.
   - Report says these are high-annoyance zones.
   - Done: `AccessibilityClient` collects title/description/placeholder/help purpose hints.
   - Done: `AppDelegate` suppresses search fields and address/URL-like fields before requests.
-  - Queued: form-field and short-chat suppression still need stronger context heuristics.
+  - Done: phrase continuation now waits for at least 4 context words, which keeps tiny chat/form starts quieter.
+  - Done: word completion skips common complete short-chat words like `hi`, `hey`, `yes`, `no`, `want`, and `need`.
+  - Queued: form-field-specific suppression still needs stronger purpose heuristics.
   - Product default: off unless the app/profile explicitly opts in.
 
 - [ ] Add per-domain controls for browser apps.
@@ -182,9 +184,8 @@ never make the user wonder where their typing went.
   - Code: `CompatibilityProfileStore.defaultDenylist`.
   - Current denylist includes Terminal, iTerm, Keychain Access, and 1Password bundle IDs.
 
-- [ ] Expand denylist for developer tools and raw-control apps.
-  - Add common code editors unless the user opts in.
-  - Candidates: Xcode, VS Code, Cursor, Windsurf, JetBrains IDEs.
+- [x] Expand denylist for developer tools and raw-control apps.
+  - Code: `CompatibilityProfileStore.defaultDenylist` blocks Xcode, VS Code, Cursor, Windsurf, JetBrains IDEs, Warp, Ghostty, Kitty, and Alacritty.
   - Reason: `Tab` already has strong meaning there, and code autocomplete is a different product.
 
 ## Rendering And Placement
@@ -276,12 +277,13 @@ never make the user wonder where their typing went.
   - Queued code: add tighter trace miss buckets, probably `>=250ms`, `>=500ms`, and `>=1000ms`.
   - Queued eval: compare p50/p90/p95 by app and request mode.
 
-- [ ] Add confidence gating before display.
+- [~] Add confidence gating before display.
   - Report says the winners show suggestions only when confidence is high.
-  - Current code mostly gates by cleaned output shape and context, not explicit confidence.
+  - Done: `CompletionOutputCleaner` rejects low-signal phrase output, generic chat filler, advice-shaped completions, tone drift, salesy filler, and repeated context.
+  - Gap: this is still heuristic output-shape gating, not an explicit confidence score that traces low-confidence suppressions.
   - Options:
     - Use local ranker score for word completion.
-    - Add heuristic confidence for phrase output: length, repetition, generic filler, latency, prompt mode, app profile.
+    - Add display-time confidence buckets for phrase output: length, repetition, generic filler, latency, prompt mode, app profile.
     - Hide low-confidence suggestions and trace the suppression reason.
   - Likely home: new policy between `CompletionOutputCleaner` and presentation.
 
@@ -310,15 +312,17 @@ never make the user wonder where their typing went.
   - Code: prompt says no spaces, punctuation, quotes, reasoning, or extra words.
   - Code: cleaner rejects invalid word completions.
 
-- [~] Add an explicit "do not create new ideas" cleaner/prompt check.
+- [x] Add an explicit "do not create new ideas" cleaner/prompt check.
   - Report warning: suggestions can quietly shift what people write about.
-  - Queued: suppress open-ended starts like "I think we should", "The best way", "You might want", unless already present in context.
-  - Queued tests: output cleaner should reject generic advice-shaped continuations.
+  - Done: prompt says the model must not brainstorm, rewrite, introduce a topic, or answer the user.
+  - Done: output cleaner suppresses open-ended starts like "The best way", "You might want", and advice-shaped continuations unless the user already typed that lead-in.
+  - Tests: `CompletionOutputCleanerTests.suppressesAdviceShapedNewIdeaStarters`.
 
-- [ ] Add tone-flattening checks.
+- [x] Add tone-flattening checks.
   - Report warns about generic suggestions that flatten the user's voice.
-  - Likely code: output cleaner plus trace analyzer miss categories.
-  - Examples to suppress: fake enthusiasm, moralizing, salesy filler, corporate phrases.
+  - Code: `CompletionOutputCleaner` rejects tone drift and salesy filler.
+  - Code: `AutocompleteTraceAnalyzer` flags assistant-style completions as output-cleaning misses.
+  - Examples suppressed: fake enthusiasm, advice starters, salesy filler, generic helpdesk phrases.
 
 ## Settings, Controls, And Trust
 
@@ -346,9 +350,10 @@ never make the user wonder where their typing went.
     - `Option+Tab` literal tab
   - Later: allow disabling full accept entirely.
 
-- [ ] Add plain-English privacy setup copy.
+- [x] Add plain-English privacy setup copy.
   - Report says privacy explanation belongs in setup.
-  - Needed message: "Text is read locally to make suggestions. It does not leave this Mac unless you turn on a feature that says so."
+  - Code: settings first-run text now explains Accessibility, local suggestions, local model warmup, `Tab`, backtick, and `Esc`.
+  - Code: settings note says there is no cloud model, clipboard context, or screen recording by default.
   - Keep it short. No legal mush.
 
 - [ ] Add onboarding that teaches by doing.
@@ -373,19 +378,20 @@ never make the user wonder where their typing went.
 - [x] Keep screenshot tracing explicit.
   - Docs: screenshot trace env var and diagnostics toggle are documented.
 
-- [~] Make customer-facing raw tracing off by default.
-  - Docs say it must be off by default for a customer-facing app.
-  - Queued code: before any beta outside the developer machine, require explicit debug toggle for raw prompt/output traces.
-  - Queued tests: production/default config should not record raw typed text.
+- [x] Make customer-facing raw tracing off by default.
+  - Code: `TracePrivacyPolicy.default` disables raw text and screenshot tracing.
+  - Code: raw prompt/output/typed/accepted text is redacted unless `AUTOCOMPLETE_LAB_RAW_TRACE=1`, `AUTOCOMPLETE_LAB_TRACE_RAW=1`, `AUTOCOMPLETE_LAB_TRACE=raw`, or the Diagnostics raw-text toggle is enabled.
+  - Tests: `TracePrivacyPolicyTests` verifies default redaction and explicit raw opt-in.
 
-- [ ] Add a privacy mode test suite.
+- [~] Add a privacy mode test suite.
   - Assertions:
     - no typed text in default logs,
     - no screenshot trace unless enabled,
     - secure fields never emit raw text,
     - unsupported apps only log shape data,
     - diagnostics export redacts sensitive values.
-  - Likely tests: `DiagnosticValueRedactorTests`, `DiagnosticsMetadataRedactorTests`, plus new runtime/default logging tests.
+  - Done: `TracePrivacyPolicyTests` covers default raw redaction, screenshot redaction, raw opt-in, screenshot opt-in, and safe metadata counts.
+  - Still queued: secure-field, unsupported-app, and diagnostics export end-to-end redaction tests.
 
 - [ ] Keep personalization opt-in.
   - Report says personalization is powerful but creepy if assumed.
@@ -427,24 +433,15 @@ never make the user wonder where their typing went.
     - accepted or typed-through rate beats ignored rate,
     - repeated-unaccepted suggestions trend down after tuning.
 
-- [ ] Add annoyance metrics.
+- [x] Add annoyance metrics.
   - Report says uninstall risk comes from flicker, lag, bad `Tab`, wrong places, long generic prose.
-  - Add counters for:
-    - `Esc` snooze rate,
-    - repeated same-field suppression,
-    - suggestions hidden under 500ms,
-    - suggestions shown then immediately typed over,
-    - per-app disable events.
+  - Code: `AutocompleteTraceSummary.annoyanceCounters`.
+  - Counters include `escape-snooze`, ignored/typed-over hides, insertion failures, repeated unaccepted suggestions, repeated suppressions, quick hides under 500ms, app-disabled suppressions, unsupported/sensitive/detached suppressions, and slow p95.
 
-- [ ] Add a "do not ship" dashboard section.
-  - Use trace analyzer top misses.
-  - Show hard blockers first:
-    - insertion failed,
-    - secure field suggestion,
-    - unsupported app presentation,
-    - detached suggestion shown,
-    - mock runtime fallback,
-    - slow p95.
+- [~] Add a "do not ship" dashboard section.
+  - Done: `AutocompleteTraceSummary.doNotShipCounters` exposes hard blockers for trace reports.
+  - Done: top misses include do-not-ship categories for unsupported app presentation, sensitive field presentation, detached suggestion shown, mock runtime fallback, insertion failures, and slow p95.
+  - Queued: render these as a dedicated dashboard/report section instead of raw summary data.
 
 - [ ] Add dogfood report template.
   - Each session should answer:
@@ -512,8 +509,8 @@ never make the user wonder where their typing went.
 - [~] Search/URL/form suppression.
 - [ ] Per-domain browser controls.
 - [x] Global temporary off switch.
-- [ ] Plain-English privacy setup.
-- [ ] Production-safe default logging with raw text off.
+- [x] Plain-English privacy setup.
+- [x] Production-safe default logging with raw text off.
 - [ ] Optional personalization only after local trust is earned.
 - [ ] More app adapters only after the core loop is boringly reliable.
 
@@ -524,12 +521,12 @@ never make the user wonder where their typing went.
    - Watch whether the new 4-word cap feels helpful or too clipped.
 
 2. Finish confidence gating.
-   - Hide more low-value phrase completions before display.
+   - Add explicit confidence buckets on top of the current output-shape cleaner.
    - Trace suppression reasons.
-   - Add tests around generic advice, tone drift, and long prose.
+   - Add tests around confidence suppression reasons and latency/app-profile effects.
 
-3. Add stronger silence for short chat and forms.
-   - Extend `CompletionActivationPolicy`.
+3. Add stronger silence for forms and burst typing.
+   - Extend `CompletionActivationPolicy` or `SuggestionTriggerPolicy`.
    - Prove accept rate improves or ignored rate drops.
 
 4. Finish Codex dogfood proof.
@@ -538,12 +535,10 @@ never make the user wonder where their typing went.
    - Use trace eval to pick the next miss.
 
 5. Make privacy defaults beta-safe.
-   - Raw text tracing off by default outside lab/debug mode.
-   - Screenshot tracing explicit.
-   - Diagnostics export redacted by default.
+   - Default raw text and screenshot tracing are now off.
+   - Finish secure-field, unsupported-app, and diagnostics export redaction tests.
 
 6. Add richer beta privacy controls.
-   - Raw text tracing off by default outside lab/debug mode.
    - Redacted diagnostics export by default.
    - Clear local data button in first-run/settings, not only diagnostics.
 
