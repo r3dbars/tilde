@@ -7,7 +7,7 @@ public struct FocusPollingCadencePolicy: Equatable, Sendable {
     public let untrustedIntervalSeconds: TimeInterval
 
     public init(
-        activeSuggestionIntervalSeconds: TimeInterval = 0.033,
+        activeSuggestionIntervalSeconds: TimeInterval = 0.05,
         supportedTypingWatchIntervalSeconds: TimeInterval = 0.12,
         idleIntervalSeconds: TimeInterval = 0.25,
         untrustedIntervalSeconds: TimeInterval = 0.5
