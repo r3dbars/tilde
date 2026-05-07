@@ -19,23 +19,75 @@ APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 APP_ICON="$APP_RESOURCES/AppIcon.icns"
 MLX_METALLIB="$ROOT_DIR/.build/mlx-metal/default.metallib"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 cd "$ROOT_DIR"
 
-stop_running_apps() {
+running_app_pids() {
   local app_process_pattern
-  local pid
-
   app_process_pattern="/[${APP_NAME:0:1}]${APP_NAME:1}.app/Contents/MacOS/$APP_NAME"
+  pgrep -f "$app_process_pattern" 2>/dev/null || true
+}
+
+stop_running_apps() {
+  local pid
   pkill -x "$APP_NAME" >/dev/null 2>&1 || true
   while IFS= read -r pid; do
     [[ -z "$pid" ]] && continue
     kill "$pid" >/dev/null 2>&1 || true
-  done < <(pgrep -f "$app_process_pattern" 2>/dev/null || true)
+  done < <(running_app_pids)
+
+  for _ in {1..20}; do
+    [[ -z "$(running_app_pids)" ]] && return 0
+    sleep 0.1
+  done
+
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    kill -9 "$pid" >/dev/null 2>&1 || true
+  done < <(running_app_pids)
 }
 
 current_bundle_is_running() {
-  pgrep -f "^$APP_BINARY$" >/dev/null 2>&1
+  local command
+  local pid
+
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    if [[ "$command" == "$APP_BINARY" ]]; then
+      return 0
+    fi
+  done < <(running_app_pids)
+
+  return 1
+}
+
+stale_bundle_is_running() {
+  local command
+  local pid
+
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    if [[ -n "$command" && "$command" != "$APP_BINARY" ]]; then
+      return 0
+    fi
+  done < <(running_app_pids)
+
+  return 1
+}
+
+print_running_apps() {
+  local command
+  local pid
+
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    [[ -z "$command" ]] && continue
+    echo "$pid $command" >&2
+  done < <(running_app_pids)
 }
 
 stop_running_apps
@@ -233,7 +285,10 @@ open_app() {
     nohup "$APP_BINARY" >"$DIST_DIR/$APP_NAME.launch.log" 2>&1 </dev/null &
     disown "$!" 2>/dev/null || true
   else
-    /usr/bin/open -n "$APP_BUNDLE"
+    if [[ -x "$LSREGISTER" ]]; then
+      "$LSREGISTER" -f "$APP_BUNDLE" >/dev/null 2>&1 || true
+    fi
+    /usr/bin/open -n -a "$APP_BUNDLE"
   fi
 }
 
@@ -255,8 +310,18 @@ case "$MODE" in
   --verify|verify)
     open_app
     for _ in {1..30}; do
+      if stale_bundle_is_running; then
+        echo "stale $APP_NAME process is running; expected $APP_BINARY" >&2
+        print_running_apps
+        exit 1
+      fi
       if current_bundle_is_running; then
         sleep 2
+        if stale_bundle_is_running; then
+          echo "stale $APP_NAME process is running; expected $APP_BINARY" >&2
+          print_running_apps
+          exit 1
+        fi
         current_bundle_is_running
         exit 0
       fi
