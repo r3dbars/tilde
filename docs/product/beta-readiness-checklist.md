@@ -36,7 +36,10 @@ Use this before inviting private beta testers.
 - [ ] The tester knows how to pause tracing.
 - [ ] The tester knows how to disable the current app.
 - [ ] The tester knows how to delete traces.
-- [ ] A redacted report export works.
+- [ ] A redacted privacy bundle export works.
+- [ ] `dist/private-beta/privacy-status.md` exists and says raw traces,
+  screenshots, prompts, typed text, and accepted text are not requested by
+  default.
 
 ## Trust Gate
 

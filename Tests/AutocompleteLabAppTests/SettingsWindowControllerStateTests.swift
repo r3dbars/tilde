@@ -195,6 +195,10 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(privacy.contentStatusText == "Raw text capture: off")
         #expect(
+            privacy.sharingStatusText
+                == "Sharing: use Export Privacy Bundle; do not share debug traces or screenshots."
+        )
+        #expect(
             privacy.learningStatusText
                 == "Learning: accepted-kept scores, style sketch, and recent words stay local"
         )
@@ -219,7 +223,26 @@ struct SettingsWindowControllerStateTests {
                 == "Diagnostics: performance + placement traces paused, screenshots off"
         )
         #expect(paused.contentStatusText == "Raw text capture: on temporarily")
+        #expect(
+            paused.sharingStatusText
+                == "Sharing: use Export Privacy Bundle; do not share debug traces or screenshots."
+        )
         #expect(paused.screenRecordingPermissionText == nil)
+
+        let shareSafe = SettingsPrivacyState(
+            tracingPaused: false,
+            rawContentTracingEnabled: false,
+            rawContentTracingExpiresAt: nil,
+            screenshotTracingEnabled: false,
+            screenshotTracingExpiresAt: nil,
+            diagnosticsPath: "/tmp/diagnostics.log",
+            tracePath: "/tmp/traces.jsonl"
+        )
+
+        #expect(
+            shareSafe.sharingStatusText
+                == "Sharing: Export Privacy Bundle excludes raw text, prompts, accepted text, and screenshots."
+        )
     }
 
     @Test("Onboarding copy explains first run without private app tests")

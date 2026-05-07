@@ -63,7 +63,7 @@ unsure. Wrong-place text is worse than no suggestion.
 | Acceptance safety | 10 | 90 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Prompt-app one-word no-submit proof is still incomplete. |
 | Cross-app reliability | 10 | 70 | 100 | The proof matrix now has 8 screenshot rows and the app exposes green/yellow/diagnostics-only/unsupported status. Many real apps are still yellow or pending screenshot proof. |
 | Native macOS visual feel | 8 | 80 | 100 | Settings moved toward native sections, checkboxes, clearer privacy/app controls, support status, "why hidden" copy, and calmer menu copy. Diagnostics and onboarding still need polish. |
-| Privacy and permissions trust | 9 | 97 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, raw/screenshot debug capture expires from the app UI, permission copy states what is read and why, and Diagnostics now exports a redacted privacy bundle with a manifest and checklist. Private-beta feedback policy still needs a no-raw-default workflow. |
+| Privacy and permissions trust | 9 | 100 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, raw/screenshot debug capture expires from the app UI, Settings shows share-safe privacy status, Diagnostics exports a redacted privacy bundle with a manifest/checklist, and the beta packet explicitly forbids raw traces, screenshots, prompts, typed text, and accepted text by default. |
 | Suggestion quality | 8 | 87 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, learned word completion is app-scoped, dogfood prompts are stricter, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
 | Failure restraint | 8 | 90 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, stale geometry suppresses display, too-narrow inline placement suppresses instead of showing a sliver, event-tap disablement fails closed, prompt full accept requires proof, placement uncertainty now hides stale ghosts and feeds field quiet mode, active quiet mode is visible in Diagnostics, and unsupported apps explain their stance. Real-app proof remains open. |
 | User control | 6 | 100 | 100 | Settings and the menu now expose pause, current-field silence, app blocking, support status, per-app render mode, force-mirror override, an app-proof starter, privacy diagnostics, temporary raw/screenshot capture, local log deletion, direct accept-all shortcut editing, and why the last suggestion was hidden. |
@@ -276,7 +276,7 @@ Native target: nothing looks like a web widget floating on top of macOS.
 
 ## Category 6: Privacy And Permissions Trust
 
-Current score: 97/100.
+Current score: 100/100.
 
 Native target: the app feels more private than cloud writing tools.
 
@@ -290,12 +290,12 @@ Native target: the app feels more private than cloud writing tools.
 - [x] Secure text fields are suppressed.
 - [x] Recent word memory is scoped by app so vocabulary learned in one app does not bleed into another.
 - [x] Permission copy should explain exactly what is read and why.
-- [ ] A one-click privacy status panel should show what is currently enabled.
+- [x] A one-click privacy status panel should show what is currently enabled.
 - [x] Raw tracing should auto-expire after a session.
 - [x] Screenshot tracing should auto-expire after a session.
 - [x] Deleting local privacy logs should disable raw text and screenshot capture where possible.
 - [x] Exported debug bundles should have a privacy checklist.
-- [ ] Private beta feedback should never request raw text by default.
+- [x] Private beta feedback should never request raw text by default.
 
 ## Category 7: Suggestion Quality
 
