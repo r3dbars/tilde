@@ -49,8 +49,12 @@ require_file "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift" "Verifies accepted text landed exactly" "successful insertion verification coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift" "Detects unchanged and partially inserted text" "failed insertion verification coverage"
 
+require_file "Tests/AutocompleteLabCoreTests/AcceptanceSurvivalClassifierTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/AcceptanceSurvivalClassifierTests.swift" "Classifies exact kept text" "accepted-and-kept exact survival coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/AcceptanceSurvivalClassifierTests.swift" "Classifies immediate deletes as rejected" "accepted-and-kept rejection coverage"
+
 require_file "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift"
-require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Suppresses one word twitch completions" "model-output cleanup coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Suppresses low value one word phrase completions" "model-output cleanup coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Allows single token word completion suffixes" "word-completion cleanup coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Removes thinking tags" "thinking-tag cleanup coverage"
 

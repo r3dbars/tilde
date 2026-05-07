@@ -110,6 +110,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
 
     func recordAcceptance(
         action: String,
+        acceptanceID: String,
+        acceptMode: String,
         appBundleIdentifier: String,
         acceptedText: String,
         remainingVisibleText: String?,
@@ -129,7 +131,13 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             requestMode: requestMode,
             acceptedText: acceptedText,
             remainingVisibleText: remainingVisibleText ?? "",
-            outcome: action
+            outcome: action,
+            metadata: [
+                "acceptanceID": acceptanceID,
+                "acceptMode": acceptMode,
+                "acceptedChars": String(acceptedText.count),
+                "acceptedWords": String(acceptedText.split(whereSeparator: \.isWhitespace).count)
+            ]
         )
     }
 
@@ -314,6 +322,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         let suppressedModes = sortedCountList(summary.suppressedByMode)
         let actionableSuppressedApps = sortedCountList(summary.actionableSuppressedByApp)
         let actionableSuppressedModes = sortedCountList(summary.actionableSuppressedByMode)
+        let annoyanceSignals = sortedCountList(summary.annoyanceSignalCounts)
 
         return """
         <!doctype html>
@@ -346,6 +355,12 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             <div class="metric"><b>\(summary.actionableSuppressedCount)</b>actionable suppressed</div>
             <div class="metric"><b>\(Int((summary.acceptRate * 100).rounded()))%</b>accept rate</div>
             <div class="metric"><b>\(Int((summary.usefulRate * 100).rounded()))%</b>useful rate</div>
+            <div class="metric"><b>\(summary.acceptedAndKeptCount)</b>accepted kept</div>
+            <div class="metric"><b>\(Int((summary.acceptedAndKeptRateShown * 100).rounded()))%</b>kept / shown</div>
+            <div class="metric"><b>\(Int((summary.acceptedAndKeptRateAccepted * 100).rounded()))%</b>kept / accepted</div>
+            <div class="metric"><b>\(Int((summary.tabAcceptShare * 100).rounded()))%</b>Tab accept share</div>
+            <div class="metric"><b>\(Int((summary.insertionVerificationSuccessRate * 100).rounded()))%</b>verified inserts</div>
+            <div class="metric"><b>\(String(format: "%.2f", summary.annoyanceScore))</b>annoyance score</div>
           </div>
           <h2>Accept rate by app</h2>
           <ul>\(appRates)</ul>
@@ -365,6 +380,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           <ul>\(actionableSuppressedApps)</ul>
           <h2>Actionable suppressed by mode</h2>
           <ul>\(actionableSuppressedModes)</ul>
+          <h2>Annoyance signals</h2>
+          <ul>\(annoyanceSignals)</ul>
           <h2>Top 5 misses</h2>
           <ol>\(misses)</ol>
           <h2>Recent events</h2>

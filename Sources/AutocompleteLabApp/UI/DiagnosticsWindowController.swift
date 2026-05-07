@@ -142,6 +142,7 @@ final class DiagnosticsWindowController {
         sections.append(countBucketsText(title: "Suppressed by mode", buckets: traceSummary.suppressedByMode))
         sections.append(countBucketsText(title: "Actionable suppressed by app", buckets: traceSummary.actionableSuppressedByApp))
         sections.append(countBucketsText(title: "Actionable suppressed by mode", buckets: traceSummary.actionableSuppressedByMode))
+        sections.append(countBucketsText(title: "Annoyance signals", buckets: traceSummary.annoyanceSignalCounts))
         sections.append(topMissesText(traceSummary.topMisses))
 
         if let profile {
@@ -200,6 +201,18 @@ final class DiagnosticsWindowController {
           suppressed: \(summary.suppressedCount)
           actionable suppressed: \(summary.actionableSuppressedCount)
           insertion failures: \(summary.insertionFailureCount)
+          insertion verified: \(summary.insertionVerifiedCount)
+          insertion verification success: \(Self.percent(summary.insertionVerificationSuccessRate))
+          accepted and kept: \(summary.acceptedAndKeptCount)
+          kept / shown: \(Self.percent(summary.acceptedAndKeptRateShown))
+          kept / accepted: \(Self.percent(summary.acceptedAndKeptRateAccepted))
+          median edit distance after accept: \(Self.decimal(summary.medianEditDistanceAfterAccept))
+          median first edit delay: \(Self.latency(summary.medianTimeUntilFirstEditAfterAcceptMilliseconds))
+          Tab accept share: \(Self.percent(summary.tabAcceptShare))
+          full accept share: \(Self.percent(summary.fullAcceptShare))
+          duplicate text: \(summary.duplicateTextCount)
+          app disables: \(summary.appDisableCount)
+          annoyance score: \(String(format: "%.2f", summary.annoyanceScore))
           accept rate: \(Self.percent(summary.acceptRate))
           useful rate: \(Self.percent(summary.usefulRate))
           p50 latency: \(Self.latency(summary.p50LatencyMilliseconds))
@@ -283,6 +296,10 @@ final class DiagnosticsWindowController {
 
     private static func latency(_ value: Int?) -> String {
         value.map { "\($0)ms" } ?? "n/a"
+    }
+
+    private static func decimal(_ value: Double?) -> String {
+        value.map { String(format: "%.2f", $0) } ?? "n/a"
     }
 
     @objc

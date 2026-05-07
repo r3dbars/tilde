@@ -54,8 +54,14 @@ Each suggestion gets a `suggestionID` and emits lifecycle events:
 - `suggestionSuppressed`
 - `insertionVerified`
 - `insertionFailed`
+- `acceptedTextEdited`
+- `appPaused`
+- `appDisabled`
+- `caretGeometryFailed`
 
 Events include app bundle id, request mode, field identity, prompt/output when available, displayed text, accepted text, outcome, reason, latency, screenshot path, caret/panel geometry, and compatibility-learning metadata.
+
+The headline product metric is accepted-and-kept, not raw accept rate. Accepted text is compared at 2s, 10s, 30s, and field blur. Durable checkpoint events store survival class, token recall, edit distance, accepted length, and timing metadata. They should not need the current field text on disk.
 
 ## What To Evaluate
 
@@ -64,8 +70,14 @@ Track these rates per app and request mode:
 - shown suggestions
 - accepted with Tab
 - accepted with backtick
+- accepted-and-kept shown rate
+- accepted-and-kept accepted rate
+- median edit distance after accept
+- median first edit delay after accept
 - ignored by continued typing
 - suppressed as empty, meta, repeated context, or invalid word completion
+- annoyance score and annoyance signal counts
+- insertion verification success
 - insertion verification failures
 
 Use the in-app Diagnostics window for the quickest read. It shows recent trace events, top misses, accept rates by app/mode, pause/delete controls, screenshot tracing, current learned adapter state, and an HTML export.

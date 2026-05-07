@@ -20,7 +20,7 @@ The user should not start Ollama, llama.cpp, or any model server. Gemma 4 E2B is
 ## Latency Target
 
 - debounce typing: 150-250ms
-- model output: 2-8 words
+- model output: 1-3 visible words by default, with longer arms only in explicit experiments
 - generation cap: 8-16 tokens
 - prompt context cap: about 900 characters before the cursor
 - reasoning: off

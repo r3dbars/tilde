@@ -24,7 +24,7 @@ if ! grep -F "asset=Qwen3.5-4B-4bit" <<<"$REPORT" >/dev/null; then
   exit 1
 fi
 
-if ! grep -F "first token: n=1 min=70ms avg=70ms p50=70ms p90=70ms max=70ms" <<<"$REPORT" >/dev/null; then
+if ! grep -F "first token: n=1 min=70ms avg=70ms p50=70ms p90=70ms p95=70ms max=70ms" <<<"$REPORT" >/dev/null; then
   echo "latency report self-test did not summarize first-token timing" >&2
   echo "$REPORT" >&2
   exit 1
@@ -36,13 +36,13 @@ if ! grep -F "max tokens: 6" <<<"$REPORT" >/dev/null; then
   exit 1
 fi
 
-if ! grep -F "shown latency: n=1 min=0ms avg=0ms p50=0ms p90=0ms max=0ms" <<<"$REPORT" >/dev/null; then
+if ! grep -F "shown latency: n=1 min=0ms avg=0ms p50=0ms p90=0ms p95=0ms max=0ms" <<<"$REPORT" >/dev/null; then
   echo "latency report self-test did not summarize word-completion latency" >&2
   echo "$REPORT" >&2
   exit 1
 fi
 
-if ! grep -F "shown latency: n=1 min=130ms avg=130ms p50=130ms p90=130ms max=130ms" <<<"$REPORT" >/dev/null; then
+if ! grep -F "shown latency: n=1 min=130ms avg=130ms p50=130ms p90=130ms p95=130ms max=130ms" <<<"$REPORT" >/dev/null; then
   echo "latency report self-test did not deduplicate streamed shown latency" >&2
   echo "$REPORT" >&2
   exit 1
