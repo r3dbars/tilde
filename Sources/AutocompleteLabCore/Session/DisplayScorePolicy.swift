@@ -147,6 +147,15 @@ public enum DisplayScoreDecision: Equatable, Sendable {
         }
     }
 
+    public var trace: DisplayScoreTrace {
+        switch self {
+        case let .display(trace):
+            trace
+        case let .suppress(suppression):
+            suppression.trace
+        }
+    }
+
     public var metadata: [String: String] {
         switch self {
         case let .display(trace):

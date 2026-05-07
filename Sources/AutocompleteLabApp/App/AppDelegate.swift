@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
+    private let suggestionReplacementPolicy = SuggestionReplacementPolicy()
     private let displayScorePolicy = DisplayScorePolicy()
     private var acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
     private var acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
@@ -126,6 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionDisplayedText: String?
     private var currentSuggestionFieldClassification: AXFieldClassification?
     private var currentSuggestionPresentedAt: Date?
+    private var currentSuggestionDisplayScoreFinal: Double?
     private var currentSuggestionInvalidatedByUserKeyDown = false
     private var scheduledScreenshotSuggestionIDs: Set<String> = []
     private let maxScheduledScreenshotSuggestionIDs = 256
@@ -2543,6 +2545,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ),
             mode: request.mode
         )
+        let displayScoreTrace = displayScoreDecision.trace
         let displayScoreMetadata = displayScoreDecision.metadata
         guard displayScoreDecision.shouldDisplay else {
             let reason = displayScoreMetadata["displayScoreSuppressionReason"] ?? "display-score"
@@ -2581,6 +2584,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let currentSuggestionAgeMilliseconds = currentSuggestionPresentedAt.map {
+            max(0, Int(Date().timeIntervalSince($0) * 1_000))
+        }
+        let replacementDecision = suggestionReplacementPolicy.decision(
+            currentVisibleText: suggestionSession.visibleSuggestion?.visibleText,
+            proposedVisibleText: suggestion.visibleText,
+            currentSuggestionID: currentSuggestionID,
+            proposedSuggestionID: suggestionID,
+            currentAgeMilliseconds: currentSuggestionAgeMilliseconds,
+            currentScore: currentSuggestionDisplayScoreFinal,
+            proposedScore: displayScoreTrace.score.finalScore
+        )
+        let replacementMetadata = replacementDecision.metadata
+        guard replacementDecision.shouldPresent else {
+            let reason = replacementDecision.reason?.rawValue ?? "replacement-gate"
+            setSuggestionDecision("Kept current suggestion: \(reason)")
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: suggestionID,
+                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity.traceDescription,
+                requestMode: request.mode.rawValue,
+                triggerReason: triggerReason,
+                textBeforeCursor: request.textBeforeCursor,
+                textAfterCursor: request.textAfterCursor,
+                displayedText: suggestion.visibleText,
+                latencyMilliseconds: latencyMilliseconds,
+                reason: reason,
+                metadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode)
+                    .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
+                    .merging(learningAdjustment.metadata) { current, _ in current }
+                    .merging(placement.metadata) { current, _ in current }
+                    .merging(displayScoreMetadata) { current, _ in current }
+                    .merging(replacementMetadata) { current, _ in current }
+            )
+            recordSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                metadata: [
+                    "reason": reason
+                ]
+                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
+                .merging(learningAdjustment.metadata) { current, _ in current }
+                .merging(placement.metadata) { current, _ in current }
+                .merging(displayScoreMetadata) { current, _ in current }
+                .merging(replacementMetadata) { current, _ in current }
+            )
+            return
+        }
+
         lastCaretRect = placement.anchorRect
         lastTextLineRect = placement.textLineRect
         lastClippingRect = placement.clippingRect
@@ -2613,6 +2667,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     .merging(learningAdjustment.metadata) { current, _ in current }
                     .merging(placement.metadata) { current, _ in current }
                     .merging(displayScoreMetadata) { current, _ in current }
+                    .merging(replacementMetadata) { current, _ in current }
             )
             recordSuggestionEvent(
                 "suggestion-blocked",
@@ -2625,6 +2680,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(placement.metadata) { current, _ in current }
                 .merging(displayScoreMetadata) { current, _ in current }
+                .merging(replacementMetadata) { current, _ in current }
             )
             hideSuggestion(reason: reason)
             return
@@ -2640,6 +2696,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionDisplayedText = suggestion.visibleText
         currentSuggestionFieldClassification = fieldClassification(for: context)
         currentSuggestionPresentedAt = Date()
+        currentSuggestionDisplayScoreFinal = displayScoreTrace.score.finalScore
         currentSuggestionInvalidatedByUserKeyDown = false
         keyboardEventTap?.resetPassthroughObservation()
         updateKeyboardEventTapSnapshot()
@@ -2693,6 +2750,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(learningAdjustment.metadata) { current, _ in current }
             .merging(placement.metadata) { current, _ in current }
             .merging(displayScoreMetadata) { current, _ in current }
+            .merging(replacementMetadata) { current, _ in current }
         )
         recordSuggestionEvent(
             "suggestion-presented",
@@ -2716,6 +2774,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(learningAdjustment.metadata) { current, _ in current }
             .merging(placement.metadata) { current, _ in current }
             .merging(displayScoreMetadata) { current, _ in current }
+            .merging(replacementMetadata) { current, _ in current }
         )
         updateKeyboardEventTapSnapshot()
     }
@@ -3567,6 +3626,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionDisplayedText = nil
         currentSuggestionFieldClassification = nil
         currentSuggestionPresentedAt = nil
+        currentSuggestionDisplayScoreFinal = nil
         currentSuggestionInvalidatedByUserKeyDown = false
         streamingPresentationStates.removeAll(keepingCapacity: true)
         lastCaretRect = nil

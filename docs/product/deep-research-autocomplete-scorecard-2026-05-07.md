@@ -3,14 +3,14 @@
 Source research:
 `/Users/redbars/Library/Caches/com.apple.SwiftUI.Drag-9DB841D4-8068-4044-B0CF-B2F61B9E12BB/deep-research-report (5).md`
 
-Repo state graded: `codex/deep-research-scorecard` after the clear learned
-suggestions pass, based on `origin/main`.
+Repo state graded: `codex/deep-research-scorecard` after the flicker-safe
+replacement pass, based on `origin/main`.
 
 ## Executive Grade
 
 Baseline deep research score: **78/100**.
 
-Current implementation score after the current build pass: **94/100**.
+Current implementation score after the current build pass: **95/100**.
 
 This is a strong prototype with real engineering depth. It has local MLX
 runtime support, app compatibility profiles, privacy-safe tracing defaults,
@@ -72,6 +72,9 @@ Pass 1 shipped these improvements:
 - Settings now has a Clear Learned Suggestions control that resets
   accepted-kept scores, aggregate style memory, recent words, repetition
   suppression, and prefix-family cooldowns without deleting logs.
+- Replacement now protects fresh visible ghost text for 1.2s unless the new
+  suggestion has a clear score win, then treats 2s-old suggestions as stale
+  enough to replace.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -85,6 +88,8 @@ Remaining high-impact gaps:
   drift into planning or take over the writer's next thought.
 - Behavior profiles now affect the live generation/scoring path, but still need
   screenshot-backed app slices and per-profile acceptance proof.
+- Flicker control now has score-margin and stale-lifetime rules, but still
+  needs screenshot-backed proof in narrow editors and streaming model output.
 - Replay-first real-app proof is still missing. The command exists, but the
   current local trace corpus fails the proof gate because it predates display
   scoring, candidate-selection metadata, kept-horizon events, and researched
@@ -161,7 +166,7 @@ Weighted total: **78.5/100**, rounded to **78/100**.
 | Stale cancellation | 86 | Request IDs, text snapshots, and keydown invalidation are strong. | Add app-level async race tests and cancellation proof in replay rig. |
 | One visible suggestion | 95 | Single `SuggestionSession`, no dropdown or carousel. | Keep this invariant. |
 | Single-line under 42 chars | 90 | `CompletionSuggestion` caps visible text to one line, bounded words, and 42 visible characters. | Add screenshot proof across narrow editors and long wrapped lines. |
-| Flicker control | 80 | Streaming presentation gate limits partial updates. | Add score-margin replacement rule and stale lifetime tests. |
+| Flicker control | 90 | Streaming presentation gate limits partial updates, and replacement now suppresses fresh/low-margin candidate swaps with 1.2s fresh and 2s stale lifetime tests. | Add screenshot proof across narrow editors and streaming model output. |
 | Tab next word | 91 | Implemented and app/profile gated. | Recompute residual after one follow-on instead of chaining unscored residuals. |
 | Backtick full visible accept | 82 | Full accept exists when profile supports it; prompt apps disable full accept. | Prove atomic undo and no-submit for every app where full accept is enabled. |
 | Esc dismiss | 88 | Implemented and traces keyboard action. | Add prefix-family cooldown and repeated-dismiss escalation. |
@@ -232,6 +237,12 @@ Strong evidence in current code:
 - `Sources/AutocompleteLabApp/App/AppDelegate.swift:4140-4155` resets local
   accepted-kept learning, aggregate style memory, recent words, repetition
   suppression, and prefix-family cooldowns without deleting logs.
+- `Sources/AutocompleteLabCore/Session/SuggestionReplacementPolicy.swift:43-121`
+  requires fresh visible suggestions to win by score margin before replacement
+  and allows stale visible suggestions after 2s.
+- `Sources/AutocompleteLabApp/App/AppDelegate.swift:2587-2620` records
+  replacement decisions in raw traces and keeps the current visible suggestion
+  when a replacement is too fresh or too close in score.
 - `docs/product/app-proof-matrix.md:24-40` honestly marks target proof as
   still failing and lists pending surfaces.
 
@@ -363,9 +374,11 @@ these are true.
 12. Done: add aggregate accepted-kept style memory and prompt guidance.
 13. Done: add settings control to clear learned suggestions without deleting
    logs.
-14. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
+14. Done: add score-margin replacement gate and stale visible-suggestion
+   lifetime tests.
+15. Partial: add bullet/checklist unit evals. Bullet profile tests exist;
    checklist acceptance/proof slices are still missing.
-15. Partial: build the replay-first proof command. The command exists; a fresh
+16. Partial: build the replay-first proof command. The command exists; a fresh
    post-pass trace proof still has to pass.
 
 ## Goal Status
@@ -375,7 +388,7 @@ every scored item reaches 100/100.
 
 Baseline status: **78/100**.
 
-Current implementation status: **94/100**. Not complete.
+Current implementation status: **95/100**. Not complete.
 
 Replay proof status:
 
