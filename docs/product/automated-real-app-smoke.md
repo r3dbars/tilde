@@ -14,6 +14,10 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture pr
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture chat-like
 ```
 
+Automated smoke launches temporarily enable only the target bundle ID for that
+proof pass. This keeps fresh installs default-off while still letting the
+disposable TextEdit and Chrome checks run unattended.
+
 Run all local Chrome browser/editor fixtures with one build:
 
 ```bash

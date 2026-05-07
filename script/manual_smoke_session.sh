@@ -130,7 +130,7 @@ case "$APP" in
     BUNDLE_ID="com.apple.TextEdit"
     DISPLAY_NAME="TextEdit"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
-    STEPS=$'- Open a disposable TextEdit document.\n- Type `Can we`.\n- Wait for a suggestion.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
+    STEPS=$'- Open a disposable TextEdit document.\n- Type `Smoke proof feels inst`.\n- Wait for a suggestion.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the key above Tab for full visible accept and expect another `instant` completion.'
     ;;
   notes)
     BUNDLE_ID="com.apple.Notes"
@@ -187,7 +187,7 @@ case "$APP" in
     DISPLAY_NAME="Chrome"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     PROOF_LABEL="${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-$PROOF_LABEL}"
-    STEPS=$'- Open a local fixture page with a textarea, contenteditable field, editor-like field, Monaco-like editor, ProseMirror-like editor, or chat-style composer.\n- Type `Can we` in the focused field.\n- Confirm focus stays in the field.\n- Use Tab once, then the key above Tab for full visible accept.\n- For chat-like proof, prefer `script/real_app_smoke.sh chrome --fixture chat-like` so the no-submit guard is checked.'
+    STEPS=$'- Open a local fixture page with a textarea, contenteditable field, editor-like field, Monaco-like editor, ProseMirror-like editor, or chat-style composer.\n- Type `Smoke proof feels inst` in the focused field.\n- Confirm focus stays in the field.\n- Use Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the key above Tab for full visible accept and expect another `instant` completion.\n- For chat-like proof, prefer `script/real_app_smoke.sh chrome --fixture chat-like` so the no-submit guard is checked.'
     ;;
   codex)
     BUNDLE_ID="com.openai.codex"

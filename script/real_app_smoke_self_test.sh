@@ -13,9 +13,19 @@ if ! grep -F "Real app smoke: textedit" "$TMP_DIR/textedit.txt" >/dev/null; then
   exit 1
 fi
 
+if ! grep -F "temporarily enables TextEdit only for this proof pass" "$TMP_DIR/textedit.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain temporary TextEdit enablement" >&2
+  exit 1
+fi
+
 script/real_app_smoke.sh chrome --dry-run >"$TMP_DIR/chrome.txt"
 if ! grep -F "disposable Chrome textarea fixture" "$TMP_DIR/chrome.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome dry-run plan" >&2
+  exit 1
+fi
+
+if ! grep -F "temporarily enables Chrome only for this proof pass" "$TMP_DIR/chrome.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain temporary Chrome enablement" >&2
   exit 1
 fi
 

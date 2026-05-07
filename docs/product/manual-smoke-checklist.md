@@ -6,6 +6,8 @@ For a repeatable local record, use `script/real_app_smoke.sh <app>` when it is
 listed below. It builds/relaunches the app, prints the safe steps, waits while
 you test, then validates the new diagnostics and matching JSONL trace coverage.
 Successful runs are recorded in `docs/product/manual-smoke-runs.md`.
+The recorder temporarily enables only the target app for that proof launch, so
+fresh installs can stay default-off without blocking disposable proof runs.
 Run `script/manual_smoke_status.sh` to see insertion proof and separate
 screenshot-backed placement proof. Use `script/manual_smoke_status.sh --strict`
 when missing insertion proof or missing screenshot proof should block
@@ -39,10 +41,11 @@ Recorder:
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit
 ```
 
-- Type `Can we`.
+- Type `Smoke proof feels inst`.
 - Confirm a suggestion appears.
-- Press Tab and expect `Can we make`.
-- Press the key above Tab and expect the rest of the visible suggestion.
+- Press Tab and expect `instant`.
+- Type ` and stays inst`.
+- Press the key above Tab and expect another `instant` completion.
 - Confirm `insert-verification result=verified`.
 
 ## Notes
@@ -88,11 +91,13 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture al
 
 - Use a local fixture page: textarea, contenteditable, editor-like,
   Monaco-like, or ProseMirror-like.
-- Type `Can we`.
+- Type `Smoke proof feels inst`.
 - Confirm the profile is Chrome, render mode is `inlineAdjacent` when synthetic
   caret placement is available and `floatingMirror` only as fallback. Insertion
   uses key events with AX value replacement as fallback.
-- Press Tab and expect `Can we make` without focus leaving the editor.
+- Press Tab and expect `instant` without focus leaving the editor.
+- Type ` and stays inst`.
+- Press the key above Tab and expect another `instant` completion.
 - Confirm verification succeeds.
 - Each fixture records its own proof label.
 

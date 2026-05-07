@@ -66,4 +66,23 @@ public struct DisabledAppSelection: Equatable, Sendable {
     public mutating func clear() {
         bundleIdentifiers.removeAll(keepingCapacity: false)
     }
+
+    public mutating func temporarilyEnable(bundleIdentifiers rawValue: String?) {
+        for bundleIdentifier in Self.parseBundleIdentifierList(rawValue) {
+            set(bundleIdentifier, disabled: false)
+        }
+    }
+
+    public static func parseBundleIdentifierList(_ rawValue: String?) -> [String] {
+        guard let rawValue else {
+            return []
+        }
+
+        return rawValue
+            .split { character in
+                character == "," || character == "\n" || character == " "
+            }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
 }
