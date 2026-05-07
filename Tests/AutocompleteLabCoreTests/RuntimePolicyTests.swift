@@ -10,6 +10,7 @@ struct RuntimePolicyTests {
         #expect(decision.preferredCandidate == .mlx)
         #expect(decision.fallbackCandidate == .liteRTLM)
         #expect(decision.allowsUserManagedServer == false)
+        #expect(RuntimeReadinessAction.cancelModelInstall.displayName == "Cancel Model Install")
     }
 
     @Test("Runtime states have short status summaries")

@@ -376,6 +376,7 @@ Native target: a user can understand and control the app in 20 seconds.
 - [x] User should be able to disable suggestions for current field/session.
 - [x] User should see why a suggestion is hidden without reading logs.
 - [x] A "make this app safe" flow should guide proof collection by copying the exact disposable/manual smoke commands from Settings.
+- [x] In-app model install should be cancelable while it is running, and failed installs should leave retry enabled.
 
 ## Category 10: Onboarding And Setup
 
