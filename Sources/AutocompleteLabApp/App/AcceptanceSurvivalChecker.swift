@@ -141,3 +141,18 @@ struct AcceptanceSurvivalCheckResult: Sendable {
     let shouldFinish: Bool
     let finishReason: String?
 }
+
+struct AcceptanceSurvivalTracker: Equatable, Sendable {
+    let acceptanceID: String
+    let suggestionID: String
+    let appBundleIdentifier: String
+    let fieldIdentity: FocusedFieldIdentity
+    let requestMode: String
+    let acceptedText: String
+    let expectedInsertionUTF16Offset: Int
+    let acceptedAt: Date
+    let profile: CompatibilityProfile
+    let fieldKind: AXFieldKind
+    let fieldKindReason: String
+    var deletedWithinTwoSeconds: Bool = false
+}

@@ -15,6 +15,14 @@ public struct DisabledAppSelection: Equatable, Sendable {
         bundleIdentifiers.sorted()
     }
 
+    public var isEmpty: Bool {
+        bundleIdentifiers.isEmpty
+    }
+
+    public var count: Int {
+        bundleIdentifiers.count
+    }
+
     public func contains(_ bundleIdentifier: String) -> Bool {
         bundleIdentifiers.contains(bundleIdentifier)
     }
@@ -41,5 +49,9 @@ public struct DisabledAppSelection: Equatable, Sendable {
         } else {
             bundleIdentifiers.remove(bundleIdentifier)
         }
+    }
+
+    public mutating func clear() {
+        bundleIdentifiers.removeAll(keepingCapacity: false)
     }
 }

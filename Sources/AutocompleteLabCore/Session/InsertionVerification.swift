@@ -5,12 +5,23 @@ public enum InsertionVerificationResult: Equatable, Sendable {
     case unchanged
     case partial
     case duplicateText
+    case duplicatedAcceptedText
     case literalTab
+    case insertedAtWrongLocation
     case selectionChangedUnexpectedly
     case changedUnexpectedly
 
     public var isVerified: Bool {
         self == .verified
+    }
+
+    public static func == (lhs: InsertionVerificationResult, rhs: InsertionVerificationResult) -> Bool {
+        switch (lhs, rhs) {
+        case (.duplicateText, .duplicatedAcceptedText), (.duplicatedAcceptedText, .duplicateText):
+            true
+        default:
+            String(describing: lhs) == String(describing: rhs)
+        }
     }
 }
 
@@ -30,20 +41,13 @@ public struct InsertionVerification: Equatable, Sendable {
             return .verified
         }
 
+        if normalizeRichEditorWhitespace(currentTextBeforeCursor) == normalizeRichEditorWhitespace(expectedTextBeforeCursor) {
+            return .verified
+        }
+
         if currentTextBeforeCursor == previousTextBeforeCursor + "\t"
             || currentTextBeforeCursor.hasPrefix(previousTextBeforeCursor + "\t") {
             return .literalTab
-        }
-
-        if !acceptedText.isEmpty,
-           currentTextBeforeCursor == expectedTextBeforeCursor + acceptedText {
-            return .duplicateText
-        }
-
-        if !acceptedText.isEmpty,
-           currentTextBeforeCursor.hasPrefix(expectedTextBeforeCursor),
-           currentTextBeforeCursor.dropFirst(expectedTextBeforeCursor.count).hasPrefix(acceptedText) {
-            return .duplicateText
         }
 
         if currentTextBeforeCursor == previousTextBeforeCursor {
@@ -54,11 +58,39 @@ public struct InsertionVerification: Equatable, Sendable {
             return .unchanged
         }
 
+        if !acceptedText.isEmpty,
+           currentTextBeforeCursor == expectedTextBeforeCursor + acceptedText {
+            return .duplicatedAcceptedText
+        }
+
+        if !acceptedText.isEmpty,
+           currentTextBeforeCursor.hasPrefix(expectedTextBeforeCursor),
+           currentTextBeforeCursor.dropFirst(expectedTextBeforeCursor.count).hasPrefix(acceptedText) {
+            return .duplicatedAcceptedText
+        }
+
         if expectedTextBeforeCursor.hasPrefix(currentTextBeforeCursor),
            currentTextBeforeCursor.count > previousTextBeforeCursor.count {
             return .partial
         }
 
+        if !acceptedText.isEmpty,
+           currentTextBeforeCursor.hasSuffix(acceptedText) {
+            let insertionPrefix = currentTextBeforeCursor.dropLast(acceptedText.count)
+
+            if insertionPrefix != previousTextBeforeCursor,
+               previousTextBeforeCursor.hasPrefix(insertionPrefix)
+                || insertionPrefix.hasPrefix(previousTextBeforeCursor) {
+                return .insertedAtWrongLocation
+            }
+        }
+
         return .changedUnexpectedly
+    }
+
+    private func normalizeRichEditorWhitespace(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "\u{00A0}", with: " ")
+            .replacingOccurrences(of: "\u{202F}", with: " ")
     }
 }

@@ -242,6 +242,11 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let suppressedByMode: [String: Int]
     public let actionableSuppressedByApp: [String: Int]
     public let actionableSuppressedByMode: [String: Int]
+    public let anchorQualityByApp: [String: [String: Int]]
+    public let insertionModeByApp: [String: [String: Int]]
+    public let insertionFailuresByAppAndMode: [String: [String: Int]]
+    public let updateSourceByApp: [String: [String: Int]]
+    public let axFailureReasonByApp: [String: [String: Int]]
     public let topMisses: [AutocompleteTraceMiss]
 
     public init(
@@ -320,6 +325,11 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         suppressedByMode: [String: Int] = [:],
         actionableSuppressedByApp: [String: Int] = [:],
         actionableSuppressedByMode: [String: Int] = [:],
+        anchorQualityByApp: [String: [String: Int]] = [:],
+        insertionModeByApp: [String: [String: Int]] = [:],
+        insertionFailuresByAppAndMode: [String: [String: Int]] = [:],
+        updateSourceByApp: [String: [String: Int]] = [:],
+        axFailureReasonByApp: [String: [String: Int]] = [:],
         topMisses: [AutocompleteTraceMiss]
     ) {
         self.totalEvents = totalEvents
@@ -397,6 +407,11 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.suppressedByMode = suppressedByMode
         self.actionableSuppressedByApp = actionableSuppressedByApp
         self.actionableSuppressedByMode = actionableSuppressedByMode
+        self.anchorQualityByApp = anchorQualityByApp
+        self.insertionModeByApp = insertionModeByApp
+        self.insertionFailuresByAppAndMode = insertionFailuresByAppAndMode
+        self.updateSourceByApp = updateSourceByApp
+        self.axFailureReasonByApp = axFailureReasonByApp
         self.topMisses = topMisses
     }
 }
@@ -619,6 +634,24 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             suppressedByMode: counts(suppressed, key: \.requestMode),
             actionableSuppressedByApp: counts(actionableSuppressed, key: \.appBundleIdentifier),
             actionableSuppressedByMode: counts(actionableSuppressed, key: \.requestMode),
+            anchorQualityByApp: countsByAppAndMetadata(events, keys: ["anchorQuality", "caretQuality", "geometryQuality"]),
+            insertionModeByApp: countsByAppAndMetadata(
+                events,
+                keys: ["actualInsertionMode", "profileInsertionMode", "insertionMode"]
+            ),
+            insertionFailuresByAppAndMode: countsByAppAndMetadata(
+                insertionFailures,
+                keys: ["actualInsertionMode", "profileInsertionMode", "insertionMode"],
+                fallback: \.requestMode
+            ),
+            updateSourceByApp: countsByAppAndMetadata(
+                events,
+                keys: ["updateSource", "refreshSource", "geometryUpdateSource"]
+            ),
+            axFailureReasonByApp: countsByAppAndMetadata(
+                events,
+                keys: ["axFailureReason", "geometryReason", "caretInvalidReason"]
+            ),
             topMisses: topMisses(from: events)
         )
     }
@@ -794,6 +827,36 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             return bucket.isEmpty ? "unknown" : bucket
         }
         .mapValues(\.count)
+    }
+
+    private func countsByAppAndMetadata(
+        _ events: [AutocompleteTraceEvent],
+        keys: [String],
+        fallback: ((AutocompleteTraceEvent) -> String)? = nil
+    ) -> [String: [String: Int]] {
+        var result: [String: [String: Int]] = [:]
+
+        for event in events {
+            let bucket = rawMetadataValue(event, keys: keys) ?? fallback?(event)
+            guard let bucket, !bucket.isEmpty else {
+                continue
+            }
+
+            let app = event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
+            result[app, default: [:]][bucket, default: 0] += 1
+        }
+
+        return result
+    }
+
+    private func rawMetadataValue(_ event: AutocompleteTraceEvent, keys: [String]) -> String? {
+        for key in keys {
+            if let value = event.metadata[key], !value.isEmpty {
+                return value
+            }
+        }
+
+        return nil
     }
 
     private func isActionableSuppression(_ event: AutocompleteTraceEvent) -> Bool {

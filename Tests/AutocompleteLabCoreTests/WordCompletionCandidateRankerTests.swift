@@ -21,6 +21,14 @@ struct WordCompletionCandidateRankerTests {
         #expect(suggestion?.visibleText == "umentary")
     }
 
+    @Test("Suppresses ambiguous two-letter static fragments unless recent")
+    func suppressesAmbiguousTwoLetterStaticFragmentsUnlessRecent() {
+        let ranker = WordCompletionCandidateRanker(staticWords: ["there", "their", "thing"])
+
+        #expect(ranker.suggestion(for: "I saw th") == nil)
+        #expect(ranker.suggestion(for: "I saw th", recentWords: ["therefore"])?.visibleText == "erefore")
+    }
+
     @Test("common fragments complete without waiting for the model")
     func commonFragmentsComplete() {
         let ranker = WordCompletionCandidateRanker()
@@ -31,9 +39,7 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "he")?.visibleText == "llo")
         #expect(ranker.suggestion(for: "It seems to be de")?.visibleText == "cent")
         #expect(ranker.suggestion(for: "I wa")?.visibleText == "nt")
-        #expect(ranker.suggestion(for: "This should be su")?.visibleText == "per")
         #expect(ranker.suggestion(for: "hey tr")?.visibleText == "ying")
-        #expect(ranker.suggestion(for: "It is worki")?.visibleText == "ng")
     }
 
     @Test("suppresses low value static suffixes")
@@ -47,6 +53,36 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "This should be super fas") == nil)
         #expect(ranker.suggestion(for: "Can you look") == nil)
         #expect(ranker.suggestion(for: "I see thi") == nil)
+        #expect(ranker.suggestion(for: "It is worki") == nil)
+    }
+
+    @Test("default words avoid lab and app vocabulary")
+    func defaultWordsAvoidLabAndAppVocabulary() {
+        let ranker = WordCompletionCandidateRanker()
+
+        #expect(ranker.suggestion(for: "Try auto") == nil)
+        #expect(ranker.suggestion(for: "Open code") == nil)
+        #expect(ranker.suggestion(for: "Check diag") == nil)
+        #expect(ranker.suggestion(for: "Review trac") == nil)
+        #expect(ranker.suggestion(for: "Use trans") == nil)
+    }
+
+    @Test("default words avoid overly enthusiastic vocabulary")
+    func defaultWordsAvoidOverlyEnthusiasticVocabulary() {
+        let ranker = WordCompletionCandidateRanker()
+
+        #expect(ranker.suggestion(for: "That was fant") == nil)
+        #expect(ranker.suggestion(for: "This is gr") == nil)
+        #expect(ranker.suggestion(for: "That sounds su") == nil)
+    }
+
+    @Test("suppresses tiny recent suffixes until the fragment is strong")
+    func suppressesTinyRecentSuffixesUntilFragmentIsStrong() {
+        let ranker = WordCompletionCandidateRanker(staticWords: [])
+
+        #expect(ranker.suggestion(for: "th", recentWords: ["this"]) == nil)
+        #expect(ranker.suggestion(for: "It is worki", recentWords: ["working"]) == nil)
+        #expect(ranker.suggestion(for: "It is workin", recentWords: ["working"])?.visibleText == "g")
     }
 
     @Test("allows one letter recent suffixes for long fragments")

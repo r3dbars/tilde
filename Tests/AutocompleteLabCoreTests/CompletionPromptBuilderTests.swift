@@ -10,7 +10,9 @@ struct CompletionPromptBuilderTests {
 
         #expect(prompt.system.contains("next 5 words or fewer"))
         #expect(prompt.system.contains("Inline autocomplete"))
+        #expect(prompt.system.contains("boring connective tissue"))
         #expect(prompt.system.contains("Do not answer, explain"))
+        #expect(prompt.system.contains("Do not brainstorm, rewrite"))
         #expect(prompt.system.contains("reason"))
         #expect(prompt.user.contains("Before cursor:\nI think we should"))
         #expect(prompt.user.hasSuffix("Next words:"))
@@ -25,7 +27,9 @@ struct CompletionPromptBuilderTests {
         ))
 
         #expect(prompt.system.contains("dogfooding this autocomplete tool"))
+        #expect(prompt.system.contains("text the user is typing into an agent prompt"))
         #expect(prompt.system.contains("testing, using, building, debugging"))
+        #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
         #expect(prompt.system.contains("integrate it seamlessly"))
     }
 
@@ -38,8 +42,87 @@ struct CompletionPromptBuilderTests {
         ))
 
         #expect(prompt.system.contains("Continue the user's actual sentence naturally"))
+        #expect(prompt.system.contains("text the user is typing into an agent prompt"))
         #expect(prompt.system.contains("Do not force software, testing, latency, placement, or debugging topics"))
+        #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
         #expect(!prompt.system.contains("Prefer concrete continuations about testing"))
+    }
+
+    @Test("Codex prompt ignores loose dogfood substrings")
+    func codexPromptIgnoresLooseDogfoodSubstrings() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "This table model should pass the normal writing test",
+            appBundleIdentifier: "com.openai.codex"
+        ))
+
+        #expect(prompt.system.contains("Continue the user's actual sentence naturally"))
+        #expect(!prompt.system.contains("dogfooding this autocomplete tool"))
+        #expect(!prompt.system.contains("Prefer concrete continuations about testing"))
+    }
+
+    @Test("Codex prompt keeps normal suggestion words out of dogfood mode")
+    func codexPromptKeepsNormalSuggestionWordsOutOfDogfoodMode() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let cases = [
+            "I have a suggestion for dinner and",
+            "Can you debug this paragraph without",
+            "Trace the outline back to"
+        ]
+
+        for textBeforeCursor in cases {
+            let prompt = builder.prompt(for: CompletionRequest(
+                textBeforeCursor: textBeforeCursor,
+                appBundleIdentifier: "com.openai.codex"
+            ))
+
+            #expect(
+                prompt.system.contains("Continue the user's actual sentence naturally"),
+                "Expected neutral dogfood-safe prompt for: \(textBeforeCursor)"
+            )
+            #expect(!prompt.system.contains("dogfooding this autocomplete tool"))
+            #expect(!prompt.system.contains("Prefer concrete continuations about testing"))
+        }
+    }
+
+    @Test("Claude Code prompt uses dogfood guidance")
+    func claudeCodePromptUsesDogfoodGuidance() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "I need this autocomplete debug trace to",
+            appBundleIdentifier: "com.anthropic.claude-code"
+        ))
+
+        #expect(prompt.system.contains("The active app is Claude Code"))
+        #expect(prompt.system.contains("dogfooding this autocomplete tool"))
+        #expect(prompt.system.contains("testing, using, building, debugging"))
+        #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
+    }
+
+    @Test("Claude desktop prompt gets prompt app guidance")
+    func claudeDesktopPromptGetsPromptAppGuidance() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Can you make this sentence",
+            appBundleIdentifier: "com.anthropic.claudefordesktop"
+        ))
+
+        #expect(prompt.system.contains("The active app is Claude"))
+        #expect(prompt.system.contains("text the user is typing into an agent prompt"))
+        #expect(prompt.system.contains("not a prompt to answer"))
+        #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
+    }
+
+    @Test("Dogfood prompt recognizes prompt app safety context")
+    func dogfoodPromptRecognizesPromptAppSafetyContext() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Claude Code no-submit prompt insertion should",
+            appBundleIdentifier: "com.anthropic.claude-code"
+        ))
+
+        #expect(prompt.system.contains("dogfooding this autocomplete tool"))
+        #expect(prompt.system.contains("Prefer concrete continuations about testing"))
     }
 
     @Test("Word completion prompt asks for only the current word suffix")
@@ -51,6 +134,15 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("missing suffix"))
         #expect(prompt.system.contains("No spaces"))
         #expect(prompt.user.hasSuffix("Suffix:"))
+    }
+
+    @Test("Prompt clamps oversized visible word requests")
+    func promptClampsOversizedVisibleWordRequests() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 20)
+        let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
+
+        #expect(builder.maxVisibleWords == 7)
+        #expect(prompt.system.contains("next 7 words or fewer"))
     }
 
     @Test("Prompt trims long context from the left")
@@ -124,5 +216,14 @@ struct CompletionPromptBuilderTests {
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "Can we make this work."))
 
         #expect(prompt.user.contains("Can we make this work."))
+    }
+
+    @Test("Prompt starts next sentence after sentence boundary")
+    func promptStartsNextSentenceAfterSentenceBoundary() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "Can we make this work."))
+
+        #expect(prompt.system.contains("Start the next sentence naturally"))
+        #expect(!prompt.system.contains("Continue the current sentence"))
     }
 }

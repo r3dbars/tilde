@@ -59,5 +59,17 @@ struct DiagnosticValueRedactorTests {
                 value: "1"
             ) == "1"
         )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "suggestionPanelRect",
+                value: "x=100,y=200,w=120,h=22"
+            ) == "x=100,y=200,w=120,h=22"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "suggestionPanelFrame",
+                value: "x=100,y=200,w=120,h=22"
+            ) == "x=100,y=200,w=120,h=22"
+        )
     }
 }
