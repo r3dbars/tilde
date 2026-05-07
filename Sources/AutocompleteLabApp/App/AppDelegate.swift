@@ -818,6 +818,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "app": baseline.profile.bundleIdentifier,
                     "result": String(describing: result),
                     "acceptedChars": String(acceptedText.count),
+                    "actualInsertionMode": baseline.verificationInsertionMode.rawValue,
+                    "profileInsertionMode": baseline.profile.insertionMode.rawValue,
                     "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                     "currentBeforeChars": String(context.textBeforeCursor.count)
                 ]
