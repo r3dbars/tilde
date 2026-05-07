@@ -41,6 +41,17 @@ struct KeyboardActionRouterTests {
         #expect(router.action(for: .backtick, hasVisibleSuggestion: true) == .acceptAllVisible)
     }
 
+    @Test("Full accept can be disabled")
+    func fullAcceptCanBeDisabled() {
+        let router = KeyboardActionRouter(
+            shortcutConfiguration: KeyboardShortcutConfiguration(acceptAllShortcut: .disabled)
+        )
+
+        #expect(router.action(for: .tab, hasVisibleSuggestion: true) == .acceptNextWord)
+        #expect(router.action(for: .backtick, hasVisibleSuggestion: true) == .passThrough)
+        #expect(router.action(for: .optionTab, hasVisibleSuggestion: true) == .passThrough)
+    }
+
     @Test("Escape dismisses only when a suggestion is visible")
     func escapeDismissesOnlyWhenSuggestionIsVisible() {
         let router = KeyboardActionRouter()

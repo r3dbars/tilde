@@ -453,8 +453,12 @@ struct SettingsWindowControllerStateTests {
         let shortcuts = SettingsKeyboardShortcutState(acceptAllShortcut: .optionTab)
 
         #expect(shortcuts.statusText == "Shortcuts: Tab next word | Option-Tab all")
-        #expect(shortcuts.pickerTitles == ["Backtick", "Option-Tab"])
+        #expect(shortcuts.pickerTitles == ["Backtick", "Option-Tab", "Off"])
         #expect(shortcuts.selectedShortcutTitle == "Option-Tab")
+        #expect(
+            SettingsKeyboardShortcutState(acceptAllShortcut: .disabled).statusText
+                == "Shortcuts: Tab next word | full accept off"
+        )
     }
 
     @Test("Suggestion control state exposes quiet normal eager choices")
