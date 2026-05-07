@@ -147,7 +147,7 @@ cheap, even if the model output is good.
 - [x] Synthetic impossible carets cannot score high confidence.
 - [x] Synthetic caret anchors are labeled as synthetic in traces.
 - [x] First code pass: inline ghost text now clips near the caret instead of sliding left to stay inside a box.
-- [x] First code pass: too-narrow inline frames now suppress the visible suggestion instead of leaving an invisible Tab-capturing ghost.
+- [x] First code pass: too-narrow inline frames now use mirror fallback when available, otherwise suppress instead of leaving an invisible Tab-capturing ghost.
 - [x] Async model and streaming suggestions refresh the focused context before display and suppress if app, field, or text is stale.
 - [x] Keyboard capture now starts only after the panel frame is proven usable.
 - [x] Trace eval now surfaces panel-frame failures, inline clipping, placement health reasons, and screenshot-file evidence.
