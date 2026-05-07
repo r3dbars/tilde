@@ -105,11 +105,18 @@
     },
     {
       "surface": "Apple Notes body",
-      "status": "pending",
-      "screenshots": [],
-      "gaps": [
-        "Needs separate notes-body manual-gated screenshot and accept proof."
-      ]
+      "status": "complete",
+      "manualSmoke": {
+        "app": "Notes",
+        "bundle": "com.apple.Notes",
+        "proof": "notes-body",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/notes-body.png"
+      ],
+      "gaps": []
     },
     {
       "surface": "Apple Notes checklist",

@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wordBoundaryDelayMilliseconds: 0,
         pauseDelayMilliseconds: 15
     )
+    private let suggestionCadenceResetPolicy = SuggestionCadenceResetPolicy()
     private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
     private var completionLengthConfiguration: CompletionLengthConfiguration {
         modelRuntimeBundle.lengthConfiguration
@@ -25,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var engine: any CompletionEngine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
     private let keyboardCapturePolicy = KeyboardCapturePolicy()
+    private let keyboardEventTapIdleStopPolicy = KeyboardEventTapIdleStopPolicy()
     private let insertionVerification = InsertionVerification()
     private let insertionRetryPolicy = InsertionRetryPolicy()
     private let insertionVerificationTimingPolicy = InsertionVerificationTimingPolicy()
@@ -40,6 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let screenshotTraceCapturePolicy = ScreenshotTraceCapturePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
     private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
+    private let focusedTextAXHealthSuggestionVisibilityPolicy = FocusedTextAXHealthSuggestionVisibilityPolicy()
+    private let focusedTextPollingThrottleSuggestionVisibilityPolicy =
+        FocusedTextPollingThrottleSuggestionVisibilityPolicy()
     private let focusPollingCadencePolicy = FocusPollingCadencePolicy()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
@@ -800,13 +805,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentSnapshot: snapshot,
             appBundleIdentifier: frontmostApp.bundleIdentifier
         )
-        hideStaleSuggestionIfNeeded(
-            newTextBeforeCursor: context.textBeforeCursor,
-            fieldIdentity: fieldIdentity
-        )
+        if advanceVisibleSuggestionForTypingProgressIfNeeded(
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            snapshot: snapshot
+        ) {
+            return
+        }
 
         lastTextSnapshot = snapshot
         invalidatePendingSuggestionRequest()
+        if suggestionCadenceResetPolicy.shouldResetLastRequestedText(
+            previousTextBeforeCursor: previousSnapshot?.textBeforeCursor,
+            currentTextBeforeCursor: context.textBeforeCursor,
+            selectedTextLength: context.selectedTextLength
+        ) {
+            lastRequestedTextBeforeCursor = nil
+        }
 
         guard profile.canPresentSuggestions else {
             setSuggestionDecision("Blocked: profile diagnostics only")
@@ -1093,10 +1109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "remainingMilliseconds": String(cooldown.remainingMilliseconds)
                 ]
             )
-            invalidatePendingSuggestionRequest()
-            if suggestionSession.hasVisibleSuggestion {
-                hideSuggestion(reason: "focused-text-ax-health-\(cooldown.reason.rawValue)")
-            }
+            handleFocusedTextAXHealthCooldown(cooldown, source: "poll")
             setSuggestionDecision("Waiting: AX cooldown")
             return false
         }
@@ -1129,12 +1142,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "hasContext": String(result.context != nil)
             ]
         )
-        invalidatePendingSuggestionRequest()
-        if suggestionSession.hasVisibleSuggestion {
-            hideSuggestion(reason: "focused-text-ax-health-\(cooldown.reason.rawValue)")
-        }
+        handleFocusedTextAXHealthCooldown(cooldown, source: "read")
         setSuggestionDecision("Waiting: AX cooldown")
         return true
+    }
+
+    private func handleFocusedTextAXHealthCooldown(
+        _ cooldown: FocusedTextAXHealthCooldown,
+        source: String
+    ) {
+        invalidatePendingSuggestionRequest()
+        guard suggestionSession.hasVisibleSuggestion else {
+            return
+        }
+
+        if focusedTextAXHealthSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
+            during: cooldown,
+            currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+            currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
+            currentFieldIdentity: currentFieldIdentity,
+            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown
+        ) {
+            hideSuggestion(reason: "focused-text-ax-health-\(cooldown.reason.rawValue)")
+            return
+        }
+
+        updateKeyboardEventTapSnapshot()
+        DiagnosticsLog.shared.record(
+            "focused-text-ax-health-suggestion-preserved",
+            metadata: [
+                "app": cooldown.bundleIdentifier,
+                "reason": cooldown.reason.rawValue,
+                "source": source,
+                "remainingMilliseconds": String(cooldown.remainingMilliseconds)
+            ]
+        )
     }
 
     private func recordFocusedTextPollLatency(_ durationMilliseconds: Int) {
@@ -1204,7 +1246,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         invalidatePendingSuggestionRequest()
         if suggestionSession.hasVisibleSuggestion {
-            hideSuggestion(reason: "focused-text-poll-\(reason.rawValue)")
+            let frontmostBundleIdentifier = accessibilityClient.frontmostApplication()?.bundleIdentifier
+            if focusedTextPollingThrottleSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
+                currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+                currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
+                currentFieldIdentity: currentFieldIdentity,
+                frontmostBundleIdentifier: frontmostBundleIdentifier,
+                isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown
+            ) {
+                hideSuggestion(reason: "focused-text-poll-\(reason.rawValue)")
+            } else {
+                updateKeyboardEventTapSnapshot()
+                DiagnosticsLog.shared.record(
+                    "focused-text-poll-suggestion-preserved",
+                    metadata: [
+                        "app": currentSuggestionAppBundleIdentifier ?? "",
+                        "frontmostApp": frontmostBundleIdentifier ?? "",
+                        "reason": reason.rawValue,
+                        "pauseMilliseconds": String(recommendation.pauseMilliseconds)
+                    ]
+                )
+            }
         }
         DiagnosticsLog.shared.record(
             "focused-text-poll-throttled",
@@ -1435,8 +1497,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @discardableResult
     private func startKeyboardEventTapIfPossible() -> Bool {
-        keyboardEventTapStopTask?.cancel()
-        keyboardEventTapStopTask = nil
+        cancelKeyboardEventTapIdleStop()
 
         guard keyboardEventTap == nil else {
             return true
@@ -1517,8 +1578,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? await Task.sleep(for: .milliseconds(idleStopDelayMilliseconds))
             guard !Task.isCancelled,
                   let self,
-                  !self.suggestionSession.hasVisibleSuggestion,
-                  !self.acceptedInsertionUndoIsActive() else {
+                  self.keyboardEventTapIdleStopPolicy.shouldStopKeyboardCapture(
+                      hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion,
+                      isSuggestionPanelVisible: self.suggestionPanel.isVisible,
+                      hasPendingAcceptedInsertionUndo: self.acceptedInsertionUndoIsActive()
+                  ) else {
                 return
             }
 
@@ -1526,9 +1590,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func stopKeyboardEventTapNow(reason: String) {
+    private func cancelKeyboardEventTapIdleStop() {
         keyboardEventTapStopTask?.cancel()
         keyboardEventTapStopTask = nil
+    }
+
+    private func stopKeyboardEventTapNow(reason: String) {
+        cancelKeyboardEventTapIdleStop()
 
         guard let keyboardEventTap else {
             return
@@ -3060,6 +3128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextStyle = context.textStyle
         lastRenderMode = placement.renderMode
         lastCompatibilityLearningTrustContext = visualTrustContext
+        cancelKeyboardEventTapIdleStop()
         guard let panelRect = suggestionPanel.show(
             text: suggestion.visibleText,
             near: placement.anchorRect,
@@ -3125,6 +3194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion(reason: "keyboard-capture-unavailable")
             return
         }
+        keyboardEventTap?.suppressPassthroughObservation(for: 0.35)
 
         let screenshotCapture = captureTraceScreenshot(
             around: [
@@ -3844,6 +3914,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         currentSuggestionDisplayedText = suggestion.visibleText
+        cancelKeyboardEventTapIdleStop()
         guard suggestionPanel.show(
             text: suggestion.visibleText,
             near: caretRect,
@@ -4043,27 +4114,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func hideStaleSuggestionIfNeeded(
-        newTextBeforeCursor: String,
-        fieldIdentity: FocusedFieldIdentity
-    ) {
+    private func advanceVisibleSuggestionForTypingProgressIfNeeded(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        snapshot: FocusedTextSnapshot
+    ) -> Bool {
         guard suggestionSession.hasVisibleSuggestion,
               fieldIdentity == currentFieldIdentity,
               let originalTextBeforeCursor = currentSuggestionTextBeforeCursor,
               let displayedText = currentSuggestionDisplayedText,
-              newTextBeforeCursor.hasPrefix(originalTextBeforeCursor),
-              newTextBeforeCursor != originalTextBeforeCursor else {
-            return
+              context.textBeforeCursor.hasPrefix(originalTextBeforeCursor),
+              context.textBeforeCursor != originalTextBeforeCursor else {
+            return false
         }
 
         let progress = suggestionTypingProgressPolicy.progress(
             originalTextBeforeCursor: originalTextBeforeCursor,
             displayedText: displayedText,
-            newTextBeforeCursor: newTextBeforeCursor
+            newTextBeforeCursor: context.textBeforeCursor
         )
 
-        if case .typedThroughVisiblePrefix = progress {
-            hideSuggestion(reason: "typed-through-visible-prefix")
+        if case let .typedThroughVisiblePrefix(typedSuffix) = progress {
+            guard suggestionSession.commitTypedVisiblePrefix(typedSuffix) else {
+                return false
+            }
+
+            lastTextSnapshot = snapshot
+            invalidatePendingSuggestionRequest()
+            currentSuggestionTextBeforeCursor = context.textBeforeCursor
+            setSuggestionDecision("Shown: typing through suggestion")
+            recordSuggestionEvent(
+                "suggestion-typed-through",
+                context: context,
+                profile: profile,
+                metadata: [
+                    "reason": "visible-prefix-advanced",
+                    "typedSuffixChars": String(typedSuffix.count),
+                    "remainingVisibleChars": String(suggestionSession.visibleSuggestion?.visibleText.count ?? 0)
+                ]
+            )
+            keyboardEventTap?.suppressPassthroughObservation(for: 0.35)
+            repositionVisibleSuggestion(context: context, profile: profile)
+            return true
         } else if case .typedOver = progress {
             suggestionRepetitionSuppressor.recordMiss(
                 displayedText,
@@ -4072,6 +4165,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             hideSuggestion(reason: "typed-over")
         }
+
+        return false
     }
 
     private func hideSuggestion(reason: String = "hidden") {

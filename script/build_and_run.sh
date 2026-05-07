@@ -50,6 +50,22 @@ unregister_stale_app_bundles() {
   done < <(stale_app_bundles)
 }
 
+quarantine_stale_app_bundles() {
+  local bundle
+  local disabled
+  local timestamp
+  timestamp="$(date +%Y%m%d%H%M%S)"
+
+  while IFS= read -r bundle; do
+    [[ -z "$bundle" || "$bundle" == "$APP_BUNDLE" ]] && continue
+    if [[ -x "$LSREGISTER" ]]; then
+      "$LSREGISTER" -u "$bundle" >/dev/null 2>&1 || true
+    fi
+    disabled="${bundle}.disabled-${timestamp}-$$"
+    mv "$bundle" "$disabled" >/dev/null 2>&1 || true
+  done < <(stale_app_bundles)
+}
+
 stop_running_apps() {
   local pid
   local service
@@ -117,7 +133,7 @@ print_running_apps() {
   done < <(running_app_pids)
 }
 
-unregister_stale_app_bundles
+quarantine_stale_app_bundles
 stop_running_apps
 
 find_signing_identity() {
@@ -268,7 +284,7 @@ fi
 
 open_app() {
   stop_running_apps
-  unregister_stale_app_bundles
+  quarantine_stale_app_bundles
 
   if [[ "${AUTOCOMPLETE_LAB_TRACE:-}" =~ ^(0|false|no|off)$ ]]; then
     launchctl setenv AUTOCOMPLETE_LAB_TRACE "$AUTOCOMPLETE_LAB_TRACE"
@@ -319,7 +335,7 @@ open_app() {
     if [[ -x "$LSREGISTER" ]]; then
       "$LSREGISTER" -f "$APP_BUNDLE" >/dev/null 2>&1 || true
     fi
-    /usr/bin/open -n -F -a "$APP_BUNDLE"
+    /usr/bin/open -n -F "$APP_BUNDLE"
   fi
 }
 
@@ -339,24 +355,36 @@ case "$MODE" in
     /usr/bin/log stream --info --style compact --predicate "subsystem == \"$BUNDLE_ID\""
     ;;
   --verify|verify)
-    open_app
-    for _ in {1..30}; do
-      if stale_bundle_is_running; then
-        echo "stale $APP_NAME process is running; expected $APP_BINARY" >&2
-        print_running_apps
-        exit 1
-      fi
-      if current_bundle_is_running; then
-        sleep 2
+    for attempt in {1..2}; do
+      open_app
+      for _ in {1..30}; do
         if stale_bundle_is_running; then
+          if [[ "$attempt" == "1" ]]; then
+            stop_running_apps
+            quarantine_stale_app_bundles
+            break
+          fi
           echo "stale $APP_NAME process is running; expected $APP_BINARY" >&2
           print_running_apps
           exit 1
         fi
-        current_bundle_is_running
-        exit 0
-      fi
-      sleep 1
+        if current_bundle_is_running; then
+          sleep "${AUTOCOMPLETE_LAB_VERIFY_STABILITY_SECONDS:-20}"
+          if stale_bundle_is_running; then
+            if [[ "$attempt" == "1" ]]; then
+              stop_running_apps
+              quarantine_stale_app_bundles
+              break
+            fi
+            echo "stale $APP_NAME process is running; expected $APP_BINARY" >&2
+            print_running_apps
+            exit 1
+          fi
+          current_bundle_is_running
+          exit 0
+        fi
+        sleep 1
+      done
     done
     exit 1
     ;;

@@ -130,7 +130,7 @@ case "$APP" in
     BUNDLE_ID="com.apple.TextEdit"
     DISPLAY_NAME="TextEdit"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
-    STEPS=$'- Open a disposable TextEdit document.\n- Type `Smoke proof feels inst`.\n- Wait for a suggestion.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the key above Tab for full visible accept and expect another `instant` completion.'
+    STEPS=$'- Open a disposable TextEdit document.\n- Type `Smoke proof feels inst`.\n- Wait for a suggestion.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.'
     ;;
   notes)
     BUNDLE_ID="com.apple.Notes"
@@ -157,17 +157,17 @@ case "$APP" in
       title)
         PROOF_LABEL="notes-title"
         SESSION_NAME="Notes title"
-        STEPS=$'- Open the disposable autocomplete smoke note.\n- Put the caret in the note title.\n- Type `Can we` in the title only.\n- Use Tab once, then the key above Tab for full visible accept.\n- Use --visual when screenshot-backed placement must be proven.'
+        STEPS=$'- Open the disposable autocomplete smoke note.\n- Put the caret in the note title.\n- Type `Smoke proof feels inst` in the title only.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
         ;;
       body)
         PROOF_LABEL="notes-body"
         SESSION_NAME="Notes body"
-        STEPS=$'- Open the disposable autocomplete smoke note.\n- Put `Autocomplete smoke` on the first body line.\n- Put the caret on the next body line and type `Can we`.\n- Use Tab once, then the key above Tab for full visible accept.\n- Use --visual when screenshot-backed placement must be proven.'
+        STEPS=$'- Open the disposable autocomplete smoke note.\n- Put `Autocomplete smoke` on the first body line.\n- Put the caret on the next body line and type `Smoke proof feels inst`.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
         ;;
       checklist)
         PROOF_LABEL="notes-checklist"
         SESSION_NAME="Notes checklist"
-        STEPS=$'- Open the disposable autocomplete smoke note.\n- Toggle Checklist and create a disposable checklist row.\n- Type `Can we` in that checklist row.\n- Use Tab once, then the key above Tab for full visible accept.\n- Use --visual when screenshot-backed placement must be proven.'
+        STEPS=$'- Open the disposable autocomplete smoke note.\n- Toggle Checklist and create a disposable checklist row.\n- Type `Smoke proof feels inst` in that checklist row.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
         ;;
       *)
         echo "unknown Notes surface: $NOTES_SURFACE" >&2
@@ -180,14 +180,14 @@ case "$APP" in
     BUNDLE_ID="md.obsidian"
     DISPLAY_NAME="Obsidian"
     EXPECTED_RENDER="floatingMirror"
-    STEPS=$'- Open a disposable Obsidian note.\n- Type a partial word like `dicta`.\n- If CodeMirror does not expose caret bounds, confirm no detached floating bubble appears.\n- If a real caret-bound suggestion appears, use Tab once, then the key above Tab for full visible accept.'
+    STEPS=$'- Open a disposable Obsidian note.\n- Type a partial word like `dicta`.\n- If CodeMirror does not expose caret bounds, confirm no detached floating bubble appears.\n- If a real caret-bound suggestion appears, use Tab once, then the configured full-accept shortcut.'
     ;;
   chrome)
     BUNDLE_ID="com.google.Chrome"
     DISPLAY_NAME="Chrome"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     PROOF_LABEL="${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-$PROOF_LABEL}"
-    STEPS=$'- Open a local fixture page with a textarea, contenteditable field, editor-like field, Monaco-like editor, ProseMirror-like editor, or chat-style composer.\n- Type `Smoke proof feels inst` in the focused field.\n- Confirm focus stays in the field.\n- Use Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the key above Tab for full visible accept and expect another `instant` completion.\n- For chat-like proof, prefer `script/real_app_smoke.sh chrome --fixture chat-like` so the no-submit guard is checked.'
+    STEPS=$'- Open a local fixture page with a textarea, contenteditable field, editor-like field, Monaco-like editor, ProseMirror-like editor, or chat-style composer.\n- Type `Smoke proof feels inst` in the focused field.\n- Confirm focus stays in the field.\n- Use Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- For chat-like proof, prefer `script/real_app_smoke.sh chrome --fixture chat-like` so the no-submit guard is checked.'
     ;;
   codex)
     BUNDLE_ID="com.openai.codex"
