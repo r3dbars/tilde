@@ -11,6 +11,8 @@ public struct DisplayScore: Equatable, Sendable {
     public let risk: Double
     public let repetition: Double
     public let instability: Double
+    public let acceptedAndKeptProbability: Double?
+    public let acceptedAndKeptSampleCount: Int
 
     public init(
         utility: Double,
@@ -19,7 +21,9 @@ public struct DisplayScore: Equatable, Sendable {
         userAffinity: Double,
         risk: Double,
         repetition: Double,
-        instability: Double
+        instability: Double,
+        acceptedAndKeptProbability: Double? = nil,
+        acceptedAndKeptSampleCount: Int = 0
     ) {
         self.utility = Self.component(utility)
         self.styleFit = Self.component(styleFit)
@@ -28,6 +32,8 @@ public struct DisplayScore: Equatable, Sendable {
         self.risk = Self.component(risk)
         self.repetition = Self.component(repetition)
         self.instability = Self.component(instability)
+        self.acceptedAndKeptProbability = acceptedAndKeptProbability.map(Self.component)
+        self.acceptedAndKeptSampleCount = max(0, acceptedAndKeptSampleCount)
     }
 
     public var rawScore: Double {
@@ -39,7 +45,7 @@ public struct DisplayScore: Equatable, Sendable {
     }
 
     public var traceMetadata: [String: String] {
-        [
+        var metadata = [
             "displayScoreUtility": Self.format(utility),
             "displayScoreStyleFit": Self.format(styleFit),
             "displayScoreContextFit": Self.format(contextFit),
@@ -50,6 +56,11 @@ public struct DisplayScore: Equatable, Sendable {
             "displayScoreRaw": Self.format(rawScore),
             "displayScoreFinal": Self.format(finalScore)
         ]
+        if let acceptedAndKeptProbability {
+            metadata["displayScoreAcceptedAndKeptProbability"] = Self.format(acceptedAndKeptProbability)
+            metadata["displayScoreAcceptedAndKeptSamples"] = String(acceptedAndKeptSampleCount)
+        }
+        return metadata
     }
 
     private static func component(_ value: Double) -> Double {
@@ -69,6 +80,7 @@ public enum DisplayScoreSuppressionReason: String, Equatable, Sendable {
     case highRisk = "high-risk"
     case highRepetition = "high-repetition"
     case highInstability = "high-instability"
+    case lowAcceptedAndKeptProbability = "low-accepted-and-kept-probability"
     case belowThreshold = "below-threshold"
 }
 
@@ -76,21 +88,28 @@ public struct DisplayScoreTrace: Equatable, Sendable {
     public let score: DisplayScore
     public let mode: CompletionRequestMode
     public let threshold: Double
+    public let acceptedAndKeptProbabilityThreshold: Double
 
     public init(
         score: DisplayScore,
         mode: CompletionRequestMode,
-        threshold: Double
+        threshold: Double,
+        acceptedAndKeptProbabilityThreshold: Double
     ) {
         self.score = score
         self.mode = mode
         self.threshold = threshold
+        self.acceptedAndKeptProbabilityThreshold = acceptedAndKeptProbabilityThreshold
     }
 
     public var metadata: [String: String] {
         var metadata = score.traceMetadata
         metadata["displayScoreMode"] = mode.rawValue
         metadata["displayScoreThreshold"] = DisplayScore.format(threshold)
+        if score.acceptedAndKeptProbability != nil {
+            metadata["displayScoreAcceptedAndKeptThreshold"] =
+                DisplayScore.format(acceptedAndKeptProbabilityThreshold)
+        }
         return metadata
     }
 }
@@ -147,6 +166,7 @@ public struct DisplayScorePolicy: Equatable, Sendable {
     public let highRiskThreshold: Double
     public let highRepetitionThreshold: Double
     public let highInstabilityThreshold: Double
+    public let minimumAcceptedAndKeptSamples: Int
 
     public init(
         wordCompletionThreshold: Double = 0.60,
@@ -154,7 +174,8 @@ public struct DisplayScorePolicy: Equatable, Sendable {
         sentenceContinuationThreshold: Double = 1.20,
         highRiskThreshold: Double = 0.85,
         highRepetitionThreshold: Double = 0.85,
-        highInstabilityThreshold: Double = 0.85
+        highInstabilityThreshold: Double = 0.85,
+        minimumAcceptedAndKeptSamples: Int = 6
     ) {
         self.wordCompletionThreshold = DisplayScore.bounded(
             wordCompletionThreshold,
@@ -171,6 +192,7 @@ public struct DisplayScorePolicy: Equatable, Sendable {
         self.highRiskThreshold = DisplayScore.bounded(highRiskThreshold, to: DisplayScore.componentBounds)
         self.highRepetitionThreshold = DisplayScore.bounded(highRepetitionThreshold, to: DisplayScore.componentBounds)
         self.highInstabilityThreshold = DisplayScore.bounded(highInstabilityThreshold, to: DisplayScore.componentBounds)
+        self.minimumAcceptedAndKeptSamples = max(1, minimumAcceptedAndKeptSamples)
     }
 
     public func threshold(for mode: CompletionRequestMode) -> Double {
@@ -191,7 +213,8 @@ public struct DisplayScorePolicy: Equatable, Sendable {
         let trace = DisplayScoreTrace(
             score: score,
             mode: mode,
-            threshold: threshold(for: mode)
+            threshold: threshold(for: mode),
+            acceptedAndKeptProbabilityThreshold: acceptedAndKeptProbabilityThreshold(for: mode)
         )
 
         if score.risk >= highRiskThreshold {
@@ -206,10 +229,27 @@ public struct DisplayScorePolicy: Equatable, Sendable {
             return .suppress(DisplayScoreSuppression(reason: .highInstability, trace: trace))
         }
 
+        if let acceptedAndKeptProbability = score.acceptedAndKeptProbability,
+           score.acceptedAndKeptSampleCount >= minimumAcceptedAndKeptSamples,
+           acceptedAndKeptProbability < trace.acceptedAndKeptProbabilityThreshold {
+            return .suppress(DisplayScoreSuppression(reason: .lowAcceptedAndKeptProbability, trace: trace))
+        }
+
         guard score.finalScore >= trace.threshold else {
             return .suppress(DisplayScoreSuppression(reason: .belowThreshold, trace: trace))
         }
 
         return .display(trace)
+    }
+
+    public func acceptedAndKeptProbabilityThreshold(for mode: CompletionRequestMode) -> Double {
+        switch mode {
+        case .wordCompletion:
+            return 0.20
+        case .phraseContinuation:
+            return 0.12
+        case .sentenceContinuation:
+            return 0.18
+        }
     }
 }

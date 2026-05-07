@@ -123,4 +123,47 @@ struct DisplayScorePolicyTests {
         #expect(sentenceDecision.metadata["displayScoreSuppressionReason"] == "below-threshold")
         #expect(sentenceDecision.metadata["displayScoreThreshold"] == "1.20")
     }
+
+    @Test("low accepted and kept probability suppresses only after enough evidence")
+    func lowAcceptedAndKeptProbabilitySuppressesOnlyAfterEnoughEvidence() {
+        let policy = DisplayScorePolicy(minimumAcceptedAndKeptSamples: 4)
+        let scoreWithoutEnoughEvidence = DisplayScore(
+            utility: 0.80,
+            styleFit: 0.60,
+            contextFit: 0.55,
+            userAffinity: 0.20,
+            risk: 0.05,
+            repetition: 0.05,
+            instability: 0.05,
+            acceptedAndKeptProbability: 0.01,
+            acceptedAndKeptSampleCount: 3
+        )
+        let scoreWithEnoughEvidence = DisplayScore(
+            utility: 0.80,
+            styleFit: 0.60,
+            contextFit: 0.55,
+            userAffinity: 0.20,
+            risk: 0.05,
+            repetition: 0.05,
+            instability: 0.05,
+            acceptedAndKeptProbability: 0.01,
+            acceptedAndKeptSampleCount: 4
+        )
+
+        let earlyDecision = policy.decision(
+            for: scoreWithoutEnoughEvidence,
+            mode: .phraseContinuation
+        )
+        let learnedDecision = policy.decision(
+            for: scoreWithEnoughEvidence,
+            mode: .phraseContinuation
+        )
+
+        #expect(earlyDecision.shouldDisplay)
+        #expect(!learnedDecision.shouldDisplay)
+        #expect(learnedDecision.metadata["displayScoreSuppressionReason"] == "low-accepted-and-kept-probability")
+        #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptProbability"] == "0.01")
+        #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptSamples"] == "4")
+        #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.12")
+    }
 }
