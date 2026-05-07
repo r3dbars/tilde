@@ -58,6 +58,11 @@ let package = Package(
             name: "AutocompleteLabCoreTests",
             dependencies: ["AutocompleteLabCore"],
             exclude: ["AGENTS.md"]
+        ),
+        .testTarget(
+            name: "AutocompleteLabAppTests",
+            dependencies: ["AutocompleteLabApp"],
+            exclude: ["AGENTS.md"]
         )
     ]
 )

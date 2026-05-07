@@ -14,14 +14,38 @@ struct SettingsCurrentAppState: Equatable {
 
     var statusText: String {
         guard bundleIdentifier != nil else {
-            return "App: none"
+            return "Current app: no supported app selected"
         }
 
         guard isSupported else {
-            return "App: \(displayName) unsupported"
+            return "Current app: \(displayName) is not on the test allowlist"
         }
 
-        return "App: \(displayName) \(isEnabled ? "on" : "off")"
+        return "Current app: \(displayName) is \(isEnabled ? "allowed" : "blocked")"
+    }
+
+    var detailText: String {
+        guard bundleIdentifier != nil else {
+            return "Open a supported writing app to control it here."
+        }
+
+        guard isSupported else {
+            return "Suggestions stay off until this app is added to the test allowlist."
+        }
+
+        if isEnabled {
+            return "On the test allowlist. Turn it off here if it gets annoying."
+        }
+
+        return "This app is in your blocked-app list."
+    }
+
+    var blockedAppsText: String {
+        if disabledAppCount == 0 {
+            return "Blocked apps: none"
+        }
+
+        return "Blocked apps: \(disabledAppCount)"
     }
 }
 
@@ -33,7 +57,21 @@ struct SettingsPrivacyState: Equatable {
     let tracePath: String
 
     var statusText: String {
-        "Privacy: traces \(tracingPaused ? "paused" : "on") | raw text \(rawContentTracingEnabled ? "on" : "off") | screenshots \(screenshotTracingEnabled ? "on" : "off")"
+        "Privacy: local diagnostics only"
+    }
+
+    var diagnosticsStatusText: String {
+        let traceState = tracingPaused ? "paused" : "recording"
+        let screenshotState = screenshotTracingEnabled ? "screenshots on" : "screenshots off"
+        return "Diagnostics: performance + placement traces \(traceState), \(screenshotState)"
+    }
+
+    var contentStatusText: String {
+        "Raw text capture: \(rawContentTracingEnabled ? "on" : "off")"
+    }
+
+    var pathText: String {
+        "Logs: \(diagnosticsPath) | Traces: \(tracePath)"
     }
 }
 
@@ -59,17 +97,36 @@ final class SettingsWindowController: NSObject {
     private let runtimeTargetLabel = NSTextField(labelWithString: "")
     private let modelDirectoryLabel = NSTextField(labelWithString: "")
     private let controlLabel = NSTextField(labelWithString: "")
-    private let togglePauseButton = NSButton(title: "Pause Suggestions", target: nil, action: nil)
+    private let togglePauseButton = NSButton(checkboxWithTitle: "Suggestions", target: nil, action: nil)
     private let runtimeActionButton = NSButton(title: "Open Model Folder", target: nil, action: nil)
     private let currentAppLabel = NSTextField(labelWithString: "")
+    private let currentAppDetailLabel = NSTextField(labelWithString: "")
     private let disabledAppsLabel = NSTextField(labelWithString: "")
-    private let toggleCurrentAppButton = NSButton(title: "Disable Current App", target: nil, action: nil)
-    private let enableAllAppsButton = NSButton(title: "Enable All Apps", target: nil, action: nil)
+    private let toggleCurrentAppButton = NSButton(
+        checkboxWithTitle: "Allow suggestions in this app",
+        target: nil,
+        action: nil
+    )
+    private let enableAllAppsButton = NSButton(title: "Clear Blocked Apps", target: nil, action: nil)
     private let privacyLabel = NSTextField(labelWithString: "")
+    private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
+    private let rawContentStatusLabel = NSTextField(labelWithString: "")
     private let privacyPathLabel = NSTextField(labelWithString: "")
-    private let toggleTracingButton = NSButton(title: "Pause Tracing", target: nil, action: nil)
-    private let toggleRawTraceButton = NSButton(title: "Raw Text Off", target: nil, action: nil)
-    private let toggleScreenshotTraceButton = NSButton(title: "Screenshots Off", target: nil, action: nil)
+    private let toggleTracingButton = NSButton(
+        checkboxWithTitle: "Performance and placement traces",
+        target: nil,
+        action: nil
+    )
+    private let toggleRawTraceButton = NSButton(
+        checkboxWithTitle: "Include raw text in traces",
+        target: nil,
+        action: nil
+    )
+    private let toggleScreenshotTraceButton = NSButton(
+        checkboxWithTitle: "Capture placement screenshots",
+        target: nil,
+        action: nil
+    )
     private let deleteLocalLogsButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
     private let shortcutLabel = NSTextField(labelWithString: "")
     private let cycleAcceptAllShortcutButton = NSButton(title: "Use Option-Tab", target: nil, action: nil)
@@ -112,7 +169,7 @@ final class SettingsWindowController: NSObject {
         self.deleteLocalLogs = deleteLocalLogs
         self.cycleAcceptAllShortcut = cycleAcceptAllShortcut
 
-        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 520, height: 690))
+        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 720))
         contentView.material = .contentBackground
         contentView.blendingMode = .behindWindow
         contentView.state = .active
@@ -125,7 +182,7 @@ final class SettingsWindowController: NSObject {
         window.title = "Autocomplete Lab"
         window.contentView = contentView
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 520, height: 620)
+        window.contentMinSize = NSSize(width: 540, height: 660)
         window.isMovableByWindowBackground = true
 
         super.init()
@@ -174,8 +231,8 @@ final class SettingsWindowController: NSObject {
     ) {
         let guidance = RuntimeReadinessGuidance(report: runtimeReport)
         permissionLabel.stringValue = isTrusted ? "Accessibility: on" : "Accessibility: needed"
-        controlLabel.stringValue = suggestionsPaused ? "Suggestions: paused" : "Suggestions: on"
-        togglePauseButton.title = suggestionsPaused ? "Resume Suggestions" : "Pause Suggestions"
+        controlLabel.stringValue = suggestionsPaused ? "Suggestions: paused" : "Suggestions: ready"
+        togglePauseButton.state = suggestionsPaused ? .off : .on
         runtimeLabel.stringValue = "Local model: \(runtimeReport.summary)"
         runtimeDetailLabel.stringValue = runtimeReport.detail ?? ""
         runtimeDetailLabel.isHidden = runtimeReport.detail == nil
@@ -186,19 +243,18 @@ final class SettingsWindowController: NSObject {
         runtimeTargetLabel.stringValue = "Runtime target: \(runtimeTargetSummary)"
         modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
         currentAppLabel.stringValue = currentApp.statusText
-        if currentApp.isSupported {
-            toggleCurrentAppButton.title = currentApp.isEnabled ? "Disable Current App" : "Enable Current App"
-        } else {
-            toggleCurrentAppButton.title = "Unsupported App"
-        }
+        currentAppDetailLabel.stringValue = currentApp.detailText
+        toggleCurrentAppButton.state = currentApp.isEnabled ? .on : .off
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
-        disabledAppsLabel.stringValue = "Disabled apps: \(currentApp.disabledAppCount)"
+        disabledAppsLabel.stringValue = currentApp.blockedAppsText
         enableAllAppsButton.isEnabled = currentApp.disabledAppCount > 0
         privacyLabel.stringValue = privacy.statusText
-        privacyPathLabel.stringValue = "Logs: \(privacy.diagnosticsPath) | Traces: \(privacy.tracePath)"
-        toggleTracingButton.title = privacy.tracingPaused ? "Resume Tracing" : "Pause Tracing"
-        toggleRawTraceButton.title = privacy.rawContentTracingEnabled ? "Raw Text On" : "Raw Text Off"
-        toggleScreenshotTraceButton.title = privacy.screenshotTracingEnabled ? "Screenshots On" : "Screenshots Off"
+        diagnosticsStatusLabel.stringValue = privacy.diagnosticsStatusText
+        rawContentStatusLabel.stringValue = privacy.contentStatusText
+        privacyPathLabel.stringValue = privacy.pathText
+        toggleTracingButton.state = privacy.tracingPaused ? .off : .on
+        toggleRawTraceButton.state = privacy.rawContentTracingEnabled ? .on : .off
+        toggleScreenshotTraceButton.state = privacy.screenshotTracingEnabled ? .on : .off
         shortcutLabel.stringValue = keyboardShortcuts.statusText
         cycleAcceptAllShortcutButton.title = keyboardShortcuts.cycleButtonTitle
         firstRunLabel.stringValue = onboardingText(
@@ -212,7 +268,7 @@ final class SettingsWindowController: NSObject {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 12
+        stack.spacing = 14
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         let title = NSTextField(labelWithString: "Autocomplete Lab")
@@ -220,33 +276,29 @@ final class SettingsWindowController: NSObject {
         permissionLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         runtimeLabel.lineBreakMode = .byWordWrapping
         runtimeLabel.maximumNumberOfLines = 0
-        runtimeLabel.preferredMaxLayoutWidth = 360
+        runtimeLabel.preferredMaxLayoutWidth = 470
         runtimeDetailLabel.font = NSFont.systemFont(ofSize: 12)
-        runtimeDetailLabel.textColor = .secondaryLabelColor
-        runtimeDetailLabel.lineBreakMode = .byWordWrapping
-        runtimeDetailLabel.maximumNumberOfLines = 0
-        runtimeDetailLabel.preferredMaxLayoutWidth = 360
+        configureSecondaryLabel(runtimeDetailLabel)
         runtimeActionLabel.font = NSFont.systemFont(ofSize: 12)
         runtimeActionLabel.textColor = .secondaryLabelColor
-        runtimeTargetLabel.textColor = .secondaryLabelColor
-        runtimeTargetLabel.lineBreakMode = .byWordWrapping
-        runtimeTargetLabel.maximumNumberOfLines = 0
-        runtimeTargetLabel.preferredMaxLayoutWidth = 360
+        configureSecondaryLabel(runtimeTargetLabel)
         modelDirectoryLabel.lineBreakMode = .byTruncatingMiddle
         modelDirectoryLabel.maximumNumberOfLines = 1
-        modelDirectoryLabel.preferredMaxLayoutWidth = 360
+        modelDirectoryLabel.preferredMaxLayoutWidth = 470
         controlLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         firstRunLabel.font = NSFont.systemFont(ofSize: 12)
-        firstRunLabel.textColor = .secondaryLabelColor
-        firstRunLabel.lineBreakMode = .byWordWrapping
-        firstRunLabel.maximumNumberOfLines = 0
-        firstRunLabel.preferredMaxLayoutWidth = 390
+        configureSecondaryLabel(firstRunLabel)
+        currentAppLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(currentAppDetailLabel)
+        configureSecondaryLabel(disabledAppsLabel)
         privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(diagnosticsStatusLabel)
+        configureSecondaryLabel(rawContentStatusLabel)
         privacyPathLabel.font = NSFont.systemFont(ofSize: 11)
         privacyPathLabel.textColor = .secondaryLabelColor
         privacyPathLabel.lineBreakMode = .byTruncatingMiddle
         privacyPathLabel.maximumNumberOfLines = 1
-        privacyPathLabel.preferredMaxLayoutWidth = 420
+        privacyPathLabel.preferredMaxLayoutWidth = 470
         shortcutLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
 
         let requestButton = NSButton(title: "Request Access", target: self, action: #selector(requestAccessibility))
@@ -259,25 +311,25 @@ final class SettingsWindowController: NSObject {
         openSettingsButton.bezelStyle = .rounded
         togglePauseButton.target = self
         togglePauseButton.action = #selector(togglePause)
-        togglePauseButton.bezelStyle = .rounded
+        togglePauseButton.toolTip = "Turns suggestions on or off immediately."
         runtimeActionButton.target = self
         runtimeActionButton.action = #selector(runRuntimeAction)
         runtimeActionButton.bezelStyle = .rounded
         toggleCurrentAppButton.target = self
         toggleCurrentAppButton.action = #selector(toggleCurrentAppControl)
-        toggleCurrentAppButton.bezelStyle = .rounded
+        toggleCurrentAppButton.toolTip = "Adds or removes the current app from your blocked-app list."
         enableAllAppsButton.target = self
         enableAllAppsButton.action = #selector(enableAllAppsControl)
         enableAllAppsButton.bezelStyle = .rounded
         toggleTracingButton.target = self
         toggleTracingButton.action = #selector(toggleTracingControl)
-        toggleTracingButton.bezelStyle = .rounded
+        toggleTracingButton.toolTip = "Keeps local performance and placement events available for debugging."
         toggleRawTraceButton.target = self
         toggleRawTraceButton.action = #selector(toggleRawTraceControl)
-        toggleRawTraceButton.bezelStyle = .rounded
+        toggleRawTraceButton.toolTip = "Off by default. Turn on only when you need local raw-text debugging."
         toggleScreenshotTraceButton.target = self
         toggleScreenshotTraceButton.action = #selector(toggleScreenshotTraceControl)
-        toggleScreenshotTraceButton.bezelStyle = .rounded
+        toggleScreenshotTraceButton.toolTip = "Captures local screenshots for placement debugging."
         deleteLocalLogsButton.target = self
         deleteLocalLogsButton.action = #selector(deleteLocalLogsControl)
         deleteLocalLogsButton.bezelStyle = .rounded
@@ -297,33 +349,69 @@ final class SettingsWindowController: NSObject {
 
         [
             title,
-            permissionLabel,
-            requestButton,
-            openSettingsButton,
-            runtimeLabel,
-            runtimeDetailLabel,
-            runtimeActionLabel,
-            runtimeActionButton,
-            runtimeTargetLabel,
-            modelDirectoryLabel,
-            controlLabel,
-            togglePauseButton,
-            currentAppLabel,
-            toggleCurrentAppButton,
-            disabledAppsLabel,
-            enableAllAppsButton,
-            privacyLabel,
-            privacyPathLabel,
-            toggleTracingButton,
-            toggleRawTraceButton,
-            toggleScreenshotTraceButton,
-            deleteLocalLogsButton,
-            shortcutLabel,
-            cycleAcceptAllShortcutButton,
-            firstRunLabel,
-            screenRecording,
-            clipboardFallback,
-            note
+            makeSection(
+                title: "Access",
+                views: [
+                    permissionLabel,
+                    makeButtonRow([requestButton, openSettingsButton])
+                ]
+            ),
+            makeSection(
+                title: "Local Model",
+                views: [
+                    runtimeLabel,
+                    runtimeDetailLabel,
+                    runtimeActionLabel,
+                    makeButtonRow([runtimeActionButton]),
+                    runtimeTargetLabel,
+                    modelDirectoryLabel
+                ]
+            ),
+            makeSection(
+                title: "Suggestions",
+                views: [
+                    controlLabel,
+                    togglePauseButton,
+                    firstRunLabel
+                ]
+            ),
+            makeSection(
+                title: "Apps",
+                views: [
+                    currentAppLabel,
+                    currentAppDetailLabel,
+                    toggleCurrentAppButton,
+                    makeButtonRow([disabledAppsLabel, enableAllAppsButton])
+                ]
+            ),
+            makeSection(
+                title: "Privacy and Diagnostics",
+                views: [
+                    privacyLabel,
+                    diagnosticsStatusLabel,
+                    rawContentStatusLabel,
+                    toggleTracingButton,
+                    toggleRawTraceButton,
+                    toggleScreenshotTraceButton,
+                    privacyPathLabel,
+                    makeButtonRow([deleteLocalLogsButton])
+                ]
+            ),
+            makeSection(
+                title: "Keyboard",
+                views: [
+                    shortcutLabel,
+                    makeButtonRow([cycleAcceptAllShortcutButton])
+                ]
+            ),
+            makeSection(
+                title: "Safety",
+                views: [
+                    screenRecording,
+                    clipboardFallback,
+                    note
+                ]
+            )
         ].forEach {
             stack.addArrangedSubview($0)
         }
@@ -333,8 +421,39 @@ final class SettingsWindowController: NSObject {
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
             stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
-            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 24)
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 24),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -24)
         ])
+    }
+
+    private func configureSecondaryLabel(_ label: NSTextField, maxWidth: CGFloat = 470) {
+        label.textColor = .secondaryLabelColor
+        label.lineBreakMode = .byWordWrapping
+        label.maximumNumberOfLines = 0
+        label.preferredMaxLayoutWidth = maxWidth
+    }
+
+    private func makeSection(title: String, views: [NSView]) -> NSStackView {
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        titleLabel.textColor = .secondaryLabelColor
+
+        var arrangedSubviews: [NSView] = [titleLabel]
+        arrangedSubviews.append(contentsOf: views)
+
+        let section = NSStackView(views: arrangedSubviews)
+        section.orientation = .vertical
+        section.alignment = .leading
+        section.spacing = 5
+        return section
+    }
+
+    private func makeButtonRow(_ views: [NSView]) -> NSStackView {
+        let row = NSStackView(views: views)
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+        return row
     }
 
     private func onboardingText(
