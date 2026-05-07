@@ -178,7 +178,10 @@ struct CompatibilityProfileTests {
         let unsupported = store.supportStatus(for: "com.openai.atlas")
         #expect(unsupported.supportLevel == .unsupported)
         #expect(unsupported.userFacingSummary == "Unsupported: not tested yet")
-        #expect(unsupported.userFacingReason == "No compatibility profile yet.")
+        #expect(
+            unsupported.userFacingReason
+                == "No compatibility profile yet; broad unknown-app support stays off until proven apps feel safe."
+        )
         #expect(unsupported.userFacingUnavailableText == "Suggestions are intentionally off until this app is tested.")
         #expect(unsupported.menuText(appDisplayName: "Atlas", isEnabled: true) == "Atlas unsupported")
         #expect(!unsupported.canToggleSuggestions)

@@ -540,7 +540,7 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
         case .denylisted:
             return "Blocked because this kind of app can expose secrets or shell input."
         case .unsupported:
-            return "No compatibility profile yet."
+            return "No compatibility profile yet; broad unknown-app support stays off until proven apps feel safe."
         }
     }
 
