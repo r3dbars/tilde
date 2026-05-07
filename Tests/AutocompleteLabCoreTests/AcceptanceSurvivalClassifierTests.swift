@@ -74,4 +74,29 @@ struct AcceptanceSurvivalClassifierTests {
         #expect(measurement.survivalClass == .partiallyKept)
         #expect(measurement.isFinalAcceptedAndKept)
     }
+
+    @Test("Matches around the expected insertion offset instead of the whole field")
+    func matchesAroundExpectedInsertionOffset() {
+        let acceptedText = "make this better"
+        let before = String(repeating: "noise ", count: 80)
+        let after = String(repeating: " other", count: 80)
+        let current = before + acceptedText + after
+        let measurement = classifier.classifyAroundExpectedInsertion(
+            acceptedText: acceptedText,
+            currentFullText: current,
+            expectedInsertionUTF16Offset: before.utf16.count,
+            checkpoint: .tenSeconds,
+            radius: 24
+        )
+        let wrongOffset = classifier.classifyAroundExpectedInsertion(
+            acceptedText: acceptedText,
+            currentFullText: current,
+            expectedInsertionUTF16Offset: current.utf16.count,
+            checkpoint: .tenSeconds,
+            radius: 24
+        )
+
+        #expect(measurement.survivalClass == .exactKept)
+        #expect(wrongOffset.survivalClass == .rejectedAfterAccept)
+    }
 }

@@ -1069,6 +1069,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: baseline.fieldIdentity,
             requestMode: baseline.requestMode?.rawValue ?? "",
             acceptedText: acceptedText,
+            expectedInsertionUTF16Offset: baseline.previousTextBeforeCursor.utf16.count,
             acceptedAt: Date(),
             profile: baseline.profile,
             fieldKind: baseline.fieldKind,
@@ -1094,6 +1095,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     checkpoint: checkpoint
                 )
             }
+
+            finishAcceptanceSurvivalTracking(
+                acceptanceID: baseline.acceptanceID,
+                reason: "thirty-second-retention-expiry"
+            )
         }
     }
 
@@ -1130,9 +1136,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         checkpoint: AcceptanceSurvivalCheckpoint,
         currentTextWindow: String
     ) {
-        let firstPass = acceptanceSurvivalClassifier.classify(
+        let firstPass = acceptanceSurvivalClassifier.classifyAroundExpectedInsertion(
             acceptedText: tracker.acceptedText,
-            currentTextWindow: currentTextWindow,
+            currentFullText: currentTextWindow,
+            expectedInsertionUTF16Offset: tracker.expectedInsertionUTF16Offset,
             checkpoint: checkpoint,
             deletedWithinTwoSeconds: tracker.deletedWithinTwoSeconds
         )
@@ -1143,9 +1150,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             acceptanceSurvivalTrackers[tracker.acceptanceID] = updatedTracker
         }
 
-        let measurement = acceptanceSurvivalClassifier.classify(
+        let measurement = acceptanceSurvivalClassifier.classifyAroundExpectedInsertion(
             acceptedText: tracker.acceptedText,
-            currentTextWindow: currentTextWindow,
+            currentFullText: currentTextWindow,
+            expectedInsertionUTF16Offset: tracker.expectedInsertionUTF16Offset,
             checkpoint: checkpoint,
             firstEditDelayMilliseconds: firstPass.survivalClass == .exactKept
                 ? nil
@@ -1164,8 +1172,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "fieldKind": tracker.fieldKind.rawValue,
                 "fieldKindReason": tracker.fieldKindReason,
                 "acceptedChars": String(tracker.acceptedText.count),
-                "acceptedWords": String(tracker.acceptedText.split(whereSeparator: \.isWhitespace).count)
+                "acceptedWords": String(tracker.acceptedText.split(whereSeparator: \.isWhitespace).count),
+                "survivalMatchWindow": "expected-offset",
+                "expectedInsertionUTF16Offset": String(tracker.expectedInsertionUTF16Offset),
+                "retentionPolicy": "ram-only-30s-blur-10m-max",
+                "rawAcceptedTextDurable": "false"
             ]) { current, _ in current }
+            .merging(RawAutocompleteTraceLog.shared.survivalFingerprintMetadata(for: tracker.acceptedText)) { current, _ in current }
         )
 
         let annoyanceContext = AnnoyanceContext(
@@ -1183,7 +1196,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if checkpoint.isFinalMetricCheckpoint {
-            finishAcceptanceSurvivalTracking(acceptanceID: tracker.acceptanceID)
+            finishAcceptanceSurvivalTracking(
+                acceptanceID: tracker.acceptanceID,
+                reason: checkpoint == .fieldBlur ? "field-blur-finalized" : "thirty-second-finalized"
+            )
         }
     }
 
@@ -1205,10 +1221,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func finishAcceptanceSurvivalTracking(acceptanceID: String) {
+    private func finishAcceptanceSurvivalTracking(
+        acceptanceID: String,
+        reason: String
+    ) {
+        if let tracker = acceptanceSurvivalTrackers[acceptanceID] {
+            recordAcceptanceRetentionCleared(tracker: tracker, reason: reason)
+        }
         acceptanceSurvivalTasks[acceptanceID]?.cancel()
         acceptanceSurvivalTasks[acceptanceID] = nil
         acceptanceSurvivalTrackers[acceptanceID] = nil
+    }
+
+    private func recordAcceptanceRetentionCleared(
+        tracker: AcceptanceSurvivalTracker,
+        reason: String
+    ) {
+        RawAutocompleteTraceLog.shared.record(
+            type: .acceptanceRetentionCleared,
+            suggestionID: tracker.suggestionID,
+            appBundleIdentifier: tracker.appBundleIdentifier,
+            fieldIdentity: tracker.fieldIdentity.traceDescription,
+            requestMode: tracker.requestMode,
+            reason: reason,
+            metadata: [
+                "acceptanceID": tracker.acceptanceID,
+                "acceptedChars": String(tracker.acceptedText.count),
+                "acceptedWords": String(tracker.acceptedText.split(whereSeparator: \.isWhitespace).count),
+                "retentionCleared": "true",
+                "retentionPolicy": "ram-only-30s-blur-10m-max",
+                "maxRetentionSeconds": "600",
+                "rawAcceptedTextDurable": "false"
+            ].merging(RawAutocompleteTraceLog.shared.survivalFingerprintMetadata(for: tracker.acceptedText)) { current, _ in current }
+        )
     }
 
     private func cancelAcceptanceSurvivalTracking() {
@@ -2570,11 +2615,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showDiagnostics()
             return
         }
+        let survivalURL = RawAutocompleteTraceLog.shared.exportRedactedSurvivalReport()
 
         NSWorkspace.shared.open(reportURL)
         DiagnosticsLog.shared.record(
             "trace-report-exported",
-            metadata: ["path": reportURL.path]
+            metadata: [
+                "path": reportURL.path,
+                "survivalPath": survivalURL?.path ?? "unavailable"
+            ]
         )
         showDiagnostics()
     }
@@ -2696,6 +2745,7 @@ private struct AcceptanceSurvivalTracker: Equatable {
     let fieldIdentity: FocusedFieldIdentity
     let requestMode: String
     let acceptedText: String
+    let expectedInsertionUTF16Offset: Int
     let acceptedAt: Date
     let profile: CompatibilityProfile
     let fieldKind: AXFieldKind

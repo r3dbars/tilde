@@ -118,6 +118,7 @@ public struct CompatibilitySupportEvaluator: Equatable, Sendable {
         let caretFailureRate = Double(caretFailureCount) / Double(max(1, presented.count + caretFailureCount))
         let duplicateTextCount = insertionFailures.filter(isDuplicateTextEvent).count
         let wrongInsertionCount = insertionFailures.filter { !isDuplicateTextEvent($0) }.count
+        let acceptedThenDeletedCount = appEvents.filter(isAcceptedThenDeletedEvent).count
         let tabConflictCount = appEvents.filter(isTabConflictEvent).count
         let focusStealCount = appEvents.filter(isFocusStealEvent).count
         let sensitiveFieldShownCount = presented.filter(isSensitiveFieldPresentation).count
@@ -159,6 +160,9 @@ public struct CompatibilitySupportEvaluator: Equatable, Sendable {
         }
         if focusStealCount > 0 {
             hardBlockReasons.append("Focus stealing was detected.")
+        }
+        if acceptedThenDeletedCount > 0 {
+            hardBlockReasons.append("Accepted text was deleted within 2 seconds.")
         }
         if sensitiveFieldShownCount > 0 {
             hardBlockReasons.append("Suggestion was shown in a sensitive field kind.")
@@ -307,6 +311,15 @@ public struct CompatibilitySupportEvaluator: Equatable, Sendable {
             || event.reason.localizedCaseInsensitiveContains("focus steal")
             || event.outcome.localizedCaseInsensitiveContains("focus-steal")
             || event.outcome.localizedCaseInsensitiveContains("focus steal")
+    }
+
+    private func isAcceptedThenDeletedEvent(_ event: AutocompleteTraceEvent) -> Bool {
+        event.type == .acceptedTextEdited
+            && event.metadata["survivalClass"] == AcceptanceSurvivalClass.rejectedAfterAccept.rawValue
+            && (
+                (Int(event.metadata["firstEditDelayMs"] ?? "") ?? Int.max) <= 2_000
+                    || event.metadata["checkpoint"] == AcceptanceSurvivalCheckpoint.twoSeconds.rawValue
+            )
     }
 
     private func isSensitiveFieldPresentation(_ event: AutocompleteTraceEvent) -> Bool {
