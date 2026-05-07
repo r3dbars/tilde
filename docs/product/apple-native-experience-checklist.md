@@ -256,7 +256,7 @@ or unsupported.
 - [x] Every yellow app needs a visible fallback mode.
 - [x] Unsupported apps should explain why, not silently fail.
 - [x] The menu should show current app support status.
-- [ ] The app should not attempt broad unknown-app support until green apps feel native.
+- [x] The app should not attempt broad unknown-app support until green apps feel native.
 
 ## Category 5: Native macOS Visual Feel
 

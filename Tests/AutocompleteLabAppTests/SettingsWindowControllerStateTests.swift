@@ -116,7 +116,10 @@ struct SettingsWindowControllerStateTests {
         )
 
         #expect(unsupported.statusText == "Current app: Atlas is unsupported")
-        #expect(unsupported.detailText == "No compatibility profile yet. Suggestions are intentionally off until this app is tested.")
+        #expect(
+            unsupported.detailText
+                == "No compatibility profile yet; broad unknown-app support stays off until proven apps feel safe. Suggestions are intentionally off until this app is tested."
+        )
         #expect(unsupported.modeText == "Mode: not tested yet")
         #expect(unsupported.acceptanceText == "Acceptance: off here")
         #expect(
