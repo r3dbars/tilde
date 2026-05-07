@@ -100,13 +100,16 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
 public struct CompatibilityLearningAdjustment: Equatable, Sendable {
     public let profile: CompatibilityLearningProfile?
     public let effectiveRenderMode: SuggestionRenderMode
+    public let renderModeOverrideIgnored: Bool
 
     public init(
         profile: CompatibilityLearningProfile?,
-        effectiveRenderMode: SuggestionRenderMode
+        effectiveRenderMode: SuggestionRenderMode,
+        renderModeOverrideIgnored: Bool = false
     ) {
         self.profile = profile
         self.effectiveRenderMode = effectiveRenderMode
+        self.renderModeOverrideIgnored = renderModeOverrideIgnored
     }
 
     public var shouldCaptureScreenshot: Bool {
@@ -123,7 +126,8 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
 
         return CompatibilityLearningAdjustment(
             profile: profile,
-            effectiveRenderMode: effectiveRenderMode
+            effectiveRenderMode: effectiveRenderMode,
+            renderModeOverrideIgnored: renderModeOverrideIgnored
         )
     }
 
@@ -156,6 +160,7 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
             return [
                 "learningApplied": "false",
                 "learningRenderMode": effectiveRenderMode.rawValue,
+                "learningRenderModeOverrideIgnored": "false",
                 "learningVisualOffsetTrusted": "false"
             ]
         }
@@ -163,6 +168,7 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
         return [
             "learningApplied": String(profile.hasVisualAdjustment || profile.renderModeOverride != nil),
             "learningRenderMode": effectiveRenderMode.rawValue,
+            "learningRenderModeOverrideIgnored": String(renderModeOverrideIgnored),
             "learningXOffset": String(format: "%.1f", Double(profile.xOffset)),
             "learningYOffset": String(format: "%.1f", Double(profile.yOffset)),
             "learningVisualOffsetTrusted": String(profile.hasTrustedVisualAdjustment),
@@ -211,9 +217,35 @@ public struct CompatibilityLearningEngine: Equatable, Sendable {
         profileRenderMode: SuggestionRenderMode
     ) -> CompatibilityLearningAdjustment {
         let profile = profiles[bundleIdentifier]
+        let safeOverride = Self.safeRenderModeOverride(
+            profile?.renderModeOverride,
+            profileRenderMode: profileRenderMode
+        )
         return CompatibilityLearningAdjustment(
             profile: profile,
-            effectiveRenderMode: profile?.renderModeOverride ?? profileRenderMode
+            effectiveRenderMode: safeOverride ?? profileRenderMode,
+            renderModeOverrideIgnored: profile?.renderModeOverride != nil && safeOverride == nil
         )
+    }
+
+    private static func safeRenderModeOverride(
+        _ override: SuggestionRenderMode?,
+        profileRenderMode: SuggestionRenderMode
+    ) -> SuggestionRenderMode? {
+        guard let override else {
+            return nil
+        }
+
+        switch override {
+        case .floatingMirror:
+            switch profileRenderMode {
+            case .inlineAdjacent, .floatingMirror:
+                return .floatingMirror
+            case .disabled:
+                return nil
+            }
+        case .inlineAdjacent, .disabled:
+            return nil
+        }
     }
 }
