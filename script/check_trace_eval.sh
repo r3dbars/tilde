@@ -12,12 +12,14 @@ fi
 
 python3 - "$TRACE_PATH" "$START_LINE" "$REQUIRE_APP" <<'PY'
 import json
+import os
 import sys
 from collections import Counter, defaultdict
 
 path = sys.argv[1]
 start_line = int(sys.argv[2] or "0")
 require_app = sys.argv[3]
+require_geometry_proof = os.environ.get("AUTOCOMPLETE_LAB_TRACE_REQUIRE_GEOMETRY_PROOF", "1") != "0"
 events = []
 with open(path, "r", encoding="utf-8") as handle:
     for line_number, line in enumerate(handle, start=1):
@@ -57,6 +59,117 @@ latencies = sorted(
     for event in presented_by_id.values()
     if isinstance(event.get("latencyMilliseconds"), int)
 )
+allowed_anchor_sources = {"caret", "line", "field", "window", "none"}
+allowed_anchor_qualities = {"trusted", "usableFallback", "diagnosticsOnly", "invalid"}
+expected_reason_by_source = {
+    "caret": "caretBoundsTrusted",
+    "line": "lineBoundsFallback",
+    "field": "fieldBoundsFallback",
+    "window": "windowBoundsDiagnostics",
+    "none": {
+        "renderModeDisabled",
+        "missingAnchor",
+        "detachedAnchorDisallowed",
+        "windowAnchorDisallowed",
+    },
+}
+
+def metadata(event):
+    value = event.get("metadata")
+    return value if isinstance(value, dict) else {}
+
+def metadata_value(event, key):
+    value = metadata(event).get(key)
+    return value.strip() if isinstance(value, str) else ""
+
+def bool_metadata(event, key):
+    value = metadata_value(event, key).lower()
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    return None
+
+def has_anchor_metadata(event):
+    meta = metadata(event)
+    return any(
+        key in meta
+        for key in ("anchorSource", "anchorQuality", "anchorReason", "anchorCanPresent")
+    )
+
+def has_rect_metadata(event):
+    return bool(metadata_value(event, "anchorRect")) and metadata_value(event, "anchorRect") != "none"
+
+anchor_metadata_events = [event for event in events if has_anchor_metadata(event)]
+anchor_source_by_app = defaultdict(Counter)
+anchor_quality_by_app = defaultdict(Counter)
+anchor_reason_by_app = defaultdict(Counter)
+anchor_blocked_events = []
+geometry_failures = []
+
+for event in anchor_metadata_events:
+    app = event.get("appBundleIdentifier") or "unknown"
+    source = metadata_value(event, "anchorSource")
+    quality = metadata_value(event, "anchorQuality")
+    reason = metadata_value(event, "anchorReason")
+    if source:
+        anchor_source_by_app[app][source] += 1
+    if quality:
+        anchor_quality_by_app[app][quality] += 1
+    if reason:
+        anchor_reason_by_app[app][reason] += 1
+    if event.get("type") == "suggestionSuppressed" and (
+        quality == "invalid" or bool_metadata(event, "anchorCanPresent") is False
+    ):
+        anchor_blocked_events.append(event)
+
+def validate_presented_anchor(event):
+    suggestion_id = event.get("suggestionID") or "unknown"
+    app = event.get("appBundleIdentifier") or "unknown"
+    label = f"{app}/{suggestion_id}"
+    source = metadata_value(event, "anchorSource")
+    quality = metadata_value(event, "anchorQuality")
+    reason = metadata_value(event, "anchorReason")
+    can_present = bool_metadata(event, "anchorCanPresent")
+
+    if not source:
+        geometry_failures.append(f"{label}: missing anchorSource")
+    elif source not in allowed_anchor_sources:
+        geometry_failures.append(f"{label}: unknown anchorSource {source}")
+
+    if not quality:
+        geometry_failures.append(f"{label}: missing anchorQuality")
+    elif quality not in allowed_anchor_qualities:
+        geometry_failures.append(f"{label}: unknown anchorQuality {quality}")
+
+    if not reason:
+        geometry_failures.append(f"{label}: missing anchorReason")
+    elif source in expected_reason_by_source:
+        expected_reason = expected_reason_by_source[source]
+        if isinstance(expected_reason, set):
+            if reason not in expected_reason:
+                geometry_failures.append(f"{label}: {source} anchor used {reason}")
+        elif reason != expected_reason:
+            geometry_failures.append(f"{label}: {source} anchor used {reason}")
+
+    if can_present is not True:
+        geometry_failures.append(f"{label}: anchorCanPresent is not true")
+
+    if quality in {"invalid", "diagnosticsOnly"}:
+        geometry_failures.append(f"{label}: presented with {quality} anchor")
+
+    if source in {"none", "window"}:
+        geometry_failures.append(f"{label}: presented with {source} anchor")
+
+    if not has_rect_metadata(event):
+        geometry_failures.append(f"{label}: missing anchorRect")
+
+    if source == "caret" and bool_metadata(event, "hasCaretRect") is not True:
+        geometry_failures.append(f"{label}: caret anchor without hasCaretRect")
+    if source == "line" and bool_metadata(event, "hasTextLineRect") is not True:
+        geometry_failures.append(f"{label}: line anchor without hasTextLineRect")
+    if source == "field" and bool_metadata(event, "hasElementRect") is not True:
+        geometry_failures.append(f"{label}: field anchor without hasElementRect")
 
 def percentile(values, fraction):
     if not values:
@@ -69,6 +182,15 @@ if not presented:
     missing.append("suggestionPresented")
 if not latencies:
     missing.append("latencyMilliseconds")
+if require_geometry_proof:
+    for event in presented_by_id.values():
+        validate_presented_anchor(event)
+    if not anchor_metadata_events:
+        geometry_failures.append("no anchor metadata events")
+    if not presented_by_id:
+        geometry_failures.append("no presented suggestions to prove")
+    if geometry_failures:
+        missing.append("geometry proof (" + "; ".join(geometry_failures[:8]) + ")")
 
 accept_by_mode = defaultdict(lambda: [0, 0])
 accept_by_app = defaultdict(lambda: [0, 0])
@@ -197,6 +319,42 @@ actionable_suppressed_modes = Counter(event.get("requestMode") or "unknown" for 
 if actionable_suppressed_modes:
     for mode, count in actionable_suppressed_modes.most_common():
         print(f"  {mode}: {count}")
+else:
+    print("  none")
+print("Geometry proof:")
+print(f"  required: {'yes' if require_geometry_proof else 'no'}")
+print(f"  anchor metadata events: {len(anchor_metadata_events)}")
+print(f"  presented anchors checked: {len(presented_by_id) if require_geometry_proof else 0}")
+print(f"  blocked anchors observed: {len(anchor_blocked_events)}")
+print(f"  failures: {len(geometry_failures)}")
+print("Anchor source by app:")
+if anchor_source_by_app:
+    for app in sorted(anchor_source_by_app):
+        buckets = ", ".join(
+            f"{source}={count}"
+            for source, count in sorted(anchor_source_by_app[app].items())
+        )
+        print(f"  {app}: {buckets}")
+else:
+    print("  none")
+print("Anchor quality by app:")
+if anchor_quality_by_app:
+    for app in sorted(anchor_quality_by_app):
+        buckets = ", ".join(
+            f"{quality}={count}"
+            for quality, count in sorted(anchor_quality_by_app[app].items())
+        )
+        print(f"  {app}: {buckets}")
+else:
+    print("  none")
+print("Anchor reason by app:")
+if anchor_reason_by_app:
+    for app in sorted(anchor_reason_by_app):
+        buckets = ", ".join(
+            f"{reason}={count}"
+            for reason, count in sorted(anchor_reason_by_app[app].items())
+        )
+        print(f"  {app}: {buckets}")
 else:
     print("  none")
 print("Top repeated unaccepted suggestions:")

@@ -76,6 +76,8 @@ Use the command-line checker for repeatable proof:
 ./script/check_trace_eval.sh
 ```
 
+By default, this also enforces geometry proof for every shown suggestion: `anchorSource`, `anchorQuality`, `anchorReason`, `anchorCanPresent`, and a concrete anchor rect must be present and internally consistent. Set `AUTOCOMPLETE_LAB_TRACE_REQUIRE_GEOMETRY_PROOF=0` only when reviewing old trace slices.
+
 Compare local model latency after a trial launch:
 
 ```bash
