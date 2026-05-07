@@ -16,6 +16,7 @@ struct FocusedTextContext: Equatable, Sendable {
     let fingerprint: FocusedElementFingerprint
     let textBeforeCursor: String
     let textAfterCursor: String
+    let selectedText: String
     let selectedTextLength: Int
     let caretRect: CGRect?
     let elementRect: CGRect?
@@ -222,6 +223,7 @@ final class AccessibilityClient: @unchecked Sendable {
             text,
             utf16Offset: selectedRange?.location ?? text.utf16.count
         )
+        let selectedText = selectedText(in: focusedElement, fullText: text, selectedRange: selectedRange)
         let caretRect = selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
         }
@@ -264,6 +266,7 @@ final class AccessibilityClient: @unchecked Sendable {
             fingerprint: fingerprint,
             textBeforeCursor: textSlice.textBeforeCursor,
             textAfterCursor: textSlice.textAfterCursor,
+            selectedText: selectedText,
             selectedTextLength: selectedTextLength,
             caretRect: caretRect,
             elementRect: elementRect,
@@ -291,6 +294,7 @@ final class AccessibilityClient: @unchecked Sendable {
             fingerprint: fingerprint,
             textBeforeCursor: "",
             textAfterCursor: "",
+            selectedText: "",
             selectedTextLength: 0,
             caretRect: nil,
             elementRect: elementBounds(for: element),
@@ -739,6 +743,23 @@ final class AccessibilityClient: @unchecked Sendable {
         }
 
         return range
+    }
+
+    private func selectedText(in element: AXUIElement, fullText: String, selectedRange: CFRange?) -> String {
+        if let selectedText = copyAttribute(element, attribute: kAXSelectedTextAttribute) as? String,
+           !selectedText.isEmpty {
+            return selectedText
+        }
+
+        guard let selectedRange, selectedRange.length > 0 else {
+            return ""
+        }
+
+        let startOffset = max(0, min(selectedRange.location, fullText.utf16.count))
+        let endOffset = max(startOffset, min(startOffset + selectedRange.length, fullText.utf16.count))
+        let startIndex = String.Index(utf16Offset: startOffset, in: fullText)
+        let endIndex = String.Index(utf16Offset: endOffset, in: fullText)
+        return String(fullText[startIndex..<endIndex])
     }
 
     private func caretBounds(for element: AXUIElement, range: CFRange) -> CGRect? {

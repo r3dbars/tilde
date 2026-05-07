@@ -153,6 +153,7 @@ private func focusedTextContext(textBeforeCursor: String) -> FocusedTextContext 
         fingerprint: .init(),
         textBeforeCursor: textBeforeCursor,
         textAfterCursor: "",
+        selectedText: "",
         selectedTextLength: 0,
         caretRect: nil,
         elementRect: nil,

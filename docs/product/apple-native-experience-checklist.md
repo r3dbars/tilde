@@ -456,11 +456,11 @@ Native target: every claim has proof.
 
 ### Pass 4: Add Native Fallback Surface
 
-- [ ] Add command/context panel for uncertain apps.
-- [ ] Selected text or current field context feeds the panel.
-- [ ] One-click insert or copy.
-- [ ] Never slows normal typing.
-- [ ] This becomes the universal path when inline is unsafe.
+- [x] Add command/context panel for uncertain apps.
+- [x] Selected text or current field context feeds the panel.
+- [x] One-click insert or copy.
+- [x] Never slows normal typing.
+- [x] This becomes the universal path when inline is unsafe.
 
 ### Pass 5: Native Polish
 
