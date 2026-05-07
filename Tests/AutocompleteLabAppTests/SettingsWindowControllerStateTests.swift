@@ -179,4 +179,56 @@ struct SettingsWindowControllerStateTests {
         #expect(paused.contentStatusText == "Raw text capture: on temporarily")
         #expect(paused.screenRecordingPermissionText == nil)
     }
+
+    @Test("Onboarding copy explains first run without private app tests")
+    func onboardingCopyExplainsFirstRunWithoutPrivateAppTests() {
+        let missingPermission = SettingsOnboardingState(
+            isTrusted: false,
+            suggestionsPaused: false,
+            runtimeGuidance: RuntimeReadinessGuidance(
+                report: RuntimeReadinessReport(
+                    stage: .ready,
+                    summary: "ready",
+                    action: .none,
+                    isReady: true
+                )
+            )
+        )
+
+        #expect(
+            missingPermission.text
+                == "Allow Accessibility so the app can read the active text field, find the cursor, and insert only what you accept. Text stays on this Mac."
+        )
+
+        let paused = SettingsOnboardingState(
+            isTrusted: true,
+            suggestionsPaused: true,
+            runtimeGuidance: RuntimeReadinessGuidance(
+                report: RuntimeReadinessReport(
+                    stage: .ready,
+                    summary: "ready",
+                    action: .none,
+                    isReady: true
+                )
+            )
+        )
+
+        #expect(paused.text == "Paused. Resume when you want to test suggestions.")
+
+        let ready = SettingsOnboardingState(
+            isTrusted: true,
+            suggestionsPaused: false,
+            runtimeGuidance: RuntimeReadinessGuidance(
+                report: RuntimeReadinessReport(
+                    stage: .ready,
+                    summary: "ready",
+                    action: .none,
+                    isReady: true
+                )
+            )
+        )
+
+        #expect(ready.text == "Ready: open TextEdit, type a short sentence, press Tab for one word, or Esc to dismiss.")
+        #expect(!ready.text.localizedCaseInsensitiveContains("Notes"))
+    }
 }
