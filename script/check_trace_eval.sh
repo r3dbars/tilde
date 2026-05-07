@@ -188,7 +188,96 @@ if enforce_performance:
 
 placement_bands = Counter()
 self_healing_actions = Counter()
+placement_health_reasons = Counter()
+placement_self_healing_details = Counter()
 visual_evidence_count = 0
+panel_frame_issue_examples = []
+inline_clipping_examples = []
+stale_mismatch_examples = []
+
+def metadata_for(event):
+    metadata = event.get("metadata") or {}
+    return metadata if isinstance(metadata, dict) else {}
+
+def rect_from_text(value):
+    if value is None:
+        return None
+    value = str(value).strip()
+    if not value or value == "none":
+        return None
+    rect = {}
+    for part in value.split(","):
+        if "=" not in part:
+            continue
+        key, raw_number = part.split("=", 1)
+        try:
+            rect[key.strip()] = float(raw_number)
+        except ValueError:
+            return None
+    required = {"x", "y", "w", "h"}
+    if not required.issubset(rect):
+        return None
+    rect["maxX"] = rect["x"] + rect["w"]
+    rect["maxY"] = rect["y"] + rect["h"]
+    return rect
+
+def effective_render_mode(event):
+    metadata = metadata_for(event)
+    return (
+        metadata.get("placementEffectiveRenderMode")
+        or metadata.get("effectiveRenderMode")
+        or event.get("requestMode")
+        or "unknown"
+    )
+
+def placement_health_reason(event):
+    metadata = metadata_for(event)
+    return metadata.get("placementHealthReason") or event.get("reason") or "unknown"
+
+def append_limited(values, value, limit=5):
+    if len(values) < limit:
+        values.append(value)
+
+def inline_clipping_summary(event):
+    metadata = metadata_for(event)
+    if effective_render_mode(event) != "inlineAdjacent":
+        return None
+
+    panel_rect = rect_from_text(metadata.get("suggestionPanelRect"))
+    clipping_rect = rect_from_text(metadata.get("clippingRect"))
+    if not panel_rect or not clipping_rect:
+        return None
+
+    try:
+        visible_chars = int(metadata.get("visibleChars") or 0)
+    except (TypeError, ValueError):
+        visible_chars = 0
+    minimum_width = min(72, max(24, visible_chars * 3))
+    clipped_edges = []
+    if panel_rect["x"] <= clipping_rect["x"] + 1:
+        clipped_edges.append("left")
+    if panel_rect["maxX"] >= clipping_rect["maxX"] - 1:
+        clipped_edges.append("right")
+    if panel_rect["y"] <= clipping_rect["y"] + 1:
+        clipped_edges.append("top")
+    if panel_rect["maxY"] >= clipping_rect["maxY"] - 1:
+        clipped_edges.append("bottom")
+
+    if panel_rect["w"] >= minimum_width and not clipped_edges:
+        return None
+
+    suggestion_id = event.get("suggestionID") or "unknown"
+    app = event.get("appBundleIdentifier") or "unknown"
+    reason_parts = []
+    if panel_rect["w"] < minimum_width:
+        reason_parts.append(f"narrow {int(panel_rect['w'])}px")
+    if clipped_edges:
+        reason_parts.append("edge " + "/".join(clipped_edges))
+    return (
+        f"{app}/{suggestion_id}: "
+        + ", ".join(reason_parts)
+        + f" panel={metadata.get('suggestionPanelRect')} clipping={metadata.get('clippingRect')}"
+    )
 
 def missing_visual_evidence_parts(event):
     metadata = event.get("metadata") or {}
@@ -205,14 +294,30 @@ def missing_visual_evidence_parts(event):
     return missing_parts
 
 for event in presented:
-    metadata = event.get("metadata") or {}
+    metadata = metadata_for(event)
     band = metadata.get("placementConfidenceBand")
     action = metadata.get("placementSelfHealingAction")
+    health_reason = metadata.get("placementHealthReason")
 
     if band:
         placement_bands[band] += 1
     if action:
         self_healing_actions[action] += 1
+    if health_reason:
+        placement_health_reasons[health_reason] += 1
+    if action and action != "none":
+        placement_self_healing_details[
+            (
+                f"{action} reason={health_reason or 'unknown'} "
+                f"{metadata.get('placementRequestedRenderMode') or 'unknown'}"
+                f"->{effective_render_mode(event)} "
+                f"anchor={metadata.get('placementAnchorSource') or 'unknown'}"
+            )
+        ] += 1
+
+    clipping_summary = inline_clipping_summary(event)
+    if clipping_summary:
+        append_limited(inline_clipping_examples, clipping_summary)
 
     if require_confident_placement:
         suggestion_id = event.get("suggestionID") or "unknown"
@@ -237,6 +342,48 @@ if require_visual_evidence:
         best_missing_parts = min(missing_parts_by_event, key=len)
         visual_evidence_failures.append(
             f"{suggestion_id}: missing " + ", ".join(best_missing_parts)
+        )
+
+for event in events:
+    metadata = metadata_for(event)
+    event_type = event.get("type")
+    reason = event.get("reason") or ""
+    health_reason = metadata.get("placementHealthReason")
+
+    if health_reason and event_type != "suggestionPresented":
+        placement_health_reasons[health_reason] += 1
+
+    action = metadata.get("placementSelfHealingAction")
+    if action and action != "none" and event_type != "suggestionPresented":
+        placement_self_healing_details[
+            (
+                f"{action} reason={health_reason or reason or 'unknown'} "
+                f"{metadata.get('placementRequestedRenderMode') or 'unknown'}"
+                f"->{effective_render_mode(event)} "
+                f"anchor={metadata.get('placementAnchorSource') or 'unknown'}"
+            )
+        ] += 1
+
+    if event_type in {"suggestionSuppressed", "suggestionHidden"} and reason == "panel-frame-unusable":
+        append_limited(
+            panel_frame_issue_examples,
+            (
+                f"{event.get('appBundleIdentifier') or 'unknown'}/"
+                f"{event.get('suggestionID') or 'unknown'} "
+                f"{event_type} mode={effective_render_mode(event)}"
+            )
+        )
+
+    if event_type == "suggestionHidden" and (
+        reason in {"focus-changed", "stale-after-keydown", "panel-frame-unusable"}
+        or reason.startswith("placement-")
+    ):
+        append_limited(
+            stale_mismatch_examples,
+            (
+                f"{event.get('appBundleIdentifier') or 'unknown'}/"
+                f"{event.get('suggestionID') or 'unknown'} ({reason or 'unknown'})"
+            )
         )
 
 accept_by_mode = defaultdict(lambda: [0, 0])
@@ -376,6 +523,17 @@ if actionable_suppressed_modes:
         print(f"  {mode}: {count}")
 else:
     print("  none")
+print("Hidden by reason:")
+hidden_reasons = Counter(
+    event.get("reason") or "unknown"
+    for event in events
+    if event.get("type") == "suggestionHidden"
+)
+if hidden_reasons:
+    for reason, count in hidden_reasons.most_common():
+        print(f"  {reason}: {count}")
+else:
+    print("  none")
 print("Top repeated unaccepted suggestions:")
 if repeated_unaccepted:
     for count, mode, displayed, top_app, top_app_count, suggestion_id in repeated_unaccepted[:5]:
@@ -396,6 +554,36 @@ print("Placement self-healing actions:")
 if self_healing_actions:
     for action, count in self_healing_actions.most_common():
         print(f"  {action}: {count}")
+else:
+    print("  none")
+print("Placement health reasons:")
+if placement_health_reasons:
+    for reason, count in placement_health_reasons.most_common():
+        print(f"  {reason}: {count}")
+else:
+    print("  none")
+print("Placement self-healing detail:")
+if placement_self_healing_details:
+    for detail, count in placement_self_healing_details.most_common():
+        print(f"  {detail}: {count}")
+else:
+    print("  none")
+print("Panel frame issues:")
+if panel_frame_issue_examples:
+    for example in panel_frame_issue_examples:
+        print(f"  {example}")
+else:
+    print("  none")
+print("Inline clipping evidence:")
+if inline_clipping_examples:
+    for example in inline_clipping_examples:
+        print(f"  {example}")
+else:
+    print("  none")
+print("Stale or mismatch hidden reasons:")
+if stale_mismatch_examples:
+    for example in stale_mismatch_examples:
+        print(f"  {example}")
 else:
     print("  none")
 if require_visual_evidence:
