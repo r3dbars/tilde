@@ -48,6 +48,32 @@ struct InsertionVerificationTests {
         ) == .partial)
     }
 
+    @Test("Notes-style AX no-op success verifies as unchanged")
+    func notesStyleAXNoOpSuccessVerifiesAsUnchanged() {
+        let verifier = InsertionVerification()
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we",
+            previousTextAfterCursor: "\nChecklist item",
+            currentTextAfterCursor: "\nChecklist item"
+        ) == .unchanged)
+    }
+
+    @Test("Chrome-style AX value replacement preserves cursor split")
+    func chromeStyleAXValueReplacementPreservesCursorSplit() {
+        let verifier = InsertionVerification()
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we make",
+            previousTextAfterCursor: " this easier",
+            currentTextAfterCursor: " this easier"
+        ) == .verified)
+    }
+
     @Test("Detects accepted text inserted away from the captured cursor")
     func detectsAcceptedTextAtWrongLocation() {
         let verifier = InsertionVerification()
