@@ -100,7 +100,15 @@ public struct PlacementHealthPresentation: Equatable {
             base = 0.0
         }
 
-        return max(0, base - (isSelfHealing ? 0.2 : 0))
+        let selfHealingPenalty: Double
+        switch (renderMode, anchorSource, reason) {
+        case (.floatingMirror, .element, .untrustedSyntheticCaret):
+            selfHealingPenalty = 0
+        default:
+            selfHealingPenalty = isSelfHealing ? 0.2 : 0
+        }
+
+        return max(0, base - selfHealingPenalty)
     }
 
     public var confidenceBand: String {
@@ -212,7 +220,7 @@ public enum PlacementHealth {
                 )
             }
 
-            return applyTrustPolicy(PlacementHealthPresentation(
+            let presentation = PlacementHealthPresentation(
                 requestedRenderMode: requestedRenderMode,
                 renderMode: .inlineAdjacent,
                 anchorRect: validCaret,
@@ -224,7 +232,22 @@ public enum PlacementHealth {
                 ),
                 clippingRect: clippingRect,
                 reason: .healthy
-            ), trustPolicy: trustPolicy)
+            )
+
+            if caretIsSynthetic,
+               !trustPolicy.allowsSyntheticCaretPlacement {
+                return untrustedSyntheticCaretFallback(
+                    requestedRenderMode: requestedRenderMode,
+                    fallbackRenderMode: fallbackRenderMode,
+                    elementRect: validElement,
+                    windowRect: validWindow,
+                    clippingRect: clippingRect,
+                    allowsDetachedSuggestions: allowsDetachedSuggestions,
+                    trustPolicy: trustPolicy
+                )
+            }
+
+            return applyTrustPolicy(presentation, trustPolicy: trustPolicy)
 
         case .floatingMirror:
             if !allowsDetachedSuggestions {
@@ -323,6 +346,32 @@ public enum PlacementHealth {
         }
 
         return suppress(requestedRenderMode, reason: .missingAnchor)
+    }
+
+    private static func untrustedSyntheticCaretFallback(
+        requestedRenderMode: SuggestionRenderMode,
+        fallbackRenderMode: SuggestionRenderMode?,
+        elementRect: CGRect?,
+        windowRect: CGRect?,
+        clippingRect: CGRect?,
+        allowsDetachedSuggestions: Bool,
+        trustPolicy: PlacementTrustPolicy
+    ) -> PlacementHealthPlan {
+        guard fallbackRenderMode == .floatingMirror,
+              allowsDetachedSuggestions else {
+            return suppress(requestedRenderMode, reason: .untrustedSyntheticCaret)
+        }
+
+        return floatingFallback(
+            requestedRenderMode: requestedRenderMode,
+            fallbackRenderMode: fallbackRenderMode,
+            reason: .untrustedSyntheticCaret,
+            elementRect: elementRect,
+            windowRect: windowRect,
+            clippingRect: clippingRect,
+            allowsDetachedSuggestions: allowsDetachedSuggestions,
+            trustPolicy: trustPolicy
+        )
     }
 
     private static func mirrorPresentation(

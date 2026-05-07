@@ -3196,9 +3196,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> PlacementTrustPolicy {
         let hasTrustedVisualAdjustment = learningAdjustment.profile?.hasTrustedVisualAdjustment == true
         let isGreenProfile = profile.supportLevel == .green
+        let hasDetachedMirrorFallback = profile.allowsDetachedSuggestions
+            && profile.fallbackRenderMode == .floatingMirror
 
         return PlacementTrustPolicy(
-            allowsLowConfidencePlacement: isGreenProfile || hasTrustedVisualAdjustment,
+            allowsLowConfidencePlacement: isGreenProfile || hasTrustedVisualAdjustment || hasDetachedMirrorFallback,
             allowsSyntheticCaretPlacement: isGreenProfile || hasTrustedVisualAdjustment
         )
     }
