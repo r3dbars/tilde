@@ -2325,20 +2325,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        lastCaretRect = placement.anchorRect
-        lastTextLineRect = placement.textLineRect
-        lastClippingRect = placement.clippingRect
-        lastTextStyle = context.textStyle
-        lastRenderMode = placement.renderMode
-        guard let panelRect = suggestionPanel.show(
+        var activePlacement = placement
+        var panelRect = suggestionPanel.show(
             text: suggestion.visibleText,
-            near: placement.anchorRect,
-            alignedTo: placement.renderMode == .inlineAdjacent ? placement.textLineRect : nil,
-            boundedBy: placement.clippingRect,
+            near: activePlacement.anchorRect,
+            alignedTo: activePlacement.renderMode == .inlineAdjacent ? activePlacement.textLineRect : nil,
+            boundedBy: activePlacement.clippingRect,
             style: context.textStyle,
-            renderMode: placement.renderMode
-        ) else {
+            renderMode: activePlacement.renderMode
+        )
+
+        if panelRect == nil,
+           let fallbackPlacement = activePlacement.mirrorFallbackForCrampedInlineFrame(
+               fallbackRenderMode: profile.fallbackRenderMode
+           ) {
+            activePlacement = fallbackPlacement
+            panelRect = suggestionPanel.show(
+                text: suggestion.visibleText,
+                near: activePlacement.anchorRect,
+                alignedTo: nil,
+                boundedBy: activePlacement.clippingRect,
+                style: context.textStyle,
+                renderMode: activePlacement.renderMode
+            )
+        }
+
+        guard let panelRect else {
             let reason = "panel-frame-unusable"
+            let failureReason = activePlacement.reason == .inlineRoomTooSmall
+                ? activePlacement.reason.rawValue
+                : reason
             setSuggestionDecision("Blocked: \(reason)")
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
@@ -2351,32 +2367,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textAfterCursor: request.textAfterCursor,
                 displayedText: suggestion.visibleText,
                 latencyMilliseconds: latencyMilliseconds,
-                reason: reason,
-                metadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode)
+                reason: failureReason,
+                metadata: traceGeometryMetadata(context: context, renderMode: activePlacement.renderMode)
                     .merging(learningAdjustment.metadata) { current, _ in current }
-                    .merging(placement.metadata) { current, _ in current }
+                    .merging(activePlacement.metadata) { current, _ in current }
             )
             recordSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
                 profile: profile,
                 metadata: [
-                    "reason": reason
+                    "reason": failureReason
                 ]
                 .merging(learningAdjustment.metadata) { current, _ in current }
-                .merging(placement.metadata) { current, _ in current }
+                .merging(activePlacement.metadata) { current, _ in current }
             )
             _ = recordPlacementUncertainty(
-                reason: reason,
+                reason: failureReason,
                 context: context,
                 profile: profile,
                 fieldIdentity: fieldIdentity,
                 metadata: learningAdjustment.metadata
-                    .merging(placement.metadata) { current, _ in current }
+                    .merging(activePlacement.metadata) { current, _ in current }
             )
-            hideSuggestion(reason: reason)
+            hideSuggestion(reason: failureReason)
             return
         }
+
+        lastCaretRect = activePlacement.anchorRect
+        lastTextLineRect = activePlacement.textLineRect
+        lastClippingRect = activePlacement.clippingRect
+        lastTextStyle = context.textStyle
+        lastRenderMode = activePlacement.renderMode
 
         placementUncertaintySuppressor.reset(fieldIdentifier: fieldIdentity.traceDescription)
         suggestionSession.present(suggestion)
@@ -2399,10 +2421,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let screenshotCapture = captureTraceScreenshot(
             around: [
-                placement.anchorRect,
-                placement.textLineRect,
+                activePlacement.anchorRect,
+                activePlacement.textLineRect,
                 panelRect,
-                placement.clippingRect
+                activePlacement.clippingRect
             ].compactMap { $0 },
             suggestionID: suggestionID,
             bundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
@@ -2427,39 +2449,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             latencyMilliseconds: latencyMilliseconds,
             screenshotPath: screenshotCapture.path,
             metadata: [
-                "effectiveRenderMode": placement.renderMode.rawValue,
+                "effectiveRenderMode": activePlacement.renderMode.rawValue,
                 "visibleChars": String(suggestion.visibleText.count),
                 "visibleWords": String(suggestion.visibleWordCount),
-                "anchorRect": compactRectDescription(placement.anchorRect),
-                "textLineRect": placement.textLineRect.map(compactRectDescription) ?? "none",
+                "anchorRect": compactRectDescription(activePlacement.anchorRect),
+                "textLineRect": activePlacement.textLineRect.map(compactRectDescription) ?? "none",
                 "suggestionPanelRect": compactRectDescription(panelRect),
-                "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none",
+                "clippingRect": activePlacement.clippingRect.map(compactRectDescription) ?? "none",
                 "screenshotCaptureRect": screenshotCapture.rectDescription
             ]
-            .merging(traceGeometryMetadata(context: context, renderMode: placement.renderMode)) { current, _ in current }
+            .merging(traceGeometryMetadata(context: context, renderMode: activePlacement.renderMode)) { current, _ in current }
             .merging(learningAdjustment.metadata) { current, _ in current }
-            .merging(placement.metadata) { current, _ in current }
+            .merging(activePlacement.metadata) { current, _ in current }
         )
         recordSuggestionEvent(
             "suggestion-presented",
             context: context,
             profile: profile,
             metadata: [
-                "effectiveRenderMode": placement.renderMode.rawValue,
+                "effectiveRenderMode": activePlacement.renderMode.rawValue,
                 "requestMode": request.mode.rawValue,
                 "traceID": String(suggestionID.prefix(8)),
                 "visibleChars": String(suggestion.visibleText.count),
                 "visibleWords": String(suggestion.visibleWordCount),
                 "suggestionID": suggestionID,
                 "latencyMilliseconds": String(latencyMilliseconds),
-                "anchorRect": compactRectDescription(placement.anchorRect),
-                "textLineRect": placement.textLineRect.map(compactRectDescription) ?? "none",
+                "anchorRect": compactRectDescription(activePlacement.anchorRect),
+                "textLineRect": activePlacement.textLineRect.map(compactRectDescription) ?? "none",
                 "suggestionPanelRect": compactRectDescription(panelRect),
-                "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none",
+                "clippingRect": activePlacement.clippingRect.map(compactRectDescription) ?? "none",
                 "screenshotCaptureRect": screenshotCapture.rectDescription
             ]
             .merging(learningAdjustment.metadata) { current, _ in current }
-            .merging(placement.metadata) { current, _ in current }
+            .merging(activePlacement.metadata) { current, _ in current }
         )
         updateKeyboardEventTapSnapshot()
     }

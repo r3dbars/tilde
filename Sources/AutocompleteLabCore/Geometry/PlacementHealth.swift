@@ -10,6 +10,7 @@ public enum PlacementHealthReason: String, Equatable, Sendable {
     case invalidAnchor = "invalid-anchor"
     case caretOutsideFocusedBounds = "caret-outside-focused-bounds"
     case detachedSuggestionDisabled = "detached-suggestion-disabled"
+    case inlineRoomTooSmall = "inline-room-too-small"
     case missingFloatingFallback = "missing-floating-fallback"
     case lowConfidencePlacement = "low-confidence-placement"
     case untrustedSyntheticCaret = "untrusted-synthetic-caret"
@@ -130,6 +131,29 @@ public struct PlacementHealthPresentation: Equatable {
         }
 
         return "adjust-anchor"
+    }
+
+    public func mirrorFallbackForCrampedInlineFrame(
+        fallbackRenderMode: SuggestionRenderMode?
+    ) -> PlacementHealthPresentation? {
+        guard renderMode == .inlineAdjacent,
+              fallbackRenderMode == .floatingMirror else {
+            return nil
+        }
+
+        guard anchorSource == .caret || anchorSource == .syntheticCaret else {
+            return nil
+        }
+
+        return PlacementHealthPresentation(
+            requestedRenderMode: requestedRenderMode,
+            renderMode: .floatingMirror,
+            anchorRect: anchorRect,
+            anchorSource: anchorSource,
+            textLineRect: nil,
+            clippingRect: clippingRect,
+            reason: .inlineRoomTooSmall
+        )
     }
 }
 
