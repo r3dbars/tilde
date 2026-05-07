@@ -69,6 +69,7 @@ require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.s
 require_file "Tests/AutocompleteLabCoreTests/AutocompleteTraceEventTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceEventTests.swift" "Encodes current schema and privacy versions" "trace schema version coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceEventTests.swift" "Decodes old trace events without schema fields" "trace schema migration coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTraceEventTests.swift" "Default trace redaction removes raw text" "default trace redaction coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Suppresses low value one word phrase completions" "model-output cleanup coverage"

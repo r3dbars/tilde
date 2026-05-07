@@ -7,12 +7,14 @@ final class DiagnosticsWindowController {
     private let textView: NSTextView
     private let refreshButton: NSButton
     private let pauseTracingButton: NSButton
+    private let rawDebugTracingButton: NSButton
     private let screenshotTracingButton: NSButton
     private let openTraceFolderButton: NSButton
     private let exportReportButton: NSButton
     private let deleteTracesButton: NSButton
     private var refreshAction: (() -> Void)?
     private var toggleTracingAction: (() -> Void)?
+    private var toggleRawDebugTracingAction: (() -> Void)?
     private var toggleScreenshotTracingAction: (() -> Void)?
     private var openTraceFolderAction: (() -> Void)?
     private var exportReportAction: (() -> Void)?
@@ -27,6 +29,7 @@ final class DiagnosticsWindowController {
 
         refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
         pauseTracingButton = NSButton(title: "Pause Tracing", target: nil, action: nil)
+        rawDebugTracingButton = NSButton(title: "Raw Debug Off", target: nil, action: nil)
         screenshotTracingButton = NSButton(title: "Screenshot Trace", target: nil, action: nil)
         openTraceFolderButton = NSButton(title: "Open Trace Folder", target: nil, action: nil)
         exportReportButton = NSButton(title: "Export Report", target: nil, action: nil)
@@ -39,6 +42,7 @@ final class DiagnosticsWindowController {
         let buttonStack = NSStackView(views: [
             refreshButton,
             pauseTracingButton,
+            rawDebugTracingButton,
             screenshotTracingButton,
             openTraceFolderButton,
             exportReportButton,
@@ -67,6 +71,8 @@ final class DiagnosticsWindowController {
         refreshButton.action = #selector(refresh)
         pauseTracingButton.target = self
         pauseTracingButton.action = #selector(toggleTracing)
+        rawDebugTracingButton.target = self
+        rawDebugTracingButton.action = #selector(toggleRawDebugTracing)
         screenshotTracingButton.target = self
         screenshotTracingButton.action = #selector(toggleScreenshotTracing)
         openTraceFolderButton.target = self
@@ -91,12 +97,14 @@ final class DiagnosticsWindowController {
         recentTraceEvents: [AutocompleteTraceEvent],
         tracePath: String,
         tracingPaused: Bool,
+        rawDebugTracingEnabled: Bool,
         screenshotTracingEnabled: Bool,
         compatibilityLearningPath: String,
         compatibilityLearningProfile: CompatibilityLearningProfile?,
         quietModeSummary: String,
         refreshAction: @escaping () -> Void,
         toggleTracingAction: @escaping () -> Void,
+        toggleRawDebugTracingAction: @escaping () -> Void,
         toggleScreenshotTracingAction: @escaping () -> Void,
         openTraceFolderAction: @escaping () -> Void,
         exportReportAction: @escaping () -> Void,
@@ -104,11 +112,13 @@ final class DiagnosticsWindowController {
     ) {
         self.refreshAction = refreshAction
         self.toggleTracingAction = toggleTracingAction
+        self.toggleRawDebugTracingAction = toggleRawDebugTracingAction
         self.toggleScreenshotTracingAction = toggleScreenshotTracingAction
         self.openTraceFolderAction = openTraceFolderAction
         self.exportReportAction = exportReportAction
         self.deleteTracesAction = deleteTracesAction
         pauseTracingButton.title = tracingPaused ? "Resume Tracing" : "Pause Tracing"
+        rawDebugTracingButton.title = rawDebugTracingEnabled ? "RAW Debug On" : "Raw Debug Off"
         screenshotTracingButton.title = screenshotTracingEnabled ? "Screenshots On" : "Screenshots Off"
 
         var sections: [String] = []
@@ -131,6 +141,7 @@ final class DiagnosticsWindowController {
             traceSummary,
             tracePath: tracePath,
             tracingPaused: tracingPaused,
+            rawDebugTracingEnabled: rawDebugTracingEnabled,
             screenshotTracingEnabled: screenshotTracingEnabled,
             compatibilityLearningPath: compatibilityLearningPath,
             compatibilityLearningProfile: compatibilityLearningProfile
@@ -192,6 +203,7 @@ final class DiagnosticsWindowController {
         _ summary: AutocompleteTraceSummary,
         tracePath: String,
         tracingPaused: Bool,
+        rawDebugTracingEnabled: Bool,
         screenshotTracingEnabled: Bool,
         compatibilityLearningPath: String,
         compatibilityLearningProfile: CompatibilityLearningProfile?
@@ -200,6 +212,7 @@ final class DiagnosticsWindowController {
         Trace eval:
           path: \(tracePath)
           tracing: \(tracingPaused ? "paused" : "on")
+          raw local debug: \(rawDebugTracingEnabled ? "on" : "off")
           screenshot tracing: \(screenshotTracingEnabled ? "on" : "off")
           compatibility learning: \(compatibilityLearningPath)
           current learned adapter: \(compatibilityLearningProfile?.debugSummary ?? "none")
@@ -335,6 +348,11 @@ final class DiagnosticsWindowController {
     @objc
     private func toggleTracing() {
         toggleTracingAction?()
+    }
+
+    @objc
+    private func toggleRawDebugTracing() {
+        toggleRawDebugTracingAction?()
     }
 
     @objc

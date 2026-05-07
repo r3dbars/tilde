@@ -59,17 +59,17 @@ The north star is simple: a build is better only when accepted text survives, wr
 
 ## P0 - Privacy-Safe Tracing
 
-- [ ] Split tracing into default redacted trace and explicit raw local debug trace.
-- [ ] Make raw context, prompts, raw outputs, displayed text, accepted text, and screenshots opt-in debug fields.
-- [ ] Add a scary local-only debug toggle with visible state.
+- [x] Split tracing into default redacted trace and explicit raw local debug trace.
+- [x] Make raw context, prompts, raw outputs, displayed text, accepted text, and screenshots opt-in debug fields.
+- [x] Add a scary local-only debug toggle with visible state.
 - [x] Add `schemaVersion` and `privacyVersion` to every durable event.
 - [ ] Rotate `sessionID` daily for default tracing.
 - [ ] Add a Keychain-backed per-install HMAC secret.
 - [ ] Persist counts, lengths, buckets, fingerprints, and field metadata by default.
-- [ ] Store no document names, URLs, recipients, subject lines, screenshots, or raw text by default.
+- [x] Store no document names, URLs, recipients, subject lines, screenshots, or raw text by default.
 - [ ] Add redaction tests for JSONL and HTML export.
-- [ ] Add a one-click redacted local report export.
-- [ ] Keep screenshot traces per-app opt-in and clearly marked.
+- [x] Add a one-click redacted local report export.
+- [x] Keep screenshot traces per-app opt-in and clearly marked.
 - [ ] Add retention controls for trace logs and screenshots.
 - [ ] Add a "delete all local traces" proof test.
 
@@ -205,7 +205,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 
 ## P2 - Docs And Product Surface
 
-- [ ] Update `eval-and-tracing.md` so accepted-and-kept is the headline metric.
+- [x] Update `eval-and-tracing.md` so accepted-and-kept is the headline metric.
 - [ ] Update `private-beta-plan.md` with the 10-day protocol.
 - [ ] Update `compatibility-matrix.md` with support gates and caveats.
 - [ ] Update `implementation-plan.md` with the redacted telemetry architecture.

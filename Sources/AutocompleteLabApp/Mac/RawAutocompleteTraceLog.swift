@@ -6,12 +6,14 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "app.transcripted.autocomplete.raw-trace-log")
     private let logURL: URL
+    private let rawLogURL: URL
     private let screenshotsURL: URL
     private let sessionID = UUID().uuidString
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let pauseDefaultsKey = "AutocompleteLabTracePaused"
     private let screenshotDefaultsKey = "AutocompleteLabScreenshotTraceEnabled"
+    private let rawTraceDefaultsKey = "AutocompleteLabRawDebugTraceEnabled"
     private var experimentArmName = ""
     private var runtimeMetadata: [String: String] = [:]
 
@@ -19,6 +21,9 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         logURL = FileManager.default
             .homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/AutocompleteLab/traces.jsonl")
+        rawLogURL = FileManager.default
+            .homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/AutocompleteLab/raw-traces.jsonl")
         screenshotsURL = FileManager.default
             .homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/AutocompleteLab/screenshots")
@@ -51,6 +56,10 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         logURL.path
     }
 
+    var rawPath: String {
+        rawLogURL.path
+    }
+
     var isEnabled: Bool {
         if isPaused {
             return false
@@ -73,13 +82,31 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     }
 
     func deleteAll() {
-        queue.sync { [logURL, screenshotsURL] in
+        queue.sync { [logURL, rawLogURL, screenshotsURL] in
             try? FileManager.default.removeItem(at: logURL)
+            try? FileManager.default.removeItem(at: rawLogURL)
             try? FileManager.default.removeItem(at: screenshotsURL)
         }
     }
 
+    var rawDebugTracingEnabled: Bool {
+        if UserDefaults.standard.bool(forKey: rawTraceDefaultsKey) {
+            return true
+        }
+
+        let value = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_RAW_TRACE"] ?? ""
+        return ["1", "true", "yes", "on"].contains(value.lowercased())
+    }
+
+    func setRawDebugTracingEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: rawTraceDefaultsKey)
+    }
+
     var screenshotTracingEnabled: Bool {
+        guard rawDebugTracingEnabled else {
+            return false
+        }
+
         if UserDefaults.standard.bool(forKey: screenshotDefaultsKey) {
             return true
         }
@@ -232,33 +259,47 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             metadata: traceConfiguration.metadata
         )
 
-        queue.async { [logURL, encoder] in
+        let redactedEvent = event.redactedForDefaultTrace()
+        let writesRawDebugTrace = rawDebugTracingEnabled
+
+        queue.async { [logURL, rawLogURL, encoder] in
             do {
-                let fileManager = FileManager.default
-                try fileManager.createDirectory(
-                    at: logURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-
-                let data = try encoder.encode(event)
-                guard var line = String(data: data, encoding: .utf8) else {
-                    return
+                try Self.append(redactedEvent, to: logURL, encoder: encoder)
+                if writesRawDebugTrace {
+                    try Self.append(event, to: rawLogURL, encoder: encoder)
                 }
-
-                line.append("\n")
-
-                if !fileManager.fileExists(atPath: logURL.path) {
-                    fileManager.createFile(atPath: logURL.path, contents: nil)
-                }
-
-                let handle = try FileHandle(forWritingTo: logURL)
-                try handle.seekToEnd()
-                try handle.write(contentsOf: Data(line.utf8))
-                try handle.close()
             } catch {
                 // Raw tracing is diagnostic only and must never affect typing.
             }
         }
+    }
+
+    private static func append(
+        _ event: AutocompleteTraceEvent,
+        to logURL: URL,
+        encoder: JSONEncoder
+    ) throws {
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(
+            at: logURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        let data = try encoder.encode(event)
+        guard var line = String(data: data, encoding: .utf8) else {
+            return
+        }
+
+        line.append("\n")
+
+        if !fileManager.fileExists(atPath: logURL.path) {
+            fileManager.createFile(atPath: logURL.path, contents: nil)
+        }
+
+        let handle = try FileHandle(forWritingTo: logURL)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(line.utf8))
+        try handle.close()
     }
 
     func recentEvents(limit: Int) -> [AutocompleteTraceEvent] {
@@ -274,6 +315,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
                 .compactMap { line in
                     try? decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
                 }
+                .map { $0.redactedForDefaultTrace() }
         }
     }
 
@@ -294,6 +336,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
                 .compactMap { line in
                     try? decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
                 }
+                .map { $0.redactedForDefaultTrace() }
 
             let summary = AutocompleteTraceAnalyzer().summary(for: events)
             let html = Self.htmlReport(summary: summary, events: events)
@@ -390,7 +433,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         <html>
         <head>
           <meta charset="utf-8">
-          <title>Autocomplete Lab Trace Report</title>
+          <title>Autocomplete Lab Redacted Trace Report</title>
           <style>
             body { font: 14px -apple-system, BlinkMacSystemFont, sans-serif; margin: 28px; color: #1d1d1f; }
             h1 { font-size: 24px; }
@@ -404,8 +447,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           </style>
         </head>
         <body>
-          <h1>Autocomplete Lab Trace Report</h1>
-          <p>Generated locally. Nothing was uploaded.</p>
+          <h1>Autocomplete Lab Redacted Trace Report</h1>
+          <p>Generated locally from the default redacted trace. Nothing was uploaded.</p>
           <div class="grid">
             <div class="metric"><b>\(summary.totalEvents)</b>events</div>
             <div class="metric"><b>\(summary.presentedCount)</b>shown</div>
