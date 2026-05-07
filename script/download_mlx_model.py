@@ -9,13 +9,57 @@ MODELS = {
         "repo_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
         "target": "Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit",
     },
+    "qwen3.5-4b": {
+        "repo_id": "mlx-community/Qwen3.5-4B-4bit",
+        "target": "Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit",
+    },
+    "qwen35-9b": {
+        "repo_id": "mlx-community/Qwen3.5-9B-MLX-4bit",
+        "target": "Models/Qwen35NineB/MLX/Qwen3.5-9B-MLX-4bit",
+    },
+    "qwen3.5-9b": {
+        "repo_id": "mlx-community/Qwen3.5-9B-MLX-4bit",
+        "target": "Models/Qwen35NineB/MLX/Qwen3.5-9B-MLX-4bit",
+    },
+    "qwen3-1.7b": {
+        "repo_id": "mlx-community/Qwen3-1.7B-4bit",
+        "target": "Models/Qwen3Medium/MLX/qwen3-1.7b-4bit",
+    },
+    "qwen3-0.6b": {
+        "repo_id": "mlx-community/Qwen3-0.6B-4bit",
+        "target": "Models/Qwen3Small/MLX/qwen3-0.6b-4bit",
+    },
+    "gemma-4-e2b": {
+        "repo_id": "mlx-community/gemma-4-e2b-mlx",
+        "target": "Models/Gemma4E2B/MLX/gemma-4-e2b-mlx",
+    },
     "gemma-4-e4b": {
+        "repo_id": "mlx-community/gemma-4-e4b-4bit",
+        "target": "Models/Gemma4E4B/MLX/gemma-4-e4b-4bit",
+    },
+    "gemma4-e4b": {
+        "repo_id": "mlx-community/gemma-4-e4b-4bit",
+        "target": "Models/Gemma4E4B/MLX/gemma-4-e4b-4bit",
+    },
+    "gemma-4-e4b-4bit": {
         "repo_id": "mlx-community/gemma-4-e4b-4bit",
         "target": "Models/Gemma4E4B/MLX/gemma-4-e4b-4bit",
     },
     "gemma-4-e4b-it-optiq": {
         "repo_id": "mlx-community/gemma-4-e4b-it-OptiQ-4bit",
         "target": "Models/Gemma4E4BItOptiQ/MLX/gemma-4-e4b-it-OptiQ-4bit",
+    },
+    "gemma-4-e4b-it-optiq-4bit": {
+        "repo_id": "mlx-community/gemma-4-e4b-it-OptiQ-4bit",
+        "target": "Models/Gemma4E4BItOptiQ/MLX/gemma-4-e4b-it-OptiQ-4bit",
+    },
+    "gemma4-e4b-it-optiq": {
+        "repo_id": "mlx-community/gemma-4-e4b-it-OptiQ-4bit",
+        "target": "Models/Gemma4E4BItOptiQ/MLX/gemma-4-e4b-it-OptiQ-4bit",
+    },
+    "gemma-4-26b": {
+        "repo_id": "mlx-community/gemma-4-26b-a4b-it-4bit",
+        "target": "Models/Gemma4A4B/MLX/gemma-4-26b-a4b-it-4bit",
     },
 }
 
@@ -45,11 +89,26 @@ def parse_args() -> argparse.Namespace:
         default="qwen35-4b",
         help="Model alias to download.",
     )
+    parser.add_argument(
+        "--list-models",
+        action="store_true",
+        help="Print supported model aliases and exit.",
+    )
+    parser.add_argument(
+        "--print-target",
+        action="store_true",
+        help="Print the selected repo and target path without downloading.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if args.list_models:
+        for alias in sorted(MODELS):
+            print(alias)
+        return 0
+
     model = MODELS[args.model]
     repo_id = model["repo_id"]
     target = (
@@ -57,6 +116,12 @@ def main() -> int:
         / "Library/Application Support/AutocompleteLab"
         / model["target"]
     )
+
+    if args.print_target:
+        print(f"alias={args.model}")
+        print(f"repo_id={repo_id}")
+        print(f"target={target}")
+        return 0
 
     try:
         from huggingface_hub import snapshot_download

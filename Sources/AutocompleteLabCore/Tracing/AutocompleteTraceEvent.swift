@@ -10,6 +10,12 @@ public enum AutocompleteTraceEventType: String, Codable, Equatable, Sendable {
     case suggestionSuppressed
     case insertionVerified
     case insertionFailed
+    case acceptedTextEdited
+    case acceptanceRetentionCleared
+    case appPaused
+    case appDisabled
+    case renderModeChanged
+    case caretGeometryFailed
 }
 
 public enum AutocompleteTracePrivacyMode: String, Codable, CaseIterable, Equatable, Sendable {
@@ -38,7 +44,13 @@ public enum AutocompleteTracePrivacyMode: String, Codable, CaseIterable, Equatab
 }
 
 public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable {
+    public static let currentSchemaVersion = 3
+    public static let currentPrivacyVersion = 2
+
     public let id: String
+    public let schemaVersion: Int
+    public let privacyVersion: Int
+    public let experimentArm: String
     public let timestamp: String
     public let sessionID: String
     public let suggestionID: String
@@ -62,8 +74,40 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
     public let screenshotPath: String
     public let metadata: [String: String]
 
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case schemaVersion
+        case privacyVersion
+        case experimentArm
+        case timestamp
+        case sessionID
+        case suggestionID
+        case type
+        case appBundleIdentifier
+        case fieldIdentity
+        case requestMode
+        case triggerReason
+        case textBeforeCursor
+        case textAfterCursor
+        case systemPrompt
+        case userPrompt
+        case rawOutput
+        case cleanedVisibleText
+        case displayedText
+        case acceptedText
+        case remainingVisibleText
+        case latencyMilliseconds
+        case outcome
+        case reason
+        case screenshotPath
+        case metadata
+    }
+
     public init(
         id: String = UUID().uuidString,
+        schemaVersion: Int = AutocompleteTraceEvent.currentSchemaVersion,
+        privacyVersion: Int = AutocompleteTraceEvent.currentPrivacyVersion,
+        experimentArm: String = AutocompleteExperimentArm.length3Word.rawValue,
         timestamp: String,
         sessionID: String,
         suggestionID: String,
@@ -88,6 +132,9 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
         metadata: [String: String] = [:]
     ) {
         self.id = id
+        self.schemaVersion = schemaVersion
+        self.privacyVersion = privacyVersion
+        self.experimentArm = experimentArm
         self.timestamp = timestamp
         self.sessionID = sessionID
         self.suggestionID = suggestionID
@@ -112,10 +159,124 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
         self.metadata = metadata
     }
 
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        privacyVersion = try container.decodeIfPresent(Int.self, forKey: .privacyVersion) ?? 0
+        experimentArm = try container.decodeIfPresent(String.self, forKey: .experimentArm)
+            ?? AutocompleteExperimentArm.length3Word.rawValue
+        timestamp = try container.decode(String.self, forKey: .timestamp)
+        sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID) ?? ""
+        suggestionID = try container.decodeIfPresent(String.self, forKey: .suggestionID) ?? ""
+        type = try container.decode(AutocompleteTraceEventType.self, forKey: .type)
+        appBundleIdentifier = try container.decodeIfPresent(String.self, forKey: .appBundleIdentifier) ?? ""
+        fieldIdentity = try container.decodeIfPresent(String.self, forKey: .fieldIdentity) ?? ""
+        requestMode = try container.decodeIfPresent(String.self, forKey: .requestMode) ?? ""
+        triggerReason = try container.decodeIfPresent(String.self, forKey: .triggerReason) ?? ""
+        textBeforeCursor = try container.decodeIfPresent(String.self, forKey: .textBeforeCursor) ?? ""
+        textAfterCursor = try container.decodeIfPresent(String.self, forKey: .textAfterCursor) ?? ""
+        systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
+        userPrompt = try container.decodeIfPresent(String.self, forKey: .userPrompt) ?? ""
+        rawOutput = try container.decodeIfPresent(String.self, forKey: .rawOutput) ?? ""
+        cleanedVisibleText = try container.decodeIfPresent(String.self, forKey: .cleanedVisibleText) ?? ""
+        displayedText = try container.decodeIfPresent(String.self, forKey: .displayedText) ?? ""
+        acceptedText = try container.decodeIfPresent(String.self, forKey: .acceptedText) ?? ""
+        remainingVisibleText = try container.decodeIfPresent(String.self, forKey: .remainingVisibleText) ?? ""
+        latencyMilliseconds = try container.decodeIfPresent(Int.self, forKey: .latencyMilliseconds)
+        outcome = try container.decodeIfPresent(String.self, forKey: .outcome) ?? ""
+        reason = try container.decodeIfPresent(String.self, forKey: .reason) ?? ""
+        screenshotPath = try container.decodeIfPresent(String.self, forKey: .screenshotPath) ?? ""
+        metadata = try container.decodeIfPresent([String: String].self, forKey: .metadata) ?? [:]
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(privacyVersion, forKey: .privacyVersion)
+        try container.encode(experimentArm, forKey: .experimentArm)
+        try container.encode(timestamp, forKey: .timestamp)
+        try container.encode(sessionID, forKey: .sessionID)
+        try container.encode(suggestionID, forKey: .suggestionID)
+        try container.encode(type, forKey: .type)
+        try container.encode(appBundleIdentifier, forKey: .appBundleIdentifier)
+        try container.encode(fieldIdentity, forKey: .fieldIdentity)
+        try container.encode(requestMode, forKey: .requestMode)
+        try container.encode(triggerReason, forKey: .triggerReason)
+        try container.encode(textBeforeCursor, forKey: .textBeforeCursor)
+        try container.encode(textAfterCursor, forKey: .textAfterCursor)
+        try container.encode(systemPrompt, forKey: .systemPrompt)
+        try container.encode(userPrompt, forKey: .userPrompt)
+        try container.encode(rawOutput, forKey: .rawOutput)
+        try container.encode(cleanedVisibleText, forKey: .cleanedVisibleText)
+        try container.encode(displayedText, forKey: .displayedText)
+        try container.encode(acceptedText, forKey: .acceptedText)
+        try container.encode(remainingVisibleText, forKey: .remainingVisibleText)
+        try container.encodeIfPresent(latencyMilliseconds, forKey: .latencyMilliseconds)
+        try container.encode(outcome, forKey: .outcome)
+        try container.encode(reason, forKey: .reason)
+        try container.encode(screenshotPath, forKey: .screenshotPath)
+        try container.encode(metadata, forKey: .metadata)
+    }
+
+    public func redactedForDefaultTrace() -> AutocompleteTraceEvent {
+        var safeMetadata = metadata.reduce(into: [String: String]()) { result, item in
+            result[item.key] = DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: item.key,
+                value: item.value
+            )
+        }
+
+        addLengthMetadata(value: textBeforeCursor, key: "textBeforeCursorChars", metadata: &safeMetadata)
+        addLengthMetadata(value: textAfterCursor, key: "textAfterCursorChars", metadata: &safeMetadata)
+        addLengthMetadata(value: systemPrompt, key: "systemPromptChars", metadata: &safeMetadata)
+        addLengthMetadata(value: userPrompt, key: "userPromptChars", metadata: &safeMetadata)
+        addLengthMetadata(value: rawOutput, key: "rawOutputChars", metadata: &safeMetadata)
+        addLengthMetadata(value: cleanedVisibleText, key: "cleanedVisibleTextChars", metadata: &safeMetadata)
+        addLengthMetadata(value: displayedText, key: "displayedTextChars", metadata: &safeMetadata)
+        addLengthMetadata(value: acceptedText, key: "acceptedTextChars", metadata: &safeMetadata)
+        addLengthMetadata(value: remainingVisibleText, key: "remainingVisibleTextChars", metadata: &safeMetadata)
+        if !screenshotPath.isEmpty {
+            safeMetadata["screenshotCaptured"] = "true"
+        }
+
+        return AutocompleteTraceEvent(
+            id: id,
+            schemaVersion: schemaVersion,
+            privacyVersion: AutocompleteTraceEvent.currentPrivacyVersion,
+            experimentArm: experimentArm,
+            timestamp: timestamp,
+            sessionID: sessionID,
+            suggestionID: suggestionID,
+            type: type,
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            requestMode: requestMode,
+            triggerReason: triggerReason,
+            latencyMilliseconds: latencyMilliseconds,
+            outcome: outcome,
+            reason: reason,
+            metadata: safeMetadata
+        )
+    }
+
     public func redacted(
         privacyMode: AutocompleteTracePrivacyMode
     ) -> RedactedAutocompleteTraceEvent {
         RedactedAutocompleteTraceEvent(event: self, privacyMode: privacyMode)
+    }
+
+    private func addLengthMetadata(
+        value: String,
+        key: String,
+        metadata: inout [String: String]
+    ) {
+        guard !value.isEmpty else {
+            return
+        }
+
+        metadata[key] = String(value.count)
     }
 }
 

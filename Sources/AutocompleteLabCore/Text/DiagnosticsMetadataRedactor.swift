@@ -8,6 +8,10 @@ public enum DiagnosticsMetadataRedactor {
             return flattened
         }
 
+        if isAlreadyRedactedSummary(flattened) {
+            return flattened
+        }
+
         return DiagnosticValueRedactor.stringSummary(length: value.count)
     }
 
@@ -41,5 +45,12 @@ public enum DiagnosticsMetadataRedactor {
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "\r", with: " ")
             .replacingOccurrences(of: "\t", with: " ")
+    }
+
+    private static func isAlreadyRedactedSummary(_ value: String) -> Bool {
+        (value.hasPrefix("String(") && value.hasSuffix(" chars)"))
+            || (value.hasPrefix("AttributedString(") && value.hasSuffix(" chars)"))
+            || (value.hasPrefix("Array(") && value.hasSuffix(" items)"))
+            || value.hasSuffix("(redacted)")
     }
 }

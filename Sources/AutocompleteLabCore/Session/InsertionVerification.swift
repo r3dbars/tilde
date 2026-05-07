@@ -4,12 +4,24 @@ public enum InsertionVerificationResult: Equatable, Sendable {
     case verified
     case unchanged
     case partial
+    case duplicateText
     case duplicatedAcceptedText
+    case literalTab
     case insertedAtWrongLocation
+    case selectionChangedUnexpectedly
     case changedUnexpectedly
 
     public var isVerified: Bool {
         self == .verified
+    }
+
+    public static func == (lhs: InsertionVerificationResult, rhs: InsertionVerificationResult) -> Bool {
+        switch (lhs, rhs) {
+        case (.duplicateText, .duplicatedAcceptedText), (.duplicatedAcceptedText, .duplicateText):
+            true
+        default:
+            String(describing: lhs) == String(describing: rhs)
+        }
     }
 }
 
@@ -19,7 +31,9 @@ public struct InsertionVerification: Equatable, Sendable {
     public func verify(
         previousTextBeforeCursor: String,
         acceptedText: String,
-        currentTextBeforeCursor: String
+        currentTextBeforeCursor: String,
+        previousTextAfterCursor: String = "",
+        currentTextAfterCursor: String = ""
     ) -> InsertionVerificationResult {
         let expectedTextBeforeCursor = previousTextBeforeCursor + acceptedText
 
@@ -31,12 +45,27 @@ public struct InsertionVerification: Equatable, Sendable {
             return .verified
         }
 
+        if currentTextBeforeCursor == previousTextBeforeCursor + "\t"
+            || currentTextBeforeCursor.hasPrefix(previousTextBeforeCursor + "\t") {
+            return .literalTab
+        }
+
         if currentTextBeforeCursor == previousTextBeforeCursor {
+            if !previousTextAfterCursor.isEmpty,
+               previousTextAfterCursor != currentTextAfterCursor {
+                return .selectionChangedUnexpectedly
+            }
             return .unchanged
         }
 
         if !acceptedText.isEmpty,
            currentTextBeforeCursor == expectedTextBeforeCursor + acceptedText {
+            return .duplicatedAcceptedText
+        }
+
+        if !acceptedText.isEmpty,
+           currentTextBeforeCursor.hasPrefix(expectedTextBeforeCursor),
+           currentTextBeforeCursor.dropFirst(expectedTextBeforeCursor.count).hasPrefix(acceptedText) {
             return .duplicatedAcceptedText
         }
 
