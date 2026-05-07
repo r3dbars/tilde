@@ -1,11 +1,11 @@
 import Foundation
 
-public enum AcceptedAndKeptLearningOutcome: String, Equatable, Sendable {
+public enum AcceptedAndKeptLearningOutcome: String, Codable, Equatable, Sendable {
     case kept
     case rejected
 }
 
-public struct AcceptedAndKeptLearningKey: Equatable, Hashable, Sendable {
+public struct AcceptedAndKeptLearningKey: Codable, Equatable, Hashable, Sendable {
     public let appBundleIdentifier: String
     public let fieldKind: String
     public let requestMode: String
@@ -31,6 +31,7 @@ public struct AcceptedAndKeptLearningSignal: Equatable, Sendable {
     public let rejectedCount: Int
     public let priorProbability: Double
     public let userAffinityAdjustment: Double
+    public let decayFactor: Double
 
     public var traceMetadata: [String: String] {
         [
@@ -39,7 +40,8 @@ public struct AcceptedAndKeptLearningSignal: Equatable, Sendable {
             "acceptedAndKeptKept": String(keptCount),
             "acceptedAndKeptRejected": String(rejectedCount),
             "acceptedAndKeptPrior": Self.format(priorProbability),
-            "acceptedAndKeptAffinityAdjustment": Self.format(userAffinityAdjustment)
+            "acceptedAndKeptAffinityAdjustment": Self.format(userAffinityAdjustment),
+            "acceptedAndKeptDecayFactor": Self.format(decayFactor)
         ]
     }
 
@@ -48,23 +50,38 @@ public struct AcceptedAndKeptLearningSignal: Equatable, Sendable {
     }
 }
 
-public struct AcceptedAndKeptLearningStore: Equatable, Sendable {
+public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
     public let priorWeight: Double
     public let maximumBuckets: Int
+    public let halfLifeSeconds: TimeInterval
     private var buckets: [AcceptedAndKeptLearningKey: AcceptedAndKeptLearningBucket] = [:]
 
     public init(
         priorWeight: Double = 4,
-        maximumBuckets: Int = 512
+        maximumBuckets: Int = 512,
+        halfLifeSeconds: TimeInterval = 14 * 24 * 60 * 60
     ) {
         self.priorWeight = max(0, priorWeight)
         self.maximumBuckets = max(1, maximumBuckets)
+        self.halfLifeSeconds = max(60, halfLifeSeconds)
+    }
+
+    public init?(jsonData: Data) {
+        guard let decoded = try? JSONDecoder().decode(Self.self, from: jsonData) else {
+            return nil
+        }
+        self = decoded
+    }
+
+    public func jsonData() -> Data? {
+        try? JSONEncoder().encode(self)
     }
 
     @discardableResult
     public mutating func record(
         _ outcome: AcceptedAndKeptLearningOutcome,
-        key: AcceptedAndKeptLearningKey
+        key: AcceptedAndKeptLearningKey,
+        now: Date = Date()
     ) -> AcceptedAndKeptLearningSignal {
         var bucket = buckets[key] ?? AcceptedAndKeptLearningBucket()
         switch outcome {
@@ -74,17 +91,24 @@ public struct AcceptedAndKeptLearningStore: Equatable, Sendable {
             bucket.rejectedCount += 1
         }
         bucket.lastUpdatedSequence = nextSequence()
+        bucket.lastUpdatedAt = now
         buckets[key] = bucket
         trimIfNeeded()
-        return signal(for: key)
+        return signal(for: key, now: now)
     }
 
-    public func signal(for key: AcceptedAndKeptLearningKey) -> AcceptedAndKeptLearningSignal {
+    public func signal(
+        for key: AcceptedAndKeptLearningKey,
+        now: Date = Date()
+    ) -> AcceptedAndKeptLearningSignal {
         let bucket = buckets[key] ?? AcceptedAndKeptLearningBucket()
         let prior = priorProbability(for: key.requestMode)
         let samples = bucket.sampleCount
-        let probability = (Double(bucket.keptCount) + prior * priorWeight)
-            / max(1, Double(samples) + priorWeight)
+        let decayFactor = self.decayFactor(for: bucket, now: now)
+        let keptWeight = Double(bucket.keptCount) * decayFactor
+        let rejectedWeight = Double(bucket.rejectedCount) * decayFactor
+        let probability = (keptWeight + prior * priorWeight)
+            / max(1, keptWeight + rejectedWeight + priorWeight)
         let adjustmentScale = min(1, Double(samples) / 6)
         let adjustment = Self.bounded(
             (probability - prior) * 0.45 * adjustmentScale,
@@ -97,7 +121,8 @@ public struct AcceptedAndKeptLearningStore: Equatable, Sendable {
             keptCount: bucket.keptCount,
             rejectedCount: bucket.rejectedCount,
             priorProbability: prior,
-            userAffinityAdjustment: adjustment
+            userAffinityAdjustment: adjustment,
+            decayFactor: decayFactor
         )
     }
 
@@ -121,6 +146,18 @@ public struct AcceptedAndKeptLearningStore: Equatable, Sendable {
         default:
             return 0.34
         }
+    }
+
+    private func decayFactor(
+        for bucket: AcceptedAndKeptLearningBucket,
+        now: Date
+    ) -> Double {
+        guard bucket.sampleCount > 0 else {
+            return 1
+        }
+
+        let elapsed = max(0, now.timeIntervalSince(bucket.lastUpdatedAt))
+        return pow(0.5, elapsed / halfLifeSeconds)
     }
 
     private mutating func trimIfNeeded() {
@@ -149,10 +186,11 @@ public struct AcceptedAndKeptLearningStore: Equatable, Sendable {
     }
 }
 
-private struct AcceptedAndKeptLearningBucket: Equatable, Sendable {
+private struct AcceptedAndKeptLearningBucket: Codable, Equatable, Sendable {
     var keptCount: Int = 0
     var rejectedCount: Int = 0
     var lastUpdatedSequence: UInt64 = 0
+    var lastUpdatedAt: Date = Date(timeIntervalSince1970: 0)
 
     var sampleCount: Int {
         keptCount + rejectedCount
