@@ -33,6 +33,8 @@ struct CompletionOutputCleanerTests {
 
         #expect(cleaner.clean("Okay, let's see. The user is trying to") == nil)
         #expect(cleaner.clean("The user is trying to write a sentence") == nil)
+        #expect(cleaner.clean("As an AI, I can't do that") == nil)
+        #expect(cleaner.clean("Here's a better version") == nil)
     }
 
     @Test("Suppresses generic chat filler")
@@ -45,6 +47,10 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("Let me know when it's done.") == nil)
         #expect(cleaner.clean("integrate it seamlessly.") == nil)
         #expect(cleaner.clean("enhance the experience") == nil)
+        #expect(cleaner.clean("You can make this easier") == nil)
+        #expect(cleaner.clean("I'd suggest keeping it short") == nil)
+        #expect(cleaner.clean("I recommend trying this") == nil)
+        #expect(cleaner.clean("To do that, open settings") == nil)
     }
 
     @Test("Uses only first line")
@@ -71,8 +77,8 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("ready.", after: "I know you are")?.visibleText == " ready.")
     }
 
-    @Test("Suppresses low value one word phrase completions")
-    func suppressesLowValueOneWordPhraseCompletions() {
+    @Test("Suppresses one word twitch completions")
+    func suppressesOneWordTwitchCompletions() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
         #expect(cleaner.clean("it", after: "I think") == nil)

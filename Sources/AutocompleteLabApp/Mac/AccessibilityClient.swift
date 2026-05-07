@@ -181,15 +181,19 @@ final class AccessibilityClient {
         }
 
         let selectedRange = selectedTextRange(in: focusedElement)
+        let elementRect = elementBounds(for: focusedElement)
+        let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
         let textSlice = CursorTextSplitter.split(
             text,
             utf16Offset: selectedRange?.location ?? text.utf16.count
         )
         let caretRect = selectedRange.flatMap {
-            AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
+            AccessibilityTextBoundsPolicy.usableTextBounds(
+                caretBounds(for: focusedElement, range: $0),
+                elementRect: elementRect,
+                windowRect: windowRect
+            )
         }
-        let elementRect = elementBounds(for: focusedElement)
-        let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
         let textLineRect = selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(
                 textLineBounds(
@@ -197,7 +201,9 @@ final class AccessibilityClient {
                     textLength: text.utf16.count,
                     textBeforeCursor: textSlice.textBeforeCursor,
                     range: $0
-                )
+                ),
+                elementRect: elementRect,
+                windowRect: windowRect
             )
         }
         let textStyle = selectedRange.flatMap {
@@ -304,14 +310,18 @@ final class AccessibilityClient {
             allowDescendantTextFallback: allowDescendantTextFallback
         )
         let selectedRange = selectedTextRange(in: focusedElement)
+        let elementRect = elementBounds(for: focusedElement)
+        let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
         let textSlice = text.map {
             CursorTextSplitter.split($0, utf16Offset: selectedRange?.location ?? $0.utf16.count)
         }
         let caretRect = selectedRange.flatMap {
-            AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
+            AccessibilityTextBoundsPolicy.usableTextBounds(
+                caretBounds(for: focusedElement, range: $0),
+                elementRect: elementRect,
+                windowRect: windowRect
+            )
         }
-        let elementRect = elementBounds(for: focusedElement)
-        let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
         let textLineRect = selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(
                 textLineBounds(
@@ -319,7 +329,9 @@ final class AccessibilityClient {
                     textLength: text?.utf16.count ?? 0,
                     textBeforeCursor: textSlice?.textBeforeCursor ?? "",
                     range: $0
-                )
+                ),
+                elementRect: elementRect,
+                windowRect: windowRect
             )
         }
         let textStyle = selectedRange.flatMap {
