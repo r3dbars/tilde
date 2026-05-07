@@ -344,18 +344,16 @@ final class AccessibilityClient {
             )
         }
 
-        if !cursorMatches(cursorRange, in: focusedElement),
-           replacement.cursorUTF16Offset == replacement.text.utf16.count {
+        if replacement.cursorUTF16Offset == replacement.text.utf16.count,
+           !cursorMatches(cursorRange, in: focusedElement) {
             moveInsertionPointToLineEnd()
         }
 
-        Thread.sleep(forTimeInterval: 0.03)
         let textAfterInsert = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String
         return textAfterInsert == replacement.text
     }
 
     private func cursorMatches(_ expectedRange: CFRange, in element: AXUIElement) -> Bool {
-        Thread.sleep(forTimeInterval: 0.04)
         guard let currentRange = selectedTextRange(in: element) else {
             return false
         }

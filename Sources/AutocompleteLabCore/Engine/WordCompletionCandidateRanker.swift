@@ -126,21 +126,20 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
 
     public static let defaultWords = [
         "about", "accurate", "actually", "again", "also", "always", "app",
-        "application", "around", "autocomplete", "available", "because",
+        "application", "around", "available", "because",
         "before", "being", "better", "between", "bring", "build", "change",
-        "codex", "completion", "computer", "context", "conversation", "could",
-        "decent", "decently", "debugging", "definitely", "diagnostics", "dictation", "different",
-        "document", "dogfooding", "everything", "evaluation", "fantastic",
+        "computer", "context", "conversation", "could",
+        "decent", "decently", "definitely", "dictation", "different",
+        "document", "everything", "fantastic",
         "fast",
-        "first", "going", "great", "hello", "help", "hey", "important", "inference", "insert",
-        "insertion", "instant", "interesting", "kind", "language", "launch",
-        "logs", "make", "meaning", "model", "need", "notes", "obsidian",
-        "option", "people", "placement", "prediction", "prompt", "really",
-        "relaunch", "reliable", "retry", "right", "should", "slow", "something", "super",
-        "suggestion", "system", "test", "testing", "their", "there", "these", "thing",
-        "think", "this", "trying", "typing", "trace", "tracing",
-        "transcripted", "understand", "version", "want",
-        "verification", "what", "when", "where", "which", "while", "window",
+        "first", "going", "great", "hello", "help", "hey", "important",
+        "instant", "interesting", "kind", "language", "launch",
+        "make", "meaning", "need", "notes",
+        "option", "people", "really",
+        "reliable", "right", "should", "slow", "something", "super",
+        "system", "their", "there", "these", "thing",
+        "think", "this", "trying", "typing", "understand", "want",
+        "what", "when", "where", "which", "while", "window",
         "without", "working", "would", "writing"
     ]
 

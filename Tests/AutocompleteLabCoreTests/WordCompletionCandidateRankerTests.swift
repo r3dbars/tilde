@@ -49,6 +49,17 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "It is worki") == nil)
     }
 
+    @Test("default words avoid lab and app vocabulary")
+    func defaultWordsAvoidLabAndAppVocabulary() {
+        let ranker = WordCompletionCandidateRanker()
+
+        #expect(ranker.suggestion(for: "Try auto") == nil)
+        #expect(ranker.suggestion(for: "Open code") == nil)
+        #expect(ranker.suggestion(for: "Check diag") == nil)
+        #expect(ranker.suggestion(for: "Review trac") == nil)
+        #expect(ranker.suggestion(for: "Use trans") == nil)
+    }
+
     @Test("suppresses tiny recent suffixes until the fragment is strong")
     func suppressesTinyRecentSuffixesUntilFragmentIsStrong() {
         let ranker = WordCompletionCandidateRanker(staticWords: [])

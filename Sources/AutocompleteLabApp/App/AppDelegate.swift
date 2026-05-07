@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
+    private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private let suggestionPanel = SuggestionPanelController()
@@ -110,7 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionInvalidatedByUserKeyDown = false
     private var scheduledScreenshotSuggestionIDs: Set<String> = []
     private let maxScheduledScreenshotSuggestionIDs = 256
-    private var recentWordMemory = RecentWordMemory()
+    private var recentWordMemory = ScopedRecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var lastStatusLine: String?
     private var lastSuggestionDecision = "Starting"
@@ -547,7 +548,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         rememberTypedWordsIfNeeded(
             previousSnapshot: lastTextSnapshot,
-            currentSnapshot: snapshot
+            currentSnapshot: snapshot,
+            appBundleIdentifier: frontmostApp.bundleIdentifier
         )
         hideStaleSuggestionIfNeeded(
             newTextBeforeCursor: context.textBeforeCursor,
@@ -725,6 +727,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "maxMilliseconds": String(summary.maxMilliseconds)
                 ]
             )
+            applyFocusedTextPollingThrottleIfNeeded(
+                focusedTextPollingBackoffPolicy.throttleRecommendation(
+                    latencySummary: summary,
+                    skipSummary: nil
+                )
+            )
         }
     }
 
@@ -739,6 +747,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "reason": "in-flight",
                 "count": String(summary.count),
                 "durationMilliseconds": String(summary.durationMilliseconds)
+            ]
+        )
+        applyFocusedTextPollingThrottleIfNeeded(
+            focusedTextPollingBackoffPolicy.throttleRecommendation(
+                latencySummary: nil,
+                skipSummary: summary
+            )
+        )
+    }
+
+    private func applyFocusedTextPollingThrottleIfNeeded(
+        _ recommendation: FocusedTextPollingThrottleRecommendation
+    ) {
+        guard recommendation.shouldThrottle,
+              let reason = recommendation.reason,
+              recommendation.pauseMilliseconds > 0 else {
+            return
+        }
+
+        focusedTextPollingPause.pause(
+            now: Date(),
+            durationMilliseconds: recommendation.pauseMilliseconds,
+            policy: focusedTextPollingBackoffPolicy
+        )
+        invalidatePendingSuggestionRequest()
+        if suggestionSession.hasVisibleSuggestion {
+            hideSuggestion(reason: "focused-text-poll-\(reason.rawValue)")
+        }
+        DiagnosticsLog.shared.record(
+            "focused-text-poll-throttled",
+            metadata: [
+                "reason": reason.rawValue,
+                "pauseMilliseconds": String(recommendation.pauseMilliseconds)
             ]
         )
     }
@@ -987,6 +1028,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             passthroughKeyDownObserver: { [weak self] in
                 self?.observePassthroughTypingKeyDown()
+            },
+            disabledObserver: { [weak self] reason in
+                self?.handleKeyboardEventTapDisabled(reason: reason)
             }
         )
         eventTap.updateSnapshot(keyboardEventTapSnapshot())
@@ -1013,6 +1057,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateKeyboardEventTapSnapshot() {
         keyboardEventTap?.updateSnapshot(keyboardEventTapSnapshot())
+    }
+
+    private func handleKeyboardEventTapDisabled(reason: String) {
+        stopKeyboardEventTapNow(reason: "system-\(reason)")
+        currentSuggestionInvalidatedByUserKeyDown = true
+        invalidatePendingSuggestionRequest()
+        setSuggestionDecision("Blocked: keyboard capture disabled")
+        hideSuggestion(reason: "keyboard-event-tap-\(reason)")
+        DiagnosticsLog.shared.record(
+            "keyboard-event-tap-failed-closed",
+            metadata: [
+                "reason": reason
+            ]
+        )
     }
 
     private func scheduleKeyboardEventTapStopIfIdle() {
@@ -1465,8 +1523,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if requestMode == .wordCompletion {
             if let fastSuggestion = wordCompletionRanker.suggestion(
                 for: context.textBeforeCursor,
-                recentWords: recentWordMemory.words
+                recentWords: recentWordMemory.words(for: appBundleIdentifier)
             ) {
+                guard !suggestionRepetitionSuppressor.shouldSuppress(
+                    fastSuggestion.visibleText,
+                    mode: request.mode,
+                    scope: appBundleIdentifier
+                ) else {
+                    RawAutocompleteTraceLog.shared.record(
+                        type: .suggestionSuppressed,
+                        suggestionID: suggestionID,
+                        appBundleIdentifier: appBundleIdentifier,
+                        fieldIdentity: fieldIdentityDescription,
+                        requestMode: request.mode.rawValue,
+                        triggerReason: "fast-word-completion",
+                        textBeforeCursor: request.textBeforeCursor,
+                        textAfterCursor: request.textAfterCursor,
+                        cleanedVisibleText: fastSuggestion.visibleText,
+                        displayedText: fastSuggestion.visibleText,
+                        latencyMilliseconds: 0,
+                        reason: "repeated-miss",
+                        metadata: [
+                            "renderMode": renderMode.rawValue
+                        ]
+                    )
+                    recordSuggestionEvent(
+                        "suggestion-blocked",
+                        context: context,
+                        profile: profile,
+                        metadata: [
+                            "reason": "repeated-miss",
+                            "triggerReason": "fast-word-completion"
+                        ]
+                    )
+                    hideSuggestion()
+                    return
+                }
+
                 presentSuggestion(
                     fastSuggestion,
                     suggestionID: suggestionID,
@@ -1695,6 +1788,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         latencyMilliseconds: Int,
         triggerReason: String
     ) {
+        let originalContext = context
+        let refreshedContext = refreshedPresentationContext(
+            for: request,
+            profile: profile,
+            fieldIdentity: fieldIdentity
+        )
+        guard let context = refreshedContext.context else {
+            let reason = refreshedContext.reason ?? "stale-focused-context"
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: suggestionID,
+                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity.traceDescription,
+                requestMode: request.mode.rawValue,
+                triggerReason: triggerReason,
+                textBeforeCursor: request.textBeforeCursor,
+                textAfterCursor: request.textAfterCursor,
+                displayedText: suggestion.visibleText,
+                latencyMilliseconds: latencyMilliseconds,
+                reason: reason,
+                metadata: traceGeometryMetadata(context: originalContext, renderMode: renderMode)
+            )
+            recordSuggestionEvent(
+                "suggestion-blocked",
+                context: originalContext,
+                profile: profile,
+                metadata: [
+                    "reason": reason
+                ]
+            )
+            hideSuggestion(reason: reason)
+            return
+        }
+
         let storedLearningAdjustment = compatibilityLearningStore.engine().adjustment(
             for: profile.bundleIdentifier,
             profileRenderMode: renderMode
@@ -1747,23 +1874,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        suggestionSession.present(suggestion)
-        setSuggestionDecision("Shown: \(triggerReason) \(latencyMilliseconds)ms")
-        currentSuggestionID = suggestionID
-        currentSuggestionAppBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
-        currentSuggestionFieldIdentity = fieldIdentity
-        currentSuggestionRequestMode = request.mode
-        currentSuggestionTextBeforeCursor = request.textBeforeCursor
-        currentSuggestionDisplayedText = suggestion.visibleText
-        currentSuggestionInvalidatedByUserKeyDown = false
-        keyboardEventTap?.resetPassthroughObservation()
-        updateKeyboardEventTapSnapshot()
-        guard startKeyboardEventTapIfPossible() else {
-            setSuggestionDecision("Blocked: keyboard capture unavailable")
-            hideSuggestion(reason: "keyboard-capture-unavailable")
-            return
-        }
-
         lastCaretRect = placement.anchorRect
         lastTextLineRect = placement.textLineRect
         lastClippingRect = placement.clippingRect
@@ -1808,6 +1918,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion(reason: reason)
             return
         }
+
+        suggestionSession.present(suggestion)
+        setSuggestionDecision("Shown: \(triggerReason) \(latencyMilliseconds)ms")
+        currentSuggestionID = suggestionID
+        currentSuggestionAppBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
+        currentSuggestionFieldIdentity = fieldIdentity
+        currentSuggestionRequestMode = request.mode
+        currentSuggestionTextBeforeCursor = request.textBeforeCursor
+        currentSuggestionDisplayedText = suggestion.visibleText
+        currentSuggestionInvalidatedByUserKeyDown = false
+        keyboardEventTap?.resetPassthroughObservation()
+        updateKeyboardEventTapSnapshot()
+        guard startKeyboardEventTapIfPossible() else {
+            setSuggestionDecision("Blocked: keyboard capture unavailable")
+            hideSuggestion(reason: "keyboard-capture-unavailable")
+            return
+        }
+
         let screenshotCapture = captureTraceScreenshot(
             around: [
                 placement.anchorRect,
@@ -1873,6 +2001,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(placement.metadata) { current, _ in current }
         )
         updateKeyboardEventTapSnapshot()
+    }
+
+    private func refreshedPresentationContext(
+        for request: CompletionRequest,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity
+    ) -> (context: FocusedTextContext?, reason: String?) {
+        let expectedBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
+        guard let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == expectedBundleIdentifier else {
+            return (nil, "stale-app")
+        }
+
+        guard let rawContext = accessibilityClient.focusedTextContext(
+            allowDescendantTextFallback: profile.allowsDescendantTextFallback
+        ), !rawContext.isSecure,
+           rawContext.selectedTextLength == 0 else {
+            return (nil, "stale-focused-context")
+        }
+
+        guard promptTextAreaMatch(
+            for: frontmostApp.bundleIdentifier,
+            context: rawContext
+        ).canSuggest else {
+            return (nil, "stale-prompt-target")
+        }
+
+        let context = presentationAdjustedContext(
+            rawContext,
+            app: frontmostApp,
+            profile: profile
+        )
+        guard self.fieldIdentity(
+            app: frontmostApp,
+            context: context,
+            profile: profile
+        ) == fieldIdentity else {
+            return (nil, "stale-field")
+        }
+
+        guard context.textBeforeCursor == request.textBeforeCursor,
+              context.textAfterCursor == request.textAfterCursor else {
+            return (nil, "stale-text")
+        }
+
+        return (context, nil)
     }
 
     private func placementHealthPlan(
@@ -2162,7 +2336,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func recordAcceptedText(_ acceptedText: String) {
-        rememberAcceptedWords(in: acceptedText)
+        rememberAcceptedWords(
+            in: acceptedText,
+            appBundleIdentifier: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier
+        )
 
         guard let currentFieldIdentity,
               let lastTextSnapshot,
@@ -2193,13 +2370,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func rememberAcceptedWords(in text: String) {
-        rememberRecentWords(recentWordExtractor.words(in: text))
+    private func rememberAcceptedWords(in text: String, appBundleIdentifier: String?) {
+        rememberRecentWords(
+            recentWordExtractor.words(in: text),
+            appBundleIdentifier: appBundleIdentifier
+        )
     }
 
     private func rememberTypedWordsIfNeeded(
         previousSnapshot: FocusedTextSnapshot?,
-        currentSnapshot: FocusedTextSnapshot
+        currentSnapshot: FocusedTextSnapshot,
+        appBundleIdentifier: String
     ) {
         guard let previousSnapshot,
               previousSnapshot.fieldIdentity == currentSnapshot.fieldIdentity else {
@@ -2209,11 +2390,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rememberRecentWords(recentWordExtractor.completedWords(
             previousTextBeforeCursor: previousSnapshot.textBeforeCursor,
             currentTextBeforeCursor: currentSnapshot.textBeforeCursor
-        ))
+        ), appBundleIdentifier: appBundleIdentifier)
     }
 
-    private func rememberRecentWords(_ words: [String]) {
-        recentWordMemory.remember(words)
+    private func rememberRecentWords(_ words: [String], appBundleIdentifier: String?) {
+        guard let appBundleIdentifier else {
+            return
+        }
+
+        recentWordMemory.remember(words, scope: appBundleIdentifier)
     }
 
     private func recordTypedOverSuggestionIfNeeded(
