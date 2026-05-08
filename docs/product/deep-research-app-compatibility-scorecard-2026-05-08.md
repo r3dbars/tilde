@@ -30,7 +30,9 @@ metadata to compatibility profiles. This follow-up also persists that scope on
 learned compatibility profiles and blocks suggestions while marked-text
 composition is active. The latest loop adds a no-append `--check-only` proof
 validation path and explicit smoke report routing so known slices can be
-rechecked without polluting the append-only manual proof log.
+rechecked without polluting the append-only manual proof log. It also adds a
+pure app-level trust-flow harness for poll, request, present, accept, and
+verify behavior without launching Accessibility or a real target app.
 
 ## Product Standard
 
@@ -81,10 +83,11 @@ fixture proof, not a general system-wide inserter.
 
 Starting score before this pass: 72/100
 
-Overall score after this pass: 82/100
+Overall score after this pass: 83/100
 
-Latest automatable loop: evidence hygiene improved, but the score stays 82/100
-because no new live Codex, Claude Code, or production browser proof was added.
+Latest automatable loop: evidence hygiene improved and the app now has a
+focused automated trust-flow harness. The score still cannot approach 100
+without new live Codex, Claude Code, and production browser proof.
 
 This is a strict compatibility score. It is not a general app-quality score.
 Several individual surfaces score much higher, but hard gates prevent a broad
@@ -138,22 +141,25 @@ compatibility claim.
 ### Insertion correctness
 
 - Weight: 20
-- Current score: 15/20
+- Current score: 16/20
 - Why this score: The app verifies insertion, blocks selected text, checks
   visible acceptance proof, and now fast word completions use the same final
-  stale-context refresh as model suggestions. Still, key real-app proof gaps
-  remain.
+  stale-context refresh as model suggestions. The new trust-flow harness proves
+  poll/request/present/Tab-accept/verify behavior and stale/focus suppression
+  without raw-text evidence. Still, key real-app proof gaps remain.
 - Evidence found in repo:
   - `InsertionEngine`
   - `InsertionVerification`
   - `SuggestionAcceptanceProofPolicy`
   - `AppDelegate.refreshedPresentationContext`
+  - `SuggestionPresentationRefreshPolicy`
+  - `TrustFlowHarness`
   - `AcceptanceSurvivalChecker`
   - `Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift`
   - `Tests/AutocompleteLabCoreTests/SuggestionAcceptanceProofPolicyTests.swift`
+  - `Tests/AutocompleteLabAppTests/TrustFlowHarnessTests.swift`
 - Missing evidence: Same-slice Codex proof, Claude Code terminal-host proof,
-  broader production Chrome proof, and direct app-level flow tests around
-  poll-request-present-accept-verify.
+  and broader production Chrome proof.
 - What would make it 100/100: Every accept-enabled profile has current proof
   for exact insertion, no duplication, no cross-field leakage, and verification.
 
@@ -249,6 +255,8 @@ compatibility claim.
   - `script/manual_smoke_status.sh`
   - `script/manual_smoke_session.sh --check-only`
   - `script/real_app_smoke.sh --report-path`
+  - `Sources/AutocompleteLabApp/App/TrustFlowHarness.swift`
+  - `Tests/AutocompleteLabAppTests/TrustFlowHarnessTests.swift`
   - `script/check_visual_placement_evidence.sh`
   - `script/scorecard_goal_loop.sh`
 - Missing evidence: Passing require-all proof gates for Codex, Claude Code, and
@@ -479,6 +487,29 @@ directly.
 - Risk level: High
 - Expected score impact: +4 compatibility confidence.
 
+### 10. App-level trust-flow harness
+
+- Objective: Prove the app-level path from focused text snapshot through
+  request, presentation refresh, accept, and insertion verification without
+  real Accessibility side effects.
+- Files likely involved:
+  - `Sources/AutocompleteLabApp/App/SuggestionPresentationRefreshPolicy.swift`
+  - `Sources/AutocompleteLabApp/App/TrustFlowHarness.swift`
+  - `Sources/AutocompleteLabApp/App/AppDelegate.swift`
+  - `Tests/AutocompleteLabAppTests/TrustFlowHarnessTests.swift`
+- Tests to add/update:
+  - Stale text suppression before presentation.
+  - Marked-text composition suppression before presentation.
+  - Browser action-bearing suppression before presentation.
+  - Focus-change acceptance block before insertion.
+  - Prompt no-submit hard-cap full-accept block.
+  - Raw-text-free requested/presented/accepted/verified evidence.
+- Proof required:
+  - `swift test --filter TrustFlowHarnessTests`
+- Risk level: Medium
+- Expected score impact: +1 insertion correctness.
+- Status: Done in this follow-up.
+
 ## Codex Execution Goal
 
 Improve app compatibility safety by making browser action-bearing surfaces fail
@@ -505,4 +536,5 @@ This goal is complete when:
 - Learned compatibility profiles now carry versioned scope; last-verified and
   proof-link metadata is still not stored directly on learned profiles.
 - IME/dead-key and undo/redo matrix proof remains incomplete.
-- A full app-level non-AX harness would make trust flow testing much stronger.
+- The app-level trust-flow harness now covers the core path, but live proof is
+  still needed for Codex, Claude Code, and production browser surfaces.

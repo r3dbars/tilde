@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let profileStore = CompatibilityProfileStore.mvp
     private let promptEditorPolicy = PromptEditorFingerprintPolicy()
     private let browserHostedSurfacePolicy = BrowserHostedSurfacePolicy()
+    private let presentationRefreshPolicy = SuggestionPresentationRefreshPolicy()
     private let suggestionControlPolicy = SuggestionControlPolicy()
     private let activationPolicy = CompletionActivationPolicy()
     private let fieldClassifier = AXFieldClassifier()
@@ -2324,6 +2325,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               ),
               !rawContext.isSecure,
               rawContext.selectedTextLength == 0,
+              !rawContext.capabilities.hasMarkedText,
               claudeCodeTerminalHostProofBlockReason(
                   app: frontmostApp,
                   context: rawContext,
@@ -2491,6 +2493,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               ),
               !rawContext.isSecure,
               rawContext.selectedTextLength == 0,
+              !rawContext.capabilities.hasMarkedText,
               claudeCodeTerminalHostProofBlockReason(
                   app: frontmostApp,
                   context: rawContext,
@@ -3887,64 +3890,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fieldIdentity: FocusedFieldIdentity
     ) -> (context: FocusedTextContext?, reason: String?) {
         let expectedBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
-        guard let frontmostApp = accessibilityClient.frontmostApplication(),
-              frontmostAppMatchesSuggestion(
-                  frontmostApp,
-                  expectedBundleIdentifier: expectedBundleIdentifier,
-                  profile: profile
-              ) else {
+        guard let frontmostApp = accessibilityClient.frontmostApplication() else {
             return (nil, "stale-app")
         }
 
-        guard let rawContext = accessibilityClient.focusedTextContext(
-            allowDescendantTextFallback: profile.allowsDescendantTextFallback
-        ), !rawContext.isSecure,
-           rawContext.selectedTextLength == 0 else {
-            return (nil, "stale-focused-context")
-        }
-
-        guard claudeCodeTerminalHostProofBlockReason(
-            app: frontmostApp,
-            context: rawContext,
+        let appMatches = frontmostAppMatchesSuggestion(
+            frontmostApp,
+            expectedBundleIdentifier: expectedBundleIdentifier,
             profile: profile
-        ) == nil else {
-            return (nil, "stale-terminal-host-proof")
-        }
-
-        guard promptTextAreaMatch(
-            for: frontmostApp.bundleIdentifier,
-            context: rawContext
-        ).canSuggest else {
-            return (nil, "stale-prompt-target")
-        }
-
-        if case let .blocked(block) = browserHostedSurfacePolicy.decision(
-            bundleIdentifier: frontmostApp.bundleIdentifier,
-            fingerprint: rawContext.fingerprint
-        ) {
-            return (nil, block.traceReason)
-        }
-
-        let context = presentationAdjustedContext(
-            rawContext,
-            app: frontmostApp,
-            profile: profile,
-            previousSnapshot: lastTextSnapshot
         )
-        guard self.fieldIdentity(
-            app: frontmostApp,
-            context: context,
-            profile: profile
-        ) == fieldIdentity else {
-            return (nil, "stale-field")
+        let rawContext = appMatches
+            ? accessibilityClient.focusedTextContext(
+                allowDescendantTextFallback: profile.allowsDescendantTextFallback
+            )
+            : nil
+        let terminalHostBlockReason = rawContext.flatMap {
+            claudeCodeTerminalHostProofBlockReason(
+                app: frontmostApp,
+                context: $0,
+                profile: profile
+            )
+        }
+        let promptMatch = rawContext.map {
+            promptTextAreaMatch(
+                for: frontmostApp.bundleIdentifier,
+                context: $0
+            )
+        }
+        let browserDecision = rawContext.map {
+            browserHostedSurfacePolicy.decision(
+                bundleIdentifier: frontmostApp.bundleIdentifier,
+                fingerprint: $0.fingerprint
+            )
+        } ?? .allowed
+        let adjustedContext: FocusedTextContext?
+        let adjustedFieldIdentity: FocusedFieldIdentity?
+        if appMatches,
+           let rawContext,
+           !rawContext.isSecure,
+           rawContext.selectedTextLength == 0,
+           !rawContext.capabilities.hasMarkedText,
+           terminalHostBlockReason == nil,
+           promptMatch?.canSuggest == true,
+           browserDecision.canSuggest {
+            let context = presentationAdjustedContext(
+                rawContext,
+                app: frontmostApp,
+                profile: profile,
+                previousSnapshot: lastTextSnapshot
+            )
+            adjustedContext = context
+            adjustedFieldIdentity = self.fieldIdentity(
+                app: frontmostApp,
+                context: context,
+                profile: profile
+            )
+        } else {
+            adjustedContext = nil
+            adjustedFieldIdentity = nil
         }
 
-        guard context.textBeforeCursor == request.textBeforeCursor,
-              context.textAfterCursor == request.textAfterCursor else {
-            return (nil, "stale-text")
-        }
+        let decision = presentationRefreshPolicy.decision(for: SuggestionPresentationRefreshInput(
+            request: request,
+            expectedFieldIdentity: fieldIdentity,
+            frontmostAppMatchesExpected: appMatches,
+            rawContext: rawContext,
+            terminalHostBlockReason: terminalHostBlockReason,
+            promptCanSuggest: promptMatch?.canSuggest ?? false,
+            browserHostedSurfaceDecision: browserDecision,
+            adjustedContext: adjustedContext,
+            adjustedFieldIdentity: adjustedFieldIdentity
+        ))
 
-        return (context, nil)
+        return (decision.context, decision.reason)
     }
 
     private func frontmostAppMatchesSuggestion(
