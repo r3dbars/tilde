@@ -267,6 +267,47 @@ wait_for_frontmost_app() {
   exit 1
 }
 
+wait_for_background_process() {
+  local pid="$1"
+  local timeout_seconds="$2"
+  local label="$3"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while kill -0 "$pid" >/dev/null 2>&1; do
+    if ((SECONDS > deadline)); then
+      kill "$pid" >/dev/null 2>&1 || true
+      sleep 0.2
+      kill -9 "$pid" >/dev/null 2>&1 || true
+      wait "$pid" >/dev/null 2>&1 || true
+      echo "Timed out waiting for $label." >&2
+      return 124
+    fi
+    sleep 0.1
+  done
+
+  if wait "$pid"; then
+    return 0
+  fi
+
+  return $?
+}
+
+activate_process_id() {
+  local target_pid="$1"
+
+  swift - "$target_pid" <<'SWIFT' >/dev/null
+import AppKit
+
+guard CommandLine.arguments.count == 2,
+      let rawPID = Int32(CommandLine.arguments[1]),
+      let app = NSRunningApplication(processIdentifier: pid_t(rawPID)) else {
+    exit(1)
+}
+
+app.activate(options: [.activateAllWindows])
+SWIFT
+}
+
 assert_frontmost_app() {
   local expected="$1"
   local label="$2"
@@ -288,6 +329,7 @@ SWIFT
 wait_for_frontmost_process_id() {
   local expected_pid="$1"
   local timeout_seconds="${2:-5}"
+  local label="${3:-process}"
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
@@ -299,7 +341,7 @@ wait_for_frontmost_process_id() {
     sleep 0.2
   done
 
-  echo "Timed out waiting for Chrome process $expected_pid to become frontmost." >&2
+  echo "Timed out waiting for $label $expected_pid to become frontmost." >&2
   exit 1
 }
 
@@ -776,27 +818,45 @@ focus_textedit_smoke_editor() {
   local window_title="${1:-}"
 
   if [[ -n "$window_title" ]]; then
-    osascript - "$window_title" >/dev/null <<'APPLESCRIPT'
+    local target_pid_file target_pid
+    target_pid_file="$(mktemp)"
+    osascript - "$window_title" >"$target_pid_file" <<'APPLESCRIPT' &
 on run argv
   set targetTitle to item 1 of argv
   tell application "System Events"
-    tell process "TextEdit"
-      set foundTarget to false
-      set frontmost to true
-      repeat with candidateWindow in windows
-        if name of candidateWindow is targetTitle then
-          set foundTarget to true
-          perform action "AXRaise" of candidateWindow
-          exit repeat
-        end if
-      end repeat
-      if foundTarget is false then
-        error "No TextEdit smoke window named " & targetTitle number 1000
-      end if
-    end tell
+    set foundTarget to false
+    set targetPID to ""
+    repeat with textEditProcess in application processes whose name is "TextEdit"
+      tell textEditProcess
+        repeat with candidateWindow in windows
+          if name of candidateWindow is targetTitle then
+            set foundTarget to true
+            set targetPID to unix id of textEditProcess as text
+            set frontmost to true
+            perform action "AXRaise" of candidateWindow
+            exit repeat
+          end if
+        end repeat
+      end tell
+      if foundTarget is true then exit repeat
+    end repeat
+    if foundTarget is false then
+      error "No TextEdit smoke window named " & targetTitle number 1000
+    end if
+    return targetPID
   end tell
 end run
 APPLESCRIPT
+    local osascript_pid=$!
+    wait_for_background_process "$osascript_pid" 3 "TextEdit smoke window focus"
+    target_pid="$(tr -d '\r\n' <"$target_pid_file")"
+    rm -f "$target_pid_file"
+    if [[ -z "$target_pid" ]]; then
+      echo "Could not resolve TextEdit smoke window pid for '$window_title'." >&2
+      return 1
+    fi
+    activate_process_id "$target_pid"
+    wait_for_frontmost_process_id "$target_pid" 5 "TextEdit process"
   else
     osascript >/dev/null <<'APPLESCRIPT'
 tell application "System Events"
@@ -814,30 +874,48 @@ click_textedit_smoke_editor() {
   local window_title="${1:-}"
 
   if [[ -n "$window_title" ]]; then
-    osascript - "$window_title" >/dev/null <<'APPLESCRIPT'
+    local target_pid_file target_pid
+    target_pid_file="$(mktemp)"
+    osascript - "$window_title" >"$target_pid_file" <<'APPLESCRIPT' &
 on run argv
   set targetTitle to item 1 of argv
   tell application "System Events"
-    tell process "TextEdit"
-      set foundTarget to false
-      set frontmost to true
-      repeat with candidateWindow in windows
-        if name of candidateWindow is targetTitle then
-          set foundTarget to true
-          perform action "AXRaise" of candidateWindow
-          set windowPosition to position of candidateWindow
-          set windowSize to size of candidateWindow
-          click at {(item 1 of windowPosition) + ((item 1 of windowSize) / 2), (item 2 of windowPosition) + 160}
-          exit repeat
-        end if
-      end repeat
-      if foundTarget is false then
-        error "No TextEdit smoke window named " & targetTitle number 1000
-      end if
-    end tell
+    set foundTarget to false
+    set targetPID to ""
+    repeat with textEditProcess in application processes whose name is "TextEdit"
+      tell textEditProcess
+        repeat with candidateWindow in windows
+          if name of candidateWindow is targetTitle then
+            set foundTarget to true
+            set targetPID to unix id of textEditProcess as text
+            set frontmost to true
+            perform action "AXRaise" of candidateWindow
+            set windowPosition to position of candidateWindow
+            set windowSize to size of candidateWindow
+            click at {(item 1 of windowPosition) + ((item 1 of windowSize) / 2), (item 2 of windowPosition) + 160}
+            exit repeat
+          end if
+        end repeat
+      end tell
+      if foundTarget is true then exit repeat
+    end repeat
+    if foundTarget is false then
+      error "No TextEdit smoke window named " & targetTitle number 1000
+    end if
+    return targetPID
   end tell
 end run
 APPLESCRIPT
+    local osascript_pid=$!
+    wait_for_background_process "$osascript_pid" 3 "TextEdit smoke window click"
+    target_pid="$(tr -d '\r\n' <"$target_pid_file")"
+    rm -f "$target_pid_file"
+    if [[ -z "$target_pid" ]]; then
+      echo "Could not resolve TextEdit smoke window pid for '$window_title'." >&2
+      return 1
+    fi
+    activate_process_id "$target_pid"
+    wait_for_frontmost_process_id "$target_pid" 5 "TextEdit process"
   else
     osascript >/dev/null <<'APPLESCRIPT'
 tell application "System Events"
@@ -854,6 +932,22 @@ APPLESCRIPT
   fi
 
   wait_for_frontmost_app "TextEdit" 5
+}
+
+wait_for_textedit_smoke_editor() {
+  local window_title="$1"
+  local timeout_seconds="${2:-8}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    if focus_textedit_smoke_editor "$window_title" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for TextEdit smoke window '$window_title'." >&2
+  exit 1
 }
 
 assert_chrome_chat_fixture_not_submitted() {
@@ -1377,9 +1471,9 @@ run_textedit() {
   textedit_window_title="$(basename "$textedit_file")"
   : >"$textedit_file"
   open -a TextEdit "$textedit_file"
-  wait_for_frontmost_app "TextEdit" 5
   sleep 0.8
 
+  wait_for_textedit_smoke_editor "$textedit_window_title"
   focus_textedit_smoke_editor "$textedit_window_title"
   click_textedit_smoke_editor "$textedit_window_title"
   osascript <<'APPLESCRIPT'
