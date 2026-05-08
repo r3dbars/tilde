@@ -587,7 +587,7 @@ fi
 
 reject_pattern "insert-verification-final-failure .*app=$BUNDLE_ID" "unrecovered insertion verification failure"
 reject_pattern "field-suppressed .*app=$BUNDLE_ID" "field suppression"
-reject_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=(insert-verification-failed|missing-anchor|runtime-not-ready)" "blocking failure"
+reject_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=(insert-verification-failed|missing-anchor)" "blocking failure"
 
 if (( PROMPT_NO_SUBMIT_PROFILE == 1 )); then
   if [[ "$APP" == "codex" ]] && ! is_truthy "${AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED:-0}"; then

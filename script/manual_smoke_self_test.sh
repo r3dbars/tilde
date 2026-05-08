@@ -10,6 +10,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 mkdir -p "$TMP_DIR/visual-placement-screenshots"
 cp docs/product/visual-placement-screenshots/textedit-inline.png "$TMP_DIR/visual-placement-screenshots/textedit-inline.png"
 cp docs/product/visual-placement-screenshots/codex-inline.png "$TMP_DIR/visual-placement-screenshots/codex-inline.png"
+cp docs/product/visual-placement-screenshots/claude-code-terminal.png "$TMP_DIR/visual-placement-screenshots/claude-code-terminal.png"
 
 LOG_PATH="$TMP_DIR/diagnostics.log"
 TRACE_PATH="$TMP_DIR/traces.jsonl"
@@ -93,6 +94,19 @@ write_passing_trace() {
 EOF
 }
 
+write_one_word_log_with_runtime_warmup() {
+  local bundle_id="$1"
+  local render_mode="$2"
+
+  write_one_word_log "$bundle_id" "$render_mode"
+  local warmed_log="$LOG_PATH.warmup"
+  {
+    echo "2026-04-26T07:59:59Z suggestion-blocked app=$bundle_id reason=runtime-not-ready readinessStage=warming"
+    cat "$LOG_PATH"
+  } >"$warmed_log"
+  mv "$warmed_log" "$LOG_PATH"
+}
+
 write_one_word_trace() {
   local bundle_id="$1"
 
@@ -169,6 +183,7 @@ run_one_word_case() {
     AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
     AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
     AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1 \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1 \
     AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
     script/manual_smoke_session.sh "$app" --check >/dev/null
 
@@ -260,7 +275,24 @@ fi
 
 run_one_word_case codex Codex Codex com.openai.codex 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_one_word_case claude "Claude desktop" Claude com.anthropic.claudefordesktop 'inlineAdjacent|floatingMirror' inlineAdjacent
+run_one_word_case claude-code "Claude Code" "Claude Code" com.anthropic.claude-code 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_strict_visual_case notes-title notes-title
+
+write_one_word_log_with_runtime_warmup "com.anthropic.claude-code" "inlineAdjacent"
+write_one_word_trace "com.anthropic.claude-code"
+
+AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh claude-code --check >/dev/null
+
+if ! grep -F "| Claude Code | \`com.anthropic.claude-code\` | \`default\` | 1 | \`inlineAdjacent|floatingMirror\` | lines 1-" "$REPORT_PATH" >/dev/null; then
+  echo "manual smoke self-test did not allow Claude Code runtime warmup before verified proof" >&2
+  exit 1
+fi
 
 write_one_word_log "com.openai.codex" "inlineAdjacent"
 write_one_word_trace "com.openai.codex"
@@ -465,24 +497,19 @@ if ! grep -F "Insertion proof status: $REPORT_PATH" "$STATUS_OUTPUT" >/dev/null;
   exit 1
 fi
 
-for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome real Monaco" "Chrome real ProseMirror" "Chrome real Monaco default AX" "Chrome real ProseMirror default AX" "Chrome chat-like no-submit" Codex "Claude desktop"; do
+for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome real Monaco" "Chrome real ProseMirror" "Chrome real Monaco default AX" "Chrome real ProseMirror default AX" "Chrome chat-like no-submit" Codex "Claude Code" "Claude desktop"; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
     exit 1
   fi
 done
 
-for app_name in Codex "Claude desktop"; do
+for app_name in Codex "Claude Code" "Claude desktop"; do
   if ! grep -F -- "- $app_name: passed (one-word no-submit profile)" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not keep $app_name on one-word proof" >&2
     exit 1
   fi
 done
-
-if ! grep -F -- "- Claude Code: pending (run AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate)" "$STATUS_OUTPUT" >/dev/null; then
-  echo "manual smoke self-test did not report Claude Code terminal-host proof command" >&2
-  exit 1
-fi
 
 if ! grep -F -- "- Obsidian: passed" "$STATUS_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not report full Obsidian proof as passed" >&2
@@ -542,17 +569,14 @@ cat >"$COMPLETE_SCORECARD_PATH" <<'EOF'
 | --- | ---: | --- | --- | --- |
 | TextEdit | 10/10 | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Inline proof exists. | Done. |
 | Codex | 10/10 | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Prompt screenshot exists. | Done. |
+| Claude Code | 10/10 | [claude-code-terminal.png](visual-placement-screenshots/claude-code-terminal.png) | Terminal-host prompt screenshot exists. | Done. |
 EOF
 
-if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+if ! AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   AUTOCOMPLETE_LAB_SCORECARD="$COMPLETE_SCORECARD_PATH" \
   script/manual_smoke_status.sh --require-all >"$FAILURE_OUTPUT" 2>&1; then
-  echo "manual smoke self-test expected --require-all to fail while Claude Code terminal-host proof is pending" >&2
-  exit 1
-fi
-
-if ! grep -F "Claude Code - AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate" "$FAILURE_OUTPUT" >/dev/null; then
-  echo "manual smoke self-test did not explain the Claude Code terminal-host proof gap" >&2
+  echo "manual smoke self-test expected --require-all to pass when Claude Code proof is present" >&2
+  cat "$FAILURE_OUTPUT" >&2
   exit 1
 fi
 

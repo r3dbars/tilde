@@ -266,6 +266,8 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$MIN_SYSTEM_VERSION</string>
   <key>LSUIElement</key>
   <true/>
+  <key>NSSupportsAutomaticTermination</key>
+  <false/>
   <key>NSAccessibilityUsageDescription</key>
   <string>AutocompleteLab needs Accessibility permission to read the active text field and show local suggestions near the cursor.</string>
   <key>NSPrincipalClass</key>

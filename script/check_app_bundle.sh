@@ -70,6 +70,8 @@ done
 [[ -n "$(plist_value CFBundleShortVersionString)" ]] || fail "missing CFBundleShortVersionString"
 [[ -n "$(plist_value CFBundleVersion)" ]] || fail "missing CFBundleVersion"
 [[ "$(plist_value LSUIElement)" == "true" ]] || fail "LSUIElement must be true for menu bar agent"
+[[ "$(plist_value NSSupportsAutomaticTermination)" == "false" ]] \
+  || fail "NSSupportsAutomaticTermination must be false for persistent menu bar agent"
 
 ACCESSIBILITY_REASON="$(plist_value NSAccessibilityUsageDescription)"
 [[ "$ACCESSIBILITY_REASON" == *"Accessibility permission"* ]] || fail "missing Accessibility usage description"

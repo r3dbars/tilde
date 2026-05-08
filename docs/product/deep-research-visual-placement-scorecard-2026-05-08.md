@@ -65,8 +65,7 @@ expected old `anchorSource` metadata even though current presentation traces use
 The live panel conversion had no core helper or tests for vertically arranged
 monitors; this pass added both. The remaining weak spots are manual proof and
 deeper invalidation: strict proof still fails for Codex same-slice no-submit
-proof, Claude Code terminal-host proof, and some partial browser/editor
-manifest gates, and the app still lacks full window/scroll/display revision
+proof and some partial browser/editor manifest gates, and the app still lacks full window/scroll/display revision
 tokens. A later hardening pass also made stable-bounds field identity
 deterministic instead of process-random, which makes replay and trace evidence
 more comparable across lab app launches.
@@ -318,18 +317,16 @@ scroll, resize, and fullscreen states. Unknown cases suppress immediately.
 - Risk level: High manual risk because the app must not submit.
 - Expected score impact: +4 to +6.
 
-### 5. Finish Claude Code terminal-host proof
+### 5. Expand Claude Code terminal-host proof
 
-- Objective: prove the terminal-host lane can display and accept one word
-  without submitting shell or agent input.
-- Files likely involved: proof docs and possibly terminal-host policy.
-- Tests to add/update:
-  `Tests/AutocompleteLabCoreTests/ClaudeCodeTerminalHostProofPolicyTests.swift`
-  if gaps are found.
-- Proof required:
-  `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate`.
-- Risk level: High manual risk.
-- Expected score impact: +3 to +5.
+- Objective: add more terminal-host and prompt-layout variants now that the
+  first strict Terminal-hosted one-word no-submit proof exists.
+- Files likely involved: proof docs and terminal-host compatibility policy.
+- Tests to add/update: host-specific proof policy tests if new hosts expose
+  different prompt text.
+- Proof required: bounded manual-gated slices per host/layout.
+- Risk level: Medium manual risk.
+- Expected score impact: +1 to +2.
 
 ## Codex Execution Goal
 
@@ -383,9 +380,9 @@ Verification:
 - `swift test` passed 716 tests.
 - `./script/geometry_trace_report_self_test.sh` passed.
 - `./script/geometry_trace_report.py --trace ~/Library/Logs/AutocompleteLab/traces.jsonl --start-line 56300 --require-proof` passed with 0 geometry proof failures.
-- `./script/check_visual_placement_evidence.sh` passed in report mode with 15 screenshots verified.
+- `./script/check_visual_placement_evidence.sh` passed in report mode with 16 screenshots verified after adding Claude Code terminal-host proof.
 - `./script/check_proof_manifest.sh` passed in report mode.
-- `./script/check_visual_placement_evidence.sh --strict` still fails for Codex stale same-slice no-submit proof and Claude Code missing screenshot proof.
-- `./script/check_proof_manifest.sh --strict` still fails for partial Chrome text fields, browser editor fixtures, Chrome chat-like composer, Codex, and pending Claude Code.
-- `./script/check_score_targets.sh` still fails with 69 expected target and
+- `./script/check_visual_placement_evidence.sh --strict` still fails for Codex stale same-slice no-submit proof.
+- `./script/check_proof_manifest.sh --strict` still fails for partial Chrome text fields, browser editor fixtures, Chrome chat-like composer, Codex, Obsidian, Notes variants, and Claude desktop variants.
+- `./script/check_score_targets.sh` still fails with 68 expected target and
   strict proof-gate misses.
