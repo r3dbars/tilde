@@ -16,7 +16,7 @@ For screenshot-backed app-by-app grades and gaps, use
 | Chrome | supported for local text fields and local editor fixtures | synthetic inline, mirror fallback | key events, AX value fallback | repeatable textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture commands with screenshot-backed proof labels |
 | Codex | dogfood target | synthetic inline caret, no detached fallback | AX value replacement, key fallback | prior manual pass is stale for this gate; current one-word no-submit proof pending |
 | Claude Code | dogfood target | synthetic inline caret, no detached fallback | key events, AX fallback | pending manual smoke pass |
-| Claude desktop | dogfood target | synthetic inline caret, no detached fallback | AX value replacement | prior manual pass is stale for this gate; current one-word no-submit proof pending |
+| Claude desktop | dogfood target | synthetic inline caret, no detached fallback | AX value replacement | current screenshot-backed one-word no-submit proof recorded; placement polish still pending |
 | Mail | diagnostics only | disabled | disabled | blocked until safe compose adapter exists |
 | Atlas | unsupported | disabled | disabled | blocked until focused AX element is reliable |
 
@@ -27,7 +27,7 @@ Run:
 ```
 
 TextEdit, Notes title/body/checklist, Obsidian, and Chrome must have full
-accept proof. Codex, Claude Code, and Claude desktop must have one-word
+accept proof. Codex and Claude Code must have one-word
 no-submit proof before they can graduate; full accept stays disabled in prompt
 apps until separate full-accept no-submit proof exists. Screenshot-backed visual proof is
 also enforced by strict mode, so Codex, Obsidian, Notes, Claude Code, and Claude

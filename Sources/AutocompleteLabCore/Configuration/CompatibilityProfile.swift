@@ -150,6 +150,16 @@ public struct CompatibilityProfile: Equatable, Sendable {
             && (supportsOneWordAcceptance || supportsFullAcceptance)
     }
 
+    public var allowsStrictVisualProofSyntheticCaretPlacement: Bool {
+        supportsOneWordAcceptance
+            && !supportsFullAcceptance
+            && !allowsDetachedSuggestions
+            && !allowsSyntheticCaretPlacement
+            && !isSensitive
+            && anchorLadder == [.caret]
+            && notes.contains("one-word no-submit proof")
+    }
+
     public var debugSummary: String {
         let fallbackRender = fallbackRenderMode?.rawValue ?? "none"
         let fallbackInsertion = fallbackInsertionMode?.rawValue ?? "none"

@@ -241,6 +241,7 @@ struct CompatibilityProfileTests {
             #expect(promptProfile.supportsFullAcceptance == false)
             #expect(promptProfile.allowsDetachedSuggestions == false)
             #expect(promptProfile.allowsSyntheticCaretPlacement == false)
+            #expect(promptProfile.allowsStrictVisualProofSyntheticCaretPlacement == true)
         }
     }
 

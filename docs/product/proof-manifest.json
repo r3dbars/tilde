@@ -179,11 +179,19 @@
     },
     {
       "surface": "Claude desktop",
-      "status": "partial",
-      "screenshots": [],
-      "gaps": [
-        "Prior accepts exist, but fresh screenshot-backed one-word no-submit proof is still missing."
-      ]
+      "status": "complete",
+      "manualSmoke": {
+        "app": "Claude",
+        "bundle": "com.anthropic.claudefordesktop",
+        "proof": "default",
+        "minVerifiedAccepts": 1,
+        "maxVerifiedAccepts": 1,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/claude-desktop.png"
+      ],
+      "gaps": []
     }
   ]
 }
