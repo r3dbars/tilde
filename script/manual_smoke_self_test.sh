@@ -402,8 +402,8 @@ for app_name in Codex "Claude desktop"; do
   fi
 done
 
-if ! grep -F -- "- Claude Code: pending (terminal-host adapter required; direct com.anthropic.claude-code proof is diagnostics-only)" "$STATUS_OUTPUT" >/dev/null; then
-  echo "manual smoke self-test did not keep Claude Code blocked on terminal-host proof" >&2
+if ! grep -F -- "- Claude Code: pending (run AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate)" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not report Claude Code terminal-host proof command" >&2
   exit 1
 fi
 
@@ -474,7 +474,7 @@ if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   exit 1
 fi
 
-if ! grep -F "Claude Code - terminal-host adapter required" "$FAILURE_OUTPUT" >/dev/null; then
+if ! grep -F "Claude Code - AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate" "$FAILURE_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not explain the Claude Code terminal-host proof gap" >&2
   exit 1
 fi

@@ -123,11 +123,10 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
 
 ## Claude Code
 
-Claude Code is not ready for a direct prompt smoke pass in the current build.
-The installed `com.anthropic.claude-code` bundle is a background-only CLI
-helper, while real typing happens inside a terminal host. Terminal hosts remain
-blocked until a separate adapter proves Tab cannot submit shell input or an
-agent prompt.
+Claude Code uses a proof-only terminal-host lane. The direct
+`com.anthropic.claude-code` bundle is still diagnostics-only, but a supported
+terminal host may count when explicit proof mode is active and the disposable
+marker is present.
 
 Recorder:
 
@@ -135,14 +134,14 @@ Recorder:
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate
 ```
 
-- This command is expected to stay blocked until the terminal-host adapter exists.
-- Do not record terminal-hosted Claude Code as direct `com.anthropic.claude-code` proof.
-- Once an adapter exists, focus a disposable Claude Code prompt without submitting.
+- Use a supported terminal host: Terminal, iTerm2, Warp, Ghostty, kitty, or Alacritty.
+- Include `AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF` in the prompt or terminal title.
+- Focus a disposable Claude Code prompt without submitting.
 - Type a harmless local test fragment like `Can we make this`.
 - Confirm a suggestion appears near the prompt or in a stable mirror position.
 - Press Tab and expect the next word/suffix to insert without submitting.
 - Confirm the text stayed in the composer, no user message bubble appeared, and
-  no assistant response started.
+  no shell command, user message, or assistant response started.
 - Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
 
