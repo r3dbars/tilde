@@ -5,6 +5,51 @@ import AutocompleteLabCore
 
 @Suite("Acceptance survival checker")
 struct AcceptanceSurvivalCheckerTests {
+    @Test("Rejected two-second checkpoint marks the tracker as deleted")
+    func rejectedTwoSecondCheckpointMarksTrackerDeleted() async throws {
+        let checker = AcceptanceSurvivalChecker()
+        let tracker = makeTracker(
+            acceptedText: " accepted text",
+            textBeforeCursor: "Draft"
+        )
+        await checker.beginTracking(tracker)
+
+        let result = try #require(await checker.measure(
+            acceptanceID: tracker.acceptanceID,
+            checkpoint: .twoSeconds,
+            currentTextWindow: "Draft without it",
+            now: tracker.acceptedAt.addingTimeInterval(2)
+        ))
+        let updated = try #require(await checker.tracker(acceptanceID: tracker.acceptanceID))
+
+        #expect(result.shouldRecordAcceptedThenDeleted)
+        #expect(result.measurement.survivalClass == .rejectedAfterAccept)
+        #expect(updated.deletedWithinTwoSeconds)
+    }
+
+    @Test("Final kept checkpoint records accepted and kept then finishes")
+    func finalKeptCheckpointRecordsAcceptedAndKeptThenFinishes() async throws {
+        let checker = AcceptanceSurvivalChecker()
+        let tracker = makeTracker(
+            acceptedText: " accepted text",
+            textBeforeCursor: "Draft"
+        )
+        await checker.beginTracking(tracker)
+
+        let result = try #require(await checker.measure(
+            acceptanceID: tracker.acceptanceID,
+            checkpoint: .thirtySeconds,
+            currentTextWindow: "Draft accepted text",
+            now: tracker.acceptedAt.addingTimeInterval(30)
+        ))
+        let removed = await checker.finishTracking(acceptanceID: tracker.acceptanceID)
+
+        #expect(result.shouldRecordAcceptedAndKept)
+        #expect(result.shouldFinish)
+        #expect(result.finishReason == "thirty-second-finalized")
+        #expect(removed?.acceptanceID == tracker.acceptanceID)
+    }
+
     @Test("Records two-second deletes and finalizes retained text from RAM")
     func recordsDeletesAndClearsTracker() async throws {
         let checker = AcceptanceSurvivalChecker()
@@ -83,7 +128,9 @@ struct AcceptanceSurvivalCheckerTests {
 
     private func makeTracker(
         acceptedText: String,
-        acceptedAt: Date = Date(timeIntervalSince1970: 1_000)
+        acceptedAt: Date = Date(timeIntervalSince1970: 1_000),
+        requestMode: CompletionRequestMode = .wordCompletion,
+        textBeforeCursor: String = "Start "
     ) -> AcceptanceSurvivalTracker {
         AcceptanceSurvivalTracker(
             acceptanceID: "acceptance-one",
@@ -94,9 +141,9 @@ struct AcceptanceSurvivalCheckerTests {
                 processIdentifier: 42,
                 elementIdentifier: 7
             ),
-            requestMode: CompletionRequestMode.wordCompletion.rawValue,
+            requestMode: requestMode.rawValue,
             acceptedText: acceptedText,
-            expectedInsertionUTF16Offset: "Start ".utf16.count,
+            expectedInsertionUTF16Offset: textBeforeCursor.utf16.count,
             acceptedAt: acceptedAt,
             profile: CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit")!,
             fieldKind: .multilineCompose,
