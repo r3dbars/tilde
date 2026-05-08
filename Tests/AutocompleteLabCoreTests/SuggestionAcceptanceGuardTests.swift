@@ -66,6 +66,54 @@ struct SuggestionAcceptanceGuardTests {
         #expect(guardPolicy.decision(shown: shown, current: current) == .block(.textAfterCursorChanged))
     }
 
+    @Test("Blocks accept when target fingerprint changes")
+    func blocksAcceptWhenTargetFingerprintChanges() {
+        let shown = snapshot(
+            targetFingerprint: targetFingerprint(
+                elementRect: RoundedFocusedRect(x: 20, y: 40, width: 300, height: 44),
+                caretRect: RoundedFocusedRect(x: 120, y: 52, width: 1, height: 20)
+            )
+        )
+        let movedCaret = snapshot(
+            targetFingerprint: targetFingerprint(
+                elementRect: RoundedFocusedRect(x: 20, y: 40, width: 300, height: 44),
+                caretRect: RoundedFocusedRect(x: 180, y: 52, width: 1, height: 20)
+            )
+        )
+        let movedWindow = snapshot(
+            targetFingerprint: targetFingerprint(
+                elementRect: RoundedFocusedRect(x: 20, y: 120, width: 300, height: 44),
+                caretRect: RoundedFocusedRect(x: 120, y: 52, width: 1, height: 20)
+            )
+        )
+        let changedWindowIdentifier = snapshot(
+            targetFingerprint: targetFingerprint(windowIdentifier: 43)
+        )
+
+        #expect(guardPolicy.decision(shown: shown, current: movedCaret) == .block(.targetFingerprintChanged))
+        #expect(guardPolicy.decision(shown: shown, current: movedWindow) == .block(.targetFingerprintChanged))
+        #expect(guardPolicy.decision(shown: shown, current: changedWindowIdentifier) == .block(.targetFingerprintChanged))
+    }
+
+    @Test("Advanced target fingerprints keep target lock while allowing natural caret movement")
+    func advancedTargetFingerprintAllowsNaturalCaretMovement() {
+        let shown = snapshot(
+            targetFingerprint: targetFingerprint()
+                .advancingTextRevision(textBeforeCursor: "Please send this", textAfterCursor: ""),
+            textBeforeCursor: "Please send this"
+        )
+        let current = snapshot(
+            targetFingerprint: targetFingerprint(
+                caretRect: RoundedFocusedRect(x: 240, y: 52, width: 1, height: 20),
+                textBeforeCursor: "Please send this",
+                textAfterCursor: ""
+            ),
+            textBeforeCursor: "Please send this"
+        )
+
+        #expect(guardPolicy.decision(shown: shown, current: current) == .allow)
+    }
+
     @Test("Missing snapshots fail closed")
     func missingSnapshotsFailClosed() {
         let shown = snapshot()
@@ -76,12 +124,14 @@ struct SuggestionAcceptanceGuardTests {
 
     private func snapshot(
         fieldIdentity: FocusedFieldIdentity = identity(),
+        targetFingerprint: FocusedTargetFingerprint = Self.targetFingerprint(),
         textBeforeCursor: String = "Please send",
         textAfterCursor: String = "",
         selectedTextLength: Int = 0
     ) -> SuggestionAcceptanceSnapshot {
         SuggestionAcceptanceSnapshot(
             fieldIdentity: fieldIdentity,
+            targetFingerprint: targetFingerprint,
             textBeforeCursor: textBeforeCursor,
             textAfterCursor: textAfterCursor,
             selectedTextLength: selectedTextLength
@@ -109,6 +159,58 @@ struct SuggestionAcceptanceGuardTests {
             bundleIdentifier: bundleIdentifier,
             processIdentifier: processIdentifier,
             elementIdentifier: elementIdentifier
+        )
+    }
+
+    private static func targetFingerprint(
+        role: String? = "AXTextArea",
+        subrole: String? = nil,
+        windowIdentifier: Int? = 42,
+        elementRect: RoundedFocusedRect? = RoundedFocusedRect(x: 20, y: 40, width: 300, height: 44),
+        windowRect: RoundedFocusedRect? = RoundedFocusedRect(x: 0, y: 0, width: 800, height: 600),
+        caretRect: RoundedFocusedRect? = RoundedFocusedRect(x: 120, y: 52, width: 1, height: 20),
+        textBeforeCursor: String = "Please send",
+        textAfterCursor: String = ""
+    ) -> FocusedTargetFingerprint {
+        FocusedTargetFingerprint(
+            role: role,
+            subrole: subrole,
+            elementFingerprint: FocusedElementFingerprint(
+                identifier: "editor",
+                title: "Draft",
+                placeholder: "Message",
+                windowTitle: "Window"
+            ),
+            windowIdentifier: windowIdentifier,
+            elementBounds: elementRect,
+            windowBounds: windowRect,
+            caretBounds: caretRect,
+            surroundingTextRevision: FocusedTextRevision(
+                textBeforeCursor: textBeforeCursor,
+                textAfterCursor: textAfterCursor
+            )
+        )
+    }
+
+    private func targetFingerprint(
+        role: String? = "AXTextArea",
+        subrole: String? = nil,
+        windowIdentifier: Int? = 42,
+        elementRect: RoundedFocusedRect? = RoundedFocusedRect(x: 20, y: 40, width: 300, height: 44),
+        windowRect: RoundedFocusedRect? = RoundedFocusedRect(x: 0, y: 0, width: 800, height: 600),
+        caretRect: RoundedFocusedRect? = RoundedFocusedRect(x: 120, y: 52, width: 1, height: 20),
+        textBeforeCursor: String = "Please send",
+        textAfterCursor: String = ""
+    ) -> FocusedTargetFingerprint {
+        Self.targetFingerprint(
+            role: role,
+            subrole: subrole,
+            windowIdentifier: windowIdentifier,
+            elementRect: elementRect,
+            windowRect: windowRect,
+            caretRect: caretRect,
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: textAfterCursor
         )
     }
 }

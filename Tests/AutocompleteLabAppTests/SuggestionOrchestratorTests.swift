@@ -692,6 +692,7 @@ private func makeContext(
         caretRect: CGRect(x: 10, y: 10, width: 1, height: 18),
         elementRect: CGRect(x: 0, y: 0, width: 400, height: 200),
         windowRect: CGRect(x: 0, y: 0, width: 500, height: 300),
+        windowIdentifier: 42,
         textLineRect: CGRect(x: 10, y: 10, width: 120, height: 18),
         textStyle: nil,
         isSecure: false,

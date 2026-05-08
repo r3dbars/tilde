@@ -199,8 +199,8 @@ struct SettingsWindowControllerStateTests {
         #expect(!safari.canToggle)
     }
 
-    @Test("Prompt apps show full accept is off for safety")
-    func promptAppsShowFullAcceptIsOffForSafety() {
+    @Test("Prompt apps stay disabled until no-submit proof exists")
+    func promptAppsStayDisabledUntilNoSubmitProofExists() {
         let store = CompatibilityProfileStore.mvp
         let codex = SettingsCurrentAppState(
             displayName: "Codex",
@@ -210,12 +210,12 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 0
         )
 
-        #expect(codex.modeText == "Mode: inline, mirror fallback")
-        #expect(codex.acceptanceText == "Acceptance: Tab next word only; full accept is off for safety")
-        #expect(codex.proofText == "Proof: include AUTOCOMPLETE_LAB_CODEX_PROOF, press Tab once, and do not press Enter.")
-        #expect(codex.proofCommandText == "Manual command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate")
-        #expect(codex.proofCommandClipboardText == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate")
-        #expect(codex.canCopyProofCommand)
+        #expect(codex.modeText == "Mode: disabled")
+        #expect(codex.acceptanceText == "Acceptance: off here")
+        #expect(codex.proofText == "Proof: unavailable here.")
+        #expect(codex.proofCommandText == nil)
+        #expect(codex.proofCommandClipboardText == nil)
+        #expect(!codex.canCopyProofCommand)
     }
 
     @Test("Per-app mode copy exposes forced mirror overrides")

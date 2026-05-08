@@ -38,17 +38,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modelRuntimeBundle.runtime
     }
     private lazy var engine: any CompletionEngine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
-    private lazy var insertionEngine = InsertionEngine(
-        accessibilityClient: accessibilityClient,
-        clipboardFallbackEnabled: true
-    )
+    private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
     private let keyboardCapturePolicy = KeyboardCapturePolicy()
     private let keyboardEventTapIdleStopPolicy = KeyboardEventTapIdleStopPolicy()
     private let insertionVerification = InsertionVerification()
     private let insertionRetryPolicy = InsertionRetryPolicy()
     private let insertionVerificationTimingPolicy = InsertionVerificationTimingPolicy()
     private let suggestionAcceptanceProofPolicy = SuggestionAcceptanceProofPolicy()
+    private let suggestionAcceptanceGuard = SuggestionAcceptanceGuard()
     private let acceptanceSafetyPolicy = AcceptanceSafetyPolicy()
+    private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
     private let suggestionPresentationTracePayloadBuilder = SuggestionPresentationTracePayloadBuilder()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private lazy var suggestionOrchestrator = SuggestionOrchestrator(
@@ -176,6 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionFieldIdentity: FocusedFieldIdentity?
     private var currentSuggestionRequestMode: CompletionRequestMode?
     private var currentSuggestionTextBeforeCursor: String?
+    private var currentSuggestionAcceptanceSnapshot: SuggestionAcceptanceSnapshot?
     private var currentSuggestionDisplayedText: String?
     private var currentSuggestionFieldClassification: AXFieldClassification?
     private var currentSuggestionPresentedAt: Date?
@@ -1748,6 +1748,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             caretRect: syntheticCaret,
             elementRect: context.elementRect,
             windowRect: context.windowRect,
+            windowIdentifier: context.windowIdentifier,
             textLineRect: syntheticCaret,
             textStyle: context.textStyle,
             isSecure: context.isSecure,
@@ -1772,6 +1773,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             caretRect: context.caretRect,
             elementRect: context.elementRect,
             windowRect: context.windowRect,
+            windowIdentifier: context.windowIdentifier,
             textLineRect: context.textLineRect,
             textStyle: context.textStyle,
             isSecure: context.isSecure,
@@ -2341,6 +2343,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-one-word")
                 return false
             }
+            if let blockReason = currentSuggestionAcceptanceDecision().blockReason {
+                recordAcceptanceGuardBlock(reason: blockReason)
+                setSuggestionDecision("Blocked: \(blockReason.rawValue)")
+                hideSuggestion(reason: blockReason.rawValue)
+                recordKeyboardAction(key: key, action: action, handled: false, reason: blockReason.rawValue)
+                return false
+            }
 
             let acceptanceID = UUID().uuidString
             let acceptedAt = Date()
@@ -2431,6 +2440,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-full")
                 return false
             }
+            if let blockReason = currentSuggestionAcceptanceDecision().blockReason {
+                recordAcceptanceGuardBlock(reason: blockReason)
+                setSuggestionDecision("Blocked: \(blockReason.rawValue)")
+                hideSuggestion(reason: blockReason.rawValue)
+                recordKeyboardAction(key: key, action: action, handled: false, reason: blockReason.rawValue)
+                return false
+            }
 
             let acceptanceID = UUID().uuidString
             let acceptedAt = Date()
@@ -2515,6 +2531,105 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return false
         }
+    }
+
+    private func currentSuggestionAcceptanceDecision() -> SuggestionAcceptanceDecision {
+        guard let shownSnapshot = currentSuggestionAcceptanceSnapshot else {
+            return .block(.missingShownSnapshot)
+        }
+
+        var blockReason: SuggestionAcceptanceBlockReason?
+        guard let currentSnapshot = currentFocusedAcceptanceSnapshot(
+            expected: shownSnapshot.fieldIdentity,
+            blockReason: &blockReason
+        ) else {
+            return .block(blockReason ?? .missingCurrentSnapshot)
+        }
+
+        return suggestionAcceptanceGuard.decision(
+            shown: shownSnapshot,
+            current: currentSnapshot
+        )
+    }
+
+    private func currentFocusedAcceptanceSnapshot(
+        expected shownIdentity: FocusedFieldIdentity,
+        blockReason: inout SuggestionAcceptanceBlockReason?
+    ) -> SuggestionAcceptanceSnapshot? {
+        guard let frontmostApp = accessibilityClient.frontmostApplication(),
+              let profile = effectiveProfile(for: frontmostApp) else {
+            return nil
+        }
+
+        guard frontmostAppMatchesSuggestion(
+            frontmostApp,
+            expectedBundleIdentifier: shownIdentity.bundleIdentifier,
+            profile: profile
+        ),
+            frontmostApp.processIdentifier == shownIdentity.processIdentifier else {
+            blockReason = .appChanged
+            return nil
+        }
+
+        guard let rawContext = accessibilityClient.focusedTextContext(
+                  allowDescendantTextFallback: profile.allowsDescendantTextFallback
+              ) else {
+            return nil
+        }
+
+        guard !rawContext.isSecure else {
+            blockReason = .currentBecameSecure
+            return nil
+        }
+
+        guard promptTextAreaMatch(
+            for: frontmostApp.bundleIdentifier,
+            context: rawContext
+        ).canSuggest else {
+            blockReason = .promptTargetChanged
+            return nil
+        }
+
+        let context = presentationAdjustedContext(
+            rawContext,
+            app: frontmostApp,
+            profile: profile,
+            previousSnapshot: lastTextSnapshot
+        )
+        return SuggestionAcceptanceSnapshot(
+            fieldIdentity: fieldIdentity(
+                app: frontmostApp,
+                context: context,
+                profile: profile
+            ),
+            targetFingerprint: targetFingerprint(context: context),
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            selectedTextLength: context.selectedTextLength
+        )
+    }
+
+    private func recordAcceptanceGuardBlock(reason: SuggestionAcceptanceBlockReason) {
+        guard suggestionSession.hasVisibleSuggestion,
+              let suggestionID = currentSuggestionID else {
+            return
+        }
+
+        RawAutocompleteTraceLog.shared.record(
+            type: .suggestionSuppressed,
+            suggestionID: suggestionID,
+            appBundleIdentifier: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? "",
+            fieldIdentity: currentSuggestionFieldIdentity?.traceDescription ?? "",
+            requestMode: currentSuggestionRequestMode?.rawValue ?? "",
+            displayedText: currentSuggestionDisplayedText ?? suggestionSession.visibleSuggestion?.visibleText ?? "",
+            reason: "wrong-app-or-field-before-accept",
+            metadata: [
+                "acceptanceGuardReason": reason.rawValue,
+                "doNotShip": "true",
+                "focusMismatch": String(reason.isFocusMismatch),
+                "severe": "true"
+            ]
+        )
     }
 
     private func recordClaudeCodeTerminalHostProofKeyboardProgress(
@@ -2889,6 +3004,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let currentFieldIdentity,
               let lastTextSnapshot,
               lastTextSnapshot.fieldIdentity == currentFieldIdentity,
+              let currentSuggestionAcceptanceSnapshot,
               let profile = currentProfile else {
             return nil
         }
@@ -2903,6 +3019,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         return InsertionVerificationBaseline(
             fieldIdentity: currentFieldIdentity,
+            targetFingerprint: currentSuggestionAcceptanceSnapshot.targetFingerprint.postInsertionScope,
             previousTextBeforeCursor: lastTextSnapshot.textBeforeCursor,
             previousTextAfterCursor: lastTextSnapshot.textAfterCursor,
             profile: profile,
@@ -3031,6 +3148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     if insertAcceptedText(acceptedText, skippingInsertionModes: skippedModes) {
                         let retryBaseline = InsertionVerificationBaseline(
                             fieldIdentity: baseline.fieldIdentity,
+                            targetFingerprint: baseline.targetFingerprint,
                             previousTextBeforeCursor: baseline.previousTextBeforeCursor,
                             previousTextAfterCursor: baseline.previousTextAfterCursor,
                             profile: baseline.profile,
@@ -3240,6 +3358,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard currentIdentity == baseline.fieldIdentity else {
             return .fieldChanged
+        }
+
+        let currentTargetFingerprint = targetFingerprint(context: adjustedContext).postInsertionScope
+        guard baseline.targetFingerprint.matches(currentTargetFingerprint) else {
+            return .targetFingerprintChanged
         }
 
         return .ready(context: adjustedContext)
@@ -3474,6 +3597,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         persistAcceptedAndKeptLearning()
         return signal
+    }
+
+    private func recordInsertionVerificationFailure(
+        acceptedText: String,
+        baseline: InsertionVerificationBaseline,
+        outcome: String,
+        reason: String,
+        metadata: [String: String]
+    ) {
+        RawAutocompleteTraceLog.shared.record(
+            type: .insertionFailed,
+            suggestionID: baseline.suggestionID ?? "",
+            appBundleIdentifier: baseline.profile.bundleIdentifier,
+            fieldIdentity: baseline.fieldIdentity.traceDescription,
+            requestMode: baseline.requestMode?.rawValue ?? "",
+            acceptedText: acceptedText,
+            outcome: outcome,
+            reason: reason,
+            metadata: metadata
+                .merging([
+                    "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                    "previousAfterChars": String(baseline.previousTextAfterCursor.count)
+                ]) { current, _ in current }
+        )
     }
 
     private func scheduleSuggestion(
@@ -4154,6 +4301,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionFieldIdentity = fieldIdentity
         currentSuggestionRequestMode = request.mode
         currentSuggestionTextBeforeCursor = request.textBeforeCursor
+        currentSuggestionAcceptanceSnapshot = SuggestionAcceptanceSnapshot(
+            fieldIdentity: fieldIdentity,
+            targetFingerprint: targetFingerprint(context: context),
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            selectedTextLength: context.selectedTextLength
+        )
         currentSuggestionDisplayedText = suggestion.visibleText
         currentSuggestionFieldClassification = fieldClassification(for: context)
         currentSuggestionPresentedAt = Date()
@@ -4527,6 +4681,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             processIdentifier: app.processIdentifier,
             mode: profile.fieldIdentityMode,
             input: FocusedFieldIdentityInput(context: context)
+        )
+    }
+
+    private func targetFingerprint(context: FocusedTextContext) -> FocusedTargetFingerprint {
+        FocusedTargetFingerprint(
+            role: context.role,
+            subrole: context.subrole,
+            elementFingerprint: context.fingerprint,
+            windowIdentifier: context.windowIdentifier,
+            elementRect: context.elementRect,
+            windowRect: context.windowRect,
+            caretRect: context.caretRect,
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor
         )
     }
 
@@ -5217,13 +5385,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if let lastTextSnapshot,
-           lastTextSnapshot.fieldIdentity == currentFieldIdentity {
+           lastTextSnapshot.fieldIdentity == currentFieldIdentity,
+           let currentSuggestionAcceptanceSnapshot {
             currentSuggestionTextBeforeCursor = lastTextSnapshot.textBeforeCursor
+            self.currentSuggestionAcceptanceSnapshot = SuggestionAcceptanceSnapshot(
+                fieldIdentity: lastTextSnapshot.fieldIdentity,
+                targetFingerprint: currentSuggestionAcceptanceSnapshot.targetFingerprint.advancingTextRevision(
+                    textBeforeCursor: lastTextSnapshot.textBeforeCursor,
+                    textAfterCursor: lastTextSnapshot.textAfterCursor
+                ),
+                textBeforeCursor: lastTextSnapshot.textBeforeCursor,
+                textAfterCursor: lastTextSnapshot.textAfterCursor,
+                selectedTextLength: 0
+            )
             return
         }
 
         if let currentSuggestionTextBeforeCursor {
-            self.currentSuggestionTextBeforeCursor = currentSuggestionTextBeforeCursor + acceptedText
+            let advancedTextBeforeCursor = currentSuggestionTextBeforeCursor + acceptedText
+            self.currentSuggestionTextBeforeCursor = advancedTextBeforeCursor
+            if let currentSuggestionAcceptanceSnapshot {
+                self.currentSuggestionAcceptanceSnapshot = SuggestionAcceptanceSnapshot(
+                    fieldIdentity: currentSuggestionAcceptanceSnapshot.fieldIdentity,
+                    targetFingerprint: currentSuggestionAcceptanceSnapshot.targetFingerprint.advancingTextRevision(
+                        textBeforeCursor: advancedTextBeforeCursor,
+                        textAfterCursor: currentSuggestionAcceptanceSnapshot.textAfterCursor
+                    ),
+                    textBeforeCursor: advancedTextBeforeCursor,
+                    textAfterCursor: currentSuggestionAcceptanceSnapshot.textAfterCursor,
+                    selectedTextLength: 0
+                )
+            }
         }
     }
 
@@ -5435,6 +5627,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionFieldIdentity = nil
         currentSuggestionRequestMode = nil
         currentSuggestionTextBeforeCursor = nil
+        currentSuggestionAcceptanceSnapshot = nil
         currentSuggestionDisplayedText = nil
         currentSuggestionFieldClassification = nil
         currentSuggestionPresentedAt = nil
@@ -7086,11 +7279,12 @@ private extension AppDelegate {
     }
 }
 
-    private struct InsertionVerificationBaseline: Equatable {
-        let fieldIdentity: FocusedFieldIdentity
-        let previousTextBeforeCursor: String
-        let previousTextAfterCursor: String
-        let profile: CompatibilityProfile
+private struct InsertionVerificationBaseline: Equatable {
+    let fieldIdentity: FocusedFieldIdentity
+    let targetFingerprint: FocusedTargetFingerprint
+    let previousTextBeforeCursor: String
+    let previousTextAfterCursor: String
+    let profile: CompatibilityProfile
     let suggestionID: String?
     let requestMode: CompletionRequestMode?
     let acceptanceID: String
@@ -7106,6 +7300,7 @@ private enum FocusedInsertionVerificationContext {
     case ready(context: FocusedTextContext)
     case missingContext
     case fieldChanged
+    case targetFingerprintChanged
 
     var failureOutcome: String? {
         switch self {
@@ -7115,6 +7310,8 @@ private enum FocusedInsertionVerificationContext {
             return "missingContext"
         case .fieldChanged:
             return "fieldChanged"
+        case .targetFingerprintChanged:
+            return "targetFingerprintChanged"
         }
     }
 
@@ -7126,6 +7323,8 @@ private enum FocusedInsertionVerificationContext {
             return "insert-verification-missing-context"
         case .fieldChanged:
             return "insert-verification-field-changed"
+        case .targetFingerprintChanged:
+            return "insert-verification-target-fingerprint-mismatch"
         }
     }
 }

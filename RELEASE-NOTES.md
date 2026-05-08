@@ -14,7 +14,7 @@ Use this template for each private beta artifact.
 
 ## What Changed
 
-- 
+-
 
 ## What To Test
 
