@@ -2735,10 +2735,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mode: requestMode,
             suggestionID: suggestionID
         )
+        let runtimeSessionCacheDecision = RuntimeSessionCachePolicy().decision(
+            previous: currentCompletionRequest,
+            current: request
+        )
         let requestMetadata = traceRequestMetadata(
             request: request,
             fieldClassification: fieldClassification
         )
+        .merging(runtimeSessionCacheDecision.traceMetadata) { current, _ in current }
         currentCompletionRequest = request
         streamingPresentationStates[suggestionID] = StreamingPresentationState()
         let requestTicket = suggestionRequestGate.issue(request: request)

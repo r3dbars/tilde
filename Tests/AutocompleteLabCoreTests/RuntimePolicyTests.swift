@@ -8,14 +8,20 @@ struct RuntimePolicyTests {
         let policy = RuntimeSessionCachePolicy()
         let previous = cacheRequest(text: "Can we make this")
         let current = cacheRequest(text: "Can we make this feel")
-
-        #expect(policy.decision(previous: previous, current: current) == .reuse(RuntimeSessionCacheKey(
+        let expectedKey = RuntimeSessionCacheKey(
             appBundleIdentifier: "com.apple.TextEdit",
             fieldIdentityDescription: "field-1",
             fieldKind: .multilineCompose,
             behaviorProfileID: .notes,
             mode: .phraseContinuation
-        )))
+        )
+
+        let decision = policy.decision(previous: previous, current: current)
+
+        #expect(decision == .reuse(expectedKey))
+        #expect(decision.traceMetadata["runtimeSessionCacheEligible"] == "true")
+        #expect(decision.traceMetadata["runtimeSessionCacheDecision"] == "reuse")
+        #expect(decision.traceMetadata["runtimeSessionCacheKey"] == expectedKey.traceDescription)
     }
 
     @Test("Runtime session cache blocks risky boundary changes")
@@ -80,6 +86,11 @@ struct RuntimePolicyTests {
             previous: previous,
             current: cacheRequest(text: "Can we make this feel", after: " existing")
         ) == .reset(.textAfterCursorChanged))
+
+        let reset = policy.decision(previous: previous, current: cacheRequest(text: "Can we make"))
+        #expect(reset.traceMetadata["runtimeSessionCacheEligible"] == "false")
+        #expect(reset.traceMetadata["runtimeSessionCacheDecision"] == "reset")
+        #expect(reset.traceMetadata["runtimeSessionCacheResetReason"] == "text-did-not-grow")
     }
 
     @Test("MVP runtime is embedded and does not allow user-managed servers")

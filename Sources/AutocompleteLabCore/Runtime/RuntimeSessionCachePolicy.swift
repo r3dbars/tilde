@@ -50,6 +50,35 @@ public enum RuntimeSessionCacheDecision: Equatable, Sendable {
             return false
         }
     }
+
+    public var traceMetadata: [String: String] {
+        switch self {
+        case let .reuse(key):
+            [
+                "runtimeSessionCacheEligible": "true",
+                "runtimeSessionCacheDecision": "reuse",
+                "runtimeSessionCacheKey": key.traceDescription
+            ]
+        case let .reset(reason):
+            [
+                "runtimeSessionCacheEligible": "false",
+                "runtimeSessionCacheDecision": "reset",
+                "runtimeSessionCacheResetReason": reason.rawValue
+            ]
+        }
+    }
+}
+
+public extension RuntimeSessionCacheKey {
+    var traceDescription: String {
+        [
+            appBundleIdentifier,
+            fieldIdentityDescription,
+            fieldKind.rawValue,
+            behaviorProfileID?.rawValue ?? "none",
+            mode.rawValue
+        ].joined(separator: "|")
+    }
 }
 
 public struct RuntimeSessionCachePolicy: Equatable, Sendable {
