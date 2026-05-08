@@ -220,7 +220,7 @@ struct SettingsWindowControllerStateTests {
         #expect(codex.pathText == "Path: display mirror | insert value repair -> keys | track stable bounds")
         #expect(
             codex.safetyText
-                == "Safety: Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Full accept stays off until no-submit proof exists."
+                == "Safety: Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Full accept stays off until no-submit proof exists. Prompt safety mode is word-only."
         )
         #expect(
             codex.proofGuideText
