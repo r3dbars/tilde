@@ -24,8 +24,8 @@ It is not yet magical by the research bar. The biggest remaining misses are:
   and proof that accepted-and-kept tuning improves real usage.
 - Phrase and sentence quality now has conservative candidate ranking and score
   margin suppression, but still needs real model proof and learned utility.
-- Cross-app proof is honest but incomplete for Notes checklist, Codex,
-  Claude Code, Claude desktop, and more production-editor variants.
+- Cross-app proof is honest but incomplete for Codex, Claude Code, Claude
+  desktop, and more production-editor variants.
 - Normal typing proof improved with an exact 1,200-character strict TextEdit
   endurance pass, and the current harness now revalidates named TextEdit focus
   in shorter CGEvent batches with bounded cleanup. The live 10-minute wrapper is
@@ -274,7 +274,7 @@ Weighted total: **79.2/100**, rounded to **79/100**.
 | Atomic undo | 78 | Accepted insertions now arm an 8s one-step Command-Z restore for the same focused app/field; raw accepted text stays only in ephemeral memory and diagnostics log lengths/status only. | Prove the restore path per app and decide whether native undo grouping can replace the app-level fallback. |
 | Casual chat profile | 82 | `AutocompleteBehaviorProfile.casualChat` caps at 4 words, suppresses questions/emotional text, and runtime candidate ranking penalizes question-like or emotionally steering completions. | Fresh chat-app proof and learned style fit. |
 | Email profile | 78 | Mail resolves to an email profile with 2-6 word cap, blank/fresh paragraph suppression, no invented commitments/names/deadlines guidance, and runtime candidate ranking now penalizes invented meetings, dates, attachments, and unsupported commitments. | Real Mail proof plus safe free-form exceptions. |
-| Notes profile | 88 | Notes app profile exists with terse 1-5 word guidance, blank-line suppression, list/checklist prompt guidance, safer AX-first insertion, and delayed read-only verification for Notes AX lag. The title and body fields have same-slice strict visual proof with two verified accepts each. | Bullet/list-aware proof for checklist surfaces. |
+| Notes profile | 90 | Notes app profile exists with terse 1-5 word guidance, blank-line suppression, list/checklist prompt guidance, safer AX-first insertion, delayed read-only verification for Notes AX lag, and stale text-after-cursor repair. Title, body, and checklist fields have same-slice strict visual proof with two verified accepts each. | More list lengths, checked items, and undo proof. |
 | Coding profile | 78 | Coding profile caps at 1-5 tokens, warns against invented APIs/imports/blocks, and runtime candidate ranking now penalizes block/import/function starters, multiline output, and unsupported identifiers. | Opt-in proof in real editors and deeper syntax-aware scoring from editor context. |
 | Docs/prose profile | 80 | Docs/prose profile matches rhythm/vocabulary, suppresses fresh paragraphs/blank lines, and runtime ranking penalizes candidates that start a new section or new point instead of continuing the current paragraph. | Fresh prose proof and learned rhythm/style fit. |
 | Bullets profile | 84 | Bullet/checklist/numbered current-line shape is now detected without item text, feeds trace metadata and prompt guidance, maps generic list-shaped writing to the bullets profile, keeps AI/search/form safety profiles ahead of list shape, and runtime ranking penalizes repeated bullet/checklist markers. | Screenshot-backed same-slice accepts in Notes/TextEdit plus checklist undo proof. |
@@ -288,7 +288,7 @@ Weighted total: **79.2/100**, rounded to **79/100**.
 | Style memory | 90 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, and question rates with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, Settings can clear it, and Diagnostics exposes the trace-safe aggregate sketch. | Add tuning controls and fresh real-app trace validation. |
 | Annoyance index | 90 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, exposes current-field/session silence in Settings and the menu, records manual field pauses as scoped trace events, records placement uncertainty as caret-geometry failures, and Diagnostics now exposes annoyance score, active quiet-mode scope, and signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
 | Replay-first test rig | 84 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, placement metadata, trusted caret placement, stale cancellation, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. It can replay a fresh line-bounded trace slice, and the proof manifest now parses matched manual-smoke trace slices, requires bounded proof ranges, verifies accepts plus insertion verification, checks screenshot-backed strict visual trace events, and rejects stale proof fingerprints. | Replay recorded real app sessions with screenshots, accepts, kept horizon, and latency after every app/runtime change. |
-| Cross-app proof honesty | 96 | App proof matrix explicitly keeps failing rows non-A until evidence exists, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, and the proof manifest now verifies TextEdit, Chrome chat-like, Obsidian, Apple Notes title, and Apple Notes body with bounded current-fingerprint traces while still failing strict mode on partial/pending surfaces plus the old open-ended Claude desktop slice. | Close every pending proof row. |
+| Cross-app proof honesty | 97 | App proof matrix explicitly keeps failing rows non-A until evidence exists, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, and the proof manifest now verifies TextEdit, Chrome chat-like, Obsidian, and Apple Notes title/body/checklist with bounded current-fingerprint traces while still failing strict mode on prompt-app and production-editor gaps. | Close every pending proof row. |
 
 ## Baseline Evidence Notes
 
@@ -469,7 +469,7 @@ these are true.
 - Replace local editor fixture confidence with real CodeMirror, Monaco, and
   ProseMirror proof.
 - Obsidian has disposable-vault screenshot plus same-slice accepts; expand it across themes, panes, and long notes.
-- Notes title is green; body and checklist still need separate proof.
+- Notes title, body, and checklist are green with separate bounded proof rows.
 - Codex gets screenshot plus one-word accept plus no-submit in one strict slice.
 - Claude Code gets safe live prompt proof.
 - Claude desktop gets fresh screenshot-backed one-word no-submit proof.
