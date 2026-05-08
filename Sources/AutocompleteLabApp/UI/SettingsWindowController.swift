@@ -1049,17 +1049,25 @@ final class SettingsWindowController: NSObject {
 
     @objc
     private func startAppProofControl() {
+        performStartAppProofAction()
+    }
+
+    func performStartAppProofAction() {
         startCurrentAppProof()
     }
 
-    @objc
-    private func copyProofCommandControl() {
+    func copyCurrentProofCommand(to pasteboard: NSPasteboard = .general) {
         guard let currentProofCommandClipboardText else {
             return
         }
 
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(currentProofCommandClipboardText, forType: .string)
+        pasteboard.clearContents()
+        pasteboard.setString(currentProofCommandClipboardText, forType: .string)
+    }
+
+    @objc
+    private func copyProofCommandControl() {
+        copyCurrentProofCommand()
     }
 
     @objc

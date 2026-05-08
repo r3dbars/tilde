@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 import AutocompleteLabCore
@@ -499,5 +500,83 @@ struct SettingsWindowControllerStateTests {
         #expect(eager.statusText == "Aggressiveness: Eager")
         #expect(eager.detailText == "Shows sooner when safe, while keeping sensitive-field and high-risk blocks.")
         #expect(eager.cycleButtonTitle == "Use Quiet")
+    }
+
+    @MainActor
+    @Test("Settings proof actions dispatch current app proof and copy clean command")
+    func settingsProofActionsDispatchCurrentAppProofAndCopyCleanCommand() throws {
+        _ = NSApplication.shared
+        var proofStartCount = 0
+        let controller = SettingsWindowController(
+            requestPermission: {},
+            openAccessibilitySettings: {},
+            toggleSuggestionsPaused: {},
+            silenceCurrentField: {},
+            performRuntimeAction: { _ in },
+            toggleCurrentApp: {},
+            toggleCurrentAppMirrorMode: {},
+            startCurrentAppProof: {
+                proofStartCount += 1
+            },
+            enableAllApps: {},
+            toggleTracingPaused: {},
+            toggleRawContentTracing: {},
+            toggleScreenshotTracing: {},
+            deleteLocalLogs: {},
+            clearLearningData: {},
+            cycleAcceptAllShortcut: {},
+            setAcceptAllShortcut: { _ in },
+            cycleSuggestionAggressiveness: {}
+        )
+
+        controller.refresh(
+            isTrusted: true,
+            suggestionsPaused: false,
+            runtimeReport: RuntimeReadinessReport(
+                stage: .ready,
+                summary: "ready",
+                action: .none,
+                isReady: true
+            ),
+            runtimeTargetSummary: "Qwen local - short completions - normal",
+            modelDirectoryPath: "/tmp/AutocompleteLab/Models",
+            modelInstallStatusText: nil,
+            isModelInstallInProgress: false,
+            currentApp: SettingsCurrentAppState(
+                displayName: "TextEdit",
+                bundleIdentifier: "com.apple.TextEdit",
+                supportStatus: CompatibilityProfileStore.mvp.supportStatus(for: "com.apple.TextEdit"),
+                isEnabled: true,
+                disabledAppCount: 0
+            ),
+            fieldControl: SettingsFieldControlState(
+                appDisplayName: "TextEdit",
+                hasFieldTarget: true,
+                isCurrentField: true,
+                isSilenced: false
+            ),
+            privacy: SettingsPrivacyState(
+                tracingPaused: false,
+                rawContentTracingEnabled: false,
+                rawContentTracingExpiresAt: nil,
+                screenshotTracingEnabled: false,
+                screenshotTracingExpiresAt: nil,
+                diagnosticsPath: "/tmp/diagnostics.log",
+                tracePath: "/tmp/traces.jsonl"
+            ),
+            keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .backtick),
+            suggestionAggressiveness: SettingsSuggestionAggressivenessState(aggressiveness: .normal),
+            lastSuggestionDecision: "Shown"
+        )
+
+        controller.performStartAppProofAction()
+        #expect(proofStartCount == 1)
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        controller.copyCurrentProofCommand(to: pasteboard)
+        #expect(
+            pasteboard.string(forType: .string)
+                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit"
+        )
     }
 }
