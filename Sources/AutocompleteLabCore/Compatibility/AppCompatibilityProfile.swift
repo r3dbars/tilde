@@ -105,7 +105,7 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             bundleIdentifierPrefixes: ["com.apple.TextEdit"],
             defaultRung: .stableBeta,
             textPath: .nativeAccessibility,
-            acceptMode: .clipboardFallback,
+            acceptMode: .directAccessibility,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
         ),
@@ -115,7 +115,7 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             bundleIdentifierPrefixes: ["com.apple.Notes"],
             defaultRung: .accept,
             textPath: .nativeAccessibility,
-            acceptMode: .clipboardFallback,
+            acceptMode: .directAccessibility,
             lineRectPolicy: .trustAfterValidation,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             verticalToleranceMultiplier: 1.2

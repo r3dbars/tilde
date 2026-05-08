@@ -23,6 +23,17 @@ public struct DisabledAppSelection: Equatable, Sendable {
         ))
     }
 
+    public init(
+        persistedBundleIdentifiers: [String]?,
+        defaultOffProfileStore profileStore: CompatibilityProfileStore
+    ) {
+        if let persistedBundleIdentifiers {
+            self.init(persistedBundleIdentifiers: persistedBundleIdentifiers)
+        } else {
+            self.init(defaultOffProfileStore: profileStore)
+        }
+    }
+
     public var persistedBundleIdentifiers: [String] {
         bundleIdentifiers.sorted()
     }

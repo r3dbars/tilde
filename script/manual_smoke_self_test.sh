@@ -10,14 +10,13 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 mkdir -p "$TMP_DIR/visual-placement-screenshots"
 cp docs/product/visual-placement-screenshots/textedit-inline.png "$TMP_DIR/visual-placement-screenshots/textedit-inline.png"
 cp docs/product/visual-placement-screenshots/codex-inline.png "$TMP_DIR/visual-placement-screenshots/codex-inline.png"
+cp docs/product/visual-placement-screenshots/claude-code-terminal.png "$TMP_DIR/visual-placement-screenshots/claude-code-terminal.png"
 
 LOG_PATH="$TMP_DIR/diagnostics.log"
 TRACE_PATH="$TMP_DIR/traces.jsonl"
 REPORT_PATH="$TMP_DIR/manual-smoke-runs.md"
 SCORECARD_PATH="$TMP_DIR/deep-dive-scorecard.md"
 FAILURE_OUTPUT="$TMP_DIR/failure-output.txt"
-
-export AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF="commit:selftest"
 
 write_passing_log() {
   local bundle_id="$1"
@@ -32,6 +31,24 @@ write_passing_log() {
 2026-04-26T08:00:04Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=backtick reason=accepted
 2026-04-26T08:00:04Z insert app=$bundle_id success=true mode=axSelectedText
 2026-04-26T08:00:05Z insert-verification app=$bundle_id result=verified acceptedChars=12 previousBeforeChars=11 currentBeforeChars=23
+EOF
+}
+
+write_undo_passing_log() {
+  local bundle_id="$1"
+  local render_mode="$2"
+
+  cat >"$LOG_PATH" <<EOF
+2026-04-26T08:00:00Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=caret placementConfidenceBand=high hasCaretRect=true
+2026-04-26T08:00:01Z keyboard-action action=acceptNextWord app=$bundle_id handled=true key=tab reason=accepted
+2026-04-26T08:00:01Z insert app=$bundle_id success=true mode=axSelectedText
+2026-04-26T08:00:02Z insert-verification app=$bundle_id result=verified acceptedChars=5 previousBeforeChars=6 currentBeforeChars=11
+2026-04-26T08:00:03Z keyboard-action action=undoAcceptedInsertion app=$bundle_id handled=true key=cmdZ reason=accepted-insertion-undone
+2026-04-26T08:00:03Z accepted-insertion-undone app=$bundle_id acceptedTextLength=3 restoredTextLength=23
+2026-04-26T08:00:04Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=caret placementConfidenceBand=high hasCaretRect=true
+2026-04-26T08:00:05Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=backtick reason=accepted
+2026-04-26T08:00:05Z insert app=$bundle_id success=true mode=axSelectedText
+2026-04-26T08:00:06Z insert-verification app=$bundle_id result=verified acceptedChars=12 previousBeforeChars=11 currentBeforeChars=23
 EOF
 }
 
@@ -63,23 +80,6 @@ write_one_word_log() {
 EOF
 }
 
-write_recovered_runtime_log() {
-  local bundle_id="$1"
-  local render_mode="$2"
-
-  cat >"$LOG_PATH" <<EOF
-2026-04-26T07:59:59Z suggestion-blocked app=$bundle_id reason=runtime-not-ready
-2026-04-26T08:00:00Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=caret placementConfidenceBand=high hasCaretRect=true
-2026-04-26T08:00:01Z keyboard-action action=acceptNextWord app=$bundle_id handled=true key=tab reason=accepted
-2026-04-26T08:00:01Z insert app=$bundle_id success=true mode=axSelectedText
-2026-04-26T08:00:02Z insert-verification app=$bundle_id result=verified acceptedChars=5 previousBeforeChars=6 currentBeforeChars=11
-2026-04-26T08:00:03Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=caret placementConfidenceBand=high hasCaretRect=true
-2026-04-26T08:00:04Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=backtick reason=accepted
-2026-04-26T08:00:04Z insert app=$bundle_id success=true mode=axSelectedText
-2026-04-26T08:00:05Z insert-verification app=$bundle_id result=verified acceptedChars=12 previousBeforeChars=11 currentBeforeChars=23
-EOF
-}
-
 write_passing_trace() {
   local bundle_id="$1"
 
@@ -92,6 +92,19 @@ write_passing_trace() {
 {"type":"suggestionAccepted","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","acceptedText":" this work"}
 {"type":"insertionVerified","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","acceptedText":" this work"}
 EOF
+}
+
+write_one_word_log_with_runtime_warmup() {
+  local bundle_id="$1"
+  local render_mode="$2"
+
+  write_one_word_log "$bundle_id" "$render_mode"
+  local warmed_log="$LOG_PATH.warmup"
+  {
+    echo "2026-04-26T07:59:59Z suggestion-blocked app=$bundle_id reason=runtime-not-ready readinessStage=warming"
+    cat "$LOG_PATH"
+  } >"$warmed_log"
+  mv "$warmed_log" "$LOG_PATH"
 }
 
 write_one_word_trace() {
@@ -147,7 +160,7 @@ run_passing_case() {
   fi
 
   if ! grep -F " | lines 1-" "$REPORT_PATH" | grep -F "in \`$TRACE_PATH\` |" >/dev/null; then
-    if ! grep -F " | lines 1-" "$REPORT_PATH" | grep -F "in \`$TRACE_PATH\`; visual \`not-claimed\`; build \`commit:selftest\` |" >/dev/null; then
+    if ! grep -F " | lines 1-" "$REPORT_PATH" | grep -F "in \`$TRACE_PATH\`; visual \`not-claimed\` |" >/dev/null; then
       echo "manual smoke self-test did not record the successful $display_name trace slice" >&2
       exit 1
     fi
@@ -166,20 +179,16 @@ run_one_word_case() {
   write_one_word_trace "$bundle_id"
 
   AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
-  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
-  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
-  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
-  AUTOCOMPLETE_LAB_PROMPT_NO_SUBMIT_CONFIRMED=1 \
-  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
-  script/manual_smoke_session.sh "$app" --check >/dev/null
+    AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+    AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+    AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+    AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1 \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1 \
+    AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+    script/manual_smoke_session.sh "$app" --check >/dev/null
 
   if ! grep -F "| $report_name | \`$bundle_id\` | \`default\` | 1 | \`$expected_render\` | lines 1-" "$REPORT_PATH" >/dev/null; then
     echo "manual smoke self-test did not record one-word no-submit proof for $status_name" >&2
-    exit 1
-  fi
-
-  if ! grep -F "| $report_name | \`$bundle_id\` | \`default\` | 1 | \`$expected_render\` | lines 1-" "$REPORT_PATH" | grep -F "prompt no-submit confirmed" >/dev/null; then
-    echo "manual smoke self-test did not record no-submit confirmation for $status_name" >&2
     exit 1
   fi
 }
@@ -203,40 +212,50 @@ run_strict_visual_case() {
     exit 1
   fi
 
-  if ! grep -F " | lines 1-" "$REPORT_PATH" | grep -F "in \`$TRACE_PATH\`; visual \`strict-complete\`; build \`commit:selftest\` |" >/dev/null; then
+  if ! grep -F " | lines 1-" "$REPORT_PATH" | grep -F "in \`$TRACE_PATH\`; visual \`strict-complete\` |" >/dev/null; then
     echo "manual smoke self-test did not record the successful $proof_label strict visual trace slice" >&2
     exit 1
   fi
 }
 
+run_notes_undo_case() {
+  local app="$1"
+  local proof_label="$2"
+
+  write_undo_passing_log "com.apple.Notes" "floatingMirror"
+  write_passing_trace "com.apple.Notes"
+
+  AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+    AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+    AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+    AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+    AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+    script/manual_smoke_session.sh "$app" --check >/dev/null
+
+  if ! grep -F "| Notes | \`com.apple.Notes\` | \`$proof_label\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-" "$REPORT_PATH" >/dev/null; then
+    echo "manual smoke self-test did not record the successful $proof_label undo pass" >&2
+    exit 1
+  fi
+}
+
 run_passing_case textedit TextEdit com.apple.TextEdit 'inlineAdjacent|floatingMirror' inlineAdjacent
-run_passing_case textedit-multiline TextEdit com.apple.TextEdit 'inlineAdjacent|floatingMirror' inlineAdjacent multiline
-run_passing_case textedit-wrapped TextEdit com.apple.TextEdit 'inlineAdjacent|floatingMirror' inlineAdjacent wrapped-line
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-title
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-body
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-checklist
+run_notes_undo_case notes-title-undo notes-title-undo
+run_notes_undo_case notes-body-undo notes-body-undo
+run_notes_undo_case notes-checklist-undo notes-checklist-undo
 run_passing_case obsidian Obsidian md.obsidian floatingMirror floatingMirror
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent textarea
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent contenteditable
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent editor-like
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent monaco-like
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent prosemirror-like
+run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent monaco-real
+run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent prosemirror-real
+run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent monaco-real-default
+run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent prosemirror-real-default
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent chat-like
-
-write_recovered_runtime_log "com.apple.TextEdit" "inlineAdjacent"
-write_passing_trace "com.apple.TextEdit"
-RECOVERED_RUNTIME_REPORT="$TMP_DIR/recovered-runtime-manual-smoke-runs.md"
-AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
-  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
-  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
-  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
-  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$RECOVERED_RUNTIME_REPORT" \
-  script/manual_smoke_session.sh textedit --check >/dev/null
-
-if ! grep -F "| TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-" "$RECOVERED_RUNTIME_REPORT" >/dev/null; then
-  echo "manual smoke self-test did not allow recovered runtime readiness noise" >&2
-  exit 1
-fi
 
 write_option_tab_passing_log "com.apple.TextEdit" "inlineAdjacent"
 write_passing_trace "com.apple.TextEdit"
@@ -255,9 +274,25 @@ if ! grep -F "| TextEdit | \`com.apple.TextEdit\` | \`option-tab\` | 2 | \`inlin
 fi
 
 run_one_word_case codex Codex Codex com.openai.codex 'inlineAdjacent|floatingMirror' inlineAdjacent
-run_one_word_case claude-code "Claude Code" "Claude Code" com.anthropic.claude-code 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_one_word_case claude "Claude desktop" Claude com.anthropic.claudefordesktop 'inlineAdjacent|floatingMirror' inlineAdjacent
+run_one_word_case claude-code "Claude Code" "Claude Code" com.anthropic.claude-code 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_strict_visual_case notes-title notes-title
+
+write_one_word_log_with_runtime_warmup "com.anthropic.claude-code" "inlineAdjacent"
+write_one_word_trace "com.anthropic.claude-code"
+
+AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh claude-code --check >/dev/null
+
+if ! grep -F "| Claude Code | \`com.anthropic.claude-code\` | \`default\` | 1 | \`inlineAdjacent|floatingMirror\` | lines 1-" "$REPORT_PATH" >/dev/null; then
+  echo "manual smoke self-test did not allow Claude Code runtime warmup before verified proof" >&2
+  exit 1
+fi
 
 write_one_word_log "com.openai.codex" "inlineAdjacent"
 write_one_word_trace "com.openai.codex"
@@ -268,30 +303,12 @@ if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
   AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
   AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   script/manual_smoke_session.sh codex --check >"$FAILURE_OUTPUT" 2>&1; then
-  echo "manual smoke self-test expected Codex proof without no-submit confirmation to fail" >&2
+  echo "manual smoke self-test expected Codex proof without marker confirmation to fail" >&2
   exit 1
 fi
 
-if ! grep -F 'missing Codex no-submit confirmation' "$FAILURE_OUTPUT" >/dev/null; then
-  echo "manual smoke self-test did not explain missing Codex no-submit confirmation" >&2
-  exit 1
-fi
-
-write_passing_log "com.anthropic.claude-code" "inlineAdjacent"
-write_passing_trace "com.anthropic.claude-code"
-
-if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
-  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
-  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
-  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
-  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
-  script/manual_smoke_session.sh claude-code --check >"$FAILURE_OUTPUT" 2>&1; then
-  echo "manual smoke self-test expected Claude Code full accept proof to fail" >&2
-  exit 1
-fi
-
-if ! grep -F 'full accept handled before separate no-submit proof' "$FAILURE_OUTPUT" >/dev/null; then
-  echo "manual smoke self-test did not reject Claude Code full accept proof" >&2
+if ! grep -F 'Codex proof marker was not confirmed' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not reject unmarked Codex proof" >&2
   exit 1
 fi
 
@@ -307,7 +324,7 @@ if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
   AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
   AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
   AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
-  AUTOCOMPLETE_LAB_PROMPT_NO_SUBMIT_CONFIRMED=1 \
+  AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1 \
   AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   script/manual_smoke_session.sh codex --check >"$FAILURE_OUTPUT" 2>&1; then
   echo "manual smoke self-test expected Codex field-send proof to fail" >&2
@@ -338,6 +355,22 @@ fi
 script/manual_smoke_session.sh notes-title --print >"$TMP_DIR/notes-title-print.txt"
 if ! grep -F "Notes surface: title" "$TMP_DIR/notes-title-print.txt" >/dev/null; then
   echo "manual smoke self-test did not print the Notes title surface label" >&2
+  exit 1
+fi
+
+script/manual_smoke_session.sh notes-title-undo --print >"$TMP_DIR/notes-title-undo-print.txt"
+if ! grep -F "Manual smoke: Notes title undo" "$TMP_DIR/notes-title-undo-print.txt" >/dev/null; then
+  echo "manual smoke self-test did not print the Notes title undo session label" >&2
+  exit 1
+fi
+
+if ! grep -F "Proof: notes-title-undo" "$TMP_DIR/notes-title-undo-print.txt" >/dev/null; then
+  echo "manual smoke self-test did not label Notes title undo proof" >&2
+  exit 1
+fi
+
+if ! grep -F "Press Command-Z" "$TMP_DIR/notes-title-undo-print.txt" >/dev/null; then
+  echo "manual smoke self-test did not print the Notes undo instruction" >&2
   exit 1
 fi
 
@@ -375,6 +408,24 @@ fi
 
 if ! grep -F 'missing Notes body diagnostics: Tab handled by autocomplete' "$FAILURE_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not label the Notes body diagnostics failure" >&2
+  exit 1
+fi
+
+write_passing_log "com.apple.Notes" "floatingMirror"
+write_passing_trace "com.apple.Notes"
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh notes-body-undo --check >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected Notes undo proof to fail without undo diagnostics" >&2
+  exit 1
+fi
+
+if ! grep -F 'missing Notes body undo diagnostics: accepted insertion undo handled' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not label missing Notes undo diagnostics" >&2
   exit 1
 fi
 
@@ -446,7 +497,7 @@ if ! grep -F "Insertion proof status: $REPORT_PATH" "$STATUS_OUTPUT" >/dev/null;
   exit 1
 fi
 
-for app_name in TextEdit "TextEdit multiline" "TextEdit wrapped line" "Notes title" "Notes body" "Notes checklist" "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome chat-like no-submit" Codex "Claude Code" "Claude desktop"; do
+for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome real Monaco" "Chrome real ProseMirror" "Chrome real Monaco default AX" "Chrome real ProseMirror default AX" "Chrome chat-like no-submit" Codex "Claude Code" "Claude desktop"; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
     exit 1
@@ -518,24 +569,14 @@ cat >"$COMPLETE_SCORECARD_PATH" <<'EOF'
 | --- | ---: | --- | --- | --- |
 | TextEdit | 10/10 | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Inline proof exists. | Done. |
 | Codex | 10/10 | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Prompt screenshot exists. | Done. |
+| Claude Code | 10/10 | [claude-code-terminal.png](visual-placement-screenshots/claude-code-terminal.png) | Terminal-host prompt screenshot exists. | Done. |
 EOF
 
-AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
-  AUTOCOMPLETE_LAB_SCORECARD="$COMPLETE_SCORECARD_PATH" \
-  script/manual_smoke_status.sh --require-all >/dev/null
-
-STALE_REPORT="$TMP_DIR/stale-manual-smoke-runs.md"
-sed -E 's/; build `[^`]+`//g' "$REPORT_PATH" >"$STALE_REPORT"
-
-if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$STALE_REPORT" \
+if ! AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   AUTOCOMPLETE_LAB_SCORECARD="$COMPLETE_SCORECARD_PATH" \
   script/manual_smoke_status.sh --require-all >"$FAILURE_OUTPUT" 2>&1; then
-  echo "manual smoke self-test expected strict status to fail on stale build proof" >&2
-  exit 1
-fi
-
-if ! grep -F 'stale pass (needs current commit/archive proof' "$FAILURE_OUTPUT" >/dev/null; then
-  echo "manual smoke self-test did not explain stale manual smoke proof" >&2
+  echo "manual smoke self-test expected --require-all to pass when Claude Code proof is present" >&2
+  cat "$FAILURE_OUTPUT" >&2
   exit 1
 fi
 

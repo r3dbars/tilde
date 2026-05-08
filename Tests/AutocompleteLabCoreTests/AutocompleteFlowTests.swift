@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import AutocompleteLabCore
 
@@ -62,5 +63,46 @@ struct AutocompleteFlowTests {
         )
 
         #expect(suggestion?.visibleText == "tation")
+    }
+
+    @Test("Typed-over rejection starts a same-prefix cooldown")
+    func typedOverRejectionStartsSamePrefixCooldown() {
+        let originalText = "Can we make this feel "
+        let displayedText = "native"
+        let newText = "Can we make this feel rough"
+        let progress = SuggestionTypingProgressPolicy().progress(
+            originalTextBeforeCursor: originalText,
+            displayedText: displayedText,
+            newTextBeforeCursor: newText
+        )
+
+        guard case let .typedOver(typedSuffix) = progress else {
+            Issue.record("Expected typed-over progress, got \(progress)")
+            return
+        }
+        #expect(typedSuffix == "rough")
+
+        let now = Date(timeIntervalSince1970: 1_000)
+        let input = PrefixFamilyCooldownInput(
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldIdentifier: "field:body",
+            requestMode: .phraseContinuation,
+            textBeforeCursor: originalText
+        )
+        var cooldownPolicy = PrefixFamilyCooldownPolicy()
+        let cooldown = cooldownPolicy.record(.typedOver, input: input, now: now)
+
+        #expect(cooldown?.reason == .typedOver)
+        #expect(cooldown?.durationMilliseconds == 5_000)
+        #expect(cooldownPolicy.decision(for: input, now: now.addingTimeInterval(1)).canRequest == false)
+        #expect(cooldownPolicy.decision(for: input, now: now.addingTimeInterval(6)).canRequest == true)
+
+        let differentField = PrefixFamilyCooldownInput(
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldIdentifier: "field:title",
+            requestMode: .phraseContinuation,
+            textBeforeCursor: originalText
+        )
+        #expect(cooldownPolicy.decision(for: differentField, now: now.addingTimeInterval(1)).canRequest)
     }
 }

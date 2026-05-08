@@ -5,8 +5,9 @@ let arguments = CommandLine.arguments.dropFirst()
 var tracePath: String?
 var startLine = 0
 var endLine: Int?
+var profile = AutocompleteTraceReplayProfile.full
 var iterator = arguments.makeIterator()
-let usage = "Usage: AutocompleteTraceReplay [--start-line N] [--end-line N] /path/to/traces.jsonl\n"
+let usage = "Usage: AutocompleteTraceReplay [--start-line N] [--end-line N] [--profile \(AutocompleteTraceReplayProfile.cliValues)] /path/to/traces.jsonl\n"
 
 func printUsageAndExit(
     _ message: String? = nil,
@@ -27,6 +28,13 @@ func parseLine(_ value: String, flag: String) -> Int {
     return parsed
 }
 
+func parseProfile(_ value: String) -> AutocompleteTraceReplayProfile {
+    guard let parsed = AutocompleteTraceReplayProfile(rawValue: value) else {
+        printUsageAndExit("Invalid --profile: \(value)")
+    }
+    return parsed
+}
+
 while let argument = iterator.next() {
     switch argument {
     case "--start-line":
@@ -39,10 +47,17 @@ while let argument = iterator.next() {
             printUsageAndExit("Missing value for --end-line")
         }
         endLine = parseLine(value, flag: "--end-line")
+    case "--profile":
+        guard let value = iterator.next() else {
+            printUsageAndExit("Missing value for --profile")
+        }
+        profile = parseProfile(value)
     case let value where value.hasPrefix("--start-line="):
         startLine = parseLine(String(value.dropFirst("--start-line=".count)), flag: "--start-line")
     case let value where value.hasPrefix("--end-line="):
         endLine = parseLine(String(value.dropFirst("--end-line=".count)), flag: "--end-line")
+    case let value where value.hasPrefix("--profile="):
+        profile = parseProfile(String(value.dropFirst("--profile=".count)))
     case "-h", "--help":
         printUsageAndExit(status: 0, fileHandle: .standardOutput)
     case let value where value.hasPrefix("-"):
@@ -82,6 +97,6 @@ for (offset, line) in contents.split(whereSeparator: \.isNewline).enumerated() {
     events.append(event)
 }
 
-let report = AutocompleteTraceReplay().report(for: events)
+let report = AutocompleteTraceReplay().report(for: events, profile: profile)
 print(report.markdown)
 Foundation.exit(report.passesReplayProofGate ? 0 : 1)

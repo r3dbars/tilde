@@ -1,5 +1,45 @@
 import Foundation
 
+public struct WordCompletionCandidateSelection: Equatable, Sendable {
+    public let suggestion: CompletionSuggestion?
+    public let candidateCount: Int
+    public let topScore: Double?
+    public let scoreMargin: Double?
+    public let suppressionReason: String?
+
+    public init(
+        suggestion: CompletionSuggestion?,
+        candidateCount: Int,
+        topScore: Double?,
+        scoreMargin: Double?,
+        suppressionReason: String?
+    ) {
+        self.suggestion = suggestion
+        self.candidateCount = candidateCount
+        self.topScore = topScore
+        self.scoreMargin = scoreMargin
+        self.suppressionReason = suppressionReason
+    }
+
+    public var traceMetadata: [String: String] {
+        [
+            "candidateSelectionSource": "fast-word-completion",
+            "cleanedCandidateCount": String(candidateCount),
+            "candidateTopScore": Self.formatScore(topScore),
+            "candidateScoreMargin": Self.formatScore(scoreMargin),
+            "candidateSuppressionReason": suppressionReason ?? "none"
+        ]
+    }
+
+    private static func formatScore(_ score: Double?) -> String {
+        guard let score else {
+            return "none"
+        }
+
+        return String(format: "%.3f", score)
+    }
+}
+
 public struct WordCompletionCandidateRanker: Equatable, Sendable {
     public let staticWords: [String]
 
@@ -11,10 +51,23 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         for textBeforeCursor: String,
         recentWords: [String] = []
     ) -> CompletionSuggestion? {
+        selection(for: textBeforeCursor, recentWords: recentWords).suggestion
+    }
+
+    public func selection(
+        for textBeforeCursor: String,
+        recentWords: [String] = []
+    ) -> WordCompletionCandidateSelection {
         guard let fragment = trailingFragment(in: textBeforeCursor),
-              fragment.count >= 2,
+              fragment.count >= 3,
               fragment.allSatisfy({ $0.isLetter }) else {
-            return nil
+            return WordCompletionCandidateSelection(
+                suggestion: nil,
+                candidateCount: 0,
+                topScore: nil,
+                scoreMargin: nil,
+                suppressionReason: "invalid-fragment"
+            )
         }
 
         let normalizedFragment = fragment.lowercased()
@@ -25,7 +78,13 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
 
         guard let candidate = candidates.first,
               candidate.normalizedWord.count > normalizedFragment.count else {
-            return nil
+            return WordCompletionCandidateSelection(
+                suggestion: nil,
+                candidateCount: candidates.count,
+                topScore: candidates.first?.score,
+                scoreMargin: scoreMargin(in: candidates),
+                suppressionReason: "no-candidate"
+            )
         }
 
         let suffix = String(candidate.normalizedWord.dropFirst(normalizedFragment.count))
@@ -36,12 +95,24 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
             source: candidate.source,
             competingCandidateCount: competingCandidateCount
         ) else {
-            return nil
+            return WordCompletionCandidateSelection(
+                suggestion: nil,
+                candidateCount: candidates.count,
+                topScore: candidate.score,
+                scoreMargin: scoreMargin(in: candidates),
+                suppressionReason: "low-value-suffix"
+            )
         }
 
-        return CompletionSuggestion(
-            text: displaySuffix(for: candidate, fragment: fragment),
-            maxVisibleWords: 1
+        return WordCompletionCandidateSelection(
+            suggestion: CompletionSuggestion(
+                text: displaySuffix(for: candidate, fragment: fragment),
+                maxVisibleWords: 1
+            ),
+            candidateCount: candidates.count,
+            topScore: candidate.score,
+            scoreMargin: scoreMargin(in: candidates),
+            suppressionReason: nil
         )
     }
 
@@ -158,6 +229,16 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         return (normalized, display)
     }
 
+    private func scoreMargin(in candidates: [Candidate]) -> Double? {
+        guard candidates.count > 1,
+              let topScore = candidates.first?.score
+        else {
+            return nil
+        }
+
+        return topScore - candidates[1].score
+    }
+
     public static let defaultWords = [
         "about", "accurate", "actually", "again", "also", "always", "app",
         "application", "around", "available", "because",
@@ -187,6 +268,15 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         let source: CandidateSource
         let priority: Int
         let index: Int
+
+        var score: Double {
+            switch source {
+            case .recent:
+                return max(0.800, 1.000 - (Double(index) * 0.020))
+            case .staticDictionary:
+                return max(0.500, 0.850 - (Double(index) * 0.010))
+            }
+        }
     }
 
     private enum CandidateSource: Equatable {

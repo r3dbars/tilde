@@ -136,11 +136,12 @@ public final class LocalCompletionEngine: CompletionEngine, @unchecked Sendable 
 
     private func clean(_ rawOutput: String, request: CompletionRequest) -> CompletionSuggestion? {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: request.maxVisibleWords)
-        return cleaner.clean(
+        return cleaner.cleanBestCandidate(
             rawOutput,
             after: request.textBeforeCursor,
-            mode: request.mode
-        )
+            mode: request.mode,
+            behaviorProfileID: request.behaviorProfile.id
+        ).suggestion
     }
 }
 

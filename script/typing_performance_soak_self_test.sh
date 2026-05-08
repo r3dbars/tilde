@@ -17,7 +17,7 @@ if ! grep -F "Safe typing performance soak" "$TMP_DIR/default.txt" >/dev/null; t
   exit 1
 fi
 
-if ! grep -F "Target app: disposable TextEdit .txt file" "$TMP_DIR/default.txt" >/dev/null; then
+if ! grep -F "Target app: disposable TextEdit window" "$TMP_DIR/default.txt" >/dev/null; then
   echo "typing soak self-test did not explain the safe TextEdit target" >&2
   cat "$TMP_DIR/default.txt" >&2
   exit 1
@@ -41,7 +41,7 @@ if ! grep -F "Synthetic text: 1200 generated chars from a built-in neutral fixtu
   exit 1
 fi
 
-if ! grep -F "Typed text proof: exact named TextEdit document match required" "$TMP_DIR/default.txt" >/dev/null; then
+if ! grep -F "Typed text proof: exact TextEdit clipboard capture match required" "$TMP_DIR/default.txt" >/dev/null; then
   echo "typing soak self-test did not explain exact typed-text verification" >&2
   cat "$TMP_DIR/default.txt" >&2
   exit 1
@@ -65,8 +65,8 @@ if ! grep -F "AX warmup: waits for a focused-text poll summary before typing" "$
   exit 1
 fi
 
-if ! grep -F "Event tap proof: require at least 100 samples" "$TMP_DIR/default.txt" >/dev/null; then
-  echo "typing soak self-test did not require event-tap samples by default" >&2
+if ! grep -F "Event tap proof: not required for this normal-typing pass" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain normal typing event-tap scope" >&2
   cat "$TMP_DIR/default.txt" >&2
   exit 1
 fi
@@ -123,7 +123,7 @@ if ! grep -F "Event tap proof: require at least 25 samples" "$TMP_DIR/strict.txt
   exit 1
 fi
 
-if ! grep -F "AX warnings: strict; slow or skipped focused-text polling fails the soak" "$TMP_DIR/strict.txt" >/dev/null; then
+if ! grep -F "AX warnings: strict; threshold-exceeding or skipped focused-text polling fails the soak" "$TMP_DIR/strict.txt" >/dev/null; then
   echo "typing soak self-test did not honor --strict-ax" >&2
   cat "$TMP_DIR/strict.txt" >&2
   exit 1
