@@ -58,8 +58,8 @@ actor AcceptanceSurvivalChecker {
             measurement: measurement,
             shouldRecordAcceptedThenDeleted: checkpoint == .twoSeconds
                 && measurement.survivalClass == AcceptanceSurvivalClass.rejectedAfterAccept,
-            shouldRecordAcceptedAndKept: checkpoint.isFinalMetricCheckpoint
-                && measurement.isFinalAcceptedAndKept,
+            shouldRecordAcceptedAndKept: measurement.isStrongAcceptedAndKept
+                || measurement.isFinalAcceptedAndKept,
             shouldFinish: checkpoint.isFinalMetricCheckpoint,
             finishReason: checkpoint.isFinalMetricCheckpoint
                 ? finishReason(for: checkpoint)
