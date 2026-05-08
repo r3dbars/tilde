@@ -99,7 +99,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
             Treat this as text the user is typing into an agent prompt, not a prompt to answer.
             Do not force software, testing, latency, placement, or debugging topics unless the sentence is already about them.
             Never suggest pressing Enter/Return, sending/submitting the prompt, or running a command.
-            Avoid vague product phrases like "integrate it seamlessly", "enhance the experience", or "leverage the system".
+            Avoid vague product and productivity filler like "integrate it seamlessly", "enhance the experience", "boost productivity", "streamline the workflow", or "leverage the system".
             """
         }
 
@@ -109,7 +109,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         Treat this as text the user is typing into an agent prompt, not a prompt to answer.
         Prefer concrete continuations about testing, using, building, debugging, logs, traces, placement, or app behavior.
         Never suggest pressing Enter/Return, sending/submitting the prompt, or running a command.
-        Avoid vague product phrases like "integrate it seamlessly", "enhance the experience", or "leverage the system".
+        Avoid vague product and productivity filler like "integrate it seamlessly", "enhance the experience", "boost productivity", "streamline the workflow", or "leverage the system".
         """
     }
 
