@@ -49,6 +49,11 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("try saying this more clearly", after: "Can we") == nil)
         #expect(cleaner.clean("rewrite this as a calmer sentence", after: "Can we") == nil)
         #expect(cleaner.clean("next step is to open the logs", after: "Can we") == nil)
+        #expect(cleaner.clean("I'd recommend keeping this smaller", after: "Can we") == nil)
+        #expect(cleaner.clean("I would suggest opening the logs", after: "Can we") == nil)
+        #expect(cleaner.clean("you should open the logs", after: "Can we") == nil)
+        #expect(cleaner.clean("we need to make a plan", after: "Can we") == nil)
+        #expect(cleaner.clean("make sure to save the file", after: "Can we") == nil)
         #expect(cleaner.clean("keep this smaller", after: "Can we")?.visibleText == " keep this smaller")
     }
 

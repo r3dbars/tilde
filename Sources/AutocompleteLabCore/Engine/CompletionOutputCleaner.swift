@@ -123,6 +123,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        guard !isAdviceOrToneDriftPhrase(withoutPromptEchoLabel) else {
+            return nil
+        }
+
         let normalizedSuggestion = mode == .wordCompletion ? withoutPromptEchoLabel : ensureLeadingSpace(withoutPromptEchoLabel)
         let trimmedSuggestion: String
         if let textBeforeCursor {
@@ -537,11 +541,20 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["absolutely"],
         ["great", "question"],
         ["happy", "to", "help"],
+        ["i'd", "recommend"],
+        ["i'd", "suggest"],
+        ["i’d", "recommend"],
+        ["i’d", "suggest"],
         ["i", "love", "this"],
         ["i", "recommend"],
         ["i", "suggest"],
+        ["i", "would", "recommend"],
+        ["i", "would", "suggest"],
         ["it", "is", "important"],
         ["it's", "important"],
+        ["let's"],
+        ["lets"],
+        ["make", "sure", "to"],
         ["one", "thing", "to", "consider"],
         ["next", "action"],
         ["next", "step"],
@@ -553,7 +566,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["this", "is", "exciting"],
         ["try", "saying"],
         ["you", "may", "want"],
-        ["you", "might", "want"]
+        ["you", "might", "want"],
+        ["you", "need", "to"],
+        ["you", "should"],
+        ["we", "need", "to"],
+        ["we", "should"]
     ]
 }
 
