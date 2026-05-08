@@ -3,6 +3,85 @@ import Testing
 
 @Suite("Runtime policy")
 struct RuntimePolicyTests {
+    @Test("Runtime session cache reuses only same field growing continuations")
+    func runtimeSessionCacheReusesSameFieldGrowingContinuations() {
+        let policy = RuntimeSessionCachePolicy()
+        let previous = cacheRequest(text: "Can we make this")
+        let current = cacheRequest(text: "Can we make this feel")
+
+        #expect(policy.decision(previous: previous, current: current) == .reuse(RuntimeSessionCacheKey(
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldIdentityDescription: "field-1",
+            fieldKind: .multilineCompose,
+            behaviorProfileID: .notes,
+            mode: .phraseContinuation
+        )))
+    }
+
+    @Test("Runtime session cache blocks risky boundary changes")
+    func runtimeSessionCacheBlocksRiskyBoundaryChanges() {
+        let policy = RuntimeSessionCachePolicy()
+        let previous = cacheRequest(text: "Can we make this")
+
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make this.", mode: .phraseContinuation)
+        ) == .reset(.sentenceChanged))
+
+        #expect(policy.decision(
+            previous: cacheRequest(text: "Can we make this", mode: .sentenceContinuation),
+            current: cacheRequest(text: "Can we make this\n\nNew paragraph", mode: .sentenceContinuation)
+        ) == .reset(.paragraphChanged))
+    }
+
+    @Test("Runtime session cache allows sentence mode within the same paragraph")
+    func runtimeSessionCacheAllowsSentenceModeInSameParagraph() {
+        let policy = RuntimeSessionCachePolicy()
+        let previous = cacheRequest(text: "Can we make this.", mode: .sentenceContinuation)
+        let current = cacheRequest(text: "Can we make this. It should", mode: .sentenceContinuation)
+
+        #expect(policy.decision(previous: previous, current: current).canReuse)
+    }
+
+    @Test("Runtime session cache resets on app field mode and edit changes")
+    func runtimeSessionCacheResetsOnScopeAndEditChanges() {
+        let policy = RuntimeSessionCachePolicy()
+        let previous = cacheRequest(text: "Can we make this")
+
+        #expect(policy.decision(
+            previous: nil,
+            current: previous
+        ) == .reset(.noPriorRequest))
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make this", mode: .wordCompletion)
+        ) == .reset(.wordCompletion))
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make this feel", app: "com.apple.Notes")
+        ) == .reset(.appChanged))
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make this feel", field: "field-2")
+        ) == .reset(.fieldChanged))
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make this feel", profile: .docsProse)
+        ) == .reset(.behaviorProfileChanged))
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make this feel", mode: .sentenceContinuation)
+        ) == .reset(.modeChanged))
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make", mode: .phraseContinuation)
+        ) == .reset(.textDidNotGrow))
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make this feel", after: " existing")
+        ) == .reset(.textAfterCursorChanged))
+    }
+
     @Test("MVP runtime is embedded and does not allow user-managed servers")
     func mvpRuntimeIsEmbedded() {
         let decision = EmbeddedRuntimeDecision.mvp
@@ -312,4 +391,24 @@ struct RuntimePolicyTests {
         #expect(benchmark.p95LatencyMilliseconds == 90)
         #expect(!benchmark.passesAutocompleteTarget())
     }
+}
+
+private func cacheRequest(
+    text: String,
+    after: String = "",
+    app: String? = "com.apple.TextEdit",
+    field: String? = "field-1",
+    kind: AXFieldKind = .multilineCompose,
+    profile: AutocompleteBehaviorProfileID? = .notes,
+    mode: CompletionRequestMode = .phraseContinuation
+) -> CompletionRequest {
+    CompletionRequest(
+        textBeforeCursor: text,
+        textAfterCursor: after,
+        appBundleIdentifier: app,
+        fieldIdentityDescription: field,
+        fieldKind: kind,
+        behaviorProfileID: profile,
+        mode: mode
+    )
 }

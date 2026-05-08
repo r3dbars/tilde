@@ -30,6 +30,7 @@ public struct CompletionRequest: Equatable, Sendable {
     public let textBeforeCursor: String
     public let textAfterCursor: String
     public let appBundleIdentifier: String?
+    public let fieldIdentityDescription: String?
     public let fieldKind: AXFieldKind
     public let behaviorProfileID: AutocompleteBehaviorProfileID?
     public let acceptedTextStyleSketch: AcceptedTextStyleSketch?
@@ -41,6 +42,7 @@ public struct CompletionRequest: Equatable, Sendable {
         textBeforeCursor: String,
         textAfterCursor: String = "",
         appBundleIdentifier: String? = nil,
+        fieldIdentityDescription: String? = nil,
         fieldKind: AXFieldKind = .unknown,
         behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
         acceptedTextStyleSketch: AcceptedTextStyleSketch? = nil,
@@ -51,6 +53,7 @@ public struct CompletionRequest: Equatable, Sendable {
         self.textBeforeCursor = textBeforeCursor
         self.textAfterCursor = textAfterCursor
         self.appBundleIdentifier = appBundleIdentifier
+        self.fieldIdentityDescription = fieldIdentityDescription
         self.fieldKind = fieldKind
         self.behaviorProfileID = behaviorProfileID
         self.acceptedTextStyleSketch = acceptedTextStyleSketch
