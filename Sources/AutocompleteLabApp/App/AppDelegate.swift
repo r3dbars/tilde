@@ -39,6 +39,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let displayScorePolicy = DisplayScorePolicy()
     private var acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
     private var acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
+    private var activeAppProofBundleIdentifiers: Set<String> = []
+    private var appProofExpirationTasks: [String: Task<Void, Never>] = [:]
     private let annoyanceSuppressor = AnnoyanceSuppressorActor()
     private let screenshotTraceCapturePolicy = ScreenshotTraceCapturePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
@@ -52,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionPanel = SuggestionPanelController()
     private lazy var focusedTextReader = SerialFocusedTextAXReader(accessibilityClient: accessibilityClient)
     private let diagnosticsWindow = DiagnosticsWindowController()
+    private let appProofCommandRunner = AppProofCommandRunner()
     private lazy var settingsWindow = SettingsWindowController(
         requestPermission: { [weak self] in
             self?.requestAccessibilityPermission()
@@ -188,6 +191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadKeyboardShortcutConfiguration()
         loadAcceptedAndKeptLearning()
         loadAcceptedTextStyleMemory()
+        loadProofModeOverrides()
         configureStatusItem()
         DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
@@ -3683,14 +3687,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let behaviorProfile = request.behaviorProfile
         let visibleWordCount = suggestion.visibleWordCount
         let visibleCharacterCount = suggestion.visibleText.count
-        let acceptedAndKeptSignal = acceptedAndKeptLearning.signal(
-            for: AcceptedAndKeptLearningKey(
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldKind: requestFieldKind,
-                requestMode: request.mode,
-                behaviorProfileID: behaviorProfile.id
-            )
+        let appBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
+        let acceptedAndKeptKey = AcceptedAndKeptLearningKey(
+            appBundleIdentifier: appBundleIdentifier,
+            fieldKind: requestFieldKind,
+            requestMode: request.mode,
+            behaviorProfileID: behaviorProfile.id
         )
+        let acceptedAndKeptSignal = activeAppProofBundleIdentifiers.contains(appBundleIdentifier)
+            ? AcceptedAndKeptLearningStore().signal(for: acceptedAndKeptKey)
+            : acceptedAndKeptLearning.signal(for: acceptedAndKeptKey)
 
         return DisplayScore(
             utility: displayUtility(
@@ -5428,8 +5434,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        guard !disabledBundleIdentifiers.contains(app.bundleIdentifier) else {
+            setSuggestionDecision("Blocked: enable this app first")
+            refreshRuntimeChrome()
+            DiagnosticsLog.shared.record(
+                "app-proof-blocked",
+                metadata: [
+                    "app": app.bundleIdentifier,
+                    "reason": "disabled"
+                ]
+            )
+            return
+        }
+
+        beginAppProofMode(for: app.bundleIdentifier)
         compatibilityLearningStore.setScreenshotTracing(true, for: app.bundleIdentifier)
-        setSuggestionDecision("Ready: app proof started")
         DiagnosticsLog.shared.record(
             "app-proof-started",
             metadata: [
@@ -5437,8 +5456,136 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "support": profile.supportLevel.rawValue
             ]
         )
+
+        if app.bundleIdentifier == "com.apple.TextEdit" {
+            runAutomaticTextEditProof(app: app)
+            return
+        }
+
+        setSuggestionDecision("Ready: app proof started")
         refreshRuntimeChrome()
         showDiagnostics()
+    }
+
+    private var appProofLogDirectoryURL: URL {
+        FileManager.default
+            .homeDirectoryForCurrentUser
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Logs", isDirectory: true)
+            .appendingPathComponent("AutocompleteLab", isDirectory: true)
+    }
+
+    private func runAutomaticTextEditProof(app: RunningApplicationInfo) {
+        guard let sourceRootURL = AppProofCommandPlan.sourceRootURL(),
+              let plan = AppProofCommandPlan.automaticPlan(
+                  for: app.bundleIdentifier,
+                  sourceRootURL: sourceRootURL,
+                  logDirectoryURL: appProofLogDirectoryURL
+              ) else {
+            setSuggestionDecision("Blocked: proof script unavailable")
+            DiagnosticsLog.shared.record(
+                "app-proof-command-unavailable",
+                metadata: [
+                    "app": app.bundleIdentifier
+                ]
+            )
+            refreshRuntimeChrome()
+            showDiagnostics()
+            return
+        }
+
+        do {
+            try appProofCommandRunner.run(plan: plan) { [weak self] passed, status in
+                guard let self else {
+                    return
+                }
+
+                self.setSuggestionDecision(passed ? "Done: TextEdit proof passed" : "Needs attention: TextEdit proof failed")
+                self.endAppProofMode(for: plan.bundleIdentifier, reason: passed ? "passed" : "failed")
+                DiagnosticsLog.shared.record(
+                    "app-proof-command-finished",
+                    metadata: [
+                        "app": plan.bundleIdentifier,
+                        "outcome": passed ? "passed" : "failed",
+                        "status": String(status),
+                        "log": plan.logURL.path
+                    ]
+                )
+                self.refreshRuntimeChrome()
+            }
+
+            setSuggestionDecision("Running: TextEdit proof")
+            DiagnosticsLog.shared.record(
+                "app-proof-command-started",
+                metadata: [
+                    "app": app.bundleIdentifier,
+                    "command": plan.commandText,
+                    "log": plan.logURL.path
+                ]
+            )
+            refreshRuntimeChrome()
+            showDiagnostics()
+        } catch AppProofCommandRunnerError.alreadyRunning {
+            setSuggestionDecision("Running: app proof already in progress")
+            DiagnosticsLog.shared.record(
+                "app-proof-command-skipped",
+                metadata: [
+                    "app": app.bundleIdentifier,
+                    "reason": "already-running"
+                ]
+            )
+            refreshRuntimeChrome()
+            showDiagnostics()
+        } catch {
+            setSuggestionDecision("Blocked: proof command failed to start")
+            DiagnosticsLog.shared.record(
+                "app-proof-command-failed",
+                metadata: [
+                    "app": app.bundleIdentifier,
+                    "reason": error.localizedDescription,
+                    "log": plan.logURL.path
+                ]
+            )
+            refreshRuntimeChrome()
+            showDiagnostics()
+        }
+    }
+
+    private func beginAppProofMode(for bundleIdentifier: String) {
+        activeAppProofBundleIdentifiers.insert(bundleIdentifier)
+        appProofExpirationTasks[bundleIdentifier]?.cancel()
+        appProofExpirationTasks[bundleIdentifier] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 10 * 60 * 1_000_000_000)
+            guard !Task.isCancelled else {
+                return
+            }
+
+            await MainActor.run {
+                self?.endAppProofMode(for: bundleIdentifier, reason: "expired")
+            }
+        }
+        DiagnosticsLog.shared.record(
+            "app-proof-mode-started",
+            metadata: [
+                "app": bundleIdentifier
+            ]
+        )
+    }
+
+    private func endAppProofMode(for bundleIdentifier: String, reason: String) {
+        appProofExpirationTasks[bundleIdentifier]?.cancel()
+        appProofExpirationTasks.removeValue(forKey: bundleIdentifier)
+        guard activeAppProofBundleIdentifiers.remove(bundleIdentifier) != nil else {
+            return
+        }
+
+        DiagnosticsLog.shared.record(
+            "app-proof-mode-ended",
+            metadata: [
+                "app": bundleIdentifier,
+                "reason": reason
+            ]
+        )
     }
 
     private func enableAllDisabledApps() {
@@ -5616,6 +5763,10 @@ private extension AppDelegate {
         "AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
     }
 
+    static var proofModeBundleIDsEnvironmentKey: String {
+        "AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS"
+    }
+
     static var acceptedAndKeptLearningDefaultsKey: String {
         "AcceptedAndKeptLearning"
     }
@@ -5667,6 +5818,27 @@ private extension AppDelegate {
 
         defaultOffSelection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
         disabledBundleIdentifiers = defaultOffSelection.bundleIdentifiers
+    }
+
+    func loadProofModeOverrides() {
+        let environment = ProcessInfo.processInfo.environment
+        let proofBundleIdentifiers = Set(
+            DisabledAppSelection.parseBundleIdentifierList(environment[Self.temporarilyEnabledBundleIDsEnvironmentKey])
+                + DisabledAppSelection.parseBundleIdentifierList(environment[Self.proofModeBundleIDsEnvironmentKey])
+        )
+        guard !proofBundleIdentifiers.isEmpty else {
+            return
+        }
+
+        for bundleIdentifier in proofBundleIdentifiers.sorted() {
+            beginAppProofMode(for: bundleIdentifier)
+        }
+        DiagnosticsLog.shared.record(
+            "app-proof-mode-env",
+            metadata: [
+                "apps": proofBundleIdentifiers.sorted().joined(separator: ",")
+            ]
+        )
     }
 
     func persistDisabledApps() {

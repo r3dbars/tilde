@@ -28,6 +28,7 @@ struct SettingsWindowControllerStateTests {
         #expect(allowed.proofCommandClipboardText == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit")
         #expect(allowed.copyProofCommandButtonTitle == "Copy Proof Command")
         #expect(allowed.canCopyProofCommand)
+        #expect(allowed.proofButtonTitle == "Run TextEdit Proof")
         #expect(allowed.toggleTitle == "Allow suggestions in this app")
         #expect(allowed.menuToggleTitle == "Disable TextEdit")
         #expect(allowed.blockedAppsText == "Blocked apps: none")
@@ -177,7 +178,7 @@ struct SettingsWindowControllerStateTests {
         #expect(forcedMirror.modeText == "Mode: mirror forced (profile inline)")
         #expect(forcedMirror.modeButtonTitle == "Use Profile Mode")
         #expect(forcedMirror.canOverrideMode)
-        #expect(forcedMirror.proofButtonTitle == "Start App Proof")
+        #expect(forcedMirror.proofButtonTitle == "Run TextEdit Proof")
         #expect(forcedMirror.canStartProof)
 
         let profileMode = SettingsCurrentAppState(
@@ -190,6 +191,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(profileMode.modeButtonTitle == "Force Mirror Mode")
         #expect(profileMode.canOverrideMode)
+        #expect(profileMode.proofButtonTitle == "Run TextEdit Proof")
         #expect(profileMode.canStartProof)
 
         let diagnosticsOnly = SettingsCurrentAppState(
