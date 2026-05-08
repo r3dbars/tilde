@@ -63,7 +63,7 @@ should stay lower until those rows are closed.
 | Chrome chat-like no-submit support | 9/10 | A local no-submit fixture now has screenshot-backed proof with Tab/full accept verified and submit count still zero. It is still a local fixture, not proof for real chat apps. |
 | Obsidian support | 9/10 | Fresh bounded screenshot-backed run at 2026-05-07T21:15:51Z shows caret-bound synthetic mirror placement in a disposable vault note, two verified accepts, and current proof fingerprints. It still needs more vault themes, panes, and long-note variants before it can be called complete by the research bar. |
 | Codex support | 8.5/10 | Fresh disposable prompt screenshot shows visible inline placement on the side display after the coordinate and render-level fixes. It still needs a recorder-grade visual pass with one-word accept and no-submit proof in the same slice before it can be scored higher; full accept is disabled until separate full-accept no-submit proof exists. |
-| Claude Code support | 4/10 | Direct bundle support is now diagnostics-only because `com.anthropic.claude-code` is a background-only CLI helper on this machine. Real Claude Code typing happens in a terminal host, so the remaining work is a safe terminal-host adapter plus one-word no-submit proof. |
+| Claude Code support | 4.2/10 | Direct bundle support is still diagnostics-only because `com.anthropic.claude-code` is a background-only CLI helper on this machine. A terminal-host proof policy now exists and is unit-tested for supported terminal hosts, explicit proof mode, an explicit proof marker, one-line buffers, and shell-prompt rejection. Real Claude Code typing still needs a live terminal-host adapter plus one-word no-submit proof before support can count. |
 | Claude desktop support | 9.2/10 | Bounded strict visual smoke at 2026-05-08T03:49:56Z proves same-baseline screenshot-backed synthetic-caret placement, exactly one verified Tab one-word accept, and no prompt submit signal in Claude desktop. The detector reported `dx=0.2`, `dy=-0.4` for the visible ghost. Full accept stays disabled until separate full-accept no-submit proof exists, and more prompt layouts still need coverage. |
 | Output relevance | 8.9/10 | Prompt labels, instruction echoes, assistant filler, unsafe prompt actions, punctuation suffixes, parroting, and more assistant-y prefixes are suppressed before display. Dogfood prompts now avoid loose substring triggers, but default redacted tracing means deeper output-quality audits require explicit raw-content dogfood runs. |
 | Word completion quality | 8.9/10 | Word completion and partial acceptance are useful, bounded, app-scoped, fast completions obey repeated-miss suppression, and unrelated whole-word completions are rejected. It still needs more real-app miss-rate proof before scoring higher. |
@@ -93,7 +93,7 @@ should stay lower until those rows are closed.
 | Apple Notes title | 9/10 | [notes-title.png](visual-placement-screenshots/notes-title.png) | Bounded strict visual smoke at 2026-05-07T21:24:14Z shows inline title placement with two verified accepts and current proof fingerprints. | Pending: more title lengths and undo variants. |
 | Apple Notes body | 9/10 | [notes-body.png](visual-placement-screenshots/notes-body.png) | Bounded strict visual smoke at 2026-05-07T23:33:48Z shows inline body placement with two verified accepts and current proof fingerprints. The retention check now correctly treats accepted word-completion suffixes as kept inside completed words. | Pending: more body lengths and undo variants. |
 | Apple Notes checklist | 9/10 | [notes-checklist.png](visual-placement-screenshots/notes-checklist.png) | Bounded strict visual smoke at 2026-05-08T00:21:33Z shows native checklist-row placement with two verified accepts and current proof fingerprints. | Pending: checked items, longer checklist rows, and undo variants. |
-| Claude Code | 4/10 | Pending terminal-host proof | Direct bundle is diagnostics-only. | Needs a safe terminal-host adapter before live prompt smoke can count. |
+| Claude Code | 4.2/10 | Pending terminal-host proof | Direct bundle is diagnostics-only. The terminal-host proof policy now has unit coverage for proof-mode gating and shell-prompt rejection. | Needs a live terminal-host adapter before prompt smoke can count. |
 | Claude desktop | 9.2/10 | [claude-desktop.png](visual-placement-screenshots/claude-desktop.png) | Bounded strict visual smoke at 2026-05-08T03:49:56Z proves same-baseline ghost placement plus a one-word Tab accept in the real Claude desktop composer without a submit signal. | Pending: more prompt layouts; full accept remains disabled until separately proven no-submit. |
 
 ## Latest Proof
@@ -135,6 +135,11 @@ should stay lower until those rows are closed.
   72 target misses across this scorecard, the Apple-native checklist, and the
   app proof matrix. This makes the requested "all 10s / all 100s / all As"
   target executable instead of subjective.
+- `swift test --filter ClaudeCodeTerminalHostProofPolicyTests`: passed 6 tests
+  after adding the first Claude Code terminal-host proof policy. This proves
+  the adapter gate blocks unsupported hosts, missing proof mode, missing proof
+  markers, shell prompts with commands, and multiline buffers before any live
+  terminal-host proof can count.
 - `./script/check_proof_manifest.sh`: verifies the machine-readable
   `docs/product/proof-manifest.json` against current proof-fingerprint
   constants, tracked screenshots, scorecard links, and matching manual smoke
