@@ -763,6 +763,11 @@ these are true.
    Codex, Claude Code, Claude desktop, and Chrome chat-like trace verification
    now fails on submit-like trace signals, and no-submit-only prompt surfaces
    also fail if the slice used full accept instead of one-word Tab proof.
+72. Done: add guarded official Chrome editor smoke lanes for CodeMirror,
+   Monaco, and ProseMirror, plus a single-run smoke lock and pre-keystroke
+   Chrome/frontmost/URL checks so proof attempts fail closed instead of typing
+   into the wrong app. These lanes are implementation-ready but still score as
+   pending until bounded screenshot-backed official-demo traces pass.
 
 ## Goal Status
 

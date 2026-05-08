@@ -24,7 +24,7 @@ PROOF_MODE_LAUNCHCTL_PREVIOUS=""
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|chat-like|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof]
+Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|codemirror-official|monaco-official|prosemirror-official|chat-like|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof]
 
 Runs a real app smoke pass where it is safe to automate. Notes, Obsidian,
 Codex, Claude Code, and Claude desktop are manual-gated so this script never
@@ -41,6 +41,9 @@ or --fixture prosemirror-real for pinned upstream editor-engine fixtures in an
 isolated Chrome process with renderer accessibility forced. Use
 --chrome-accessibility default to run those real editor fixtures in the normal
 frontmost Chrome window as an experimental default-AX exposure proof. Use
+--fixture codemirror-official, monaco-official, or prosemirror-official to run
+bounded proof against the public official editor demo pages in normal Chrome.
+Use
 --fixture all to run every local Chrome browser/editor fixture with one app
 build. Add --include-default-real-editor-proof with --fixture all to rerun real
 Monaco and ProseMirror in default Chrome AX mode after the forced lane.
@@ -137,7 +140,7 @@ case "$APP" in
 esac
 
 case "$CHROME_FIXTURE" in
-  textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|chat-like|all)
+  textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|codemirror-official|monaco-official|prosemirror-official|chat-like|all)
     ;;
   *)
     echo "Unknown Chrome fixture: $CHROME_FIXTURE" >&2
@@ -193,6 +196,8 @@ declare -a SMOKE_TMP_DIRS=()
 declare -a SMOKE_CHROME_PIDS=()
 CHROME_FIXTURE_ASSET_URL=""
 CHROME_FIXTURE_SCRIPT_URL=""
+SMOKE_LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-real-app-smoke.lock}"
+SMOKE_LOCK_HELD=0
 
 cleanup_smoke_tmp_dirs() {
   if ((${#SMOKE_TMP_DIRS[@]})); then
@@ -214,6 +219,11 @@ cleanup_smoke() {
   cleanup_smoke_chrome_pids
   cleanup_smoke_tmp_dirs
 
+  if [[ "$SMOKE_LOCK_HELD" == "1" ]]; then
+    rm -rf "$SMOKE_LOCK_DIR" >/dev/null 2>&1 || true
+    SMOKE_LOCK_HELD=0
+  fi
+
   if [[ "$TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED" == "1" ]]; then
     if [[ -n "$TEMP_ENABLE_LAUNCHCTL_PREVIOUS" ]]; then
       launchctl setenv "$TEMP_ENABLE_ENV_KEY" "$TEMP_ENABLE_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
@@ -232,6 +242,35 @@ cleanup_smoke() {
 }
 
 trap cleanup_smoke EXIT
+
+acquire_smoke_lock() {
+  if mkdir "$SMOKE_LOCK_DIR" >/dev/null 2>&1; then
+    SMOKE_LOCK_HELD=1
+    echo "$$" >"$SMOKE_LOCK_DIR/pid"
+    return 0
+  fi
+
+  local existing_pid=""
+  if [[ -f "$SMOKE_LOCK_DIR/pid" ]]; then
+    existing_pid="$(cat "$SMOKE_LOCK_DIR/pid" 2>/dev/null || true)"
+  fi
+
+  if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" >/dev/null 2>&1; then
+    echo "Another real app smoke run is already active (pid $existing_pid)." >&2
+    echo "Refusing to run concurrently because smoke runs can type into frontmost apps." >&2
+    exit 1
+  fi
+
+  rm -rf "$SMOKE_LOCK_DIR" >/dev/null 2>&1 || true
+  if mkdir "$SMOKE_LOCK_DIR" >/dev/null 2>&1; then
+    SMOKE_LOCK_HELD=1
+    echo "$$" >"$SMOKE_LOCK_DIR/pid"
+    return 0
+  fi
+
+  echo "Could not acquire real app smoke lock: $SMOKE_LOCK_DIR" >&2
+  exit 1
+}
 
 make_tmp_dir() {
   local tmp_dir
@@ -601,6 +640,37 @@ file_url() {
   printf 'file://%s\n' "$path"
 }
 
+chrome_fixture_is_official_demo() {
+  case "$1" in
+    codemirror-official|monaco-official|prosemirror-official)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+chrome_fixture_url() {
+  local fixture="$1"
+  local local_html_file="$2"
+
+  case "$fixture" in
+    codemirror-official)
+      printf '%s\n' "https://codemirror.net/try/"
+      ;;
+    monaco-official)
+      printf '%s\n' "https://microsoft.github.io/monaco-editor/playground.html"
+      ;;
+    prosemirror-official)
+      printf '%s\n' "https://prosemirror.net/examples/basic/"
+      ;;
+    *)
+      file_url "$local_html_file"
+      ;;
+  esac
+}
+
 prepare_chrome_fixture_assets() {
   local fixture="$1"
   local tmp_dir="$2"
@@ -680,6 +750,20 @@ wait_for_chrome_smoke_ready() {
   local chrome_pid="${3:-}"
   local deadline=$((SECONDS + timeout_seconds))
 
+  if chrome_fixture_is_official_demo "$fixture"; then
+    while ((SECONDS <= deadline)); do
+      local ready
+      ready="$(chrome_official_demo_ready "$fixture" | tr -d '[:space:]')"
+      if [[ "$ready" == "true" ]]; then
+        return 0
+      fi
+      sleep 0.3
+    done
+
+    echo "Timed out waiting for Chrome $fixture official demo readiness." >&2
+    exit 1
+  fi
+
   case "$fixture" in
     monaco-real|prosemirror-real)
       ;;
@@ -712,6 +796,73 @@ APPLESCRIPT
 
   echo "Timed out waiting for Chrome $fixture fixture readiness." >&2
   exit 1
+}
+
+chrome_active_tab_javascript() {
+  local javascript="$1"
+
+  osascript - "$javascript" <<'APPLESCRIPT' 2>/dev/null || true
+on run argv
+  set scriptText to item 1 of argv
+  tell application "Google Chrome"
+    try
+      tell active tab of front window to execute javascript scriptText
+    on error
+      return ""
+    end try
+  end tell
+end run
+APPLESCRIPT
+}
+
+chrome_official_demo_ready() {
+  local fixture="$1"
+  local javascript
+
+  case "$fixture" in
+    codemirror-official)
+      javascript="Boolean(document.querySelector('.cm-content'))"
+      ;;
+    monaco-official)
+      javascript="Boolean(document.querySelector('.monaco-editor textarea') || document.querySelector('.monaco-editor .inputarea'))"
+      ;;
+    prosemirror-official)
+      javascript="Boolean(document.querySelector('.ProseMirror'))"
+      ;;
+    *)
+      printf 'true\n'
+      return 0
+      ;;
+  esac
+
+  chrome_active_tab_javascript "$javascript"
+}
+
+chrome_focus_official_demo_editor() {
+  local fixture="$1"
+  local javascript
+
+  case "$fixture" in
+    codemirror-official)
+      javascript="(() => { const editor = document.querySelector('.cm-content'); if (!editor) return 'missing'; editor.scrollIntoView({block: 'center', inline: 'center'}); editor.focus(); const selection = window.getSelection(); const range = document.createRange(); range.selectNodeContents(editor); range.collapse(false); selection.removeAllRanges(); selection.addRange(range); return 'ok'; })()"
+      ;;
+    monaco-official)
+      javascript="(() => { const input = document.querySelector('.monaco-editor textarea') || document.querySelector('.monaco-editor .inputarea'); const editor = document.querySelector('.monaco-editor'); if (!input || !editor) return 'missing'; editor.scrollIntoView({block: 'center', inline: 'center'}); input.focus(); return 'ok'; })()"
+      ;;
+    prosemirror-official)
+      javascript="(() => { const editor = document.querySelector('.ProseMirror'); if (!editor) return 'missing'; editor.scrollIntoView({block: 'center', inline: 'center'}); editor.focus(); const selection = window.getSelection(); const range = document.createRange(); range.selectNodeContents(editor); range.collapse(false); selection.removeAllRanges(); selection.addRange(range); return 'ok'; })()"
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  local result
+  result="$(chrome_active_tab_javascript "$javascript" | tr -d '[:space:]')"
+  if [[ "$result" != "ok" ]]; then
+    echo "Could not focus Chrome $fixture official demo editor; JavaScript result: ${result:-empty}" >&2
+    exit 1
+  fi
 }
 
 chrome_fixture_uses_isolated_accessibility_chrome() {
@@ -966,8 +1117,17 @@ chrome_fixture_click_offsets() {
   local fixture="$1"
 
   case "$fixture" in
+    codemirror-official)
+      printf '260 430\n'
+      ;;
+    monaco-official)
+      printf '560 430\n'
+      ;;
     prosemirror-real)
       printf '180 260\n'
+      ;;
+    prosemirror-official)
+      printf '220 500\n'
       ;;
     *)
       printf '180 190\n'
@@ -983,6 +1143,18 @@ focus_chrome_smoke_editor() {
 
   if [[ -n "$chrome_pid" ]]; then
     focus_chrome_process_window "$chrome_pid" "$click_x_offset" "$click_y_offset"
+    return 0
+  fi
+
+  if chrome_fixture_is_official_demo "$fixture"; then
+    osascript >/dev/null <<'APPLESCRIPT'
+tell application "Google Chrome"
+  activate
+end tell
+delay 0.1
+APPLESCRIPT
+    chrome_focus_official_demo_editor "$fixture"
+    wait_for_frontmost_app "Google Chrome" 5
     return 0
   fi
 
@@ -1558,6 +1730,77 @@ APPLESCRIPT
   fi
 }
 
+chrome_active_tab_url() {
+  osascript <<'APPLESCRIPT' 2>/dev/null || true
+tell application "Google Chrome"
+  try
+    return URL of active tab of front window
+  on error
+    return ""
+  end try
+end tell
+APPLESCRIPT
+}
+
+assert_chrome_expected_tab() {
+  local fixture="$1"
+  local expected_url="$2"
+  local label="$3"
+  local active_url
+
+  active_url="$(chrome_active_tab_url)"
+  if [[ -z "$active_url" ]]; then
+    echo "Chrome $fixture smoke refused to type during $label: no active Chrome tab URL." >&2
+    exit 1
+  fi
+
+  if chrome_fixture_is_official_demo "$fixture"; then
+    if [[ "$active_url" != "$expected_url"* ]]; then
+      echo "Chrome $fixture smoke refused to type during $label: expected official demo URL '$expected_url', got '$active_url'." >&2
+      exit 1
+    fi
+    return 0
+  fi
+
+  if [[ "$expected_url" == file://* && "$active_url" != file://*autocomplete-lab-chrome-"$fixture"-smoke.html* ]]; then
+    echo "Chrome $fixture smoke refused to type during $label: expected local smoke fixture, got '$active_url'." >&2
+    exit 1
+  fi
+}
+
+assert_chrome_ready_for_input() {
+  local fixture="$1"
+  local chrome_pid="$2"
+  local expected_url="$3"
+  local label="$4"
+
+  if [[ -n "$chrome_pid" ]]; then
+    assert_frontmost_process_id "$chrome_pid" "Chrome $fixture $label"
+    return 0
+  fi
+
+  assert_frontmost_app "Google Chrome" "Chrome $fixture $label"
+  assert_chrome_expected_tab "$fixture" "$expected_url" "$label"
+}
+
+type_chrome_smoke_text() {
+  local fixture="$1"
+  local chrome_pid="$2"
+  local expected_url="$3"
+  local label="$4"
+  local text="$5"
+
+  assert_chrome_ready_for_input "$fixture" "$chrome_pid" "$expected_url" "$label"
+  osascript - "$text" <<'APPLESCRIPT'
+on run argv
+  set smokeText to item 1 of argv
+  tell application "System Events"
+    keystroke smokeText
+  end tell
+end run
+APPLESCRIPT
+}
+
 chrome_fixture_html() {
   local fixture="${1:-$CHROME_FIXTURE}"
 
@@ -1973,6 +2216,8 @@ describe_plan() {
         if [[ "$CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF" == "1" ]]; then
           echo "Plan add-on: rerun real Monaco and real ProseMirror in default Chrome AX mode after the forced renderer lane."
         fi
+      elif chrome_fixture_is_official_demo "$CHROME_FIXTURE"; then
+        echo "Plan: build/relaunch AutocompleteLab, open the public official $CHROME_FIXTURE demo page in Chrome, type a disposable test fragment, then validate logs and traces."
       else
         echo "Plan: build/relaunch AutocompleteLab, open a disposable Chrome $CHROME_FIXTURE fixture, type a test fragment, then validate logs and traces."
       fi
@@ -2014,7 +2259,7 @@ build_if_needed() {
     return 0
   fi
 
-  ./script/build_and_run.sh --verify
+  ./script/build_and_run.sh run
 }
 
 run_manual_gated() {
@@ -2144,9 +2389,12 @@ run_chrome_fixture() {
   html_file="$tmp_dir/autocomplete-lab-chrome-$fixture-smoke.html"
 
   prepare_chrome_fixture_assets "$fixture" "$tmp_dir"
-  chrome_fixture_html "$fixture" >"$html_file"
+  if ! chrome_fixture_is_official_demo "$fixture"; then
+    chrome_fixture_html "$fixture" >"$html_file"
+  fi
 
-  local chrome_url="file://$html_file"
+  local chrome_url
+  chrome_url="$(chrome_fixture_url "$fixture" "$html_file")"
   local click_x_offset click_y_offset
   read -r click_x_offset click_y_offset < <(chrome_fixture_click_offsets "$fixture")
   local chrome_pid=""
@@ -2190,11 +2438,7 @@ APPLESCRIPT
   focus_chrome_smoke_editor "$fixture" "$chrome_pid"
   require_default_chrome_web_accessibility "$fixture"
 
-  osascript <<'APPLESCRIPT'
-tell application "System Events"
-  keystroke "Smoke proof feels inst"
-end tell
-APPLESCRIPT
+  type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "first fragment" "Smoke proof feels inst"
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.google.Chrome" "Chrome $fixture"
@@ -2221,11 +2465,10 @@ APPLESCRIPT
   full_accept_key="$(accept_all_shortcut)"
   second_start_line="$(line_count "$LOG_PATH")"
 
-  osascript <<'APPLESCRIPT'
-tell application "System Events"
-  keystroke " and stays inst"
-end tell
-APPLESCRIPT
+  if [[ -z "$chrome_pid" ]]; then
+    focus_chrome_smoke_editor "$fixture"
+  fi
+  type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "second fragment" " and stays inst"
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.google.Chrome" "Chrome $fixture second"
@@ -2301,6 +2544,8 @@ describe_plan
 if [[ "$DRY_RUN" == "1" ]]; then
   exit 0
 fi
+
+acquire_smoke_lock
 
 case "$APP" in
   textedit)
