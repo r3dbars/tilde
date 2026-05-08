@@ -19,6 +19,28 @@ struct PrefixFamilyCooldownPolicyTests {
         #expect(policy.decision(for: input, now: now.addingTimeInterval(5.1)) == .allowed)
     }
 
+    @Test("Repeated typed over escalates to a longer cooldown")
+    func repeatedTypedOverEscalatesToLongerCooldown() throws {
+        var policy = PrefixFamilyCooldownPolicy()
+        let now = Date(timeIntervalSince1970: 1_000)
+        let input = input(textBeforeCursor: "I think this works")
+
+        _ = policy.record(.typedOver, input: input, now: now)
+        let maybeRepeated = policy.record(
+            .typedOver,
+            input: input,
+            now: now.addingTimeInterval(2)
+        )
+        let repeated = try #require(maybeRepeated)
+
+        #expect(repeated.reason == .typedOver)
+        #expect(repeated.durationMilliseconds == 30_000)
+        #expect(repeated.isEscalated)
+        #expect(repeated.metadata["prefixCooldownEscalated"] == "true")
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(31.9)).canRequest == false)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(32.1)) == .allowed)
+    }
+
     @Test("Escape starts a fifteen second cooldown")
     func escapeStartsFifteenSecondCooldown() {
         var policy = PrefixFamilyCooldownPolicy()

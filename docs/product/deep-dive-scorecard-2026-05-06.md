@@ -358,6 +358,8 @@ evidence-backed score should stay lower until those rows are closed.
 - Sentence-mode ranking now suppresses invented action commitments like
   scheduling, calls, new names, and dates instead of treating them as harmless
   sentence starters.
+- Repeated typed-over misses now escalate from a short prefix cooldown to a
+  longer quiet period for that same app/field/mode/prefix family.
 - Chrome chat-like no-submit proof now uses a tab-title submit counter so the
   smoke test works even when Chrome JavaScript execution from Apple Events is
   disabled.
