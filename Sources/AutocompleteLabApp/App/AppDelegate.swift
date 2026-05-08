@@ -157,6 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var placementUncertaintySuppressor = PlacementUncertaintySuppressor()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
     private var annoyanceSuppressor = AnnoyanceSuppressor()
+    private var prefixFamilyCooldownPolicy = PrefixFamilyCooldownPolicy()
     private var currentCompletionRequest: CompletionRequest?
     private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
     private var currentSuggestionID: String?
@@ -167,6 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionTextBeforeCursor: String?
     private var currentSuggestionAcceptanceSnapshot: SuggestionAcceptanceSnapshot?
     private var currentSuggestionDisplayedText: String?
+    private var currentSuggestionPresentedAt: Date?
     private var currentSuggestionInvalidatedByUserKeyDown = false
     private var lastScreenLayoutFingerprint: String?
     private var scheduledScreenshotSuggestionIDs: Set<String> = []
@@ -843,6 +845,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor
         )
+        let didDeleteInCurrentField = lastTextSnapshot.map { previousSnapshot in
+            previousSnapshot.fieldIdentity == fieldIdentity
+                && context.textBeforeCursor.count < previousSnapshot.textBeforeCursor.count
+        } ?? false
 
         guard snapshot != lastTextSnapshot else {
             setSuggestionDecision(
@@ -1012,6 +1018,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let requestMode = activationDecision.requestMode ?? .phraseContinuation
+        if didDeleteInCurrentField {
+            _ = recordPrefixFamilyCooldown(
+                .deletion,
+                appBundleIdentifier: frontmostApp.bundleIdentifier,
+                fieldIdentity: fieldIdentity,
+                requestMode: requestMode,
+                textBeforeCursor: context.textBeforeCursor
+            )
+        }
+
+        if blockForQuietModeIfNeeded(
+            context: context,
+            profile: profile,
+            appBundleIdentifier: frontmostApp.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            requestMode: requestMode
+        ) {
+            return
+        }
+
+        if blockForPrefixFamilyCooldownIfNeeded(
+            context: context,
+            profile: profile,
+            appBundleIdentifier: frontmostApp.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            requestMode: requestMode
+        ) {
+            return
+        }
+
         if requestMode == .phraseContinuation,
            typingBurstDecision.shouldSuppressPhraseContinuation {
             setSuggestionDecision("Waiting: typing burst")
@@ -1733,6 +1769,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         case .dismiss:
             invalidatePendingSuggestionRequest()
+            _ = recordPrefixFamilyCooldown(
+                .escapeDismissal,
+                appBundleIdentifier: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier,
+                fieldIdentity: currentSuggestionFieldIdentity ?? currentFieldIdentity,
+                requestMode: currentSuggestionRequestMode,
+                textBeforeCursor: currentSuggestionTextBeforeCursor ?? lastTextSnapshot?.textBeforeCursor
+            )
             suppressCurrentField(reason: "escape")
             hideSuggestion(reason: "escape")
             suppressKey(key)
@@ -2567,6 +2610,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         placementUncertaintySuppressor.reset(fieldIdentifier: fieldIdentity.traceDescription)
         suggestionSession.present(suggestion)
         setSuggestionDecision("Shown: \(triggerReason) \(latencyMilliseconds)ms")
+        if currentSuggestionID != suggestionID || currentSuggestionPresentedAt == nil {
+            currentSuggestionPresentedAt = Date()
+        }
         currentSuggestionID = suggestionID
         currentSuggestionAppBundleIdentifier = presentationBundleIdentifier
         currentSuggestionFieldIdentity = fieldIdentity
@@ -3294,6 +3340,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        var metadata = [
+            "typedSuffix": typedSuffix
+        ]
+        if let cooldown = recordPrefixFamilyCooldown(
+            .typedOver,
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            requestMode: currentSuggestionRequestMode,
+            textBeforeCursor: originalTextBeforeCursor
+        ) {
+            metadata.merge(cooldown.metadata) { current, _ in current }
+        }
+
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionTypedOver,
             suggestionID: suggestionID,
@@ -3304,9 +3363,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             displayedText: displayedText,
             outcome: "typed-over",
             reason: "typed-against-visible-suggestion",
-            metadata: [
-                "typedSuffix": typedSuffix
-            ]
+            metadata: metadata
         )
     }
 
@@ -3369,6 +3426,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 outcome = "ignored"
             }
             let displayedText = currentSuggestionDisplayedText ?? suggestionSession.visibleSuggestion?.visibleText ?? ""
+            var metadata: [String: String] = [:]
+            if let currentSuggestionPresentedAt {
+                let lifetimeMilliseconds = max(
+                    0,
+                    Int(Date().timeIntervalSince(currentSuggestionPresentedAt) * 1_000)
+                )
+                metadata["lifetimeMs"] = String(lifetimeMilliseconds)
+                metadata["visibleLifetimeMs"] = String(lifetimeMilliseconds)
+            }
 
             if outcome == "ignored" {
                 suggestionRepetitionSuppressor.recordMiss(
@@ -3386,7 +3452,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 requestMode: currentSuggestionRequestMode?.rawValue ?? "",
                 displayedText: displayedText,
                 outcome: outcome,
-                reason: reason
+                reason: reason,
+                metadata: metadata
             )
             setSuggestionDecision("Hidden: \(reason)")
         }
@@ -3400,6 +3467,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionTextBeforeCursor = nil
         currentSuggestionAcceptanceSnapshot = nil
         currentSuggestionDisplayedText = nil
+        currentSuggestionPresentedAt = nil
         currentSuggestionInvalidatedByUserKeyDown = false
         streamingPresentationStates.removeAll(keepingCapacity: true)
         lastCaretRect = nil
@@ -3595,6 +3663,146 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 fieldIdentifier: fieldIdentity.traceDescription,
                 requestMode: requestMode
             )
+        )
+    }
+
+    private func blockForQuietModeIfNeeded(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        appBundleIdentifier: String,
+        fieldIdentity: FocusedFieldIdentity,
+        requestMode: CompletionRequestMode
+    ) -> Bool {
+        let annoyanceContext = AnnoyanceContext(
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentifier: fieldIdentity.traceDescription,
+            requestMode: requestMode,
+            fieldKind: context.fieldClassification.kind
+        )
+        let quietMode = annoyanceSuppressor.quietMode(for: annoyanceContext)
+        guard quietMode.isActive else {
+            return false
+        }
+
+        setSuggestionDecision("Waiting: \(quietMode.traceReason)")
+        RawAutocompleteTraceLog.shared.record(
+            type: .suggestionSuppressed,
+            suggestionID: UUID().uuidString,
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentity: fieldIdentity.traceDescription,
+            requestMode: requestMode.rawValue,
+            triggerReason: "policy",
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            reason: quietMode.traceReason,
+            metadata: quietMode.metadata
+                .merging(context.fieldClassification.traceMetadata) { current, _ in current }
+        )
+        recordBlockedSuggestionEvent(
+            "suggestion-blocked",
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            metadata: ["reason": quietMode.traceReason]
+                .merging(quietMode.metadata) { current, _ in current }
+        )
+        hideSuggestion(reason: quietMode.traceReason)
+        return true
+    }
+
+    private func blockForPrefixFamilyCooldownIfNeeded(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        appBundleIdentifier: String,
+        fieldIdentity: FocusedFieldIdentity,
+        requestMode: CompletionRequestMode
+    ) -> Bool {
+        let input = prefixFamilyCooldownInput(
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            requestMode: requestMode,
+            textBeforeCursor: context.textBeforeCursor
+        )
+
+        guard case let .coolingDown(cooldown) = prefixFamilyCooldownPolicy.decision(for: input) else {
+            return false
+        }
+
+        setSuggestionDecision("Waiting: prefix cooldown")
+        RawAutocompleteTraceLog.shared.record(
+            type: .suggestionSuppressed,
+            suggestionID: UUID().uuidString,
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentity: fieldIdentity.traceDescription,
+            requestMode: requestMode.rawValue,
+            triggerReason: "policy",
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            reason: "prefix-family-cooldown",
+            metadata: cooldown.metadata
+                .merging(context.fieldClassification.traceMetadata) { current, _ in current }
+        )
+        recordBlockedSuggestionEvent(
+            "suggestion-blocked",
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            metadata: ["reason": "prefix-family-cooldown"]
+                .merging(cooldown.metadata) { current, _ in current }
+        )
+        hideSuggestion(reason: "prefix-family-cooldown")
+        return true
+    }
+
+    @discardableResult
+    private func recordPrefixFamilyCooldown(
+        _ reason: PrefixFamilyCooldownReason,
+        appBundleIdentifier: String?,
+        fieldIdentity: FocusedFieldIdentity?,
+        requestMode: CompletionRequestMode?,
+        textBeforeCursor: String?
+    ) -> PrefixFamilyCooldown? {
+        guard let appBundleIdentifier,
+              let fieldIdentity else {
+            return nil
+        }
+
+        let cooldown = prefixFamilyCooldownPolicy.record(
+            reason,
+            input: prefixFamilyCooldownInput(
+                appBundleIdentifier: appBundleIdentifier,
+                fieldIdentity: fieldIdentity,
+                requestMode: requestMode,
+                textBeforeCursor: textBeforeCursor ?? ""
+            )
+        )
+
+        if let cooldown {
+            DiagnosticsLog.shared.record(
+                "prefix-family-cooldown-recorded",
+                metadata: [
+                    "app": appBundleIdentifier,
+                    "field": fieldIdentity.traceDescription,
+                    "requestMode": requestMode?.rawValue ?? "unknown"
+                ]
+                .merging(cooldown.metadata) { current, _ in current }
+            )
+        }
+
+        return cooldown
+    }
+
+    private func prefixFamilyCooldownInput(
+        appBundleIdentifier: String,
+        fieldIdentity: FocusedFieldIdentity,
+        requestMode: CompletionRequestMode?,
+        textBeforeCursor: String
+    ) -> PrefixFamilyCooldownInput {
+        PrefixFamilyCooldownInput(
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentifier: fieldIdentity.traceDescription,
+            requestMode: requestMode,
+            textBeforeCursor: textBeforeCursor
         )
     }
 
