@@ -269,7 +269,8 @@ struct DiagnosticsWindowControllerStateTests {
                     "prefixCooldownReason": "escapeDismissal",
                     "prefixCooldownDurationMilliseconds": "60000",
                     "prefixFamilyTokenCount": "3",
-                    "prefixCooldownEscalated": "true"
+                    "prefixCooldownEscalated": "true",
+                    "prefixFamilyHMACToken": "abc123def456abc123def456"
                 ]),
                 event(metadata: [
                     "quietMode": "field",

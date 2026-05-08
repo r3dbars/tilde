@@ -836,7 +836,8 @@ struct SuggestionLearningDiagnostics: Equatable {
         let duration = event.metadata["prefixCooldownDurationMilliseconds"] ?? "unknown"
         let tokens = event.metadata["prefixFamilyTokenCount"] ?? "unknown"
         let escalated = event.metadata["prefixCooldownEscalated"] ?? "false"
-        return "Prefix cooldown: reason=\(reason), duration=\(duration)ms, familyTokens=\(tokens), escalated=\(escalated)"
+        let hash = event.metadata["prefixFamilyHMACToken"].map { ", familyHash=\($0)" } ?? ""
+        return "Prefix cooldown: reason=\(reason), duration=\(duration)ms, familyTokens=\(tokens), escalated=\(escalated)\(hash)"
     }
 
     private var recentStyleSketchText: String {

@@ -31,15 +31,24 @@ public struct PrefixFamilyCooldown: Equatable, Sendable {
     public let durationMilliseconds: Int
     public let prefixTokenCount: Int
     public let isEscalated: Bool
+    public let prefixFamilyFingerprintVersion: String?
+    public let prefixFamilyHMACToken: String?
 
     public var metadata: [String: String] {
-        [
+        var metadata = [
             "prefixCooldownReason": reason.rawValue,
             "prefixCooldownUntil": ISO8601DateFormatter().string(from: until),
             "prefixCooldownDurationMilliseconds": String(durationMilliseconds),
             "prefixFamilyTokenCount": String(prefixTokenCount),
             "prefixCooldownEscalated": String(isEscalated)
         ]
+        if let prefixFamilyFingerprintVersion {
+            metadata["prefixFamilyFingerprintVersion"] = prefixFamilyFingerprintVersion
+        }
+        if let prefixFamilyHMACToken {
+            metadata["prefixFamilyHMACToken"] = prefixFamilyHMACToken
+        }
+        return metadata
     }
 }
 
@@ -48,19 +57,28 @@ public struct PrefixFamilyEagernessAdjustment: Equatable, Sendable {
     public let repeatedTypedOverThreshold: Double
     public let thresholdAdjustment: Double
     public let prefixTokenCount: Int
+    public let prefixFamilyFingerprintVersion: String?
+    public let prefixFamilyHMACToken: String?
 
     public var isActive: Bool {
         thresholdAdjustment > 0
     }
 
     public var metadata: [String: String] {
-        [
+        var metadata = [
             "prefixEagernessTypedOverScore": Self.format(typedOverScore),
             "prefixEagernessRepeatedTypedOverThreshold": Self.format(repeatedTypedOverThreshold),
             "prefixEagernessThresholdAdjustment": Self.format(thresholdAdjustment),
             "prefixEagernessApplied": String(isActive),
             "prefixFamilyTokenCount": String(prefixTokenCount)
         ]
+        if let prefixFamilyFingerprintVersion {
+            metadata["prefixFamilyFingerprintVersion"] = prefixFamilyFingerprintVersion
+        }
+        if let prefixFamilyHMACToken {
+            metadata["prefixFamilyHMACToken"] = prefixFamilyHMACToken
+        }
+        return metadata
     }
 
     private static func format(_ value: Double) -> String {
@@ -86,6 +104,7 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
     public let prefixFamilyTokenLimit: Int
     public let typedOverEagernessThreshold: Double
     public let typedOverEagernessHalfLifeSeconds: TimeInterval
+    public let traceFingerprintSecret: Data
 
     private var cooldowns: [PrefixFamilyCooldownKey: PrefixFamilyCooldown] = [:]
     private var typedOverEagernessBuckets: [PrefixFamilyCooldownKey: PrefixFamilyEagernessBucket] = [:]
@@ -98,7 +117,8 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
         deletionCooldownMilliseconds: Int = 250,
         prefixFamilyTokenLimit: Int = 3,
         typedOverEagernessThreshold: Double = 1.5,
-        typedOverEagernessHalfLifeSeconds: TimeInterval = 20 * 60
+        typedOverEagernessHalfLifeSeconds: TimeInterval = 20 * 60,
+        traceFingerprintSecret: Data = Data()
     ) {
         self.typedOverCooldownMilliseconds = max(0, typedOverCooldownMilliseconds)
         self.repeatedTypedOverCooldownMilliseconds = max(
@@ -111,6 +131,7 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
         self.prefixFamilyTokenLimit = max(1, prefixFamilyTokenLimit)
         self.typedOverEagernessThreshold = max(1, typedOverEagernessThreshold)
         self.typedOverEagernessHalfLifeSeconds = max(1, typedOverEagernessHalfLifeSeconds)
+        self.traceFingerprintSecret = traceFingerprintSecret
     }
 
     public mutating func record(
@@ -136,7 +157,9 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
             until: now.addingTimeInterval(TimeInterval(durationMilliseconds) / 1_000),
             durationMilliseconds: durationMilliseconds,
             prefixTokenCount: key.prefixTokenCount,
-            isEscalated: isEscalated
+            isEscalated: isEscalated,
+            prefixFamilyFingerprintVersion: key.prefixFamilyFingerprintVersion,
+            prefixFamilyHMACToken: key.prefixFamilyHMACToken
         )
         cooldowns[key] = cooldown
         return cooldown
@@ -172,7 +195,9 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
                 for: input.requestMode,
                 typedOverScore: score
             ),
-            prefixTokenCount: key.prefixTokenCount
+            prefixTokenCount: key.prefixTokenCount,
+            prefixFamilyFingerprintVersion: key.prefixFamilyFingerprintVersion,
+            prefixFamilyHMACToken: key.prefixFamilyHMACToken
         )
     }
 
@@ -269,12 +294,18 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
         let tokens = AcceptanceSurvivalClassifier.looseTokens(in: input.textBeforeCursor)
         let familyTokens = Array(tokens.suffix(prefixFamilyTokenLimit))
         let family = familyTokens.isEmpty ? "<empty>" : familyTokens.joined(separator: " ")
+        let fingerprintMetadata = TracePrivacyFingerprint.prefixFamilyMetadata(
+            for: familyTokens,
+            secret: traceFingerprintSecret
+        )
         return PrefixFamilyCooldownKey(
             appBundleIdentifier: input.appBundleIdentifier,
             fieldIdentifier: input.fieldIdentifier,
             requestMode: input.requestMode?.rawValue ?? "unknown",
             prefixFamily: family,
-            prefixTokenCount: familyTokens.count
+            prefixTokenCount: familyTokens.count,
+            prefixFamilyFingerprintVersion: fingerprintMetadata["prefixFamilyFingerprintVersion"],
+            prefixFamilyHMACToken: fingerprintMetadata["prefixFamilyHMACToken"]
         )
     }
 }
@@ -285,6 +316,8 @@ private struct PrefixFamilyCooldownKey: Hashable, Sendable {
     let requestMode: String
     let prefixFamily: String
     let prefixTokenCount: Int
+    let prefixFamilyFingerprintVersion: String?
+    let prefixFamilyHMACToken: String?
 }
 
 private struct PrefixFamilyEagernessBucket: Equatable, Sendable {
