@@ -3321,7 +3321,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 triggerReason: triggerReason,
                 latencyMilliseconds: latencyMilliseconds
             ),
-            mode: request.mode
+            mode: request.mode,
+            behaviorProfileID: request.behaviorProfile.id
         )
         let displayScoreTrace = displayScoreDecision.trace
         let displayScoreMetadata = displayScoreDecision.metadata

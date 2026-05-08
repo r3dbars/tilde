@@ -69,8 +69,8 @@ fail quietly when it is unsure. Wrong-place text is worse than no suggestion.
 | Cross-app reliability | 10 | 85 | 100 | The proof matrix now has 15 screenshot artifacts, Notes title/body/checklist are all split out, real Monaco/ProseMirror pass under isolated renderer-accessibility Chrome, Claude desktop has same-baseline real prompt no-submit proof, Claude Code has a proof-only terminal-host lane, every compatibility profile has owner/safety coverage in the proof manifest, and the app exposes green/yellow/diagnostics-only/unsupported status. Codex, Claude Code terminal-host proof, default-Chrome editor AX exposure, and more production editor variants are still pending proof. |
 | Native macOS visual feel | 8 | 80 | 100 | Settings moved toward native sections, checkboxes, clearer privacy/app controls, support status, "why hidden" copy, and calmer menu copy. Diagnostics and onboarding still need polish. |
 | Privacy and permissions trust | 9 | 100 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, raw/screenshot debug capture expires from the app UI, Settings shows share-safe privacy status, Diagnostics exports a redacted privacy bundle with a manifest/checklist, and the beta packet explicitly forbids raw traces, screenshots, prompts, typed text, and accepted text by default. |
-| Suggestion quality | 8 | 91 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, accepted-kept learning now adjusts display utility, learned word completion is app-scoped, word completion now has a consistent 3+ typed-letter floor, profile-aware fresh paragraph starts stay quieter, suffix overlap is salvaged, visible typed-word duplicates and phrase restarts are suppressed, dogfood prompts are stricter, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
-| Failure restraint | 8 | 92 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, slow no-context AX reads cool down immediately, single slow AX reads with context now throttle and drop stale results, stale geometry suppresses display, too-narrow inline placement suppresses instead of showing a sliver, untrusted low-confidence mirror fallback suppresses instead of showing detached placement, event-tap disablement fails closed, prompt full accept requires proof, placement uncertainty now hides stale ghosts and feeds field quiet mode, active quiet mode is visible in Diagnostics, and unsupported apps explain their stance. Real-app proof remains open. |
+| Suggestion quality | 8 | 92 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, accepted-kept learning now adjusts display utility, accepted-kept display thresholds now vary by behavior profile, learned word completion is app-scoped, word completion now has a consistent 3+ typed-letter floor, profile-aware fresh paragraph starts stay quieter, suffix overlap is salvaged, visible typed-word duplicates and phrase restarts are suppressed, dogfood prompts are stricter, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
+| Failure restraint | 8 | 93 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, slow no-context AX reads cool down immediately, single slow AX reads with context now throttle and drop stale results, stale geometry suppresses display, too-narrow inline placement suppresses instead of showing a sliver, untrusted low-confidence mirror fallback suppresses instead of showing detached placement, prompt/chat and sentence-like prose profiles now require stronger accepted-kept probability after enough samples, event-tap disablement fails closed, prompt full accept requires proof, placement uncertainty now hides stale ghosts and feeds field quiet mode, active quiet mode is visible in Diagnostics, and unsupported apps explain their stance. Real-app proof remains open. |
 | User control | 6 | 100 | 100 | Settings and the menu now expose pause, current-field silence, app blocking, support status, per-app render mode, force-mirror override, an app-proof starter, privacy diagnostics, temporary raw/screenshot capture, local log deletion, direct accept-all shortcut editing, and why the last suggestion was hidden. |
 | Onboarding and setup | 4 | 99 | 100 | Settings explains Accessibility in one short paragraph, only mentions Screen Recording when screenshot capture is on, starts fresh installs with suggestion-capable apps off, points first success at enabling TextEdit, and installs or repairs the local model in-app with plain no-model-server recovery copy, progress, cancellation, failure retry, validation, and runtime warmup. The Apps section now shows visible proof instructions, shows the exact smoke command where one exists, copies the runnable command in one click, disables proof until the current app is enabled, and can launch the TextEdit smoke proof directly from Settings. The underlying TextEdit skip-build proof command is now green; direct Settings-button dispatch still needs a clean green proof before this reaches 100. |
 | Evidence and QA loop | 4 | 99 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command with exact TextEdit text checks, Notes text-context repair, Claude Code terminal-host adapter checks, and 15 screenshot artifacts including real Monaco/ProseMirror and same-baseline Claude desktop. Codex same-slice proof and live Claude Code terminal-host proof are still missing. |
@@ -312,7 +312,7 @@ Native target: the app feels more private than cloud writing tools.
 
 ## Category 7: Suggestion Quality
 
-Current score: 91/100.
+Current score: 92/100.
 
 Native target: suggestions feel like a continuation of the user's sentence, not
 like an assistant trying to talk.
@@ -331,16 +331,17 @@ like an assistant trying to talk.
 - [x] Dogfood prompt guidance no longer triggers from loose substrings like `table`, `stable`, `model`, or `test`.
 - [x] Assistant-y prefixes like "as an AI", "happy to", "you could", and "would you like" are suppressed before display.
 - [x] Word-completion mode rejects unrelated whole-word completions.
+- [x] Accepted-kept display thresholds are stricter for prompt/chat and sentence-like prose profiles after enough evidence.
 - [x] Model should prefer suffixes over phrase restarts.
 - [x] Suggestions should not duplicate the user's visible text.
 - [ ] Suggestions should be less eager after repeated typed-over misses.
-- [ ] Different app modes should have different suggestion aggressiveness.
+- [x] Different app modes should have different suggestion aggressiveness.
 - [ ] User should be able to choose quiet, normal, or eager suggestions.
 - [ ] Dogfood agent prompts should avoid generic productivity filler.
 
 ## Category 8: Failure Restraint
 
-Current score: 92/100.
+Current score: 93/100.
 
 Native target: when the app is unsure, the user feels nothing.
 
@@ -356,6 +357,7 @@ Native target: when the app is unsure, the user feels nothing.
 - [x] Stale app, field, prompt target, or text suppresses async suggestions before display.
 - [x] Low placement confidence should suppress inline mode.
 - [x] Prompt apps should require no-submit proof before full accept.
+- [x] Low accepted-kept probability should suppress more aggressively in high-cost profiles after enough local samples.
 - [ ] Unsupported apps should not appear broken.
 - [ ] The app should never leave a ghost after focus moves.
 - [x] The app should hide after repeated placement uncertainty in the same field.
