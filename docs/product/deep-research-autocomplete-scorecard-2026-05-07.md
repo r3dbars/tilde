@@ -137,7 +137,9 @@ Pass 1 shipped these improvements:
   the matched trace JSONL slice. Strict proof now requires bounded line
   evidence, screenshot-backed presented events for strict visual proof,
   verified insertions, and current trace/placement/key/runtime proof
-  fingerprints.
+  fingerprints. It also parses `docs/product/app-proof-matrix.md` and rejects
+  `complete` manifest rows for `A-` matrix surfaces, so variant-incomplete proof
+  stays marked `partial`.
 - Fresh installs now start with suggestion-capable apps off, keep Settings open
   until a test app is enabled, and use plainer local-model recovery copy that
   says Ollama or another model server is not needed.
@@ -721,9 +723,10 @@ these are true.
 62. Done: classify event-tap start failures and failed-closed markers as hard
    key-capture failures in Diagnostics and the typing-performance guard while
    keeping AX polling slowness in its separate warning lane.
-63. Done: keep variant-incomplete A- proof rows marked `partial` in the proof
-   manifest, so live smoke proof can be verified without hiding missing variant
-   coverage from strict `--require-all`.
+63. Done: make `check_proof_manifest.py` cross-check
+   `docs/product/app-proof-matrix.md` in strict mode, so any `A-` matrix row
+   marked `complete` in the proof manifest fails and variant-incomplete live
+   smoke proof stays `partial`.
 64. Done: strengthen ambient output restraint by suppressing more assistant-like
    advice and planning starters such as "what I would do", "one option is",
    "the next step would", and "I think we should".
