@@ -59,36 +59,41 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.displayName == "Codex")
         #expect(store.profile(for: "com.openai.codex")?.appFamily == .customCanvas)
         #expect(store.profile(for: "com.openai.codex")?.allowsFieldAnchor == false)
-        #expect(store.profile(for: "com.openai.codex")?.supportLevel == .yellow)
-        #expect(store.profile(for: "com.openai.codex")?.renderMode == .floatingMirror)
-        #expect(store.profile(for: "com.openai.codex")?.fallbackRenderMode == nil)
-        #expect(store.profile(for: "com.openai.codex")?.insertionMode == .axValueReplacement)
-        #expect(store.profile(for: "com.openai.codex")?.fallbackInsertionMode == .keyEvents)
+        #expect(store.profile(for: "com.openai.codex")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.openai.codex")?.renderMode == .disabled)
+        #expect(store.profile(for: "com.openai.codex")?.fallbackRenderMode == .disabled)
+        #expect(store.profile(for: "com.openai.codex")?.insertionMode == .disabled)
+        #expect(store.profile(for: "com.openai.codex")?.fallbackInsertionMode == .disabled)
         #expect(store.profile(for: "com.openai.codex")?.fieldIdentityMode == .stableBounds)
-        #expect(store.profile(for: "com.openai.codex")?.supportsOneWordAcceptance == true)
+        #expect(store.profile(for: "com.openai.codex")?.supportsOneWordAcceptance == false)
         #expect(store.profile(for: "com.openai.codex")?.supportsFullAcceptance == false)
+        #expect(store.profile(for: "com.openai.codex")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.openai.codex")?.allowsDetachedSuggestions == false)
+        #expect(store.profile(for: "com.openai.codex")?.isSensitive == true)
         #expect(store.profile(for: "com.anthropic.claude-code")?.displayName == "Claude Code")
-        #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .yellow)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.renderMode == .floatingMirror)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackRenderMode == nil)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.insertionMode == .keyEvents)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackInsertionMode == .axThenKeyEvents)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.renderMode == .disabled)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackRenderMode == .disabled)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.insertionMode == .disabled)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackInsertionMode == .disabled)
         #expect(store.profile(for: "com.anthropic.claude-code")?.fieldIdentityMode == .stableBounds)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.supportsOneWordAcceptance == true)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.supportsOneWordAcceptance == false)
         #expect(store.profile(for: "com.anthropic.claude-code")?.supportsFullAcceptance == false)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.canPresentSuggestions == true)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claude-code")?.allowsDetachedSuggestions == false)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.isSensitive == true)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.displayName == "Claude")
-        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportLevel == .yellow)
-        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.renderMode == .floatingMirror)
-        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackRenderMode == nil)
-        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.insertionMode == .axValueReplacement)
-        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackInsertionMode == nil)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.renderMode == .disabled)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackRenderMode == .disabled)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.insertionMode == .disabled)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackInsertionMode == .disabled)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fieldIdentityMode == .stableBounds)
-        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportsOneWordAcceptance == true)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportsOneWordAcceptance == false)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportsFullAcceptance == false)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.allowsDetachedSuggestions == false)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.isSensitive == true)
         #expect(store.profile(for: "com.apple.Safari")?.supportLevel == .diagnosticsOnly)
         #expect(store.profile(for: "com.tinyspeck.slackmacgap")?.appFamily == .electron)
         #expect(store.profile(for: "notion.id")?.supportLevel == .diagnosticsOnly)
@@ -258,7 +263,7 @@ struct CompatibilityProfileTests {
 
         #expect(textEdit.interactionMode == .inline)
         #expect(notes.interactionMode == .mirror)
-        #expect(codex.interactionMode == .mirror)
+        #expect(codex.interactionMode == .disabled)
         #expect(mailStatus.interactionMode == .disabled)
         #expect(unsupportedStatus.interactionMode == .disabled)
         #expect(commandOnly.interactionMode == .commandOnly)
@@ -278,9 +283,9 @@ struct CompatibilityProfileTests {
         #expect(InsertionModePlan.modes(for: textEdit) == [.axSelectedText, .axValueReplacement])
         #expect(InsertionModePlan.modes(for: notes) == [.axThenKeyEvents, .keyEvents])
         #expect(InsertionModePlan.modes(for: chrome) == [.keyEvents, .axValueReplacement])
-        #expect(InsertionModePlan.modes(for: codex) == [.axValueReplacement, .keyEvents])
-        #expect(InsertionModePlan.modes(for: claudeCode) == [.keyEvents, .axThenKeyEvents])
-        #expect(InsertionModePlan.modes(for: claude) == [.axValueReplacement])
+        #expect(InsertionModePlan.modes(for: codex) == [])
+        #expect(InsertionModePlan.modes(for: claudeCode) == [])
+        #expect(InsertionModePlan.modes(for: claude) == [])
         #expect(InsertionModePlan.modes(for: mail) == [])
     }
 
@@ -293,22 +298,25 @@ struct CompatibilityProfileTests {
 
         #expect(notes.allowsDetachedSuggestions == false)
         #expect(notes.fallbackInsertionMode == .keyEvents)
-        #expect(codex.supportsOneWordAcceptance == true)
+        #expect(codex.supportsOneWordAcceptance == false)
         #expect(codex.supportsFullAcceptance == false)
-        #expect(claudeCode.supportsOneWordAcceptance == true)
+        #expect(codex.canPresentSuggestions == false)
+        #expect(claudeCode.supportsOneWordAcceptance == false)
         #expect(claudeCode.supportsFullAcceptance == false)
-        #expect(claudeCode.canPresentSuggestions == true)
-        #expect(claude.supportsOneWordAcceptance == true)
+        #expect(claudeCode.canPresentSuggestions == false)
+        #expect(claude.supportsOneWordAcceptance == false)
         #expect(claude.supportsFullAcceptance == false)
+        #expect(claude.canPresentSuggestions == false)
 
         for promptProfile in [codex, claudeCode, claude] {
-            #expect(promptProfile.supportReason.contains("one-word no-submit proof"))
-            #expect(promptProfile.notes.contains("Requires one-word no-submit proof"))
-            #expect(promptProfile.notes.contains("separate full-accept no-submit proof"))
-            #expect(promptProfile.supportsOneWordAcceptance == true)
+            #expect(promptProfile.supportReason.contains("same-slice one-word no-submit proof"))
+            #expect(promptProfile.notes.contains("stays diagnostics-only"))
+            #expect(promptProfile.notes.contains("same-slice screenshot and one-word no-submit proof"))
+            #expect(promptProfile.supportsOneWordAcceptance == false)
             #expect(promptProfile.supportsFullAcceptance == false)
             #expect(promptProfile.allowsDetachedSuggestions == false)
             #expect(promptProfile.allowsSyntheticCaretPlacement == false)
+            #expect(promptProfile.isSensitive == true)
         }
     }
 
@@ -331,7 +339,7 @@ struct CompatibilityProfileTests {
         )
         #expect(
             codex.userFacingSafetySummary
-                == "Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Full accept stays off until no-submit proof exists."
+                == "Suggestions stay off here."
         )
         #expect(mailStatus.userFacingSafetySummary == "Suggestions stay off here.")
         #expect(atlasStatus.userFacingSafetySummary == "Suggestions stay off here.")
@@ -364,8 +372,8 @@ struct CompatibilityProfileTests {
         #expect(InsertionModePlan.modes(for: notes, skipping: [.axThenKeyEvents]) == [.keyEvents])
     }
 
-    @Test("Render mode plans keep unproven targets mirror first")
-    func renderModePlansKeepUnprovenTargetsMirrorFirst() throws {
+    @Test("Render mode plans keep prompt targets disabled until proof exists")
+    func renderModePlansKeepPromptTargetsDisabledUntilProofExists() throws {
         let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
         let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
         let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
@@ -397,32 +405,32 @@ struct CompatibilityProfileTests {
             for: codex,
             supportsInlineSuggestions: true,
             hasMirrorAnchor: true
-        ) == .floatingMirror)
+        ) == nil)
         #expect(RenderModePlan.effectiveMode(
             for: codex,
             supportsInlineSuggestions: false,
             hasMirrorAnchor: true
-        ) == .floatingMirror)
+        ) == nil)
         #expect(RenderModePlan.effectiveMode(
             for: claudeCode,
             supportsInlineSuggestions: true,
             hasMirrorAnchor: true
-        ) == .floatingMirror)
+        ) == nil)
         #expect(RenderModePlan.effectiveMode(
             for: claudeCode,
             supportsInlineSuggestions: false,
             hasMirrorAnchor: true
-        ) == .floatingMirror)
+        ) == nil)
         #expect(RenderModePlan.effectiveMode(
             for: claude,
             supportsInlineSuggestions: true,
             hasMirrorAnchor: true
-        ) == .floatingMirror)
+        ) == nil)
         #expect(RenderModePlan.effectiveMode(
             for: claude,
             supportsInlineSuggestions: false,
             hasMirrorAnchor: true
-        ) == .floatingMirror)
+        ) == nil)
         #expect(RenderModePlan.effectiveMode(
             for: mail,
             supportsInlineSuggestions: true,

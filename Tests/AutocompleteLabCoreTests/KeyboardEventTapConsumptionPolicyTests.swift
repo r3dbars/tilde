@@ -100,6 +100,15 @@ struct KeyboardEventTapConsumptionPolicyTests {
         #expect(!policy.shouldConsume(input(key: .other)))
     }
 
+    @Test("Unhandled consumed accept keys are dropped instead of replayed")
+    func unhandledConsumedAcceptKeysAreDropped() {
+        #expect(!policy.shouldReplayUnhandledConsumedKey(.tab))
+        #expect(!policy.shouldReplayUnhandledConsumedKey(.backtick))
+        #expect(!policy.shouldReplayUnhandledConsumedKey(.optionTab))
+        #expect(!policy.shouldReplayUnhandledConsumedKey(.escape))
+        #expect(policy.shouldReplayUnhandledConsumedKey(.other))
+    }
+
     private func input(
         key: AutocompleteKey,
         hasVisibleSuggestion: Bool = true,

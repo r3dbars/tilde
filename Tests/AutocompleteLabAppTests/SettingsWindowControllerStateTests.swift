@@ -204,8 +204,8 @@ struct SettingsWindowControllerStateTests {
         #expect(forced.canQuietCurrentField)
     }
 
-    @Test("Prompt apps show full accept is off for safety")
-    func promptAppsShowFullAcceptIsOffForSafety() {
+    @Test("Prompt apps stay disabled until no-submit proof exists")
+    func promptAppsStayDisabledUntilNoSubmitProofExists() {
         let store = CompatibilityProfileStore.mvp
         let codex = SettingsCurrentAppState(
             displayName: "Codex",
@@ -215,12 +215,12 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 0
         )
 
-        #expect(codex.modeText == "Mode: mirror")
-        #expect(codex.acceptanceText == "Acceptance: Tab next word only; full accept is off for safety")
-        #expect(codex.pathText == "Path: display mirror | insert value repair -> keys | track stable bounds")
+        #expect(codex.modeText == "Mode: disabled")
+        #expect(codex.acceptanceText == "Acceptance: off here")
+        #expect(codex.pathText == "Path: display off | insert off")
         #expect(
             codex.safetyText
-                == "Safety: Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Full accept stays off until no-submit proof exists."
+                == "Safety: Suggestions stay off here."
         )
         #expect(
             codex.proofGuideText

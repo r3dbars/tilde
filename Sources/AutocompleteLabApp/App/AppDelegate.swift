@@ -1891,6 +1891,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return InsertionVerificationBaseline(
             fieldIdentity: currentFieldIdentity,
             previousTextBeforeCursor: lastTextSnapshot.textBeforeCursor,
+            previousTextAfterCursor: lastTextSnapshot.textAfterCursor,
             profile: profile,
             suggestionID: currentSuggestionID,
             requestMode: currentSuggestionRequestMode,
@@ -1924,6 +1925,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "result": "missing-context"
                     ]
                 )
+                recordInsertionVerificationFailure(
+                    acceptedText: acceptedText,
+                    baseline: baseline,
+                    outcome: "missing-context",
+                    reason: "insert-verification-missing-context",
+                    metadata: [:]
+                )
                 hideSuggestion()
                 return
             }
@@ -1935,13 +1943,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
 
             guard currentIdentity == baseline.fieldIdentity else {
+                DiagnosticsLog.shared.record(
+                    "insert-verification",
+                    metadata: [
+                        "app": baseline.profile.bundleIdentifier,
+                        "result": "target-mismatch",
+                        "expectedField": baseline.fieldIdentity.traceDescription,
+                        "currentField": currentIdentity.traceDescription
+                    ]
+                )
+                recordInsertionVerificationFailure(
+                    acceptedText: acceptedText,
+                    baseline: baseline,
+                    outcome: "target-mismatch",
+                    reason: "insert-verification-target-mismatch",
+                    metadata: [
+                        "currentField": currentIdentity.traceDescription
+                    ]
+                )
+                hideSuggestion()
                 return
             }
 
             let result = insertionVerification.verify(
                 previousTextBeforeCursor: baseline.previousTextBeforeCursor,
                 acceptedText: acceptedText,
-                currentTextBeforeCursor: context.textBeforeCursor
+                currentTextBeforeCursor: context.textBeforeCursor,
+                previousTextAfterCursor: baseline.previousTextAfterCursor,
+                currentTextAfterCursor: context.textAfterCursor
             )
 
             DiagnosticsLog.shared.record(
@@ -1980,6 +2009,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         let retryBaseline = InsertionVerificationBaseline(
                             fieldIdentity: baseline.fieldIdentity,
                             previousTextBeforeCursor: baseline.previousTextBeforeCursor,
+                            previousTextAfterCursor: baseline.previousTextAfterCursor,
                             profile: baseline.profile,
                             suggestionID: baseline.suggestionID,
                             requestMode: baseline.requestMode,
@@ -2010,7 +2040,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     reason: "insert-verification-failed",
                     metadata: [
                         "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                        "currentBeforeChars": String(context.textBeforeCursor.count)
+                        "currentBeforeChars": String(context.textBeforeCursor.count),
+                        "previousAfterChars": String(baseline.previousTextAfterCursor.count),
+                        "currentAfterChars": String(context.textAfterCursor.count)
                     ]
                 )
                 if baseline.profile.suppressesAfterInsertionFailure {
@@ -2046,6 +2078,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 requestMode: baseline.requestMode
             )
         }
+    }
+
+    private func recordInsertionVerificationFailure(
+        acceptedText: String,
+        baseline: InsertionVerificationBaseline,
+        outcome: String,
+        reason: String,
+        metadata: [String: String]
+    ) {
+        RawAutocompleteTraceLog.shared.record(
+            type: .insertionFailed,
+            suggestionID: baseline.suggestionID ?? "",
+            appBundleIdentifier: baseline.profile.bundleIdentifier,
+            fieldIdentity: baseline.fieldIdentity.traceDescription,
+            requestMode: baseline.requestMode?.rawValue ?? "",
+            acceptedText: acceptedText,
+            outcome: outcome,
+            reason: reason,
+            metadata: metadata
+                .merging([
+                    "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                    "previousAfterChars": String(baseline.previousTextAfterCursor.count)
+                ]) { current, _ in current }
+        )
     }
 
     private func scheduleSuggestion(
@@ -4655,6 +4711,7 @@ private extension AppDelegate {
 private struct InsertionVerificationBaseline: Equatable {
     let fieldIdentity: FocusedFieldIdentity
     let previousTextBeforeCursor: String
+    let previousTextAfterCursor: String
     let profile: CompatibilityProfile
     let suggestionID: String?
     let requestMode: CompletionRequestMode?

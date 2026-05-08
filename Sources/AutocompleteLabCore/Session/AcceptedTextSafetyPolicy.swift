@@ -28,6 +28,14 @@ public struct AcceptedTextSafetyPolicy: Equatable, Sendable {
             return .blocked(reason: "accepted-text-empty")
         }
 
+        guard profile.insertionMode != .disabled else {
+            return .blocked(reason: "profile-insertion-disabled")
+        }
+
+        guard profile.supportsOneWordAcceptance || profile.supportsFullAcceptance else {
+            return .blocked(reason: "profile-acceptance-disabled")
+        }
+
         if acceptedText.unicodeScalars.contains(where: { CharacterSet.newlines.contains($0) }) {
             return .blocked(reason: "accepted-text-line-break")
         }
