@@ -307,6 +307,8 @@ struct SettingsWindowControllerStateTests {
             rawContentTracingExpiresAt: nil,
             screenshotTracingEnabled: true,
             screenshotTracingExpiresAt: nil,
+            visiblePageContextEnabled: false,
+            screenCaptureAccessGranted: true,
             diagnosticsPath: "/tmp/diagnostics.log",
             tracePath: "/tmp/traces.jsonl"
         )
@@ -317,6 +319,7 @@ struct SettingsWindowControllerStateTests {
                 == "Diagnostics: performance + placement traces recording, screenshots on"
         )
         #expect(privacy.contentStatusText == "Raw text capture: off")
+        #expect(privacy.visiblePageContextStatusText == "Visible page context: off. OCR runs locally and is used only as prompt context.")
         #expect(
             privacy.sharingStatusText
                 == "Data leaving Mac: none automatically. Share only the redacted Privacy Bundle, not debug traces or screenshots."
@@ -337,6 +340,8 @@ struct SettingsWindowControllerStateTests {
             rawContentTracingExpiresAt: Date(timeIntervalSince1970: 1_000),
             screenshotTracingEnabled: false,
             screenshotTracingExpiresAt: nil,
+            visiblePageContextEnabled: true,
+            screenCaptureAccessGranted: false,
             diagnosticsPath: "/tmp/diagnostics.log",
             tracePath: "/tmp/traces.jsonl"
         )
@@ -346,11 +351,12 @@ struct SettingsWindowControllerStateTests {
                 == "Diagnostics: performance + placement traces paused, screenshots off"
         )
         #expect(paused.contentStatusText == "Raw text capture: on temporarily")
+        #expect(paused.visiblePageContextStatusText == "Visible page context: on, waiting for Screen Recording permission.")
         #expect(
             paused.sharingStatusText
                 == "Data leaving Mac: none automatically. Share only the redacted Privacy Bundle, not debug traces or screenshots."
         )
-        #expect(paused.screenRecordingPermissionText == nil)
+        #expect(paused.screenRecordingPermissionText == "Screen Recording: required for visible page context OCR.")
 
         let temporaryScreenshots = SettingsPrivacyState(
             tracingPaused: false,
@@ -358,6 +364,8 @@ struct SettingsWindowControllerStateTests {
             rawContentTracingExpiresAt: nil,
             screenshotTracingEnabled: true,
             screenshotTracingExpiresAt: Date(timeIntervalSince1970: 2_000),
+            visiblePageContextEnabled: false,
+            screenCaptureAccessGranted: true,
             diagnosticsPath: "/tmp/diagnostics.log",
             tracePath: "/tmp/traces.jsonl"
         )
@@ -373,6 +381,8 @@ struct SettingsWindowControllerStateTests {
             rawContentTracingExpiresAt: nil,
             screenshotTracingEnabled: false,
             screenshotTracingExpiresAt: nil,
+            visiblePageContextEnabled: false,
+            screenCaptureAccessGranted: false,
             diagnosticsPath: "/tmp/diagnostics.log",
             tracePath: "/tmp/traces.jsonl"
         )
@@ -532,6 +542,7 @@ struct SettingsWindowControllerStateTests {
             toggleTracingPaused: {},
             toggleRawContentTracing: {},
             toggleScreenshotTracing: {},
+            toggleVisiblePageContext: {},
             deleteLocalLogs: {},
             clearLearningData: {},
             cycleAcceptAllShortcut: {},
@@ -572,6 +583,8 @@ struct SettingsWindowControllerStateTests {
                 rawContentTracingExpiresAt: nil,
                 screenshotTracingEnabled: false,
                 screenshotTracingExpiresAt: nil,
+                visiblePageContextEnabled: false,
+                screenCaptureAccessGranted: false,
                 diagnosticsPath: "/tmp/diagnostics.log",
                 tracePath: "/tmp/traces.jsonl"
             ),

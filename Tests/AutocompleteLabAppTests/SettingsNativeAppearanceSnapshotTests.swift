@@ -23,6 +23,7 @@ struct SettingsNativeAppearanceSnapshotTests {
             toggleTracingPaused: {},
             toggleRawContentTracing: {},
             toggleScreenshotTracing: {},
+            toggleVisiblePageContext: {},
             deleteLocalLogs: {},
             clearLearningData: {},
             cycleAcceptAllShortcut: {},
@@ -62,6 +63,8 @@ struct SettingsNativeAppearanceSnapshotTests {
                 rawContentTracingExpiresAt: nil,
                 screenshotTracingEnabled: false,
                 screenshotTracingExpiresAt: nil,
+                visiblePageContextEnabled: false,
+                screenCaptureAccessGranted: false,
                 diagnosticsPath: "/Users/example/Library/Logs/AutocompleteLab/diagnostics.log",
                 tracePath: "/Users/example/Library/Logs/AutocompleteLab/events.jsonl"
             ),

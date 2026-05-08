@@ -11,7 +11,7 @@ public struct CompletionPrompt: Equatable, Sendable {
 }
 
 public struct CompletionPromptBuilder: Equatable, Sendable {
-    public static let promptStyleIdentifier = "tiny-continuation-v2"
+    public static let promptStyleIdentifier = "tiny-continuation-v3"
     public static let noSuggestionToken = "<NO_SUGGESTION>"
 
     public let maxContextCharacters: Int
@@ -37,11 +37,17 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
     public func prompt(for request: CompletionRequest) -> CompletionPrompt {
         let context = promptContext(from: request.textBeforeCursor, mode: request.mode)
         let behaviorProfile = behaviorProfile(for: request)
+        let userPrompt = userPrompt(
+            context: context,
+            visiblePageContext: request.visiblePageContext,
+            suffix: request.mode == .wordCompletion ? "Suffix:" : "Next words:"
+        )
 
         if request.mode == .wordCompletion {
             let titleShapeGuidance = request.documentTitleShape?.promptGuidance ?? ""
             let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
             let lineStructureGuidance = request.currentLineStructure?.promptGuidance ?? ""
+            let visiblePageGuidance = request.visiblePageContext?.promptGuidance ?? ""
             return CompletionPrompt(
                 system: """
                 Inline word completion.
@@ -49,16 +55,17 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
                 \(titleShapeGuidance)
                 \(partialWordGuidance)
                 \(lineStructureGuidance)
+                \(visiblePageGuidance)
                 Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, or the suffix would complete the wrong word.
                 No spaces, punctuation, quotes, reasoning, or extra words.
                 """,
-                user: "Before cursor:\n\(context)\n\nSuffix:"
+                user: userPrompt
             )
         }
 
         return CompletionPrompt(
             system: phraseContinuationSystemPrompt(for: request, behaviorProfile: behaviorProfile),
-            user: "Before cursor:\n\(context)\n\nNext words:"
+            user: userPrompt
         )
     }
 
@@ -72,6 +79,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let titleShapeGuidance = request.documentTitleShape?.promptGuidance ?? ""
         let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
         let lineStructureGuidance = request.currentLineStructure?.promptGuidance ?? ""
+        let visiblePageGuidance = request.visiblePageContext?.promptGuidance ?? ""
         let modeGuidance = request.mode == .sentenceContinuation
             ? "Sentence mode: start only the next sentence's first few words. Require higher confidence and return <NO_SUGGESTION> when the next sentence is not obvious."
             : "Phrase mode: continue only the current local thought."
@@ -86,6 +94,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         \(titleShapeGuidance)
         \(partialWordGuidance)
         \(lineStructureGuidance)
+        \(visiblePageGuidance)
         \(behaviorProfile.promptGuidance.joined(separator: "\n"))
         \(modeGuidance)
         Prefer boring connective tissue, names, repeated local terms, closers, and the next few words the user was already likely to type.
@@ -121,6 +130,26 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
 
     private func behaviorProfile(for request: CompletionRequest) -> AutocompleteBehaviorProfile {
         request.behaviorProfile
+    }
+
+    private func userPrompt(
+        context: String,
+        visiblePageContext: VisiblePageContext?,
+        suffix: String
+    ) -> String {
+        guard let visiblePageContext else {
+            return "Before cursor:\n\(context)\n\n\(suffix)"
+        }
+
+        return """
+        Visible page context:
+        \(visiblePageContext.promptText)
+
+        Before cursor:
+        \(context)
+
+        \(suffix)
+        """
     }
 
     private func sentenceGuidance(for request: CompletionRequest) -> String {

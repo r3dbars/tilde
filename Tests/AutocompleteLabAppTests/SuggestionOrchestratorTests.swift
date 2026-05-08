@@ -61,6 +61,7 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             fieldClassification: classification,
             acceptedTextStyleSketch: sketch,
+            visiblePageContext: VisiblePageContext(text: "Launch Plan\nKeep this local and fast."),
             maxVisibleWords: 7,
             requestMode: .phraseContinuation,
             suggestionTuning: SuggestionTuning(aggressiveness: .quiet)
@@ -75,6 +76,7 @@ struct SuggestionOrchestratorTests {
         #expect(orchestration.request.behaviorProfileID == .bullets)
         #expect(orchestration.request.acceptedTextStyleSketch == sketch)
         #expect(orchestration.request.documentTitleShape?.fileExtension == "md")
+        #expect(orchestration.request.visiblePageContext?.text.contains("Launch Plan") == true)
         #expect(orchestration.request.maxVisibleWords == 7)
         #expect(orchestration.request.mode == .phraseContinuation)
         #expect(orchestration.fieldIdentityDescription == field.traceDescription)
@@ -84,6 +86,7 @@ struct SuggestionOrchestratorTests {
         #expect(orchestration.requestMetadata["suggestionAggressiveness"] == "quiet")
         #expect(orchestration.requestMetadata["suggestionAggressivenessLevel"] == "1")
         #expect(orchestration.requestMetadata["suggestionMaxVisibleWords"] == "8")
+        #expect(orchestration.requestMetadata["visiblePageContextSource"] == "screen_ocr")
         #expect(orchestration.requestMetadata["runtimeSessionCacheDecision"] == "reset")
         #expect(orchestration.requestMetadata["runtimeSessionCacheResetReason"] == "no-prior-request")
         #expect(orchestrator.allows(orchestration.ticket))
@@ -106,6 +109,7 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             fieldClassification: classification,
             acceptedTextStyleSketch: nil,
+            visiblePageContext: nil,
             maxVisibleWords: 5,
             requestMode: .phraseContinuation,
             suggestionTuning: SuggestionTuning(aggressiveness: .normal)
@@ -116,6 +120,7 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             fieldClassification: classification,
             acceptedTextStyleSketch: nil,
+            visiblePageContext: nil,
             maxVisibleWords: 5,
             requestMode: .phraseContinuation,
             suggestionTuning: SuggestionTuning(aggressiveness: .normal)

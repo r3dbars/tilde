@@ -314,6 +314,8 @@ struct SettingsPrivacyState: Equatable {
     let rawContentTracingExpiresAt: Date?
     let screenshotTracingEnabled: Bool
     let screenshotTracingExpiresAt: Date?
+    let visiblePageContextEnabled: Bool
+    let screenCaptureAccessGranted: Bool
     let diagnosticsPath: String
     let tracePath: String
 
@@ -336,8 +338,16 @@ struct SettingsPrivacyState: Equatable {
         return "Raw text capture: \(state)"
     }
 
+    var visiblePageContextStatusText: String {
+        if visiblePageContextEnabled && !screenCaptureAccessGranted {
+            return "Visible page context: on, waiting for Screen Recording permission."
+        }
+
+        return "Visible page context: \(visiblePageContextEnabled ? "on" : "off"). OCR runs locally and is used only as prompt context."
+    }
+
     var sharingStatusText: String {
-        if rawContentTracingEnabled || screenshotTracingEnabled {
+        if rawContentTracingEnabled || screenshotTracingEnabled || visiblePageContextEnabled {
             return "Data leaving Mac: none automatically. Share only the redacted Privacy Bundle, not debug traces or screenshots."
         }
 
@@ -349,15 +359,23 @@ struct SettingsPrivacyState: Equatable {
     }
 
     var screenRecordingPermissionText: String? {
-        guard screenshotTracingEnabled else {
+        guard screenshotTracingEnabled || visiblePageContextEnabled else {
             return nil
         }
 
-        if screenshotTracingExpiresAt == nil {
+        if visiblePageContextEnabled && !screenCaptureAccessGranted {
+            return "Screen Recording: required for visible page context OCR."
+        }
+
+        if screenshotTracingEnabled && screenshotTracingExpiresAt == nil {
             return "Screen Recording: used only while screenshot proof is on to capture local placement screenshots."
         }
 
-        return "Screen Recording: used only for temporary local placement screenshots."
+        if screenshotTracingEnabled && !visiblePageContextEnabled {
+            return "Screen Recording: used only for temporary local placement screenshots."
+        }
+
+        return "Screen Recording: used only for local screenshots and OCR context while enabled."
     }
 
     var pathText: String {
@@ -522,6 +540,7 @@ final class SettingsWindowController: NSObject {
     private let privacyLabel = NSTextField(labelWithString: "")
     private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
     private let rawContentStatusLabel = NSTextField(labelWithString: "")
+    private let visiblePageContextStatusLabel = NSTextField(labelWithString: "")
     private let privacySharingStatusLabel = NSTextField(labelWithString: "")
     private let learningStatusLabel = NSTextField(labelWithString: "")
     private let screenRecordingPermissionLabel = NSTextField(labelWithString: "")
@@ -538,6 +557,11 @@ final class SettingsWindowController: NSObject {
     )
     private let toggleScreenshotTraceButton = NSButton(
         checkboxWithTitle: "Capture placement screenshots",
+        target: nil,
+        action: nil
+    )
+    private let toggleVisiblePageContextButton = NSButton(
+        checkboxWithTitle: "Use visible page context",
         target: nil,
         action: nil
     )
@@ -566,6 +590,7 @@ final class SettingsWindowController: NSObject {
     private let toggleTracingPaused: () -> Void
     private let toggleRawContentTracing: () -> Void
     private let toggleScreenshotTracing: () -> Void
+    private let toggleVisiblePageContext: () -> Void
     private let deleteLocalLogs: () -> Void
     private let clearLearningData: () -> Void
     private let cycleAcceptAllShortcut: () -> Void
@@ -589,6 +614,7 @@ final class SettingsWindowController: NSObject {
         toggleTracingPaused: @escaping () -> Void,
         toggleRawContentTracing: @escaping () -> Void,
         toggleScreenshotTracing: @escaping () -> Void,
+        toggleVisiblePageContext: @escaping () -> Void,
         deleteLocalLogs: @escaping () -> Void,
         clearLearningData: @escaping () -> Void,
         cycleAcceptAllShortcut: @escaping () -> Void,
@@ -608,6 +634,7 @@ final class SettingsWindowController: NSObject {
         self.toggleTracingPaused = toggleTracingPaused
         self.toggleRawContentTracing = toggleRawContentTracing
         self.toggleScreenshotTracing = toggleScreenshotTracing
+        self.toggleVisiblePageContext = toggleVisiblePageContext
         self.deleteLocalLogs = deleteLocalLogs
         self.clearLearningData = clearLearningData
         self.cycleAcceptAllShortcut = cycleAcceptAllShortcut
@@ -615,7 +642,7 @@ final class SettingsWindowController: NSObject {
         self.setSuggestionAggressivenessLevel = setSuggestionAggressivenessLevel
         self.setSuggestionMaxVisibleWords = setSuggestionMaxVisibleWords
 
-        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 830))
+        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 850))
         contentView.material = .contentBackground
         contentView.blendingMode = .behindWindow
         contentView.state = .active
@@ -628,7 +655,7 @@ final class SettingsWindowController: NSObject {
         window.title = "Autocomplete Lab"
         window.contentView = contentView
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 540, height: 760)
+        window.contentMinSize = NSSize(width: 540, height: 780)
         window.isMovableByWindowBackground = true
 
         super.init()
@@ -743,6 +770,7 @@ final class SettingsWindowController: NSObject {
         privacyLabel.stringValue = privacy.statusText
         diagnosticsStatusLabel.stringValue = privacy.diagnosticsStatusText
         rawContentStatusLabel.stringValue = privacy.contentStatusText
+        visiblePageContextStatusLabel.stringValue = privacy.visiblePageContextStatusText
         privacySharingStatusLabel.stringValue = privacy.sharingStatusText
         learningStatusLabel.stringValue = privacy.learningStatusText
         let screenRecordingText = privacy.screenRecordingPermissionText
@@ -752,6 +780,7 @@ final class SettingsWindowController: NSObject {
         toggleTracingButton.state = privacy.tracingPaused ? .off : .on
         toggleRawTraceButton.state = privacy.rawContentTracingEnabled ? .on : .off
         toggleScreenshotTraceButton.state = privacy.screenshotTracingEnabled ? .on : .off
+        toggleVisiblePageContextButton.state = privacy.visiblePageContextEnabled ? .on : .off
         shortcutLabel.stringValue = keyboardShortcuts.statusText
         acceptAllShortcutLabel.stringValue = keyboardShortcuts.acceptAllPickerLabel
         refreshAcceptAllShortcutPopup(selected: keyboardShortcuts.acceptAllShortcut)
@@ -833,6 +862,7 @@ final class SettingsWindowController: NSObject {
         privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(diagnosticsStatusLabel)
         configureSecondaryLabel(rawContentStatusLabel)
+        configureSecondaryLabel(visiblePageContextStatusLabel)
         configureSecondaryLabel(privacySharingStatusLabel)
         configureSecondaryLabel(learningStatusLabel)
         configureSecondaryLabel(screenRecordingPermissionLabel)
@@ -894,6 +924,9 @@ final class SettingsWindowController: NSObject {
         toggleScreenshotTraceButton.target = self
         toggleScreenshotTraceButton.action = #selector(toggleScreenshotTraceControl)
         toggleScreenshotTraceButton.toolTip = "Captures local screenshots for placement debugging."
+        toggleVisiblePageContextButton.target = self
+        toggleVisiblePageContextButton.action = #selector(toggleVisiblePageContextControl)
+        toggleVisiblePageContextButton.toolTip = "Uses local OCR from the visible editor area as extra prompt context."
         deleteLocalLogsButton.target = self
         deleteLocalLogsButton.action = #selector(deleteLocalLogsControl)
         deleteLocalLogsButton.bezelStyle = .rounded
@@ -975,11 +1008,13 @@ final class SettingsWindowController: NSObject {
                     privacyLabel,
                     diagnosticsStatusLabel,
                     rawContentStatusLabel,
+                    visiblePageContextStatusLabel,
                     privacySharingStatusLabel,
                     screenRecordingPermissionLabel,
                     toggleTracingButton,
                     toggleRawTraceButton,
                     toggleScreenshotTraceButton,
+                    toggleVisiblePageContextButton,
                     learningStatusLabel,
                     privacyPathLabel,
                     makeButtonRow([deleteLocalLogsButton, clearLearningDataButton])
@@ -1152,6 +1187,11 @@ final class SettingsWindowController: NSObject {
     @objc
     private func toggleScreenshotTraceControl() {
         toggleScreenshotTracing()
+    }
+
+    @objc
+    private func toggleVisiblePageContextControl() {
+        toggleVisiblePageContext()
     }
 
     @objc
