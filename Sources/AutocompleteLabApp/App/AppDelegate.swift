@@ -1107,10 +1107,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile
         )
         let fieldClassification = fieldClassification(for: context)
-        refreshVisiblePageContextIfNeeded(
-            context: context,
-            app: frontmostApp
-        )
         rememberFieldControlTarget(
             app: frontmostApp,
             fieldIdentity: fieldIdentity,
@@ -1126,6 +1122,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: fieldIdentity,
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor
+        )
+        refreshVisiblePageContextIfNeeded(
+            context: context,
+            app: frontmostApp,
+            textChanged: previousSnapshot == nil || snapshot != previousSnapshot
         )
 
         guard snapshot != previousSnapshot else {
@@ -4678,12 +4679,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshVisiblePageContextIfNeeded(
         context: FocusedTextContext,
-        app: RunningApplicationInfo
+        app: RunningApplicationInfo,
+        textChanged: Bool
     ) {
         visiblePageContextProvider.refreshIfNeeded(
             for: context,
             app: app,
-            enabled: visiblePageContextEnabled
+            enabled: visiblePageContextEnabled,
+            allowsFreshCacheRefresh: textChanged
         )
     }
 
