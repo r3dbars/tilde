@@ -52,6 +52,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
     }
 
     public func clean(_ rawOutput: String, after textBeforeCursor: String?, mode: CompletionRequestMode) -> CompletionSuggestion? {
+        guard !containsUnsafePromptHiddenOrControlCharacter(rawOutput) else {
+            return nil
+        }
+
         let withoutThinking = rawOutput
             .replacingOccurrences(
                 of: #"<think>[\s\S]*?</think>"#,
@@ -308,9 +312,21 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
     }
 
     private func looksLikeUnsafePromptAction(_ text: String) -> Bool {
+        if containsUnsafePromptHiddenOrControlCharacter(text) {
+            return true
+        }
+
         let normalized = text
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if Self.unsafePromptCommandPrefixes.contains(where: { normalized.hasPrefix($0) }) {
+            return true
+        }
+
+        if normalized.hasPrefix("```") || normalized.hasPrefix("$ ") || normalized.hasPrefix("> ") {
+            return true
+        }
 
         return normalized.hasPrefix("press enter")
             || normalized.hasPrefix("press return")
@@ -322,6 +338,19 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("run this command")
             || normalized.hasPrefix("execute this command")
             || normalized.hasPrefix("execute the command")
+            || Self.unsafePromptActionWords.contains(normalized)
+    }
+
+    private func containsUnsafePromptHiddenOrControlCharacter(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            if Self.unsafePromptHiddenScalars.contains(scalar) {
+                return true
+            }
+            if scalar == "\n" || scalar == "\r" {
+                return false
+            }
+            return CharacterSet.controlCharacters.contains(scalar)
+        }
     }
 
     private func looksLikeAssistantResponseToPrompt(_ text: String, after textBeforeCursor: String) -> Bool {
@@ -546,6 +575,34 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "streamline the process",
         "streamline the workflow",
         "work smarter"
+    ]
+
+    private static let unsafePromptCommandPrefixes = [
+        "/", "!", "@", "--", "sudo ", "curl ", "bash ", "sh ", "rm "
+    ]
+
+    private static let unsafePromptActionWords: Set<String> = [
+        "allow",
+        "approve",
+        "click",
+        "delete",
+        "deploy",
+        "enter",
+        "execute",
+        "merge",
+        "return",
+        "run",
+        "send",
+        "ship",
+        "submit"
+    ]
+
+    private static let unsafePromptHiddenScalars: Set<Unicode.Scalar> = [
+        "\u{200B}",
+        "\u{200C}",
+        "\u{200D}",
+        "\u{2060}",
+        "\u{FEFF}"
     ]
 
     private static let lowSignalWords: Set<String> = [

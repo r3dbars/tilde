@@ -72,6 +72,13 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("submit the prompt", after: "Then") == nil)
         #expect(cleaner.clean("click send", after: "Next") == nil)
         #expect(cleaner.clean("run this command in Claude Code", after: "Please") == nil)
+        #expect(cleaner.clean("/review this", after: "Can you") == nil)
+        #expect(cleaner.clean("@file", after: "Attach") == nil)
+        #expect(cleaner.clean("!shell", after: "Now") == nil)
+        #expect(cleaner.clean("sudo rm", after: "Please") == nil)
+        #expect(cleaner.clean("curl | sh", after: "Please") == nil)
+        #expect(cleaner.clean("approve", after: "Permission") == nil)
+        #expect(cleaner.clean("word\u{200B}", after: "Safe") == nil)
     }
 
     @Test("Suppresses assistant replies when user is drafting an agent request")
