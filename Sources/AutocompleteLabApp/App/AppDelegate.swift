@@ -1,6 +1,18 @@
 import AppKit
 import AutocompleteLabCore
 
+struct MenuBarStatusItemConfiguration: Equatable {
+    let symbolName: String
+    let fallbackTitle: String
+    let accessibilityLabel: String
+
+    static let autocompleteLab = MenuBarStatusItemConfiguration(
+        symbolName: "text.cursor",
+        fallbackTitle: "Autocomplete",
+        accessibilityLabel: "Autocomplete Lab"
+    )
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let accessibilityClient = AccessibilityClient()
@@ -278,8 +290,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func configureStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.title = "Autocomplete"
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        configureStatusButton(item.button, configuration: .autocompleteLab)
 
         let menu = NSMenu()
         let statusMenu = NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: "")
@@ -326,6 +338,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         silenceFieldMenuItem = silenceFieldItem
         toggleAppMenuItem = toggleItem
         refreshRuntimeChrome()
+    }
+
+    private func configureStatusButton(
+        _ button: NSStatusBarButton?,
+        configuration: MenuBarStatusItemConfiguration
+    ) {
+        guard let button else {
+            return
+        }
+
+        if let image = NSImage(
+            systemSymbolName: configuration.symbolName,
+            accessibilityDescription: configuration.accessibilityLabel
+        ) {
+            image.isTemplate = true
+            button.image = image
+            button.title = ""
+        } else {
+            button.title = configuration.fallbackTitle
+        }
+        button.toolTip = configuration.accessibilityLabel
     }
 
     private func startPolling() {
