@@ -10,7 +10,7 @@ Model rule: keep the current fast model. Do not switch models for this loop.
 
 Overall score: 97/100 deterministic scorecard score.
 
-This is not yet a 97/100 real human dogfood score. It means the prompt, OCR context shape, max-aggression cadence, long-suggestion persistence gate, and safety gates now pass the code harnesses. The next loop should gather real TextEdit, Notes, and Obsidian traces and replace the deterministic score with an accepted-and-kept score.
+This is not yet a 97/100 real human dogfood score. It means the prompt, OCR context shape, max-aggression cadence, long-suggestion persistence gate, and safety gates now pass the code harnesses. Live dogfood traces found a real TextEdit miss where OCR/window chrome leaked into the suggestion (`Untitled 13`), so the current loop fixed that failure class before claiming any higher score.
 
 ## Scoring
 
@@ -32,6 +32,9 @@ This is not yet a 97/100 real human dogfood score. It means the prompt, OCR cont
 - Added a focused replacement-visibility test so long suggestions should persist while the next model result is being filtered.
 - OCR now refreshes aggressively when the user is typing, but reuses the cached visible-screen context while the field is idle so background capture does not fight the fast typing loop.
 - A five-minute heartbeat was set to keep this thread returning to this file until the score is genuinely strong.
+- OCR prompt context now removes obvious app/window chrome such as `Untitled 13`, `New chat Search Plugins`, `Ep quadrant`, and font controls before sending visible text to the model.
+- Output cleaning now suppresses the same OCR chrome class even if the model still returns it.
+- Prompt style bumped to `screen-aware-continuation-v5` with an explicit "never output visible window titles / tab labels / menu labels / OCR chrome" rule.
 
 ## Latest Heartbeat Pass
 
@@ -42,6 +45,18 @@ Time: 2026-05-08T22:03:57Z
 - Added `VisiblePageContextRefreshPolicyTests` to prove idle OCR reuses cache until stale, while typing can refresh after the minimum interval.
 - Re-ran the focused magic-writing and persistence tests, then the full suite.
 - Relaunched qwen3-0.6b and confirmed the app did one OCR capture on startup, then stopped recapturing during an unchanged idle window.
+
+## Latest Dogfood Fix Pass
+
+Time: 2026-05-08T22:27:24Z
+
+- Live trace evidence showed TextEdit suggesting `Untitled 13` after the user typed "Can I do the things that".
+- Live trace evidence also showed Codex briefly displaying `**Ep quadrant**`, another OCR sidebar/tab label leak.
+- Recent trace scan also found prompt-format echoes like `before cursor`, `candidate 1`, and `candidate 2`.
+- Root cause: visible-screen OCR included window/document chrome, and the candidate cleaner did not treat that as a hard rejection.
+- Fix: strip obvious OCR chrome from `VisiblePageContext`, including embedded one-line OCR fragments, reject visible UI chrome and prompt-format echoes in `CompletionOutputCleaner`, and add a v5 prompt rule against outputting window titles, document titles, tab labels, menu labels, sidebar labels, font controls, app navigation, or OCR chrome.
+- Added focused tests for the live failure: OCR context strips `Untitled 13` / `New chat Search Plugins` / `Helvetica Regular`, and output cleaning suppresses those suggestions while still allowing normal prose.
+- Focused Swift test pass: `CompletionOutputCleanerTests`, `VisiblePageContextTests`, `CompletionPromptBuilderTests`, and `MagicWritingOCRPromptEvalTests` all passed.
 
 ## 100 Test Situations
 

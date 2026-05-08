@@ -78,6 +78,7 @@ struct CompletionPromptBuilderTests {
         let pageContext = try #require(VisiblePageContext(text: """
         Launch Plan
         - Keep OCR local
+        Untitled 13
         Save
         Save
         !!!
@@ -91,9 +92,11 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("Visible page context source: screen_ocr, scope: visible_screen"))
         #expect(prompt.system.contains("Use it to infer the active app"))
         #expect(prompt.system.contains("Prefer a useful best guess"))
+        #expect(prompt.system.contains("Never output visible window titles"))
         #expect(prompt.user.contains("Visible page context:\nOCR scope: visible_screen\nLaunch Plan"))
         #expect(prompt.user.contains("OCR scope: visible_screen"))
         #expect(prompt.user.contains("- Keep OCR local"))
+        #expect(!prompt.user.contains("Untitled 13"))
         #expect(prompt.user.contains("Before cursor:\nWe should"))
         #expect(prompt.user.hasSuffix("Next words:"))
         #expect(!prompt.user.contains("!!!"))

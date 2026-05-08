@@ -45,6 +45,7 @@ struct MagicWritingOCRPromptEvalTests {
             #expect(prompt.user.contains("Active app: \(scenario.appName)"), "missing app context for \(scenario.id)")
             #expect(prompt.user.contains(scenario.anchorText), "missing OCR anchor for \(scenario.id)")
             #expect(prompt.system.contains("local writing companion"), "missing companion guidance for \(scenario.id)")
+            #expect(prompt.system.contains("Never output visible window titles"), "missing OCR chrome guardrail for \(scenario.id)")
             #expect(activationDecision.canSuggest, "activation blocked \(scenario.id)")
             guard case .request = triggerDecision else {
                 Issue.record("cadence skipped \(scenario.id)")
@@ -69,7 +70,8 @@ struct MagicWritingOCRPromptEvalTests {
         if prompt.user.contains(scenario.anchorText) { score += 0.18 }
         if prompt.system.contains("what the user is replying to") { score += 0.14 }
         if prompt.system.contains("Prefer the next word or short phrase") { score += 0.14 }
-        if prompt.system.contains("Return only the suffix") { score += 0.10 }
+        if prompt.system.contains("Never output visible window titles") { score += 0.05 }
+        if prompt.system.contains("Return only the suffix") { score += 0.05 }
         if activationDecision.canSuggest { score += 0.12 }
         return score
     }
@@ -91,7 +93,7 @@ private struct MagicWritingScenario {
                     id: "\(app.id)-\(index + 1)",
                     appName: app.name,
                     bundleIdentifier: app.bundleIdentifier,
-                    visibleText: "\(intent.surface)\n\(intent.anchor)\nDraft\n\(intent.before)",
+                    visibleText: "New chat Search Plugins\nUntitled 13\n\(intent.surface)\n\(intent.anchor)\nDraft\n\(intent.before)",
                     anchorText: intent.anchor,
                     textBeforeCursor: intent.before,
                     mode: intent.mode
