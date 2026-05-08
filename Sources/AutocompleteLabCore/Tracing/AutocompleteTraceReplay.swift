@@ -166,8 +166,8 @@ public struct AutocompleteTraceReplay: Sendable {
         let triggerDelayCoveredCount = requests.filter(hasResearchedTriggerDelay).count
         let displayCandidates = displayScoreCandidateEvents(in: events)
         let displayCovered = displayCandidates.filter(hasDisplayScoreMetadata)
-        let modelResults = events.filter { $0.type == .modelResult }
-        let candidateSelectionCovered = modelResults.filter(hasCandidateSelectionMetadata)
+        let candidateSelectionCandidates = candidateSelectionCandidateEvents(in: events)
+        let candidateSelectionCovered = candidateSelectionCandidates.filter(hasCandidateSelectionMetadata)
         let proofFingerprintCandidates = proofFingerprintCandidateEvents(in: events)
         let proofFingerprintCovered = proofFingerprintCandidates.filter {
             AutocompleteTraceProofMetadata.isCurrent($0.metadata)
@@ -231,7 +231,7 @@ public struct AutocompleteTraceReplay: Sendable {
 
         requirements += profileRequirements(
             profile: profile,
-            modelResults: modelResults,
+            candidateSelectionCandidates: candidateSelectionCandidates,
             candidateSelectionCoveredCount: candidateSelectionCovered.count,
             staleCancellationCount: staleCancellations.count,
             acceptedTextEditedCount: acceptedTextEdited.count,
@@ -259,7 +259,7 @@ public struct AutocompleteTraceReplay: Sendable {
             triggerDelayCoveredCount: triggerDelayCoveredCount,
             displayScoreCandidateCount: displayCandidates.count,
             displayScoreCoveredCount: displayCovered.count,
-            candidateSelectionCandidateCount: modelResults.count,
+            candidateSelectionCandidateCount: candidateSelectionCandidates.count,
             candidateSelectionCoveredCount: candidateSelectionCovered.count,
             proofFingerprintCandidateCount: proofFingerprintCandidates.count,
             proofFingerprintCoveredCount: proofFingerprintCovered.count,
@@ -280,7 +280,7 @@ public struct AutocompleteTraceReplay: Sendable {
 
     private func profileRequirements(
         profile: AutocompleteTraceReplayProfile,
-        modelResults: [AutocompleteTraceEvent],
+        candidateSelectionCandidates: [AutocompleteTraceEvent],
         candidateSelectionCoveredCount: Int,
         staleCancellationCount: Int,
         acceptedTextEditedCount: Int,
@@ -292,8 +292,9 @@ public struct AutocompleteTraceReplay: Sendable {
             return [
                 TraceReplayRequirement(
                     name: "candidate selection replay",
-                    passed: !modelResults.isEmpty && candidateSelectionCoveredCount == modelResults.count,
-                    detail: "\(candidateSelectionCoveredCount)/\(modelResults.count) model results include candidate selection metadata"
+                    passed: !candidateSelectionCandidates.isEmpty
+                        && candidateSelectionCoveredCount == candidateSelectionCandidates.count,
+                    detail: "\(candidateSelectionCoveredCount)/\(candidateSelectionCandidates.count) candidate events include selection metadata"
                 ),
                 TraceReplayRequirement(
                     name: "stale cancellation replay",
@@ -312,11 +313,11 @@ public struct AutocompleteTraceReplay: Sendable {
                 )
             ]
         case .smokeSlice:
-            let candidateSelectionPassed = modelResults.isEmpty
-                || candidateSelectionCoveredCount == modelResults.count
-            let candidateSelectionDetail = modelResults.isEmpty
-                ? "not required for smoke-slice; 0 model results in bounded local completion slice"
-                : "\(candidateSelectionCoveredCount)/\(modelResults.count) model results include candidate selection metadata"
+            let candidateSelectionPassed = candidateSelectionCandidates.isEmpty
+                || candidateSelectionCoveredCount == candidateSelectionCandidates.count
+            let candidateSelectionDetail = candidateSelectionCandidates.isEmpty
+                ? "not required for smoke-slice; 0 candidate events in bounded local completion slice"
+                : "\(candidateSelectionCoveredCount)/\(candidateSelectionCandidates.count) candidate events include selection metadata"
 
             return [
                 TraceReplayRequirement(
@@ -367,6 +368,17 @@ public struct AutocompleteTraceReplay: Sendable {
             && event.metadata["displayScoreRisk"] != nil
             && event.metadata["displayScoreAcceptedAndKeptProbability"] != nil
             && event.metadata["displayScoreAcceptedAndKeptSamples"] != nil
+    }
+
+    private func candidateSelectionCandidateEvents(in events: [AutocompleteTraceEvent]) -> [AutocompleteTraceEvent] {
+        events.filter { event in
+            if event.type == .modelResult {
+                return true
+            }
+
+            return event.type == .suggestionPresented
+                && event.metadata["candidateSelectionSource"] == "fast-word-completion"
+        }
     }
 
     private func hasCandidateSelectionMetadata(_ event: AutocompleteTraceEvent) -> Bool {

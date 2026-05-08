@@ -3179,10 +3179,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         if requestMode == .wordCompletion {
-            if let fastSuggestion = wordCompletionRanker.suggestion(
+            let fastSelection = wordCompletionRanker.selection(
                 for: context.textBeforeCursor,
                 recentWords: recentWordMemory.words(for: appBundleIdentifier)
-            ) {
+            )
+            let fastSelectionMetadata = fastSelection.traceMetadata
+            if let fastSuggestion = fastSelection.suggestion {
                 guard !suggestionRepetitionSuppressor.shouldSuppress(
                     fastSuggestion.visibleText,
                     mode: request.mode,
@@ -3204,6 +3206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         metadata: [
                             "renderMode": renderMode.rawValue
                         ]
+                        .merging(fastSelectionMetadata) { current, _ in current }
                         .merging(requestMetadata) { current, _ in current }
                     )
                     recordSuggestionEvent(
@@ -3240,6 +3243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     renderMode: renderMode,
                     latencyMilliseconds: 0,
                     triggerReason: "fast-word-completion",
+                    candidateSelectionMetadata: fastSelectionMetadata,
                     refreshBeforePresenting: false
                 )
                 return
@@ -3258,6 +3262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "renderMode": renderMode.rawValue
                 ]
+                .merging(fastSelectionMetadata) { current, _ in current }
                 .merging(requestMetadata) { current, _ in current }
             )
             if suggestionSession.hasVisibleSuggestion {
@@ -3394,6 +3399,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
 
+                    let appModelResultMetadata = self.appModelResultCandidateSelectionMetadata(
+                        for: suggestion
+                    )
                     RawAutocompleteTraceLog.shared.record(
                         type: .modelResult,
                         suggestionID: suggestionID,
@@ -3407,6 +3415,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         displayedText: suggestion.visibleText,
                         latencyMilliseconds: latencyMilliseconds,
                         metadata: requestMetadata
+                            .merging(appModelResultMetadata) { current, _ in current }
                     )
                     guard !self.suggestionRepetitionSuppressor.shouldSuppress(
                         suggestion.visibleText,
@@ -3451,7 +3460,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         fieldIdentity: fieldIdentity,
                         renderMode: renderMode,
                         latencyMilliseconds: latencyMilliseconds,
-                        triggerReason: "model-result"
+                        triggerReason: "model-result",
+                        candidateSelectionMetadata: appModelResultMetadata
                     )
                     self.streamingPresentationStates[suggestionID] = nil
                 }
@@ -3483,6 +3493,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         renderMode: SuggestionRenderMode,
         latencyMilliseconds: Int,
         triggerReason: String,
+        candidateSelectionMetadata: [String: String] = [:],
         refreshBeforePresenting: Bool = true
     ) {
         let originalContext = context
@@ -3509,6 +3520,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 reason: reason,
                 metadata: traceGeometryMetadata(context: originalContext, renderMode: renderMode)
                     .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
+                    .merging(candidateSelectionMetadata) { current, _ in current }
             )
             recordSuggestionEvent(
                 "suggestion-blocked",
@@ -3518,6 +3530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "reason": reason
                 ]
                 .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
+                .merging(candidateSelectionMetadata) { current, _ in current }
             )
             hideSuggestion(reason: reason)
             return
@@ -3652,6 +3665,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                     .merging(learningAdjustment.metadata) { current, _ in current }
                     .merging(placement.metadata) { current, _ in current }
+                    .merging(candidateSelectionMetadata) { current, _ in current }
                     .merging(displayScoreMetadata) { current, _ in current }
             )
             recordSuggestionEvent(
@@ -3664,6 +3678,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(placement.metadata) { current, _ in current }
+                .merging(candidateSelectionMetadata) { current, _ in current }
                 .merging(displayScoreMetadata) { current, _ in current }
             )
             hideSuggestion(reason: reason)
@@ -3702,6 +3717,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                     .merging(learningAdjustment.metadata) { current, _ in current }
                     .merging(placement.metadata) { current, _ in current }
+                    .merging(candidateSelectionMetadata) { current, _ in current }
                     .merging(displayScoreMetadata) { current, _ in current }
                     .merging(replacementMetadata) { current, _ in current }
             )
@@ -3715,6 +3731,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(placement.metadata) { current, _ in current }
+                .merging(candidateSelectionMetadata) { current, _ in current }
                 .merging(displayScoreMetadata) { current, _ in current }
                 .merging(replacementMetadata) { current, _ in current }
             )
@@ -3722,6 +3739,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(placement.metadata) { current, _ in current }
+                .merging(candidateSelectionMetadata) { current, _ in current }
                 .merging(displayScoreMetadata) { current, _ in current }
                 .merging(replacementMetadata) { current, _ in current }
             recordPlacementUncertainty(
@@ -3770,6 +3788,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                     .merging(learningAdjustment.metadata) { current, _ in current }
                     .merging(placement.metadata) { current, _ in current }
+                    .merging(candidateSelectionMetadata) { current, _ in current }
                     .merging(displayScoreMetadata) { current, _ in current }
                     .merging(replacementMetadata) { current, _ in current }
             )
@@ -3783,6 +3802,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(placement.metadata) { current, _ in current }
+                .merging(candidateSelectionMetadata) { current, _ in current }
                 .merging(displayScoreMetadata) { current, _ in current }
                 .merging(replacementMetadata) { current, _ in current }
             )
@@ -3856,6 +3876,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(traceGeometryMetadata(context: context, renderMode: placement.renderMode)) { current, _ in current }
             .merging(learningAdjustment.metadata) { current, _ in current }
             .merging(placement.metadata) { current, _ in current }
+            .merging(candidateSelectionMetadata) { current, _ in current }
             .merging(displayScoreMetadata) { current, _ in current }
             .merging(replacementMetadata) { current, _ in current }
         )
@@ -3880,6 +3901,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
             .merging(learningAdjustment.metadata) { current, _ in current }
             .merging(placement.metadata) { current, _ in current }
+            .merging(candidateSelectionMetadata) { current, _ in current }
             .merging(displayScoreMetadata) { current, _ in current }
             .merging(replacementMetadata) { current, _ in current }
         )
@@ -4171,6 +4193,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         request.behaviorProfileTraceMetadata
             .merging(fieldClassification.traceMetadata) { current, _ in current }
             .merging(suggestionAggressiveness.traceMetadata) { current, _ in current }
+    }
+
+    private func appModelResultCandidateSelectionMetadata(
+        for suggestion: CompletionSuggestion
+    ) -> [String: String] {
+        [
+            "candidateSelectionSource": "app-model-result",
+            "cleanedCandidateCount": "1",
+            "candidateTopScore": "1.000",
+            "candidateScoreMargin": "none",
+            "candidateSuppressionReason": "none",
+            "cleanedWordCount": String(suggestion.visibleWordCount)
+        ]
     }
 
     private func displayScore(

@@ -121,6 +121,33 @@ struct WordCompletionCandidateRankerTests {
         #expect(suggestion?.visibleText == "umentation")
     }
 
+    @Test("selection exposes trace safe candidate metadata")
+    func selectionExposesTraceSafeCandidateMetadata() {
+        let ranker = WordCompletionCandidateRanker(staticWords: ["document", "documentary"])
+
+        let selection = ranker.selection(for: "Open doc")
+
+        #expect(selection.suggestion?.visibleText == "ument")
+        #expect(selection.candidateCount == 2)
+        #expect(selection.traceMetadata["candidateSelectionSource"] == "fast-word-completion")
+        #expect(selection.traceMetadata["cleanedCandidateCount"] == "2")
+        #expect(selection.traceMetadata["candidateTopScore"] == "0.850")
+        #expect(selection.traceMetadata["candidateScoreMargin"] == "0.010")
+        #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+    }
+
+    @Test("selection records suppression reason without raw words")
+    func selectionRecordsSuppressionReasonWithoutRawWords() {
+        let ranker = WordCompletionCandidateRanker()
+
+        let selection = ranker.selection(for: "This is kin")
+
+        #expect(selection.suggestion == nil)
+        #expect(selection.traceMetadata["candidateSelectionSource"] == "fast-word-completion")
+        #expect(selection.traceMetadata["candidateSuppressionReason"] == "low-value-suffix")
+        #expect(selection.traceMetadata.values.contains("kind") == false)
+    }
+
     @Test("does not suggest phrases or completed words")
     func skipsInvalidFragments() {
         let ranker = WordCompletionCandidateRanker(staticWords: ["dictation"])

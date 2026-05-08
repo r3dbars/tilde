@@ -478,6 +478,80 @@ struct AutocompleteTraceReplayTests {
         })
     }
 
+    @Test("Full replay accepts fast word candidate metadata on presented events")
+    func fullReplayAcceptsFastWordCandidateMetadataOnPresentedEvents() {
+        let events = [
+            event(
+                .suggestionRequested,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                metadata: ["delayMilliseconds": "120"]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                latencyMilliseconds: 88,
+                metadata: displayMetadata(decision: "display")
+                    .merging(placementMetadata(anchor: "synthetic-caret", confidence: "medium")) {
+                        current, _ in current
+                    }
+                    .merging(fastWordSelectionMetadata()) { current, _ in current },
+                includePlacementMetadata: false
+            ),
+            event(
+                .suggestionAccepted,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                outcome: "acceptNextWord",
+                metadata: ["acceptanceID": "accept-fast", "acceptMode": "tab"]
+            ),
+            event(
+                .insertionVerified,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                outcome: "verified",
+                metadata: ["acceptanceID": "accept-fast", "acceptMode": "tab"]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "stale-one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                reason: "stale-request"
+            ),
+            event(
+                .acceptedTextEdited,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                metadata: [
+                    "acceptanceID": "accept-fast",
+                    "checkpoint": AcceptanceSurvivalCheckpoint.fieldBlur.rawValue,
+                    "survivalClass": AcceptanceSurvivalClass.exactKept.rawValue,
+                    "finishReason": "field-blur-finalized"
+                ]
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                outcome: "ignored",
+                reason: "escape",
+                metadata: ["lifetimeMs": "80"]
+            )
+        ]
+
+        let report = AutocompleteTraceReplay().report(for: events)
+
+        #expect(report.passesReplayProofGate)
+        #expect(report.candidateSelectionCandidateCount == 1)
+        #expect(report.candidateSelectionCoverageRate == 1)
+        #expect(report.requirements.contains {
+            $0.name == "candidate selection replay"
+                && $0.passed
+                && $0.detail.contains("1/1 candidate events")
+        })
+    }
+
     private func event(
         _ type: AutocompleteTraceEventType,
         suggestionID: String,
@@ -541,6 +615,16 @@ struct AutocompleteTraceReplayTests {
             "candidateTopScore": topScore,
             "candidateScoreMargin": scoreMargin,
             "candidateSuppressionReason": suppressionReason
+        ]
+    }
+
+    private func fastWordSelectionMetadata() -> [String: String] {
+        [
+            "candidateSelectionSource": "fast-word-completion",
+            "cleanedCandidateCount": "2",
+            "candidateTopScore": "0.850",
+            "candidateScoreMargin": "0.010",
+            "candidateSuppressionReason": "none"
         ]
     }
 
