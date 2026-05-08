@@ -242,8 +242,8 @@ struct CompletionPromptBuilderTests {
         let builder = CompletionPromptBuilder(maxVisibleWords: 20)
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
 
-        #expect(builder.maxVisibleWords == 7)
-        #expect(prompt.system.contains("next 7 words or fewer"))
+        #expect(builder.maxVisibleWords == 8)
+        #expect(prompt.system.contains("next 8 words or fewer"))
         #expect(prompt.system.contains("Behavior profile: docs_prose"))
     }
 
@@ -404,8 +404,8 @@ struct CompletionPromptBuilderTests {
             appBundleIdentifier: "com.openai.codex"
         ))
 
-        #expect(prompt.system.contains("next 1 words or fewer"))
-        #expect(prompt.system.contains("Behavior profile: ai_chat, max 1 visible words / 4 generated tokens"))
+        #expect(prompt.system.contains("next 5 words or fewer"))
+        #expect(prompt.system.contains("Behavior profile: ai_chat, max 8 visible words / 12 generated tokens"))
         #expect(prompt.system.contains("Never suggest sending, submitting"))
         #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
     }

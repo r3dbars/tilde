@@ -279,7 +279,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         min(
             lengthConfiguration.maxGeneratedTokens,
             request.behaviorProfile.maxGeneratedTokens,
-            request.mode.generatedTokenCeiling
+            request.mode.generatedTokenCeiling,
+            CompletionModelPolicy.clampedGeneratedTokens(request.maxVisibleWords + 6)
         )
     }
 

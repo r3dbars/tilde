@@ -89,7 +89,7 @@ final class SuggestionOrchestrator {
         return beginRequest(
             request,
             fieldClassification: input.fieldClassification,
-            suggestionAggressiveness: input.suggestionAggressiveness
+            suggestionTuning: input.suggestionTuning
         )
     }
 
@@ -97,14 +97,14 @@ final class SuggestionOrchestrator {
         beginRequest(
             request,
             fieldClassification: nil,
-            suggestionAggressiveness: nil
+            suggestionTuning: nil
         )
     }
 
     private func beginRequest(
         _ request: CompletionRequest,
         fieldClassification: AXFieldClassification?,
-        suggestionAggressiveness: SuggestionAggressiveness?
+        suggestionTuning: SuggestionTuning?
     ) -> SuggestionOrchestration {
         let runtimeSessionCacheDecision = RuntimeSessionCachePolicy().decision(
             previous: currentRequestStorage,
@@ -115,8 +115,8 @@ final class SuggestionOrchestrator {
         if let fieldClassification {
             requestMetadata.merge(fieldClassification.traceMetadata) { current, _ in current }
         }
-        if let suggestionAggressiveness {
-            requestMetadata.merge(suggestionAggressiveness.traceMetadata) { current, _ in current }
+        if let suggestionTuning {
+            requestMetadata.merge(suggestionTuning.traceMetadata) { current, _ in current }
         }
 
         currentRequestStorage = request
@@ -692,5 +692,5 @@ struct SuggestionRequestInput: Sendable {
     let acceptedTextStyleSketch: AcceptedTextStyleSketch?
     let maxVisibleWords: Int
     let requestMode: CompletionRequestMode
-    let suggestionAggressiveness: SuggestionAggressiveness
+    let suggestionTuning: SuggestionTuning
 }

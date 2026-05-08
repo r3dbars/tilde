@@ -27,7 +27,8 @@ struct SettingsNativeAppearanceSnapshotTests {
             clearLearningData: {},
             cycleAcceptAllShortcut: {},
             setAcceptAllShortcut: { _ in },
-            cycleSuggestionAggressiveness: {}
+            setSuggestionAggressivenessLevel: { _ in },
+            setSuggestionMaxVisibleWords: { _ in }
         )
         controller.refresh(
             isTrusted: true,
@@ -65,7 +66,7 @@ struct SettingsNativeAppearanceSnapshotTests {
                 tracePath: "/Users/example/Library/Logs/AutocompleteLab/events.jsonl"
             ),
             keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .backtick),
-            suggestionAggressiveness: SettingsSuggestionAggressivenessState(aggressiveness: .normal),
+            suggestionAggressiveness: SettingsSuggestionAggressivenessState(tuning: SuggestionTuning()),
             lastSuggestionDecision: "Shown"
         )
 

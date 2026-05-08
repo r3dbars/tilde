@@ -387,25 +387,38 @@ struct SettingsKeyboardShortcutState: Equatable {
 }
 
 struct SettingsSuggestionAggressivenessState: Equatable {
-    let aggressiveness: SuggestionAggressiveness
+    let tuning: SuggestionTuning
+
+    init(tuning: SuggestionTuning) {
+        self.tuning = tuning
+    }
+
+    init(aggressiveness: SuggestionAggressiveness) {
+        self.tuning = SuggestionTuning(aggressiveness: aggressiveness)
+    }
 
     var statusText: String {
-        "Aggressiveness: \(aggressiveness.displayName)"
+        "Aggressiveness: \(tuning.aggressivenessLevel)/\(SuggestionTuning.maximumAggressivenessLevel) - \(tuning.displayName)"
     }
 
     var detailText: String {
-        switch aggressiveness {
-        case .quiet:
-            return "Waits longer and needs stronger scores before showing."
-        case .normal:
-            return "Shows a little sooner with longer suggestions."
-        case .eager:
-            return "Predicts partial words sooner and starts phrase help after short pauses."
-        }
+        tuning.detailText
     }
 
-    var cycleButtonTitle: String {
-        "Use \(aggressiveness.next.displayName)"
+    var maxWordsText: String {
+        "Words shown: \(tuning.maxVisibleWords)"
+    }
+
+    var maxWordsDetailText: String {
+        "Caps visible phrase suggestions at \(tuning.maxVisibleWords) \(tuning.maxVisibleWords == 1 ? "word" : "words")."
+    }
+
+    var aggressivenessSliderValue: Double {
+        Double(tuning.aggressivenessLevel)
+    }
+
+    var maxWordsSliderValue: Double {
+        Double(tuning.maxVisibleWords)
     }
 }
 
@@ -536,7 +549,10 @@ final class SettingsWindowController: NSObject {
     private let cycleAcceptAllShortcutButton = NSButton(title: "Use Option-Tab", target: nil, action: nil)
     private let aggressivenessLabel = NSTextField(labelWithString: "")
     private let aggressivenessDetailLabel = NSTextField(labelWithString: "")
-    private let cycleAggressivenessButton = NSButton(title: "Use Eager", target: nil, action: nil)
+    private let aggressivenessSlider = NSSlider()
+    private let maxWordsLabel = NSTextField(labelWithString: "")
+    private let maxWordsDetailLabel = NSTextField(labelWithString: "")
+    private let maxWordsSlider = NSSlider()
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
     private let requestPermission: () -> Void
     private let openAccessibilitySettings: () -> Void
@@ -554,7 +570,8 @@ final class SettingsWindowController: NSObject {
     private let clearLearningData: () -> Void
     private let cycleAcceptAllShortcut: () -> Void
     private let setAcceptAllShortcut: (AcceptAllShortcut) -> Void
-    private let cycleSuggestionAggressiveness: () -> Void
+    private let setSuggestionAggressivenessLevel: (Int) -> Void
+    private let setSuggestionMaxVisibleWords: (Int) -> Void
     private let layoutStyle = SettingsLayoutStyle.nativeUtility
     private var currentRuntimeAction: RuntimeReadinessAction = .none
     private var currentProofCommandClipboardText: String?
@@ -576,7 +593,8 @@ final class SettingsWindowController: NSObject {
         clearLearningData: @escaping () -> Void,
         cycleAcceptAllShortcut: @escaping () -> Void,
         setAcceptAllShortcut: @escaping (AcceptAllShortcut) -> Void,
-        cycleSuggestionAggressiveness: @escaping () -> Void
+        setSuggestionAggressivenessLevel: @escaping (Int) -> Void,
+        setSuggestionMaxVisibleWords: @escaping (Int) -> Void
     ) {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
@@ -594,9 +612,10 @@ final class SettingsWindowController: NSObject {
         self.clearLearningData = clearLearningData
         self.cycleAcceptAllShortcut = cycleAcceptAllShortcut
         self.setAcceptAllShortcut = setAcceptAllShortcut
-        self.cycleSuggestionAggressiveness = cycleSuggestionAggressiveness
+        self.setSuggestionAggressivenessLevel = setSuggestionAggressivenessLevel
+        self.setSuggestionMaxVisibleWords = setSuggestionMaxVisibleWords
 
-        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 780))
+        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 830))
         contentView.material = .contentBackground
         contentView.blendingMode = .behindWindow
         contentView.state = .active
@@ -609,7 +628,7 @@ final class SettingsWindowController: NSObject {
         window.title = "Autocomplete Lab"
         window.contentView = contentView
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 540, height: 720)
+        window.contentMinSize = NSSize(width: 540, height: 760)
         window.isMovableByWindowBackground = true
 
         super.init()
@@ -739,7 +758,10 @@ final class SettingsWindowController: NSObject {
         cycleAcceptAllShortcutButton.title = keyboardShortcuts.cycleButtonTitle
         aggressivenessLabel.stringValue = suggestionAggressiveness.statusText
         aggressivenessDetailLabel.stringValue = suggestionAggressiveness.detailText
-        cycleAggressivenessButton.title = suggestionAggressiveness.cycleButtonTitle
+        aggressivenessSlider.doubleValue = suggestionAggressiveness.aggressivenessSliderValue
+        maxWordsLabel.stringValue = suggestionAggressiveness.maxWordsText
+        maxWordsDetailLabel.stringValue = suggestionAggressiveness.maxWordsDetailText
+        maxWordsSlider.doubleValue = suggestionAggressiveness.maxWordsSliderValue
         firstRunLabel.stringValue = SettingsOnboardingState(
             isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
@@ -824,6 +846,8 @@ final class SettingsWindowController: NSObject {
         acceptAllShortcutLabel.textColor = .secondaryLabelColor
         aggressivenessLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(aggressivenessDetailLabel)
+        maxWordsLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(maxWordsDetailLabel)
 
         let requestButton = NSButton(title: "Allow Accessibility", target: self, action: #selector(requestAccessibility))
         requestButton.bezelStyle = .rounded
@@ -879,12 +903,22 @@ final class SettingsWindowController: NSObject {
         cycleAcceptAllShortcutButton.target = self
         cycleAcceptAllShortcutButton.action = #selector(cycleAcceptAllShortcutControl)
         cycleAcceptAllShortcutButton.bezelStyle = .rounded
-        cycleAggressivenessButton.target = self
-        cycleAggressivenessButton.action = #selector(cycleAggressivenessControl)
-        cycleAggressivenessButton.bezelStyle = .rounded
-        cycleAggressivenessButton.toolTip = "Cycles between quiet, normal, and eager suggestions."
         acceptAllShortcutPopup.target = self
         acceptAllShortcutPopup.action = #selector(selectAcceptAllShortcutControl)
+        configureSlider(
+            aggressivenessSlider,
+            minimumValue: SuggestionTuning.minimumAggressivenessLevel,
+            maximumValue: SuggestionTuning.maximumAggressivenessLevel,
+            action: #selector(changeAggressivenessSlider)
+        )
+        aggressivenessSlider.toolTip = "Adjusts how quickly and how often suggestions appear."
+        configureSlider(
+            maxWordsSlider,
+            minimumValue: CompletionModelPolicy.minimumVisibleWords,
+            maximumValue: CompletionModelPolicy.maximumVisibleWords,
+            action: #selector(changeMaxWordsSlider)
+        )
+        maxWordsSlider.toolTip = "Adjusts the maximum number of visible predicted words."
 
         [
             title,
@@ -955,10 +989,18 @@ final class SettingsWindowController: NSObject {
                 title: "Keyboard",
                 views: [
                     shortcutLabel,
-                    makeButtonRow([acceptAllShortcutLabel, acceptAllShortcutPopup, cycleAcceptAllShortcutButton]),
+                    makeButtonRow([acceptAllShortcutLabel, acceptAllShortcutPopup, cycleAcceptAllShortcutButton])
+                ]
+            ),
+            makeSection(
+                title: "Tuning",
+                views: [
                     aggressivenessLabel,
                     aggressivenessDetailLabel,
-                    makeButtonRow([cycleAggressivenessButton])
+                    aggressivenessSlider,
+                    maxWordsLabel,
+                    maxWordsDetailLabel,
+                    maxWordsSlider
                 ]
             )
         ].forEach {
@@ -1006,6 +1048,23 @@ final class SettingsWindowController: NSObject {
         row.alignment = .centerY
         row.spacing = 8
         return row
+    }
+
+    private func configureSlider(
+        _ slider: NSSlider,
+        minimumValue: Int,
+        maximumValue: Int,
+        action: Selector
+    ) {
+        slider.minValue = Double(minimumValue)
+        slider.maxValue = Double(maximumValue)
+        slider.numberOfTickMarks = maximumValue - minimumValue + 1
+        slider.allowsTickMarkValuesOnly = true
+        slider.isContinuous = true
+        slider.target = self
+        slider.action = action
+        slider.translatesAutoresizingMaskIntoConstraints = false
+        slider.widthAnchor.constraint(equalToConstant: 260).isActive = true
     }
 
     private func refreshAcceptAllShortcutPopup(selected: AcceptAllShortcut) {
@@ -1111,11 +1170,6 @@ final class SettingsWindowController: NSObject {
     }
 
     @objc
-    private func cycleAggressivenessControl() {
-        cycleSuggestionAggressiveness()
-    }
-
-    @objc
     private func selectAcceptAllShortcutControl() {
         guard let rawValue = acceptAllShortcutPopup.selectedItem?.representedObject as? String,
               let shortcut = AcceptAllShortcut(rawValue: rawValue) else {
@@ -1123,5 +1177,15 @@ final class SettingsWindowController: NSObject {
         }
 
         setAcceptAllShortcut(shortcut)
+    }
+
+    @objc
+    private func changeAggressivenessSlider() {
+        setSuggestionAggressivenessLevel(aggressivenessSlider.integerValue)
+    }
+
+    @objc
+    private func changeMaxWordsSlider() {
+        setSuggestionMaxVisibleWords(maxWordsSlider.integerValue)
     }
 }

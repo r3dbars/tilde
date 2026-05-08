@@ -63,7 +63,7 @@ struct SuggestionOrchestratorTests {
             acceptedTextStyleSketch: sketch,
             maxVisibleWords: 7,
             requestMode: .phraseContinuation,
-            suggestionAggressiveness: .quiet
+            suggestionTuning: SuggestionTuning(aggressiveness: .quiet)
         ))
 
         #expect(styleKey.behaviorProfile == AutocompleteBehaviorProfileID.bullets.rawValue)
@@ -82,6 +82,8 @@ struct SuggestionOrchestratorTests {
         #expect(orchestration.requestMetadata["fieldKind"] == "multilineCompose")
         #expect(orchestration.requestMetadata["fieldKindReason"] == "test-compose")
         #expect(orchestration.requestMetadata["suggestionAggressiveness"] == "quiet")
+        #expect(orchestration.requestMetadata["suggestionAggressivenessLevel"] == "1")
+        #expect(orchestration.requestMetadata["suggestionMaxVisibleWords"] == "8")
         #expect(orchestration.requestMetadata["runtimeSessionCacheDecision"] == "reset")
         #expect(orchestration.requestMetadata["runtimeSessionCacheResetReason"] == "no-prior-request")
         #expect(orchestrator.allows(orchestration.ticket))
@@ -106,7 +108,7 @@ struct SuggestionOrchestratorTests {
             acceptedTextStyleSketch: nil,
             maxVisibleWords: 5,
             requestMode: .phraseContinuation,
-            suggestionAggressiveness: .normal
+            suggestionTuning: SuggestionTuning(aggressiveness: .normal)
         ))
         let second = orchestrator.beginRequest(SuggestionRequestInput(
             context: makeContext(textBeforeCursor: "The plan is", textAfterCursor: ""),
@@ -116,7 +118,7 @@ struct SuggestionOrchestratorTests {
             acceptedTextStyleSketch: nil,
             maxVisibleWords: 5,
             requestMode: .phraseContinuation,
-            suggestionAggressiveness: .normal
+            suggestionTuning: SuggestionTuning(aggressiveness: .normal)
         ))
 
         #expect(second.runtimeSessionCacheDecision.canReuse)
