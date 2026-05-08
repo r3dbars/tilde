@@ -147,6 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var modelInstallStatusText: String?
     private var commandContextRequestTask: Task<Void, Never>?
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
+    private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private var isFocusedTextPollInFlight = false
     private var latestFocusedTextReadRequestID: UInt64?
     private var focusedTextAXHealthState = FocusedTextAXHealthState()
@@ -1913,18 +1914,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            guard let frontmostApp = accessibilityClient.frontmostApplication(),
-                  let context = accessibilityClient.focusedTextContext(
-                      allowDescendantTextFallback: baseline.profile.allowsDescendantTextFallback
-                  ) else {
-                DiagnosticsLog.shared.record(
-                    "insert-verification",
-                    metadata: [
-                        "app": baseline.profile.bundleIdentifier,
-                        "result": "missing-context"
-                    ]
+            guard let frontmostApp = accessibilityClient.frontmostApplication() else {
+                recordInsertionVerificationPreflightFailure(
+                    acceptedText: acceptedText,
+                    baseline: baseline,
+                    currentContext: .missingFrontmostApplication
                 )
-                hideSuggestion()
+                return
+            }
+
+            guard frontmostApp.bundleIdentifier == baseline.fieldIdentity.bundleIdentifier else {
+                recordInsertionVerificationPreflightFailure(
+                    acceptedText: acceptedText,
+                    baseline: baseline,
+                    currentContext: .frontmostApplication(
+                        bundleIdentifier: frontmostApp.bundleIdentifier,
+                        fieldIdentity: nil
+                    )
+                )
+                return
+            }
+
+            guard let context = accessibilityClient.focusedTextContext(
+                allowDescendantTextFallback: baseline.profile.allowsDescendantTextFallback
+            ) else {
+                recordInsertionVerificationPreflightFailure(
+                    acceptedText: acceptedText,
+                    baseline: baseline,
+                    currentContext: .frontmostApplication(
+                        bundleIdentifier: frontmostApp.bundleIdentifier,
+                        fieldIdentity: nil
+                    )
+                )
                 return
             }
 
@@ -1934,7 +1955,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 profile: baseline.profile
             )
 
-            guard currentIdentity == baseline.fieldIdentity else {
+            let preflightDecision = insertionVerificationPreflightPolicy.decision(
+                expectedFieldIdentity: baseline.fieldIdentity,
+                currentContext: .frontmostApplication(
+                    bundleIdentifier: frontmostApp.bundleIdentifier,
+                    fieldIdentity: currentIdentity
+                )
+            )
+            guard preflightDecision == .proceed else {
+                recordInsertionVerificationPreflightFailure(
+                    acceptedText: acceptedText,
+                    baseline: baseline,
+                    currentContext: .frontmostApplication(
+                        bundleIdentifier: frontmostApp.bundleIdentifier,
+                        fieldIdentity: currentIdentity
+                    )
+                )
                 return
             }
 
@@ -2014,7 +2050,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ]
                 )
                 if baseline.profile.suppressesAfterInsertionFailure {
-                    suppressCurrentField(reason: "insert-verification-failed")
+                    suppressField(
+                        baseline.fieldIdentity,
+                        profile: baseline.profile,
+                        reason: "insert-verification-failed"
+                    )
                 }
                 hideSuggestion()
                 return
@@ -2046,6 +2086,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 requestMode: baseline.requestMode
             )
         }
+    }
+
+    private func recordInsertionVerificationPreflightFailure(
+        acceptedText: String,
+        baseline: InsertionVerificationBaseline,
+        currentContext: InsertionVerificationPreflightContext
+    ) {
+        let decision = insertionVerificationPreflightPolicy.decision(
+            expectedFieldIdentity: baseline.fieldIdentity,
+            currentContext: currentContext
+        )
+        guard let reason = decision.failureReason else {
+            return
+        }
+
+        var metadata = insertionVerificationPreflightMetadata(
+            baseline: baseline,
+            currentContext: currentContext
+        )
+        metadata["acceptedChars"] = String(acceptedText.count)
+        metadata["retryCount"] = String(baseline.retryCount)
+        metadata["result"] = reason.rawValue
+
+        DiagnosticsLog.shared.record(
+            "insert-verification-final-failure",
+            metadata: metadata
+        )
+        RawAutocompleteTraceLog.shared.record(
+            type: .insertionFailed,
+            suggestionID: baseline.suggestionID ?? "",
+            appBundleIdentifier: baseline.profile.bundleIdentifier,
+            fieldIdentity: baseline.fieldIdentity.traceDescription,
+            requestMode: baseline.requestMode?.rawValue ?? "",
+            acceptedText: acceptedText,
+            outcome: reason.rawValue,
+            reason: reason.rawValue,
+            metadata: metadata
+        )
+        recordAnnoyance(
+            .wrongInsertion,
+            appBundleIdentifier: baseline.profile.bundleIdentifier,
+            fieldIdentity: baseline.fieldIdentity,
+            requestMode: baseline.requestMode
+        )
+
+        if baseline.profile.suppressesAfterInsertionFailure {
+            suppressField(
+                baseline.fieldIdentity,
+                profile: baseline.profile,
+                reason: reason.rawValue
+            )
+        }
+        hideSuggestion(reason: reason.rawValue)
+    }
+
+    private func insertionVerificationPreflightMetadata(
+        baseline: InsertionVerificationBaseline,
+        currentContext: InsertionVerificationPreflightContext
+    ) -> [String: String] {
+        var metadata = [
+            "app": baseline.profile.bundleIdentifier,
+            "expectedFieldIdentity": baseline.fieldIdentity.traceDescription
+        ]
+
+        switch currentContext {
+        case .missingFrontmostApplication:
+            metadata["currentApp"] = "missing"
+            metadata["currentFieldIdentity"] = "missing"
+        case let .frontmostApplication(bundleIdentifier, fieldIdentity):
+            metadata["currentApp"] = bundleIdentifier
+            metadata["currentFieldIdentity"] = fieldIdentity?.traceDescription ?? "missing"
+        }
+
+        return metadata
     }
 
     private func scheduleSuggestion(
@@ -3571,11 +3685,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        suppressedFieldIdentities.insert(currentFieldIdentity)
+        suppressField(currentFieldIdentity, profile: currentProfile, reason: reason)
+    }
+
+    private func suppressField(
+        _ fieldIdentity: FocusedFieldIdentity,
+        profile: CompatibilityProfile,
+        reason: String
+    ) {
+        suppressedFieldIdentities.insert(fieldIdentity)
         DiagnosticsLog.shared.record(
             "field-suppressed",
             metadata: [
-                "app": currentProfile.bundleIdentifier,
+                "app": profile.bundleIdentifier,
+                "fieldIdentity": fieldIdentity.traceDescription,
                 "reason": reason
             ]
         )

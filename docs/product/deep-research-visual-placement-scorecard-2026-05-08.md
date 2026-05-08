@@ -5,7 +5,7 @@
 - Deep Research topic: Visual Placement Rubric for Autocomplete Ghost Text
 - Repo: `transcripted-autocomplete-lab`
 - Date: 2026-05-08
-- Commit inspected: `771f14dee37a4c8a44d89f1059f8a2aec9ca4e40` plus the local display-selection fail-closed pass
+- Commit inspected: `771f14dee37a4c8a44d89f1059f8a2aec9ca4e40` plus the local display-selection and insertion-verification fail-closed passes
 
 ## Executive Summary
 
@@ -33,6 +33,8 @@ Excellent visual placement means inline ghost text starts where the next glyph w
 The app has a strong geometry core: AX bounds validation, caret correction, line-rect rejection, clipping, profile-based render modes, low-confidence suppression, redacted geometry trace metadata, screenshot artifacts, and visual evidence scripts. TextEdit and Chrome fixture proof exists, and risky apps are narrow or mirror-first.
 
 The score stays at 75 because real-app proof is stale or incomplete for several required surfaces, the research-required debug screenshot bundle is not complete, and there is no recorder-grade proof for mixed-scale monitor moves, current Codex no-submit acceptance, Claude Code, or Claude desktop. This pass fixed the panel controller so an anchor that cannot be mapped to a real screen suppresses instead of falling back to the main display.
+
+Continuation note: the next automatable trust gap fixed post-accept verification so app/context/field mismatches trace as insertion failures and suppress the original field. That improves insertion trust, but the visual-placement score stays at 75 until fresh recorder-grade app proof exists.
 
 ## Score
 

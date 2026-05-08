@@ -38,7 +38,9 @@ feeds quiet mode, active quiet mode is visible in Diagnostics, Settings now
 reads more like a Mac utility, and missing/invalid model assets can be
 installed or repaired from Settings with progress, cancellation, and runtime
 warmup. First-run setup now explains Accessibility in one short paragraph and
-points first success at TextEdit, not private notes.
+points first success at TextEdit, not private notes. Post-accept insertion
+verification now also fails closed when the frontmost app, focused text context,
+or focused field no longer matches the accepted suggestion baseline.
 
 The largest miss is still visual placement proof in real apps. Ghost text can
 still be unproven in Notes, Obsidian, Claude Code, Claude desktop, and real
@@ -62,7 +64,7 @@ unsure. Wrong-place text is worse than no suggestion.
 | --- | ---: | ---: | ---: | --- |
 | Typing must feel untouched | 15 | 93 | 100 | Live TextEdit soak proves event tap p95 max 35us, p99 max 95us, max 161us over 600 samples with zero slow markers and zero tap disable events. A 10-minute endurance soak command now exists and is self-tested. Slow AX polling is off the hot key path but still warned in the same run, with p95 max 59ms and max 209ms, so worst-app AX proof remains open. |
 | Visual placement and caret alignment | 18 | 64 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, unproven Notes/prompt apps are mirror-first, and Chrome chat-like now has proof. Notes, Obsidian, Claude Code, and Claude desktop are still the blocker. |
-| Acceptance safety | 10 | 90 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Prompt-app one-word no-submit proof is still incomplete. |
+| Acceptance safety | 10 | 91 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, post-accept app/field/context mismatches now trace as insertion failures and quiet the original field, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Prompt-app one-word no-submit proof is still incomplete. |
 | Cross-app reliability | 10 | 78 | 100 | The proof matrix now has 12 screenshot artifacts, Notes title/body/checklist are all split out, and the app exposes green/yellow/diagnostics-only/unsupported status. Prompt apps and more real production editors are still pending proof. |
 | Native macOS visual feel | 8 | 80 | 100 | Settings moved toward native sections, checkboxes, clearer privacy/app controls, support status, "why hidden" copy, and calmer menu copy. Diagnostics and onboarding still need polish. |
 | Privacy and permissions trust | 9 | 93 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, raw/screenshot debug capture now expires when enabled from the app UI, Settings has a one-click Privacy Status panel, raw text capture now says it can include what you type, and exported reports include a privacy checklist. Broader first-run permission proof remains open. |
@@ -214,7 +216,7 @@ cheap, even if the model output is good.
 
 ## Category 3: Acceptance Safety
 
-Current score: 90/100.
+Current score: 91/100.
 
 Native target: accepting a suggestion feels as safe as accepting a system
 autocomplete suggestion.
@@ -228,6 +230,7 @@ autocomplete suggestion.
 - [x] Selected text blocks suggestions and acceptance.
 - [x] Insertion verification checks whether accepted text landed.
 - [x] Failed insertion can suppress the field.
+- [x] Post-accept app, focused-text, and field mismatches trace as failed insertions.
 - [x] Notes fails closed instead of trusting flaky rich-text insertion.
 - [x] Chat-like fixture exists to prove accept does not submit a form.
 - [x] Keyboard capture starts after a usable panel is shown, not before.
