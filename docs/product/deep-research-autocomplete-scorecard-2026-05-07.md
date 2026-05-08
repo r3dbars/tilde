@@ -723,6 +723,10 @@ these are true.
 64. Done: strengthen ambient output restraint by suppressing more assistant-like
    advice and planning starters such as "what I would do", "one option is",
    "the next step would", and "I think we should".
+65. Done: tighten post-write insertion verification so after-cursor drift fails
+   even when the accepted prefix appears to land, and missing or changed
+   verification targets record `insertionFailed` trace evidence instead of
+   returning quietly.
 
 ## Goal Status
 

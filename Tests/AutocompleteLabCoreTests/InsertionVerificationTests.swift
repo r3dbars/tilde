@@ -12,6 +12,14 @@ struct InsertionVerificationTests {
             acceptedText: " make",
             currentTextBeforeCursor: "Can we make"
         ) == .verified)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we make",
+            previousTextAfterCursor: " this work",
+            currentTextAfterCursor: " this work"
+        ) == .verified)
     }
 
     @Test("Verifies rich editor whitespace equivalents")
@@ -28,6 +36,14 @@ struct InsertionVerificationTests {
             previousTextBeforeCursor: "Can we",
             acceptedText: " make",
             currentTextBeforeCursor: "Can we\u{202F}make"
+        ) == .verified)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we\u{00A0}make",
+            previousTextAfterCursor: "\u{202F}today",
+            currentTextAfterCursor: "\u{00A0}today"
         ) == .verified)
     }
 
@@ -109,6 +125,27 @@ struct InsertionVerificationTests {
             currentTextBeforeCursor: "Can we",
             previousTextAfterCursor: " keep writing",
             currentTextAfterCursor: " writing"
+        ) == .selectionChangedUnexpectedly)
+    }
+
+    @Test("Detects after-cursor mutation even when the accepted prefix landed")
+    func detectsAfterCursorMutationWithVerifiedPrefix() {
+        let verifier = InsertionVerification()
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we make",
+            previousTextAfterCursor: " this work",
+            currentTextAfterCursor: " work"
+        ) == .selectionChangedUnexpectedly)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we\u{00A0}make",
+            previousTextAfterCursor: " this work",
+            currentTextAfterCursor: " work"
         ) == .selectionChangedUnexpectedly)
     }
 }
