@@ -43,8 +43,10 @@ It is not yet magical by the research bar. The biggest remaining misses are:
   1,200-character TextEdit text with focused-poll p95 max 11ms, max 37ms, zero
   slow markers, and zero skips. A fresh 2-minute strict run also verified exact
   2,400-character text with focused-poll p95 max 27ms, max 50ms, zero slow
-  markers, and zero skips after long-document copy settling was hardened. Fresh
-  4- and 10-minute endurance runs still need to prove the marker count falls to
+  markers, and zero skips after long-document copy settling was hardened. A
+  fresh 4-minute strict run verified exact 4,800-character text with
+  focused-poll p95 max 22ms, max 58ms, zero slow markers, and zero skips. A
+  fresh 10-minute endurance run still needs to prove the marker count falls to
   zero.
 
 The repo's existing Apple-native visual-feel score is **95/100**. This score is lower
