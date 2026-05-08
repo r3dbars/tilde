@@ -26,10 +26,12 @@ It is not yet magical by the research bar. The biggest remaining misses are:
   margin suppression, but still needs real model proof and learned utility.
 - Cross-app proof is honest but incomplete for Codex, Claude Code, Claude
   desktop, and more production-editor variants.
-- Normal typing proof improved with an exact 1,200-character strict TextEdit
-  endurance pass, and the current harness now revalidates named TextEdit focus
-  in shorter CGEvent batches with bounded cleanup. The live 10-minute wrapper is
-  still a proof blocker and is not counted as complete.
+- Normal typing proof now includes exact 1,200-, 4,800-, and 12,000-character
+  strict TextEdit endurance passes, and the current harness revalidates named
+  TextEdit focus in shorter CGEvent batches with bounded cleanup. The latest
+  10-minute proof passed with zero missed text, zero tap disables, zero focused
+  poll skips, focused-poll p95 max 57ms, focused-poll max 87ms, and 4
+  under-threshold slow markers.
 
 The repo's existing Apple-native score is **86/100**. This score is lower
 because it grades against the research definition of "magical autocomplete,"
@@ -101,10 +103,10 @@ Pass 1 shipped these improvements:
   TextEdit document verification, temporary TextEdit enablement, temporary
   pause-state restore, AX warmup flushing, bounded cleanup, and a CGEvent
   Unicode typing driver that verifies the target TextEdit window before each
-  segmented Swift typing batch. A strict 1-minute pass verified 1,200 exact
-  characters with clean key latency before the latest focus hardening; a current
-  short proof verified 100 exact characters with the hardened path. The
-  10-minute unattended wrapper still needs to complete cleanly.
+  segmented Swift typing batch. Current strict proof has verified 1,200, 4,800,
+  and 12,000 exact TextEdit characters; the latest 10-minute pass had no missed
+  text, no tap disables, zero focused-poll skips, focused-poll p95 max 57ms,
+  focused-poll max 87ms, and 4 under-threshold slow markers.
 - Inline placement now suppresses when less than one useful word can fit after
   the caret, so near-edge fields hide instead of showing clipped slivers.
 - Diagnostics export now creates a redacted privacy bundle with a manifest,
@@ -168,6 +170,11 @@ Pass 1 shipped these improvements:
 - Single slow focused-text AX reads with context now start a short polling
   throttle and drop that returned context, so a slow read cannot become the
   next visible suggestion while the app is trying to catch up.
+- Chrome smoke now has pinned upstream `monaco-real` and `prosemirror-real`
+  fixture lanes in addition to the dependency-free lookalikes. The first local
+  `prosemirror-real` attempt loaded and received disposable typing, but Chrome
+  did not expose a focused editable AX context to Autocomplete Lab, so the real
+  editor proof gap is now explicit instead of hidden behind local lookalikes.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -200,6 +207,8 @@ Remaining high-impact gaps:
   scoring, candidate-selection metadata, proof fingerprints, kept-horizon
   events, and researched trigger delays.
 - Cross-app proof rows still need fresh screenshot-backed acceptance slices.
+- Real Chrome editor-engine proof now has executable lanes, but still needs
+  Chrome focused web-editor AX context before scores can move.
 
 ## Research Bar
 

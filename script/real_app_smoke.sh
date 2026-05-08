@@ -18,7 +18,7 @@ TEMP_ENABLE_LAUNCHCTL_PREVIOUS=""
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|chat-like|all>]
+Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|chat-like|all>]
 
 Runs a real app smoke pass where it is safe to automate. Notes, Obsidian,
 Codex, Claude Code, and Claude desktop are manual-gated so this script never
@@ -28,8 +28,10 @@ Notes proof must use notes-title, notes-body, or notes-checklist. A generic
 notes run only prints the surface picker and does not record proof.
 
 Chrome defaults to the textarea fixture. Use --fixture chat-like to prove
-Tab/full-accept do not submit a chat-style composer. Use --fixture all to run
-every local Chrome browser/editor fixture with one app build.
+Tab/full-accept do not submit a chat-style composer. Use --fixture monaco-real
+or --fixture prosemirror-real for pinned upstream editor-engine fixtures. Use
+--fixture all to run every local Chrome browser/editor fixture with one app
+build.
 EOF
 }
 
@@ -95,7 +97,7 @@ case "$APP" in
 esac
 
 case "$CHROME_FIXTURE" in
-  textarea|contenteditable|editor-like|monaco-like|prosemirror-like|chat-like|all)
+  textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|chat-like|all)
     ;;
   *)
     echo "Unknown Chrome fixture: $CHROME_FIXTURE" >&2
@@ -114,6 +116,8 @@ LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
 DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.autocomplete-lab}"
 declare -a SMOKE_TMP_DIRS=()
+CHROME_FIXTURE_ASSET_URL=""
+CHROME_FIXTURE_SCRIPT_URL=""
 
 cleanup_smoke_tmp_dirs() {
   if ((${#SMOKE_TMP_DIRS[@]})); then
@@ -409,8 +413,138 @@ end tell
 APPLESCRIPT
 }
 
+file_url() {
+  local path="$1"
+  printf 'file://%s\n' "$path"
+}
+
+prepare_chrome_fixture_assets() {
+  local fixture="$1"
+  local tmp_dir="$2"
+
+  CHROME_FIXTURE_ASSET_URL=""
+  CHROME_FIXTURE_SCRIPT_URL=""
+
+  case "$fixture" in
+    monaco-real)
+      if ! command -v npm >/dev/null 2>&1; then
+        echo "npm is required for the real Monaco smoke fixture." >&2
+        exit 1
+      fi
+      local deps_dir="$tmp_dir/monaco-real-deps"
+      npm install --silent --no-audit --no-fund --prefix "$deps_dir" monaco-editor@0.55.1 >/dev/null
+      CHROME_FIXTURE_ASSET_URL="$(file_url "$deps_dir/node_modules/monaco-editor/min/vs")"
+      ;;
+    prosemirror-real)
+      if ! command -v npm >/dev/null 2>&1; then
+        echo "npm is required for the real ProseMirror smoke fixture." >&2
+        exit 1
+      fi
+      local deps_dir="$tmp_dir/prosemirror-real-deps"
+      local source_file="$deps_dir/prosemirror-real-entry.js"
+      local bundle_file="$tmp_dir/prosemirror-real.bundle.js"
+      npm install --silent --no-audit --no-fund --prefix "$deps_dir" \
+        esbuild@0.28.0 \
+        prosemirror-model@1.25.4 \
+        prosemirror-schema-basic@1.2.4 \
+        prosemirror-state@1.4.4 \
+        prosemirror-view@1.41.8 >/dev/null
+      cat >"$source_file" <<'JAVASCRIPT'
+import { schema } from "prosemirror-schema-basic";
+import { EditorState, TextSelection } from "prosemirror-state";
+import { EditorView } from "prosemirror-view";
+
+window.AutocompleteLabRealProseMirrorSmoke = {
+  mount(element) {
+    const view = new EditorView(element, {
+      state: EditorState.create({ schema }),
+      attributes: {
+        "aria-label": "Real ProseMirror smoke editor",
+        "aria-multiline": "true",
+        "data-smoke-editor": "true",
+        "role": "textbox",
+        "spellcheck": "false"
+      }
+    });
+
+    window.autocompleteSmokeEditorText = function () {
+      return view.state.doc.textContent;
+    };
+    window.focusSmokeEditor = function () {
+      view.focus();
+      const transaction = view.state.tr.setSelection(TextSelection.atEnd(view.state.doc));
+      view.dispatch(transaction);
+    };
+    window.autocompleteSmokeReady = true;
+    window.focusSmokeEditor();
+  }
+};
+JAVASCRIPT
+      "$deps_dir/node_modules/.bin/esbuild" "$source_file" \
+        --bundle \
+        --format=iife \
+        --global-name=AutocompleteLabRealProseMirrorBundle \
+        --outfile="$bundle_file" \
+        --log-level=error
+      CHROME_FIXTURE_SCRIPT_URL="$(file_url "$bundle_file")"
+      ;;
+  esac
+}
+
+wait_for_chrome_smoke_ready() {
+  local fixture="$1"
+  local timeout_seconds="${2:-20}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  case "$fixture" in
+    monaco-real|prosemirror-real)
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  while ((SECONDS <= deadline)); do
+    local tab_title
+    tab_title="$(osascript <<'APPLESCRIPT' 2>/dev/null || true
+tell application "Google Chrome"
+  try
+    return title of active tab of front window
+  on error
+    return ""
+  end try
+end tell
+APPLESCRIPT
+)"
+    if [[ "$tab_title" == *"[ready=1]"* ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for Chrome $fixture fixture readiness." >&2
+  exit 1
+}
+
+chrome_fixture_click_offsets() {
+  local fixture="$1"
+
+  case "$fixture" in
+    prosemirror-real)
+      printf '180 260\n'
+      ;;
+    *)
+      printf '180 190\n'
+      ;;
+  esac
+}
+
 focus_chrome_smoke_editor() {
-  osascript >/dev/null <<'APPLESCRIPT'
+  local fixture="${1:-$CHROME_FIXTURE}"
+  local click_x_offset click_y_offset
+  read -r click_x_offset click_y_offset < <(chrome_fixture_click_offsets "$fixture")
+
+  osascript >/dev/null <<APPLESCRIPT
 tell application "Google Chrome"
   activate
   try
@@ -421,6 +555,8 @@ delay 0.1
 tell application "System Events"
   tell process "Google Chrome"
     set frontmost to true
+    set chromePosition to position of window 1
+    click at {(item 1 of chromePosition) + $click_x_offset, (item 2 of chromePosition) + $click_y_offset}
   end tell
 end tell
 APPLESCRIPT
@@ -598,6 +734,65 @@ window.addEventListener("load", window.focusSmokeEditor);
 </script>
 HTML
       ;;
+    monaco-real)
+      cat <<HTML
+<!doctype html>
+<meta charset="utf-8">
+<title>Autocomplete Lab Chrome Real Monaco Smoke [ready=0]</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' file: blob:; worker-src blob: file:; connect-src 'none'; img-src 'self' data: file:">
+<style>
+body { margin: 0; background: #f7f7f7; }
+.monaco-host {
+  width: 780px;
+  height: 240px;
+  margin: 80px;
+  border: 1px solid #c7c7c7;
+}
+.label {
+  margin: 0 80px;
+  color: #555;
+  font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+</style>
+<div class="label">Real Monaco editor smoke fixture</div>
+<div data-smoke-editor class="monaco-host" aria-label="Real Monaco smoke editor"></div>
+<script src="$CHROME_FIXTURE_ASSET_URL/loader.js"></script>
+<script>
+window.autocompleteSmokeReady = false;
+require.config({ paths: { vs: "$CHROME_FIXTURE_ASSET_URL" } });
+require(["vs/editor/editor.main"], function () {
+  const container = document.querySelector("[data-smoke-editor]");
+  const editor = monaco.editor.create(container, {
+    value: "",
+    language: "plaintext",
+    automaticLayout: true,
+    fontSize: 16,
+    fontFamily: "Menlo, Monaco, Consolas, monospace",
+    lineNumbers: "on",
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    wordWrap: "on",
+    accessibilitySupport: "on",
+    ariaLabel: "Real Monaco smoke editor"
+  });
+
+  window.autocompleteSmokeEditorText = function () {
+    return editor.getValue();
+  };
+  window.focusSmokeEditor = function () {
+    const model = editor.getModel();
+    const lineNumber = model.getLineCount();
+    const column = model.getLineMaxColumn(lineNumber);
+    editor.setPosition({ lineNumber, column });
+    editor.focus();
+  };
+  window.autocompleteSmokeReady = true;
+  document.title = "Autocomplete Lab Chrome Real Monaco Smoke [ready=1]";
+  window.focusSmokeEditor();
+});
+</script>
+HTML
+      ;;
     prosemirror-like)
       cat <<'HTML'
 <!doctype html>
@@ -648,6 +843,51 @@ window.focusSmokeEditor = function () {
   selection.addRange(range);
 };
 window.addEventListener("load", window.focusSmokeEditor);
+</script>
+HTML
+      ;;
+    prosemirror-real)
+      cat <<HTML
+<!doctype html>
+<meta charset="utf-8">
+<title>Autocomplete Lab Chrome Real ProseMirror Smoke [ready=0]</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' file:; connect-src 'none'; img-src 'self' data: file:">
+<style>
+body { margin: 0; background: #fbfbfb; }
+.editor-shell {
+  width: 760px;
+  min-height: 220px;
+  margin: 80px;
+  border: 1px solid #cfcfcf;
+  background: #ffffff;
+  font: 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.menubar {
+  display: flex;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e1e1e1;
+  color: #555;
+  font-size: 13px;
+}
+.ProseMirror {
+  min-height: 170px;
+  padding: 18px 22px;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ProseMirror p { margin: 0 0 12px; }
+</style>
+<article class="editor-shell" aria-label="Real ProseMirror smoke fixture">
+  <div class="menubar" aria-hidden="true"><span>B</span><span>I</span><span>H1</span></div>
+  <div data-prosemirror-mount></div>
+</article>
+<script src="$CHROME_FIXTURE_SCRIPT_URL"></script>
+<script>
+window.autocompleteSmokeReady = false;
+window.AutocompleteLabRealProseMirrorSmoke.mount(document.querySelector("[data-prosemirror-mount]"));
+document.title = "Autocomplete Lab Chrome Real ProseMirror Smoke [ready=1]";
 </script>
 HTML
       ;;
@@ -758,7 +998,7 @@ describe_plan() {
     chrome)
       echo "Chrome fixture: $CHROME_FIXTURE"
       if [[ "$CHROME_FIXTURE" == "all" ]]; then
-        echo "Plan: build/relaunch AutocompleteLab, then run disposable Chrome textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, and chat-like no-submit local fixtures."
+        echo "Plan: build/relaunch AutocompleteLab, then run disposable Chrome textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, real Monaco, real ProseMirror, and chat-like no-submit local fixtures."
       else
         echo "Plan: build/relaunch AutocompleteLab, open a disposable Chrome $CHROME_FIXTURE fixture, type a test fragment, then validate logs and traces."
       fi
@@ -893,9 +1133,12 @@ run_chrome_fixture() {
   tmp_dir="$(make_tmp_dir)"
   html_file="$tmp_dir/autocomplete-lab-chrome-$fixture-smoke.html"
 
+  prepare_chrome_fixture_assets "$fixture" "$tmp_dir"
   chrome_fixture_html "$fixture" >"$html_file"
 
   local chrome_url="file://$html_file"
+  local click_x_offset click_y_offset
+  read -r click_x_offset click_y_offset < <(chrome_fixture_click_offsets "$fixture")
 
   echo "Running Chrome fixture: $fixture"
 
@@ -916,12 +1159,14 @@ tell application "System Events"
   tell process "Google Chrome"
     set frontmost to true
     set chromePosition to position of window 1
-    click at {(item 1 of chromePosition) + 180, (item 2 of chromePosition) + 190}
+    click at {(item 1 of chromePosition) + $click_x_offset, (item 2 of chromePosition) + $click_y_offset}
   end tell
 end tell
 APPLESCRIPT
 
   wait_for_frontmost_app "Google Chrome" 5
+  wait_for_chrome_smoke_ready "$fixture"
+  focus_chrome_smoke_editor "$fixture"
 
   osascript <<'APPLESCRIPT'
 tell application "System Events"
@@ -931,7 +1176,7 @@ APPLESCRIPT
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.google.Chrome" "Chrome $fixture"
-  focus_chrome_smoke_editor
+  focus_chrome_smoke_editor "$fixture"
   assert_frontmost_app "Google Chrome" "Chrome $fixture"
   press_key_code 48
   wait_for_log_fields "$start_line" "Chrome $fixture Tab acceptance" 12 \
@@ -956,7 +1201,7 @@ APPLESCRIPT
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.google.Chrome" "Chrome $fixture second"
-  focus_chrome_smoke_editor
+  focus_chrome_smoke_editor "$fixture"
   assert_frontmost_app "Google Chrome" "Chrome $fixture"
   full_start_line="$(line_count "$LOG_PATH")"
   press_accept_all_shortcut
@@ -998,6 +1243,8 @@ run_chrome() {
     run_chrome_fixture editor-like
     run_chrome_fixture monaco-like
     run_chrome_fixture prosemirror-like
+    run_chrome_fixture monaco-real
+    run_chrome_fixture prosemirror-real
     run_chrome_fixture chat-like
   else
     run_chrome_fixture "$CHROME_FIXTURE"

@@ -47,6 +47,22 @@
       ]
     },
     {
+      "surface": "Chrome real Monaco",
+      "status": "pending",
+      "screenshots": [],
+      "gaps": [
+        "Pinned upstream Monaco fixture exists, but this machine's current Chrome instance did not expose a focused editable AX element during the latest run."
+      ]
+    },
+    {
+      "surface": "Chrome real ProseMirror",
+      "status": "pending",
+      "screenshots": [],
+      "gaps": [
+        "Pinned upstream ProseMirror fixture exists and receives typing, but this machine's current Chrome instance did not expose a focused editable AX element during the latest run."
+      ]
+    },
+    {
       "surface": "Chrome chat-like composer",
       "status": "partial",
       "manualSmoke": {

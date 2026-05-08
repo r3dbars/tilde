@@ -46,7 +46,7 @@ evidence-backed score should stay lower until those rows are closed.
 
 | Area | Rating | Why |
 | --- | ---: | --- |
-| Normal typing passthrough | 9.9/10 | Fresh TextEdit endurance proof passed exact 1,200-, 4,800-, and 12,000-character runs with no tap-disable events and zero focused-poll skips. Normal typing correctly keeps keyboard capture idle until a suggestion is visible. The full 10-minute run stayed under strict AX thresholds with focused-poll p95 max 48ms and max 96ms, but it still reported 13 under-threshold slow markers, so this stays just below 10/10 until long-document typing has no AX warning noise or real hardware typing proves those markers are invisible. |
+| Normal typing passthrough | 9.9/10 | Fresh TextEdit endurance proof passed exact 1,200-, 4,800-, and 12,000-character runs with no tap-disable events and zero focused-poll skips. Normal typing correctly keeps keyboard capture idle until a suggestion is visible. The latest full 10-minute run stayed under strict AX thresholds with focused-poll p95 max 57ms and max 87ms, but it still reported 4 under-threshold slow markers, so this stays just below 10/10 until long-document typing has no AX warning noise or real hardware typing proves those markers are invisible. |
 | Keyboard capture safety | 9.8/10 | Capture starts only after a suggestion panel frame is actually usable, passes ordinary typing through, blocks selected-text replacement, fails closed if macOS disables the tap, and replays accept keys when focus moves to a protected field. |
 | Acceptance reliability | 9.45/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, and Apple Notes title/body/checklist verify accept paths. Prompt-app full accept is intentionally disabled until separate full-accept no-submit proof exists. Selected text is blocked before suggestions/acceptance and AX insertion is faster, but current Codex, Claude Code, and Claude desktop one-word no-submit proof still need live runs. |
 | Visual caret alignment | 9.5/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, Apple Notes title/body/checklist, and a disposable Codex prompt now have screenshot-backed proof. Stale line rects are dropped, vertical clipping is enforced, too-narrow inline space suppresses display instead of showing a sliver, and async suggestions refresh current geometry before display, but Claude Code and Claude desktop proof is incomplete and Codex still needs same-slice accept/no-submit proof. |
@@ -57,8 +57,8 @@ evidence-backed score should stay lower until those rows are closed.
 | Chrome textarea support | 9/10 | Fresh full-frame screenshot and two verified accepts. |
 | Chrome contenteditable support | 9/10 | Fresh full-frame screenshot and two verified accepts. |
 | Chrome editor-like support | 9/10 | Fresh full-frame screenshot and two verified accepts. |
-| Chrome Monaco-like support | 8.5/10 | Fresh pass verifies insertion; visual is readable and near the caret, but still needs real Monaco proof. |
-| Chrome ProseMirror-like support | 9/10 | Fresh full-frame screenshot and two verified accepts. |
+| Chrome Monaco-like support | 8.5/10 | Fresh pass verifies insertion; visual is readable and near the caret. A pinned upstream `monaco-real` smoke lane now exists, but it still needs passing Chrome AX focus, screenshot, and accept proof before this score can move. |
+| Chrome ProseMirror-like support | 9/10 | Fresh full-frame screenshot and two verified accepts. A pinned upstream `prosemirror-real` smoke lane now exists and receives typing, but the latest local run found Chrome did not expose focused web-editor AX context, so real-engine proof remains open. |
 | Chrome chat-like no-submit support | 9/10 | A local no-submit fixture now has screenshot-backed proof with Tab/full accept verified and submit count still zero. It is still a local fixture, not proof for real chat apps. |
 | Obsidian support | 9/10 | Fresh bounded screenshot-backed run at 2026-05-07T21:15:51Z shows caret-bound synthetic mirror placement in a disposable vault note, two verified accepts, and current proof fingerprints. It still needs more vault themes, panes, and long-note variants before it can be called complete by the research bar. |
 | Codex support | 8.5/10 | Fresh disposable prompt screenshot shows visible inline placement on the side display after the coordinate and render-level fixes. It still needs a recorder-grade visual pass with one-word accept and no-submit proof in the same slice before it can be scored higher; full accept is disabled until separate full-accept no-submit proof exists. |
@@ -84,8 +84,8 @@ evidence-backed score should stay lower until those rows are closed.
 | Chrome textarea | 9/10 | [chrome-textarea.png](visual-placement-screenshots/chrome-textarea.png) | Inline ghost is readable and follows the typed text. | Pending: real website proof beyond the local fixture. |
 | Chrome contenteditable | 9/10 | [chrome-contenteditable.png](visual-placement-screenshots/chrome-contenteditable.png) | Ghost starts immediately after the caret with enough contrast. | Pending: real app/site proof. |
 | Chrome editor-like | 9/10 | [chrome-editor-like.png](visual-placement-screenshots/chrome-editor-like.png) | CodeMirror-style fixture aligns well after the caret. | Pending: Obsidian now covers real CodeMirror; still needs more production editor variants. |
-| Chrome Monaco-like | 8.5/10 | [chrome-monaco-like.png](visual-placement-screenshots/chrome-monaco-like.png) | Ghost is readable and close to the caret in a dark editor. | Pending: real Monaco proof and a slightly cleaner visual gap. |
-| Chrome ProseMirror-like | 9/10 | [chrome-prosemirror-like.png](visual-placement-screenshots/chrome-prosemirror-like.png) | Ghost is readable and inline with the editing line. | Pending: real production ProseMirror proof. |
+| Chrome Monaco-like | 8.5/10 | [chrome-monaco-like.png](visual-placement-screenshots/chrome-monaco-like.png) | Ghost is readable and close to the caret in a dark editor. | Pending: `monaco-real` screenshot and accept proof with Chrome exposing a focused editable AX element. |
+| Chrome ProseMirror-like | 9/10 | [chrome-prosemirror-like.png](visual-placement-screenshots/chrome-prosemirror-like.png) | Ghost is readable and inline with the editing line. | Pending: `prosemirror-real` screenshot and accept proof; latest local run typed into real ProseMirror but Chrome exposed no focused editable AX context to the app. |
 | Chrome chat-like no-submit | 9/10 | [chrome-chat-like.png](visual-placement-screenshots/chrome-chat-like.png) | Ghost is inline after the caret, Tab and full accept verified, and the local submit counter stayed at zero. | Pending: real prompt/chat-app no-submit proof before broad enablement. |
 | Obsidian | 9/10 | [obsidian.png](visual-placement-screenshots/obsidian.png) | Real CodeMirror proof now shows the ghost beside the typed word in a disposable vault note, with Tab/full accept verified in the same bounded trace slice. | Pending: more vault themes, panes, and long-note variants. |
 | Codex | 8.5/10 | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Disposable prompt screenshot shows the ghost visible on the same line after the caret on a negative-origin side display. | Pending: needs a recorder-grade visual pass with one-word accept and no-submit proof in the same trace slice. |
@@ -154,11 +154,11 @@ evidence-backed score should stay lower until those rows are closed.
   passed with exact 4,800-character TextEdit verification through the prior
   4,000-character drift point, focused-poll p95 max 38ms, focused-poll max
   90ms, four under-threshold slow markers, and zero focused-poll skips.
-- `./script/typing_performance_endurance_soak.sh --strict-ax --require-ax-samples 5`:
+- `./script/typing_performance_endurance_soak.sh --minutes 10 --strict-ax --require-ax-samples 5`:
   passed the full 10-minute gate with exact 12,000-character TextEdit
-  verification, no tap-disable events, focused-poll p95 max 48ms,
-  focused-poll max 96ms, 13 under-threshold slow markers, and zero
-  focused-poll skips.
+  verification, no tap-disable events, focused-poll p95 max 57ms,
+  focused-poll max 87ms, 4 under-threshold slow markers, and zero focused-poll
+  skips after the fast word-completion context reuse pass.
 - Latest harness hardening now creates the disposable TextEdit target through
   UI automation instead of fragile TextEdit document AppleEvents, captures via
   clipboard while restoring the previous clipboard, refocuses the target window
@@ -222,6 +222,7 @@ evidence-backed score should stay lower until those rows are closed.
 - `./script/check_visual_placement_evidence_self_test.sh`: passed, including missing, empty, invalid, too-small, unreferenced, and pending strict screenshot failure cases.
 - `./script/check_visual_placement_evidence.sh`: passed with twelve verified visual-placement screenshots and reports two pending screenshot audits.
 - `./script/check_visual_placement_evidence.sh --require-all`: fails honestly on the two pending screenshot audits.
+- `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh chrome --fixture prosemirror-real`: added the pinned upstream ProseMirror lane, but the latest local run failed before suggestion presentation because Chrome did not expose focused editable AX context. The page did receive the disposable typed text, so this is now an explicit Chrome web-editor accessibility/focus blocker rather than a lookalike-fixture claim.
 - `./script/manual_smoke_self_test.sh`: passed after prompt-app no-submit
   proof started requiring exactly one trace-level accept and rejecting
   trace-level full-accept or field-send finalization signals.
