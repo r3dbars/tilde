@@ -125,6 +125,52 @@ struct FocusedFieldIdentityPolicyTests {
         #expect(first != third)
     }
 
+    @Test("Rounded target rects tolerate tiny AX float noise")
+    func roundedTargetRectsTolerateTinyAXFloatNoise() {
+        let first = RoundedFocusedRect(CGRect(x: 100.2, y: 620.2, width: 700.2, height: 84.2))
+        let second = RoundedFocusedRect(CGRect(x: 100.4, y: 620.4, width: 700.4, height: 84.4))
+        let changed = RoundedFocusedRect(CGRect(x: 101.0, y: 620.4, width: 700.4, height: 84.4))
+
+        #expect(first == second)
+        #expect(first != changed)
+    }
+
+    @Test("Target fingerprints include role geometry caret and text revision")
+    func targetFingerprintsIncludeTargetAndTextRevision() {
+        let base = targetFingerprint()
+        let roleChanged = targetFingerprint(role: "AXGroup")
+        let windowChanged = targetFingerprint(windowRect: CGRect(x: 40, y: 0, width: 900, height: 720))
+        let windowIdentifierChanged = targetFingerprint(windowIdentifier: 43)
+        let caretChanged = targetFingerprint(caretRect: CGRect(x: 160, y: 650, width: 1, height: 20))
+        let textChanged = targetFingerprint(textBeforeCursor: "hello there")
+
+        #expect(!base.matches(roleChanged))
+        #expect(!base.matches(windowChanged))
+        #expect(!base.matches(windowIdentifierChanged))
+        #expect(!base.matches(caretChanged))
+        #expect(!base.matches(textChanged))
+    }
+
+    @Test("Post insertion scope keeps target geometry but ignores natural caret and text movement")
+    func postInsertionScopeIgnoresCaretAndTextMovement() {
+        let before = targetFingerprint(
+            caretRect: CGRect(x: 120, y: 650, width: 1, height: 20),
+            textBeforeCursor: "hello"
+        ).postInsertionScope
+        let after = targetFingerprint(
+            caretRect: CGRect(x: 180, y: 650, width: 1, height: 20),
+            textBeforeCursor: "hello there"
+        ).postInsertionScope
+        let movedWindow = targetFingerprint(
+            windowRect: CGRect(x: 40, y: 0, width: 900, height: 720),
+            caretRect: CGRect(x: 180, y: 650, width: 1, height: 20),
+            textBeforeCursor: "hello there"
+        ).postInsertionScope
+
+        #expect(before.matches(after))
+        #expect(!before.matches(movedWindow))
+    }
+
     private func input(
         elementIdentifier: Int = 1,
         role: String? = "AXTextArea",
@@ -147,6 +193,34 @@ struct FocusedFieldIdentityPolicyTests {
             fingerprint: fingerprint,
             elementRect: elementRect,
             windowRect: windowRect
+        )
+    }
+
+    private func targetFingerprint(
+        role: String? = "AXTextArea",
+        subrole: String? = nil,
+        windowIdentifier: Int? = 42,
+        elementRect: CGRect? = CGRect(x: 100.4, y: 620.4, width: 700.2, height: 84.2),
+        windowRect: CGRect? = CGRect(x: 0, y: 0, width: 900, height: 720),
+        caretRect: CGRect? = CGRect(x: 120, y: 650, width: 1, height: 20),
+        textBeforeCursor: String = "hello",
+        textAfterCursor: String = ""
+    ) -> FocusedTargetFingerprint {
+        FocusedTargetFingerprint(
+            role: role,
+            subrole: subrole,
+            elementFingerprint: FocusedElementFingerprint(
+                identifier: "editor",
+                title: "Draft",
+                placeholder: "Message",
+                windowTitle: "Window"
+            ),
+            windowIdentifier: windowIdentifier,
+            elementRect: elementRect,
+            windowRect: windowRect,
+            caretRect: caretRect,
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: textAfterCursor
         )
     }
 }

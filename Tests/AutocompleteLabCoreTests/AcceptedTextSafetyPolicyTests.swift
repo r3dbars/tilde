@@ -14,24 +14,24 @@ struct AcceptedTextSafetyPolicyTests {
 
     @Test("Blocks line breaks before insertion")
     func blocksLineBreaksBeforeInsertion() throws {
-        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
+        let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
 
         #expect(
-            policy.decision(acceptedText: " send\n", profile: codex)
+            policy.decision(acceptedText: " send\n", profile: textEdit)
                 == .blocked(reason: "accepted-text-line-break")
         )
         #expect(
-            policy.decision(acceptedText: " send\r", profile: codex)
+            policy.decision(acceptedText: " send\r", profile: textEdit)
                 == .blocked(reason: "accepted-text-line-break")
         )
     }
 
     @Test("Blocks literal tabs before insertion")
     func blocksLiteralTabsBeforeInsertion() throws {
-        let claudeCode = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claude-code"))
+        let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
 
         #expect(
-            policy.decision(acceptedText: "\tcomplete", profile: claudeCode)
+            policy.decision(acceptedText: "\tcomplete", profile: textEdit)
                 == .blocked(reason: "accepted-text-tab")
         )
     }
@@ -58,49 +58,79 @@ struct AcceptedTextSafetyPolicyTests {
 
     @Test("Prompt-safe profiles allow only one word")
     func promptSafeProfilesAllowOnlyOneWord() throws {
-        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
+        let promptSafe = CompatibilityProfile(
+            bundleIdentifier: "com.example.PromptSafe",
+            displayName: "Prompt Safe",
+            supportLevel: .yellow,
+            supportReason: "Synthetic prompt-safe profile.",
+            renderMode: .floatingMirror,
+            insertionMode: .axValueReplacement,
+            supportsFullAcceptance: false,
+            promptAppSafetyMode: .wordOnly,
+            notes: "Test profile."
+        )
         let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
 
-        #expect(policy.decision(acceptedText: " make", profile: codex) == .allowed)
-        #expect(policy.decision(acceptedText: "ing", profile: codex) == .allowed)
+        #expect(policy.decision(acceptedText: " make", profile: promptSafe) == .allowed)
+        #expect(policy.decision(acceptedText: "ing", profile: promptSafe) == .allowed)
         #expect(
-            policy.decision(acceptedText: " make this", profile: codex)
+            policy.decision(acceptedText: " make this", profile: promptSafe)
                 == .blocked(reason: "accepted-text-multiword-full-disabled")
         )
         #expect(policy.decision(acceptedText: " make this", profile: textEdit) == .allowed)
     }
 
+    @Test("Disabled profiles block insertion")
+    func disabledProfilesBlockInsertion() throws {
+        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
+
+        #expect(
+            policy.decision(acceptedText: " make", profile: codex)
+                == .blocked(reason: "profile-insertion-disabled")
+        )
+    }
+
     @Test("Prompt-safe profiles block command-like one-word accepts")
     func promptSafeProfilesBlockCommandLikeOneWordAccepts() throws {
-        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
+        let promptSafe = CompatibilityProfile(
+            bundleIdentifier: "com.example.PromptSafe",
+            displayName: "Prompt Safe",
+            supportLevel: .yellow,
+            supportReason: "Synthetic prompt-safe profile.",
+            renderMode: .floatingMirror,
+            insertionMode: .axValueReplacement,
+            supportsFullAcceptance: false,
+            promptAppSafetyMode: .wordOnly,
+            notes: "Test profile."
+        )
         let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
 
         #expect(
-            policy.decision(acceptedText: " /review", profile: codex)
+            policy.decision(acceptedText: " /review", profile: promptSafe)
                 == .blocked(reason: "accepted-text-prompt-command-prefix")
         )
         #expect(
-            policy.decision(acceptedText: " @file", profile: codex)
+            policy.decision(acceptedText: " @file", profile: promptSafe)
                 == .blocked(reason: "accepted-text-prompt-command-prefix")
         )
         #expect(
-            policy.decision(acceptedText: " --force", profile: codex)
+            policy.decision(acceptedText: " --force", profile: promptSafe)
                 == .blocked(reason: "accepted-text-prompt-command-prefix")
         )
         #expect(
-            policy.decision(acceptedText: " curl", profile: codex)
+            policy.decision(acceptedText: " curl", profile: promptSafe)
                 == .blocked(reason: "accepted-text-prompt-action-word")
         )
         #expect(
-            policy.decision(acceptedText: " deploy", profile: codex)
+            policy.decision(acceptedText: " deploy", profile: promptSafe)
                 == .blocked(reason: "accepted-text-prompt-action-word")
         )
         #expect(
-            policy.decision(acceptedText: " keep|send", profile: codex)
+            policy.decision(acceptedText: " keep|send", profile: promptSafe)
                 == .blocked(reason: "accepted-text-prompt-shell-metacharacter")
         )
         #expect(
-            policy.decision(acceptedText: " word\u{200B}", profile: codex)
+            policy.decision(acceptedText: " word\u{200B}", profile: promptSafe)
                 == .blocked(reason: "accepted-text-hidden-control-character")
         )
         #expect(policy.decision(acceptedText: " /review", profile: textEdit) == .allowed)

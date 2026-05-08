@@ -10,16 +10,9 @@ struct InsertionResult: Equatable {
 @MainActor
 final class InsertionEngine {
     private let accessibilityClient: AccessibilityClient
-    private let clipboardFallbackEnabled: Bool
-    private let clipboardFallbackPolicy = ClipboardFallbackPolicy()
-    private let clipboardFallbackRestorePolicy = ClipboardFallbackRestorePolicy()
 
-    init(
-        accessibilityClient: AccessibilityClient,
-        clipboardFallbackEnabled: Bool = false
-    ) {
+    init(accessibilityClient: AccessibilityClient) {
         self.accessibilityClient = accessibilityClient
-        self.clipboardFallbackEnabled = clipboardFallbackEnabled
     }
 
     func insert(
@@ -37,7 +30,7 @@ final class InsertionEngine {
             }
         }
 
-        return clipboardFallback(text, profile: profile)
+        return clipboardFallbackUnavailable()
     }
 
     private func attempt(_ text: String, mode: InsertionMode) -> InsertionResult? {
@@ -101,51 +94,11 @@ final class InsertionEngine {
         return true
     }
 
-    private func clipboardFallback(_ text: String, profile: CompatibilityProfile) -> InsertionResult {
-        let fallbackDecision = clipboardFallbackPolicy.decision(
-            profile: profile,
-            runtimeEnabled: clipboardFallbackEnabled
-        )
-        guard fallbackDecision == .allowed else {
-            return InsertionResult(
-                succeeded: false,
-                mode: .clipboardFallbackOptIn,
-                message: fallbackDecision.message
-            )
-        }
-
-        let pasteboard = NSPasteboard.general
-        let originalItems = pasteboard.pasteboardItems?.map { $0.copy() as! NSPasteboardItem } ?? []
-        let restorePolicy = clipboardFallbackRestorePolicy
-
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        let fallbackChangeCount = pasteboard.changeCount
-
-        let pasteEvent = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: true)
-        pasteEvent?.flags = .maskCommand
-        pasteEvent?.post(tap: .cghidEventTap)
-        let pasteUpEvent = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: false)
-        pasteUpEvent?.flags = .maskCommand
-        pasteUpEvent?.post(tap: .cghidEventTap)
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            let restoreDecision = restorePolicy.decision(
-                insertedText: text,
-                currentString: pasteboard.string(forType: .string),
-                fallbackChangeCount: fallbackChangeCount,
-                currentChangeCount: pasteboard.changeCount
-            )
-            if restoreDecision == .restoreOriginalPasteboard {
-                pasteboard.clearContents()
-                pasteboard.writeObjects(originalItems)
-            }
-        }
-
+    private func clipboardFallbackUnavailable() -> InsertionResult {
         return InsertionResult(
-            succeeded: true,
+            succeeded: false,
             mode: .clipboardFallbackOptIn,
-            message: "Inserted via temporary clipboard fallback."
+            message: "Insertion failed and clipboard fallback is disabled for beta."
         )
     }
 }

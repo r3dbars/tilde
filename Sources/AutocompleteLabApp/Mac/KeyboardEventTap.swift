@@ -290,8 +290,16 @@ final class KeyboardEventTap: @unchecked Sendable {
 
         Task { @MainActor in
             let handled = handler(key, isAutorepeat, hadPassthroughKeyDown)
-            if !handled {
+            if !handled,
+               consumptionPolicy.shouldReplayUnhandledConsumedKey(key) {
                 replayKey(replay)
+            } else if !handled {
+                DiagnosticsLog.shared.record(
+                    "keyboard-event-tap-unhandled-consumed-key-dropped",
+                    metadata: [
+                        "key": key.diagnosticName
+                    ]
+                )
             }
         }
         return finish(nil, key: key, decision: "consume", startedAt: startedAt)

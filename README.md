@@ -32,7 +32,13 @@ Target apps for the first pass:
 - Notes
 - Obsidian
 - Chrome text fields
-- Codex and Claude desktop prompt fields
+
+Diagnostics-only until same-slice one-word no-submit proof exists:
+
+- Codex prompt fields
+
+Claude desktop is limited to one-word proof-gated acceptance; full accept stays
+off until separate no-submit proof exists.
 
 Mail is diagnostics-only until compose insertion is proven safe. Claude Code
 CLI sessions are also diagnostics-only for now because the live typing surface

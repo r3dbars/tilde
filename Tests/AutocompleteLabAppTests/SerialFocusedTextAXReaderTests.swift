@@ -158,6 +158,7 @@ private func focusedTextContext(textBeforeCursor: String) -> FocusedTextContext 
         caretRect: nil,
         elementRect: nil,
         windowRect: nil,
+        windowIdentifier: nil,
         textLineRect: nil,
         textStyle: nil,
         isSecure: false,

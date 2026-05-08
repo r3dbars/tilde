@@ -49,6 +49,28 @@ run_check() {
   return 1
 }
 
+check_clipboard_fallback_disabled() {
+  local failed=0
+
+  if rg -n \
+    'NSPasteboard\.general|pasteboard\.clearContents|pasteboard\.setString|writeObjects\(|keyboardEventSource: nil, virtualKey: 9' \
+    Sources/AutocompleteLabApp/Mac/InsertionEngine.swift; then
+    failed=1
+  fi
+
+  if rg -n 'acceptMode: \.clipboardFallback' \
+    Sources/AutocompleteLabCore/Compatibility/AppCompatibilityProfile.swift; then
+    failed=1
+  fi
+
+  if ((failed > 0)); then
+    echo "clipboard fallback insertion is not beta-safe"
+    return 1
+  fi
+
+  echo "clipboard fallback insertion disabled"
+}
+
 if [[ "$MODE" == "check-only" ]]; then
   failures=0
 
@@ -58,6 +80,7 @@ if [[ "$MODE" == "check-only" ]]; then
     AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
     ./script/check_diagnostics_log.sh || failures=$((failures + 1))
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
+  run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
   run_check "Manual app proof" ./script/manual_smoke_status.sh --require-all || failures=$((failures + 1))
   run_check "Visual placement proof" ./script/check_visual_placement_evidence.sh --require-all || failures=$((failures + 1))
   run_check "Release package prerequisites" ./script/package_release.sh --check || failures=$((failures + 1))
@@ -107,6 +130,10 @@ AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
 echo
 echo "== Redacted report export =="
 ./script/check_redacted_report_export.sh
+
+echo
+echo "== Clipboard fallback disabled =="
+check_clipboard_fallback_disabled
 
 echo
 echo "== Manual app proof =="
