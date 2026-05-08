@@ -35,4 +35,23 @@ struct VisiblePageContextTests {
         #expect(context.text.contains("Sam: Can you send the launch note today?"))
         #expect(context.text.contains("Yeah I can"))
     }
+
+    @Test("Exposes safe OCR words for instant word completion")
+    func exposesSafeOCRWordsForInstantWordCompletion() throws {
+        let context = try #require(VisiblePageContext(text: """
+        New chat Search Plugins
+        Autocomplete Lab should recognize Obsidian context
+        Transcripted is the product name on the page
+        Screen Recording permission appears in Settings
+        Draft
+        Transcrip
+        """))
+
+        #expect(context.completionCandidateWords.contains("Obsidian"))
+        #expect(context.completionCandidateWords.contains("Transcripted"))
+        #expect(context.completionCandidateWords.contains("permission"))
+        #expect(!context.completionCandidateWords.contains("Search"))
+        #expect(!context.completionCandidateWords.contains("Settings"))
+        #expect(context.traceMetadata["visiblePageContextCompletionCandidateWords"] != "0")
+    }
 }

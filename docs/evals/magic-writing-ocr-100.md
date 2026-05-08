@@ -8,9 +8,9 @@ Model rule: keep the current fast model. Do not switch models for this loop.
 
 ## Current Score
 
-Overall score: 97/100 deterministic scorecard score.
+Overall score: 98/100 deterministic scorecard score.
 
-This is not yet a 97/100 real human dogfood score. It means the prompt, OCR context shape, max-aggression cadence, long-suggestion persistence gate, and safety gates now pass the code harnesses. Live dogfood traces found a real TextEdit miss where OCR/window chrome leaked into the suggestion (`Untitled 13`), so the current loop fixed that failure class before claiming any higher score.
+This is not yet a 98/100 real human dogfood score. It means the prompt, OCR context shape, max-aggression cadence, long-suggestion persistence gate, instant OCR-backed word completion, and safety gates now pass the code harnesses. Live dogfood traces found a real TextEdit miss where OCR/window chrome leaked into the suggestion (`Untitled 13`), so the loop fixed that failure class before claiming any higher score.
 
 ## Scoring
 
@@ -39,6 +39,7 @@ This is not yet a 97/100 real human dogfood score. It means the prompt, OCR cont
 - Slow focused-text reads that still return a valid context now feed the suggestion pipeline instead of being discarded before the model can help.
 - Codex dogfood typing now uses a focused-text fast path: direct text snapshot plus synthetic text-area caret, skipping expensive AX range geometry and attributed text reads during the polling loop.
 - Codex polling now also skips window lookup, attribute fingerprint reads, and settable checks in the hot loop; acceptance still verifies through the normal insertion path.
+- Partial-word completion now reuses safe words from visible OCR context in the instant local ranker, so local terms like `Obsidian`, `Transcripted`, and `permission` can complete without waiting for the model.
 
 ## Latest Heartbeat Pass
 
@@ -102,6 +103,15 @@ Time: 2026-05-08T23:27:29Z
 - Safety note: this only affects polling/read shape for `com.openai.codex`; insertion and acceptance still use the normal verification path, and other apps stay on the standard read path.
 - Verification: full Swift suite passed with 973 tests, the app relaunched on `qwen3-0.6b`, and a fresh 20-second typing-performance gate reported focused-text poll p95 2 ms, max 30 ms, zero slow markers, and zero skipped polls.
 
+## Latest OCR Instant-Word Pass
+
+Time: 2026-05-08T23:36:00Z
+
+- The remaining low-scoring rows were partial-word cases: `Obsid`, `Transcrip`, and `permis` with the completed terms visible elsewhere on screen.
+- Fix: `VisiblePageContext` now exposes sanitized OCR candidate words, and word completion feeds those words into the fast local ranker before falling back to the model.
+- Prompt fallback was tightened too: partial product names, app names, permissions, people, project terms, and repeated OCR words should complete the visible local word before a generic dictionary guess.
+- Verification: focused prompt/OCR/ranker tests passed, the 100-scenario magic-writing harness now asserts the exact instant suffixes `ian`, `ted`, and `sion`, the full Swift suite passed with 975 tests, the app relaunched on `qwen3-0.6b`, and the fresh typing-performance gate reported focused-text poll p95 2 ms, max 4 ms, zero slow markers, and zero skipped polls.
+
 ## 100 Test Situations
 
 | # | App | Situation | Target behavior | Score |
@@ -123,9 +133,9 @@ Time: 2026-05-08T23:27:29Z
 | 15 | TextEdit | Reply asks "good enough to ship?" | Continue an opinion without submitting. | 98 |
 | 16 | TextEdit | Prompt says do not change AI model | Continue "current model" correctly. | 98 |
 | 17 | TextEdit | Field test has visible checklist | Continue about predicting from checklist context. | 98 |
-| 18 | TextEdit | Partial word "Obsid" with Obsidian visible | Complete the local app term. | 88 |
-| 19 | TextEdit | Partial word "Transcrip" with product name visible | Complete the product name. | 88 |
-| 20 | TextEdit | Partial word "permis" with permission text visible | Complete the permission word. | 88 |
+| 18 | TextEdit | Partial word "Obsid" with Obsidian visible | Complete the local app term. | 96 |
+| 19 | TextEdit | Partial word "Transcrip" with product name visible | Complete the product name. | 96 |
+| 20 | TextEdit | Partial word "permis" with permission text visible | Complete the permission word. | 96 |
 | 21 | Notes | Reply to "Can you send the launch note today?" | Predict a short confirming reply continuation. | 98 |
 | 22 | Notes | Meeting note says "keep OCR local and fast" | Continue the next-step sentence using OCR terms. | 98 |
 | 23 | Notes | Project doc says "suggestions feel instant" | Predict the next phrase about speed. | 98 |
@@ -143,9 +153,9 @@ Time: 2026-05-08T23:27:29Z
 | 35 | Notes | Reply asks "good enough to ship?" | Continue an opinion without submitting. | 98 |
 | 36 | Notes | Prompt says do not change AI model | Continue "current model" correctly. | 98 |
 | 37 | Notes | Field test has visible checklist | Continue about predicting from checklist context. | 98 |
-| 38 | Notes | Partial word "Obsid" with Obsidian visible | Complete the local app term. | 88 |
-| 39 | Notes | Partial word "Transcrip" with product name visible | Complete the product name. | 88 |
-| 40 | Notes | Partial word "permis" with permission text visible | Complete the permission word. | 88 |
+| 38 | Notes | Partial word "Obsid" with Obsidian visible | Complete the local app term. | 96 |
+| 39 | Notes | Partial word "Transcrip" with product name visible | Complete the product name. | 96 |
+| 40 | Notes | Partial word "permis" with permission text visible | Complete the permission word. | 96 |
 | 41 | Obsidian | Reply to "Can you send the launch note today?" | Predict a short confirming reply continuation. | 98 |
 | 42 | Obsidian | Meeting note says "keep OCR local and fast" | Continue the next-step sentence using OCR terms. | 98 |
 | 43 | Obsidian | Project doc says "suggestions feel instant" | Predict the next phrase about speed. | 98 |
@@ -163,9 +173,9 @@ Time: 2026-05-08T23:27:29Z
 | 55 | Obsidian | Reply asks "good enough to ship?" | Continue an opinion without submitting. | 98 |
 | 56 | Obsidian | Prompt says do not change AI model | Continue "current model" correctly. | 98 |
 | 57 | Obsidian | Field test has visible checklist | Continue about predicting from checklist context. | 98 |
-| 58 | Obsidian | Partial word "Obsid" with Obsidian visible | Complete the local app term. | 88 |
-| 59 | Obsidian | Partial word "Transcrip" with product name visible | Complete the product name. | 88 |
-| 60 | Obsidian | Partial word "permis" with permission text visible | Complete the permission word. | 88 |
+| 58 | Obsidian | Partial word "Obsid" with Obsidian visible | Complete the local app term. | 96 |
+| 59 | Obsidian | Partial word "Transcrip" with product name visible | Complete the product name. | 96 |
+| 60 | Obsidian | Partial word "permis" with permission text visible | Complete the permission word. | 96 |
 | 61 | Codex | Reply to "Can you send the launch note today?" | Continue the prompt text, not answer it. | 94 |
 | 62 | Codex | Meeting note says "keep OCR local and fast" | Use OCR terms without issuing commands. | 94 |
 | 63 | Codex | Project doc says "suggestions feel instant" | Predict a short implementation ask. | 94 |
@@ -183,9 +193,9 @@ Time: 2026-05-08T23:27:29Z
 | 75 | Codex | Reply asks "good enough to ship?" | Continue the sentence, not answer. | 94 |
 | 76 | Codex | Prompt says do not change AI model | Keep qwen3-0.6b. | 94 |
 | 77 | Codex | Field test has visible checklist | Continue about prediction from visible context. | 94 |
-| 78 | Codex | Partial word "Obsid" with Obsidian visible | Complete only the suffix. | 84 |
-| 79 | Codex | Partial word "Transcrip" with product name visible | Complete only the suffix. | 84 |
-| 80 | Codex | Partial word "permis" with permission text visible | Complete only the suffix. | 84 |
+| 78 | Codex | Partial word "Obsid" with Obsidian visible | Complete only the suffix. | 94 |
+| 79 | Codex | Partial word "Transcrip" with product name visible | Complete only the suffix. | 94 |
+| 80 | Codex | Partial word "permis" with permission text visible | Complete only the suffix. | 94 |
 | 81 | ChatGPT | Reply to "Can you send the launch note today?" | Continue the typed message, not answer. | 94 |
 | 82 | ChatGPT | Meeting note says "keep OCR local and fast" | Use visible terms without becoming assistant voice. | 94 |
 | 83 | ChatGPT | Project doc says "suggestions feel instant" | Continue a request about speed. | 94 |
@@ -203,9 +213,9 @@ Time: 2026-05-08T23:27:29Z
 | 95 | ChatGPT | Reply asks "good enough to ship?" | Continue the prompt, not answer. | 94 |
 | 96 | ChatGPT | Prompt says do not change AI model | Preserve model choice. | 94 |
 | 97 | ChatGPT | Field test has visible checklist | Continue using visible context. | 94 |
-| 98 | ChatGPT | Partial word "Obsid" with Obsidian visible | Complete only the suffix. | 84 |
-| 99 | ChatGPT | Partial word "Transcrip" with product name visible | Complete only the suffix. | 84 |
-| 100 | ChatGPT | Partial word "permis" with permission text visible | Complete only the suffix. | 84 |
+| 98 | ChatGPT | Partial word "Obsid" with Obsidian visible | Complete only the suffix. | 94 |
+| 99 | ChatGPT | Partial word "Transcrip" with product name visible | Complete only the suffix. | 94 |
+| 100 | ChatGPT | Partial word "permis" with permission text visible | Complete only the suffix. | 94 |
 
 ## Next Loop
 

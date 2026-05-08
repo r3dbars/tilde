@@ -57,6 +57,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
                 \(lineStructureGuidance)
                 \(visiblePageGuidance)
                 If visible page context includes a matching local word, name, or term, prefer that word's missing suffix.
+                For partial product names, app names, permissions, people, project terms, and repeated OCR words, complete the visible local word before guessing a generic dictionary word.
                 Only exception: return exactly \(Self.noSuggestionToken) when unsafe or the suffix would complete the wrong word.
                 No spaces, punctuation, quotes, reasoning, or extra words.
                 """,

@@ -37,6 +37,20 @@ struct WordCompletionCandidateRankerTests {
         #expect(suggestion?.visibleText == "umentary")
     }
 
+    @Test("uses visible page words as instant partial word context")
+    func usesVisiblePageWordsAsInstantPartialWordContext() throws {
+        let context = try #require(VisiblePageContext(text: """
+        Autocomplete Lab should recognize Obsidian context
+        Transcripted is the product name on the page
+        Screen Recording permission appears in Settings
+        """))
+        let ranker = WordCompletionCandidateRanker(staticWords: [])
+
+        #expect(ranker.suggestion(for: "Obsid", recentWords: context.completionCandidateWords)?.visibleText == "ian")
+        #expect(ranker.suggestion(for: "Transcrip", recentWords: context.completionCandidateWords)?.visibleText == "ted")
+        #expect(ranker.suggestion(for: "permis", recentWords: context.completionCandidateWords)?.visibleText == "sion")
+    }
+
     @Test("Suppresses ambiguous two-letter static and recent fragments")
     func suppressesAmbiguousTwoLetterStaticAndRecentFragments() {
         let ranker = WordCompletionCandidateRanker(staticWords: ["there", "their", "thing"])

@@ -287,6 +287,7 @@ struct CompletionPromptBuilderTests {
 
         #expect(prompt.system.contains("Inline word completion"))
         #expect(prompt.system.contains("missing suffix"))
+        #expect(prompt.system.contains("complete the visible local word"))
         #expect(prompt.system.contains("return exactly <NO_SUGGESTION>"))
         #expect(prompt.system.contains("suffix would complete the wrong word"))
         #expect(prompt.system.contains("No spaces"))
