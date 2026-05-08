@@ -75,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private let suggestionPanel = SuggestionPanelController()
+    private let fieldStatusIndicator = FieldStatusIndicatorController()
     private lazy var focusedTextReader = SerialFocusedTextAXReader(accessibilityClient: accessibilityClient)
     private let diagnosticsWindow = DiagnosticsWindowController()
     private let appProofCommandCoordinator = AppProofCommandCoordinator()
@@ -250,6 +251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pollTimer?.invalidate()
         stopWorkspaceFocusObservers()
         stopKeyboardEventTapNow(reason: "terminate")
+        fieldStatusIndicator.hide()
     }
 
     private func startWorkspaceFocusObservers() {
@@ -289,7 +291,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleWorkspaceFocusChange(reason: String) {
         guard suggestionSession.hasVisibleSuggestion
             || suggestionOrchestrator.currentRequest != nil
-            || currentFieldIdentity != nil else {
+            || currentFieldIdentity != nil
+            || fieldStatusIndicator.isVisible else {
             return
         }
 
@@ -783,6 +786,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ?? false
             )
             hideSuggestion(reason: reason.hideReason)
+            fieldStatusIndicator.hide()
             return
         }
 
@@ -790,6 +794,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setSuggestionDecision("Blocked: Accessibility permission missing")
             updateStatusMenu(app: nil, profile: nil, appEnabled: false)
             hideSuggestion()
+            fieldStatusIndicator.hide()
             return
         }
 
@@ -806,6 +811,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setSuggestionDecision("Blocked: unsupported app")
             updateStatusMenu(app: activeApp, profile: nil, appEnabled: false)
             hideSuggestion()
+            fieldStatusIndicator.hide()
             return
         }
 
@@ -902,6 +908,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               activeApp.processIdentifier == result.app.processIdentifier else {
             setSuggestionDecision("Blocked: focus changed")
             hideSuggestion(reason: "focus-changed")
+            fieldStatusIndicator.hide()
             return
         }
 
@@ -984,6 +991,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             clearFocusedFieldState(resetBlockLogGate: false)
             currentProfile = profile
             setSuggestionDecision("Blocked: \(terminalHostBlockReason)")
+            showFieldStatusIndicator(.blocked, context: rawContext)
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: rawContext,
@@ -1006,6 +1014,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             clearFocusedFieldState(resetBlockLogGate: false)
             currentProfile = profile
             setSuggestionDecision("Blocked: \(promptMatch.reason)")
+            showFieldStatusIndicator(.blocked, context: rawContext)
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: rawContext,
@@ -1039,6 +1048,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         clearFocusedFieldState(resetBlockLogGate: false)
         currentProfile = profile
         setSuggestionDecision("Blocked: \(hostedSurfaceBlock.userFacingReason)")
+        showFieldStatusIndicator(.blocked, context: rawContext)
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionSuppressed,
             suggestionID: UUID().uuidString,
@@ -1092,6 +1102,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requestMode: nil,
             fieldKind: fieldClassification.kind
         )
+        showFieldStatusIndicator(
+            suggestionSession.hasVisibleSuggestion ? .shown : .ready,
+            context: context
+        )
 
         let snapshot = FocusedTextSnapshot(
             fieldIdentity: fieldIdentity,
@@ -1104,6 +1118,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 suggestionSession.hasVisibleSuggestion
                     ? "Shown: tracking current field"
                     : "Ready: waiting for text change"
+            )
+            showFieldStatusIndicator(
+                suggestionSession.hasVisibleSuggestion ? .shown : .ready,
+                context: context
             )
             repositionVisibleSuggestion(context: context, profile: profile)
             return
@@ -1144,6 +1162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard profile.canPresentSuggestions else {
             setSuggestionDecision("Blocked: profile diagnostics only")
+            showFieldStatusIndicator(.blocked, context: context)
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
@@ -1160,6 +1179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let runtimeReport = runtimeReadinessReport
         guard runtimeReport.allowsSuggestions else {
             setSuggestionDecision("Blocked: runtime \(runtimeReport.stage.rawValue)")
+            showFieldStatusIndicator(.waiting, context: context)
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
@@ -1192,6 +1212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard activationDecision.canSuggest else {
             setSuggestionDecision("Blocked: \(activationDecision.blockReasonDescription)")
+            showFieldStatusIndicator(.blocked, context: context)
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
                 suggestionID: UUID().uuidString,
@@ -1236,6 +1257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             break
         case let .coolingDown(cooldown):
             setSuggestionDecision("Waiting: prefix \(cooldown.reason.rawValue)")
+            showFieldStatusIndicator(.waiting, context: context)
             let metadata = fieldClassification.traceMetadata
                 .merging(cooldown.metadata) { current, _ in current }
                 .merging(["reason": "prefix-family-cooldown"]) { current, _ in current }
@@ -1271,6 +1293,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let quietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext)
         guard !quietMode.isActive else {
             setSuggestionDecision("Waiting: \(quietMode.traceReason)")
+            showFieldStatusIndicator(.waiting, context: context)
             let metadata = fieldClassification.traceMetadata
                 .merging(quietMode.metadata) { current, _ in current }
                 .merging(["reason": quietMode.traceReason]) { current, _ in current }
@@ -1305,6 +1328,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let baseRenderMode else {
             setSuggestionDecision("Blocked: missing inline capabilities")
+            showFieldStatusIndicator(.blocked, context: context)
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
@@ -1327,6 +1351,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             renderMode: renderMode
         ) {
             setSuggestionDecision("Blocked: detached suggestion disabled")
+            showFieldStatusIndicator(.blocked, context: context)
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
                 suggestionID: UUID().uuidString,
@@ -1371,11 +1396,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard case let .request(delayMilliseconds) = triggerDecision else {
             if suggestionSession.hasVisibleSuggestion {
                 setSuggestionDecision("Shown: waiting for cadence")
+                showFieldStatusIndicator(.shown, context: context)
                 repositionVisibleSuggestion(context: context, profile: profile)
                 return
             }
 
             setSuggestionDecision("Waiting: cadence policy")
+            showFieldStatusIndicator(.waiting, context: context)
             recordSuggestionEvent(
                 "suggestion-trigger-skipped",
                 context: context,
@@ -1389,6 +1416,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         setSuggestionDecision("Queued: \(requestMode.rawValue)")
+        showFieldStatusIndicator(.thinking, context: context)
         scheduleSuggestion(
             context: context,
             profile: profile,
@@ -4380,6 +4408,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        showFieldStatusIndicator(.shown, context: context)
         suggestionSession.present(suggestion)
         setSuggestionDecision("Shown: \(triggerReason) \(latencyMilliseconds)ms")
         currentSuggestionID = suggestionID
@@ -5443,6 +5472,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextStyle = context.textStyle
         lastRenderMode = placement.renderMode
         lastCompatibilityLearningTrustContext = visualTrustContext
+        showFieldStatusIndicator(.shown, context: context)
         refreshVisibleSuggestion()
     }
 
@@ -5729,6 +5759,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionPanel.hide()
         updateKeyboardEventTapSnapshot()
         scheduleKeyboardEventTapStopIfIdle()
+    }
+
+    private func showFieldStatusIndicator(
+        _ state: FieldStatusIndicatorState,
+        context: FocusedTextContext
+    ) {
+        guard let anchorRect = context.caretRect
+            ?? context.textLineRect
+            ?? context.elementRect
+            ?? context.windowRect else {
+            fieldStatusIndicator.hide()
+            return
+        }
+
+        fieldStatusIndicator.show(
+            state: state,
+            near: anchorRect,
+            fieldRect: context.elementRect
+        )
     }
 
     private func updateStatusMenu(
@@ -6163,6 +6212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextSnapshot = nil
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
+        fieldStatusIndicator.hide()
         if resetBlockLogGate {
             suggestionBlockLogGate.reset()
         }
