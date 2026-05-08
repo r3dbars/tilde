@@ -47,6 +47,28 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Field delivery guard blocks stale field results")
+    func fieldDeliveryGuardBlocksStaleFieldResults() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let request = CompletionRequest(textBeforeCursor: "Can we", suggestionID: "field")
+        let ticket = orchestrator.beginRequest(request).ticket
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: "com.example.editor",
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let otherField = FocusedFieldIdentity(
+            bundleIdentifier: "com.example.editor",
+            processIdentifier: 42,
+            elementIdentifier: 8
+        )
+
+        #expect(orchestrator.allows(ticket, fieldIdentity: field, currentFieldIdentity: field))
+        #expect(!orchestrator.allows(ticket, fieldIdentity: field, currentFieldIdentity: otherField))
+        #expect(!orchestrator.allows(ticket, fieldIdentity: field, currentFieldIdentity: nil))
+    }
+
+    @MainActor
     @Test("Invalidating clears the current request and blocks stale tickets")
     func invalidateClearsCurrentRequestAndBlocksTickets() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())

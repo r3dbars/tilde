@@ -3290,8 +3290,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     onPartialSuggestion: { partialSuggestion in
                         Task { @MainActor in
                             let latencyMilliseconds = max(0, Int(Date().timeIntervalSince(requestStartedAt) * 1000))
-                            guard self.suggestionOrchestrator.allows(requestTicket),
-                                  self.currentFieldIdentity == fieldIdentity else {
+                            guard self.suggestionOrchestrator.allows(
+                                requestTicket,
+                                fieldIdentity: fieldIdentity,
+                                currentFieldIdentity: self.currentFieldIdentity
+                            ) else {
                                 return
                             }
 
@@ -3332,8 +3335,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 await MainActor.run {
                     let latencyMilliseconds = max(0, Int(Date().timeIntervalSince(requestStartedAt) * 1000))
-                    guard self.suggestionOrchestrator.allows(requestTicket),
-                          self.currentFieldIdentity == fieldIdentity else {
+                    guard self.suggestionOrchestrator.allows(
+                        requestTicket,
+                        fieldIdentity: fieldIdentity,
+                        currentFieldIdentity: self.currentFieldIdentity
+                    ) else {
                         return
                     }
 

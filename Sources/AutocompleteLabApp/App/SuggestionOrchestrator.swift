@@ -57,6 +57,14 @@ final class SuggestionOrchestrator {
         requestGate.allows(ticket, currentRequest: currentRequestStorage)
     }
 
+    func allows(
+        _ ticket: SuggestionRequestTicket,
+        fieldIdentity: FocusedFieldIdentity,
+        currentFieldIdentity: FocusedFieldIdentity?
+    ) -> Bool {
+        allows(ticket) && currentFieldIdentity == fieldIdentity
+    }
+
     func invalidate() {
         currentRequestStorage = nil
         requestGate.invalidate()
