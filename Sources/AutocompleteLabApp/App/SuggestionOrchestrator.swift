@@ -6,19 +6,23 @@ final class SuggestionOrchestrator {
     private let engineBox: CompletionEngineBox
     private let wordCompletionRanker: WordCompletionCandidateRanker
     private let failureVisibilityPolicy = CompletionFailureVisibilityPolicy()
+    private let suggestionPresentationGate: SuggestionPresentationGate
     private let suggestionReplacementPolicy: SuggestionReplacementPolicy
     private var requestGate = SuggestionRequestGate()
     private var currentRequestStorage: CompletionRequest?
     private var prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy
+    private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
 
     init(
         engine: any CompletionEngine,
         wordCompletionRanker: WordCompletionCandidateRanker = WordCompletionCandidateRanker(),
+        suggestionPresentationGate: SuggestionPresentationGate = SuggestionPresentationGate(),
         suggestionReplacementPolicy: SuggestionReplacementPolicy = SuggestionReplacementPolicy(),
         prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy = PrefixFamilyCooldownPolicy()
     ) {
         self.engineBox = CompletionEngineBox(engine: engine)
         self.wordCompletionRanker = wordCompletionRanker
+        self.suggestionPresentationGate = suggestionPresentationGate
         self.suggestionReplacementPolicy = suggestionReplacementPolicy
         self.prefixFamilyCooldownPolicy = prefixFamilyCooldownPolicy
     }
@@ -191,6 +195,38 @@ final class SuggestionOrchestrator {
 
     func resetPrefixFamilyCooldownPolicy(_ policy: PrefixFamilyCooldownPolicy) {
         prefixFamilyCooldownPolicy = policy
+    }
+
+    func startStreamingPresentation(suggestionID: String) {
+        streamingPresentationStates[suggestionID] = StreamingPresentationState()
+    }
+
+    func shouldPresentStreamingPartial(
+        _ suggestion: CompletionSuggestion,
+        suggestionID: String,
+        mode: CompletionRequestMode,
+        nowMilliseconds: Int
+    ) -> Bool {
+        var state = streamingPresentationStates[suggestionID] ?? StreamingPresentationState()
+        guard suggestionPresentationGate.shouldPresentStreamingPartial(
+            suggestion,
+            mode: mode,
+            state: &state,
+            nowMilliseconds: nowMilliseconds
+        ) else {
+            return false
+        }
+
+        streamingPresentationStates[suggestionID] = state
+        return true
+    }
+
+    func finishStreamingPresentation(suggestionID: String) {
+        streamingPresentationStates[suggestionID] = nil
+    }
+
+    func clearStreamingPresentations() {
+        streamingPresentationStates.removeAll(keepingCapacity: true)
     }
 
     func replacementDecision(
