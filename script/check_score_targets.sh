@@ -85,7 +85,7 @@ print_blocker_summary() {
     echo "- Live prompt proof: $LIVE_PROMPT_PROOF_ISSUES issue(s). Finish Codex same-slice no-submit proof and Claude Code terminal-host proof."
   fi
   if ((DEFAULT_CHROME_EDITOR_ISSUES > 0)); then
-    echo "- Default Chrome editor placement: $DEFAULT_CHROME_EDITOR_ISSUES issue(s). Move real Monaco/ProseMirror from default-Chrome synthetic-caret fallback to caret-quality placement and add production variants."
+    echo "- Chrome editor production proof: $DEFAULT_CHROME_EDITOR_ISSUES issue(s). Local real Monaco/ProseMirror caret-quality proof exists; add production variants before target scores can reach 100."
   fi
   if ((VARIANT_PROOF_ISSUES > 0)); then
     echo "- Real-app variant proof: $VARIANT_PROOF_ISSUES issue(s). Add missing Notes, Obsidian, Chrome, Claude desktop, and prompt layout variants."

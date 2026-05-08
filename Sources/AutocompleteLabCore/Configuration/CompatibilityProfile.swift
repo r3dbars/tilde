@@ -186,6 +186,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
             allowsSyntheticCaretPlacement: isGreenProfile
                 || hasTrustedVisualAdjustment
                 || allowsSyntheticCaretPlacement
+                || input.hasProofedSyntheticCaret
                 || strictVisualProofSyntheticCaretEnabled
         )
     }
@@ -193,15 +194,18 @@ public struct CompatibilityProfile: Equatable, Sendable {
 
 public struct CompatibilityPlacementTrustInput: Equatable, Sendable {
     public let hasTrustedVisualAdjustment: Bool
+    public let hasProofedSyntheticCaret: Bool
     public let screenshotTracingEnabled: Bool
     public let shouldCaptureScreenshot: Bool
 
     public init(
         hasTrustedVisualAdjustment: Bool = false,
+        hasProofedSyntheticCaret: Bool = false,
         screenshotTracingEnabled: Bool = false,
         shouldCaptureScreenshot: Bool = false
     ) {
         self.hasTrustedVisualAdjustment = hasTrustedVisualAdjustment
+        self.hasProofedSyntheticCaret = hasProofedSyntheticCaret
         self.screenshotTracingEnabled = screenshotTracingEnabled
         self.shouldCaptureScreenshot = shouldCaptureScreenshot
     }
@@ -328,7 +332,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             anchorLadder: [.caret, .field],
             knownFailureModes: ["textarea support differs from rich editors", "zero-height caret bounds can occur"],
             allowsDescendantTextFallback: true,
-            notes: "Yellow browser target. Prefer synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback. Prefer key-event insertion across textarea and contenteditable surfaces because rich browser editors can report AX replacement success without keeping cursor verification stable."
+            notes: "Yellow browser target. Prefer proof-gated synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback for unreadable or detached surfaces. Prefer key-event insertion across textarea and contenteditable surfaces because rich browser editors can report AX replacement success without keeping cursor verification stable."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.openai.codex",
