@@ -115,11 +115,11 @@ struct SuggestionTriggerPolicyTests {
         )
 
         #expect(policy.wordCompletionDelayMilliseconds == 20)
-        #expect(policy.wordBoundaryDelayMilliseconds == 40)
-        #expect(policy.pauseDelayMilliseconds == 40)
-        #expect(policy.decision(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I think ") == .request(delayMilliseconds: 40))
+        #expect(policy.wordBoundaryDelayMilliseconds == 20)
+        #expect(policy.pauseDelayMilliseconds == 20)
+        #expect(policy.decision(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I think ") == .request(delayMilliseconds: 20))
         #expect(policy.decision(previousTextBeforeCursor: "I think this wor", currentTextBeforeCursor: "I think this work") == .request(delayMilliseconds: 20))
-        #expect(policy.decision(previousTextBeforeCursor: "I think ", currentTextBeforeCursor: "I think x") == .request(delayMilliseconds: 40))
+        #expect(policy.decision(previousTextBeforeCursor: "I think ", currentTextBeforeCursor: "I think x") == .request(delayMilliseconds: 20))
     }
 
     @Test("Word fragments need three alphabetic characters")

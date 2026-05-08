@@ -3900,14 +3900,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(fastSelectionMetadata) { current, _ in current }
                 .merging(requestMetadata) { current, _ in current }
             )
-            if suggestionSession.hasVisibleSuggestion {
+            if shouldAskModelForWordCompletionFallback(visiblePageContext: visiblePageContext) {
+                setSuggestionDecision("Queued: model word completion")
+            } else if suggestionSession.hasVisibleSuggestion {
                 setSuggestionDecision("Shown: no fast word replacement")
                 repositionVisibleSuggestion(context: context, profile: profile)
                 return
+            } else {
+                hideSuggestion()
+                return
             }
-
-            hideSuggestion()
-            return
         }
 
         debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity] in
@@ -6686,6 +6688,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ),
             requestMode: requestMode
         )
+    }
+
+    private func shouldAskModelForWordCompletionFallback(
+        visiblePageContext: VisiblePageContext?
+    ) -> Bool {
+        suggestionTuning.aggressivenessLevel >= 4 || visiblePageContext != nil
     }
 
     private func setAcceptAllShortcut(_ shortcut: AcceptAllShortcut) {

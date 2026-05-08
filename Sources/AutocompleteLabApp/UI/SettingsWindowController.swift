@@ -926,7 +926,7 @@ final class SettingsWindowController: NSObject {
         toggleScreenshotTraceButton.toolTip = "Captures local screenshots for placement debugging."
         toggleVisiblePageContextButton.target = self
         toggleVisiblePageContextButton.action = #selector(toggleVisiblePageContextControl)
-        toggleVisiblePageContextButton.toolTip = "Uses local OCR from the visible editor area as extra prompt context."
+        toggleVisiblePageContextButton.toolTip = "Uses local OCR from the visible screen around the active editor as extra prompt context."
         deleteLocalLogsButton.target = self
         deleteLocalLogsButton.action = #selector(deleteLocalLogsControl)
         deleteLocalLogsButton.bezelStyle = .rounded

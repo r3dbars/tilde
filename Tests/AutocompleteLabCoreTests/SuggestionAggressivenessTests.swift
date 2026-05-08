@@ -71,10 +71,35 @@ struct SuggestionAggressivenessTests {
         #expect(veryProactiveTrigger.allowsSentenceBoundaryRequest)
 
         let maxTrigger = max.triggerPolicy(supportPace: .eager)
-        #expect(maxTrigger.softPunctuationDelayMilliseconds == 60)
-        #expect(maxTrigger.sentenceBoundaryDelayMilliseconds == 80)
+        #expect(maxTrigger.wordBoundaryDelayMilliseconds == 20)
+        #expect(maxTrigger.softPunctuationDelayMilliseconds == 40)
+        #expect(maxTrigger.sentenceBoundaryDelayMilliseconds == 60)
+        #expect(maxTrigger.pauseDelayMilliseconds == 20)
+        #expect(maxTrigger.minimumWordCompletionCharacters == 1)
         #expect(max.traceMetadata["suggestionAggressivenessLevel"] == "5")
         #expect(max.traceMetadata["suggestionMaxVisibleWords"] == "8")
+    }
+
+    @Test("max activation starts from the first strong screen-aware hint")
+    func maxActivationStartsFromFirstHint() {
+        let activation = SuggestionTuning(aggressivenessLevel: 5)
+            .activationPolicy(supportPace: .eager)
+
+        #expect(activation.decision(
+            textBeforeCursor: "R",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.wordCompletion))
+
+        #expect(activation.decision(
+            textBeforeCursor: "Yes ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
     }
 
     @Test("parsing and cycling are stable")

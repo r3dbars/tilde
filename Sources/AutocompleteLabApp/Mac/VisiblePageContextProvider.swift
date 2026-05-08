@@ -2,6 +2,7 @@ import AppKit
 import AutocompleteLabCore
 import CoreGraphics
 import ImageIO
+import ScreenCaptureKit
 import Vision
 
 final class VisiblePageContextProvider: @unchecked Sendable {
@@ -11,7 +12,13 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         let bundleIdentifier: String
         let windowIdentifier: Int?
         let fieldIdentifier: Int
+        let captureScope: VisiblePageContextCaptureScope
         let rectSignature: String
+    }
+
+    private struct CapturePlan {
+        let rect: CGRect
+        let scope: VisiblePageContextCaptureScope
     }
 
     private struct CacheEntry {
@@ -20,14 +27,31 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         let capturedAt: Date
     }
 
+    private final class CaptureResultBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storedResult: Result<CGImage, Error>?
+
+        func store(_ result: Result<CGImage, Error>) {
+            lock.lock()
+            storedResult = result
+            lock.unlock()
+        }
+
+        func result() -> Result<CGImage, Error>? {
+            lock.lock()
+            defer { lock.unlock() }
+            return storedResult
+        }
+    }
+
     private let queue = DispatchQueue(
         label: "app.transcripted.autocomplete.visible-page-context",
         qos: .utility
     )
     private let lock = NSLock()
-    private let minimumRefreshInterval: TimeInterval = 1.5
-    private let maximumCacheAge: TimeInterval = 8
-    private let maximumCaptureSize = CGSize(width: 1_200, height: 900)
+    private let minimumRefreshInterval: TimeInterval = 3
+    private let maximumCacheAge: TimeInterval = 20
+    private let maximumCaptureSize = CGSize(width: 1_600, height: 1_100)
     private var cacheEntry: CacheEntry?
     private var inFlightKey: CacheKey?
     private var lastAttemptAt: Date?
@@ -66,7 +90,7 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         }
         guard !focusedContext.isSecure,
               focusedContext.selectedTextLength == 0,
-              let captureRect = captureRect(for: focusedContext) else {
+              let capturePlan = capturePlan(for: focusedContext) else {
             return
         }
 
@@ -82,9 +106,9 @@ final class VisiblePageContextProvider: @unchecked Sendable {
 
         queue.async { [weak self] in
             self?.captureAndRecognize(
-                rect: captureRect,
+                plan: capturePlan,
                 key: key,
-                appBundleIdentifier: app.bundleIdentifier,
+                app: app,
                 startedAt: now
             )
         }
@@ -122,9 +146,9 @@ final class VisiblePageContextProvider: @unchecked Sendable {
     }
 
     private func captureAndRecognize(
-        rect: CGRect,
+        plan: CapturePlan,
         key: CacheKey,
-        appBundleIdentifier: String,
+        app: RunningApplicationInfo,
         startedAt: Date
     ) {
         defer {
@@ -136,17 +160,18 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         }
 
         guard let image = captureImage(
-            rect: rect,
-            appBundleIdentifier: appBundleIdentifier,
+            rect: plan.rect,
+            appBundleIdentifier: app.bundleIdentifier,
             startedAt: startedAt
         ) else {
             return
         }
 
         let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .fast
-        request.usesLanguageCorrection = false
-        request.minimumTextHeight = 0.012
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        request.recognitionLanguages = ["en-US"]
+        request.minimumTextHeight = 0.006
 
         do {
             let handler = VNImageRequestHandler(cgImage: image, options: [:])
@@ -155,7 +180,7 @@ final class VisiblePageContextProvider: @unchecked Sendable {
             DiagnosticsLog.shared.record(
                 "visible-page-context-ocr-failed",
                 metadata: [
-                    "app": appBundleIdentifier,
+                    "app": app.bundleIdentifier,
                     "reason": error.localizedDescription
                 ]
             )
@@ -165,12 +190,21 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         let recognizedText = request.results?
             .compactMap { $0.topCandidates(1).first?.string }
             .joined(separator: "\n") ?? ""
+        let rawLineCount = request.results?.count ?? 0
 
-        guard let pageContext = VisiblePageContext(text: recognizedText) else {
+        guard let pageContext = VisiblePageContext(
+            captureScope: plan.scope,
+            activeApplicationName: app.localizedName,
+            text: recognizedText
+        ) else {
             DiagnosticsLog.shared.record(
                 "visible-page-context-empty",
                 metadata: [
-                    "app": appBundleIdentifier,
+                    "app": app.bundleIdentifier,
+                    "captureScope": plan.scope.rawValue,
+                    "rawLines": String(rawLineCount),
+                    "imageWidth": String(image.width),
+                    "imageHeight": String(image.height),
                     "durationMilliseconds": String(Self.milliseconds(from: startedAt, to: Date()))
                 ]
             )
@@ -184,7 +218,8 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         DiagnosticsLog.shared.record(
             "visible-page-context-ready",
             metadata: [
-                "app": appBundleIdentifier,
+                "app": app.bundleIdentifier,
+                "captureScope": plan.scope.rawValue,
                 "chars": String(pageContext.text.count),
                 "lines": pageContext.traceMetadata["visiblePageContextLines"] ?? "0",
                 "durationMilliseconds": String(Self.milliseconds(from: startedAt, to: Date()))
@@ -214,6 +249,106 @@ final class VisiblePageContextProvider: @unchecked Sendable {
     }
 
     private func captureImage(
+        rect: CGRect,
+        appBundleIdentifier: String,
+        startedAt: Date
+    ) -> CGImage? {
+        if let image = captureImageWithScreenCaptureKit(
+            rect: rect,
+            appBundleIdentifier: appBundleIdentifier,
+            startedAt: startedAt
+        ) {
+            return image
+        }
+
+        return captureImageWithScreencaptureProcess(
+            rect: rect,
+            appBundleIdentifier: appBundleIdentifier,
+            startedAt: startedAt
+        )
+    }
+
+    private func captureImageWithScreenCaptureKit(
+        rect: CGRect,
+        appBundleIdentifier: String,
+        startedAt: Date
+    ) -> CGImage? {
+        let semaphore = DispatchSemaphore(value: 0)
+        let box = CaptureResultBox()
+
+        Task {
+            do {
+                let content = try await SCShareableContent.excludingDesktopWindows(
+                    false,
+                    onScreenWindowsOnly: true
+                )
+                guard let display = Self.screenCaptureDisplay(
+                    containing: rect,
+                    displays: content.displays
+                ) else {
+                    throw VisiblePageContextCaptureError.missingDisplay
+                }
+
+                let displayRect = display.frame
+                let sourceRect = rect.intersection(displayRect).integral
+                guard sourceRect.width >= 80,
+                      sourceRect.height >= 40 else {
+                    throw VisiblePageContextCaptureError.invalidSourceRect
+                }
+
+                let scale = Self.backingScaleFactor(for: displayRect)
+                let filter = SCContentFilter(display: display, excludingWindows: [])
+                let configuration = SCStreamConfiguration()
+                configuration.sourceRect = sourceRect
+                configuration.width = max(1, Int(sourceRect.width * scale))
+                configuration.height = max(1, Int(sourceRect.height * scale))
+                configuration.showsCursor = false
+
+                let image = try await SCScreenshotManager.captureImage(
+                    contentFilter: filter,
+                    configuration: configuration
+                )
+                box.store(.success(image))
+            } catch {
+                box.store(.failure(error))
+            }
+
+            semaphore.signal()
+        }
+
+        guard semaphore.wait(timeout: .now() + 1.5) == .success else {
+            DiagnosticsLog.shared.record(
+                "visible-page-context-capture-failed",
+                metadata: [
+                    "app": appBundleIdentifier,
+                    "source": "screencapturekit",
+                    "reason": "timeout",
+                    "durationMilliseconds": String(Self.milliseconds(from: startedAt, to: Date()))
+                ]
+            )
+            return nil
+        }
+
+        switch box.result() {
+        case let .success(image):
+            return image
+        case let .failure(error):
+            DiagnosticsLog.shared.record(
+                "visible-page-context-capture-failed",
+                metadata: [
+                    "app": appBundleIdentifier,
+                    "source": "screencapturekit",
+                    "reason": error.localizedDescription,
+                    "durationMilliseconds": String(Self.milliseconds(from: startedAt, to: Date()))
+                ]
+            )
+            return nil
+        case nil:
+            return nil
+        }
+    }
+
+    private func captureImageWithScreencaptureProcess(
         rect: CGRect,
         appBundleIdentifier: String,
         startedAt: Date
@@ -251,6 +386,7 @@ final class VisiblePageContextProvider: @unchecked Sendable {
                 )
                 return nil
             }
+            process.waitUntilExit()
 
             guard process.terminationStatus == 0,
                   let source = CGImageSourceCreateWithURL(screenshotURL as CFURL, nil),
@@ -280,6 +416,35 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         }
     }
 
+    private enum VisiblePageContextCaptureError: LocalizedError {
+        case missingDisplay
+        case invalidSourceRect
+
+        var errorDescription: String? {
+            switch self {
+            case .missingDisplay:
+                "No capture display matched the focused text field."
+            case .invalidSourceRect:
+                "The capture region was too small."
+            }
+        }
+    }
+
+    private static func screenCaptureDisplay(
+        containing rect: CGRect,
+        displays: [SCDisplay]
+    ) -> SCDisplay? {
+        let point = CGPoint(x: rect.midX, y: rect.midY)
+        return displays.first { $0.frame.contains(point) }
+            ?? displays.first { $0.frame.intersects(rect) }
+            ?? displays.first
+    }
+
+    private static func backingScaleFactor(for displayRect: CGRect) -> CGFloat {
+        NSScreen.screens.first { $0.frame.intersects(displayRect) }?
+            .backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+    }
+
     private func cacheKey(
         for focusedContext: FocusedTextContext,
         appBundleIdentifier: String
@@ -288,11 +453,12 @@ final class VisiblePageContextProvider: @unchecked Sendable {
             bundleIdentifier: appBundleIdentifier,
             windowIdentifier: focusedContext.windowIdentifier,
             fieldIdentifier: focusedContext.elementIdentifier,
-            rectSignature: Self.rectSignature(captureRect(for: focusedContext))
+            captureScope: capturePlan(for: focusedContext)?.scope ?? .focusedRegion,
+            rectSignature: Self.rectSignature(capturePlan(for: focusedContext)?.rect)
         )
     }
 
-    private func captureRect(for focusedContext: FocusedTextContext) -> CGRect? {
+    private func capturePlan(for focusedContext: FocusedTextContext) -> CapturePlan? {
         guard let baseRect = focusedContext.elementRect ?? focusedContext.windowRect else {
             return nil
         }
@@ -302,6 +468,26 @@ final class VisiblePageContextProvider: @unchecked Sendable {
             ?? focusedContext.elementRect
             ?? focusedContext.windowRect
             ?? baseRect
+
+        if let visibleScreenRect = visibleScreenRect(containing: anchorRect) ?? visibleScreenRect(containing: baseRect) {
+            let screenRect = visibleScreenRect.integral
+            if screenRect.width <= maximumCaptureSize.width,
+               screenRect.height <= maximumCaptureSize.height {
+                return CapturePlan(rect: screenRect, scope: .visibleScreen)
+            }
+
+            let centered = CGRect(
+                x: anchorRect.midX - maximumCaptureSize.width / 2,
+                y: anchorRect.midY - maximumCaptureSize.height / 2,
+                width: maximumCaptureSize.width,
+                height: maximumCaptureSize.height
+            )
+            let clamped = Self.clamped(centered, to: screenRect).integral
+            if clamped.width >= 80,
+               clamped.height >= 40 {
+                return CapturePlan(rect: clamped, scope: .visibleScreen)
+            }
+        }
 
         let expanded = baseRect.insetBy(dx: -80, dy: -80)
         let width = min(maximumCaptureSize.width, expanded.width)
@@ -319,7 +505,29 @@ final class VisiblePageContextProvider: @unchecked Sendable {
             return nil
         }
 
-        return captureRect
+        return CapturePlan(rect: captureRect, scope: .focusedRegion)
+    }
+
+    private func visibleScreenRect(containing rect: CGRect) -> CGRect? {
+        let point = CGPoint(x: rect.midX, y: rect.midY)
+        return NSScreen.screens
+            .map(\.visibleFrame)
+            .first { $0.contains(point) }
+    }
+
+    private static func clamped(_ rect: CGRect, to bounds: CGRect) -> CGRect {
+        let width = min(rect.width, bounds.width)
+        let height = min(rect.height, bounds.height)
+        let minX = bounds.minX
+        let maxX = bounds.maxX - width
+        let minY = bounds.minY
+        let maxY = bounds.maxY - height
+        return CGRect(
+            x: min(max(rect.origin.x, minX), maxX),
+            y: min(max(rect.origin.y, minY), maxY),
+            width: width,
+            height: height
+        )
     }
 
     private static func rectSignature(_ rect: CGRect?) -> String {
