@@ -41,4 +41,17 @@ struct FocusedTextPollLatencyStatsTests {
         #expect(summary?.p95Milliseconds == 0)
         #expect(summary?.maxMilliseconds == 0)
     }
+
+    @Test("Diagnostics markers wait for the user-facing warning threshold")
+    func diagnosticsMarkersWaitForUserFacingWarningThreshold() {
+        let policy = FocusedTextPollDiagnosticsPolicy(
+            slowPollMarkerMilliseconds: 120,
+            slowAXReadMarkerMilliseconds: 120
+        )
+
+        #expect(!policy.shouldRecordSlowPollMarker(durationMilliseconds: 87))
+        #expect(policy.shouldRecordSlowPollMarker(durationMilliseconds: 120))
+        #expect(!policy.shouldRecordSlowAXReadMarker(queueDelayMilliseconds: 0, readDurationMilliseconds: 95))
+        #expect(policy.shouldRecordSlowAXReadMarker(queueDelayMilliseconds: 121, readDurationMilliseconds: 40))
+    }
 }
