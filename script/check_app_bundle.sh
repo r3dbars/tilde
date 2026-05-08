@@ -37,6 +37,8 @@ INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
 EXECUTABLE="$APP_BUNDLE/Contents/MacOS/AutocompleteLab"
 APP_ICON="$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 MLX_METALLIB="$APP_BUNDLE/Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib"
+ICON_TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$ICON_TMP_DIR"' EXIT
 
 plist_value() {
   /usr/libexec/PlistBuddy -c "Print :$1" "$INFO_PLIST" 2>/dev/null || true
@@ -47,6 +49,19 @@ plist_value() {
 [[ -x "$EXECUTABLE" ]] || fail "missing executable: $EXECUTABLE"
 [[ -s "$APP_ICON" ]] || fail "missing app icon: $APP_ICON"
 [[ -s "$MLX_METALLIB" ]] || fail "missing packaged MLX Metal library"
+
+ICONSET_DIR="$ICON_TMP_DIR/AppIcon.iconset"
+/usr/bin/iconutil -c iconset "$APP_ICON" -o "$ICONSET_DIR" >/dev/null 2>&1 \
+  || fail "app icon is not a valid ICNS file"
+for icon_file in \
+  icon_32x32.png \
+  icon_32x32@2x.png \
+  icon_256x256.png \
+  icon_256x256@2x.png \
+  icon_512x512.png \
+  icon_512x512@2x.png; do
+  [[ -s "$ICONSET_DIR/$icon_file" ]] || fail "app icon missing $icon_file"
+done
 
 [[ "$(plist_value CFBundlePackageType)" == "APPL" ]] || fail "CFBundlePackageType is not APPL"
 [[ "$(plist_value CFBundleExecutable)" == "AutocompleteLab" ]] || fail "CFBundleExecutable mismatch"

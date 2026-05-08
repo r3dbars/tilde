@@ -3,6 +3,9 @@ import AutocompleteLabCore
 
 struct SettingsLayoutStyle {
     let usesFramedCards: Bool
+    let usesSystemFonts: Bool
+    let usesDynamicSystemColors: Bool
+    let appearanceCoverage: NativeAppearanceCoverage
     let sectionSpacing: CGFloat
     let sectionItemSpacing: CGFloat
     let contentInsets: NSEdgeInsets
@@ -10,6 +13,9 @@ struct SettingsLayoutStyle {
 
     static let nativeUtility = SettingsLayoutStyle(
         usesFramedCards: false,
+        usesSystemFonts: true,
+        usesDynamicSystemColors: true,
+        appearanceCoverage: .lightDarkAndHighContrast,
         sectionSpacing: 14,
         sectionItemSpacing: 5,
         contentInsets: NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24),

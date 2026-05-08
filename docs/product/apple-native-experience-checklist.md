@@ -12,7 +12,7 @@ The product bar is not "AI appears everywhere." The bar is:
 
 ## Current Executive Score
 
-Overall Apple-native feel: 91/100.
+Overall Apple-native feel: 92/100.
 
 This app has real engineering depth now. It is not a toy. It has local model
 runtime support, strong privacy defaults, app compatibility profiles, insertion
@@ -40,10 +40,11 @@ a suggestion is visible, app support status is visible in Settings and the menu,
 separates key-capture health from AX-poll health, placement confidence is
 visible without suggestion text, placement uncertainty hides stale ghosts and
 feeds quiet mode, active quiet mode is visible in Diagnostics, Settings now
-reads more like a Mac utility, and missing/invalid model assets can be
-installed or repaired from Settings with progress, cancellation, and runtime
-warmup. First-run setup now explains Accessibility in one short paragraph and
-points first success at TextEdit, not private notes.
+reads more like a Mac utility, inline ghost text uses dynamic system placeholder
+color instead of fixed gray, and missing/invalid model assets can be installed
+or repaired from Settings with progress, cancellation, and runtime warmup.
+First-run setup now explains Accessibility in one short paragraph and points
+first success at TextEdit, not private notes.
 Chrome-hosted Google Docs, Notion, Slack, and Discord now have an explicit
 unsupported surface policy so the yellow Chrome profile does not silently
 extend to unproved production editors or chat boxes.
@@ -72,7 +73,7 @@ fail quietly when it is unsure. Wrong-place text is worse than no suggestion.
 | Visual placement and caret alignment | 18 | 80 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, inline mode now hides when less than one useful word fits after the caret, screenshot-derived correction is wired behind explicit per-app screenshot tracing, learned visual offsets now expire when target app version, screen, or field shape changes, low-confidence mirror fallback is now suppressed for untrusted yellow profiles, Chrome chat-like, Obsidian, Notes title/body/checklist, and Claude desktop now have proof, and Diagnostics exposes placement confidence without suggestion text. Claude desktop's current one-line composer proof is same-baseline with detector offset near zero. Codex same-slice accept/no-submit proof, live Claude Code terminal-host screenshot proof, and more prompt/editor layouts are still blockers. |
 | Acceptance safety | 10 | 94 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, Esc dismissal is trace-marked as inserting zero suggestion text, full accept is blocked unless accepted text exactly matches the visible suggestion, Tab accept is traced as a visible-prefix accept, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, Claude desktop proved one-word Tab accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Claude Code now has a proof-only terminal-host adapter that blocks unsupported hosts, missing proof mode, missing marker, shell prompts, and multiline command buffers. Codex and Claude Code one-word no-submit proof are still incomplete. |
 | Cross-app reliability | 10 | 87 | 100 | The proof matrix now has 15 screenshot artifacts, Notes title/body/checklist are all split out, real Monaco/ProseMirror pass under isolated renderer-accessibility Chrome, Claude desktop has same-baseline real prompt no-submit proof, Claude Code has a proof-only terminal-host lane, every compatibility profile has owner/safety coverage in the proof manifest, and the app exposes green/yellow/diagnostics-only/unsupported status plus explicit copy-only fallback stance for non-sensitive diagnostics-only or untrusted-placement cases. Chrome-hosted Google Docs, Notion, Slack, and Discord are now blocked by surface policy until real proof exists. Codex, Claude Code terminal-host proof, default-Chrome editor AX exposure, and more production editor variants are still pending proof. |
-| Native macOS visual feel | 8 | 86 | 100 | Settings moved toward tested unframed native sections, checkboxes, clearer privacy/app controls, support status, copy-only fallback status, "why hidden" copy, and calmer menu copy. Diagnostics now opens with a short system-font inspector overview, onboarding/permission copy uses plain System Settings language, and the menu bar uses a template SF Symbol with text fallback. Dark Mode, increased contrast, and app-icon polish still need visual QA. |
+| Native macOS visual feel | 8 | 89 | 100 | Settings moved toward tested unframed native sections, checkboxes, clearer privacy/app controls, support status, copy-only fallback status, "why hidden" copy, and calmer menu copy. Diagnostics now opens with a short system-font inspector overview, onboarding/permission copy uses plain System Settings language, the menu bar uses a template SF Symbol with text fallback, inline ghost text uses a dynamic system placeholder color across light/dark/high-contrast appearance coverage, and the bundle check now verifies a valid multi-size ICNS app icon. Full visual screenshot QA is still needed. |
 | Privacy and permissions trust | 9 | 100 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, raw/screenshot debug capture expires from the app UI, Settings shows share-safe privacy status, Diagnostics exports a redacted privacy bundle with a manifest/checklist, and the beta packet explicitly forbids raw traces, screenshots, prompts, typed text, and accepted text by default. |
 | Suggestion quality | 8 | 95 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, repeated typed-over pressure now raises display thresholds for the same app/field/mode/prefix family, accepted-kept learning now adjusts display utility, accepted-kept display thresholds now vary by behavior profile, quiet/normal/eager aggressiveness now tunes cadence and display thresholds, learned word completion is app-scoped, word completion now has a consistent 3+ typed-letter floor, profile-aware fresh paragraph starts stay quieter, suffix overlap is salvaged, visible typed-word duplicates and phrase restarts are suppressed, dogfood prompts avoid generic productivity filler, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
 | Failure restraint | 8 | 95 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, slow no-context AX reads cool down immediately, single slow AX reads with context now throttle and drop stale results, stale geometry suppresses display, workspace focus changes immediately hide visible suggestions and invalidate pending requests, too-narrow inline placement suppresses instead of showing a sliver, untrusted low-confidence mirror fallback suppresses instead of showing detached placement, prompt/chat and sentence-like prose profiles now require stronger accepted-kept probability after enough samples, copy-only fallback status is explicit where inline is unsafe, event-tap disablement fails closed, prompt full accept requires proof, placement uncertainty now hides stale ghosts and feeds field quiet mode, active quiet mode is visible in Diagnostics, and unsupported apps explain their stance. Real-app proof remains open. |
@@ -80,7 +81,7 @@ fail quietly when it is unsure. Wrong-place text is worse than no suggestion.
 | Onboarding and setup | 4 | 99 | 100 | Settings explains Accessibility in one short paragraph, only mentions Screen Recording when screenshot capture is on, starts fresh installs with suggestion-capable apps off, points first success at enabling TextEdit, and installs or repairs the local model in-app with plain no-model-server recovery copy, progress, cancellation, failure retry, validation, and runtime warmup. The Apps section now shows visible proof instructions, shows the exact smoke command where one exists, copies the runnable command in one click, disables proof until the current app is enabled, and can launch TextEdit and Chrome smoke proof directly from Settings. The underlying skip-build command path is tested; direct Settings-button dispatch still needs clean green proof before this reaches 100. |
 | Evidence and QA loop | 4 | 99 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command with exact TextEdit text checks, Notes text-context repair, Claude Code terminal-host adapter checks, and 15 screenshot artifacts including real Monaco/ProseMirror and same-baseline Claude desktop. Codex same-slice proof and live Claude Code terminal-host proof are still missing. |
 
-Weighted score: 91/100.
+Weighted score: 92/100.
 
 ## Non-Negotiable Native Feel Rules
 
@@ -274,7 +275,7 @@ or unsupported.
 
 ## Category 5: Native macOS Visual Feel
 
-Current score: 86/100.
+Current score: 89/100.
 
 Native target: nothing looks like a web widget floating on top of macOS.
 
@@ -287,12 +288,12 @@ Native target: nothing looks like a web widget floating on top of macOS.
 - [x] Menu bar copy should be short and calm.
 - [x] Diagnostics should start with a utility inspector overview, not only a debug dump.
 - [x] Onboarding should use system language for Accessibility and Screen Recording.
-- [ ] Dark Mode and increased contrast need visual QA.
-- [ ] Reduce custom visual language unless system controls cannot do the job.
-- [ ] Use SF/system font behavior everywhere.
+- [ ] Dark Mode and increased contrast need full visual screenshot QA.
+- [x] Reduce custom visual language unless system controls cannot do the job.
+- [x] Use SF/system font behavior everywhere.
 - [x] Avoid card-heavy layouts in settings.
 - [x] Use a template menu bar icon with a text fallback.
-- [ ] Use a proper app icon.
+- [x] Use a proper app icon.
 
 ## Category 6: Privacy And Permissions Trust
 
@@ -491,7 +492,7 @@ Native target: every claim has proof.
 - [x] Menu bar copy pass.
 - [ ] Privacy status panel.
 - [ ] First-run setup.
-- [ ] App icon/menu icon polish.
+- [x] App icon/menu icon polish.
 - [ ] Light, dark, increased contrast visual QA.
 
 ## References

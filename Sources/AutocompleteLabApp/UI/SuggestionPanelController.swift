@@ -6,6 +6,7 @@ final class SuggestionPanelController {
     private let panel: NSPanel
     private let backdropView: NSVisualEffectView
     private let ghostTextView: GhostTextView
+    private let visualStyle = SuggestionPanelVisualStyle.native
     private var lastText: String?
     private var lastFrame: CGRect?
     private var lastRenderMode: SuggestionRenderMode?
@@ -39,12 +40,12 @@ final class SuggestionPanelController {
         container.layer?.backgroundColor = NSColor.clear.cgColor
 
         backdropView.translatesAutoresizingMaskIntoConstraints = false
-        backdropView.material = .popover
+        backdropView.material = visualStyle.mirrorMaterial
         backdropView.blendingMode = .behindWindow
         backdropView.state = .active
         backdropView.isHidden = true
         backdropView.wantsLayer = true
-        backdropView.layer?.cornerRadius = 7
+        backdropView.layer?.cornerRadius = visualStyle.mirrorCornerRadius
         backdropView.layer?.masksToBounds = true
         ghostTextView.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(backdropView)
@@ -75,7 +76,7 @@ final class SuggestionPanelController {
     ) -> CGRect? {
         let fontSize = defaultFontSize(anchorRect: anchorRect, renderMode: renderMode)
         let font = style?.font ?? NSFont.systemFont(ofSize: fontSize, weight: .regular)
-        let color = textColor(matching: style?.foregroundColor, renderMode: renderMode)
+        let color = visualStyle.textColor(for: renderMode)
 
         let textInsets = Self.textInsets(for: renderMode)
         let textPadding = CGSize(
@@ -227,17 +228,6 @@ final class SuggestionPanelController {
             ?? NSScreen.screens.first?.frame.height
             ?? NSScreen.main?.frame.height
             ?? 0
-    }
-
-    private func textColor(matching _: NSColor?, renderMode: SuggestionRenderMode) -> NSColor {
-        switch renderMode {
-        case .floatingMirror:
-            return NSColor.labelColor
-        case .inlineAdjacent:
-            return NSColor(calibratedWhite: 0.58, alpha: 0.82)
-        case .disabled:
-            return NSColor.secondaryLabelColor
-        }
     }
 
     private func defaultFontSize(anchorRect: CGRect, renderMode: SuggestionRenderMode) -> CGFloat {

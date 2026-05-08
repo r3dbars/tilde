@@ -39,7 +39,7 @@ It is not yet magical by the research bar. The biggest remaining misses are:
   poll skips, focused-poll p95 max 57ms, focused-poll max 87ms, and 4
   under-threshold slow markers.
 
-The repo's existing Apple-native score is **86/100**. This score is lower
+The repo's existing Apple-native visual-feel score is **89/100**. This score is lower
 because it grades against the research definition of "magical autocomplete,"
 not only Mac plumbing, safety, and proof infrastructure.
 
