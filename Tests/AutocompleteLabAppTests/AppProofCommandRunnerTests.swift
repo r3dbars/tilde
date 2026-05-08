@@ -17,12 +17,35 @@ struct AppProofCommandRunnerTests {
         )
 
         #expect(plan.proofName == "TextEdit")
+        #expect(AppProofCommandPlan.supportsAutomaticPlan(for: "com.apple.TextEdit"))
         #expect(plan.executableURL.path == "/usr/bin/env")
         #expect(plan.arguments == ["bash", "script/real_app_smoke.sh", "textedit", "--skip-build"])
         #expect(plan.environmentOverrides["AUTOCOMPLETE_LAB_SCREENSHOT_TRACE"] == "1")
         #expect(plan.environmentOverrides["AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD"] == "1")
         #expect(plan.logURL.lastPathComponent == "app-proof-textedit.log")
         #expect(plan.commandText.contains("script/real_app_smoke.sh textedit --skip-build"))
+    }
+
+    @Test("Chrome proof plan runs every safe fixture without rebuilding")
+    func chromeProofPlanRunsEverySafeFixtureWithoutRebuilding() throws {
+        let sourceRootURL = URL(fileURLWithPath: "/tmp/autocomplete-lab", isDirectory: true)
+        let logDirectoryURL = URL(fileURLWithPath: "/tmp/autocomplete-lab-logs", isDirectory: true)
+        let plan = try #require(
+            AppProofCommandPlan.automaticPlan(
+                for: "com.google.Chrome",
+                sourceRootURL: sourceRootURL,
+                logDirectoryURL: logDirectoryURL
+            )
+        )
+
+        #expect(plan.proofName == "Chrome")
+        #expect(AppProofCommandPlan.supportsAutomaticPlan(for: "com.google.Chrome"))
+        #expect(plan.executableURL.path == "/usr/bin/env")
+        #expect(plan.arguments == ["bash", "script/real_app_smoke.sh", "chrome", "--fixture", "all", "--skip-build"])
+        #expect(plan.environmentOverrides["AUTOCOMPLETE_LAB_SCREENSHOT_TRACE"] == "1")
+        #expect(plan.environmentOverrides["AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD"] == "1")
+        #expect(plan.logURL.lastPathComponent == "app-proof-chrome.log")
+        #expect(plan.commandText.contains("script/real_app_smoke.sh chrome --fixture all --skip-build"))
     }
 
     @Test("Prompt apps do not get automatic proof commands")
@@ -37,6 +60,7 @@ struct AppProofCommandRunnerTests {
                 logDirectoryURL: logDirectoryURL
             ) == nil
         )
+        #expect(!AppProofCommandPlan.supportsAutomaticPlan(for: "com.openai.codex"))
     }
 
     @Test("Source root resolver finds the smoke script from an app bundle path")

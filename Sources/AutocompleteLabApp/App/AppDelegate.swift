@@ -5906,8 +5906,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
 
-        if app.bundleIdentifier == "com.apple.TextEdit" {
-            runAutomaticTextEditProof(app: app)
+        if AppProofCommandPlan.supportsAutomaticPlan(for: app.bundleIdentifier) {
+            runAutomaticAppProof(app: app)
             return
         }
 
@@ -5924,7 +5924,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .appendingPathComponent("AutocompleteLab", isDirectory: true)
     }
 
-    private func runAutomaticTextEditProof(app: RunningApplicationInfo) {
+    private func runAutomaticAppProof(app: RunningApplicationInfo) {
         guard let sourceRootURL = AppProofCommandPlan.sourceRootURL(),
               let plan = AppProofCommandPlan.automaticPlan(
                   for: app.bundleIdentifier,
@@ -5949,7 +5949,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
 
-                self.setSuggestionDecision(passed ? "Done: TextEdit proof passed" : "Needs attention: TextEdit proof failed")
+                self.setSuggestionDecision(
+                    passed
+                        ? "Done: \(plan.proofName) proof passed"
+                        : "Needs attention: \(plan.proofName) proof failed"
+                )
                 self.endAppProofMode(for: plan.bundleIdentifier, reason: passed ? "passed" : "failed")
                 DiagnosticsLog.shared.record(
                     "app-proof-command-finished",
@@ -5963,7 +5967,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.refreshRuntimeChrome()
             }
 
-            setSuggestionDecision("Running: TextEdit proof")
+            setSuggestionDecision("Running: \(plan.proofName) proof")
             DiagnosticsLog.shared.record(
                 "app-proof-command-started",
                 metadata: [

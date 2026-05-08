@@ -35,6 +35,19 @@ struct SettingsWindowControllerStateTests {
         #expect(allowed.blockedAppsText == "Blocked apps: none")
         #expect(allowed.canToggle)
 
+        let chrome = SettingsCurrentAppState(
+            displayName: "Chrome",
+            bundleIdentifier: "com.google.Chrome",
+            supportStatus: store.supportStatus(for: "com.google.Chrome"),
+            isEnabled: true,
+            disabledAppCount: 0
+        )
+
+        #expect(chrome.proofButtonTitle == "Run Chrome Proof")
+        #expect(chrome.proofCommandText == "Manual command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all")
+        #expect(chrome.proofCommandClipboardText == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all")
+        #expect(chrome.canStartProof)
+
         let blocked = SettingsCurrentAppState(
             displayName: "Notes",
             bundleIdentifier: "com.apple.Notes",

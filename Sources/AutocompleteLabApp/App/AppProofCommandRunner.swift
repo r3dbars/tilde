@@ -18,32 +18,63 @@ struct AppProofCommandPlan: Equatable {
         return envPrefix.isEmpty ? command : "\(envPrefix) \(command)"
     }
 
+    static func supportsAutomaticPlan(for bundleIdentifier: String) -> Bool {
+        switch bundleIdentifier {
+        case "com.apple.TextEdit", "com.google.Chrome":
+            return true
+        default:
+            return false
+        }
+    }
+
     static func automaticPlan(
         for bundleIdentifier: String,
         sourceRootURL: URL,
         logDirectoryURL: URL
     ) -> AppProofCommandPlan? {
-        guard bundleIdentifier == "com.apple.TextEdit" else {
+        switch bundleIdentifier {
+        case "com.apple.TextEdit":
+            return AppProofCommandPlan(
+                bundleIdentifier: bundleIdentifier,
+                proofName: "TextEdit",
+                sourceRootURL: sourceRootURL,
+                logURL: logDirectoryURL.appendingPathComponent("app-proof-textedit.log"),
+                executableURL: URL(fileURLWithPath: "/usr/bin/env"),
+                arguments: [
+                    "bash",
+                    "script/real_app_smoke.sh",
+                    "textedit",
+                    "--skip-build"
+                ],
+                environmentOverrides: proofEnvironment
+            )
+        case "com.google.Chrome":
+            return AppProofCommandPlan(
+                bundleIdentifier: bundleIdentifier,
+                proofName: "Chrome",
+                sourceRootURL: sourceRootURL,
+                logURL: logDirectoryURL.appendingPathComponent("app-proof-chrome.log"),
+                executableURL: URL(fileURLWithPath: "/usr/bin/env"),
+                arguments: [
+                    "bash",
+                    "script/real_app_smoke.sh",
+                    "chrome",
+                    "--fixture",
+                    "all",
+                    "--skip-build"
+                ],
+                environmentOverrides: proofEnvironment
+            )
+        default:
             return nil
         }
+    }
 
-        return AppProofCommandPlan(
-            bundleIdentifier: bundleIdentifier,
-            proofName: "TextEdit",
-            sourceRootURL: sourceRootURL,
-            logURL: logDirectoryURL.appendingPathComponent("app-proof-textedit.log"),
-            executableURL: URL(fileURLWithPath: "/usr/bin/env"),
-            arguments: [
-                "bash",
-                "script/real_app_smoke.sh",
-                "textedit",
-                "--skip-build"
-            ],
-            environmentOverrides: [
-                "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE": "1",
-                "AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD": "1"
-            ]
-        )
+    private static var proofEnvironment: [String: String] {
+        [
+            "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE": "1",
+            "AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD": "1"
+        ]
     }
 
     static func sourceRootURL(

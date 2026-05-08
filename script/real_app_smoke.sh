@@ -934,6 +934,93 @@ APPLESCRIPT
   wait_for_frontmost_app "TextEdit" 5
 }
 
+textedit_document_text() {
+  local window_title="$1"
+
+  osascript - "$window_title" 2>/dev/null <<'APPLESCRIPT' || true
+on run argv
+  set targetTitle to item 1 of argv
+  tell application "TextEdit"
+    repeat with candidateDocument in documents
+      if name of candidateDocument is targetTitle then
+        return text of candidateDocument
+      end if
+    end repeat
+  end tell
+  return ""
+end run
+APPLESCRIPT
+}
+
+textedit_document_contains_fragment() {
+  local window_title="$1"
+  local fragment="$2"
+
+  textedit_document_text "$window_title" | grep -F "$fragment" >/dev/null
+}
+
+wait_for_textedit_document_fragment() {
+  local window_title="$1"
+  local fragment="$2"
+  local label="$3"
+  local timeout_seconds="${4:-5}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    if textedit_document_contains_fragment "$window_title" "$fragment"; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for TextEdit document text for $label." >&2
+  echo "Window: $window_title" >&2
+  echo "Expected fragment: $fragment" >&2
+  return 1
+}
+
+type_textedit_smoke_fragment() {
+  local window_title="$1"
+  local fragment="$2"
+
+  focus_textedit_smoke_editor "$window_title"
+  click_textedit_smoke_editor "$window_title"
+  osascript - "$fragment" <<'APPLESCRIPT'
+on run argv
+  set smokeText to item 1 of argv
+  tell application "System Events"
+    keystroke smokeText
+    key code 53
+  end tell
+end run
+APPLESCRIPT
+}
+
+type_textedit_smoke_fragment_and_confirm() {
+  local window_title="$1"
+  local fragment="$2"
+  local label="$3"
+
+  type_textedit_smoke_fragment "$window_title" "$fragment"
+  if wait_for_textedit_document_fragment "$window_title" "$fragment" "$label" 5; then
+    return 0
+  fi
+
+  echo "TextEdit did not receive the $label fragment; refocusing and retrying once." >&2
+  focus_textedit_smoke_editor "$window_title"
+  click_textedit_smoke_editor "$window_title"
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  keystroke "a" using command down
+  key code 51
+  key code 53
+end tell
+delay 0.2
+APPLESCRIPT
+  type_textedit_smoke_fragment "$window_title" "$fragment"
+  wait_for_textedit_document_fragment "$window_title" "$fragment" "$label retry" 5
+}
+
 wait_for_textedit_smoke_editor() {
   local window_title="$1"
   local timeout_seconds="${2:-45}"
@@ -1486,12 +1573,7 @@ APPLESCRIPT
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  osascript <<'APPLESCRIPT'
-tell application "System Events"
-  keystroke "Smoke proof feels inst"
-  key code 53
-end tell
-APPLESCRIPT
+  type_textedit_smoke_fragment_and_confirm "$textedit_window_title" "Smoke proof feels inst" "first typed"
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
@@ -1524,12 +1606,7 @@ APPLESCRIPT
   full_accept_key="$(accept_all_shortcut)"
   second_start_line="$(line_count "$LOG_PATH")"
 
-  osascript <<'APPLESCRIPT'
-tell application "System Events"
-  keystroke " and stays inst"
-  key code 53
-end tell
-APPLESCRIPT
+  type_textedit_smoke_fragment_and_confirm "$textedit_window_title" " and stays inst" "second typed"
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.TextEdit" "TextEdit second"
