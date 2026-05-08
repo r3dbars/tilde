@@ -72,6 +72,31 @@ struct SuggestionTriggerPolicyTests {
         ) == .request(delayMilliseconds: 160))
     }
 
+    @Test("Profile punctuation waits at fragile boundaries")
+    func profilePunctuationWaitsAtFragileBoundaries() {
+        let policy = SuggestionTriggerPolicy(sentenceBoundaryDelayMilliseconds: 360)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "Hi Justin",
+            currentTextBeforeCursor: "Hi Justin,",
+            lineStartBehavior: .email,
+            behaviorProfileID: .email
+        ) == .request(delayMilliseconds: 360))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "- Follow up",
+            currentTextBeforeCursor: "- Follow up:",
+            lineStartBehavior: .listItem,
+            behaviorProfileID: .bullets
+        ) == .request(delayMilliseconds: 360))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "let value = makeCall(arg",
+            currentTextBeforeCursor: "let value = makeCall(arg)",
+            behaviorProfileID: .coding
+        ) == .skip)
+    }
+
     @Test("Within-word typing uses researched word delay")
     func withinWordTypingUsesResearchedWordDelay() {
         let policy = SuggestionTriggerPolicy(charactersBeforePauseRequest: 4)

@@ -65,12 +65,14 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
     public func shouldRequestSuggestion(
         previousTextBeforeCursor: String?,
         currentTextBeforeCursor: String,
-        lineStartBehavior: SuggestionLineStartBehavior = .plain
+        lineStartBehavior: SuggestionLineStartBehavior = .plain,
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil
     ) -> Bool {
         switch decision(
             previousTextBeforeCursor: previousTextBeforeCursor,
             currentTextBeforeCursor: currentTextBeforeCursor,
-            lineStartBehavior: lineStartBehavior
+            lineStartBehavior: lineStartBehavior,
+            behaviorProfileID: behaviorProfileID
         ) {
         case .request:
             return true
@@ -82,7 +84,8 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
     public func decision(
         previousTextBeforeCursor: String?,
         currentTextBeforeCursor: String,
-        lineStartBehavior: SuggestionLineStartBehavior = .plain
+        lineStartBehavior: SuggestionLineStartBehavior = .plain,
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil
     ) -> SuggestionTriggerDecision {
         if shouldSuppressAtLineStart(
             currentTextBeforeCursor,
@@ -112,8 +115,12 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
             return .request(delayMilliseconds: sentenceBoundaryDelayMilliseconds)
         }
 
-        if let punctuationDelay = punctuationBoundaryDelay(for: currentTextBeforeCursor.last) {
-            return .request(delayMilliseconds: punctuationDelay)
+        if let punctuationDecision = punctuationBoundaryDecision(
+            for: currentTextBeforeCursor,
+            lineStartBehavior: lineStartBehavior,
+            behaviorProfileID: behaviorProfileID
+        ) {
+            return punctuationDecision
         }
 
         if currentTextBeforeCursor.last?.isNaturalBoundary == true {
@@ -149,14 +156,38 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         return currentFragment != previousFragment
     }
 
-    private func punctuationBoundaryDelay(for character: Character?) -> Int? {
+    private func punctuationBoundaryDecision(
+        for text: String,
+        lineStartBehavior: SuggestionLineStartBehavior,
+        behaviorProfileID: AutocompleteBehaviorProfileID?
+    ) -> SuggestionTriggerDecision? {
+        guard let character = text.last else {
+            return nil
+        }
+
+        if behaviorProfileID == .coding, [")", "]", "}"].contains(character) {
+            return .skip
+        }
+
+        if lineStartBehavior == .email,
+           character == ",",
+           isLikelyEmailGreetingLine(text) {
+            return .request(delayMilliseconds: sentenceBoundaryDelayMilliseconds)
+        }
+
+        if lineStartBehavior == .listItem,
+           character == ":",
+           isLikelyShortListLabel(text) {
+            return .request(delayMilliseconds: sentenceBoundaryDelayMilliseconds)
+        }
+
         switch character {
         case ",", ";":
-            return softPunctuationDelayMilliseconds
+            return .request(delayMilliseconds: softPunctuationDelayMilliseconds)
         case ":":
-            return structuralPunctuationDelayMilliseconds
+            return .request(delayMilliseconds: structuralPunctuationDelayMilliseconds)
         case ")", "]", "}":
-            return closingPunctuationDelayMilliseconds
+            return .request(delayMilliseconds: closingPunctuationDelayMilliseconds)
         default:
             return nil
         }
@@ -215,6 +246,38 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
 
         return normalized.count >= 3
             && normalized.allSatisfy { $0.isLetter }
+    }
+
+    private func isLikelyEmailGreetingLine(_ text: String) -> Bool {
+        let currentLine = currentLine(in: text)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let words = contentWords(in: currentLine)
+        guard (1...3).contains(words.count),
+              let firstWord = words.first else {
+            return false
+        }
+
+        let greetingWords: Set<String> = ["dear", "hello", "hey", "hi", "thanks"]
+        return greetingWords.contains(firstWord)
+    }
+
+    private func isLikelyShortListLabel(_ text: String) -> Bool {
+        contentWords(in: currentLine(in: text)).count <= 4
+    }
+
+    private func currentLine(in text: String) -> String {
+        text.split(
+            omittingEmptySubsequences: false,
+            whereSeparator: \.isNewline
+        ).last.map(String.init) ?? ""
+    }
+
+    private func contentWords(in text: String) -> [String] {
+        text
+            .lowercased()
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+            .filter { !$0.isEmpty }
     }
 }
 
