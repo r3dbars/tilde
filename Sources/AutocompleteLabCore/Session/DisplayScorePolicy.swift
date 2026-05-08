@@ -13,6 +13,7 @@ public struct DisplayScore: Equatable, Sendable {
     public let instability: Double
     public let acceptedAndKeptProbability: Double?
     public let acceptedAndKeptSampleCount: Int
+    public let acceptedAndKeptUtilityAdjustment: Double
 
     public init(
         utility: Double,
@@ -23,7 +24,8 @@ public struct DisplayScore: Equatable, Sendable {
         repetition: Double,
         instability: Double,
         acceptedAndKeptProbability: Double? = nil,
-        acceptedAndKeptSampleCount: Int = 0
+        acceptedAndKeptSampleCount: Int = 0,
+        acceptedAndKeptUtilityAdjustment: Double = 0
     ) {
         self.utility = Self.component(utility)
         self.styleFit = Self.component(styleFit)
@@ -34,6 +36,10 @@ public struct DisplayScore: Equatable, Sendable {
         self.instability = Self.component(instability)
         self.acceptedAndKeptProbability = acceptedAndKeptProbability.map(Self.component)
         self.acceptedAndKeptSampleCount = max(0, acceptedAndKeptSampleCount)
+        self.acceptedAndKeptUtilityAdjustment = Self.bounded(
+            acceptedAndKeptUtilityAdjustment,
+            to: -1...1
+        )
     }
 
     public var rawScore: Double {
@@ -59,6 +65,8 @@ public struct DisplayScore: Equatable, Sendable {
         if let acceptedAndKeptProbability {
             metadata["displayScoreAcceptedAndKeptProbability"] = Self.format(acceptedAndKeptProbability)
             metadata["displayScoreAcceptedAndKeptSamples"] = String(acceptedAndKeptSampleCount)
+            metadata["displayScoreAcceptedAndKeptUtilityAdjustment"] =
+                Self.format(acceptedAndKeptUtilityAdjustment)
         }
         return metadata
     }

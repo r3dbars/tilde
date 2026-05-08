@@ -136,7 +136,8 @@ struct DisplayScorePolicyTests {
             repetition: 0.05,
             instability: 0.05,
             acceptedAndKeptProbability: 0.01,
-            acceptedAndKeptSampleCount: 3
+            acceptedAndKeptSampleCount: 3,
+            acceptedAndKeptUtilityAdjustment: -0.04
         )
         let scoreWithEnoughEvidence = DisplayScore(
             utility: 0.80,
@@ -147,7 +148,8 @@ struct DisplayScorePolicyTests {
             repetition: 0.05,
             instability: 0.05,
             acceptedAndKeptProbability: 0.01,
-            acceptedAndKeptSampleCount: 4
+            acceptedAndKeptSampleCount: 4,
+            acceptedAndKeptUtilityAdjustment: -0.04
         )
 
         let earlyDecision = policy.decision(
@@ -165,5 +167,6 @@ struct DisplayScorePolicyTests {
         #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptProbability"] == "0.01")
         #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptSamples"] == "4")
         #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.12")
+        #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptUtilityAdjustment"] == "-0.04")
     }
 }
