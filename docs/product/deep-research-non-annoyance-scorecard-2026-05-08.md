@@ -47,7 +47,7 @@ Starting score before this loop: 76/100.
 
 The app is beyond a raw prototype, but not yet a "forgettable" trusted autocomplete. It has good core safety machinery in `CompletionActivationPolicy`, `AXFieldClassifier`, `SensitiveTextFieldPolicy`, `SuggestionRequestGate`, `SuggestionAcceptanceGuard`, `SuggestionTypingProgressPolicy`, `AnnoyanceSuppressor`, `PrefixFamilyCooldownPolicy`, and `CompatibilityProfile`.
 
-The harsh read: proof is still uneven. `check_proof_manifest.sh` and `check_visual_placement_evidence.sh` fail because current docs/proof rows are stale or incomplete for several surfaces. Codex still lacks strict same-slice screenshot plus one-word accept plus no-submit proof. Claude Code remains pending. Claude desktop proof is stale. A full human no-annoyance soak with pause/resume baseline is not present.
+The harsh read: proof is still uneven. `check_proof_manifest.sh` and `check_visual_placement_evidence.sh` now pass in normal mode after linking current Obsidian and Notes screenshot evidence, but strict proof still fails. Codex still lacks strict same-slice screenshot plus one-word accept plus no-submit proof. Claude Code remains pending. Claude desktop proof is stale. A full human no-annoyance soak with pause/resume baseline is not present.
 
 This loop improves live non-annoyance behavior and proof:
 
@@ -56,18 +56,20 @@ This loop improves live non-annoyance behavior and proof:
 - `suggestionHidden` trace events now include `lifetimeMs` and `visibleLifetimeMs`.
 - `AutocompleteTraceAnalyzer` now exposes shown/min, explicit dismissals/shown, typed-over rate, stale/wrong-context rate, and visible lifetime p50/p95.
 - `check_trace_eval.sh` and its self-test now print and verify those research metrics.
+- Accepted insertion now opens a short native Cmd-Z passthrough window, so immediate undo is tracked and replayed to the host app instead of being marked unavailable.
+- Older proof docs now reference tracked Obsidian and Notes title/body/checklist screenshots, so normal proof checks reflect the current evidence.
 
 ## Score
 
-Overall score: 82/100.
+Overall score: 86/100.
 
 ## Score Breakdown
 
 ### Context correctness
 
 - Weight: 30
-- Current score: 25/30
-- Why this score: Strong suppression and accept-time guards exist, and app/global quiet modes are now checked before new requests. The score is capped by missing current prompt-app no-submit proof and stale proof docs.
+- Current score: 26/30
+- Why this score: Strong suppression and accept-time guards exist, app/global quiet modes are now checked before new requests, and current Obsidian/Notes proof rows are linked. The score is capped by missing current prompt-app no-submit proof and production-surface proof beyond fixtures.
 - Evidence found in repo: `Sources/AutocompleteLabCore/Session/CompletionActivationPolicy.swift`, `Sources/AutocompleteLabCore/Session/AXFieldClassifier.swift`, `Sources/AutocompleteLabCore/Session/SensitiveTextFieldPolicy.swift`, `Sources/AutocompleteLabCore/Session/SuggestionAcceptanceGuard.swift`, `Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift`, `Sources/AutocompleteLabApp/App/AppDelegate.swift`.
 - Missing evidence: Same-slice Codex/Claude prompt proof, production website proof beyond fixtures, proof manifest aligned to current scorecard.
 - What would make it 100/100: Zero secure/structured leaks, stale/wrong-context rate <= 0.5%, and current proof for every enabled app surface.
@@ -75,8 +77,8 @@ Overall score: 82/100.
 ### Disappearance discipline
 
 - Weight: 20
-- Current score: 17/20
-- Why this score: Focus change, stale keydown, typed-over progress, placement failure, and panel-frame failure all hide suggestions. This loop added visible lifetime metadata, but there is still no automated hide-latency p95 measurement from invalidation to disappearance.
+- Current score: 18/20
+- Why this score: Focus change, stale keydown, typed-over progress, placement failure, panel-frame failure, and cooldown/quiet mode all hide or suppress suggestions. This loop added visible lifetime metadata, but there is still no automated hide-latency p95 measurement from invalidation to disappearance.
 - Evidence found in repo: `Sources/AutocompleteLabApp/App/AppDelegate.swift`, `Sources/AutocompleteLabCore/Session/SuggestionTypingProgressPolicy.swift`, `Sources/AutocompleteLabCore/Session/SuggestionPresentationGate.swift`, `Tests/AutocompleteLabCoreTests/SuggestionTypingProgressPolicyTests.swift`, `Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift`.
 - Missing evidence: p95 hide latency < 50ms from live invalidation events, IME/dead-key proof, current 10-minute typing endurance with suggestion activity.
 - What would make it 100/100: Automated and manual proof that every invalidation path hides within budget and never leaves a stale ghost.
@@ -84,8 +86,8 @@ Overall score: 82/100.
 ### Interruption load
 
 - Weight: 20
-- Current score: 16/20
-- Why this score: Trigger delays, typing-burst suppression, repeated-miss suppression, prefix-family cooldown, field/app/global quiet mode, pause, app disable, and local log deletion are present. The score is capped by missing human pause/resume baseline and incomplete live shown/min evidence across app surfaces.
+- Current score: 17/20
+- Why this score: Trigger delays, typing-burst suppression, repeated-miss suppression, prefix-family cooldown, field/app/global quiet mode, pause, app disable, and local log deletion are present and traceable. The score is capped by missing human pause/resume baseline and incomplete live shown/min evidence across app surfaces.
 - Evidence found in repo: `Sources/AutocompleteLabCore/Session/SuggestionTriggerPolicy.swift`, `Sources/AutocompleteLabCore/Session/SuggestionRepetitionSuppressor.swift`, `Sources/AutocompleteLabCore/Session/PrefixFamilyCooldownPolicy.swift`, `Sources/AutocompleteLabCore/Session/AnnoyanceSuppressor.swift`, `Sources/AutocompleteLabApp/App/AppDelegate.swift`, `script/check_trace_eval.sh`.
 - Missing evidence: Real dogfood trace showing 0.5-2.0 shown/min, explicit dismissals/shown <= 0.25, typed-over <= 0.35, and no pause/resume uplift.
 - What would make it 100/100: A repeatable trace/proof loop that automatically backs off when annoyance rates cross red lines.
@@ -102,8 +104,8 @@ Overall score: 82/100.
 ### Trust and voice
 
 - Weight: 15
-- Current score: 13/15
-- Why this score: Local-first defaults, redacted traces, screenshot/raw text opt-ins, secure-field blocking, pause/disable/delete controls, and assistant-voice filters are strong. The main gaps are real undo/reversibility proof and current prompt-app proof.
+- Current score: 14/15
+- Why this score: Local-first defaults, redacted traces, screenshot/raw text opt-ins, secure-field blocking, pause/disable/delete controls, assistant-voice filters, and a native Cmd-Z passthrough window are strong. The main gaps are real-app undo proof and current prompt-app proof.
 - Evidence found in repo: `Sources/AutocompleteLabCore/Tracing/AutocompleteTraceEvent.swift`, `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift`, `Sources/AutocompleteLabCore/Session/AcceptedTextSafetyPolicy.swift`, `Sources/AutocompleteLabCore/Engine/CompletionOutputCleaner.swift`, `docs/product/privacy-and-controls.md`.
 - Missing evidence: Fresh accepted-text undo proof, human review for voice drift, and no-submit proof in prompt/chat apps.
 - What would make it 100/100: Every accept is safely reversible, no assistant voice appears in human review, and privacy behavior is obvious in UI and trace artifacts.
@@ -211,10 +213,10 @@ This goal is complete when:
 
 ## Remaining Gaps
 
-- `check_proof_manifest.sh` still fails because several screenshots/proof rows are not referenced consistently in older docs.
-- `check_visual_placement_evidence.sh` still fails on stale/pending proof rows.
+- `check_proof_manifest.sh` passes in normal mode; strict mode still cannot pass until partial/pending surfaces are complete.
+- `check_visual_placement_evidence.sh` passes in normal mode; strict mode still fails on Codex same-slice proof plus Claude Code/Claude desktop screenshot proof.
 - Codex, Claude Code, and Claude desktop need current same-slice prompt no-submit proof.
 - Hide latency is measured as visible lifetime, not true invalidation-to-disappear latency.
 - Prefix cooldown is now wired, but there is not yet a real-app trace run proving user-perceived annoyance improvement.
-- Accepted insertion undo/reversibility is not fully proved.
+- Accepted insertion undo now has a native passthrough path, but still needs real-app proof.
 - Human voice/style review and pause/resume baseline are still missing.
