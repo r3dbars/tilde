@@ -170,6 +170,17 @@ enum AppProofCommandStartOutcome: Equatable {
             return "Blocked: proof command failed to start"
         }
     }
+
+    var proofModeEndReasonAfterStartAttempt: String? {
+        switch self {
+        case .unavailable:
+            return "command-unavailable"
+        case .failedToStart:
+            return "command-failed"
+        case .unsupported, .started, .alreadyRunning:
+            return nil
+        }
+    }
 }
 
 @MainActor

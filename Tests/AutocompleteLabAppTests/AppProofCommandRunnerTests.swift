@@ -138,6 +138,41 @@ struct AppProofCommandRunnerTests {
         #expect(runner.startedPlans.isEmpty)
     }
 
+    @Test("Failed automatic proof starts request proof mode cleanup")
+    func failedAutomaticProofStartsRequestProofModeCleanup() {
+        let logURL = URL(fileURLWithPath: "/tmp/autocomplete-lab-logs/app-proof-textedit.log")
+
+        #expect(
+            AppProofCommandStartOutcome
+                .unavailable(bundleIdentifier: "com.apple.TextEdit")
+                .proofModeEndReasonAfterStartAttempt == "command-unavailable"
+        )
+        #expect(
+            AppProofCommandStartOutcome
+                .failedToStart(bundleIdentifier: "com.apple.TextEdit", logURL: logURL, reason: "boom")
+                .proofModeEndReasonAfterStartAttempt == "command-failed"
+        )
+        #expect(AppProofCommandStartOutcome.unsupported.proofModeEndReasonAfterStartAttempt == nil)
+
+        let sourceRootURL = URL(fileURLWithPath: "/tmp/autocomplete-lab", isDirectory: true)
+        let logDirectoryURL = URL(fileURLWithPath: "/tmp/autocomplete-lab-logs", isDirectory: true)
+        let plan = AppProofCommandPlan(
+            bundleIdentifier: "com.apple.TextEdit",
+            proofName: "TextEdit",
+            sourceRootURL: sourceRootURL,
+            logURL: logDirectoryURL.appendingPathComponent("app-proof-textedit.log"),
+            executableURL: URL(fileURLWithPath: "/usr/bin/env"),
+            arguments: ["true"],
+            environmentOverrides: [:]
+        )
+        #expect(AppProofCommandStartOutcome.started(plan).proofModeEndReasonAfterStartAttempt == nil)
+        #expect(
+            AppProofCommandStartOutcome
+                .alreadyRunning(bundleIdentifier: "com.apple.TextEdit")
+                .proofModeEndReasonAfterStartAttempt == nil
+        )
+    }
+
     @Test("Source root resolver finds the smoke script from an app bundle path")
     func sourceRootResolverFindsTheSmokeScriptFromAnAppBundlePath() throws {
         let tempRootURL = FileManager.default.temporaryDirectory

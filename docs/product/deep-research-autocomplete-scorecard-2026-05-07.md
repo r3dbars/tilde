@@ -709,6 +709,9 @@ these are true.
 59. Done: extend the Settings Chrome proof command to run the forced
    all-fixtures lane plus default-AX real Monaco and real ProseMirror add-on
    lanes, so one-click Chrome proof now exercises the Chrome editor proof rows.
+60. Done: make automatic proof command start failures end temporary proof mode
+   immediately, so unavailable or failed proof commands cannot leave a proof
+   window open until expiry.
 
 ## Goal Status
 
