@@ -59,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var activeAppProofBundleIdentifiers: Set<String> = []
     private var appProofExpirationTasks: [String: Task<Void, Never>] = [:]
     private let annoyanceSuppressor = AnnoyanceSuppressorActor()
-    private let screenshotTraceCapturePolicy = ScreenshotTraceCapturePolicy()
+    private let traceScreenshotCaptureCoordinator = TraceScreenshotCaptureCoordinator()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
     private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
     private let focusedTextPollDiagnosticsPolicy = FocusedTextPollDiagnosticsPolicy.typingDiagnostics
@@ -174,8 +174,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionPresentedAt: Date?
     private var currentSuggestionDisplayScoreFinal: Double?
     private var currentSuggestionInvalidatedByUserKeyDown = false
-    private var scheduledScreenshotSuggestionIDs: Set<String> = []
-    private let maxScheduledScreenshotSuggestionIDs = 256
     private var recentWordMemory = ScopedRecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var pendingAcceptedInsertionUndo: AcceptedInsertionUndo?
@@ -3879,19 +3877,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         keyboardEventTap?.suppressPassthroughObservation(for: 0.35)
 
-        let screenshotCapture = captureTraceScreenshot(
-            around: [
-                placement.anchorRect,
-                placement.textLineRect,
-                panelRect,
-                placement.clippingRect
-            ].compactMap { $0 },
-            expectedSignalRect: screenshotExpectedSignalRect(panelRect: panelRect),
-            suggestionID: suggestionID,
-            bundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-            triggerReason: triggerReason,
-            appScreenshotTracingEnabled: learningAdjustment.shouldCaptureScreenshot,
-            visualTrustContext: visualTrustContext
+        let screenshotCapture = traceScreenshotCaptureCoordinator.capture(
+            TraceScreenshotCaptureRequest(
+                rects: [
+                    placement.anchorRect,
+                    placement.textLineRect,
+                    panelRect,
+                    placement.clippingRect
+                ].compactMap { $0 },
+                expectedSignalRect: traceScreenshotCaptureCoordinator.expectedSignalRect(
+                    panelRect: panelRect
+                ),
+                suggestionID: suggestionID,
+                bundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+                triggerReason: triggerReason,
+                appScreenshotTracingEnabled: learningAdjustment.shouldCaptureScreenshot,
+                visualTrustContext: visualTrustContext
+            )
         )
         compatibilityLearningStore.recordObservation(
             for: profile.bundleIdentifier,
@@ -4029,61 +4031,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 profile: profile,
                 hostBundleIdentifier: frontmostApp.bundleIdentifier
             )
-    }
-
-    private func captureTraceScreenshot(
-        around rects: [CGRect],
-        expectedSignalRect: CGRect?,
-        suggestionID: String,
-        bundleIdentifier: String,
-        triggerReason: String,
-        appScreenshotTracingEnabled: Bool,
-        visualTrustContext: CompatibilityLearningVisualTrustContext?
-    ) -> TraceScreenshotCapture {
-        guard let captureRect = ScreenshotCaptureRegion.enclosing(rects) else {
-            return .none
-        }
-
-        if scheduledScreenshotSuggestionIDs.count >= maxScheduledScreenshotSuggestionIDs {
-            scheduledScreenshotSuggestionIDs.removeAll(keepingCapacity: true)
-        }
-
-        let globalScreenshotTracingEnabled = RawAutocompleteTraceLog.shared.screenshotTracingEnabled
-        guard screenshotTraceCapturePolicy.shouldCapture(
-            triggerReason: triggerReason,
-            globalScreenshotTracingEnabled: globalScreenshotTracingEnabled,
-            appScreenshotTracingEnabled: appScreenshotTracingEnabled,
-            hasCaptureRegion: true,
-            hasAlreadyCapturedSuggestionID: scheduledScreenshotSuggestionIDs.contains(suggestionID)
-        ) else {
-            return .none
-        }
-        scheduledScreenshotSuggestionIDs.insert(suggestionID)
-
-        let folderURL = RawAutocompleteTraceLog.shared.screenshotFolderURL
-        let screenshotURL = folderURL.appendingPathComponent("\(suggestionID).png")
-
-        ScreenshotTraceCapture.shared.capture(
-            rect: captureRect,
-            to: screenshotURL,
-            bundleIdentifier: bundleIdentifier,
-            expectedSignalRect: expectedSignalRect,
-            visualTrustContext: visualTrustContext,
-            allowsLearningCorrection: appScreenshotTracingEnabled
-        )
-        return TraceScreenshotCapture(
-            path: screenshotURL.path,
-            rectDescription: compactRectDescription(captureRect)
-        )
-    }
-
-    private func screenshotExpectedSignalRect(panelRect: CGRect) -> CGRect {
-        CGRect(
-            x: panelRect.minX,
-            y: panelRect.minY,
-            width: min(max(panelRect.width, 1), max(12, panelRect.height * 2)),
-            height: max(panelRect.height, 1)
-        )
     }
 
     private func compatibilityLearningVisualTrustContext(
@@ -6180,13 +6127,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func quit() {
         NSApp.terminate(nil)
     }
-}
-
-private struct TraceScreenshotCapture {
-    let path: String
-    let rectDescription: String
-
-    static let none = TraceScreenshotCapture(path: "", rectDescription: "none")
 }
 
 private extension AppDelegate {
