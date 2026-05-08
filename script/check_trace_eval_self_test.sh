@@ -133,11 +133,11 @@ fi
 
 cat >"$RATE_FILE" <<'JSONL'
 {"timestamp":"2026-05-08T10:00:00Z","type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":40,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
-{"timestamp":"2026-05-08T10:00:01Z","type":"suggestionHidden","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","outcome":"ignored","reason":"escape","metadata":{"lifetimeMs":"900"}}
+{"timestamp":"2026-05-08T10:00:01Z","type":"suggestionHidden","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","outcome":"ignored","reason":"escape","metadata":{"lifetimeMs":"900","hideLatencyMs":"12"}}
 {"timestamp":"2026-05-08T10:01:00Z","type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":45,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
 {"timestamp":"2026-05-08T10:01:02Z","type":"suggestionTypedOver","suggestionID":"two","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","metadata":{"typedSuffix":"x"}}
 {"timestamp":"2026-05-08T10:02:00Z","type":"suggestionPresented","suggestionID":"three","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":50,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
-{"timestamp":"2026-05-08T10:02:01Z","type":"suggestionHidden","suggestionID":"three","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","reason":"stale-after-keydown","metadata":{"lifetimeMs":"1200"}}
+{"timestamp":"2026-05-08T10:02:01Z","type":"suggestionHidden","suggestionID":"three","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","reason":"stale-after-keydown","metadata":{"lifetimeMs":"1200","hideLatencyMs":"31"}}
 JSONL
 
 AUTOCOMPLETE_LAB_TRACE_PATH="$RATE_FILE" \
@@ -176,6 +176,13 @@ fi
 if ! grep -F "Visible lifetime p50: 900ms" /tmp/autocomplete-trace-eval-self-test-rates.txt >/dev/null ||
    ! grep -F "Visible lifetime p95: 1200ms" /tmp/autocomplete-trace-eval-self-test-rates.txt >/dev/null; then
   echo "trace eval self-test did not report visible lifetimes" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-rates.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Hide latency p50: 12ms" /tmp/autocomplete-trace-eval-self-test-rates.txt >/dev/null ||
+   ! grep -F "Hide latency p95: 31ms" /tmp/autocomplete-trace-eval-self-test-rates.txt >/dev/null; then
+  echo "trace eval self-test did not report hide latencies" >&2
   cat /tmp/autocomplete-trace-eval-self-test-rates.txt >&2
   exit 1
 fi

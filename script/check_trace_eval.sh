@@ -1054,6 +1054,12 @@ visible_lifetimes = sorted(
     ]
     if value is not None
 )
+hide_latencies = sorted(
+    value
+    for event in hidden_events
+    for value in [metadata_int(event, "hideLatencyMs")]
+    if value is not None
+)
 active_dates = sorted(
     parsed
     for event in events
@@ -1181,6 +1187,8 @@ print(
 )
 print(f"Visible lifetime p50: {percentile(visible_lifetimes, 0.50)}")
 print(f"Visible lifetime p95: {percentile(visible_lifetimes, 0.95)}")
+print(f"Hide latency p50: {percentile(hide_latencies, 0.50)}")
+print(f"Hide latency p95: {percentile(hide_latencies, 0.95)}")
 accept_rate = 0 if not presented_ids else round((len(accepted_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
 useful_rate = 0 if not presented_ids else round((len(useful_suggestion_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
 accepted_and_kept_rate_shown = 0 if not presented_ids else round((len(accepted_and_kept_suggestion_ids.intersection(presented_ids)) / len(presented_ids)) * 100)

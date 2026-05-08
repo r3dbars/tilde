@@ -3456,6 +3456,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func hideSuggestion(reason: String = "hidden") {
+        var shouldRecordHiddenSuggestion = false
+        var hiddenSuggestionID = ""
+        var hiddenAppBundleIdentifier = ""
+        var hiddenFieldIdentity = ""
+        var hiddenRequestMode = ""
+        var hiddenDisplayedText = ""
+        var hiddenOutcome = ""
+        var hiddenMetadata: [String: String] = [:]
+
         if suggestionSession.hasVisibleSuggestion,
            let suggestionID = currentSuggestionID {
             let appBundleIdentifier = currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
@@ -3491,20 +3500,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
 
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionHidden,
-                suggestionID: suggestionID,
-                appBundleIdentifier: appBundleIdentifier,
-                fieldIdentity: fieldIdentityDescription,
-                requestMode: currentSuggestionRequestMode?.rawValue ?? "",
-                displayedText: displayedText,
-                outcome: outcome,
-                reason: reason,
-                metadata: metadata
-            )
-            setSuggestionDecision("Hidden: \(reason)")
+            shouldRecordHiddenSuggestion = true
+            hiddenSuggestionID = suggestionID
+            hiddenAppBundleIdentifier = appBundleIdentifier
+            hiddenFieldIdentity = fieldIdentityDescription
+            hiddenRequestMode = currentSuggestionRequestMode?.rawValue ?? ""
+            hiddenDisplayedText = displayedText
+            hiddenOutcome = outcome
+            hiddenMetadata = metadata
         }
 
+        let hideStartedAt = Date()
         suggestionSession.dismiss()
         currentSuggestionID = nil
         currentSuggestionAppBundleIdentifier = nil
@@ -3523,6 +3529,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextStyle = nil
         lastRenderMode = nil
         suggestionPanel.hide()
+        let hideLatencyMilliseconds = max(0, Int(Date().timeIntervalSince(hideStartedAt) * 1_000))
+
+        if shouldRecordHiddenSuggestion {
+            hiddenMetadata["hideLatencyMs"] = String(hideLatencyMilliseconds)
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionHidden,
+                suggestionID: hiddenSuggestionID,
+                appBundleIdentifier: hiddenAppBundleIdentifier,
+                fieldIdentity: hiddenFieldIdentity,
+                requestMode: hiddenRequestMode,
+                displayedText: hiddenDisplayedText,
+                outcome: hiddenOutcome,
+                reason: reason,
+                metadata: hiddenMetadata
+            )
+            setSuggestionDecision("Hidden: \(reason)")
+        }
+
         updateKeyboardEventTapSnapshot()
         scheduleKeyboardEventTapStopIfIdle()
     }

@@ -212,6 +212,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let p95LatencyMilliseconds: Int?
     public let p50VisibleLifetimeMilliseconds: Int?
     public let p95VisibleLifetimeMilliseconds: Int?
+    public let p50HideLatencyMilliseconds: Int?
+    public let p95HideLatencyMilliseconds: Int?
     public let modelResultP50LatencyMilliseconds: Int?
     public let modelResultP90LatencyMilliseconds: Int?
     public let modelResultP95LatencyMilliseconds: Int?
@@ -305,6 +307,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         p95LatencyMilliseconds: Int?,
         p50VisibleLifetimeMilliseconds: Int? = nil,
         p95VisibleLifetimeMilliseconds: Int? = nil,
+        p50HideLatencyMilliseconds: Int? = nil,
+        p95HideLatencyMilliseconds: Int? = nil,
         modelResultP50LatencyMilliseconds: Int? = nil,
         modelResultP90LatencyMilliseconds: Int? = nil,
         modelResultP95LatencyMilliseconds: Int? = nil,
@@ -397,6 +401,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.p95LatencyMilliseconds = p95LatencyMilliseconds
         self.p50VisibleLifetimeMilliseconds = p50VisibleLifetimeMilliseconds
         self.p95VisibleLifetimeMilliseconds = p95VisibleLifetimeMilliseconds
+        self.p50HideLatencyMilliseconds = p50HideLatencyMilliseconds
+        self.p95HideLatencyMilliseconds = p95HideLatencyMilliseconds
         self.modelResultP50LatencyMilliseconds = modelResultP50LatencyMilliseconds
         self.modelResultP90LatencyMilliseconds = modelResultP90LatencyMilliseconds
         self.modelResultP95LatencyMilliseconds = modelResultP95LatencyMilliseconds
@@ -482,6 +488,9 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let activeMinutes = activeWritingMinutes(in: events)
         let visibleLifetimes = hidden
             .compactMap { intMetadata($0, key: "lifetimeMs") ?? intMetadata($0, key: "visibleLifetimeMs") }
+            .sorted()
+        let hideLatencies = hidden
+            .compactMap { intMetadata($0, key: "hideLatencyMs") }
             .sorted()
         let staleOrWrongContextEvents = events.filter(isStaleOrWrongContextEvent)
         let firstShownLatencies = firstPresentedByID.values.compactMap(\.latencyMilliseconds).sorted()
@@ -584,6 +593,8 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             p95LatencyMilliseconds: percentile(0.95, in: firstShownLatencies),
             p50VisibleLifetimeMilliseconds: percentile(0.50, in: visibleLifetimes),
             p95VisibleLifetimeMilliseconds: percentile(0.95, in: visibleLifetimes),
+            p50HideLatencyMilliseconds: percentile(0.50, in: hideLatencies),
+            p95HideLatencyMilliseconds: percentile(0.95, in: hideLatencies),
             modelResultP50LatencyMilliseconds: percentile(0.50, in: modelResultLatencies),
             modelResultP90LatencyMilliseconds: percentile(0.90, in: modelResultLatencies),
             modelResultP95LatencyMilliseconds: percentile(0.95, in: modelResultLatencies),
