@@ -132,4 +132,17 @@ for expected in \
   fi
 done
 
+for expected in \
+  "Blocking themes" \
+  "Live prompt proof: 1 issue(s)" \
+  "Real-app variant proof: 2 issue(s)" \
+  "Typing restraint and noise: 2 issue(s)" \
+  "Release and architecture polish: 5 issue(s)"; do
+  if ! grep -F -- "$expected" "$TMP_DIR/failing.txt" >/dev/null; then
+    echo "score target self-test missing expected blocker summary: $expected" >&2
+    cat "$TMP_DIR/failing.txt" >&2
+    exit 1
+  fi
+done
+
 echo "Score target self-test passed."

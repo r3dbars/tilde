@@ -10,6 +10,54 @@ APPLE_NATIVE_PATH="${AUTOCOMPLETE_LAB_APPLE_NATIVE_CHECKLIST:-docs/product/apple
 APP_PROOF_PATH="${AUTOCOMPLETE_LAB_APP_PROOF_MATRIX:-docs/product/app-proof-matrix.md}"
 
 ISSUES=0
+LIVE_PROMPT_PROOF_ISSUES=0
+DEFAULT_CHROME_EDITOR_ISSUES=0
+VARIANT_PROOF_ISSUES=0
+TYPING_RESTRAINT_ISSUES=0
+RELEASE_ARCHITECTURE_ISSUES=0
+
+record_blocker_theme() {
+  local file="$1"
+  local label="$2"
+  local target="$3"
+
+  case "$label" in
+    *Codex*|*"Claude Code"*|*"AI chat profile"*|*"Proof status"*)
+      LIVE_PROMPT_PROOF_ISSUES=$((LIVE_PROMPT_PROOF_ISSUES + 1))
+      return
+      ;;
+    *"Chrome Monaco"*|*"Chrome ProseMirror"*|*"Browser editor"*|*"editor-like"*|*"real Monaco"*|*"real ProseMirror"*)
+      DEFAULT_CHROME_EDITOR_ISSUES=$((DEFAULT_CHROME_EDITOR_ISSUES + 1))
+      return
+      ;;
+    *"Normal typing"*|*"Typing must feel untouched"*|*"Non-annoyance"*|*"Failure restraint"*|*"Failure Restraint"*)
+      TYPING_RESTRAINT_ISSUES=$((TYPING_RESTRAINT_ISSUES + 1))
+      return
+      ;;
+    *TextEdit*|*Notes*|*Obsidian*|*Chrome*|*"Claude desktop"*|*"Browser editor"*)
+      VARIANT_PROOF_ISSUES=$((VARIANT_PROOF_ISSUES + 1))
+      return
+      ;;
+    *"Overall"*|*"Current implementation score"*|*"Weighted score"*|*"Release readiness"*|*"Architecture"*|*"Evidence and QA loop"*|*"Evidence And QA Loop"*)
+      RELEASE_ARCHITECTURE_ISSUES=$((RELEASE_ARCHITECTURE_ISSUES + 1))
+      return
+      ;;
+  esac
+
+  if [[ "$target" == "A" ]]; then
+    VARIANT_PROOF_ISSUES=$((VARIANT_PROOF_ISSUES + 1))
+    return
+  fi
+
+  case "$file" in
+    *app-proof-matrix.md|*apple-native-experience-checklist.md|*deep-dive-scorecard-2026-05-06.md)
+      VARIANT_PROOF_ISSUES=$((VARIANT_PROOF_ISSUES + 1))
+      ;;
+    *)
+      RELEASE_ARCHITECTURE_ISSUES=$((RELEASE_ARCHITECTURE_ISSUES + 1))
+      ;;
+  esac
+}
 
 require_file() {
   local path="$1"
@@ -26,7 +74,28 @@ record_issue() {
   local target="$4"
 
   printf -- "- %s: %s is %s; target is %s\n" "$file" "$label" "$actual" "$target"
+  record_blocker_theme "$file" "$label" "$target"
   ISSUES=$((ISSUES + 1))
+}
+
+print_blocker_summary() {
+  echo
+  echo "Blocking themes"
+  if ((LIVE_PROMPT_PROOF_ISSUES > 0)); then
+    echo "- Live prompt proof: $LIVE_PROMPT_PROOF_ISSUES issue(s). Finish Codex same-slice no-submit proof and Claude Code terminal-host proof."
+  fi
+  if ((DEFAULT_CHROME_EDITOR_ISSUES > 0)); then
+    echo "- Default Chrome editor AX: $DEFAULT_CHROME_EDITOR_ISSUES issue(s). Prove real Monaco/ProseMirror in normal Chrome, not just isolated forced-renderer mode."
+  fi
+  if ((VARIANT_PROOF_ISSUES > 0)); then
+    echo "- Real-app variant proof: $VARIANT_PROOF_ISSUES issue(s). Add missing Notes, Obsidian, Chrome, Claude desktop, and prompt layout variants."
+  fi
+  if ((TYPING_RESTRAINT_ISSUES > 0)); then
+    echo "- Typing restraint and noise: $TYPING_RESTRAINT_ISSUES issue(s). Keep normal typing untouched and separate key-path failures from AX warning noise."
+  fi
+  if ((RELEASE_ARCHITECTURE_ISSUES > 0)); then
+    echo "- Release and architecture polish: $RELEASE_ARCHITECTURE_ISSUES issue(s). Keep aggregate scores below target until proof gates and shared orchestration gaps close."
+  fi
 }
 
 check_deep_dive() {
@@ -143,6 +212,7 @@ check_apple_native "$APPLE_NATIVE_PATH"
 check_app_proof "$APP_PROOF_PATH"
 
 if ((ISSUES > 0)); then
+  print_blocker_summary
   echo
   echo "Score target check failed with $ISSUES issue(s)."
   exit 1
