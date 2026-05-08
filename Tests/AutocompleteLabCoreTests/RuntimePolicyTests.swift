@@ -123,7 +123,7 @@ struct RuntimePolicyTests {
             )
         )
 
-        #expect(missing.actionTitle == "Open Model Folder")
+        #expect(missing.actionTitle == "Install / Repair Model")
         #expect(missing.isActionEnabled)
         #expect(missing.message.contains("Model missing"))
         #expect(warming.actionTitle == "Warming...")

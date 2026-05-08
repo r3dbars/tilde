@@ -381,17 +381,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
 
     func recentEvents(limit: Int) -> [AutocompleteTraceEvent] {
         queue.sync { [logURL, decoder] in
-            guard limit > 0,
-                  let contents = try? String(contentsOf: logURL, encoding: .utf8) else {
-                return []
-            }
-
-            return contents
-                .split(separator: "\n", omittingEmptySubsequences: true)
-                .suffix(limit)
-                .compactMap { line in
-                    try? decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
-                }
+            Self.events(from: logURL, limit: limit, decoder: decoder)
         }
     }
 
@@ -401,20 +391,16 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
 
     func exportHTMLReport(limit: Int = 2_000) -> URL? {
         queue.sync { [folderURL, decoder] in
-            let logURL = folderURL.appendingPathComponent("traces.jsonl")
-            guard let contents = try? String(contentsOf: logURL, encoding: .utf8) else {
+            let events = Self.events(
+                from: folderURL.appendingPathComponent("traces.jsonl"),
+                limit: limit,
+                decoder: decoder
+            )
+            guard !events.isEmpty else {
                 return nil
             }
 
-            let events = contents
-                .split(separator: "\n", omittingEmptySubsequences: true)
-                .suffix(limit)
-                .compactMap { line in
-                    try? decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
-                }
-
-            let summary = AutocompleteTraceAnalyzer().summary(for: events)
-            let html = Self.htmlReport(summary: summary, events: events)
+            let html = AutocompleteTraceReportGenerator().htmlReport(for: events)
             let reportURL = folderURL.appendingPathComponent("trace-report.html")
 
             do {
@@ -425,6 +411,45 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
                 return nil
             }
         }
+    }
+
+    func exportRedactedSurvivalReport(limit: Int = 2_000) -> URL? {
+        queue.sync { [folderURL, decoder, encoder] in
+            let events = Self.events(
+                from: folderURL.appendingPathComponent("traces.jsonl"),
+                limit: limit,
+                decoder: decoder
+            )
+            let reportURL = folderURL.appendingPathComponent("survival-report.json")
+
+            do {
+                try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+                let data = try AutocompleteTraceReportGenerator()
+                    .redactedSurvivalJSONData(for: events, encoder: encoder)
+                try data.write(to: reportURL, options: .atomic)
+                return reportURL
+            } catch {
+                return nil
+            }
+        }
+    }
+
+    private static func events(
+        from logURL: URL,
+        limit: Int,
+        decoder: JSONDecoder
+    ) -> [AutocompleteTraceEvent] {
+        guard limit > 0,
+              let contents = try? String(contentsOf: logURL, encoding: .utf8) else {
+            return []
+        }
+
+        return contents
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .suffix(limit)
+            .compactMap { line in
+                try? decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
+            }
     }
 
     private static func htmlReport(

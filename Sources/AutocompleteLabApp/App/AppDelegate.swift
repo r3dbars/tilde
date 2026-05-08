@@ -44,6 +44,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openAccessibilitySettings: { [weak self] in
             self?.openAccessibilitySettings()
         },
+        openScreenRecordingSettings: { [weak self] in
+            self?.openScreenRecordingSettings()
+        },
         toggleSuggestionsPaused: { [weak self] in
             self?.togglePauseSuggestions()
         },
@@ -2940,6 +2943,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
+    private func openScreenRecordingSettings() {
+        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+        if let url, NSWorkspace.shared.open(url) {
+            DiagnosticsLog.shared.record("open-screen-recording-settings")
+        } else {
+            DiagnosticsLog.shared.record("open-screen-recording-settings-failed")
+        }
+    }
+
+    @objc
     private func showSettings() {
         settingsWindow.show(
             isTrusted: accessibilityClient.isTrusted,
@@ -3234,7 +3247,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func exportTraceReport() {
-        guard let reportURL = RawAutocompleteTraceLog.shared.exportHTMLReport() else {
+        guard let reportURL = RawAutocompleteTraceLog.shared.exportHTMLReport(),
+              let survivalReportURL = RawAutocompleteTraceLog.shared.exportRedactedSurvivalReport() else {
             DiagnosticsLog.shared.record("trace-report-export-failed")
             showDiagnostics()
             return
@@ -3243,7 +3257,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(reportURL)
         DiagnosticsLog.shared.record(
             "trace-report-exported",
-            metadata: ["path": reportURL.path]
+            metadata: [
+                "path": reportURL.path,
+                "survivalReportPath": survivalReportURL.path
+            ]
         )
         showDiagnostics()
     }

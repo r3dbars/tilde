@@ -4,11 +4,13 @@ Use this before inviting private beta testers.
 
 ## Build Gate
 
+- [ ] `./script/beta_readiness.sh --check-only` reports only expected external
+  blockers before the full gate.
 - [ ] `./script/beta_readiness.sh` passes.
 - [ ] `dist/AutocompleteLab.zip` exists.
 - [ ] `dist/private-beta/checksums.txt` matches the archive.
 - [ ] The app is signed and the package check passes.
-- [ ] Notarization status is known before sending the build.
+- [x] Notarization status is known before sending the build.
 
 ## Runtime Gate
 
@@ -36,7 +38,8 @@ Use this before inviting private beta testers.
 - [ ] The tester knows how to pause tracing.
 - [ ] The tester knows how to disable the current app.
 - [ ] The tester knows how to delete traces.
-- [ ] A redacted report export works.
+- [x] A redacted report export works through
+  `./script/check_redacted_report_export.sh`.
 
 ## Trust Gate
 
@@ -50,3 +53,23 @@ Use this before inviting private beta testers.
 - [ ] Focus steal is zero.
 
 Invite testers only when every applicable box is checked.
+
+## Current Blockers - 2026-05-07
+
+- Manual proof is still pending for Notes title, Notes body, Notes checklist,
+  Codex one-word no-submit, Claude Code one-word no-submit, and Claude desktop
+  one-word no-submit. Run `script/manual_proof_queue.sh --print` for the
+  exact user-gated proof sequence.
+- Screenshot-backed proof is still pending for Obsidian, Notes title, Notes
+  body, Notes checklist, Claude Code, and Claude desktop.
+- Codex has a screenshot, but still needs one strict same-slice proof that shows
+  screenshot, one-word Tab accept, verified insertion, and no prompt submit.
+- `dist/AutocompleteLab.zip` and `dist/private-beta/checksums.txt` have been
+  created and verified locally, but `dist/` is ignored; recreate them if app
+  code changes after the remaining proof blockers close.
+- Current local `dist/AutocompleteLab.zip` was submitted with
+  `NOTARYTOOL_PROFILE=Transcripted`, accepted by Apple, stapled, validated, and
+  Gatekeeper-accepted on 2026-05-07. Submission:
+  `9b9c09f5-585b-4007-b8e1-55a9ac0f6ae2`.
+- All-history trace eval is diagnostic only; beta proof must use fresh marked
+  slices from disposable text.

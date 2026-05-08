@@ -7,6 +7,12 @@ cd "$ROOT_DIR"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+script/real_app_smoke.sh textedit --help >"$TMP_DIR/help.txt"
+if ! grep -F "requires that process" "$TMP_DIR/help.txt" >/dev/null; then
+  echo "real app smoke help must explain --skip-build checkout verification" >&2
+  exit 1
+fi
+
 script/real_app_smoke.sh textedit --dry-run >"$TMP_DIR/textedit.txt"
 if ! grep -F "Real app smoke: textedit" "$TMP_DIR/textedit.txt" >/dev/null; then
   echo "real app smoke self-test did not print the TextEdit dry-run plan" >&2
