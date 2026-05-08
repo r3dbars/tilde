@@ -1505,6 +1505,21 @@ APPLESCRIPT
     "action=acceptNextWord" \
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit first verified insertion"
+  local undo_start_line
+  undo_start_line="$(line_count "$LOG_PATH")"
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  keystroke "z" using command down
+end tell
+APPLESCRIPT
+  wait_for_log_fields "$undo_start_line" "TextEdit undo keyboard action" 8 \
+    "keyboard-action" \
+    "app=com.apple.TextEdit" \
+    "action=undoAcceptedInsertion" \
+    "handled=true"
+  wait_for_log_fields "$undo_start_line" "TextEdit accepted insertion undo" 8 \
+    "accepted-insertion-undone" \
+    "app=com.apple.TextEdit"
   local full_start_line full_accept_key second_start_line
   full_accept_key="$(accept_all_shortcut)"
   second_start_line="$(line_count "$LOG_PATH")"
