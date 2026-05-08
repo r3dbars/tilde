@@ -539,7 +539,7 @@ final class SuggestionOrchestrator {
             return 0.40
         case .unknown:
             return 0.32
-        case .search, .form, .secure, .url:
+        case .search, .form, .secure, .url, .unprovenSurface:
             return 0.05
         }
     }

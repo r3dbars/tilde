@@ -1,91 +1,153 @@
 import Foundation
 import Testing
+import AutocompleteLabCore
 @testable import AutocompleteLabApp
-@testable import AutocompleteLabCore
 
 @Suite("Acceptance survival checker")
 struct AcceptanceSurvivalCheckerTests {
-    @Test("Two second deletion marks acceptance as rejected and retained for later checkpoints")
-    func twoSecondDeletionMarksAcceptanceRejected() async {
+    @Test("Rejected two-second checkpoint marks the tracker as deleted")
+    func rejectedTwoSecondCheckpointMarksTrackerDeleted() async throws {
         let checker = AcceptanceSurvivalChecker()
-        let tracker = acceptanceTracker(acceptedText: "that works")
-
+        let tracker = makeTracker(
+            acceptedText: " accepted text",
+            textBeforeCursor: "Draft"
+        )
         await checker.beginTracking(tracker)
-        let result = await checker.measure(
+
+        let result = try #require(await checker.measure(
             acceptanceID: tracker.acceptanceID,
             checkpoint: .twoSeconds,
-            currentTextWindow: "Let me know if ",
+            currentTextWindow: "Draft without it",
             now: tracker.acceptedAt.addingTimeInterval(2)
-        )
+        ))
+        let updated = try #require(await checker.tracker(acceptanceID: tracker.acceptanceID))
 
-        #expect(result?.measurement.survivalClass == .rejectedAfterAccept)
-        #expect(result?.shouldRecordAcceptedThenDeleted == true)
-        #expect(result?.shouldRecordAcceptedAndKept == false)
-        #expect(await checker.tracker(acceptanceID: tracker.acceptanceID)?.deletedWithinTwoSeconds == true)
+        #expect(result.shouldRecordAcceptedThenDeleted)
+        #expect(result.measurement.survivalClass == .rejectedAfterAccept)
+        #expect(updated.deletedWithinTwoSeconds)
     }
 
-    @Test("Thirty second kept acceptance records final accepted and kept")
-    func thirtySecondKeptAcceptanceRecordsFinalMetric() async {
+    @Test("Final kept checkpoint records accepted and kept then finishes")
+    func finalKeptCheckpointRecordsAcceptedAndKeptThenFinishes() async throws {
         let checker = AcceptanceSurvivalChecker()
-        let tracker = acceptanceTracker(acceptedText: "that works")
-
+        let tracker = makeTracker(
+            acceptedText: " accepted text",
+            textBeforeCursor: "Draft"
+        )
         await checker.beginTracking(tracker)
-        let result = await checker.measure(
+
+        let result = try #require(await checker.measure(
             acceptanceID: tracker.acceptanceID,
             checkpoint: .thirtySeconds,
-            currentTextWindow: "Let me know if that works for you.",
+            currentTextWindow: "Draft accepted text",
             now: tracker.acceptedAt.addingTimeInterval(30)
+        ))
+        let removed = await checker.finishTracking(acceptanceID: tracker.acceptanceID)
+
+        #expect(result.shouldRecordAcceptedAndKept)
+        #expect(result.shouldFinish)
+        #expect(result.finishReason == "thirty-second-finalized")
+        #expect(removed?.acceptanceID == tracker.acceptanceID)
+    }
+
+    @Test("Records two-second deletes and finalizes retained text from RAM")
+    func recordsDeletesAndClearsTracker() async throws {
+        let checker = AcceptanceSurvivalChecker()
+        let tracker = makeTracker(
+            acceptedText: "wrong direction",
+            acceptedAt: Date(timeIntervalSince1970: 1_000)
         )
 
-        #expect(result?.measurement.survivalClass == .exactKept)
-        #expect(result?.shouldRecordAcceptedAndKept == true)
-        #expect(result?.shouldFinish == true)
-        #expect(result?.finishReason == "thirty-second-finalized")
+        await checker.beginTracking(tracker)
+        let deleted = try #require(await checker.measure(
+            acceptanceID: tracker.acceptanceID,
+            checkpoint: .twoSeconds,
+            currentTextWindow: "Start again.",
+            now: Date(timeIntervalSince1970: 1_001)
+        ))
 
-        _ = await checker.finishTracking(acceptanceID: tracker.acceptanceID)
+        #expect(deleted.shouldRecordAcceptedThenDeleted)
+        #expect(deleted.measurement.survivalClass == .rejectedAfterAccept)
+        #expect(deleted.measurement.deletedWithinTwoSeconds)
+
+        let final = try #require(await checker.measure(
+            acceptanceID: tracker.acceptanceID,
+            checkpoint: .thirtySeconds,
+            currentTextWindow: "Start again.",
+            now: Date(timeIntervalSince1970: 1_031)
+        ))
+
+        #expect(final.shouldFinish)
+        #expect(final.finishReason == "thirty-second-finalized")
+        #expect(final.measurement.deletedWithinTwoSeconds)
+        #expect(await checker.finishTracking(acceptanceID: tracker.acceptanceID) != nil)
         #expect(await checker.tracker(acceptanceID: tracker.acceptanceID) == nil)
     }
 
-    @Test("Field blur finalizes matching field trackers")
-    func fieldBlurFinalizesMatchingFieldTrackers() async {
-        let checker = AcceptanceSurvivalChecker()
-        let tracker = acceptanceTracker(acceptedText: "that works")
-
-        await checker.beginTracking(tracker)
-        let results = await checker.measureFieldBlur(
-            fieldIdentity: tracker.fieldIdentity,
-            currentTextWindow: "Let me know if that works.",
-            now: tracker.acceptedAt.addingTimeInterval(4)
+    @Test("Builds survival metadata without durable raw accepted text")
+    func buildsLogSafeMetadataWithoutRawAcceptedText() {
+        let tracker = makeTracker(acceptedText: "make this private")
+        let measurement = AcceptanceSurvivalMeasurement(
+            checkpoint: .tenSeconds,
+            tokenRecall: 1,
+            normalizedEditDistance: 0,
+            survivalClass: .exactKept
         )
+        let metadata = AcceptanceSurvivalTraceMetadata.measurementMetadata(
+            tracker: tracker,
+            measurement: measurement,
+            secret: Data("survival-secret".utf8)
+        )
+        let encoded = String(decoding: try! JSONEncoder().encode(metadata), as: UTF8.self)
 
-        #expect(results.count == 1)
-        #expect(results.first?.shouldFinish == true)
-        #expect(results.first?.finishReason == "field-blur-finalized")
-        #expect(results.first?.measurement.survivalClass == .exactKept)
+        #expect(metadata["acceptanceID"] == tracker.acceptanceID)
+        #expect(metadata["acceptedTextChars"] == "17")
+        #expect(metadata["traceRetention"] == "ram-only")
+        #expect(metadata["checkpoint"] == "10s")
+        #expect(metadata["acceptedTextHMACToken"]?.isEmpty == false)
+        #expect(!encoded.localizedCaseInsensitiveContains("private"))
+        #expect(!encoded.localizedCaseInsensitiveContains("make this"))
     }
 
-    private func acceptanceTracker(acceptedText: String) -> AcceptanceSurvivalTracker {
-        let fieldIdentity = FocusedFieldIdentity(
-            bundleIdentifier: "com.apple.TextEdit",
-            processIdentifier: 42,
-            elementIdentifier: 7
-        )
-        let profile = CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit")!
+    @Test("Strong ten-second keeps are eligible for accepted-and-kept proof")
+    func strongTenSecondKeepsAreProofEvents() async throws {
+        let checker = AcceptanceSurvivalChecker()
+        let tracker = makeTracker(acceptedText: "make this easier")
 
-        return AcceptanceSurvivalTracker(
-            acceptanceID: "accept-one",
-            suggestionID: "suggest-one",
+        await checker.beginTracking(tracker)
+        let result = try #require(await checker.measure(
+            acceptanceID: tracker.acceptanceID,
+            checkpoint: .tenSeconds,
+            currentTextWindow: "Start make this easier today."
+        ))
+
+        #expect(result.shouldRecordAcceptedAndKept)
+        #expect(!result.shouldFinish)
+        #expect(result.measurement.isStrongAcceptedAndKept)
+    }
+
+    private func makeTracker(
+        acceptedText: String,
+        acceptedAt: Date = Date(timeIntervalSince1970: 1_000),
+        requestMode: CompletionRequestMode = .wordCompletion,
+        textBeforeCursor: String = "Start "
+    ) -> AcceptanceSurvivalTracker {
+        AcceptanceSurvivalTracker(
+            acceptanceID: "acceptance-one",
+            suggestionID: "suggestion-one",
             appBundleIdentifier: "com.apple.TextEdit",
-            fieldIdentity: fieldIdentity,
-            requestMode: CompletionRequestMode.phraseContinuation.rawValue,
-            acceptMode: KeyboardAction.acceptNextWord.diagnosticName,
+            fieldIdentity: FocusedFieldIdentity(
+                bundleIdentifier: "com.apple.TextEdit",
+                processIdentifier: 42,
+                elementIdentifier: 7
+            ),
+            requestMode: requestMode.rawValue,
             acceptedText: acceptedText,
-            expectedInsertionUTF16Offset: "Let me know if ".utf16.count,
-            acceptedAt: Date(timeIntervalSince1970: 1_000),
-            profile: profile,
+            expectedInsertionUTF16Offset: textBeforeCursor.utf16.count,
+            acceptedAt: acceptedAt,
+            profile: CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit")!,
             fieldKind: .multilineCompose,
-            fieldKindReason: "role:AXTextArea",
-            behaviorProfileID: .docsProse
+            fieldKindReason: "unit-test"
         )
     }
 }

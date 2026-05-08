@@ -148,7 +148,8 @@ struct CompatibilityProfileTests {
         let store = CompatibilityProfileStore.mvp
 
         #expect(store.supportStatus(for: "com.apple.Terminal") == .denylisted)
-        #expect(store.supportStatus(for: "com.openai.atlas") == .unsupported)
+        #expect(store.supportStatus(for: "com.openai.atlas").summary == "diagnostics only: ChatGPT Atlas")
+        #expect(store.supportStatus(for: "com.example.UnknownEditor") == .unsupported)
         #expect(store.supportStatus(for: "com.apple.TextEdit").summary == "green: TextEdit")
         #expect(store.supportStatus(for: "com.apple.mail").summary == "diagnostics only: Mail")
     }
@@ -180,11 +181,18 @@ struct CompatibilityProfileTests {
         #expect(diagnosticsOnly.menuText(appDisplayName: "Mail", isEnabled: true) == "Mail diagnostics-only")
         #expect(!diagnosticsOnly.canToggleSuggestions)
 
-        let unsupported = store.supportStatus(for: "com.openai.atlas")
+        let atlas = store.supportStatus(for: "com.openai.atlas")
+        #expect(atlas.supportLevel == .diagnosticsOnly)
+        #expect(atlas.userFacingSummary == "Diagnostics-only: ChatGPT Atlas")
+        #expect(atlas.userFacingReason == "Atlas can contain private browser text and prompt chats; no no-submit proof exists.")
+        #expect(atlas.menuText(appDisplayName: "Atlas", isEnabled: true) == "Atlas diagnostics-only")
+        #expect(!atlas.canToggleSuggestions)
+
+        let unsupported = store.supportStatus(for: "com.example.UnknownEditor")
         #expect(unsupported.supportLevel == .unsupported)
         #expect(unsupported.userFacingSummary == "Unsupported: not tested yet")
         #expect(unsupported.userFacingReason == "No compatibility profile yet.")
-        #expect(unsupported.menuText(appDisplayName: "Atlas", isEnabled: true) == "Atlas unsupported")
+        #expect(unsupported.menuText(appDisplayName: "Unknown", isEnabled: true) == "Unknown unsupported")
         #expect(!unsupported.canToggleSuggestions)
     }
 

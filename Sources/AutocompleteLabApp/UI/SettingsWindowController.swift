@@ -373,7 +373,12 @@ struct SettingsKeyboardShortcutState: Equatable {
     }
 
     var cycleButtonTitle: String {
-        "Use \(acceptAllShortcut.next.displayName)"
+        switch acceptAllShortcut {
+        case .backtick:
+            return "Use Option-Tab"
+        case .optionTab, .disabled:
+            return "Use Backtick"
+        }
     }
 
     var acceptAllPickerLabel: String {

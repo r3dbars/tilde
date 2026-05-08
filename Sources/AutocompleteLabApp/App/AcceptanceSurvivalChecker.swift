@@ -58,8 +58,8 @@ actor AcceptanceSurvivalChecker {
             measurement: measurement,
             shouldRecordAcceptedThenDeleted: checkpoint == .twoSeconds
                 && measurement.survivalClass == AcceptanceSurvivalClass.rejectedAfterAccept,
-            shouldRecordAcceptedAndKept: checkpoint.isFinalMetricCheckpoint
-                && measurement.isFinalAcceptedAndKept,
+            shouldRecordAcceptedAndKept: measurement.isStrongAcceptedAndKept
+                || measurement.isFinalAcceptedAndKept,
             shouldFinish: checkpoint.isFinalMetricCheckpoint,
             finishReason: checkpoint.isFinalMetricCheckpoint
                 ? finishReason(for: checkpoint)
@@ -157,4 +157,36 @@ struct AcceptanceSurvivalTracker: Equatable, Sendable {
     let fieldKindReason: String
     let behaviorProfileID: AutocompleteBehaviorProfileID
     var deletedWithinTwoSeconds: Bool = false
+
+    init(
+        acceptanceID: String,
+        suggestionID: String,
+        appBundleIdentifier: String,
+        fieldIdentity: FocusedFieldIdentity,
+        requestMode: String,
+        acceptMode: String = "acceptNextWord",
+        acceptedText: String,
+        expectedInsertionUTF16Offset: Int,
+        acceptedAt: Date,
+        profile: CompatibilityProfile,
+        fieldKind: AXFieldKind,
+        fieldKindReason: String,
+        behaviorProfileID: AutocompleteBehaviorProfileID = .notes,
+        deletedWithinTwoSeconds: Bool = false
+    ) {
+        self.acceptanceID = acceptanceID
+        self.suggestionID = suggestionID
+        self.appBundleIdentifier = appBundleIdentifier
+        self.fieldIdentity = fieldIdentity
+        self.requestMode = requestMode
+        self.acceptMode = acceptMode
+        self.acceptedText = acceptedText
+        self.expectedInsertionUTF16Offset = expectedInsertionUTF16Offset
+        self.acceptedAt = acceptedAt
+        self.profile = profile
+        self.fieldKind = fieldKind
+        self.fieldKindReason = fieldKindReason
+        self.behaviorProfileID = behaviorProfileID
+        self.deletedWithinTwoSeconds = deletedWithinTwoSeconds
+    }
 }

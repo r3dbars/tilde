@@ -29,6 +29,17 @@ cat >"$LEARNING_FILE" <<'JSON'
     "confidence": 0.35,
     "lastReason": "manual-visual-nudge",
     "updatedAt": "2026-05-07T02:00:00Z"
+  },
+  "com.example.Editor": {
+    "bundleIdentifier": "com.example.Editor",
+    "xOffset": 8,
+    "yOffset": -4,
+    "renderModeOverride": "inlineAdjacent",
+    "screenshotTracingEnabled": false,
+    "observations": 8,
+    "confidence": 0.82,
+    "lastReason": "screenshot-visual-correction",
+    "updatedAt": "2026-05-07T02:00:00Z"
   }
 }
 JSON
@@ -75,6 +86,32 @@ if ! grep -F "recommendation: turn the learned offset into an app/profile calibr
   exit 1
 fi
 
+if ! grep -F "Adapter promotion candidates (>= 5 observations, >= 0.75 confidence, trusted visual reason):" "$REPORT_FILE" >/dev/null; then
+  echo "compatibility report did not print code-promotion thresholds" >&2
+  cat "$REPORT_FILE" >&2
+  exit 1
+fi
+
+if ! grep -F "com.example.Editor: offset=(8.0,-4.0), approxNudges=6, observations=8, confidence=0.82" "$REPORT_FILE" >/dev/null; then
+  echo "compatibility report did not list high-confidence code-promotion candidate" >&2
+  cat "$REPORT_FILE" >&2
+  exit 1
+fi
+
+PROMOTION_SECTION="$(
+  awk '
+    /Adapter promotion candidates/ { in_section = 1; next }
+    /Repeated detached suppression/ { in_section = 0 }
+    in_section { print }
+  ' "$REPORT_FILE"
+)"
+
+if grep -F "com.apple.Notes:" <<<"$PROMOTION_SECTION" >/dev/null; then
+  echo "compatibility report promoted a low-confidence Notes offset" >&2
+  cat "$REPORT_FILE" >&2
+  exit 1
+fi
+
 if ! grep -F "recommendation: keep detached display blocked" "$REPORT_FILE" >/dev/null; then
   echo "compatibility report did not include detached adapter recommendation" >&2
   cat "$REPORT_FILE" >&2
@@ -105,8 +142,12 @@ if report["startLine"] != 2:
     raise SystemExit("JSON report did not keep the requested trace start line")
 if report["detachedSuppressionCandidates"]:
     raise SystemExit("JSON report did not apply the trace start line")
-if report["visualNudgeCandidates"][0]["bundleIdentifier"] != "com.apple.Notes":
+visual_ids = {item["bundleIdentifier"] for item in report["visualNudgeCandidates"]}
+if "com.apple.Notes" not in visual_ids:
     raise SystemExit("JSON report did not include the visual nudge candidate")
+promotion_ids = {item["bundleIdentifier"] for item in report["codePromotionCandidates"]}
+if promotion_ids != {"com.example.Editor"}:
+    raise SystemExit(f"JSON report code promotion candidates were wrong: {promotion_ids}")
 PY
 
 echo "Compatibility self-healing report self-test passed."

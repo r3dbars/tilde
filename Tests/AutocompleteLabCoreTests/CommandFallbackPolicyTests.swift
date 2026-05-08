@@ -25,7 +25,7 @@ struct CommandFallbackPolicyTests {
             isEnabled: false
         )
         let unsupported = CommandFallbackPolicy().decision(
-            supportStatus: store.supportStatus(for: "com.openai.atlas"),
+            supportStatus: store.supportStatus(for: "com.example.UnknownEditor"),
             isEnabled: true
         )
 

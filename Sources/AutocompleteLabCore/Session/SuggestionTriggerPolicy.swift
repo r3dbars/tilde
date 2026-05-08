@@ -113,7 +113,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         }
 
         if currentTextBeforeCursor.last?.isSentenceBoundary == true {
-            return .request(delayMilliseconds: sentenceBoundaryDelayMilliseconds)
+            return .skip
         }
 
         if let punctuationDecision = punctuationBoundaryDecision(

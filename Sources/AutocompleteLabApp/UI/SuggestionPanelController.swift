@@ -282,6 +282,49 @@ final class SuggestionPanelController {
     }
 }
 
+enum GhostTextColorPolicy {
+    static func color(
+        matching foregroundColor: NSColor?,
+        renderMode: SuggestionRenderMode
+    ) -> NSColor {
+        switch renderMode {
+        case .floatingMirror:
+            return NSColor.labelColor
+        case .inlineAdjacent:
+            return inlineColor(matching: foregroundColor)
+        case .disabled:
+            return NSColor.secondaryLabelColor
+        }
+    }
+
+    private static func inlineColor(matching foregroundColor: NSColor?) -> NSColor {
+        guard let luminance = relativeLuminance(of: foregroundColor) else {
+            return NSColor(calibratedWhite: 0.58, alpha: 0.82)
+        }
+
+        if luminance >= 0.62 {
+            return NSColor(calibratedWhite: 0.82, alpha: 0.88)
+        }
+
+        if luminance <= 0.25 {
+            return NSColor(calibratedWhite: 0.52, alpha: 0.78)
+        }
+
+        return NSColor(calibratedWhite: 0.62, alpha: 0.82)
+    }
+
+    private static func relativeLuminance(of color: NSColor?) -> CGFloat? {
+        guard let color,
+              let rgbColor = color.usingColorSpace(.deviceRGB) else {
+            return nil
+        }
+
+        return (0.2126 * rgbColor.redComponent)
+            + (0.7152 * rgbColor.greenComponent)
+            + (0.0722 * rgbColor.blueComponent)
+    }
+}
+
 private final class SuggestionOverlayAppearancePreviewView: NSView {
     private let previewAppearance: NSAppearance
     private let visualStyle: SuggestionPanelVisualStyle

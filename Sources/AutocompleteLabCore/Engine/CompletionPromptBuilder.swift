@@ -78,6 +78,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let base = """
         Inline autocomplete.
         Return 1 to 3 candidate suffixes, one per line, best first.
+        Return only the suffix after the Before cursor text.
         Each candidate must be only the next \(effectiveMaxVisibleWords) words or fewer.
         Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, chatty, or likely to answer the prompt instead of continuing it.
         Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens.
@@ -88,6 +89,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         \(behaviorProfile.promptGuidance.joined(separator: "\n"))
         \(modeGuidance)
         Prefer boring connective tissue, names, repeated local terms, closers, and the next few words the user was already likely to type.
+        Do not repeat the Before cursor text.
         \(sentenceGuidance) Do not answer, explain, greet, quote, reason, or restart.
         Do not brainstorm, rewrite, introduce a new topic, or complete the user's whole thought.
         """

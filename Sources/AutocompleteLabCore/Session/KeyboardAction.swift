@@ -61,6 +61,7 @@ public enum AutocompleteKey: Equatable, Sendable {
 public enum AcceptAllShortcut: String, CaseIterable, Equatable, Sendable {
     case backtick
     case optionTab
+    case disabled
 
     public var autocompleteKey: AutocompleteKey {
         switch self {
@@ -68,6 +69,8 @@ public enum AcceptAllShortcut: String, CaseIterable, Equatable, Sendable {
             .backtick
         case .optionTab:
             .optionTab
+        case .disabled:
+            .other
         }
     }
 
@@ -77,6 +80,8 @@ public enum AcceptAllShortcut: String, CaseIterable, Equatable, Sendable {
             "Backtick"
         case .optionTab:
             "Option-Tab"
+        case .disabled:
+            "Off"
         }
     }
 
@@ -85,6 +90,8 @@ public enum AcceptAllShortcut: String, CaseIterable, Equatable, Sendable {
         case .backtick:
             .optionTab
         case .optionTab:
+            .disabled
+        case .disabled:
             .backtick
         }
     }

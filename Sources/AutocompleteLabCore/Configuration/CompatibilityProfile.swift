@@ -235,7 +235,11 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
     }
 
     public func allows(bundleIdentifier: String) -> Bool {
-        profile(for: bundleIdentifier) != nil
+        guard let profile = profile(for: bundleIdentifier) else {
+            return false
+        }
+
+        return profile.canPresentSuggestions && !profile.isSensitive
     }
 
     public func supportStatus(for bundleIdentifier: String) -> CompatibilitySupportStatus {
@@ -321,6 +325,26 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             allowsDescendantTextFallback: true,
             isSensitive: true,
             notes: "Diagnostics-only rich-text compose target until Mail insertion has a verified safe adapter."
+        ),
+        CompatibilityProfile(
+            bundleIdentifier: "com.openai.atlas",
+            displayName: "ChatGPT Atlas",
+            appFamily: .chromium,
+            supportLevel: .diagnosticsOnly,
+            supportReason: "Atlas can contain private browser text and prompt chats; no no-submit proof exists.",
+            renderMode: .disabled,
+            insertionMode: .disabled,
+            fallbackRenderMode: .disabled,
+            fallbackInsertionMode: .disabled,
+            fieldIdentityMode: .stableBounds,
+            anchorLadder: [.none],
+            knownFailureModes: ["browser fields can contain private content", "prompt composer needs no-submit proof"],
+            allowsFieldAnchor: false,
+            allowsWindowAnchor: false,
+            supportsOneWordAcceptance: false,
+            supportsFullAcceptance: false,
+            isSensitive: true,
+            notes: "Diagnostics-only prompt/browser target until disposable prompt proof verifies placement and Tab accept cannot submit."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.google.Chrome",

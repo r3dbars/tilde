@@ -36,6 +36,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.actionableSuppressedByApp["com.apple.TextEdit"] == 2)
         #expect(summary.actionableSuppressedByMode["wordCompletion"] == 2)
         #expect(summary.insertionFailureCount == 1)
+        #expect(summary.doNotShipCounters["insertion-failed"] == 1)
         #expect(summary.acceptRate == 1.0 / 3.0)
         #expect(summary.usefulRate == 2.0 / 3.0)
         #expect(summary.acceptRateByApp["com.apple.TextEdit"] == 1.0 / 3.0)
@@ -46,6 +47,29 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.topMisses.count == 2)
         #expect(summary.topMisses.contains { $0.fixCategory == "word-completion issue" })
         #expect(summary.topMisses.contains { $0.fixCategory == "insertion bug" })
+    }
+
+    @Test("counts wrong-app acceptance blocks as do-not-ship blockers")
+    func countsWrongAppAcceptanceBlocksAsDoNotShipBlockers() {
+        let events = [
+            event(
+                .suggestionSuppressed,
+                suggestionID: "one",
+                reason: "wrong-app-or-field-before-accept",
+                metadata: [
+                    "acceptanceGuardReason": "app-changed-before-accept",
+                    "doNotShip": "true",
+                    "focusMismatch": "true",
+                    "severe": "true"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.doNotShipCounters["wrong-app-or-field-before-accept"] == 1)
+        #expect(summary.dailySummaries.first?.severeFailures == 1)
+        #expect(summary.annoyanceSignalCounts["focusMismatch"] == 1)
     }
 
     @Test("Streaming updates count as one shown suggestion")
@@ -362,6 +386,7 @@ struct AutocompleteTraceAnalyzerTests {
                 ]
             ),
             event(.suggestionPresented, suggestionID: "four", metadata: ["fieldKind": "search"]),
+            event(.suggestionPresented, suggestionID: "four-b", metadata: ["fieldKind": "unprovenSurface"]),
             event(.suggestionSuppressed, suggestionID: "five", reason: "repeated-miss"),
             event(.insertionFailed, suggestionID: "six", reason: "insert-verification-failed"),
             event(.appDisabled, suggestionID: "seven", reason: "manual"),
@@ -373,12 +398,65 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.annoyanceSignalCounts["rapidEscDismissal"] == 1)
         #expect(summary.annoyanceSignalCounts["typedOverWithinOneSecond"] == 1)
         #expect(summary.annoyanceSignalCounts["acceptedThenDeleted"] == 1)
-        #expect(summary.annoyanceSignalCounts["searchOrFormLeakage"] == 1)
+        #expect(summary.annoyanceSignalCounts["searchOrFormLeakage"] == 2)
         #expect(summary.annoyanceSignalCounts["repeatedRejection"] == 1)
         #expect(summary.annoyanceSignalCounts["wrongInsertion"] == 1)
         #expect(summary.annoyanceSignalCounts["appDisable"] == 1)
         #expect(summary.annoyanceSignalCounts["overlayFlicker"] == 1)
         #expect(summary.annoyanceScore > 0)
+    }
+
+    @Test("summarizes non-annoyance rates and visible lifetimes")
+    func summarizesNonAnnoyanceRatesAndVisibleLifetimes() {
+        let events = [
+            event(.suggestionPresented, suggestionID: "one", timestamp: "2026-05-08T10:00:00Z"),
+            event(
+                .suggestionHidden,
+                suggestionID: "one",
+                timestamp: "2026-05-08T10:00:01Z",
+                outcome: "ignored",
+                reason: "escape",
+                metadata: ["lifetimeMs": "900", "hideLatencyMs": "12"]
+            ),
+            event(.suggestionPresented, suggestionID: "two", timestamp: "2026-05-08T10:01:00Z"),
+            event(.suggestionTypedOver, suggestionID: "two", timestamp: "2026-05-08T10:01:02Z"),
+            event(.suggestionPresented, suggestionID: "three", timestamp: "2026-05-08T10:02:00Z"),
+            event(
+                .suggestionHidden,
+                suggestionID: "three",
+                timestamp: "2026-05-08T10:02:01Z",
+                reason: "stale-after-keydown",
+                metadata: ["hideLatencyMs": "31"]
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "three-b",
+                timestamp: "2026-05-08T10:02:01Z",
+                reason: "hidden",
+                metadata: ["hideLatencyMs": "4"]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "four",
+                timestamp: "2026-05-08T10:02:02Z",
+                reason: "wrong-app-or-field-before-accept",
+                metadata: ["focusMismatch": "true"]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.activeWritingMinutes == 3)
+        #expect(summary.shownPerActiveMinute == 1)
+        #expect(summary.explicitDismissalCount == 1)
+        #expect(summary.explicitDismissalsPerShown == 1.0 / 3.0)
+        #expect(summary.typedOverRate == 1.0 / 3.0)
+        #expect(summary.staleOrWrongContextCount == 2)
+        #expect(summary.staleOrWrongContextRate == 2.0 / 3.0)
+        #expect(summary.p50VisibleLifetimeMilliseconds == 900)
+        #expect(summary.p95VisibleLifetimeMilliseconds == 900)
+        #expect(summary.p50HideLatencyMilliseconds == 12)
+        #expect(summary.p95HideLatencyMilliseconds == 31)
     }
 
     @Test("summarizes field-kind slices")

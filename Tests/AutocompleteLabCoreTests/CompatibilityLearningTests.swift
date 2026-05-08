@@ -45,6 +45,38 @@ struct CompatibilityLearningTests {
         #expect(adjustment.metadata["learningRenderMode"] == "floatingMirror")
     }
 
+    @Test("Learning ignores unsafe render mode overrides")
+    func ignoresUnsafeRenderModeOverrides() {
+        let notesProfile = CompatibilityLearningProfile(
+            bundleIdentifier: "com.apple.Notes",
+            renderModeOverride: .inlineAdjacent
+        )
+        let mailProfile = CompatibilityLearningProfile(
+            bundleIdentifier: "com.apple.mail",
+            renderModeOverride: .floatingMirror
+        )
+        let engine = CompatibilityLearningEngine(profiles: [
+            notesProfile.bundleIdentifier: notesProfile,
+            mailProfile.bundleIdentifier: mailProfile
+        ])
+
+        let notesAdjustment = engine.adjustment(
+            for: "com.apple.Notes",
+            profileRenderMode: .floatingMirror
+        )
+        let mailAdjustment = engine.adjustment(
+            for: "com.apple.mail",
+            profileRenderMode: .disabled
+        )
+
+        #expect(notesAdjustment.effectiveRenderMode == .floatingMirror)
+        #expect(notesAdjustment.metadata["learningApplied"] == "false")
+        #expect(notesAdjustment.metadata["learningRenderModeOverrideIgnored"] == "true")
+        #expect(mailAdjustment.effectiveRenderMode == .disabled)
+        #expect(mailAdjustment.metadata["learningApplied"] == "false")
+        #expect(mailAdjustment.metadata["learningRenderModeOverrideIgnored"] == "true")
+    }
+
     @Test("Learning can ignore untrusted visual offsets")
     func canIgnoreUntrustedVisualOffsets() {
         let profile = CompatibilityLearningProfile(
@@ -71,10 +103,16 @@ struct CompatibilityLearningTests {
 
     @Test("Learning keeps manual visual nudges for synthetic caret apps")
     func keepsManualVisualNudges() {
+        let scope = CompatibilityLearningVisualScope(
+            appVersion: "com.openai.codex:1.0:10",
+            screen: "1440x900@200",
+            fieldShape: "role=AXTextArea;element=w=600,h=300"
+        )
         let profile = CompatibilityLearningProfile(
             bundleIdentifier: "com.openai.codex",
             xOffset: 6,
             yOffset: -4,
+            visualScope: scope,
             observations: 1,
             confidence: 0.35,
             lastReason: "manual-visual-nudge"
@@ -83,7 +121,7 @@ struct CompatibilityLearningTests {
         let adjustment = engine.adjustment(
             for: "com.openai.codex",
             profileRenderMode: .inlineAdjacent
-        ).trustedVisualOffsetOnly
+        ).trustedVisualOffsetOnly(matching: scope)
 
         let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
 
@@ -115,6 +153,34 @@ struct CompatibilityLearningTests {
 
     @Test("Learning keeps screenshot visual corrections")
     func keepsScreenshotVisualCorrections() {
+        let scope = CompatibilityLearningVisualScope(
+            appVersion: "md.obsidian:1.0:10",
+            screen: "1440x900@200",
+            fieldShape: "role=AXTextArea;element=w=600,h=300"
+        )
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "md.obsidian",
+            xOffset: -3,
+            yOffset: 8,
+            visualScope: scope,
+            observations: 4,
+            confidence: 0.7,
+            lastReason: "screenshot-visual-correction"
+        )
+        let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+        let adjustment = engine.adjustment(
+            for: "md.obsidian",
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly(matching: scope)
+
+        let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
+
+        #expect(adjustment.adjusted(rect) == CGRect(x: 97, y: 208, width: 0, height: 20))
+        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "true")
+    }
+
+    @Test("Learning ignores unscoped screenshot visual corrections")
+    func ignoresUnscopedScreenshotVisualCorrections() {
         let profile = CompatibilityLearningProfile(
             bundleIdentifier: "md.obsidian",
             xOffset: -3,
@@ -131,8 +197,97 @@ struct CompatibilityLearningTests {
 
         let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
 
-        #expect(adjustment.adjusted(rect) == CGRect(x: 97, y: 208, width: 0, height: 20))
-        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "true")
+        #expect(adjustment.adjusted(rect) == rect)
+        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "false")
+    }
+
+    @Test("Learning expires trusted visual offsets when visual scope changes")
+    func expiresTrustedVisualOffsetsWhenVisualScopeChanges() {
+        let originalScope = CompatibilityLearningVisualScope(
+            appVersion: "com.example.Editor:1.0:10",
+            screen: "1440x900@200",
+            fieldShape: "role=AXTextArea;element=w=600,h=300"
+        )
+        let changedScope = CompatibilityLearningVisualScope(
+            appVersion: "com.example.Editor:1.1:11",
+            screen: "1440x900@200",
+            fieldShape: "role=AXTextArea;element=w=600,h=300"
+        )
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "com.example.Editor",
+            xOffset: 8,
+            yOffset: -2,
+            visualScope: originalScope,
+            lastReason: "manual-visual-nudge"
+        )
+        let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+        let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
+
+        let matchingAdjustment = engine.adjustment(
+            for: profile.bundleIdentifier,
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly(matching: originalScope)
+        let changedAdjustment = engine.adjustment(
+            for: profile.bundleIdentifier,
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly(matching: changedScope)
+
+        #expect(matchingAdjustment.adjusted(rect) == CGRect(x: 108, y: 198, width: 0, height: 20))
+        #expect(matchingAdjustment.metadata["learningVisualOffsetTrusted"] == "true")
+        #expect(changedAdjustment.adjusted(rect) == rect)
+        #expect(changedAdjustment.metadata["learningVisualOffsetTrusted"] == "false")
+    }
+
+    @Test("Learning expires trusted visual offsets when current visual scope is missing")
+    func expiresTrustedVisualOffsetsWhenCurrentVisualScopeIsMissing() {
+        let storedScope = CompatibilityLearningVisualScope(
+            appVersion: "com.example.Editor:1.0:10",
+            screen: "1440x900@200",
+            fieldShape: "role=AXTextArea;element=w=600,h=300"
+        )
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "com.example.Editor",
+            xOffset: 8,
+            yOffset: -2,
+            visualScope: storedScope,
+            lastReason: "screenshot-visual-correction"
+        )
+        let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+        let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
+
+        let adjustment = engine.adjustment(
+            for: profile.bundleIdentifier,
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly(matching: nil)
+
+        #expect(adjustment.adjusted(rect) == rect)
+        #expect(adjustment.metadata["learningXOffset"] == "0.0")
+        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "false")
+    }
+
+    @Test("Unscoped trusted visual offsets do not apply in scoped live mode")
+    func unscopedTrustedVisualOffsetsDoNotApplyInScopedLiveMode() {
+        let currentScope = CompatibilityLearningVisualScope(
+            appVersion: "com.example.Editor:1.0:10",
+            screen: "1440x900@200",
+            fieldShape: "role=AXTextArea;element=w=600,h=300"
+        )
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "com.example.Editor",
+            xOffset: 8,
+            yOffset: -2,
+            lastReason: "screenshot-visual-correction"
+        )
+        let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+        let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
+
+        let adjustment = engine.adjustment(
+            for: profile.bundleIdentifier,
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly(matching: currentScope)
+
+        #expect(adjustment.adjusted(rect) == rect)
+        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "false")
     }
 
     @Test("Learning keeps screenshot visual corrections from detector")
@@ -253,5 +408,75 @@ struct CompatibilityLearningTests {
         #expect(adjustment.adjusted(rect) == rect)
         #expect(!adjustment.shouldCaptureScreenshot)
         #expect(adjustment.metadata["learningApplied"] == "false")
+    }
+
+    @Test("Placement trust policy allows low confidence only for green or trusted visual proof")
+    func placementTrustPolicyAllowsLowConfidenceOnlyForGreenOrTrustedVisualProof() {
+        let store = CompatibilityProfileStore.mvp
+        let textEdit = store.profile(for: "com.apple.TextEdit")!
+        let notes = store.profile(for: "com.apple.Notes")!
+
+        let greenPolicy = PlacementTrustPolicy.compatibility(
+            profile: textEdit,
+            learningAdjustment: CompatibilityLearningAdjustment(
+                profile: nil,
+                effectiveRenderMode: textEdit.renderMode
+            )
+        )
+        #expect(greenPolicy.allowsLowConfidencePlacement)
+        #expect(greenPolicy.allowsSyntheticCaretPlacement)
+        #expect(greenPolicy.allowsDetachedAnchorPlacement)
+
+        let unprovenPolicy = PlacementTrustPolicy.compatibility(
+            profile: notes,
+            learningAdjustment: CompatibilityLearningAdjustment(
+                profile: nil,
+                effectiveRenderMode: notes.renderMode
+            )
+        )
+        #expect(!unprovenPolicy.allowsLowConfidencePlacement)
+        #expect(!unprovenPolicy.allowsSyntheticCaretPlacement)
+        #expect(!unprovenPolicy.allowsDetachedAnchorPlacement)
+
+        let untrustedLearningPolicy = PlacementTrustPolicy.compatibility(
+            profile: notes,
+            learningAdjustment: CompatibilityLearningAdjustment(
+                profile: CompatibilityLearningProfile(
+                    bundleIdentifier: notes.bundleIdentifier,
+                    xOffset: 2,
+                    yOffset: 0,
+                    observations: 4,
+                    confidence: 0.9,
+                    lastReason: "observation"
+                ),
+                effectiveRenderMode: notes.renderMode
+            )
+        )
+        #expect(!untrustedLearningPolicy.allowsLowConfidencePlacement)
+        #expect(!untrustedLearningPolicy.allowsSyntheticCaretPlacement)
+        #expect(!untrustedLearningPolicy.allowsDetachedAnchorPlacement)
+
+        let trustedLearningPolicy = PlacementTrustPolicy.compatibility(
+            profile: notes,
+            learningAdjustment: CompatibilityLearningAdjustment(
+                profile: CompatibilityLearningProfile(
+                    bundleIdentifier: notes.bundleIdentifier,
+                    xOffset: 2,
+                    yOffset: 0,
+                    visualScope: CompatibilityLearningVisualScope(
+                        appVersion: "com.apple.Notes:1.0:10",
+                        screen: "1440x900@200",
+                        fieldShape: "role=AXTextArea;element=w=600,h=300"
+                    ),
+                    observations: 4,
+                    confidence: 0.9,
+                    lastReason: "screenshot-visual-correction"
+                ),
+                effectiveRenderMode: notes.renderMode
+            )
+        )
+        #expect(trustedLearningPolicy.allowsLowConfidencePlacement)
+        #expect(trustedLearningPolicy.allowsSyntheticCaretPlacement)
+        #expect(trustedLearningPolicy.allowsDetachedAnchorPlacement)
     }
 }

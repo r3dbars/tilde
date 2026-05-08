@@ -137,6 +137,28 @@ struct SuggestionSessionTests {
         #expect(session.visibleSuggestion?.visibleText == " should ship")
     }
 
+    @Test("Next word preview records the visible acceptance slice")
+    func nextWordPreviewRecordsVisibleAcceptanceSlice() throws {
+        let session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: " we should ship", maxVisibleWords: 8)
+        )
+
+        let preview = try #require(session.nextWordAcceptancePreview())
+
+        #expect(preview.mode == .nextWord)
+        #expect(preview.acceptedText == " we")
+        #expect(preview.visibleTextBeforeAccept == " we should ship")
+        #expect(preview.remainingVisibleTextAfterAccept == " should ship")
+        #expect(preview.acceptanceMatchesVisiblePrefix)
+        #expect(!preview.acceptanceMatchesFullVisible)
+        #expect(preview.traceMetadata["acceptanceSource"] == "visiblePrefix")
+        #expect(preview.traceMetadata["acceptedChars"] == String(preview.acceptedText.count))
+        #expect(preview.traceMetadata["visibleBeforeAcceptChars"] == String(preview.visibleTextBeforeAccept.count))
+        #expect(preview.traceMetadata["remainingVisibleAfterAcceptChars"] == String(preview.remainingVisibleTextAfterAccept.count))
+        #expect(preview.traceMetadata["acceptanceMatchesVisiblePrefix"] == "true")
+        #expect(preview.traceMetadata["acceptanceMatchesFullVisible"] == "false")
+    }
+
     @Test("Failed insert can leave suggestion untouched")
     func failedInsertCanLeaveSuggestionUntouched() {
         let session = SuggestionSession(
@@ -171,6 +193,25 @@ struct SuggestionSessionTests {
         session.commitAllVisibleAcceptance(" keep it small")
 
         #expect(!session.hasVisibleSuggestion)
+    }
+
+    @Test("Full preview records an exact visible match")
+    func fullPreviewRecordsExactVisibleMatch() throws {
+        let session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: " keep it small", maxVisibleWords: 8)
+        )
+
+        let preview = try #require(session.allVisibleAcceptancePreview())
+
+        #expect(preview.mode == .allVisible)
+        #expect(preview.acceptedText == " keep it small")
+        #expect(preview.visibleTextBeforeAccept == " keep it small")
+        #expect(preview.remainingVisibleTextAfterAccept == "")
+        #expect(preview.acceptanceMatchesVisiblePrefix)
+        #expect(preview.acceptanceMatchesFullVisible)
+        #expect(preview.traceMetadata["acceptanceSource"] == "visibleFull")
+        #expect(preview.traceMetadata["acceptanceMatchesVisiblePrefix"] == "true")
+        #expect(preview.traceMetadata["acceptanceMatchesFullVisible"] == "true")
     }
 
     @Test("Dismiss clears visible suggestion")

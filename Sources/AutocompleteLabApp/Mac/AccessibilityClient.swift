@@ -16,6 +16,7 @@ struct FocusedTextContext: Equatable, Sendable {
     let fingerprint: FocusedElementFingerprint
     let textBeforeCursor: String
     let textAfterCursor: String
+    let selectedText: String
     let selectedTextLength: Int
     let caretRect: CGRect?
     let elementRect: CGRect?
@@ -23,8 +24,47 @@ struct FocusedTextContext: Equatable, Sendable {
     let textLineRect: CGRect?
     let textStyle: FocusedTextStyle?
     let isSecure: Bool
+    let fieldClassification: AXFieldClassification
     let caretIsSynthetic: Bool
     let capabilities: FocusedTextCapabilities
+
+    init(
+        elementIdentifier: Int,
+        role: String?,
+        subrole: String?,
+        fingerprint: FocusedElementFingerprint,
+        textBeforeCursor: String,
+        textAfterCursor: String,
+        selectedText: String = "",
+        selectedTextLength: Int,
+        caretRect: CGRect?,
+        elementRect: CGRect?,
+        windowRect: CGRect?,
+        textLineRect: CGRect?,
+        textStyle: FocusedTextStyle?,
+        isSecure: Bool,
+        fieldClassification: AXFieldClassification = AXFieldClassification(kind: .unknown, reason: "unknown"),
+        caretIsSynthetic: Bool,
+        capabilities: FocusedTextCapabilities
+    ) {
+        self.elementIdentifier = elementIdentifier
+        self.role = role
+        self.subrole = subrole
+        self.fingerprint = fingerprint
+        self.textBeforeCursor = textBeforeCursor
+        self.textAfterCursor = textAfterCursor
+        self.selectedText = selectedText
+        self.selectedTextLength = selectedTextLength
+        self.caretRect = caretRect
+        self.elementRect = elementRect
+        self.windowRect = windowRect
+        self.textLineRect = textLineRect
+        self.textStyle = textStyle
+        self.isSecure = isSecure
+        self.fieldClassification = fieldClassification
+        self.caretIsSynthetic = caretIsSynthetic
+        self.capabilities = capabilities
+    }
 }
 
 struct FocusedTextCapabilities: Equatable, Sendable {

@@ -145,11 +145,25 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
             <div class="metric"><b>\(percent(summary.insertionVerificationSuccessRate))</b>verified inserts</div>
             <div class="metric"><b>\(percent(summary.caretGeometryFailureRate))</b>caret failure rate</div>
             <div class="metric"><b>\(String(format: "%.2f", summary.annoyanceScore))</b>annoyance score</div>
+            <div class="metric"><b>\(String(format: "%.2f", summary.shownPerActiveMinute))</b>shown / active min</div>
+            <div class="metric"><b>\(percent(summary.explicitDismissalsPerShown))</b>Esc / shown</div>
+            <div class="metric"><b>\(percent(summary.typedOverRate))</b>typed-over rate</div>
+            <div class="metric"><b>\(percent(summary.staleOrWrongContextRate))</b>stale/wrong-context</div>
             <div class="metric"><b>\(summary.p95LatencyMilliseconds.map { "\($0)ms" } ?? "n/a")</b>first-visible p95</div>
+            <div class="metric"><b>\(summary.p95VisibleLifetimeMilliseconds.map { "\($0)ms" } ?? "n/a")</b>visible lifetime p95</div>
+            <div class="metric"><b>\(summary.p95HideLatencyMilliseconds.map { "\($0)ms" } ?? "n/a")</b>hide p95</div>
+            <div class="metric"><b>\(summary.doNotShipCounters.values.reduce(0, +))</b>do-not-ship</div>
           </div>
           <h2>RAM-only retention proof</h2>
           <p>Accepted text is kept only for checkpoint comparison. The durable proof is the redacted <code>acceptanceRetentionCleared</code> event with counts and fingerprints, not raw text.</p>
           <ul>\(sortedCountList(summary.acceptanceRetentionClearedByReason))</ul>
+          <h2>Privacy checklist</h2>
+          <ul>
+            <li>This report is generated locally from the default redacted trace.</li>
+            <li>Typed text, accepted text, screenshots, screenshot paths, document names, URLs, recipients, and subject lines are not included.</li>
+            <li>Share only this redacted report for normal beta feedback.</li>
+            <li>Use raw debug exports only for explicit local debugging sessions.</li>
+          </ul>
           <h2>Accepted-and-kept survival slices</h2>
           <h3>By app</h3><ul>\(sortedRateList(summary.acceptedAndKeptRateByApp))</ul>
           <h3>By field kind</h3><ul>\(sortedRateList(summary.acceptedAndKeptRateByFieldKind))</ul>
@@ -161,6 +175,9 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
           <h2>Visual calibration, no screenshots</h2>
           <p>This section uses redacted caret and panel metadata only. Screenshot paths are not included.</p>
           \(visualCalibrationHTMLTable(from: events))
+          <h2>Do-not-ship blockers</h2>
+          <p>These are hard trust failures. A beta proof run should keep every counter at zero.</p>
+          <ul>\(sortedCountList(summary.doNotShipCounters))</ul>
           <h2>Recommended next fix</h2>
           <ol>\(recommendedFixList(summary.recommendedFixes))</ol>
           <h2>Support state by app</h2>
