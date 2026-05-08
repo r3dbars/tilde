@@ -263,6 +263,9 @@ def safe_int(value, default=999999999):
     except (TypeError, ValueError):
         return default
 
+def rate_float(numerator, denominator):
+    return 0 if denominator == 0 else numerator / denominator
+
 def accepted_then_deleted(event):
     metadata = event.get("metadata") or {}
     return (
@@ -1041,6 +1044,44 @@ search_form_leakage_count = sum(
 )
 overlay_flicker_count = sum(1 for event in events if overlay_flicker(event))
 accepted_then_deleted_count = sum(1 for event in events if accepted_then_deleted(event))
+hidden_events = [event for event in events if event.get("type") == "suggestionHidden"]
+explicit_dismissals = [event for event in hidden_events if event.get("reason") == "escape"]
+visible_lifetimes = sorted(
+    value
+    for event in hidden_events
+    for value in [
+        metadata_int(event, "lifetimeMs") or metadata_int(event, "visibleLifetimeMs")
+    ]
+    if value is not None
+)
+hide_latencies = sorted(
+    value
+    for event in hidden_events
+    for value in [metadata_int(event, "hideLatencyMs")]
+    if value is not None
+)
+active_dates = sorted(
+    parsed
+    for event in events
+    for parsed in [parse_date(event.get("timestamp"))]
+    if parsed
+)
+active_minutes = 0
+if active_dates:
+    active_minutes = max(1, int(((active_dates[-1] - active_dates[0]).total_seconds() + 59) // 60))
+
+def stale_or_wrong_context_event(event):
+    reason = event.get("reason") or ""
+    metadata = metadata_for(event)
+    return (
+        metadata.get("focusMismatch") == "true"
+        or reason == "wrong-app-or-field-before-accept"
+        or reason == "focus-changed"
+        or reason == "stale-after-keydown"
+        or reason.startswith("stale-")
+    )
+
+stale_or_wrong_context_events = [event for event in events if stale_or_wrong_context_event(event)]
 
 failure_reasons = [
     ("Duplicate text", duplicate_text_count, 100, "insertion trust"),
@@ -1129,6 +1170,25 @@ caret_failure_denominator = len(presented_by_id) + len(caret_geometry_failures)
 caret_failure_rate = 0 if not caret_failure_denominator else round((len(caret_geometry_failures) / caret_failure_denominator) * 100)
 print(f"Caret placement failures: {len(caret_geometry_failures)}")
 print(f"Caret placement failure rate: {caret_failure_rate}%")
+shown_per_active_minute = rate_float(len(presented_by_id), active_minutes)
+explicit_dismissals_per_shown = rate_float(len(explicit_dismissals), len(presented_by_id))
+typed_over_rate = rate_float(types["suggestionTypedOver"], len(presented_by_id))
+stale_wrong_context_rate = rate_float(len(stale_or_wrong_context_events), len(presented_by_id))
+print(f"Active writing minutes: {active_minutes}")
+print(f"Shown per active minute: {shown_per_active_minute:.2f}")
+print(
+    "Explicit dismissals per shown: "
+    f"{explicit_dismissals_per_shown:.2f} ({len(explicit_dismissals)}/{len(presented_by_id)})"
+)
+print(f"Typed-over rate: {typed_over_rate:.2f} ({types['suggestionTypedOver']}/{len(presented_by_id)})")
+print(
+    "Stale/wrong-context rate: "
+    f"{stale_wrong_context_rate:.2f} ({len(stale_or_wrong_context_events)}/{len(presented_by_id)})"
+)
+print(f"Visible lifetime p50: {percentile(visible_lifetimes, 0.50)}")
+print(f"Visible lifetime p95: {percentile(visible_lifetimes, 0.95)}")
+print(f"Hide latency p50: {percentile(hide_latencies, 0.50)}")
+print(f"Hide latency p95: {percentile(hide_latencies, 0.95)}")
 accept_rate = 0 if not presented_ids else round((len(accepted_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
 useful_rate = 0 if not presented_ids else round((len(useful_suggestion_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
 accepted_and_kept_rate_shown = 0 if not presented_ids else round((len(accepted_and_kept_suggestion_ids.intersection(presented_ids)) / len(presented_ids)) * 100)

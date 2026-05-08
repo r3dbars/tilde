@@ -165,6 +165,13 @@ line_count() {
   fi
 }
 
+log_slice_matches() {
+  local start_line="$1"
+  local pattern="$2"
+
+  grep -E "$pattern" < <(tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null) >/dev/null
+}
+
 wait_for_log_pattern() {
   local start_line="$1"
   local pattern="$2"
@@ -173,7 +180,7 @@ wait_for_log_pattern() {
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
-    if tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -E "$pattern" >/dev/null; then
+    if log_slice_matches "$start_line" "$pattern"; then
       return 0
     fi
     sleep 0.2
@@ -196,7 +203,7 @@ wait_for_log_fields() {
 
   while ((SECONDS <= deadline)); do
     local lines
-    lines="$(tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -F "$prefix" || true)"
+    lines="$(grep -F "$prefix" < <(tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null) || true)"
     local field
     for field in "$@"; do
       lines="$(grep -F "$field" <<<"$lines" || true)"
@@ -228,7 +235,7 @@ wait_for_runtime_ready() {
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
-    if tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -E " runtime .*readinessStage=ready" >/dev/null; then
+    if log_slice_matches "$start_line" " runtime .*readinessStage=ready"; then
       return 0
     fi
 
@@ -442,8 +449,22 @@ delay 0.1
 tell application "System Events"
   tell process "Google Chrome"
     set frontmost to true
-    set chromePosition to position of window 1
-    click at {(item 1 of chromePosition) + 180, (item 2 of chromePosition) + 190}
+    set editorElement to missing value
+    repeat with candidate in entire contents of window 1
+      try
+        if role of candidate is "AXTextArea" then
+          set editorElement to candidate
+          exit repeat
+        end if
+      end try
+    end repeat
+    if editorElement is not missing value then
+      set editorPosition to position of editorElement
+      click at {(item 1 of editorPosition) + 20, (item 2 of editorPosition) + 20}
+    else
+      set chromePosition to position of window 1
+      click at {(item 1 of chromePosition) + 180, (item 2 of chromePosition) + 320}
+    end if
   end tell
 end tell
 APPLESCRIPT
@@ -1126,19 +1147,12 @@ APPLESCRIPT
   wait_for_chrome_tab_title_contains "Autocomplete Lab Chrome" "Chrome $fixture fixture"
   sleep 0.5
 
+  focus_chrome_smoke_editor
+  assert_frontmost_app "Google Chrome" "Chrome $fixture focus"
+
   osascript >/dev/null <<'APPLESCRIPT'
-tell application "System Events"
-  tell process "Google Chrome"
-    set frontmost to true
-    set chromePosition to position of window 1
-    click at {(item 1 of chromePosition) + 180, (item 2 of chromePosition) + 190}
-  end tell
-end tell
-APPLESCRIPT
-
-  wait_for_frontmost_app "Google Chrome" 5
-
-  osascript <<'APPLESCRIPT'
+tell application "Google Chrome" to activate
+delay 0.1
 tell application "System Events"
   keystroke "a" using command down
   key code 51
@@ -1148,7 +1162,12 @@ APPLESCRIPT
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  osascript <<'APPLESCRIPT'
+  focus_chrome_smoke_editor
+  assert_frontmost_app "Google Chrome" "Chrome $fixture typing"
+
+  osascript >/dev/null <<'APPLESCRIPT'
+tell application "Google Chrome" to activate
+delay 0.1
 tell application "System Events"
   keystroke "Can we make this feel "
 end tell
