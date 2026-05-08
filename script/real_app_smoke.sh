@@ -774,11 +774,25 @@ APPLESCRIPT
 
 focus_textedit_smoke_editor() {
   osascript >/dev/null <<'APPLESCRIPT'
-tell application "TextEdit" to activate
-delay 0.1
 tell application "System Events"
   tell process "TextEdit"
     set frontmost to true
+  end tell
+end tell
+APPLESCRIPT
+  wait_for_frontmost_app "TextEdit" 5
+}
+
+click_textedit_smoke_editor() {
+  osascript >/dev/null <<'APPLESCRIPT'
+tell application "System Events"
+  tell process "TextEdit"
+    set frontmost to true
+    if exists window 1 then
+      set windowPosition to position of window 1
+      set windowSize to size of window 1
+      click at {(item 1 of windowPosition) + ((item 1 of windowSize) / 2), (item 2 of windowPosition) + 160}
+    end if
   end tell
 end tell
 APPLESCRIPT
@@ -1294,21 +1308,31 @@ run_claude_code_blocked() {
 }
 
 run_textedit() {
-  local runtime_start_line start_line trace_start_line
+  local runtime_start_line start_line textedit_file trace_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
 
   prepare_temporary_app_enablement
   build_if_needed
   wait_for_runtime_ready "$runtime_start_line" "TextEdit runtime readiness" 60 "$SKIP_BUILD"
 
+  mkdir -p "$HOME/Library/Logs/AutocompleteLab"
+  textedit_file="$HOME/Library/Logs/AutocompleteLab/textedit-smoke.txt"
+  : >"$textedit_file"
+  open -a TextEdit "$textedit_file"
+  wait_for_frontmost_app "TextEdit" 5
+  sleep 0.8
+
+  focus_textedit_smoke_editor
+  click_textedit_smoke_editor
   osascript <<'APPLESCRIPT'
-tell application "TextEdit"
-  activate
-  make new document
-  set text of front document to ""
+tell application "System Events"
+  keystroke "a" using command down
+  key code 51
+  key code 53
 end tell
-delay 0.8
+delay 0.4
 APPLESCRIPT
+  click_textedit_smoke_editor
 
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"

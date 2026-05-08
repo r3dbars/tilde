@@ -146,7 +146,11 @@ struct SettingsCurrentAppState: Equatable {
     }
 
     var proofButtonTitle: String {
-        isEnabled ? "Start App Proof" : "Enable App First"
+        if bundleIdentifier == "com.apple.TextEdit", isEnabled {
+            return "Run TextEdit Proof"
+        }
+
+        return isEnabled ? "Start App Proof" : "Enable App First"
     }
 
     var copyProofCommandButtonTitle: String {
