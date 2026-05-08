@@ -13,6 +13,18 @@ if ! grep -F "Real app smoke: textedit" "$TMP_DIR/textedit.txt" >/dev/null; then
   exit 1
 fi
 
+script/real_app_smoke.sh textedit --report-path "$TMP_DIR/custom-smoke-report.md" --dry-run >"$TMP_DIR/textedit-report-path.txt"
+if ! grep -F "Smoke report: $TMP_DIR/custom-smoke-report.md" "$TMP_DIR/textedit-report-path.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the custom smoke report path" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh chrome --report-path="$TMP_DIR/custom-chrome-report.md" --dry-run >"$TMP_DIR/chrome-report-path.txt"
+if ! grep -F "Smoke report: $TMP_DIR/custom-chrome-report.md" "$TMP_DIR/chrome-report-path.txt" >/dev/null; then
+  echo "real app smoke self-test did not parse --report-path=..." >&2
+  exit 1
+fi
+
 if ! grep -F "temporarily enables TextEdit only for this proof pass" "$TMP_DIR/textedit.txt" >/dev/null; then
   echo "real app smoke self-test did not explain temporary TextEdit enablement" >&2
   exit 1
@@ -132,6 +144,11 @@ fi
 
 if script/real_app_smoke.sh chrome --fixture >/dev/null 2>&1; then
   echo "real app smoke self-test expected missing Chrome fixture values to fail" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh textedit --report-path >/dev/null 2>&1; then
+  echo "real app smoke self-test expected missing report path values to fail" >&2
   exit 1
 fi
 

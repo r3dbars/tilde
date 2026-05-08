@@ -224,6 +224,41 @@ run_notes_undo_case() {
 }
 
 run_passing_case textedit TextEdit com.apple.TextEdit 'inlineAdjacent|floatingMirror' inlineAdjacent
+
+CHECK_ONLY_REPORT="$TMP_DIR/check-only-manual-smoke-runs.md"
+CHECK_ONLY_OUTPUT="$TMP_DIR/check-only-output.txt"
+write_passing_log "com.apple.TextEdit" "inlineAdjacent"
+write_passing_trace "com.apple.TextEdit"
+AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  script/manual_smoke_session.sh textedit --check-only --report-path "$CHECK_ONLY_REPORT" >"$CHECK_ONLY_OUTPUT"
+
+if [[ -e "$CHECK_ONLY_REPORT" ]]; then
+  echo "manual smoke self-test expected --check-only to avoid creating a report" >&2
+  exit 1
+fi
+
+if ! grep -F "Validated pass without recording a new row." "$CHECK_ONLY_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not label --check-only validation" >&2
+  exit 1
+fi
+
+REPORT_ARG_PATH="$TMP_DIR/report-arg-manual-smoke-runs.md"
+write_passing_log "com.apple.TextEdit" "inlineAdjacent"
+write_passing_trace "com.apple.TextEdit"
+AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  script/manual_smoke_session.sh textedit --check --report-path "$REPORT_ARG_PATH" >/dev/null
+
+if ! grep -F "| TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-" "$REPORT_ARG_PATH" >/dev/null; then
+  echo "manual smoke self-test did not honor --report-path" >&2
+  exit 1
+fi
+
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-title
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-body
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-checklist

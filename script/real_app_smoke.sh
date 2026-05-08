@@ -18,10 +18,11 @@ CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF=0
 TEMP_ENABLE_ENV_KEY="AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
 TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED=0
 TEMP_ENABLE_LAUNCHCTL_PREVIOUS=""
+REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-runs.md}"
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|chat-like|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof]
+Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--report-path <path>] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|chat-like|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof]
 
 Runs a real app smoke pass where it is safe to automate. Notes, Obsidian,
 Codex, Claude Code, and Claude desktop are manual-gated so this script never
@@ -55,6 +56,17 @@ while (($#)); do
       ;;
     --skip-build)
       SKIP_BUILD=1
+      ;;
+    --report-path)
+      shift
+      if (($# == 0)); then
+        usage >&2
+        exit 2
+      fi
+      REPORT_PATH="$1"
+      ;;
+    --report-path=*)
+      REPORT_PATH="${1#--report-path=}"
       ;;
     --fixture)
       shift
@@ -152,6 +164,8 @@ case "$CHROME_ACCESSIBILITY_MODE" in
     exit 2
     ;;
 esac
+
+export AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH"
 
 if [[ "$APP" != "chrome" && "$CHROME_FIXTURE_WAS_SET" == "1" ]]; then
   echo "--fixture is only supported for the Chrome smoke pass." >&2
@@ -1932,6 +1946,7 @@ describe_plan() {
   echo "Real app smoke: $APP"
   echo "Diagnostics log: $LOG_PATH"
   echo "Trace log: $TRACE_PATH"
+  echo "Smoke report: $REPORT_PATH"
   case "$APP" in
     textedit)
       echo "Plan: build/relaunch AutocompleteLab, open a disposable TextEdit file, type a test fragment, then validate logs and traces."

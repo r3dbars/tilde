@@ -28,7 +28,9 @@ for action-bearing web apps, made fast word completions use the final stale
 context refresh before display, and added first-class surface/path/hard-cap
 metadata to compatibility profiles. This follow-up also persists that scope on
 learned compatibility profiles and blocks suggestions while marked-text
-composition is active.
+composition is active. The latest loop adds a no-append `--check-only` proof
+validation path and explicit smoke report routing so known slices can be
+rechecked without polluting the append-only manual proof log.
 
 ## Product Standard
 
@@ -80,6 +82,9 @@ fixture proof, not a general system-wide inserter.
 Starting score before this pass: 72/100
 
 Overall score after this pass: 82/100
+
+Latest automatable loop: evidence hygiene improved, but the score stays 82/100
+because no new live Codex, Claude Code, or production browser proof was added.
 
 This is a strict compatibility score. It is not a general app-quality score.
 Several individual surfaces score much higher, but hard gates prevent a broad
@@ -242,6 +247,8 @@ compatibility claim.
   - `script/smoke_test.sh`
   - `script/check_proof_manifest.sh`
   - `script/manual_smoke_status.sh`
+  - `script/manual_smoke_session.sh --check-only`
+  - `script/real_app_smoke.sh --report-path`
   - `script/check_visual_placement_evidence.sh`
   - `script/scorecard_goal_loop.sh`
 - Missing evidence: Passing require-all proof gates for Codex, Claude Code, and
@@ -422,7 +429,28 @@ directly.
 - Expected score impact: +0.5 evidence loop.
 - Status: Done in this follow-up.
 
-### 7. Codex same-slice one-word no-submit proof
+### 7. Manual proof validation hygiene
+
+- Objective: Validate known log/trace slices without appending duplicate manual
+  proof rows and let smoke rehearsals write reports outside the product docs.
+- Files likely involved:
+  - `script/manual_smoke_session.sh`
+  - `script/real_app_smoke.sh`
+  - `script/manual_smoke_self_test.sh`
+  - `script/real_app_smoke_self_test.sh`
+- Tests to add/update:
+  - Shell self-tests for `--check-only`, `--report-path`, and missing argument
+    failures.
+- Proof required:
+  - `bash -n script/manual_smoke_session.sh script/real_app_smoke.sh script/manual_smoke_self_test.sh script/real_app_smoke_self_test.sh`
+  - `./script/manual_smoke_self_test.sh`
+  - `./script/real_app_smoke_self_test.sh`
+- Risk level: Low
+- Expected score impact: Evidence quality improvement only; no score increase
+  without new live app proof.
+- Status: Done in this follow-up.
+
+### 8. Codex same-slice one-word no-submit proof
 
 - Objective: Record one bounded Codex proof slice with screenshot, one-word Tab
   accept, and no submit.
@@ -437,7 +465,7 @@ directly.
 - Risk level: Medium
 - Expected score impact: +3 no-submit and visual proof.
 
-### 8. Claude Code terminal-host proof
+### 9. Claude Code terminal-host proof
 
 - Objective: Prove terminal-hosted Claude Code one-word accept without shell or
   agent submit.

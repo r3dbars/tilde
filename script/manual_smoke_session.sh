@@ -20,7 +20,7 @@ CLAUDE_CODE_PROOF_MARKER="${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER:-AUTOCOMPL
 
 usage() {
   cat <<'EOF'
-Usage: script/manual_smoke_session.sh <textedit|notes|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|obsidian|chrome|codex|claude-code|claude> [--print|--check] [--visual]
+Usage: script/manual_smoke_session.sh <textedit|notes|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|obsidian|chrome|codex|claude-code|claude> [--print|--check|--check-only] [--visual] [--report-path <path>]
 
 Default mode prints the local manual steps, records the current diagnostics log
 line, waits for Enter, validates the new diagnostics for that app, then appends
@@ -32,6 +32,7 @@ Use --visual when the trace slice must include strict screenshot evidence.
 
 Set AUTOCOMPLETE_LAB_LOG_START_LINE when using --check against a known log slice.
 Set AUTOCOMPLETE_LAB_TRACE_START_LINE to validate a matching trace slice.
+Use --check-only to validate a known slice without appending a report row.
 EOF
 }
 
@@ -72,8 +73,19 @@ esac
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --print | --check)
+    --print | --check | --check-only)
       MODE="$1"
+      ;;
+    --report-path)
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "--report-path needs a markdown path" >&2
+        exit 2
+      fi
+      REPORT_PATH="$1"
+      ;;
+    --report-path=*)
+      REPORT_PATH="${1#--report-path=}"
       ;;
     --visual | --require-visual-evidence)
       STRICT_VISUAL_EVIDENCE=1
@@ -346,7 +358,7 @@ if [[ "$MODE" == "run" ]]; then
   else
     read -r -p "Run the steps above, then press Enter to validate this app pass. " _
   fi
-elif [[ "$MODE" != "--check" ]]; then
+elif [[ "$MODE" != "--check" && "$MODE" != "--check-only" ]]; then
   usage >&2
   exit 2
 fi
@@ -542,9 +554,15 @@ if [[ "$APP" == "obsidian" ]] &&
     exit 1
   fi
 
-  append_report_row 0 "detached-suppressed" "not-applicable"
+  if [[ "$MODE" != "--check-only" ]]; then
+    append_report_row 0 "detached-suppressed" "not-applicable"
+  fi
   echo "$DISPLAY_NAME manual smoke verified detached suggestion suppression."
-  echo "Recorded pass in $REPORT_PATH."
+  if [[ "$MODE" == "--check-only" ]]; then
+    echo "Validated pass without recording a new row."
+  else
+    echo "Recorded pass in $REPORT_PATH."
+  fi
   exit 0
 fi
 
@@ -662,11 +680,17 @@ if ! AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
   exit 1
 fi
 
-append_report_row "$VERIFIED_COUNT"
+if [[ "$MODE" != "--check-only" ]]; then
+  append_report_row "$VERIFIED_COUNT"
+fi
 
 if (( STRICT_VISUAL_EVIDENCE == 1 )); then
   echo "$SESSION_NAME manual smoke verified with $VERIFIED_COUNT accepted insertions and strict visual trace evidence."
 else
   echo "$SESSION_NAME manual smoke verified with $VERIFIED_COUNT accepted insertions."
 fi
-echo "Recorded pass in $REPORT_PATH."
+if [[ "$MODE" == "--check-only" ]]; then
+  echo "Validated pass without recording a new row."
+else
+  echo "Recorded pass in $REPORT_PATH."
+fi
