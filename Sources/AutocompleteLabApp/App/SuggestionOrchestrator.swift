@@ -82,6 +82,7 @@ final class SuggestionOrchestrator {
             ),
             acceptedTextStyleSketch: input.acceptedTextStyleSketch,
             documentTitleShape: DocumentTitleShape.from(windowTitle: input.context.fingerprint.windowTitle),
+            visiblePageContext: input.visiblePageContext,
             maxVisibleWords: input.maxVisibleWords,
             mode: input.requestMode,
             suggestionID: suggestionID
@@ -690,6 +691,7 @@ struct SuggestionRequestInput: Sendable {
     let fieldIdentity: FocusedFieldIdentity
     let fieldClassification: AXFieldClassification
     let acceptedTextStyleSketch: AcceptedTextStyleSketch?
+    let visiblePageContext: VisiblePageContext?
     let maxVisibleWords: Int
     let requestMode: CompletionRequestMode
     let suggestionTuning: SuggestionTuning

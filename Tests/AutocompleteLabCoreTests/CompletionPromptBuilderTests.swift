@@ -73,6 +73,30 @@ struct CompletionPromptBuilderTests {
         #expect(!prompt.system.contains("Plan"))
     }
 
+    @Test("Prompt can include opt-in visible page context")
+    func promptCanIncludeVisiblePageContext() throws {
+        let pageContext = try #require(VisiblePageContext(text: """
+        Launch Plan
+        - Keep OCR local
+        Save
+        Save
+        !!!
+        """))
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "We should",
+            visiblePageContext: pageContext
+        ))
+
+        #expect(prompt.system.contains("Visible page context source: screen_ocr"))
+        #expect(prompt.system.contains("Use it only to match local names"))
+        #expect(prompt.user.contains("Visible page context:\nLaunch Plan"))
+        #expect(prompt.user.contains("- Keep OCR local"))
+        #expect(prompt.user.contains("Before cursor:\nWe should"))
+        #expect(prompt.user.hasSuffix("Next words:"))
+        #expect(!prompt.user.contains("!!!"))
+    }
+
     @Test("Word prompt includes trace safe document title shape")
     func wordPromptIncludesTraceSafeDocumentTitleShape() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)

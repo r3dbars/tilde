@@ -1,5 +1,6 @@
 import AppKit
 import AutocompleteLabCore
+import CoreGraphics
 
 struct MenuBarStatusItemConfiguration: Equatable {
     let symbolName: String
@@ -23,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionControlPolicy = SuggestionControlPolicy()
     private let suggestionPauseSchedulePolicy = SuggestionPauseSchedulePolicy()
     private let suggestionAggressivenessPolicy = SuggestionAggressivenessPolicy()
+    private let visiblePageContextProvider = VisiblePageContextProvider()
     private let fieldClassifier = AXFieldClassifier()
     private let textContextRepairPolicy = TextContextRepairPolicy()
     private let tracePrivacySecretStore = TracePrivacySecretStore()
@@ -113,6 +115,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleScreenshotTracing: { [weak self] in
             self?.toggleGlobalScreenshotTracing()
         },
+        toggleVisiblePageContext: { [weak self] in
+            self?.toggleVisiblePageContext()
+        },
         deleteLocalLogs: { [weak self] in
             self?.deleteLocalPrivacyLogs()
         },
@@ -202,6 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusedTextPollInterval: TimeInterval = 0.05
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 220
+    private let visibleSuggestionTypingPollPauseMilliseconds = 60
     private let postInsertionPollPauseMilliseconds = 220
     private let maximumPreservedSuggestionGeometryAgeDuringAXPauseMilliseconds = 750
     private var focusedTextPollingPause = FocusedTextPollingPause()
@@ -211,6 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appEnablementSetupCompleted = true
     private var keyboardShortcutConfiguration = KeyboardShortcutConfiguration.default
     private var suggestionTuning = SuggestionTuning()
+    private var visiblePageContextEnabled = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ProcessInfo.processInfo.disableAutomaticTermination("AutocompleteLab runs as a persistent menu bar agent.")
@@ -219,6 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadDisabledApps()
         loadKeyboardShortcutConfiguration()
         loadSuggestionTuning()
+        loadVisiblePageContextEnabled()
         loadAcceptedAndKeptLearning()
         loadAcceptedTextStyleMemory()
         loadProofModeOverrides()
@@ -618,6 +626,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rawContentTracingExpiresAt: RawAutocompleteTraceLog.shared.rawContentTracingExpiresAt,
             screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled,
             screenshotTracingExpiresAt: RawAutocompleteTraceLog.shared.screenshotTracingExpiresAt,
+            visiblePageContextEnabled: visiblePageContextEnabled,
+            screenCaptureAccessGranted: CGPreflightScreenCaptureAccess(),
             diagnosticsPath: DiagnosticsLog.shared.path,
             tracePath: RawAutocompleteTraceLog.shared.path
         )
@@ -634,7 +644,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var runtimeTargetSummary: String {
-        "\(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(completionLengthConfiguration.displaySummary) • \(suggestionTuning.displayName.lowercased()) • showing up to \(suggestionTuning.maxVisibleWords)"
+        "\(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(completionLengthConfiguration.displaySummary) • \(suggestionTuning.displayName.lowercased()) • showing up to \(suggestionTuning.maxVisibleWords) • page context \(visiblePageContextEnabled ? "on" : "off")"
     }
 
     private var shouldShowSettingsForCurrentReadiness: Bool {
@@ -1096,6 +1106,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile
         )
         let fieldClassification = fieldClassification(for: context)
+        refreshVisiblePageContextIfNeeded(
+            context: context,
+            app: frontmostApp
+        )
         rememberFieldControlTarget(
             app: frontmostApp,
             fieldIdentity: fieldIdentity,
@@ -1425,7 +1439,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldClassification: fieldClassification,
             renderMode: renderMode,
             delayMilliseconds: delayMilliseconds,
-            requestMode: requestMode
+            requestMode: requestMode,
+            visiblePageContext: cachedVisiblePageContext(
+                context: context,
+                appBundleIdentifier: frontmostApp.bundleIdentifier
+            )
         )
     }
 
@@ -2259,7 +2277,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func observePassthroughTypingKeyDown() {
         focusedTextPollingPause.pause(
             now: Date(),
-            durationMilliseconds: postTypingPollPauseMilliseconds
+            durationMilliseconds: suggestionSession.hasVisibleSuggestion
+                ? visibleSuggestionTypingPollPauseMilliseconds
+                : postTypingPollPauseMilliseconds
         )
         clearPendingAcceptedInsertionUndo(reason: "typing")
 
@@ -2269,8 +2289,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         currentSuggestionInvalidatedByUserKeyDown = true
         invalidatePendingSuggestionRequest()
-        setSuggestionDecision("Waiting: typing")
-        hideSuggestion(reason: "typing-continued")
+        setSuggestionDecision("Shown: tracking typing")
+        updateKeyboardEventTapSnapshot()
     }
 
     private func handleAutocompleteKey(
@@ -3745,7 +3765,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fieldClassification: AXFieldClassification,
         renderMode: SuggestionRenderMode,
         delayMilliseconds: Int,
-        requestMode: CompletionRequestMode
+        requestMode: CompletionRequestMode,
+        visiblePageContext: VisiblePageContext?
     ) {
         lastRequestedTextBeforeCursor = context.textBeforeCursor
 
@@ -3763,6 +3784,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: fieldIdentity,
             fieldClassification: fieldClassification,
             acceptedTextStyleSketch: acceptedTextStyleSketch,
+            visiblePageContext: visiblePageContext,
             maxVisibleWords: maxVisibleWords(for: requestMode, profile: profile),
             requestMode: requestMode,
             suggestionTuning: suggestionTuning
@@ -4651,6 +4673,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func traceFieldMetadata(context: FocusedTextContext) -> [String: String] {
         fieldClassification(for: context).traceMetadata
+    }
+
+    private func refreshVisiblePageContextIfNeeded(
+        context: FocusedTextContext,
+        app: RunningApplicationInfo
+    ) {
+        visiblePageContextProvider.refreshIfNeeded(
+            for: context,
+            app: app,
+            enabled: visiblePageContextEnabled
+        )
+    }
+
+    private func cachedVisiblePageContext(
+        context: FocusedTextContext,
+        appBundleIdentifier: String
+    ) -> VisiblePageContext? {
+        guard visiblePageContextEnabled else {
+            return nil
+        }
+
+        return visiblePageContextProvider.cachedContext(
+            for: context,
+            appBundleIdentifier: appBundleIdentifier
+        )
     }
 
     private func traceRequestMetadata(
@@ -5587,7 +5634,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             newTextBeforeCursor: newTextBeforeCursor
         )
 
-        guard case let .typedOver(typedSuffix) = progress else {
+        guard case let .typedOver(typedSuffix) = progress,
+              !shouldPreserveVisibleSuggestionWhileTyping(displayedText: displayedText) else {
             return
         }
 
@@ -5657,10 +5705,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            let hasRemainingSuggestion = suggestionSession.hasVisibleSuggestion
             lastTextSnapshot = snapshot
             invalidatePendingSuggestionRequest()
             currentSuggestionTextBeforeCursor = context.textBeforeCursor
-            setSuggestionDecision("Shown: typing through suggestion")
+            currentSuggestionInvalidatedByUserKeyDown = false
+            setSuggestionDecision(hasRemainingSuggestion ? "Shown: typing through suggestion" : "Queued: refreshing after typed suggestion")
             recordSuggestionEvent(
                 "suggestion-typed-through",
                 context: context,
@@ -5672,9 +5722,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
             )
             keyboardEventTap?.suppressPassthroughObservation(for: 0.35)
-            repositionVisibleSuggestion(context: context, profile: profile)
-            return true
+            if hasRemainingSuggestion {
+                repositionVisibleSuggestion(context: context, profile: profile)
+                return true
+            }
+
+            lastRequestedTextBeforeCursor = nil
+            return false
         } else if case .typedOver = progress {
+            if shouldPreserveVisibleSuggestionWhileTyping(displayedText: displayedText) {
+                lastRequestedTextBeforeCursor = nil
+                setSuggestionDecision("Shown: refreshing while typing")
+                recordSuggestionEvent(
+                    "suggestion-refresh-after-typing-diverged",
+                    context: context,
+                    profile: profile,
+                    metadata: [
+                        "reason": "typing-diverged-from-visible-suggestion",
+                        "visibleSuggestionWords": String(visibleWordCount(in: displayedText))
+                    ]
+                )
+                updateKeyboardEventTapSnapshot()
+                return false
+            }
+
             suggestionRepetitionSuppressor.recordMiss(
                 displayedText,
                 mode: currentSuggestionRequestMode,
@@ -5684,6 +5755,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return false
+    }
+
+    private func shouldPreserveVisibleSuggestionWhileTyping(displayedText: String) -> Bool {
+        guard currentSuggestionRequestMode?.isContinuation == true else {
+            return false
+        }
+
+        return visibleWordCount(in: displayedText) > 1
+    }
+
+    private func visibleWordCount(in text: String) -> Int {
+        text.split(whereSeparator: { $0.isWhitespace }).count
     }
 
     private func hideSuggestion(
@@ -6518,6 +6601,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
+    private func toggleVisiblePageContext() {
+        visiblePageContextEnabled.toggle()
+        if !visiblePageContextEnabled {
+            visiblePageContextProvider.clear()
+        }
+        persistVisiblePageContextEnabled()
+        lastRequestedTextBeforeCursor = nil
+        invalidatePendingSuggestionRequest()
+        if suggestionSession.hasVisibleSuggestion {
+            hideSuggestion(reason: "visible-page-context-changed")
+        }
+        setSuggestionDecision("Ready: page context \(visiblePageContextEnabled ? "on" : "off")")
+        DiagnosticsLog.shared.record(
+            "visible-page-context-control",
+            metadata: [
+                "surface": "settings",
+                "enabled": String(visiblePageContextEnabled),
+                "screenCaptureAccess": String(CGPreflightScreenCaptureAccess())
+            ]
+        )
+        refreshRuntimeChrome()
+    }
+
     private func deleteLocalPrivacyLogs(refreshSettings: Bool = true) {
         RawAutocompleteTraceLog.shared.deleteAll()
         compatibilityLearningStore.deleteAll()
@@ -7276,6 +7382,10 @@ private extension AppDelegate {
         "SuggestionMaxVisibleWords"
     }
 
+    static var visiblePageContextEnabledDefaultsKey: String {
+        "VisiblePageContextEnabled"
+    }
+
     static var temporarilyEnabledBundleIDsEnvironmentKey: String {
         "AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
     }
@@ -7482,6 +7592,19 @@ private extension AppDelegate {
         defaults.set(
             suggestionTuning.maxVisibleWords,
             forKey: Self.suggestionMaxVisibleWordsDefaultsKey
+        )
+    }
+
+    func loadVisiblePageContextEnabled() {
+        visiblePageContextEnabled = UserDefaults.standard.bool(
+            forKey: Self.visiblePageContextEnabledDefaultsKey
+        )
+    }
+
+    func persistVisiblePageContextEnabled() {
+        UserDefaults.standard.set(
+            visiblePageContextEnabled,
+            forKey: Self.visiblePageContextEnabledDefaultsKey
         )
     }
 
