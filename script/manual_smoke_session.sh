@@ -15,10 +15,11 @@ REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-r
 PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-default}"
 ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-backtick}"
 PROMPT_NO_SUBMIT_CONFIRMED="${AUTOCOMPLETE_LAB_PROMPT_NO_SUBMIT_CONFIRMED:-0}"
+BUILD_PROOF="${AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF:-}"
 
 usage() {
   cat <<'EOF'
-Usage: script/manual_smoke_session.sh <textedit|notes|notes-title|notes-body|notes-checklist|obsidian|chrome|codex|claude-code|claude> [--print|--check] [--visual]
+Usage: script/manual_smoke_session.sh <textedit|textedit-multiline|textedit-wrapped|notes|notes-title|notes-body|notes-checklist|obsidian|chrome|codex|claude-code|claude> [--print|--check] [--visual]
 
 Default mode prints the local manual steps, records the current diagnostics log
 line, waits for Enter, validates the new diagnostics for that app, then appends
@@ -38,6 +39,14 @@ if [[ -z "$APP" || "$APP" == "-h" || "$APP" == "--help" ]]; then
 fi
 
 case "$APP" in
+  textedit-multiline)
+    APP="textedit"
+    PROOF_LABEL="multiline"
+    ;;
+  textedit-wrapped)
+    APP="textedit"
+    PROOF_LABEL="wrapped-line"
+    ;;
   notes-title)
     APP="notes"
     NOTES_SURFACE="title"
@@ -131,7 +140,24 @@ case "$APP" in
     BUNDLE_ID="com.apple.TextEdit"
     DISPLAY_NAME="TextEdit"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
-    STEPS=$'- Open a disposable TextEdit document.\n- Type `Can we`.\n- Wait for a suggestion.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
+    case "$PROOF_LABEL" in
+      default|option-tab)
+        STEPS=$'- Open a disposable TextEdit document.\n- Type `Can we`.\n- Wait for a suggestion.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
+        ;;
+      multiline)
+        SESSION_NAME="TextEdit multiline"
+        STEPS=$'- Open a disposable TextEdit document.\n- Type one setup line, press Return, then type `Can we` on the next line.\n- Wait for a suggestion on the second line.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
+        ;;
+      wrapped-line)
+        SESSION_NAME="TextEdit wrapped line"
+        STEPS=$'- Open a disposable TextEdit document in a narrow window.\n- Type a long disposable sentence so the caret is on a visually wrapped line.\n- End with `Can we`.\n- Wait for a suggestion on the wrapped visual line.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
+        ;;
+      *)
+        echo "unknown TextEdit proof label: $PROOF_LABEL" >&2
+        echo "expected default, multiline, or wrapped-line" >&2
+        exit 2
+        ;;
+    esac
     ;;
   notes)
     BUNDLE_ID="com.apple.Notes"
@@ -408,6 +434,10 @@ append_report_row() {
     trace_summary="$trace_summary; prompt no-submit confirmed"
   fi
 
+  local build_proof
+  build_proof="$(manual_smoke_build_proof)"
+  trace_summary="$trace_summary; build \`$build_proof\`"
+
   if [[ ! -f "$REPORT_PATH" ]]; then
     mkdir -p "$(dirname "$REPORT_PATH")"
     cat >"$REPORT_PATH" <<'EOF'
@@ -424,6 +454,9 @@ historical evidence only.
 When a trace slice says `visual strict-complete`, strict screenshot evidence was
 required and passed. Rows without that marker are insertion proof only.
 
+Rows also include a build proof token in the trace slice. Current proof must
+match either the current Git commit or the current release archive checksum.
+
 | Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
 | --- | --- | --- | --- | ---: | --- | --- | --- |
 EOF
@@ -439,6 +472,37 @@ EOF
     "$((START_LINE + 1))" \
     "$LOG_PATH" \
     "$trace_summary" >>"$REPORT_PATH"
+}
+
+manual_smoke_build_proof() {
+  if [[ -n "$BUILD_PROOF" ]]; then
+    printf '%s' "$BUILD_PROOF"
+    return
+  fi
+
+  local proof_parts=()
+  local commit
+  commit="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
+  if [[ -n "$commit" ]]; then
+    proof_parts+=("commit:$commit")
+  fi
+
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/AutocompleteLab.zip}"
+  if [[ -s "$archive_path" ]]; then
+    local archive_sha
+    archive_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
+    if [[ -n "$archive_sha" ]]; then
+      proof_parts+=("archive-sha256:$archive_sha")
+    fi
+  fi
+
+  if (( ${#proof_parts[@]} == 0 )); then
+    printf 'commit:unknown'
+    return
+  fi
+
+  local IFS=','
+  printf '%s' "${proof_parts[*]}"
 }
 
 if [[ "$APP" == "obsidian" ]] &&
@@ -507,7 +571,7 @@ fi
 
 reject_pattern "insert-verification-final-failure .*app=$BUNDLE_ID" "unrecovered insertion verification failure"
 reject_pattern "field-suppressed .*app=$BUNDLE_ID" "field suppression"
-reject_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=(insert-verification-failed|missing-anchor|runtime-not-ready)" "blocking failure"
+reject_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=(insert-verification-failed|missing-anchor)" "blocking failure"
 
 TRACE_EVAL_OUTPUT="$(mktemp)"
 trap 'rm -f "$TRACE_EVAL_OUTPUT"' EXIT

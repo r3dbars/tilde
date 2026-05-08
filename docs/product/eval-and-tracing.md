@@ -47,10 +47,40 @@ The app also keeps local compatibility learning here:
 
 That file can hold per-app visual offsets, render-mode overrides, screenshot-tracing state, observation counts, and confidence. This is the first self-healing layer: small learned adjustments can apply at runtime, while bigger repeated misses become adapter patches.
 
+Compatibility learning is not a support claim by itself. Treat it as a code
+candidate only when all of these are true:
+
+- at least 5 observations for the same bundle id,
+- confidence is at least 0.75,
+- the reason is `manual-visual-nudge` or `screenshot-visual-correction`,
+- the offset is reproduced on the current commit with screenshot-backed smoke,
+- no wrong-app insertion, sensitive-field, or Tab-capture failure appears in
+  the same slice.
+
+Use the report helper to separate low-confidence learning from code candidates:
+
+```bash
+script/compatibility_self_healing_report.py
+```
+
+The default code-promotion thresholds are 5 observations and 0.75 confidence.
+Lower them only for a local experiment, not for beta support language.
+
 For quick visual calibration, use the menu bar nudge actions while the target app is focused:
 
 - `Nudge Suggestion Up/Down/Left/Right`
 - `Reset Current App Learning`
+
+Nudges are explicit local opt-in actions. Autocomplete Lab must not infer,
+store, or apply visual calibration automatically for a beta/customer user.
+Only local dogfood/lab runs may use screenshot-backed visual calibration, and
+only after screenshot tracing is explicitly enabled for that app or run.
+
+ScreenCaptureKit and Vision are useful dogfood candidates for measuring
+caret/suggestion alignment from local screenshots, but they stay out of the
+private beta path for now. The product path remains AX geometry plus explicit
+local nudges until screenshot/Vision calibration has fixture proof, current app
+smoke proof, and a visible opt-in control.
 
 Nudges are local, per app, and take effect on the next suggestion.
 For a screenshot-free placement readout, run:
@@ -60,7 +90,8 @@ script/visual_calibration_report.py
 ```
 
 The report uses redacted caret, render-mode, learning-offset, flicker, and
-caret-failure metadata only. It does not read or link screenshots.
+caret-failure metadata only. It does not read or link screenshots. Its
+self-test uses a fixture JSONL slice and is part of `script/smoke_test.sh`.
 
 ## Trace Events
 
@@ -141,7 +172,7 @@ slice from `trace_mark.sh` or explicit `AUTOCOMPLETE_LAB_TRACE_START_LINE` and
 Compare local model latency after a trial launch:
 
 ```bash
-script/model_latency_report.py --latest
+script/model_latency_report.py --default-model-proof
 AUTOCOMPLETE_LAB_MODEL=qwen35-9b ./script/build_and_run.sh --verify
 ```
 
@@ -163,6 +194,7 @@ After a manual model trial, require enough samples before trusting the result:
 
 ```bash
 script/model_latency_report.py --latest --require-timing-samples 5 --require-shown-samples 5
+script/model_latency_report.py --default-model-proof
 ```
 
 For a clean app-specific slice:

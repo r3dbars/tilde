@@ -47,6 +47,8 @@ evidence exists in the repo.
 4. Run Claude Code with a harmless prompt fragment and no Enter key.
 5. Refresh Claude desktop with screenshot tracing and one-word accept without submit.
 6. Replace browser-editor fixture confidence with at least one real CodeMirror, Monaco, and ProseMirror proof pass.
+7. Run `script/no_accessibility_smoke.sh --check` after manually disabling
+   Accessibility so the off state has a permission-specific proof path.
 
 ## Proof Rules
 
@@ -58,3 +60,5 @@ evidence exists in the repo.
 - Private apps must use disposable text only.
 - A pending screenshot means the app is not screenshot-backed, even if insertion
   worked before.
+- Compatibility learning can recommend an adapter only after 5 observations,
+  0.75 confidence, a trusted visual reason, and current screenshot-backed smoke.

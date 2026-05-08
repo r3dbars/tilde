@@ -324,6 +324,7 @@ type_textedit_fixture() {
   generate_soak_text "$TARGET_CHARS" >"$text_file"
   : >"$target_file"
 
+  close_textedit_soak_documents
   open -a TextEdit "$target_file"
   sleep 1
 
@@ -367,6 +368,9 @@ with timeout of $timeout_seconds seconds
   end tell
 end timeout
 APPLESCRIPT
+  SOAK_OSASCRIPT_PID=$!
+  wait "$SOAK_OSASCRIPT_PID"
+  SOAK_OSASCRIPT_PID=""
 }
 
 run_checker() {

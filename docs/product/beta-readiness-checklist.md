@@ -16,6 +16,8 @@ Use this before inviting private beta testers.
 
 - [ ] The menu bar or Diagnostics shows the model is ready.
 - [ ] The preferred asset is `Qwen3.5-4B-4bit`.
+- [ ] Settings installs or repairs the local model without shell commands.
+- [ ] `./script/model_latency_report.py --default-model-proof` passes.
 - [ ] Suggestions stay off while the runtime warms or fails.
 - [ ] Mock fallback is not used for beta.
 - [ ] Missing or invalid model setup is handled by Settings `Install Model` or
@@ -30,6 +32,7 @@ Use this before inviting private beta testers.
 - [ ] Obsidian or CodeMirror suppresses detached whole-editor suggestions.
 - [ ] One Electron writing app has its own trace slice before beta use.
 - [ ] Mail is diagnostics-only.
+- [ ] Atlas is diagnostics-only.
 - [ ] Any blocked app stays off.
 
 ## Privacy Gate
