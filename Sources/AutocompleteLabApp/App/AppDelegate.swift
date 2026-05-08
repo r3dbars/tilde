@@ -859,7 +859,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let requestID = focusedTextReader.readFocusedTextContext(
             for: frontmostApp,
-            allowDescendantTextFallback: profile.allowsDescendantTextFallback
+            allowDescendantTextFallback: profile.allowsDescendantTextFallback,
+            options: FocusedTextReadOptionsPolicy.options(for: frontmostApp, profile: profile)
         ) { [weak self, profile, startedAt] result in
             Task { @MainActor [weak self, profile, startedAt] in
                 await self?.completeFocusedTextPoll(

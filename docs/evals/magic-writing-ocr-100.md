@@ -37,6 +37,7 @@ This is not yet a 97/100 real human dogfood score. It means the prompt, OCR cont
 - Prompt style bumped to `screen-aware-continuation-v5` with an explicit "never output visible window titles / tab labels / menu labels / OCR chrome" rule.
 - Focused text polling now waits through a short in-flight grace window before counting overlapping polls, so slow AX reads in Codex do not churn the typing loop while the user is trying to write.
 - Slow focused-text reads that still return a valid context now feed the suggestion pipeline instead of being discarded before the model can help.
+- Codex dogfood typing now uses a focused-text fast path: direct text snapshot plus synthetic text-area caret, skipping expensive AX range geometry and attributed text reads during the polling loop.
 
 ## Latest Heartbeat Pass
 
@@ -78,6 +79,17 @@ Time: 2026-05-08T23:17:29Z
 - Root cause: those reads returned `hasContext=true`, but the app applied the slow-read throttle before processing the current snapshot, so a useful typing update could be thrown away right when the user wanted an aggressive suggestion.
 - Fix: a slow AX read now pauses the next poll but still processes the current focused-text context when it came back safely.
 - Added focused policy coverage for the "slow read with context still processes current snapshot" behavior.
+
+## Latest Codex Fast-Read Pass
+
+Time: 2026-05-08T23:22:29Z
+
+- Fresh heartbeat performance gate failed after relaunch: focused text poll max hit 411 ms and the log showed repeated slow Codex reads with `currentRead=processed`.
+- Root cause: Codex uses synthetic prompt caret placement, but the polling loop still paid for richer AX range geometry / attributed text reads before replacing that geometry with the synthetic caret.
+- Fix: add a Codex-only focused-text read option that prefers direct text snapshots and skips parameterized text geometry / attributed text during typing polls.
+- TextEdit, Notes, Obsidian, and other targets stay on the standard focused-text read path.
+- Added `SerialFocusedTextAXReaderTests` coverage for option propagation and for Codex selecting the synthetic text-area fast path.
+- Verification: full Swift suite passed with 973 tests, the app relaunched on `qwen3-0.6b`, and the fresh post-relaunch typing-performance gate reported focused-text poll p95 3 ms, max 25 ms, zero slow markers, and zero skipped polls.
 
 ## 100 Test Situations
 
