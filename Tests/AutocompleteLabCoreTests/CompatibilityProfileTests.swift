@@ -341,6 +341,36 @@ struct CompatibilityProfileTests {
         ) == nil)
     }
 
+    @Test("Yellow mirror fallback does not permit low confidence placement without proof")
+    func yellowMirrorFallbackDoesNotPermitLowConfidencePlacementWithoutProof() throws {
+        let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+        let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+
+        let chromeTrustPolicy = chrome.placementTrustPolicy()
+        let chromePlan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: chrome.fallbackRenderMode,
+            caretRect: nil,
+            elementRect: CGRect(x: 100, y: 200, width: 500, height: 180),
+            windowRect: nil,
+            textLineRect: nil,
+            allowsDetachedSuggestions: chrome.allowsDetachedSuggestions,
+            trustPolicy: chromeTrustPolicy
+        )
+
+        #expect(!chromeTrustPolicy.allowsLowConfidencePlacement)
+        guard case let .suppress(chromeSuppression) = chromePlan else {
+            Issue.record("Expected untrusted yellow mirror fallback to suppress")
+            return
+        }
+        #expect(chromeSuppression.reason == .lowConfidencePlacement)
+
+        #expect(textEdit.placementTrustPolicy().allowsLowConfidencePlacement)
+        #expect(chrome.placementTrustPolicy(input: CompatibilityPlacementTrustInput(
+            hasTrustedVisualAdjustment: true
+        )).allowsLowConfidencePlacement)
+    }
+
     @Test("Render mode plans choose stable anchors for inline and mirror modes")
     func renderModePlansChooseStableAnchors() {
         let caret = CGRect(x: 10, y: 20, width: 0, height: 18)
