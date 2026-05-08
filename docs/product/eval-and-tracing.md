@@ -107,7 +107,7 @@ Track these rates per app and request mode:
 - median edit distance after accept
 - median first edit delay after accept
 - ignored by continued typing
-- suppressed as empty, meta, repeated context, or invalid word completion
+- suppressed as empty, meta, repeated context, duplicate/restart, or invalid word completion
 - annoyance score and annoyance signal counts
 - insertion verification success
 - insertion verification failures

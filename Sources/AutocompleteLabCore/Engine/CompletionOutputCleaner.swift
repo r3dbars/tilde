@@ -139,6 +139,12 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        if mode.isContinuation,
+           let textBeforeCursor,
+           duplicatesVisibleTypedWords(trimmedSuggestion, after: textBeforeCursor) {
+            return nil
+        }
+
         if let textBeforeCursor,
            repeatsEarlierContext(trimmedSuggestion, after: textBeforeCursor) {
             return nil
@@ -433,6 +439,40 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         return contextWords.windows(ofCount: leadPhrase.count).contains(leadPhrase)
+    }
+
+    private func duplicatesVisibleTypedWords(_ suggestion: String, after textBeforeCursor: String) -> Bool {
+        let suggestionWords = normalizedWords(in: suggestion)
+        guard !suggestionWords.isEmpty else {
+            return false
+        }
+
+        let currentSentenceWords = normalizedWords(in: currentSentence(in: textBeforeCursor))
+        guard !currentSentenceWords.isEmpty else {
+            return false
+        }
+
+        if suggestionWords.count == 1,
+           let onlyWord = suggestionWords.first,
+           onlyWord.count > 3,
+           !Self.lowValueSingleWordPhrases.contains(onlyWord),
+           currentSentenceWords.contains(onlyWord) {
+            return true
+        }
+
+        let maximumLead = min(3, suggestionWords.count, currentSentenceWords.count)
+        guard maximumLead >= 2 else {
+            return false
+        }
+
+        for leadCount in stride(from: maximumLead, through: 2, by: -1) {
+            let leadPhrase = Array(suggestionWords.prefix(leadCount))
+            if currentSentenceWords.windows(ofCount: leadCount).contains(leadPhrase) {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func restartsCurrentSentence(_ suggestion: String, after textBeforeCursor: String) -> Bool {

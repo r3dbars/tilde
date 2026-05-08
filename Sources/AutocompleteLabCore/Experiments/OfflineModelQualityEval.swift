@@ -282,11 +282,43 @@ public enum OfflineModelQualityEvaluator {
             }
         }
 
+        let maximumLead = min(3, outputWords.count, contextWords.count)
+        if maximumLead >= 2 {
+            for leadCount in stride(from: maximumLead, through: 2, by: -1) {
+                let leadPhrase = Array(outputWords.prefix(leadCount))
+                if containsContiguous(leadPhrase, in: contextWords) {
+                    return 0
+                }
+            }
+        }
+
         if let lastContext = contextWords.last, outputWords.first == lastContext {
             return 0.5
         }
 
+        if outputWords.count == 1,
+           let onlyWord = outputWords.first,
+           onlyWord.count > 3,
+           contextWords.contains(onlyWord) {
+            return 0.5
+        }
+
         return 1
+    }
+
+    private static func containsContiguous(_ needle: [String], in haystack: [String]) -> Bool {
+        guard !needle.isEmpty, haystack.count >= needle.count else {
+            return false
+        }
+
+        for startIndex in 0...(haystack.count - needle.count) {
+            let endIndex = startIndex + needle.count
+            if Array(haystack[startIndex..<endIndex]) == needle {
+                return true
+            }
+        }
+
+        return false
     }
 
     private static func assistantLeakageScore(output: String) -> Double {

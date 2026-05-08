@@ -213,6 +213,18 @@ struct CompletionOutputCleanerTests {
             "I want this to feel smoother",
             after: "I want this"
         )?.visibleText == " to feel smoother")
+        #expect(cleaner.clean(
+            "I want smoother",
+            after: "I want this"
+        ) == nil)
+        #expect(cleaner.clean(
+            "the launch plan",
+            after: "We should keep the launch small"
+        ) == nil)
+        #expect(cleaner.clean(
+            "launch small enough",
+            after: "We should keep the launch small"
+        )?.visibleText == " enough")
     }
 
     @Test("Suppresses one word twitch completions")
