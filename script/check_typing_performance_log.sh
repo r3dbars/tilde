@@ -117,6 +117,8 @@ poll_summaries = []
 poll_skipped_events = []
 poll_skip_summaries = []
 disabled_events = []
+start_failed_events = []
+failed_closed_events = []
 malformed_events = []
 
 for line_number, line in selected:
@@ -170,6 +172,20 @@ for line_number, line in selected:
         summaries.append(summary)
     elif event == "keyboard-event-tap-disabled":
         disabled_events.append(
+            {
+                "line": line_number,
+                "reason": fields.get("reason", "unknown"),
+            }
+        )
+    elif event == "keyboard-event-tap-start-failed":
+        start_failed_events.append(
+            {
+                "line": line_number,
+                "reason": fields.get("reason", "unknown"),
+            }
+        )
+    elif event == "keyboard-event-tap-failed-closed":
+        failed_closed_events.append(
             {
                 "line": line_number,
                 "reason": fields.get("reason", "unknown"),
@@ -266,6 +282,11 @@ if summaries:
     print(f"Summary max: {max(summary_max) if summary_max else 'n/a'}us")
 print(f"Slow latency markers: {len(slow_markers)}")
 print(f"Tap disabled events: {len(disabled_events)}")
+print(
+    "Key capture failure events: "
+    f"startFailed={len(start_failed_events)} "
+    f"failedClosed={len(failed_closed_events)}"
+)
 print(
     "Focused text poll windows: "
     f"n={len(poll_summaries)} samples={poll_summary_sample_count}"
@@ -369,6 +390,16 @@ if focused_poll_warnings:
 for item in disabled_events:
     failures.append(
         f"{line_label(item)} event tap disabled reason={item['reason']}"
+    )
+
+for item in start_failed_events:
+    failures.append(
+        f"{line_label(item)} event tap start failed reason={item['reason']}"
+    )
+
+for item in failed_closed_events:
+    failures.append(
+        f"{line_label(item)} event tap failed closed reason={item['reason']}"
     )
 
 if failures:

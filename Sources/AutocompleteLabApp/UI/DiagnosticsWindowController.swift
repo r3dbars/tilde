@@ -910,6 +910,8 @@ struct DiagnosticsTypingHealth {
     private var keyP95Micros: Int?
     private var slowKeyMarkers = 0
     private var disabledKeyEvents = 0
+    private var startFailedKeyEvents = 0
+    private var failedClosedKeyEvents = 0
 
     private var axSummarySamples = 0
     private var axP95Milliseconds: Int?
@@ -925,6 +927,14 @@ struct DiagnosticsTypingHealth {
     }
 
     var keyCaptureStatus: String {
+        if startFailedKeyEvents > 0 {
+            return "needs attention - event tap start failed \(startFailedKeyEvents)x"
+        }
+
+        if failedClosedKeyEvents > 0 {
+            return "needs attention - event tap failed closed \(failedClosedKeyEvents)x"
+        }
+
         if disabledKeyEvents > 0 {
             return "needs attention - event tap disabled \(disabledKeyEvents)x"
         }
@@ -986,6 +996,10 @@ struct DiagnosticsTypingHealth {
             keyMaxMicros = maxOptional(keyMaxMicros, fields.intValue(for: "durationMicros"))
         case "keyboard-event-tap-disabled":
             disabledKeyEvents += 1
+        case "keyboard-event-tap-start-failed":
+            startFailedKeyEvents += 1
+        case "keyboard-event-tap-failed-closed":
+            failedClosedKeyEvents += 1
         case "focused-text-poll-latency-summary":
             axSummarySamples += fields.intValue(for: "count") ?? 0
             axP95Milliseconds = maxOptional(axP95Milliseconds, fields.intValue(for: "p95Milliseconds"))
