@@ -39,12 +39,14 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let behaviorProfile = behaviorProfile(for: request)
 
         if request.mode == .wordCompletion {
+            let titleShapeGuidance = request.documentTitleShape?.promptGuidance ?? ""
             let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
             let lineStructureGuidance = request.currentLineStructure?.promptGuidance ?? ""
             return CompletionPrompt(
                 system: """
                 Inline word completion.
                 Return only the missing suffix for the current word.
+                \(titleShapeGuidance)
                 \(partialWordGuidance)
                 \(lineStructureGuidance)
                 Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, or the suffix would complete the wrong word.
@@ -67,6 +69,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let effectiveMaxVisibleWords = min(maxVisibleWords, request.maxVisibleWords, behaviorProfile.maxVisibleWords)
         let sentenceGuidance = sentenceGuidance(for: request)
         let styleGuidance = request.acceptedTextStyleSketch?.promptGuidance ?? ""
+        let titleShapeGuidance = request.documentTitleShape?.promptGuidance ?? ""
         let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
         let lineStructureGuidance = request.currentLineStructure?.promptGuidance ?? ""
         let modeGuidance = request.mode == .sentenceContinuation
@@ -79,6 +82,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, chatty, or likely to answer the prompt instead of continuing it.
         Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens.
         \(styleGuidance)
+        \(titleShapeGuidance)
         \(partialWordGuidance)
         \(lineStructureGuidance)
         \(behaviorProfile.promptGuidance.joined(separator: "\n"))
