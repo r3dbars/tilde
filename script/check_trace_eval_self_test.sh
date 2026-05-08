@@ -2,7 +2,8 @@
 set -euo pipefail
 
 TRACE_FILE="$(mktemp)"
-trap 'rm -f "$TRACE_FILE"' EXIT
+CLAUDE_CODE_TRACE_FILE="$(mktemp)"
+trap 'rm -f "$TRACE_FILE" "$CLAUDE_CODE_TRACE_FILE"' EXIT
 
 cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionRequested","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion"}
@@ -216,6 +217,26 @@ fi
 if ! grep -F "com.openai.codex: 67% (6/9)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not report useful rate by app" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+cat >"$CLAUDE_CODE_TRACE_FILE" <<'JSONL'
+{"type":"suggestionPresented","experimentArm":"length_1_word","suggestionID":"claude-code-one","appBundleIdentifier":"com.anthropic.claude-code","requestMode":"wordCompletion","displayedText":"safe","latencyMilliseconds":20,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
+JSONL
+
+AUTOCOMPLETE_LAB_TRACE_PATH="$CLAUDE_CODE_TRACE_FILE" \
+AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP="com.anthropic.claude-code" \
+  script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-self-test-claude-code.txt 2>&1 || true
+
+if grep -F "no MVP compatibility profile" /tmp/autocomplete-trace-eval-self-test-claude-code.txt >/dev/null; then
+  echo "trace eval self-test treated Claude Code as an unknown profile" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-claude-code.txt >&2
+  exit 1
+fi
+
+if ! grep -F "com.anthropic.claude-code: blocked" /tmp/autocomplete-trace-eval-self-test-claude-code.txt >/dev/null; then
+  echo "trace eval self-test did not keep Claude Code diagnostics-only" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-claude-code.txt >&2
   exit 1
 fi
 

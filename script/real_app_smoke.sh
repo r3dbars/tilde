@@ -21,8 +21,9 @@ usage() {
 Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|chat-like|all>]
 
 Runs a real app smoke pass where it is safe to automate. Notes, Obsidian,
-Codex, Claude Code, and Claude desktop are manual-gated so this script never
-types into private notes, vaults, or agent prompts by surprise.
+Codex, and Claude desktop are manual-gated so this script never types into
+private notes, vaults, or agent prompts by surprise. Claude Code is currently
+diagnostics-only until a terminal-host adapter exists.
 
 Notes proof must use notes-title, notes-body, or notes-checklist. A generic
 notes run only prints the surface picker and does not record proof.
@@ -1233,7 +1234,16 @@ describe_plan() {
       echo "Plan: manual-gated disposable Obsidian smoke. The script prints the checklist and validates after you run it."
       echo "Safety: pass --manual-gate to continue. Use only a disposable vault note."
       ;;
-    codex|claude-code|claude)
+    codex)
+      echo "Plan: manual-gated prompt smoke. The script validates one-word Tab accept without submit after you run it."
+      echo "Safety: pass --manual-gate to continue. Do not press Enter; full accept waits for separate full-accept no-submit proof."
+      ;;
+    claude-code)
+      echo "Plan: Claude Code remains a terminal-host proof gap. The installed com.anthropic.claude-code bundle is usually a background-only CLI helper, not the interactive typing surface."
+      echo "Safety: Terminal-hosted Claude Code is blocked until a separate adapter proves one-word Tab accept without submitting shell input or an agent prompt."
+      echo "Proof target: a future foreground Claude Code prompt must still validate one-word Tab accept without submit before graduation."
+      ;;
+    claude)
       echo "Plan: manual-gated prompt smoke. The script validates one-word Tab accept without submit after you run it."
       echo "Safety: pass --manual-gate to continue. Do not press Enter; full accept waits for separate full-accept no-submit proof."
       ;;
@@ -1269,6 +1279,18 @@ run_manual_gated() {
   full_accept_key="$(accept_all_shortcut)"
   AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
     ./script/manual_smoke_session.sh "$manual_app"
+}
+
+run_claude_code_blocked() {
+  if [[ "$MANUAL_GATE" != "1" ]]; then
+    echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
+    exit 2
+  fi
+
+  echo "Claude Code direct real smoke is blocked for this build." >&2
+  echo "The com.anthropic.claude-code bundle is treated as diagnostics-only because the live typing surface is terminal-hosted CLI input." >&2
+  echo "Add a terminal-host adapter and no-submit proof before recording Claude Code as complete." >&2
+  exit 2
 }
 
 run_textedit() {
@@ -1502,6 +1524,10 @@ case "$APP" in
     run_chrome
     ;;
   notes|obsidian|codex|claude-code|claude)
-    run_manual_gated
+    if [[ "$APP" == "claude-code" ]]; then
+      run_claude_code_blocked
+    else
+      run_manual_gated
+    fi
     ;;
 esac

@@ -129,6 +129,10 @@ if ! grep -F "one-word Tab accept without submit" "$TMP_DIR/claude-code.txt" >/d
   echo "real app smoke self-test did not explain the Claude Code one-word no-submit proof" >&2
   exit 1
 fi
+if ! grep -F "terminal-host proof gap" "$TMP_DIR/claude-code.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Claude Code terminal-host gap" >&2
+  exit 1
+fi
 
 script/real_app_smoke.sh claude --dry-run >"$TMP_DIR/claude.txt"
 if ! grep -F "full accept waits for separate full-accept no-submit proof" "$TMP_DIR/claude.txt" >/dev/null; then
@@ -148,6 +152,16 @@ fi
 
 if ! grep -F "requires --manual-gate" "$TMP_DIR/codex-fail.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the Codex safety gate" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh claude-code --manual-gate --skip-build >/dev/null 2>"$TMP_DIR/claude-code-blocked.txt"; then
+  echo "real app smoke self-test expected Claude Code direct proof to stay blocked" >&2
+  exit 1
+fi
+
+if ! grep -F "diagnostics-only" "$TMP_DIR/claude-code-blocked.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Claude Code diagnostics-only block" >&2
   exit 1
 fi
 

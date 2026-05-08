@@ -35,8 +35,12 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --m
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate
 ```
+
+Claude Code is intentionally absent from the runnable prompt list for now. The
+installed `com.anthropic.claude-code` bundle is a background-only CLI helper,
+and the real typing surface is a terminal host. Terminal-hosted Claude Code
+needs a separate adapter before this smoke doc can include it as runnable proof.
 
 What this proves:
 
@@ -53,10 +57,12 @@ What this proves:
   upstream Monaco/ProseMirror fixtures in isolated renderer-accessibility Chrome,
   and a chat-style composer fixture that fails if Tab/full-accept submits the form
 
-Notes, Obsidian, Codex, Claude desktop, and Claude Code checks are manual-gated.
-Do not use real notes, vault content, or live prompts for proof. Use disposable
-smoke text only, and never press Enter in an agent prompt pass. Codex, Claude
-desktop, and Claude Code require one-word no-submit proof before graduation.
+Notes, Obsidian, Codex, and Claude desktop checks are manual-gated. Do not use
+real notes, vault content, or live prompts for proof. Use disposable smoke text
+only, and never press Enter in an agent prompt pass. Codex and Claude desktop
+require one-word no-submit proof before graduation. Claude Code must first get
+a terminal-host adapter that proves Tab cannot submit shell input or an agent
+prompt.
 Prompt-app full accept stays disabled until separate full-accept no-submit proof
 exists.
 For Notes, `notes-title`, `notes-body`, and `notes-checklist` are separate
@@ -88,9 +94,10 @@ strict proof manifest has bounded current-fingerprint trace slices for every
 claimed surface.
 
 Prompt-app proof is intentionally stricter than normal app proof. The recorder
-requires exactly one trace-level accept for Codex, Claude Code, and Claude
-desktop, rejects full-accept or field-send finalization signals, and still
-depends on the human visual check that the prompt stayed unsent.
+requires exactly one trace-level accept for Codex and Claude desktop, rejects
+full-accept or field-send finalization signals, and still depends on the human
+visual check that the prompt stayed unsent. Claude Code should use that same bar
+only after the terminal-host adapter exists.
 
 Run the long typing endurance command when working the "typing must feel
 untouched" score:

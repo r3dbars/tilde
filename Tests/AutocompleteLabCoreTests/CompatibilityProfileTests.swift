@@ -60,16 +60,18 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.supportsFullAcceptance == false)
         #expect(store.profile(for: "com.openai.codex")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claude-code")?.displayName == "Claude Code")
-        #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .yellow)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.renderMode == .inlineAdjacent)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackRenderMode == .floatingMirror)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.insertionMode == .keyEvents)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackInsertionMode == .axThenKeyEvents)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.renderMode == .disabled)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackRenderMode == .disabled)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.insertionMode == .disabled)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackInsertionMode == .disabled)
         #expect(store.profile(for: "com.anthropic.claude-code")?.fieldIdentityMode == .stableBounds)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.supportsOneWordAcceptance == true)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.anchorLadder == [.none])
+        #expect(store.profile(for: "com.anthropic.claude-code")?.supportsOneWordAcceptance == false)
         #expect(store.profile(for: "com.anthropic.claude-code")?.supportsFullAcceptance == false)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.canPresentSuggestions == true)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claude-code")?.allowsDetachedSuggestions == false)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.isSensitive == true)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.displayName == "Claude")
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.renderMode == .inlineAdjacent)
@@ -211,7 +213,7 @@ struct CompatibilityProfileTests {
         #expect(InsertionModePlan.modes(for: notes) == [.axThenKeyEvents, .keyEvents])
         #expect(InsertionModePlan.modes(for: chrome) == [.keyEvents, .axValueReplacement])
         #expect(InsertionModePlan.modes(for: codex) == [.axValueReplacement, .keyEvents])
-        #expect(InsertionModePlan.modes(for: claudeCode) == [.keyEvents, .axThenKeyEvents])
+        #expect(InsertionModePlan.modes(for: claudeCode) == [])
         #expect(InsertionModePlan.modes(for: claude) == [.axValueReplacement])
         #expect(InsertionModePlan.modes(for: mail) == [])
     }
@@ -227,13 +229,14 @@ struct CompatibilityProfileTests {
         #expect(notes.fallbackInsertionMode == .keyEvents)
         #expect(codex.supportsOneWordAcceptance == true)
         #expect(codex.supportsFullAcceptance == false)
-        #expect(claudeCode.supportsOneWordAcceptance == true)
+        #expect(claudeCode.supportsOneWordAcceptance == false)
         #expect(claudeCode.supportsFullAcceptance == false)
-        #expect(claudeCode.canPresentSuggestions == true)
+        #expect(claudeCode.canPresentSuggestions == false)
+        #expect(claudeCode.isSensitive == true)
         #expect(claude.supportsOneWordAcceptance == true)
         #expect(claude.supportsFullAcceptance == false)
 
-        for promptProfile in [codex, claudeCode, claude] {
+        for promptProfile in [codex, claude] {
             #expect(promptProfile.supportReason.contains("one-word no-submit proof"))
             #expect(promptProfile.notes.contains("Requires one-word no-submit proof"))
             #expect(promptProfile.notes.contains("separate full-accept no-submit proof"))
@@ -243,6 +246,10 @@ struct CompatibilityProfileTests {
             #expect(promptProfile.allowsSyntheticCaretPlacement == false)
             #expect(promptProfile.allowsStrictVisualProofSyntheticCaretPlacement == true)
         }
+
+        #expect(claudeCode.supportReason.contains("terminal host"))
+        #expect(claudeCode.notes.contains("terminal-host adapter"))
+        #expect(claudeCode.allowsStrictVisualProofSyntheticCaretPlacement == false)
     }
 
     @Test("Insertion mode plans can skip failed primary modes")
@@ -311,12 +318,12 @@ struct CompatibilityProfileTests {
             for: claudeCode,
             supportsInlineSuggestions: true,
             hasMirrorAnchor: true
-        ) == .inlineAdjacent)
+        ) == nil)
         #expect(RenderModePlan.effectiveMode(
             for: claudeCode,
             supportsInlineSuggestions: false,
             hasMirrorAnchor: true
-        ) == .floatingMirror)
+        ) == nil)
         #expect(RenderModePlan.effectiveMode(
             for: claude,
             supportsInlineSuggestions: true,

@@ -38,7 +38,7 @@ turning a stale read into a visible suggestion.
 
 It is not a 10/10 yet. The biggest remaining gap is still recorder-grade visual
 placement in real prompt apps and production-editor variants, especially Codex,
-Claude Code, default-Chrome editor placement, and more Obsidian/editor shapes.
+terminal-hosted Claude Code, default-Chrome editor placement, and more Obsidian/editor shapes.
 Codex has a real screenshot now, but not screenshot plus verified one-word
 accept/no-submit proof in one strict proof slice. The evidence-backed score
 should stay lower until those rows are closed.
@@ -49,8 +49,8 @@ should stay lower until those rows are closed.
 | --- | ---: | --- |
 | Normal typing passthrough | 9.9/10 | Fresh TextEdit endurance proof passed exact 1,200-, 4,800-, and 12,000-character runs with no tap-disable events and zero focused-poll skips. Normal typing correctly keeps keyboard capture idle until a suggestion is visible. The latest full 10-minute run stayed under strict AX thresholds with focused-poll p95 max 57ms and max 87ms, but it still reported 4 under-threshold slow markers, so this stays just below 10/10 until long-document typing has no AX warning noise or real hardware typing proves those markers are invisible. |
 | Keyboard capture safety | 9.8/10 | Capture starts only after a suggestion panel frame is actually usable, passes ordinary typing through, blocks selected-text replacement, fails closed if macOS disables the tap, and replays accept keys when focus moves to a protected field. |
-| Acceptance reliability | 9.5/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, Apple Notes title/body/checklist, and Claude desktop verify accept paths. Prompt-app full accept is intentionally disabled until separate full-accept no-submit proof exists. Selected text is blocked before suggestions/acceptance and AX insertion is faster, but current Codex and Claude Code one-word no-submit proof still need live runs. |
-| Visual caret alignment | 9.6/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, Apple Notes title/body/checklist, a disposable Codex prompt, and Claude desktop now have screenshot-backed proof. Stale line rects are dropped, vertical clipping is enforced, too-narrow inline space suppresses display instead of showing a sliver, async suggestions refresh current geometry before display, and Claude desktop's current one-line composer proof is now same-baseline with screenshot detector offset near zero. Codex still needs same-slice accept/no-submit proof, Claude Code proof is incomplete, and more prompt/editor layouts remain open. |
+| Acceptance reliability | 9.5/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, Apple Notes title/body/checklist, and Claude desktop verify accept paths. Prompt-app full accept is intentionally disabled until separate full-accept no-submit proof exists. Selected text is blocked before suggestions/acceptance and AX insertion is faster, but Codex still needs same-slice one-word no-submit proof and Claude Code needs a terminal-host adapter before live proof can count. |
+| Visual caret alignment | 9.6/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, Apple Notes title/body/checklist, a disposable Codex prompt, and Claude desktop now have screenshot-backed proof. Stale line rects are dropped, vertical clipping is enforced, too-narrow inline space suppresses display instead of showing a sliver, async suggestions refresh current geometry before display, and Claude desktop's current one-line composer proof is now same-baseline with screenshot detector offset near zero. Codex still needs same-slice accept/no-submit proof, Claude Code is now diagnostics-only until a terminal-host adapter exists, and more prompt/editor layouts remain open. |
 | Self-healing behavior | 9.5/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, applies only explicit trusted visual offsets, manual nudges move the visible ghost immediately, untrusted placement suppression now hides any stale ghost, and trusted visual offsets expire when the target app version, screen, or field shape changes. A unit-tested pixel detector can now identify screenshot offset from synthetic pixels, screenshot capture logs offset metadata, and per-app screenshot tracing can write trusted scoped corrections through the existing trust gate. Fresh real-app screenshot proof still needs to prove this before it can count as complete. |
 | Screenshot tracing | 9.4/10 | Screen Recording is preflighted, capture runs off the hot path, screenshots include editor bounds plus ghost text, traces/logs include capture rect plus rendered panel rect, and capture now has a backlog guard plus timeout. |
 | TextEdit support | 9.6/10 | Fresh bounded screenshot-backed run at 2026-05-07T21:01:59Z shows ghost text aligned after the caret, two verified accepts, and current proof fingerprints. The smoke harness now respects the active full-accept shortcut instead of assuming Backtick. |
@@ -63,7 +63,7 @@ should stay lower until those rows are closed.
 | Chrome chat-like no-submit support | 9/10 | A local no-submit fixture now has screenshot-backed proof with Tab/full accept verified and submit count still zero. It is still a local fixture, not proof for real chat apps. |
 | Obsidian support | 9/10 | Fresh bounded screenshot-backed run at 2026-05-07T21:15:51Z shows caret-bound synthetic mirror placement in a disposable vault note, two verified accepts, and current proof fingerprints. It still needs more vault themes, panes, and long-note variants before it can be called complete by the research bar. |
 | Codex support | 8.5/10 | Fresh disposable prompt screenshot shows visible inline placement on the side display after the coordinate and render-level fixes. It still needs a recorder-grade visual pass with one-word accept and no-submit proof in the same slice before it can be scored higher; full accept is disabled until separate full-accept no-submit proof exists. |
-| Claude Code support | 4/10 | Profile exists, but there is still no safe live prompt proof. |
+| Claude Code support | 4/10 | Direct bundle support is now diagnostics-only because `com.anthropic.claude-code` is a background-only CLI helper on this machine. Real Claude Code typing happens in a terminal host, so the remaining work is a safe terminal-host adapter plus one-word no-submit proof. |
 | Claude desktop support | 9.2/10 | Bounded strict visual smoke at 2026-05-08T03:49:56Z proves same-baseline screenshot-backed synthetic-caret placement, exactly one verified Tab one-word accept, and no prompt submit signal in Claude desktop. The detector reported `dx=0.2`, `dy=-0.4` for the visible ghost. Full accept stays disabled until separate full-accept no-submit proof exists, and more prompt layouts still need coverage. |
 | Output relevance | 8.9/10 | Prompt labels, instruction echoes, assistant filler, unsafe prompt actions, punctuation suffixes, parroting, and more assistant-y prefixes are suppressed before display. Dogfood prompts now avoid loose substring triggers, but default redacted tracing means deeper output-quality audits require explicit raw-content dogfood runs. |
 | Word completion quality | 8.9/10 | Word completion and partial acceptance are useful, bounded, app-scoped, fast completions obey repeated-miss suppression, and unrelated whole-word completions are rejected. It still needs more real-app miss-rate proof before scoring higher. |
@@ -73,7 +73,7 @@ should stay lower until those rows are closed.
 | User control | 10/10 | Pause, current-field/session silence, current-app enablement, visible per-app render mode, force-mirror override, app-proof starter, green/yellow/diagnostics-only/unsupported support status, privacy controls, temporary screenshot/raw trace toggles, local log deletion, direct accept-all shortcut editing, full-accept shortcut state, and Settings "why hidden" copy are now first-class enough for this scorecard. |
 | Diagnostics | 10/10 | Placement, event-tap latency, focused poll latency, AX cooldowns, insertion, trace, screenshot-file evidence, active quiet mode, and smoke logs are strong. The Diagnostics window now separates key capture health from AX polling health and exposes placement confidence, anchor source, render fallback, self-healing action, clipping state, screenshot state, and caret failure rates without suggestion text. |
 | Automated tests | 10/10 | `swift test` passes 600 tests, including app-target settings state tests, current-field silence copy, per-app mirror override copy, direct shortcut editing copy, onboarding copy tests, diagnostics typing-health tests, placement diagnostics tests, typed-through suggestion progress, word-completion suffix survival, Notes text-context repair, scoped recent-word memory, privacy expiry, support status, serial AX reader, focused AX-health cooldown, missing-context AX cooldown, single slow-AX-read throttle, focused-poll backoff, dogfood false-positive coverage, neutral word-completion vocabulary, screenshot trace capture policy, pixel offset detector policy, synthetic caret centering, placement trust policy, replay proof, and trace visual evidence. Script self-tests now cover strict score targets, the 10-pass score loop path, manual smoke status, visual proof, replay slicing, typing performance, and the 10-minute endurance soak command. |
-| Real-app smoke | 9.6/10 | TextEdit, core Chrome fixtures, real Chrome Monaco/ProseMirror under isolated renderer-accessibility mode, Chrome chat-like no-submit, Obsidian, Apple Notes title/body/checklist, and Claude desktop are green on the current build. The latest strict visual smokes passed after the accept-all shortcut/race fix, typed-through word-completion fix, retention-classifier fix, synthetic-caret trust tightening, prompt proof-mode synthetic-caret gating, Claude desktop centered-composer tuning, and Notes text-context repair. Codex and Claude Code remain honest prompt-app proof gaps. |
+| Real-app smoke | 9.6/10 | TextEdit, core Chrome fixtures, real Chrome Monaco/ProseMirror under isolated renderer-accessibility mode, Chrome chat-like no-submit, Obsidian, Apple Notes title/body/checklist, and Claude desktop are green on the current build. The latest strict visual smokes passed after the accept-all shortcut/race fix, typed-through word-completion fix, retention-classifier fix, synthetic-caret trust tightening, prompt proof-mode synthetic-caret gating, Claude desktop centered-composer tuning, and Notes text-context repair. Codex remains an honest prompt-app proof gap; Claude Code is blocked until terminal-host proof exists. |
 | Release readiness | 8/10 | Packaging is in decent shape, but beta readiness still correctly fails unless all required manual and screenshot-backed proof rows are closed. Notarization/stapling and beta onboarding still need a final product pass. |
 | Architecture | 9.1/10 | Core policy, geometry, scoped word memory, trace analysis, privacy expiry, support status, serial AX focused-text reads, and AX-health cooldowns are tested and wired. AppDelegate still owns too much orchestration. |
 
@@ -93,7 +93,7 @@ should stay lower until those rows are closed.
 | Apple Notes title | 9/10 | [notes-title.png](visual-placement-screenshots/notes-title.png) | Bounded strict visual smoke at 2026-05-07T21:24:14Z shows inline title placement with two verified accepts and current proof fingerprints. | Pending: more title lengths and undo variants. |
 | Apple Notes body | 9/10 | [notes-body.png](visual-placement-screenshots/notes-body.png) | Bounded strict visual smoke at 2026-05-07T23:33:48Z shows inline body placement with two verified accepts and current proof fingerprints. The retention check now correctly treats accepted word-completion suffixes as kept inside completed words. | Pending: more body lengths and undo variants. |
 | Apple Notes checklist | 9/10 | [notes-checklist.png](visual-placement-screenshots/notes-checklist.png) | Bounded strict visual smoke at 2026-05-08T00:21:33Z shows native checklist-row placement with two verified accepts and current proof fingerprints. | Pending: checked items, longer checklist rows, and undo variants. |
-| Claude Code | 4/10 | Pending safe prompt proof | Profile exists. | Needs a safe live prompt smoke before it can be scored high. |
+| Claude Code | 4/10 | Pending terminal-host proof | Direct bundle is diagnostics-only. | Needs a safe terminal-host adapter before live prompt smoke can count. |
 | Claude desktop | 9.2/10 | [claude-desktop.png](visual-placement-screenshots/claude-desktop.png) | Bounded strict visual smoke at 2026-05-08T03:49:56Z proves same-baseline ghost placement plus a one-word Tab accept in the real Claude desktop composer without a submit signal. | Pending: more prompt layouts; full accept remains disabled until separately proven no-submit. |
 
 ## Latest Proof
@@ -129,8 +129,8 @@ should stay lower until those rows are closed.
   typing guard passed because key capture stayed clean and AX slowness is now a
   suggestion-responsiveness warning.
 - `./script/manual_smoke_status.sh --strict`: exits 1 honestly. Remaining
-  prompt-app insertion gaps are Codex and Claude Code; the remaining screenshot
-  gap is Claude Code. Codex still needs same-slice one-word no-submit visual proof.
+  prompt-app insertion gap is Codex; Claude Code is a terminal-host adapter gap.
+  The remaining screenshot gap is Claude Code. Codex still needs same-slice one-word no-submit visual proof.
 - `./script/check_score_targets.sh`: exits 1 honestly on the current docs with
   72 target misses across this scorecard, the Apple-native checklist, and the
   app proof matrix. This makes the requested "all 10s / all 100s / all As"
@@ -218,7 +218,7 @@ should stay lower until those rows are closed.
 - `script/beta_readiness.sh` now includes `./script/check_visual_placement_evidence.sh --require-all`, so beta readiness cannot pass while screenshot proof rows are still pending.
 - Local chat-like Chrome fixture was added to prove Tab/full accept does not submit a chat-style composer. This is the safe precursor to Codex/Claude no-submit proof, not a substitute for real prompt-app proof.
 - Parent handoff: a disposable Notes note produced screenshot-backed suggestion presentation and at least one verified Tab insertion, but this is generic historical evidence only. The later bounded Notes title and body runs are complete; checklist still needs its own proof.
-- `./script/manual_smoke_status.sh --strict`: now shows Chrome chat-like no-submit, Obsidian, Notes title/body/checklist, and Claude desktop as passed, and fails honestly on Codex/Claude Code prompt proof plus remaining score targets. The current blockers remain Codex same-slice insertion proof and Claude Code insertion/screenshot proof.
+- `./script/manual_smoke_status.sh --strict`: now shows Chrome chat-like no-submit, Obsidian, Notes title/body/checklist, and Claude desktop as passed, and fails honestly on Codex prompt proof, Claude Code terminal-host proof, and remaining score targets. The current blockers remain Codex same-slice insertion proof and Claude Code adapter/screenshot proof.
 - `./script/check_visual_placement_evidence_self_test.sh`: passed, including missing, empty, invalid, too-small, unreferenced, and pending strict screenshot failure cases.
 - `./script/check_visual_placement_evidence.sh`: passed with 15 verified visual-placement screenshots and reports one pending screenshot audit plus one stale same-slice Codex row.
 - `./script/check_visual_placement_evidence.sh --require-all`: fails honestly on the remaining Claude Code screenshot audit and Codex same-slice proof gap.
@@ -356,13 +356,14 @@ should stay lower until those rows are closed.
   AX polling/cooldown health.
 - Settings now shows the last suggestion decision as "Why", and menu bar status
   copy is calmer while detailed reasons stay in the tooltip/diagnostics.
-- Codex, Claude Code, and Claude desktop prompt profiles require one-word
-  no-submit proof and keep full accept disabled until separate full-accept
-  no-submit proof exists. Prompt completions now reject unsafe submit/run
-  actions.
+- Codex and Claude desktop prompt profiles require one-word no-submit proof and
+  keep full accept disabled until separate full-accept no-submit proof exists.
+  Claude Code is diagnostics-only until terminal-host proof exists. Prompt
+  completions now reject unsafe submit/run actions.
 - Prompt-app smoke proof now requires exactly one trace-level accepted
   suggestion and rejects full-accept or field-send finalization signals before
-  it records Codex, Claude Code, or Claude desktop as a prompt no-submit pass.
+  it records Codex or Claude desktop as a prompt no-submit pass. Claude Code
+  must use the same bar after terminal-host support exists.
 - Output cleaning suppresses more assistant-y starts and rejects unrelated
   whole-word completions in word-completion mode. It also rejects
   recommendation, rewrite, and next-action candidates so a separate product
@@ -405,8 +406,8 @@ should stay lower until those rows are closed.
 
 ## Remaining Gaps
 
-1. Run recorder-grade screenshot-backed proof for Claude Code with disposable
-   text only. Codex has visual proof now, but still needs one-word
+1. Build a safe terminal-host adapter for Claude Code before recording any
+   Claude Code proof. Codex has visual proof now, but still needs one-word
    accept/no-submit proof in the same strict visual trace slice. Claude desktop
    now has same-baseline no-submit proof, but needs more prompt-layout coverage.
 2. Prove automatic screenshot-driven self-healing in real apps: rerun smoke

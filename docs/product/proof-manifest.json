@@ -174,7 +174,8 @@
       "status": "pending",
       "screenshots": [],
       "gaps": [
-        "Needs safe live prompt proof with screenshot and one-word no-submit accept."
+        "Direct com.anthropic.claude-code proof is diagnostics-only because the installed bundle is a background-only CLI helper.",
+        "Needs a terminal-host adapter with screenshot and one-word no-submit accept proof before it can count as complete."
       ]
     },
     {
