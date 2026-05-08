@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionPanel = SuggestionPanelController()
     private lazy var focusedTextReader = SerialFocusedTextAXReader(accessibilityClient: accessibilityClient)
     private let diagnosticsWindow = DiagnosticsWindowController()
-    private let appProofCommandRunner = AppProofCommandRunner()
+    private let appProofCommandCoordinator = AppProofCommandCoordinator()
     private lazy var settingsWindow = SettingsWindowController(
         requestPermission: { [weak self] in
             self?.requestAccessibilityPermission()
@@ -5906,7 +5906,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
 
-        if AppProofCommandPlan.supportsAutomaticPlan(for: app.bundleIdentifier) {
+        if appProofCommandCoordinator.supportsAutomaticPlan(for: app.bundleIdentifier) {
             runAutomaticAppProof(app: app)
             return
         }
@@ -5916,87 +5916,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showDiagnostics()
     }
 
-    private var appProofLogDirectoryURL: URL {
-        FileManager.default
-            .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library", isDirectory: true)
-            .appendingPathComponent("Logs", isDirectory: true)
-            .appendingPathComponent("AutocompleteLab", isDirectory: true)
-    }
-
     private func runAutomaticAppProof(app: RunningApplicationInfo) {
-        guard let sourceRootURL = AppProofCommandPlan.sourceRootURL(),
-              let plan = AppProofCommandPlan.automaticPlan(
-                  for: app.bundleIdentifier,
-                  sourceRootURL: sourceRootURL,
-                  logDirectoryURL: appProofLogDirectoryURL
-              ) else {
+        let outcome = appProofCommandCoordinator.start(for: app.bundleIdentifier) { [weak self] completion in
+            guard let self else {
+                return
+            }
+
+            self.setSuggestionDecision(completion.decisionText)
+            self.endAppProofMode(for: completion.plan.bundleIdentifier, reason: completion.endReason)
+            DiagnosticsLog.shared.record(
+                "app-proof-command-finished",
+                metadata: [
+                    "app": completion.plan.bundleIdentifier,
+                    "outcome": completion.passed ? "passed" : "failed",
+                    "status": String(completion.status),
+                    "log": completion.plan.logURL.path
+                ]
+            )
+            self.refreshRuntimeChrome()
+        }
+
+        switch outcome {
+        case .unsupported:
+            setSuggestionDecision("Ready: app proof started")
+            refreshRuntimeChrome()
+            showDiagnostics()
+        case let .unavailable(bundleIdentifier):
             setSuggestionDecision("Blocked: proof script unavailable")
             DiagnosticsLog.shared.record(
                 "app-proof-command-unavailable",
                 metadata: [
-                    "app": app.bundleIdentifier
+                    "app": bundleIdentifier
                 ]
             )
             refreshRuntimeChrome()
             showDiagnostics()
-            return
-        }
-
-        do {
-            try appProofCommandRunner.run(plan: plan) { [weak self] passed, status in
-                guard let self else {
-                    return
-                }
-
-                self.setSuggestionDecision(
-                    passed
-                        ? "Done: \(plan.proofName) proof passed"
-                        : "Needs attention: \(plan.proofName) proof failed"
-                )
-                self.endAppProofMode(for: plan.bundleIdentifier, reason: passed ? "passed" : "failed")
-                DiagnosticsLog.shared.record(
-                    "app-proof-command-finished",
-                    metadata: [
-                        "app": plan.bundleIdentifier,
-                        "outcome": passed ? "passed" : "failed",
-                        "status": String(status),
-                        "log": plan.logURL.path
-                    ]
-                )
-                self.refreshRuntimeChrome()
-            }
-
-            setSuggestionDecision("Running: \(plan.proofName) proof")
+        case let .started(plan):
+            setSuggestionDecision(outcome.decisionText ?? "Running: app proof")
             DiagnosticsLog.shared.record(
                 "app-proof-command-started",
                 metadata: [
-                    "app": app.bundleIdentifier,
+                    "app": plan.bundleIdentifier,
                     "command": plan.commandText,
                     "log": plan.logURL.path
                 ]
             )
             refreshRuntimeChrome()
             showDiagnostics()
-        } catch AppProofCommandRunnerError.alreadyRunning {
-            setSuggestionDecision("Running: app proof already in progress")
+        case let .alreadyRunning(bundleIdentifier):
+            setSuggestionDecision(outcome.decisionText ?? "Running: app proof already in progress")
             DiagnosticsLog.shared.record(
                 "app-proof-command-skipped",
                 metadata: [
-                    "app": app.bundleIdentifier,
+                    "app": bundleIdentifier,
                     "reason": "already-running"
                 ]
             )
             refreshRuntimeChrome()
             showDiagnostics()
-        } catch {
-            setSuggestionDecision("Blocked: proof command failed to start")
+        case let .failedToStart(bundleIdentifier, logURL, reason):
+            setSuggestionDecision(outcome.decisionText ?? "Blocked: proof command failed to start")
             DiagnosticsLog.shared.record(
                 "app-proof-command-failed",
                 metadata: [
-                    "app": app.bundleIdentifier,
-                    "reason": error.localizedDescription,
-                    "log": plan.logURL.path
+                    "app": bundleIdentifier,
+                    "reason": reason,
+                    "log": logURL?.path ?? ""
                 ]
             )
             refreshRuntimeChrome()

@@ -123,7 +123,125 @@ enum AppProofCommandRunnerError: Error, Equatable {
 }
 
 @MainActor
-final class AppProofCommandRunner {
+protocol AppProofCommandRunning: AnyObject {
+    var isRunning: Bool { get }
+
+    func run(
+        plan: AppProofCommandPlan,
+        completion: @escaping @MainActor (Bool, Int32) -> Void
+    ) throws
+}
+
+struct AppProofCommandCompletion: Equatable {
+    let plan: AppProofCommandPlan
+    let passed: Bool
+    let status: Int32
+
+    var decisionText: String {
+        passed
+            ? "Done: \(plan.proofName) proof passed"
+            : "Needs attention: \(plan.proofName) proof failed"
+    }
+
+    var endReason: String {
+        passed ? "passed" : "failed"
+    }
+}
+
+enum AppProofCommandStartOutcome: Equatable {
+    case unsupported
+    case unavailable(bundleIdentifier: String)
+    case started(AppProofCommandPlan)
+    case alreadyRunning(bundleIdentifier: String)
+    case failedToStart(bundleIdentifier: String, logURL: URL?, reason: String)
+
+    var decisionText: String? {
+        switch self {
+        case .unsupported:
+            return nil
+        case .unavailable:
+            return "Blocked: proof script unavailable"
+        case let .started(plan):
+            return "Running: \(plan.proofName) proof"
+        case .alreadyRunning:
+            return "Running: app proof already in progress"
+        case .failedToStart:
+            return "Blocked: proof command failed to start"
+        }
+    }
+}
+
+@MainActor
+final class AppProofCommandCoordinator {
+    private let runner: any AppProofCommandRunning
+    private let logDirectoryURL: URL
+    private let sourceRootResolver: () -> URL?
+
+    init(
+        runner: any AppProofCommandRunning = AppProofCommandRunner(),
+        logDirectoryURL: URL = AppProofCommandCoordinator.defaultLogDirectoryURL,
+        sourceRootResolver: @escaping () -> URL? = { AppProofCommandPlan.sourceRootURL() }
+    ) {
+        self.runner = runner
+        self.logDirectoryURL = logDirectoryURL
+        self.sourceRootResolver = sourceRootResolver
+    }
+
+    static var defaultLogDirectoryURL: URL {
+        FileManager.default
+            .homeDirectoryForCurrentUser
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Logs", isDirectory: true)
+            .appendingPathComponent("AutocompleteLab", isDirectory: true)
+    }
+
+    func supportsAutomaticPlan(for bundleIdentifier: String) -> Bool {
+        AppProofCommandPlan.supportsAutomaticPlan(for: bundleIdentifier)
+    }
+
+    func start(
+        for bundleIdentifier: String,
+        completion: @escaping @MainActor (AppProofCommandCompletion) -> Void
+    ) -> AppProofCommandStartOutcome {
+        guard AppProofCommandPlan.supportsAutomaticPlan(for: bundleIdentifier) else {
+            return .unsupported
+        }
+
+        guard let sourceRootURL = sourceRootResolver(),
+              let plan = AppProofCommandPlan.automaticPlan(
+                  for: bundleIdentifier,
+                  sourceRootURL: sourceRootURL,
+                  logDirectoryURL: logDirectoryURL
+              ) else {
+            return .unavailable(bundleIdentifier: bundleIdentifier)
+        }
+
+        do {
+            try runner.run(plan: plan) { passed, status in
+                completion(
+                    AppProofCommandCompletion(
+                        plan: plan,
+                        passed: passed,
+                        status: status
+                    )
+                )
+            }
+
+            return .started(plan)
+        } catch AppProofCommandRunnerError.alreadyRunning {
+            return .alreadyRunning(bundleIdentifier: bundleIdentifier)
+        } catch {
+            return .failedToStart(
+                bundleIdentifier: bundleIdentifier,
+                logURL: plan.logURL,
+                reason: error.localizedDescription
+            )
+        }
+    }
+}
+
+@MainActor
+final class AppProofCommandRunner: AppProofCommandRunning {
     private var process: Process?
 
     var isRunning: Bool {

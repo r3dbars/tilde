@@ -262,7 +262,7 @@ Baseline scorecard from the initial audit:
 | Mode profiles and cross-app safety | 10 | 78 | 7.8 | Strong app profiles, a user-visible per-app mirror override, a proof-only terminal-host Claude Code adapter, and copy-only fallback stance for non-sensitive diagnostics-only or untrusted-placement cases now exist, but behavior modes are not first-class for every email, notes, bullets, docs, code, forms, search, and AI chat surface. |
 | Learning, annoyance, accepted-and-kept loop | 12 | 67 | 8.0 | Accepted-kept learning now affects both affinity and utility, and user-selected quiet/normal/eager aggressiveness can tune eagerness without clearing learning; the loop still needs fresh real-app threshold proof. |
 | Metrics, replay, and proof gates | 5 | 85 | 4.3 | Trace/report scripts are strong, and Settings can now start per-app screenshot proof from the current app; true replay-first real-app rig is still missing. |
-| Architecture and tests | 2 | 91 | 1.8 | Good policy/test structure, though AppDelegate still owns too much orchestration. |
+| Architecture and tests | 2 | 92 | 1.8 | Good policy/test structure, and app-proof command execution is now behind a small coordinator; AppDelegate still owns too much suggestion orchestration. |
 
 Weighted total: **80.6/100**, rounded to **81/100**.
 
