@@ -70,7 +70,7 @@ fail quietly when it is unsure. Wrong-place text is worse than no suggestion.
 | Suggestion quality | 8 | 87 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, learned word completion is app-scoped, dogfood prompts are stricter, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
 | Failure restraint | 8 | 91 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, slow no-context AX reads cool down immediately, single slow AX reads with context now throttle and drop stale results, stale geometry suppresses display, too-narrow inline placement suppresses instead of showing a sliver, event-tap disablement fails closed, prompt full accept requires proof, placement uncertainty now hides stale ghosts and feeds field quiet mode, active quiet mode is visible in Diagnostics, and unsupported apps explain their stance. Real-app proof remains open. |
 | User control | 6 | 100 | 100 | Settings and the menu now expose pause, current-field silence, app blocking, support status, per-app render mode, force-mirror override, an app-proof starter, privacy diagnostics, temporary raw/screenshot capture, local log deletion, direct accept-all shortcut editing, and why the last suggestion was hidden. |
-| Onboarding and setup | 4 | 97 | 100 | Settings explains Accessibility in one short paragraph, only mentions Screen Recording when screenshot capture is on, starts fresh installs with suggestion-capable apps off, points first success at enabling TextEdit, and installs or repairs the local model in-app with plain no-model-server recovery copy, progress, cancellation, failure retry, validation, and runtime warmup. The Apps section now shows visible proof instructions and disables proof until the current app is enabled. A fully automated post-enable proof pass remains open. |
+| Onboarding and setup | 4 | 98 | 100 | Settings explains Accessibility in one short paragraph, only mentions Screen Recording when screenshot capture is on, starts fresh installs with suggestion-capable apps off, points first success at enabling TextEdit, and installs or repairs the local model in-app with plain no-model-server recovery copy, progress, cancellation, failure retry, validation, and runtime warmup. The Apps section now shows visible proof instructions, shows the exact smoke command where one exists, and disables proof until the current app is enabled. A fully automated in-app post-enable proof pass remains open. |
 | Evidence and QA loop | 4 | 99 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command with exact TextEdit text checks, Notes text-context repair, and 15 screenshot artifacts including real Monaco/ProseMirror and same-baseline Claude desktop. Codex same-slice proof and Claude Code terminal-host proof are still missing. |
 
 Weighted score: 89/100.
@@ -379,7 +379,7 @@ Native target: a user can understand and control the app in 20 seconds.
 
 ## Category 10: Onboarding And Setup
 
-Current score: 97/100.
+Current score: 98/100.
 
 Native target: setup feels like a normal Mac utility, not a developer tool.
 
@@ -399,6 +399,8 @@ Native target: setup feels like a normal Mac utility, not a developer tool.
 - [x] First success should happen in TextEdit.
 - [x] App proof should explain the exact disposable-text steps before it starts.
 - [x] App proof should not start while suggestions are disabled for that app.
+- [x] App proof should show the exact smoke command when a proof lane exists.
+- [ ] App proof should run and verify the TextEdit smoke pass from inside the app.
 - [x] Onboarding should never ask users to test in private notes first.
 
 ## Category 11: Evidence And QA Loop

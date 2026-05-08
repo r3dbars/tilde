@@ -24,6 +24,7 @@ struct SettingsWindowControllerStateTests {
         #expect(allowed.modeText == "Mode: inline, mirror fallback")
         #expect(allowed.acceptanceText == "Acceptance: Tab next word + full accept")
         #expect(allowed.proofText == "Proof: use disposable text, press Tab once, then the full-accept shortcut.")
+        #expect(allowed.proofCommandText == "Command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit")
         #expect(allowed.toggleTitle == "Allow suggestions in this app")
         #expect(allowed.menuToggleTitle == "Disable TextEdit")
         #expect(allowed.blockedAppsText == "Blocked apps: none")
@@ -45,6 +46,7 @@ struct SettingsWindowControllerStateTests {
         #expect(blocked.modeText == "Mode: inline, mirror fallback")
         #expect(blocked.acceptanceText == "Acceptance: Tab next word + full accept")
         #expect(blocked.proofText == "Proof: turn on suggestions for this app first.")
+        #expect(blocked.proofCommandText == nil)
         #expect(blocked.menuToggleTitle == "Enable Notes")
         #expect(blocked.blockedAppsText == "Blocked apps: 2")
         #expect(blocked.canToggle)
@@ -69,6 +71,7 @@ struct SettingsWindowControllerStateTests {
         #expect(diagnosticsOnly.modeText == "Mode: disabled")
         #expect(diagnosticsOnly.acceptanceText == "Acceptance: off here")
         #expect(diagnosticsOnly.proofText == "Proof: unavailable here.")
+        #expect(diagnosticsOnly.proofCommandText == nil)
         #expect(diagnosticsOnly.menuToggleTitle == "Suggestions unavailable in Mail")
         #expect(!diagnosticsOnly.canToggle)
 
@@ -85,6 +88,7 @@ struct SettingsWindowControllerStateTests {
         #expect(unsupported.modeText == "Mode: not tested yet")
         #expect(unsupported.acceptanceText == "Acceptance: off here")
         #expect(unsupported.proofText == "Proof: unavailable here.")
+        #expect(unsupported.proofCommandText == nil)
         #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Atlas")
         #expect(!unsupported.canToggle)
 
@@ -101,6 +105,7 @@ struct SettingsWindowControllerStateTests {
         #expect(missing.modeText == "Mode: choose a writing app")
         #expect(missing.acceptanceText == "Acceptance: off until an app is selected")
         #expect(missing.proofText == "Proof: choose a writing app first.")
+        #expect(missing.proofCommandText == nil)
         #expect(missing.menuToggleTitle == "Toggle Current App")
         #expect(!missing.canToggle)
     }
@@ -119,6 +124,7 @@ struct SettingsWindowControllerStateTests {
         #expect(codex.modeText == "Mode: inline, mirror fallback")
         #expect(codex.acceptanceText == "Acceptance: Tab next word only; full accept is off for safety")
         #expect(codex.proofText == "Proof: use disposable prompt text, press Tab once, and do not press Enter.")
+        #expect(codex.proofCommandText == "Manual command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate")
     }
 
     @Test("Per-app mode copy exposes forced mirror overrides")
