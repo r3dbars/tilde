@@ -3226,8 +3226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     renderMode: renderMode,
                     latencyMilliseconds: 0,
                     triggerReason: "fast-word-completion",
-                    candidateSelectionMetadata: fastSelectionMetadata,
-                    refreshBeforePresenting: false
+                    candidateSelectionMetadata: fastSelectionMetadata
                 )
                 return
             }
@@ -3911,6 +3910,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: rawContext
         ).canSuggest else {
             return (nil, "stale-prompt-target")
+        }
+
+        if case let .blocked(block) = browserHostedSurfacePolicy.decision(
+            bundleIdentifier: frontmostApp.bundleIdentifier,
+            fingerprint: rawContext.fingerprint
+        ) {
+            return (nil, block.traceReason)
         }
 
         let context = presentationAdjustedContext(

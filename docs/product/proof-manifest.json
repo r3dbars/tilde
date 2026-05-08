@@ -235,7 +235,7 @@
       "surface": "Chrome text fields/editor/chat-like surfaces",
       "status": "partial",
       "owner": "browser editor adapter lane",
-      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures and default-Chrome real-editor AX plus proof-gated inline synthetic-caret lanes are proven, but production-site variance remains open. Hosted Google Docs, Notion, Slack, and Discord are blocked by surface policy until real proof exists."
+      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures and default-Chrome real-editor AX plus proof-gated inline synthetic-caret lanes are proven, but production-site variance remains open. Hosted Google Docs, Notion, Gmail, ChatGPT, Claude web, Codex web, Slack, Discord, and Telegram web are blocked by surface policy until real proof exists; action-bearing composer surfaces need no-submit proof first."
     },
     {
       "bundle": "com.openai.codex",

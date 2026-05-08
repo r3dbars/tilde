@@ -53,6 +53,51 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(try #require(blockedSurface(from: discordDecision)).surface == .discord)
     }
 
+    @Test("Browser action-bearing surfaces are blocked until no-submit proof exists")
+    func blocksActionBearingBrowserSurfaces() throws {
+        let cases: [(String, FocusedElementFingerprint, BrowserHostedSurface)] = [
+            (
+                "gmail",
+                FocusedElementFingerprint(windowTitle: "Inbox - Gmail"),
+                .gmail
+            ),
+            (
+                "chatgpt",
+                FocusedElementFingerprint(windowTitle: "ChatGPT"),
+                .chatGPT
+            ),
+            (
+                "claude web",
+                FocusedElementFingerprint(windowTitle: "Claude"),
+                .claudeWeb
+            ),
+            (
+                "codex web",
+                FocusedElementFingerprint(windowTitle: "OpenAI Codex"),
+                .codexWeb
+            ),
+            (
+                "telegram web",
+                FocusedElementFingerprint(windowTitle: "Telegram"),
+                .telegramWeb
+            )
+        ]
+
+        for (label, fingerprint, expectedSurface) in cases {
+            let block = try #require(blockedSurface(from: policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )), "\(label) should be blocked")
+
+            #expect(block.surface == expectedSurface)
+            #expect(block.reason == .actionBearingNeedsNoSubmitProof)
+            #expect(block.userFacingReason.contains("no-submit proof"))
+            #expect(block.traceMetadata["browserSurfaceKind"] != "production-rich-editor")
+            #expect(block.traceMetadata["browserSurfaceActionBearing"] == "true")
+            #expect(block.traceMetadata["browserSurfaceReason"] == "action-bearing-needs-no-submit-proof")
+        }
+    }
+
     @Test("Chrome local editor fixtures stay eligible")
     func allowsChromeLocalEditorFixtures() {
         let decision = policy.decision(
@@ -94,6 +139,8 @@ struct BrowserHostedSurfacePolicyTests {
         let metadata = block.traceMetadata
 
         #expect(metadata["browserSurface"] == "google-docs")
+        #expect(metadata["browserSurfaceKind"] == "production-rich-editor")
+        #expect(metadata["browserSurfaceActionBearing"] == "false")
         #expect(metadata["browserSurfaceDecision"] == "blocked")
         #expect(metadata["browserSurfaceReason"] == "unsupported-surface-needs-proof")
         #expect(!metadata.values.contains(secretTitle))

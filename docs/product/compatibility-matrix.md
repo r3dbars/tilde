@@ -13,7 +13,7 @@ For screenshot-backed app-by-app grades and gaps, use
 | TextEdit | supported | inline, mirror fallback | AX selected text, value fallback | recorded manual smoke pass |
 | Notes | supported | inline, mirror fallback | verified AX first, delayed read-only recheck, key fallback | title, body, and checklist proof recorded as separate labels |
 | Obsidian | supported | synthetic caret mirror, no detached fallback | AX then key events, key fallback | recorded CodeMirror smoke pass with two verified accepts; detached whole-editor anchors stay suppressed |
-| Chrome | supported for local text fields and local editor fixtures; hosted Google Docs, Notion, Slack, and Discord are blocked until proof | synthetic inline, mirror fallback | key events, AX value fallback | repeatable textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture commands with screenshot-backed proof labels |
+| Chrome | supported for local text fields and local editor fixtures; hosted Google Docs, Notion, Gmail, ChatGPT, Claude web, Codex web, Slack, Discord, and Telegram web are blocked until proof | synthetic inline, mirror fallback | key events, AX value fallback | repeatable textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture commands with screenshot-backed proof labels |
 | Codex | dogfood target | synthetic inline caret, no detached fallback | AX value replacement, key fallback | prior manual pass is stale for this gate; current one-word no-submit proof pending |
 | Claude Code | diagnostics only | disabled | disabled | pending live terminal-host adapter; the `com.anthropic.claude-code` bundle is not the live typing surface, and the first proof policy now requires explicit proof mode, a proof marker, one-line buffers, and no shell prompt command |
 | Claude desktop | dogfood target | synthetic inline caret, no detached fallback | AX value replacement | current same-baseline screenshot-backed one-word no-submit proof recorded; more prompt layouts pending |
@@ -41,9 +41,10 @@ screenshot rows, unreferenced screenshot files, or below-target visual rows that
 are not plainly marked `Pending`.
 
 Chrome's yellow profile is not a blanket browser promise. The runtime blocks
-hosted Google Docs, Notion, Slack, and Discord from fingerprint/window metadata
-with the trace reason `unsupported-browser-surface` until those production
-surfaces have their own screenshot and no-submit proof.
+hosted Google Docs, Notion, Gmail, ChatGPT, Claude web, Codex web, Slack,
+Discord, and Telegram web from fingerprint/window metadata with the trace reason
+`unsupported-browser-surface` until those production surfaces have their own
+screenshot proof and, for action-bearing composers, no-submit proof.
 
 Run `./script/check_visual_placement_evidence.sh --require-all` when every row
 in the visual placement audit should have screenshot-backed proof. Keep any
