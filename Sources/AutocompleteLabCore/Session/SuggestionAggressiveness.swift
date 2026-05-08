@@ -204,6 +204,18 @@ public struct SuggestionTuning: Equatable, Sendable {
             return CompletionActivationPolicy(pace: supportPace)
         }
 
+        if aggressivenessLevel >= 5 {
+            return CompletionActivationPolicy(
+                minimumContextCharacters: 1,
+                minimumContextWords: 1,
+                minimumPhraseContinuationWords: 1,
+                minimumWordCompletionCharacters: 1,
+                maximumWordCompletionCharacters: 18,
+                allowsTerminalSentenceBoundary: true,
+                allowsUnfinishedWordPhraseContinuation: true
+            )
+        }
+
         if aggressivenessLevel >= 4 {
             return CompletionActivationPolicy(
                 minimumContextCharacters: 1,
@@ -211,7 +223,8 @@ public struct SuggestionTuning: Equatable, Sendable {
                 minimumPhraseContinuationWords: 1,
                 minimumWordCompletionCharacters: 2,
                 maximumWordCompletionCharacters: 16,
-                allowsTerminalSentenceBoundary: true
+                allowsTerminalSentenceBoundary: true,
+                allowsUnfinishedWordPhraseContinuation: true
             )
         }
 
@@ -245,13 +258,13 @@ public struct SuggestionTuning: Equatable, Sendable {
             return SuggestionTriggerPolicy(
                 charactersBeforePauseRequest: 1,
                 wordCompletionDelayMilliseconds: 20,
-                wordBoundaryDelayMilliseconds: 40,
-                softPunctuationDelayMilliseconds: 60,
-                structuralPunctuationDelayMilliseconds: 60,
-                closingPunctuationDelayMilliseconds: 60,
-                sentenceBoundaryDelayMilliseconds: 80,
-                pauseDelayMilliseconds: 40,
-                minimumWordCompletionCharacters: 2,
+                wordBoundaryDelayMilliseconds: 20,
+                softPunctuationDelayMilliseconds: 40,
+                structuralPunctuationDelayMilliseconds: 40,
+                closingPunctuationDelayMilliseconds: 40,
+                sentenceBoundaryDelayMilliseconds: 60,
+                pauseDelayMilliseconds: 20,
+                minimumWordCompletionCharacters: 1,
                 allowsPlainLineStartWordCompletion: true,
                 allowsPlainLineStartPhraseContinuation: true,
                 allowsSentenceBoundaryRequest: true

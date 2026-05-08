@@ -88,13 +88,42 @@ struct CompletionPromptBuilderTests {
             visiblePageContext: pageContext
         ))
 
-        #expect(prompt.system.contains("Visible page context source: screen_ocr"))
-        #expect(prompt.system.contains("Use it only to match local names"))
-        #expect(prompt.user.contains("Visible page context:\nLaunch Plan"))
+        #expect(prompt.system.contains("Visible page context source: screen_ocr, scope: visible_screen"))
+        #expect(prompt.system.contains("Use it to infer the active app"))
+        #expect(prompt.system.contains("Prefer a useful best guess"))
+        #expect(prompt.user.contains("Visible page context:\nOCR scope: visible_screen\nLaunch Plan"))
+        #expect(prompt.user.contains("OCR scope: visible_screen"))
         #expect(prompt.user.contains("- Keep OCR local"))
         #expect(prompt.user.contains("Before cursor:\nWe should"))
         #expect(prompt.user.hasSuffix("Next words:"))
         #expect(!prompt.user.contains("!!!"))
+    }
+
+    @Test("Prompt uses active app screen context as reply evidence")
+    func promptUsesActiveAppScreenContextAsReplyEvidence() throws {
+        let pageContext = try #require(VisiblePageContext(
+            captureScope: .visibleScreen,
+            activeApplicationName: "Obsidian",
+            text: """
+            Inbox
+            Sam: Can you send the launch note today?
+            Draft
+            Yeah I can
+            """
+        ))
+        let builder = CompletionPromptBuilder(maxVisibleWords: 8)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Yeah I can",
+            appBundleIdentifier: "md.obsidian",
+            visiblePageContext: pageContext,
+            maxVisibleWords: 8
+        ))
+
+        #expect(prompt.system.contains("what the user is replying to"))
+        #expect(prompt.system.contains("local writing companion"))
+        #expect(prompt.user.contains("Active app: Obsidian"))
+        #expect(prompt.user.contains("Sam: Can you send the launch note today?"))
+        #expect(prompt.user.contains("Before cursor:\nYeah I can"))
     }
 
     @Test("Word prompt includes trace safe document title shape")
@@ -256,7 +285,7 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("Inline word completion"))
         #expect(prompt.system.contains("missing suffix"))
         #expect(prompt.system.contains("return exactly <NO_SUGGESTION>"))
-        #expect(prompt.system.contains("confidence is low"))
+        #expect(prompt.system.contains("suffix would complete the wrong word"))
         #expect(prompt.system.contains("No spaces"))
         #expect(prompt.user.hasSuffix("Suffix:"))
     }
@@ -415,7 +444,7 @@ struct CompletionPromptBuilderTests {
         ))
 
         #expect(prompt.system.contains("Sentence mode: start only the next sentence's first few words"))
-        #expect(prompt.system.contains("Require higher confidence"))
+        #expect(prompt.system.contains("make the best short guess"))
         #expect(prompt.system.contains("Start the next sentence naturally"))
         #expect(!prompt.system.contains("Phrase mode: continue only the current local thought"))
     }

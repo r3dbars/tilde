@@ -95,6 +95,7 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
     public let minimumWordCompletionCharacters: Int
     public let maximumWordCompletionCharacters: Int
     public let allowsTerminalSentenceBoundary: Bool
+    public let allowsUnfinishedWordPhraseContinuation: Bool
 
     public init(
         minimumContextCharacters: Int = 3,
@@ -102,7 +103,8 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         minimumPhraseContinuationWords: Int = 4,
         minimumWordCompletionCharacters: Int = 3,
         maximumWordCompletionCharacters: Int = 4,
-        allowsTerminalSentenceBoundary: Bool = false
+        allowsTerminalSentenceBoundary: Bool = false,
+        allowsUnfinishedWordPhraseContinuation: Bool = false
     ) {
         self.minimumContextCharacters = max(1, minimumContextCharacters)
         self.minimumContextWords = max(1, minimumContextWords)
@@ -110,6 +112,7 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         self.minimumWordCompletionCharacters = max(1, minimumWordCompletionCharacters)
         self.maximumWordCompletionCharacters = max(self.minimumWordCompletionCharacters, maximumWordCompletionCharacters)
         self.allowsTerminalSentenceBoundary = allowsTerminalSentenceBoundary
+        self.allowsUnfinishedWordPhraseContinuation = allowsUnfinishedWordPhraseContinuation
     }
 
     public init(pace: SuggestionPace) {
@@ -225,6 +228,11 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         }
 
         if endsInsideWord(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
+            if allowsUnfinishedWordPhraseContinuation,
+               contextWordCount >= minimumPhraseContinuationWords {
+                return .allow(.phraseContinuation)
+            }
+
             return .block(.unfinishedWord)
         }
 
