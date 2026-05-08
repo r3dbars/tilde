@@ -66,6 +66,9 @@ require_pattern "Tests/AutocompleteLabCoreTests/DiagnosticValueRedactorTests.swi
 require_file "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift" "Verifies accepted text landed exactly" "successful insertion verification coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift" "Detects unchanged and partially inserted text" "failed insertion verification coverage"
+require_file "Tests/AutocompleteLabCoreTests/InsertionVerificationPreflightPolicyTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationPreflightPolicyTests.swift" "Fails when focus moved to another app" "post-accept app mismatch coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationPreflightPolicyTests.swift" "Fails when focus moved to another field in the same app" "post-accept field mismatch coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Suppresses one word twitch completions" "model-output cleanup coverage"

@@ -34,7 +34,12 @@ focused-text AX reads that return no focused text context now cool down that app
 immediately by default, which keeps failing editors from being polled twice
 before the app backs away. A single slow AX read with context now also starts a
 short focused-text polling throttle and drops that returned context instead of
-turning a stale read into a visible suggestion.
+turning a stale read into a visible suggestion. The latest trust pass also makes
+post-accept verification fail closed when the frontmost app, focused text
+context, or field identity no longer matches the accepted suggestion baseline;
+those cases now trace as `insertionFailed`, count as wrong-insertion annoyance,
+and suppress the original field when the profile is configured to quiet failed
+insertions.
 
 It is not a 10/10 yet. The biggest remaining gap is still recorder-grade visual
 placement in real prompt apps and production-editor variants, especially Codex,
@@ -48,7 +53,7 @@ evidence-backed score should stay lower until those rows are closed.
 | --- | ---: | --- |
 | Normal typing passthrough | 9.9/10 | Live TextEdit soak now proves the key path stays in microseconds during a long synthetic typing run. Event-tap summaries stayed clean over 600 samples with p95 max 35us, p99 max 95us, max 161us, zero slow markers, and zero tap-disable events. Focused-text AX reads are off the hot path, slow reads with no focused text context now cool down that app immediately, and a single slow AX read with context now throttles polling and drops the stale read result. Fresh long-run proof still has to show the AX warning lane stays calm before this can reach 10/10. |
 | Keyboard capture safety | 9.8/10 | Capture starts only after a suggestion panel frame is actually usable, passes ordinary typing through, blocks selected-text replacement, fails closed if macOS disables the tap, and replays accept keys when focus moves to a protected field. |
-| Acceptance reliability | 9.45/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, and Apple Notes title/body/checklist verify accept paths. Prompt-app full accept is intentionally disabled until separate full-accept no-submit proof exists. Selected text is blocked before suggestions/acceptance and AX insertion is faster, but current Codex, Claude Code, and Claude desktop one-word no-submit proof still need live runs. |
+| Acceptance reliability | 9.5/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, and Apple Notes title/body/checklist verify accept paths. Prompt-app full accept is intentionally disabled until separate full-accept no-submit proof exists. Selected text is blocked before suggestions/acceptance, AX insertion is faster, and post-accept verification mismatches now fail closed with tested trace/quiet behavior. Current Codex, Claude Code, and Claude desktop one-word no-submit proof still need live runs. |
 | Visual caret alignment | 9.5/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, Apple Notes title/body/checklist, and a disposable Codex prompt now have screenshot-backed proof. Stale line rects are dropped, vertical clipping is enforced, too-narrow inline space suppresses display instead of showing a sliver, and async suggestions refresh current geometry before display, but Claude Code and Claude desktop proof is incomplete and Codex still needs same-slice accept/no-submit proof. |
 | Self-healing behavior | 9.5/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, applies only explicit trusted visual offsets, manual nudges move the visible ghost immediately, untrusted placement suppression now hides any stale ghost, and trusted visual offsets expire when the target app version, screen, or field shape changes. A unit-tested pixel detector can now identify screenshot offset from synthetic pixels, screenshot capture logs offset metadata, and per-app screenshot tracing can write trusted scoped corrections through the existing trust gate. Fresh real-app screenshot proof still needs to prove this before it can count as complete. |
 | Screenshot tracing | 9.4/10 | Screen Recording is preflighted, capture runs off the hot path, screenshots include editor bounds plus ghost text, traces/logs include capture rect plus rendered panel rect, and capture now has a backlog guard plus timeout. |
@@ -97,6 +102,14 @@ evidence-backed score should stay lower until those rows are closed.
 
 ## Latest Proof
 
+- 2026-05-08 continuation pass: added
+  `InsertionVerificationPreflightPolicy` and tests so post-accept verification
+  only proceeds when the same frontmost app and focused field are still present.
+  `AppDelegate.scheduleInsertionVerification` now records app/context/field
+  mismatches as `insertionFailed`, marks them as wrong-insertion annoyance
+  signals, and suppresses the original field for profiles that quiet failed
+  insertions. `swift test --filter InsertionVerification` passed 14 tests, and
+  full `swift test` passed 744 tests.
 - Current 2026-05-07 goal pass: added a pre-accept snapshot guard for app,
   process, focused field, selected text, and before/after cursor text; records
   accept-key focus mismatches as `wrong-app-or-field-before-accept` severe

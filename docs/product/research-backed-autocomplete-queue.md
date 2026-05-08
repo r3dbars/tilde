@@ -101,6 +101,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Detect when Tab moved focus instead of inserting accepted text.
 - [x] Detect when Tab inserted a literal tab or changed selection unexpectedly.
 - [x] Emit `tab-conflict` and quiet that field/app.
+- [x] Treat post-accept app, field, or focused-text verification mismatches as `insertionFailed` instead of silently ignoring them.
 - [x] Add focus-stealing detection and trace event support.
 - [x] Add rollback attempt metadata for failed inserts.
 - [x] Add per-app insertion mode reliability stats.
