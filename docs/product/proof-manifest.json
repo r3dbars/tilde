@@ -45,42 +45,38 @@
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Real Monaco and ProseMirror proof now pass under isolated Chrome with renderer accessibility forced. The explicit default-Chrome AX lane currently reproduces no editable field for both real editor fixtures, so broad production-site proof and default-Chrome AX exposure remain open."
+        "Real Monaco and ProseMirror proof now pass under isolated Chrome with renderer accessibility forced and default Chrome AX exposure. Broad production-site proof and caret-quality placement remain open."
       ]
     },
     {
       "surface": "Chrome real Monaco",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Chrome",
         "bundle": "com.google.Chrome",
-        "proof": "monaco-real",
+        "proof": "monaco-real-default",
         "minVerifiedAccepts": 2,
         "requiresVisualStrictComplete": true
       },
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-monaco-real.png"
       ],
-      "gaps": [
-        "Proof uses an isolated temp-profile Chrome process with renderer accessibility forced. Placement fell back to floating mirror/element anchoring. The default-Chrome AX lane currently reports no editable field, so default Chrome exposure and caret-quality proof remain open."
-      ]
+      "gaps": []
     },
     {
       "surface": "Chrome real ProseMirror",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Chrome",
         "bundle": "com.google.Chrome",
-        "proof": "prosemirror-real",
+        "proof": "prosemirror-real-default",
         "minVerifiedAccepts": 2,
         "requiresVisualStrictComplete": true
       },
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
-      "gaps": [
-        "Proof uses an isolated temp-profile Chrome process with renderer accessibility forced. Placement fell back to floating mirror/element anchoring. The default-Chrome AX lane currently reports no editable field, so default Chrome exposure and caret-quality proof remain open."
-      ]
+      "gaps": []
     },
     {
       "surface": "Chrome chat-like composer",
@@ -239,7 +235,7 @@
       "surface": "Chrome text fields/editor/chat-like surfaces",
       "status": "partial",
       "owner": "browser editor adapter lane",
-      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures are proven, but production-site variance and default Chrome AX exposure remain open. Hosted Google Docs, Notion, Slack, and Discord are blocked by surface policy until real proof exists."
+      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures and default-Chrome real-editor AX lanes are proven, but production-site variance and caret-quality editor placement remain open. Hosted Google Docs, Notion, Slack, and Discord are blocked by surface policy until real proof exists."
     },
     {
       "bundle": "com.openai.codex",
