@@ -32,7 +32,9 @@ composition is active. The latest loop adds a no-append `--check-only` proof
 validation path and explicit smoke report routing so known slices can be
 rechecked without polluting the append-only manual proof log. It also adds a
 pure app-level trust-flow harness for poll, request, present, accept, and
-verify behavior without launching Accessibility or a real target app.
+verify behavior without launching Accessibility or a real target app. The same
+loop also tightens accept-time stale-text checking so a suggestion cannot be
+accepted after the field text changes behind the event-tap path.
 
 ## Product Standard
 
@@ -83,11 +85,12 @@ fixture proof, not a general system-wide inserter.
 
 Starting score before this pass: 72/100
 
-Overall score after this pass: 83/100
+Overall score after this pass: 84/100
 
 Latest automatable loop: evidence hygiene improved and the app now has a
-focused automated trust-flow harness. The score still cannot approach 100
-without new live Codex, Claude Code, and production browser proof.
+focused automated trust-flow harness plus accept-time stale-text fail-closed
+coverage. The score still cannot approach 100 without new live Codex, Claude
+Code, and production browser proof.
 
 This is a strict compatibility score. It is not a general app-quality score.
 Several individual surfaces score much higher, but hard gates prevent a broad
@@ -141,17 +144,20 @@ compatibility claim.
 ### Insertion correctness
 
 - Weight: 20
-- Current score: 16/20
+- Current score: 17/20
 - Why this score: The app verifies insertion, blocks selected text, checks
   visible acceptance proof, and now fast word completions use the same final
   stale-context refresh as model suggestions. The new trust-flow harness proves
   poll/request/present/Tab-accept/verify behavior and stale/focus suppression
-  without raw-text evidence. Still, key real-app proof gaps remain.
+  without raw-text evidence. Accept now also fails closed if the focused text
+  has changed since display, even when the field identity still matches. Still,
+  key real-app proof gaps remain.
 - Evidence found in repo:
   - `InsertionEngine`
   - `InsertionVerification`
   - `SuggestionAcceptanceProofPolicy`
   - `AppDelegate.refreshedPresentationContext`
+  - `AppDelegate.focusedFieldMatchesCurrentSuggestion`
   - `SuggestionPresentationRefreshPolicy`
   - `TrustFlowHarness`
   - `AcceptanceSurvivalChecker`
@@ -502,12 +508,31 @@ directly.
   - Marked-text composition suppression before presentation.
   - Browser action-bearing suppression before presentation.
   - Focus-change acceptance block before insertion.
+  - Stale-text acceptance block before insertion.
   - Prompt no-submit hard-cap full-accept block.
   - Raw-text-free requested/presented/accepted/verified evidence.
 - Proof required:
   - `swift test --filter TrustFlowHarnessTests`
 - Risk level: Medium
 - Expected score impact: +1 insertion correctness.
+- Status: Done in this follow-up.
+
+### 11. Accept-time stale text fail-closed gate
+
+- Objective: Make acceptance verify that the focused text still matches the
+  displayed suggestion baseline before inserting, not just that the field
+  identity still matches.
+- Files likely involved:
+  - `Sources/AutocompleteLabApp/App/AppDelegate.swift`
+  - `Sources/AutocompleteLabApp/App/TrustFlowHarness.swift`
+  - `Tests/AutocompleteLabAppTests/TrustFlowHarnessTests.swift`
+- Tests to add/update:
+  - Harness test for stale text changed after presentation but before Tab.
+- Proof required:
+  - `swift test --filter TrustFlowHarnessTests`
+  - `swift test`
+- Risk level: Medium
+- Expected score impact: +1 insertion correctness/stale safety.
 - Status: Done in this follow-up.
 
 ## Codex Execution Goal

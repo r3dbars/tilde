@@ -104,6 +104,28 @@ struct TrustFlowHarnessTests {
     }
 
     @MainActor
+    @Test("Stale text blocks acceptance before insertion")
+    func staleTextBlocksAcceptanceBeforeInsertion() throws {
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let field = fieldIdentity(bundleIdentifier: profile.bundleIdentifier)
+        let context = focusedContext(textBeforeCursor: "Can we", textAfterCursor: "")
+        var harness = TrustFlowHarness(profile: profile, fieldIdentity: field)
+
+        harness.requestSuggestion(context: context, requestMode: .phraseContinuation)
+        let presented = harness.presentSuggestion(" make this safer", focusedContext: context)
+        let accepted = harness.accept(
+            key: .tab,
+            currentTextBeforeCursor: "Can we already changed"
+        )
+        #expect(presented)
+        #expect(!accepted)
+
+        #expect(harness.evidence.map(\.kind) == [.requested, .presented, .suppressed])
+        #expect(harness.evidence.last?.reason == "stale-text-at-accept")
+        #expect(!harness.evidence.contains { $0.kind == .accepted })
+    }
+
+    @MainActor
     @Test("Focus change blocks acceptance before insertion")
     func focusChangeBlocksAcceptanceBeforeInsertion() throws {
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))

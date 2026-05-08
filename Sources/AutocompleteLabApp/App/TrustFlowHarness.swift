@@ -147,7 +147,9 @@ struct TrustFlowHarness {
     @discardableResult
     mutating func accept(
         key: AutocompleteKey,
-        currentFieldMatchesSuggestion: Bool = true
+        currentFieldMatchesSuggestion: Bool = true,
+        currentTextBeforeCursor: String? = nil,
+        currentTextAfterCursor: String? = nil
     ) -> Bool {
         guard let request else {
             evidence.append(event(kind: .suppressed, reason: "missing-request"))
@@ -175,6 +177,19 @@ struct TrustFlowHarness {
                 requestMode: request.mode,
                 acceptMode: action.diagnosticName,
                 reason: "focus-changed"
+            ))
+            return false
+        }
+
+        if let currentTextBeforeCursor,
+           currentTextBeforeCursor != request.textBeforeCursor
+            || (currentTextAfterCursor ?? request.textAfterCursor) != request.textAfterCursor {
+            suggestionSession.dismiss()
+            evidence.append(event(
+                kind: .suppressed,
+                requestMode: request.mode,
+                acceptMode: action.diagnosticName,
+                reason: "stale-text-at-accept"
             ))
             return false
         }

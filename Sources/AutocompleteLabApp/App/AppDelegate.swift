@@ -169,6 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionFieldIdentity: FocusedFieldIdentity?
     private var currentSuggestionRequestMode: CompletionRequestMode?
     private var currentSuggestionTextBeforeCursor: String?
+    private var currentSuggestionTextAfterCursor: String?
     private var currentSuggestionDisplayedText: String?
     private var currentSuggestionFieldClassification: AXFieldClassification?
     private var currentSuggestionPresentedAt: Date?
@@ -2344,11 +2345,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             previousSnapshot: lastTextSnapshot
         )
-        return fieldIdentity(
+        guard fieldIdentity(
             app: frontmostApp,
             context: context,
             profile: profile
-        ) == currentSuggestionFieldIdentity
+        ) == currentSuggestionFieldIdentity else {
+            return false
+        }
+
+        guard let expectedTextBeforeCursor = currentSuggestionTextBeforeCursor else {
+            return false
+        }
+
+        return context.textBeforeCursor == expectedTextBeforeCursor
+            && context.textAfterCursor == (currentSuggestionTextAfterCursor ?? "")
     }
 
     private func recordKeyboardAction(
@@ -3793,6 +3803,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionFieldIdentity = fieldIdentity
         currentSuggestionRequestMode = request.mode
         currentSuggestionTextBeforeCursor = request.textBeforeCursor
+        currentSuggestionTextAfterCursor = request.textAfterCursor
         currentSuggestionDisplayedText = suggestion.visibleText
         currentSuggestionFieldClassification = fieldClassification(for: context)
         currentSuggestionPresentedAt = Date()
@@ -4491,6 +4502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let lastTextSnapshot,
            lastTextSnapshot.fieldIdentity == currentFieldIdentity {
             currentSuggestionTextBeforeCursor = lastTextSnapshot.textBeforeCursor
+            currentSuggestionTextAfterCursor = lastTextSnapshot.textAfterCursor
             return
         }
 
@@ -4624,6 +4636,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastTextSnapshot = snapshot
             invalidatePendingSuggestionRequest()
             currentSuggestionTextBeforeCursor = context.textBeforeCursor
+            currentSuggestionTextAfterCursor = context.textAfterCursor
             setSuggestionDecision("Shown: typing through suggestion")
             recordSuggestionEvent(
                 "suggestion-typed-through",
@@ -4707,6 +4720,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionFieldIdentity = nil
         currentSuggestionRequestMode = nil
         currentSuggestionTextBeforeCursor = nil
+        currentSuggestionTextAfterCursor = nil
         currentSuggestionDisplayedText = nil
         currentSuggestionFieldClassification = nil
         currentSuggestionPresentedAt = nil
