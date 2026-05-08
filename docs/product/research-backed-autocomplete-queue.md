@@ -87,6 +87,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Add tests for secure/search/url/form/singleline/multiline classification.
 - [x] Add an override path for safe singleline compose fields.
 - [x] Add a "why blocked" line for field classifier suppressions.
+- [x] Make stable-bounds field identities deterministic across process launches.
 
 ## P0 - Insertion, Tab, And Focus Trust
 

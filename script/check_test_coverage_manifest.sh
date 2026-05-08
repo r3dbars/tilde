@@ -85,6 +85,8 @@ require_pattern "Tests/AutocompleteLabCoreTests/SuggestionPresentationGateTests.
 require_file "Tests/AutocompleteLabCoreTests/SuggestionAcceptanceGuardTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/SuggestionAcceptanceGuardTests.swift" "Blocks accept after app bundle changes" "wrong-app accept guard coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/SuggestionAcceptanceGuardTests.swift" "Blocks accept when text before cursor changed" "text snapshot accept guard coverage"
+require_file "Tests/AutocompleteLabCoreTests/FocusedFieldIdentityPolicyTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/FocusedFieldIdentityPolicyTests.swift" "Stable bounds mode uses a deterministic hash fixture" "stable field identity hash coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/TypingBurstPolicyTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/TypingBurstPolicyTests.swift" "Fast repeated character inserts become a burst" "typing-burst silence coverage"
