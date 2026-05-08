@@ -72,6 +72,27 @@ struct CompletionQualityEvalTests {
                 expectedVisibleText: nil
             ),
             EvalCase(
+                name: "recommendation label blocked",
+                rawOutput: "Recommendation: keep this smaller",
+                textBeforeCursor: "Can we",
+                mode: .phraseContinuation,
+                expectedVisibleText: nil
+            ),
+            EvalCase(
+                name: "rewrite candidate blocked",
+                rawOutput: "rewrite this as a calmer sentence",
+                textBeforeCursor: "Can we",
+                mode: .phraseContinuation,
+                expectedVisibleText: nil
+            ),
+            EvalCase(
+                name: "next action candidate blocked",
+                rawOutput: "next action is to open the logs",
+                textBeforeCursor: "Can we",
+                mode: .phraseContinuation,
+                expectedVisibleText: nil
+            ),
+            EvalCase(
                 name: "earlier context repeat blocked",
                 rawOutput: "know you are ready",
                 textBeforeCursor: "I know you are\n\nHey how are you",

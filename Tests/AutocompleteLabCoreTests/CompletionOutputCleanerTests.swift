@@ -39,6 +39,19 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("You could try another option") == nil)
     }
 
+    @Test("Suppresses recommendation rewrite and next action candidates")
+    func suppressesRecommendationRewriteAndNextActionCandidates() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("Recommendation: keep this smaller", after: "Can we") == nil)
+        #expect(cleaner.clean("Rewrite: keep this smaller", after: "Can we") == nil)
+        #expect(cleaner.clean("Next action: open the logs", after: "Can we") == nil)
+        #expect(cleaner.clean("try saying this more clearly", after: "Can we") == nil)
+        #expect(cleaner.clean("rewrite this as a calmer sentence", after: "Can we") == nil)
+        #expect(cleaner.clean("next step is to open the logs", after: "Can we") == nil)
+        #expect(cleaner.clean("keep this smaller", after: "Can we")?.visibleText == " keep this smaller")
+    }
+
     @Test("Suppresses generic chat filler")
     func suppressesGenericChatFiller() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
