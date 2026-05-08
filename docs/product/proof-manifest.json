@@ -93,7 +93,7 @@
         "docs/product/visual-placement-screenshots/chrome-chat-like.png"
       ],
       "gaps": [
-        "Local no-submit fixture is proven, but real prompt/chat app proof is still missing."
+        "Local no-submit fixture is proven; future reruns now also check form-submit, Enter field-send, send-button click, and network-send counters. Real prompt/chat app proof is still missing."
       ]
     },
     {
@@ -236,7 +236,7 @@
       "surface": "Chrome text fields/editor/chat-like surfaces",
       "status": "partial",
       "owner": "browser editor adapter lane",
-      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures and default-Chrome real-editor AX plus proof-gated inline synthetic-caret lanes are proven, but production-site variance remains open. Hosted Google Docs, Notion, Gmail, ChatGPT, Claude web, Codex web, Slack, Discord, and Telegram web are blocked by surface policy until real proof exists; action-bearing composer surfaces need no-submit proof first."
+      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures and default-Chrome real-editor AX plus proof-gated inline synthetic-caret lanes are proven, but production-site variance remains open. Hosted Google Docs, Notion, Gmail, ChatGPT, Claude web, Codex web, Gemini web, Perplexity web, Copilot web, Poe web, Slack, Discord, Telegram web, Teams web, WhatsApp web, and Messenger web are blocked by surface policy until real proof exists; action-bearing composer surfaces need no-submit proof first."
     },
     {
       "bundle": "com.openai.codex",

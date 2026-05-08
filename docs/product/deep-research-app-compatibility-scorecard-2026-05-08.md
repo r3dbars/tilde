@@ -34,7 +34,10 @@ rechecked without polluting the append-only manual proof log. It also adds a
 pure app-level trust-flow harness for poll, request, present, accept, and
 verify behavior without launching Accessibility or a real target app. The same
 loop also tightens accept-time stale-text checking so a suggestion cannot be
-accepted after the field text changes behind the event-tap path.
+accepted after the field text changes behind the event-tap path. This latest
+loop expands conservative browser prompt/message blocks and strengthens the
+Chrome chat-like no-submit fixture so future proof must keep form submits,
+Enter-style field sends, send-button clicks, and network-send attempts at zero.
 
 ## Product Standard
 
@@ -85,11 +88,12 @@ fixture proof, not a general system-wide inserter.
 
 Starting score before this pass: 72/100
 
-Overall score after this pass: 84/100
+Overall score after this pass: 85/100
 
-Latest automatable loop: evidence hygiene improved and the app now has a
-focused automated trust-flow harness plus accept-time stale-text fail-closed
-coverage. The score still cannot approach 100 without new live Codex, Claude
+Latest automatable loop: evidence hygiene improved, the app now has a focused
+automated trust-flow harness, accept-time stale-text fail-closed coverage,
+broader browser prompt/message hard blocks, and stricter local no-submit smoke
+guards. The score still cannot approach 100 without new live Codex, Claude
 Code, and production browser proof.
 
 This is a strict compatibility score. It is not a general app-quality score.
@@ -105,8 +109,10 @@ compatibility claim.
 - Why this score: The repo has explicit app profiles, AX field classification,
   browser hosted-surface blocking, prompt fingerprints, and proof-manifest
   coverage. This pass added action-bearing browser hosted surfaces such as
-  Gmail, ChatGPT, Claude web, Codex web, and Telegram web, plus trace-safe
-  profile metadata for surface ID, version range, preferred path, and hard caps.
+  Gmail, ChatGPT, Claude web, Codex web, Gemini web, Perplexity web, Copilot
+  web, Poe web, Telegram web, Teams web, WhatsApp web, and Messenger web, plus
+  trace-safe profile metadata for surface ID, version range, preferred path,
+  and hard caps.
   This follow-up also persists that scope on learned/user-created compatibility
   profiles and upgrades legacy learned profiles on read.
 - Evidence found in repo:
@@ -207,21 +213,24 @@ compatibility claim.
 ### No-submit / no-side-effect safety
 
 - Weight: 15
-- Current score: 13/15
+- Current score: 14/15
 - Why this score: Prompt-app full accept is disabled, Claude desktop has
   one-word no-submit proof, Chrome chat-like local fixture has no-submit proof,
-  and this pass blocks more action-bearing browser surfaces until no-submit
-  proof exists. The remaining manual proof gaps are still real.
+  this pass blocks more action-bearing browser surfaces until no-submit proof
+  exists, and the Chrome chat-like fixture now fails proof if Tab/full accept
+  triggers form submit, Enter-style field send, send-button click, or network
+  send attempts. The remaining manual proof gaps are still real.
 - Evidence found in repo:
   - `CompatibilityProfile.supportsFullAcceptance`
   - `PromptEditorFingerprintPolicy`
   - `ClaudeCodeTerminalHostProofPolicy`
   - `BrowserHostedSurfacePolicy`
+  - `script/real_app_smoke.sh`
   - `Tests/AutocompleteLabAppTests/SettingsWindowControllerStateTests.swift`
   - `Tests/AutocompleteLabCoreTests/BrowserHostedSurfacePolicyTests.swift`
 - Missing evidence: Codex same-slice one-word no-submit proof, Claude Code
-  terminal-host proof, real Gmail/Slack/Discord/Telegram proof, and network/send
-  observers for browser prompt apps.
+  terminal-host proof, real Gmail/Slack/Discord/Telegram and other production
+  browser prompt/message proof, and live production network/send observer proof.
 - What would make it 100/100: No-submit proof for every action-bearing profile,
   with full accept disabled until separately proven.
 
@@ -363,8 +372,10 @@ directly.
 
 ### 2. Browser action-bearing hosted-surface blocks
 
-- Objective: Treat Gmail, ChatGPT, Claude web, Codex web, Slack, Discord, and
-  Telegram web as action-bearing browser surfaces that need no-submit proof.
+- Objective: Treat Gmail, ChatGPT, Claude web, Codex web, Gemini web,
+  Perplexity web, Copilot web, Poe web, Slack, Discord, Telegram web, Teams
+  web, WhatsApp web, and Messenger web as action-bearing browser surfaces that
+  need no-submit proof.
 - Files likely involved:
   - `Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift`
   - `Tests/AutocompleteLabCoreTests/BrowserHostedSurfacePolicyTests.swift`
@@ -374,7 +385,7 @@ directly.
   - `swift test --filter BrowserHostedSurfacePolicyTests`
 - Risk level: Low
 - Expected score impact: +2 surface identification and no-submit safety.
-- Status: Done in this pass.
+- Status: Done in this pass and expanded in the latest loop.
 
 ### 3. Versioned compatibility profile schema
 
@@ -535,12 +546,31 @@ directly.
 - Expected score impact: +1 insertion correctness/stale safety.
 - Status: Done in this follow-up.
 
+### 12. Browser no-submit observer fixture
+
+- Objective: Strengthen local browser prompt proof so the disposable chat
+  fixture fails if autocomplete triggers form submit, Enter-style field send,
+  send-button click, or network-send attempts.
+- Files likely involved:
+  - `script/real_app_smoke.sh`
+  - `script/real_app_smoke_self_test.sh`
+- Tests to add/update:
+  - Dry-run self-test for the explicit no-submit observer scope.
+- Proof required:
+  - `bash -n script/real_app_smoke.sh script/real_app_smoke_self_test.sh`
+  - `./script/real_app_smoke_self_test.sh`
+  - Future successful `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh chrome --fixture chat-like`
+- Risk level: Low
+- Expected score impact: +1 no-submit harness confidence.
+- Status: Script and self-test are done. A live rerun was attempted but did not
+  append proof because the app launch helper terminated before validation.
+
 ## Codex Execution Goal
 
 Improve app compatibility safety by making browser action-bearing surfaces fail
-closed until no-submit proof exists and by preventing fast word completions from
-displaying unless the focused app, surface, field, text, and browser/prompt
-policy are still current.
+closed until no-submit proof exists, strengthening local no-submit proof
+observers, and preventing fast word completions from displaying unless the
+focused app, surface, field, text, and browser/prompt policy are still current.
 
 ## Stop Conditions
 
@@ -548,6 +578,10 @@ This goal is complete when:
 
 - The scorecard exists under `docs/product/`.
 - Browser action-bearing surfaces are blocked with trace-safe metadata.
+- Browser prompt/message surface blocks include the current high-risk web app
+  list in `BrowserHostedSurfacePolicy`.
+- Chrome local chat proof has no-submit observers for submit, field-send,
+  send-click, and network-send attempts.
 - Fast word completions use the final stale-context refresh before display.
 - Targeted tests pass.
 - Broader relevant checks either pass or fail only on known manual proof gaps.
@@ -557,6 +591,8 @@ This goal is complete when:
 
 - Codex still needs current same-slice screenshot plus one-word no-submit proof.
 - Claude Code still needs terminal-host manual proof.
+- Chrome chat-like should be rerun successfully now that the fixture checks
+  field-send, send-click, and network-send counters.
 - Chrome production editor/chat surfaces need real site proof before broadening.
 - Learned compatibility profiles now carry versioned scope; last-verified and
   proof-link metadata is still not stored directly on learned profiles.

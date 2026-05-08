@@ -34,9 +34,10 @@ notes-*-undo variants. A generic notes run only prints the surface picker and
 does not record proof.
 
 Chrome defaults to the textarea fixture. Use --fixture chat-like to prove
-Tab/full-accept do not submit a chat-style composer. Use --fixture monaco-real
-or --fixture prosemirror-real for pinned upstream editor-engine fixtures in an
-isolated Chrome process with renderer accessibility forced. Use
+Tab/full-accept do not submit, field-send, click send, or attempt network send
+from a chat-style composer. Use --fixture monaco-real or --fixture
+prosemirror-real for pinned upstream editor-engine fixtures in an isolated
+Chrome process with renderer accessibility forced. Use
 --chrome-accessibility default to run those real editor fixtures in the normal
 frontmost Chrome window as an experimental default-AX exposure proof. Use
 --fixture all to run every local Chrome browser/editor fixture with one app
@@ -1528,7 +1529,7 @@ wait_for_textedit_smoke_editor() {
 
 assert_chrome_chat_fixture_not_submitted() {
   local label="$1"
-  local tab_title submit_count
+  local tab_title submit_count field_send_count click_count request_count
 
   tab_title="$(osascript <<'APPLESCRIPT'
 tell application "Google Chrome"
@@ -1544,12 +1545,30 @@ APPLESCRIPT
   if [[ "$tab_title" =~ submits=([0-9]+) ]]; then
     submit_count="${BASH_REMATCH[1]}"
   else
-    echo "Could not read Chrome chat-like submit count during $label; expected tab title to contain [submits=N], got: $tab_title" >&2
+    echo "Could not read Chrome chat-like submit count during $label; expected tab title to contain [submits=N fieldSends=N clicks=N requests=N], got: $tab_title" >&2
+    exit 1
+  fi
+  if [[ "$tab_title" =~ fieldSends=([0-9]+) ]]; then
+    field_send_count="${BASH_REMATCH[1]}"
+  else
+    echo "Could not read Chrome chat-like field-send count during $label; expected tab title to contain [submits=N fieldSends=N clicks=N requests=N], got: $tab_title" >&2
+    exit 1
+  fi
+  if [[ "$tab_title" =~ clicks=([0-9]+) ]]; then
+    click_count="${BASH_REMATCH[1]}"
+  else
+    echo "Could not read Chrome chat-like send-click count during $label; expected tab title to contain [submits=N fieldSends=N clicks=N requests=N], got: $tab_title" >&2
+    exit 1
+  fi
+  if [[ "$tab_title" =~ requests=([0-9]+) ]]; then
+    request_count="${BASH_REMATCH[1]}"
+  else
+    echo "Could not read Chrome chat-like network-send count during $label; expected tab title to contain [submits=N fieldSends=N clicks=N requests=N], got: $tab_title" >&2
     exit 1
   fi
 
-  if [[ "$submit_count" != "0" ]]; then
-    echo "Chrome chat-like fixture submitted unexpectedly during $label; submit count was $submit_count." >&2
+  if [[ "$submit_count" != "0" || "$field_send_count" != "0" || "$click_count" != "0" || "$request_count" != "0" ]]; then
+    echo "Chrome chat-like fixture had a send side effect during $label; submits=$submit_count fieldSends=$field_send_count clicks=$click_count requests=$request_count." >&2
     exit 1
   fi
 }
@@ -1851,7 +1870,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>Autocomplete Lab Chrome Chat-Like No-Submit Smoke [submits=0]</title>
+<title>Autocomplete Lab Chrome Chat-Like No-Submit Smoke [submits=0 fieldSends=0 clicks=0 requests=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body {
@@ -1911,10 +1930,20 @@ button {
   <div class="meter" aria-live="polite">Submits: <span data-smoke-submit-count>0</span></div>
 </section>
 <script>
-window.autocompleteSmokeSubmitCount = 0;
+window.autocompleteSmokeNoSubmit = {
+  submits: 0,
+  fieldSends: 0,
+  clicks: 0,
+  requests: 0
+};
 window.updateSmokeSubmitCount = function () {
-  document.title = "Autocomplete Lab Chrome Chat-Like No-Submit Smoke [submits=" + window.autocompleteSmokeSubmitCount + "]";
-  document.querySelector("[data-smoke-submit-count]").textContent = String(window.autocompleteSmokeSubmitCount);
+  const counts = window.autocompleteSmokeNoSubmit;
+  document.title = "Autocomplete Lab Chrome Chat-Like No-Submit Smoke [submits=" + counts.submits + " fieldSends=" + counts.fieldSends + " clicks=" + counts.clicks + " requests=" + counts.requests + "]";
+  document.querySelector("[data-smoke-submit-count]").textContent = String(counts.submits);
+};
+window.recordAutocompleteSmokeRequest = function () {
+  window.autocompleteSmokeNoSubmit.requests += 1;
+  window.updateSmokeSubmitCount();
 };
 window.autocompleteSmokeEditorText = function () {
   return document.querySelector("[data-smoke-editor]").innerText;
@@ -1929,11 +1958,46 @@ window.focusSmokeEditor = function () {
   selection.removeAllRanges();
   selection.addRange(range);
 };
-document.querySelector("[data-smoke-form]").addEventListener("submit", function (event) {
-  event.preventDefault();
-  window.autocompleteSmokeSubmitCount += 1;
+const smokeEditor = document.querySelector("[data-smoke-editor]");
+const smokeButton = document.querySelector("[data-smoke-form] button");
+smokeEditor.addEventListener("keydown", function (event) {
+  if (event.isComposing) return;
+  if (event.key === "Enter") {
+    window.autocompleteSmokeNoSubmit.fieldSends += 1;
+    window.updateSmokeSubmitCount();
+    event.preventDefault();
+  }
+});
+smokeButton.addEventListener("click", function (event) {
+  window.autocompleteSmokeNoSubmit.clicks += 1;
   window.updateSmokeSubmitCount();
 });
+document.querySelector("[data-smoke-form]").addEventListener("submit", function (event) {
+  event.preventDefault();
+  window.autocompleteSmokeNoSubmit.submits += 1;
+  window.updateSmokeSubmitCount();
+});
+const originalFetch = window.fetch;
+window.fetch = function () {
+  window.recordAutocompleteSmokeRequest();
+  return Promise.reject(new Error("Autocomplete Lab smoke fixture blocks network send"));
+};
+const OriginalXMLHttpRequest = window.XMLHttpRequest;
+window.XMLHttpRequest = function () {
+  const xhr = new OriginalXMLHttpRequest();
+  const originalOpen = xhr.open;
+  xhr.open = function () {
+    window.recordAutocompleteSmokeRequest();
+    return originalOpen.apply(xhr, arguments);
+  };
+  return xhr;
+};
+if (navigator.sendBeacon) {
+  navigator.sendBeacon = function () {
+    window.recordAutocompleteSmokeRequest();
+    return false;
+  };
+}
 window.updateSmokeSubmitCount();
 window.addEventListener("load", window.focusSmokeEditor);
 </script>
@@ -1969,6 +2033,9 @@ describe_plan() {
         fi
       else
         echo "Plan: build/relaunch AutocompleteLab, open a disposable Chrome $CHROME_FIXTURE fixture, type a test fragment, then validate logs and traces."
+        if [[ "$CHROME_FIXTURE" == "chat-like" ]]; then
+          echo "No-submit guard: checks form submit, Enter field-send, send-button click, and network-send attempts stay at zero."
+        fi
       fi
       echo "Safety: the smoke launch temporarily enables Chrome only for this proof pass."
       ;;

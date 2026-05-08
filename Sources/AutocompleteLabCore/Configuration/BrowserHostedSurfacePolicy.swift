@@ -7,9 +7,16 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
     case chatGPT = "chatgpt"
     case claudeWeb = "claude-web"
     case codexWeb = "codex-web"
+    case geminiWeb = "gemini-web"
+    case perplexityWeb = "perplexity-web"
+    case copilotWeb = "copilot-web"
+    case poeWeb = "poe-web"
     case slack = "slack"
     case discord = "discord"
     case telegramWeb = "telegram-web"
+    case teamsWeb = "teams-web"
+    case whatsAppWeb = "whatsapp-web"
+    case messengerWeb = "messenger-web"
 
     public var displayName: String {
         switch self {
@@ -25,12 +32,26 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
             return "Claude web"
         case .codexWeb:
             return "Codex web"
+        case .geminiWeb:
+            return "Gemini web"
+        case .perplexityWeb:
+            return "Perplexity web"
+        case .copilotWeb:
+            return "Copilot web"
+        case .poeWeb:
+            return "Poe web"
         case .slack:
             return "Slack"
         case .discord:
             return "Discord"
         case .telegramWeb:
             return "Telegram web"
+        case .teamsWeb:
+            return "Teams web"
+        case .whatsAppWeb:
+            return "WhatsApp web"
+        case .messengerWeb:
+            return "Messenger web"
         }
     }
 
@@ -40,9 +61,9 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
             return .productionRichEditor
         case .gmail:
             return .emailComposer
-        case .chatGPT, .claudeWeb, .codexWeb:
+        case .chatGPT, .claudeWeb, .codexWeb, .geminiWeb, .perplexityWeb, .copilotWeb, .poeWeb:
             return .promptComposer
-        case .slack, .discord, .telegramWeb:
+        case .slack, .discord, .telegramWeb, .teamsWeb, .whatsAppWeb, .messengerWeb:
             return .messageComposer
         }
     }
@@ -158,6 +179,18 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         if matchesCodexWeb(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .codexWeb))
         }
+        if matchesGeminiWeb(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .geminiWeb))
+        }
+        if matchesPerplexityWeb(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .perplexityWeb))
+        }
+        if matchesCopilotWeb(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .copilotWeb))
+        }
+        if matchesPoeWeb(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .poeWeb))
+        }
         if matchesSlack(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .slack))
         }
@@ -166,6 +199,15 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         }
         if matchesTelegramWeb(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .telegramWeb))
+        }
+        if matchesTeamsWeb(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .teamsWeb))
+        }
+        if matchesWhatsAppWeb(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .whatsAppWeb))
+        }
+        if matchesMessengerWeb(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .messengerWeb))
         }
 
         return .allowed
@@ -221,6 +263,45 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
             || searchableText.contains("openai - codex")
     }
 
+    private func matchesGeminiWeb(_ searchableText: String) -> Bool {
+        searchableText.contains("gemini.google.com")
+            || searchableText.contains("bard.google.com")
+            || searchableText.contains("google gemini")
+            || searchableText.contains("gemini |")
+            || searchableText.contains("| gemini")
+            || searchableText.contains("gemini -")
+            || searchableText.contains("- gemini")
+            || searchableText == "gemini"
+    }
+
+    private func matchesPerplexityWeb(_ searchableText: String) -> Bool {
+        searchableText.contains("perplexity.ai")
+            || searchableText.contains("perplexity |")
+            || searchableText.contains("| perplexity")
+            || searchableText.contains("perplexity -")
+            || searchableText.contains("- perplexity")
+            || searchableText == "perplexity"
+    }
+
+    private func matchesCopilotWeb(_ searchableText: String) -> Bool {
+        searchableText.contains("copilot.microsoft.com")
+            || searchableText.contains("microsoft copilot")
+            || searchableText.contains("copilot |")
+            || searchableText.contains("| copilot")
+            || searchableText.contains("copilot -")
+            || searchableText.contains("- copilot")
+            || searchableText == "copilot"
+    }
+
+    private func matchesPoeWeb(_ searchableText: String) -> Bool {
+        searchableText.contains("poe.com")
+            || searchableText.contains("poe |")
+            || searchableText.contains("| poe")
+            || searchableText.contains("poe -")
+            || searchableText.contains("- poe")
+            || searchableText == "poe"
+    }
+
     private func matchesSlack(_ searchableText: String) -> Bool {
         searchableText.contains("app.slack.com")
             || searchableText.contains("slack.com")
@@ -248,5 +329,33 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
             || searchableText.contains("telegram -")
             || searchableText.contains("- telegram")
             || searchableText == "telegram"
+    }
+
+    private func matchesTeamsWeb(_ searchableText: String) -> Bool {
+        searchableText.contains("teams.microsoft.com")
+            || searchableText.contains("microsoft teams")
+            || searchableText.contains("teams |")
+            || searchableText.contains("| teams")
+            || searchableText.contains("teams -")
+            || searchableText.contains("- teams")
+    }
+
+    private func matchesWhatsAppWeb(_ searchableText: String) -> Bool {
+        searchableText.contains("web.whatsapp.com")
+            || searchableText.contains("whatsapp |")
+            || searchableText.contains("| whatsapp")
+            || searchableText.contains("whatsapp -")
+            || searchableText.contains("- whatsapp")
+            || searchableText == "whatsapp"
+    }
+
+    private func matchesMessengerWeb(_ searchableText: String) -> Bool {
+        searchableText.contains("messenger.com")
+            || searchableText.contains("facebook messenger")
+            || searchableText.contains("messenger |")
+            || searchableText.contains("| messenger")
+            || searchableText.contains("messenger -")
+            || searchableText.contains("- messenger")
+            || searchableText == "messenger"
     }
 }

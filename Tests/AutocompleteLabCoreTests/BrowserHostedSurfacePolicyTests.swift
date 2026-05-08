@@ -77,9 +77,44 @@ struct BrowserHostedSurfacePolicyTests {
                 .codexWeb
             ),
             (
+                "gemini web",
+                FocusedElementFingerprint(windowTitle: "Gemini"),
+                .geminiWeb
+            ),
+            (
+                "perplexity web",
+                FocusedElementFingerprint(windowTitle: "Perplexity"),
+                .perplexityWeb
+            ),
+            (
+                "copilot web",
+                FocusedElementFingerprint(windowTitle: "Microsoft Copilot"),
+                .copilotWeb
+            ),
+            (
+                "poe web",
+                FocusedElementFingerprint(windowTitle: "Poe"),
+                .poeWeb
+            ),
+            (
                 "telegram web",
                 FocusedElementFingerprint(windowTitle: "Telegram"),
                 .telegramWeb
+            ),
+            (
+                "teams web",
+                FocusedElementFingerprint(windowTitle: "Microsoft Teams"),
+                .teamsWeb
+            ),
+            (
+                "whatsapp web",
+                FocusedElementFingerprint(windowTitle: "WhatsApp"),
+                .whatsAppWeb
+            ),
+            (
+                "messenger web",
+                FocusedElementFingerprint(windowTitle: "Messenger"),
+                .messengerWeb
             )
         ]
 

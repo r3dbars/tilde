@@ -98,6 +98,10 @@ if ! grep -F "disposable Chrome chat-like fixture" "$TMP_DIR/chrome-chat-like.tx
   echo "real app smoke self-test did not print the Chrome chat-like dry-run plan" >&2
   exit 1
 fi
+if ! grep -F "form submit, Enter field-send, send-button click, and network-send attempts stay at zero" "$TMP_DIR/chrome-chat-like.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Chrome chat-like no-submit guard scope" >&2
+  exit 1
+fi
 
 script/real_app_smoke.sh chrome --fixture all --dry-run >"$TMP_DIR/chrome-all.txt"
 if ! grep -F "textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, real Monaco, real ProseMirror, and chat-like no-submit local fixtures" "$TMP_DIR/chrome-all.txt" >/dev/null; then
