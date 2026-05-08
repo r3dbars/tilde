@@ -43,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let placementPreflightPolicy = SuggestionPlacementPreflightPolicy()
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
+    private let tracePrivacySecretStore = TracePrivacySecretStore()
     private let recentWordExtractor = RecentWordExtractor()
     private let typingBurstPolicy = TypingBurstPolicy()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
@@ -143,7 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var disabledBundleIdentifiers: Set<String> = []
     private var debounceTask: Task<Void, Never>?
     private var insertionVerificationTask: Task<Void, Never>?
-    private var acceptanceSurvivalTasks: [String: Task<Void, Never>] = [:]
+    private var acceptanceSurvivalTasks: [String: [Task<Void, Never>]] = [:]
     private var runtimeWarmTask: Task<Void, Never>?
     private var modelInstallTask: Task<Void, Never>?
     private var modelInstallStatusText: String?
@@ -234,6 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debounceTask?.cancel()
         keyboardEventTapStopTask?.cancel()
         insertionVerificationTask?.cancel()
+        cancelAcceptanceSurvivalTasks()
         runtimeWarmTask?.cancel()
         modelInstallTask?.cancel()
         commandContextRequestTask?.cancel()
@@ -1913,7 +1915,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func scheduleInsertionVerification(
         acceptedText: String,
         baseline: InsertionVerificationBaseline?,
-        acceptanceID: String?
+        acceptanceID: String
     ) {
         guard let baseline else {
             return
@@ -2026,7 +2028,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     outcome: String(describing: result),
                     reason: "insert-verification-failed",
                     metadata: [
-                        "acceptanceID": acceptanceID ?? "",
+                        "acceptanceID": acceptanceID,
                         "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                         "currentBeforeChars": String(context.textBeforeCursor.count)
                     ]
@@ -2056,28 +2058,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 requestMode: baseline.requestMode?.rawValue ?? "",
                 acceptedText: acceptedText,
                 outcome: "verified",
-                metadata: acceptanceID.map { ["acceptanceID": $0] } ?? [:]
+                metadata: ["acceptanceID": acceptanceID]
+            )
+            recordAnnoyance(
+                .accepted,
+                appBundleIdentifier: baseline.profile.bundleIdentifier,
+                fieldIdentity: baseline.fieldIdentity,
+                requestMode: baseline.requestMode
             )
             beginAcceptanceSurvivalTracking(
                 acceptanceID: acceptanceID,
                 acceptedText: acceptedText,
                 baseline: baseline,
-                verifiedContext: context
+                context: context
             )
         }
     }
 
     private func beginAcceptanceSurvivalTracking(
-        acceptanceID: String?,
+        acceptanceID: String,
         acceptedText: String,
         baseline: InsertionVerificationBaseline,
-        verifiedContext: FocusedTextContext
+        context: FocusedTextContext
     ) {
-        guard let acceptanceID,
-              !acceptedText.isEmpty else {
-            return
-        }
-
         let tracker = AcceptanceSurvivalTracker(
             acceptanceID: acceptanceID,
             suggestionID: baseline.suggestionID ?? "",
@@ -2088,81 +2091,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             expectedInsertionUTF16Offset: baseline.previousTextBeforeCursor.utf16.count,
             acceptedAt: Date(),
             profile: baseline.profile,
-            fieldKind: verifiedContext.fieldClassification.kind,
-            fieldKindReason: verifiedContext.fieldClassification.reason
+            fieldKind: context.fieldClassification.kind,
+            fieldKindReason: context.fieldClassification.reason
         )
 
-        acceptanceSurvivalTasks[acceptanceID]?.cancel()
-        acceptanceSurvivalTasks[acceptanceID] = Task { @MainActor [weak self] in
-            await self?.acceptanceSurvivalChecker.beginTracking(tracker)
+        Task {
+            await acceptanceSurvivalChecker.beginTracking(tracker)
+        }
 
-            try? await Task.sleep(for: .seconds(2))
-            guard !Task.isCancelled,
-                  await self?.measureAcceptanceSurvival(
-                      acceptanceID: acceptanceID,
-                      checkpoint: .twoSeconds
-                  ) != true else {
-                return
-            }
+        acceptanceSurvivalTasks[acceptanceID]?.forEach { $0.cancel() }
+        acceptanceSurvivalTasks[acceptanceID] = [
+            scheduledAcceptanceSurvivalTask(acceptanceID: acceptanceID, checkpoint: .twoSeconds),
+            scheduledAcceptanceSurvivalTask(acceptanceID: acceptanceID, checkpoint: .tenSeconds),
+            scheduledAcceptanceSurvivalTask(acceptanceID: acceptanceID, checkpoint: .thirtySeconds)
+        ]
+    }
 
-            try? await Task.sleep(for: .seconds(8))
-            guard !Task.isCancelled,
-                  await self?.measureAcceptanceSurvival(
-                      acceptanceID: acceptanceID,
-                      checkpoint: .tenSeconds
-                  ) != true else {
-                return
-            }
-
-            try? await Task.sleep(for: .seconds(20))
+    private func scheduledAcceptanceSurvivalTask(
+        acceptanceID: String,
+        checkpoint: AcceptanceSurvivalCheckpoint
+    ) -> Task<Void, Never> {
+        Task { @MainActor in
+            try? await Task.sleep(for: acceptanceSurvivalDelay(for: checkpoint))
             guard !Task.isCancelled else {
                 return
             }
-            _ = await self?.measureAcceptanceSurvival(
-                acceptanceID: acceptanceID,
-                checkpoint: .thirtySeconds
-            )
+
+            await runAcceptanceSurvivalCheckpoint(acceptanceID: acceptanceID, checkpoint: checkpoint)
         }
     }
 
-    private func measureAcceptanceSurvival(
+    private func acceptanceSurvivalDelay(for checkpoint: AcceptanceSurvivalCheckpoint) -> Duration {
+        switch checkpoint {
+        case .twoSeconds:
+            .seconds(2)
+        case .tenSeconds:
+            .seconds(10)
+        case .thirtySeconds:
+            .seconds(30)
+        case .fieldBlur, .fieldSend:
+            .zero
+        }
+    }
+
+    private func runAcceptanceSurvivalCheckpoint(
         acceptanceID: String,
         checkpoint: AcceptanceSurvivalCheckpoint
-    ) async -> Bool {
+    ) async {
         guard let tracker = await acceptanceSurvivalChecker.tracker(acceptanceID: acceptanceID) else {
-            return true
+            return
         }
 
         guard let frontmostApp = accessibilityClient.frontmostApplication(),
               frontmostApp.bundleIdentifier == tracker.appBundleIdentifier,
               let context = accessibilityClient.focusedTextContext(
                   allowDescendantTextFallback: tracker.profile.allowsDescendantTextFallback
-              ) else {
+              ),
+              !context.isSecure else {
             if checkpoint.isFinalMetricCheckpoint {
                 await finishAcceptanceSurvivalTracking(
-                    tracker: tracker,
-                    reason: "missing-context-finalized"
+                    acceptanceID: acceptanceID,
+                    reason: "\(checkpoint.rawValue)-context-unavailable"
                 )
-                return true
             }
-            return false
+            return
         }
 
-        let currentIdentity = fieldIdentity(
-            app: frontmostApp,
-            context: context,
-            profile: tracker.profile
-        )
-
+        let currentIdentity = fieldIdentity(app: frontmostApp, context: context, profile: tracker.profile)
         guard currentIdentity == tracker.fieldIdentity else {
             if checkpoint.isFinalMetricCheckpoint {
                 await finishAcceptanceSurvivalTracking(
-                    tracker: tracker,
-                    reason: "field-changed-finalized"
+                    acceptanceID: acceptanceID,
+                    reason: "\(checkpoint.rawValue)-field-changed"
                 )
-                return true
             }
-            return false
+            return
         }
 
         guard let result = await acceptanceSurvivalChecker.measure(
@@ -2170,11 +2173,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             checkpoint: checkpoint,
             currentTextWindow: context.textBeforeCursor + context.textAfterCursor
         ) else {
-            return true
+            return
         }
 
         recordAcceptanceSurvivalResult(result)
+        applyAcceptanceSurvivalAnnoyanceIfNeeded(result)
 
+        if result.shouldFinish {
+            await finishAcceptanceSurvivalTracking(
+                acceptanceID: acceptanceID,
+                reason: result.finishReason ?? "\(checkpoint.rawValue)-finalized"
+            )
+        }
+    }
+
+    private func finalizeAcceptanceSurvivalForCurrentField(
+        checkpoint: AcceptanceSurvivalCheckpoint
+    ) {
+        guard let currentFieldIdentity,
+              let lastTextSnapshot,
+              lastTextSnapshot.fieldIdentity == currentFieldIdentity else {
+            return
+        }
+
+        let currentTextWindow = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
+        Task { @MainActor in
+            let results = await acceptanceSurvivalChecker.measureFieldBlur(
+                fieldIdentity: currentFieldIdentity,
+                currentTextWindow: currentTextWindow
+            )
+            for result in results {
+                recordAcceptanceSurvivalResult(result)
+                applyAcceptanceSurvivalAnnoyanceIfNeeded(result)
+                await finishAcceptanceSurvivalTracking(
+                    acceptanceID: result.tracker.acceptanceID,
+                    reason: result.finishReason ?? "\(checkpoint.rawValue)-finalized"
+                )
+            }
+        }
+    }
+
+    private func recordAcceptanceSurvivalResult(_ result: AcceptanceSurvivalCheckResult) {
+        guard result.shouldRecordAcceptedThenDeleted
+                || result.shouldRecordAcceptedAndKept
+                || result.shouldFinish else {
+            return
+        }
+
+        let tracker = result.tracker
+        RawAutocompleteTraceLog.shared.record(
+            type: .acceptedTextEdited,
+            suggestionID: tracker.suggestionID,
+            appBundleIdentifier: tracker.appBundleIdentifier,
+            fieldIdentity: tracker.fieldIdentity.traceDescription,
+            requestMode: tracker.requestMode,
+            acceptedText: "",
+            outcome: result.measurement.survivalClass.rawValue,
+            reason: result.finishReason ?? "survival-\(result.measurement.checkpoint.rawValue)",
+            metadata: AcceptanceSurvivalTraceMetadata.measurementMetadata(
+                tracker: tracker,
+                measurement: result.measurement,
+                secret: tracePrivacySecretStore.secret()
+            )
+        )
+    }
+
+    private func applyAcceptanceSurvivalAnnoyanceIfNeeded(_ result: AcceptanceSurvivalCheckResult) {
         if result.shouldRecordAcceptedThenDeleted {
             let update = recordAnnoyance(
                 .acceptedThenDeleted,
@@ -2182,12 +2246,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 fieldIdentity: result.tracker.fieldIdentity,
                 requestMode: CompletionRequestMode(rawValue: result.tracker.requestMode)
             )
-            if startedFieldQuiet(for: .acceptedThenDeleted, update: update) {
+            if currentFieldIdentity == result.tracker.fieldIdentity,
+               startedFieldQuiet(for: .acceptedThenDeleted, update: update) {
                 suppressCurrentField(reason: "accepted-then-deleted")
+                setSuggestionDecision("Blocked: accepted text was deleted")
             }
-        }
-
-        if result.shouldRecordAcceptedAndKept {
+        } else if result.shouldFinish, result.measurement.isFinalAcceptedAndKept {
             recordAnnoyance(
                 .acceptedAndKept,
                 appBundleIdentifier: result.tracker.appBundleIdentifier,
@@ -2195,48 +2259,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 requestMode: CompletionRequestMode(rawValue: result.tracker.requestMode)
             )
         }
-
-        if result.shouldFinish {
-            await finishAcceptanceSurvivalTracking(
-                tracker: result.tracker,
-                reason: result.finishReason ?? "survival-finalized"
-            )
-            return true
-        }
-
-        return false
-    }
-
-    private func recordAcceptanceSurvivalResult(_ result: AcceptanceSurvivalCheckResult) {
-        var metadata = result.measurement.traceMetadata
-        metadata["acceptanceID"] = result.tracker.acceptanceID
-        metadata["acceptedChars"] = String(result.tracker.acceptedText.count)
-        metadata["fieldKind"] = result.tracker.fieldKind.rawValue
-        metadata["fieldKindReason"] = result.tracker.fieldKindReason
-
-        if let finishReason = result.finishReason {
-            metadata["finishReason"] = finishReason
-        }
-
-        RawAutocompleteTraceLog.shared.record(
-            type: .acceptedTextEdited,
-            suggestionID: result.tracker.suggestionID,
-            appBundleIdentifier: result.tracker.appBundleIdentifier,
-            fieldIdentity: result.tracker.fieldIdentity.traceDescription,
-            requestMode: result.tracker.requestMode,
-            acceptedText: result.tracker.acceptedText,
-            outcome: result.measurement.survivalClass.rawValue,
-            reason: result.finishReason ?? "survival-checkpoint",
-            metadata: metadata
-        )
     }
 
     private func finishAcceptanceSurvivalTracking(
-        tracker: AcceptanceSurvivalTracker,
+        acceptanceID: String,
         reason: String
     ) async {
-        _ = await acceptanceSurvivalChecker.finishTracking(acceptanceID: tracker.acceptanceID)
-        acceptanceSurvivalTasks[tracker.acceptanceID] = nil
+        acceptanceSurvivalTasks[acceptanceID]?.forEach { $0.cancel() }
+        acceptanceSurvivalTasks[acceptanceID] = nil
+
+        guard let tracker = await acceptanceSurvivalChecker.finishTracking(acceptanceID: acceptanceID) else {
+            return
+        }
 
         RawAutocompleteTraceLog.shared.record(
             type: .acceptanceRetentionCleared,
@@ -2244,13 +2278,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appBundleIdentifier: tracker.appBundleIdentifier,
             fieldIdentity: tracker.fieldIdentity.traceDescription,
             requestMode: tracker.requestMode,
+            acceptedText: "",
+            outcome: "cleared",
             reason: reason,
-            metadata: [
-                "acceptanceID": tracker.acceptanceID,
-                "acceptedChars": String(tracker.acceptedText.count),
-                "retentionCleared": "true"
-            ]
+            metadata: AcceptanceSurvivalTraceMetadata.retentionClearedMetadata(
+                tracker: tracker,
+                reason: reason,
+                secret: tracePrivacySecretStore.secret()
+            )
         )
+    }
+
+    private func cancelAcceptanceSurvivalTasks() {
+        acceptanceSurvivalTasks.values
+            .flatMap { $0 }
+            .forEach { $0.cancel() }
+        acceptanceSurvivalTasks.removeAll()
+        Task {
+            await acceptanceSurvivalChecker.cancelAll()
+        }
     }
 
     private func scheduleSuggestion(
@@ -3854,6 +3900,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        finalizeAcceptanceSurvivalForCurrentField(checkpoint: .fieldBlur)
         if suggestionSession.hasVisibleSuggestion {
             hideSuggestion(reason: "focus-changed")
         }
@@ -3875,6 +3922,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hideReason: String = "focus-lost",
         resetBlockLogGate: Bool = true
     ) {
+        finalizeAcceptanceSurvivalForCurrentField(checkpoint: .fieldBlur)
         if suggestionSession.hasVisibleSuggestion {
             hideSuggestion(reason: hideReason)
         }
@@ -4439,7 +4487,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func deleteLocalPrivacyLogs(refreshSettings: Bool = true) {
-        acceptanceSurvivalTasks.values.forEach { $0.cancel() }
+        acceptanceSurvivalTasks.values
+            .flatMap { $0 }
+            .forEach { $0.cancel() }
         acceptanceSurvivalTasks.removeAll()
         Task {
             await acceptanceSurvivalChecker.cancelAll()
