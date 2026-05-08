@@ -621,18 +621,24 @@ private func keyboardEventTapCallback(
     return eventTap.handle(type: type, event: event)
 }
 
+func autocompletePhysicalKey(forMacVirtualKeyCode keyCode: Int64) -> AutocompletePhysicalKey {
+    switch keyCode {
+    case 6:
+        .z
+    case 48:
+        .tab
+    case 50:
+        .backtick
+    case 53:
+        .escape
+    default:
+        .other
+    }
+}
+
 private extension AutocompletePhysicalKey {
     init(keyCode: Int64) {
-        switch keyCode {
-        case 48:
-            self = .tab
-        case 50:
-            self = .backtick
-        case 53:
-            self = .escape
-        default:
-            self = .other
-        }
+        self = autocompletePhysicalKey(forMacVirtualKeyCode: keyCode)
     }
 }
 
