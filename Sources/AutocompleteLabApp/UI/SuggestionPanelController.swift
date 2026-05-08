@@ -1,66 +1,11 @@
 import AppKit
 import AutocompleteLabCore
 
-struct SuggestionPanelWindowConfiguration: Equatable {
-    let level: NSWindow.Level
-    let ignoresMouseEvents: Bool
-    let collectionBehavior: NSWindow.CollectionBehavior
-
-    static let suggestingMode = SuggestionPanelWindowConfiguration(
-        level: .statusBar,
-        ignoresMouseEvents: true,
-        collectionBehavior: [.canJoinAllSpaces, .fullScreenAuxiliary]
-    )
-
-    @MainActor
-    func apply(to panel: NSPanel) {
-        panel.level = level
-        panel.ignoresMouseEvents = ignoresMouseEvents
-        panel.collectionBehavior = collectionBehavior
-    }
-}
-
-struct SuggestionPanelPresentation: Equatable {
-    let accessibilityFrame: CGRect
-    let appKitFrame: CGRect
-    let accessibilityAnchorRect: CGRect
-    let appKitAnchorRect: CGRect
-    let appKitTextLineRect: CGRect?
-    let appKitClippingRect: CGRect?
-    let screenIdentifier: String
-    let screenFrame: CGRect
-    let panelLevel: Int
-    let ignoresMouseEvents: Bool
-
-    var traceMetadata: [String: String] {
-        [
-            "panelLevel": String(panelLevel),
-            "panelIgnoresMouseEvents": String(ignoresMouseEvents),
-            "hasPanelClickThrough": String(ignoresMouseEvents),
-            "screenID": screenIdentifier,
-            "screenFrame": Self.compactFrameDescription(screenFrame),
-            "accessibilityAnchorRect": Self.compactFrameDescription(accessibilityAnchorRect),
-            "appKitAnchorRect": Self.compactFrameDescription(appKitAnchorRect),
-            "convertedAnchorRect": Self.compactFrameDescription(appKitAnchorRect),
-            "appKitTextLineRect": appKitTextLineRect.map(Self.compactFrameDescription) ?? "none",
-            "appKitClippingRect": appKitClippingRect.map(Self.compactFrameDescription) ?? "none",
-            "appKitPanelFrame": Self.compactFrameDescription(appKitFrame),
-            "finalAppKitFrame": Self.compactFrameDescription(appKitFrame),
-            "suggestionPanelFrame": Self.compactFrameDescription(appKitFrame)
-        ]
-    }
-
-    private static func compactFrameDescription(_ rect: CGRect) -> String {
-        "x=\(Int(rect.origin.x.rounded())),y=\(Int(rect.origin.y.rounded())),w=\(Int(rect.width.rounded())),h=\(Int(rect.height.rounded()))"
-    }
-}
-
 @MainActor
 final class SuggestionPanelController {
     private let panel: NSPanel
     private let backdropView: NSVisualEffectView
     private let ghostTextView: GhostTextView
-    private let windowConfiguration = SuggestionPanelWindowConfiguration.suggestingMode
     private var lastText: String?
     private var lastFrame: CGRect?
     private var lastRenderMode: SuggestionRenderMode?
@@ -76,11 +21,13 @@ final class SuggestionPanelController {
             defer: false
         )
         panel.isFloatingPanel = true
-        windowConfiguration.apply(to: panel)
+        panel.level = .statusBar
         panel.backgroundColor = NSColor.clear
         panel.isOpaque = false
         panel.hasShadow = false
+        panel.ignoresMouseEvents = true
         panel.animationBehavior = .none
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
         let container = NSView(frame: panel.contentView?.bounds ?? .zero)
         container.autoresizingMask = [.width, .height]
@@ -121,7 +68,7 @@ final class SuggestionPanelController {
         boundedBy clippingRect: CGRect?,
         style: FocusedTextStyle?,
         renderMode: SuggestionRenderMode
-    ) -> SuggestionPanelPresentation? {
+    ) -> CGRect? {
         let fontSize = defaultFontSize(anchorRect: anchorRect, renderMode: renderMode)
         let font = style?.font ?? NSFont.systemFont(ofSize: fontSize, weight: .regular)
         let color = GhostTextColorPolicy.color(
@@ -142,13 +89,13 @@ final class SuggestionPanelController {
             width: max(ceil(textSize.width + textPadding.width), minimumSize.width),
             height: max(ceil(textSize.height + textPadding.height), minimumSize.height)
         )
+        let screen = screen(containing: anchorRect) ?? NSScreen.main
+        let screenFrame = screen?.frame ?? .zero
         let screenHeight = Self.accessibilityScreenHeight()
-        let screenResolution = screenResolution(
-            containing: anchorRect,
+        let appKitAnchorRect = AccessibilityCoordinateConverter.appKitRect(
+            fromAccessibilityRect: anchorRect,
             screenHeight: screenHeight
         )
-        let screenFrame = screenResolution.frame
-        let appKitAnchorRect = screenResolution.conversion.appKitRect
         let appKitTextLineRect = textLineRect.map {
             AccessibilityCoordinateConverter.appKitRect(
                 fromAccessibilityRect: $0,
@@ -172,6 +119,21 @@ final class SuggestionPanelController {
                 screenFrame: screenFrame,
                 clippingFrame: appKitClippingRect
             )
+            guard SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(frame) else {
+                hide()
+                DiagnosticsLog.shared.record(
+                    "suggestion-panel-frame-suppressed",
+                    metadata: [
+                        "reason": "inline-width-too-small",
+                        "renderMode": renderMode.rawValue,
+                        "anchor": compactFrameDescription(anchorRect),
+                        "frame": compactFrameDescription(frame),
+                        "clipping": clippingRect.map(compactFrameDescription) ?? "none",
+                        "screen": compactFrameDescription(screenFrame)
+                    ]
+                )
+                return nil
+            }
 
         case .floatingMirror:
             frame = SuggestionPanelFrameCalculator.floatingMirrorFrame(
@@ -189,36 +151,6 @@ final class SuggestionPanelController {
             fromAppKitRect: frame,
             screenHeight: screenHeight
         )
-        let presentation = SuggestionPanelPresentation(
-            accessibilityFrame: accessibilityFrame,
-            appKitFrame: frame,
-            accessibilityAnchorRect: anchorRect,
-            appKitAnchorRect: appKitAnchorRect,
-            appKitTextLineRect: appKitTextLineRect,
-            appKitClippingRect: appKitClippingRect,
-            screenIdentifier: screenResolution.identifier,
-            screenFrame: screenFrame,
-            panelLevel: panel.level.rawValue,
-            ignoresMouseEvents: panel.ignoresMouseEvents
-        )
-
-        if renderMode == .inlineAdjacent,
-           !SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(frame) {
-            hide()
-            DiagnosticsLog.shared.record(
-                "suggestion-panel-frame-suppressed",
-                metadata: [
-                    "reason": "inline-width-too-small",
-                    "renderMode": renderMode.rawValue,
-                    "anchor": compactFrameDescription(anchorRect),
-                    "frame": compactFrameDescription(frame),
-                    "clipping": clippingRect.map(compactFrameDescription) ?? "none",
-                    "screen": compactFrameDescription(screenFrame)
-                ]
-                .merging(presentation.traceMetadata) { current, _ in current }
-            )
-            return nil
-        }
 
         let shouldRefresh = !panel.isVisible || SuggestionPanelFrameCalculator.shouldRefreshPresentation(
             previousText: lastText,
@@ -230,11 +162,10 @@ final class SuggestionPanelController {
         )
 
         guard shouldRefresh else {
-            return presentation
+            return accessibilityFrame
         }
 
         let wasVisible = panel.isVisible
-        windowConfiguration.apply(to: panel)
         backdropView.isHidden = renderMode != .floatingMirror
         ghostTextView.update(
             text: text,
@@ -253,7 +184,6 @@ final class SuggestionPanelController {
                 "clipping": clippingRect.map(compactFrameDescription) ?? "none",
                 "screen": compactFrameDescription(screenFrame)
             ]
-            .merging(presentation.traceMetadata) { current, _ in current }
         )
         lastText = text
         lastFrame = frame
@@ -263,7 +193,7 @@ final class SuggestionPanelController {
         } else {
             panel.orderFrontRegardless()
         }
-        return presentation
+        return accessibilityFrame
     }
 
     func hide() {
@@ -273,52 +203,22 @@ final class SuggestionPanelController {
         panel.orderOut(nil)
     }
 
-    private struct ScreenResolution {
-        let screen: NSScreen?
-        let identifier: String
-        let frame: CGRect
-        let conversion: AccessibilityDisplayConversion
-    }
-
-    private func screenResolution(containing accessibilityRect: CGRect, screenHeight: CGFloat) -> ScreenResolution {
-        let screens = NSScreen.screens
-        let displayScreens = screens.enumerated().map { index, screen in
-            (
-                screen: screen,
-                display: AccessibilityDisplayGeometry(
-                    identifier: Self.screenIdentifier(screen, index: index),
-                    frame: screen.frame,
-                    backingScaleFactor: screen.backingScaleFactor
-                )
+    private func screen(containing accessibilityRect: CGRect) -> NSScreen? {
+        let screenHeight = Self.accessibilityScreenHeight()
+        let candidates = NSScreen.screens.compactMap { screen -> (screen: NSScreen, area: CGFloat)? in
+            let probeRect = AccessibilityCoordinateConverter.appKitProbeRect(
+                fromAccessibilityRect: accessibilityRect,
+                screenHeight: screenHeight
             )
-        }
-        let conversion = AccessibilityCoordinateConverter.appKitConversion(
-            fromAccessibilityRect: accessibilityRect,
-            screenHeight: screenHeight,
-            displays: displayScreens.map(\.display)
-        )
+            let intersection = screen.frame.intersection(probeRect)
+            guard !intersection.isNull, intersection.width > 0, intersection.height > 0 else {
+                return nil
+            }
 
-        if let display = conversion.display,
-           let match = displayScreens.first(where: { $0.display.identifier == display.identifier }) {
-            return ScreenResolution(
-                screen: match.screen,
-                identifier: match.display.identifier,
-                frame: match.display.frame,
-                conversion: conversion
-            )
+            return (screen, intersection.width * intersection.height)
         }
 
-        let fallbackScreen = NSScreen.main
-        let fallbackIndex = fallbackScreen.flatMap { screen in
-            screens.firstIndex(where: { $0 === screen })
-        } ?? 0
-        let fallbackIdentifier = fallbackScreen.map { Self.screenIdentifier($0, index: fallbackIndex) } ?? "unknown"
-        return ScreenResolution(
-            screen: fallbackScreen,
-            identifier: fallbackIdentifier,
-            frame: fallbackScreen?.frame ?? .zero,
-            conversion: conversion
-        )
+        return candidates.max { $0.area < $1.area }?.screen
     }
 
     private static func accessibilityScreenHeight() -> CGFloat {

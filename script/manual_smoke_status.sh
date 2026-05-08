@@ -322,21 +322,23 @@ for app_entry in "${APPS[@]}"; do
     limited_reason="needs one-word no-submit proof"
   fi
 
-  proof_rows=""
-  if [[ -f "$REPORT_PATH" ]]; then
-    proof_rows="$(grep -E "\\| $report_name \\| \`$bundle_id\` \\| \`$proof_label\` \\| $required_verified_regex \\|" "$REPORT_PATH" || true)"
-    if [[ -z "$proof_rows" && "$proof_label" == "default" ]]; then
-      proof_rows="$(grep -E "\\| $report_name \\| \`$bundle_id\` \\| $required_verified_regex \\|" "$REPORT_PATH" || true)"
-    fi
-    if [[ "$proof_mode" == "one-word" && -n "$proof_rows" ]]; then
-      proof_rows="$(grep -F "prompt no-submit confirmed" <<<"$proof_rows" || true)"
-    fi
+  pass_line="$(matching_report_line "$report_name" "$bundle_id" "$proof_label" "$required_verified_regex")"
+  limited_line="$(matching_limited_report_line "$report_name" "$bundle_id" "$proof_label")"
+
+  if [[ "$proof_mode" == "one-word" && -n "$pass_line" ]] &&
+    ! grep -F "prompt no-submit confirmed" <<<"$pass_line" >/dev/null; then
+    pass_line=""
   fi
 
-  if [[ -n "$proof_rows" ]]; then
-    echo "- $display_name: passed$pass_suffix"
-  elif [[ -f "$REPORT_PATH" ]] &&
-    grep -E "\\| $report_name \\| \`$bundle_id\` \\| (\`$proof_label\` \\| )?0 \\| \`detached-suppressed\` \\|" "$REPORT_PATH" >/dev/null; then
+  if [[ -n "$pass_line" ]]; then
+    if line_has_current_build_proof "$pass_line"; then
+      echo "- $display_name: passed$pass_suffix"
+    else
+      echo "- $display_name: stale pass (needs current commit/archive proof; run $run_hint)"
+      missing=$((missing + 1))
+      pending_apps+=("$display_name - $run_hint")
+    fi
+  elif [[ -n "$limited_line" ]]; then
     echo "- $display_name: limited pass ($limited_reason; run $run_hint)"
     missing=$((missing + 1))
     pending_apps+=("$display_name - $run_hint")
