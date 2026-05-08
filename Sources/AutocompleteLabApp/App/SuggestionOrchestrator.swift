@@ -229,6 +229,71 @@ final class SuggestionOrchestrator {
         streamingPresentationStates.removeAll(keepingCapacity: true)
     }
 
+    nonisolated func placementHealthPlan(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        learningAdjustment: CompatibilityLearningAdjustment,
+        screenshotTracingEnabled: Bool
+    ) -> PlacementHealthPlan {
+        PlacementHealth.plan(
+            requestedRenderMode: learningAdjustment.effectiveRenderMode,
+            fallbackRenderMode: profile.fallbackRenderMode,
+            caretRect: learningAdjustment.adjusted(context.caretRect),
+            elementRect: learningAdjustment.adjusted(context.elementRect),
+            windowRect: learningAdjustment.adjusted(context.windowRect),
+            textLineRect: learningAdjustment.adjusted(context.textLineRect),
+            caretIsSynthetic: context.caretIsSynthetic,
+            allowsDetachedSuggestions: profile.allowsDetachedSuggestions,
+            trustPolicy: placementTrustPolicy(
+                profile: profile,
+                context: context,
+                learningAdjustment: learningAdjustment,
+                screenshotTracingEnabled: screenshotTracingEnabled
+            )
+        )
+    }
+
+    nonisolated private func placementTrustPolicy(
+        profile: CompatibilityProfile,
+        context: FocusedTextContext,
+        learningAdjustment: CompatibilityLearningAdjustment,
+        screenshotTracingEnabled: Bool
+    ) -> PlacementTrustPolicy {
+        let shouldCaptureScreenshot = learningAdjustment.shouldCaptureScreenshot
+        return profile.placementTrustPolicy(
+            input: CompatibilityPlacementTrustInput(
+                hasTrustedVisualAdjustment: learningAdjustment.profile?.hasTrustedVisualAdjustment == true,
+                hasProofedSyntheticCaret: hasProofedSyntheticCaretPlacement(
+                    profile: profile,
+                    context: context,
+                    screenshotTracingEnabled: screenshotTracingEnabled,
+                    shouldCaptureScreenshot: shouldCaptureScreenshot
+                ),
+                screenshotTracingEnabled: screenshotTracingEnabled,
+                shouldCaptureScreenshot: shouldCaptureScreenshot
+            )
+        )
+    }
+
+    nonisolated private func hasProofedSyntheticCaretPlacement(
+        profile: CompatibilityProfile,
+        context: FocusedTextContext,
+        screenshotTracingEnabled: Bool,
+        shouldCaptureScreenshot: Bool
+    ) -> Bool {
+        guard profile.bundleIdentifier == "com.google.Chrome",
+              context.role == "AXTextArea",
+              context.caretIsSynthetic,
+              context.capabilities.canReadValue,
+              context.capabilities.canReadSelectedTextRange,
+              screenshotTracingEnabled || shouldCaptureScreenshot else {
+            return false
+        }
+
+        let searchable = context.fingerprint.searchableText
+        return searchable.contains("monaco") || searchable.contains("prosemirror")
+    }
+
     func replacementDecision(
         currentVisibleText: String?,
         proposedVisibleText: String,

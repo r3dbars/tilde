@@ -521,6 +521,51 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Placement health plan applies Chrome synthetic caret proof gate")
+    func placementHealthPlanAppliesChromeSyntheticCaretProofGate() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+        let learningAdjustment = CompatibilityLearningAdjustment(
+            profile: nil,
+            effectiveRenderMode: .inlineAdjacent
+        )
+        let context = makeContext(
+            textBeforeCursor: "const value = mon",
+            textAfterCursor: "",
+            windowTitle: "Autocomplete Lab Chrome Real Monaco Smoke",
+            caretIsSynthetic: true
+        )
+
+        let unproofed = orchestrator.placementHealthPlan(
+            context: context,
+            profile: chrome,
+            learningAdjustment: learningAdjustment,
+            screenshotTracingEnabled: false
+        )
+        guard case let .present(unproofedPresentation) = unproofed else {
+            Issue.record("Expected unproofed synthetic caret to use Chrome fallback")
+            return
+        }
+        #expect(unproofedPresentation.renderMode == .floatingMirror)
+        #expect(unproofedPresentation.anchorSource == .element)
+        #expect(unproofedPresentation.reason == .untrustedSyntheticCaret)
+
+        let proofed = orchestrator.placementHealthPlan(
+            context: context,
+            profile: chrome,
+            learningAdjustment: learningAdjustment,
+            screenshotTracingEnabled: true
+        )
+        guard case let .present(proofedPresentation) = proofed else {
+            Issue.record("Expected proofed synthetic caret to present inline")
+            return
+        }
+        #expect(proofedPresentation.renderMode == .inlineAdjacent)
+        #expect(proofedPresentation.anchorSource == .syntheticCaret)
+        #expect(proofedPresentation.reason == .healthy)
+    }
+
+    @MainActor
     @Test("Suggestion calls delegate to the configured engine")
     func suggestionDelegatesToEngine() async throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
@@ -609,7 +654,8 @@ private func acceptedAndKeptKey(
 private func makeContext(
     textBeforeCursor: String,
     textAfterCursor: String,
-    windowTitle: String? = nil
+    windowTitle: String? = nil,
+    caretIsSynthetic: Bool = false
 ) -> FocusedTextContext {
     FocusedTextContext(
         elementIdentifier: 7,
@@ -625,7 +671,7 @@ private func makeContext(
         textLineRect: CGRect(x: 10, y: 10, width: 120, height: 18),
         textStyle: nil,
         isSecure: false,
-        caretIsSynthetic: false,
+        caretIsSynthetic: caretIsSynthetic,
         capabilities: FocusedTextCapabilities(
             canReadValue: true,
             canReadSelectedTextRange: true,
