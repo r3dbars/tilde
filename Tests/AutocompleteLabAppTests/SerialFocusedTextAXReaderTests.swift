@@ -110,6 +110,9 @@ struct SerialFocusedTextAXReaderTests {
         )
 
         #expect(options == .syntheticTextAreaFastPath)
+        #expect(options.useMinimalFingerprint)
+        #expect(options.skipWindowLookup)
+        #expect(options.assumedCanSetSelectedText == true)
     }
 
     @Test("Non Codex apps use standard focused text reads")
