@@ -363,6 +363,8 @@ evidence-backed score should stay lower until those rows are closed.
 - Punctuation cadence is now profile-aware at fragile boundaries: email
   greeting commas and short list-label colons wait longer, while coding closing
   brackets stay quiet.
+- Sentence continuations now keep a tighter 10-token generation ceiling even
+  when environment overrides raise the global ambient token cap.
 - Chrome chat-like no-submit proof now uses a tab-title submit counter so the
   smoke test works even when Chrome JavaScript execution from Apple Events is
   disabled.
