@@ -49,6 +49,7 @@ struct AutocompleteTraceReportGeneratorTests {
         let html = generator.htmlReport(for: events)
 
         #expect(html.contains("Autocomplete Lab Redacted Trace Report"))
+        #expect(html.contains("Do-not-ship blockers"))
         #expect(html.contains("RAM-only retention proof"))
         #expect(html.contains("Accepted-and-kept survival slices"))
         #expect(html.contains("Visual calibration, no screenshots"))
@@ -180,6 +181,15 @@ struct AutocompleteTraceReportGeneratorTests {
                 reason: "missing-anchor",
                 metadata: [
                     "effectiveRenderMode": "inlineAdjacent"
+                ]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "three",
+                reason: "wrong-app-or-field-before-accept",
+                metadata: [
+                    "doNotShip": "true",
+                    "severe": "true"
                 ]
             )
         ]
