@@ -3,17 +3,27 @@ import Foundation
 public struct FocusPollingCadencePolicy: Equatable, Sendable {
     public let activeSuggestionIntervalSeconds: TimeInterval
     public let supportedTypingWatchIntervalSeconds: TimeInterval
+    public let recentTextChangeIntervalSeconds: TimeInterval
+    public let recentTextChangeWindowSeconds: TimeInterval
     public let idleIntervalSeconds: TimeInterval
     public let untrustedIntervalSeconds: TimeInterval
 
     public init(
         activeSuggestionIntervalSeconds: TimeInterval = 0.033,
         supportedTypingWatchIntervalSeconds: TimeInterval = 0.12,
+        recentTextChangeIntervalSeconds: TimeInterval = 0.20,
+        recentTextChangeWindowSeconds: TimeInterval = 0.75,
         idleIntervalSeconds: TimeInterval = 0.25,
         untrustedIntervalSeconds: TimeInterval = 0.5
     ) {
         self.activeSuggestionIntervalSeconds = max(0.016, activeSuggestionIntervalSeconds)
-        self.supportedTypingWatchIntervalSeconds = max(0.05, supportedTypingWatchIntervalSeconds)
+        let supportedTypingWatchIntervalSeconds = max(0.05, supportedTypingWatchIntervalSeconds)
+        self.supportedTypingWatchIntervalSeconds = supportedTypingWatchIntervalSeconds
+        self.recentTextChangeIntervalSeconds = max(
+            supportedTypingWatchIntervalSeconds,
+            recentTextChangeIntervalSeconds
+        )
+        self.recentTextChangeWindowSeconds = max(0, recentTextChangeWindowSeconds)
         self.idleIntervalSeconds = max(0.1, idleIntervalSeconds)
         self.untrustedIntervalSeconds = max(0.25, untrustedIntervalSeconds)
     }
@@ -21,7 +31,8 @@ public struct FocusPollingCadencePolicy: Equatable, Sendable {
     public func interval(
         isTrustedForAccessibility: Bool,
         hasSupportedProfile: Bool,
-        hasVisibleSuggestion: Bool
+        hasVisibleSuggestion: Bool,
+        hasRecentTextChange: Bool = false
     ) -> TimeInterval {
         guard isTrustedForAccessibility else {
             return untrustedIntervalSeconds
@@ -32,9 +43,20 @@ public struct FocusPollingCadencePolicy: Equatable, Sendable {
         }
 
         if hasSupportedProfile {
-            return supportedTypingWatchIntervalSeconds
+            return hasRecentTextChange
+                ? recentTextChangeIntervalSeconds
+                : supportedTypingWatchIntervalSeconds
         }
 
         return idleIntervalSeconds
+    }
+
+    public func hasRecentTextChange(lastTextChangeAt: Date?, now: Date) -> Bool {
+        guard let lastTextChangeAt else {
+            return false
+        }
+
+        let age = now.timeIntervalSince(lastTextChangeAt)
+        return age >= 0 && age <= recentTextChangeWindowSeconds
     }
 }
