@@ -3387,7 +3387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
 
-                    let appModelResultMetadata = self.appModelResultCandidateSelectionMetadata(
+                    let appModelResultMetadata = self.suggestionOrchestrator.appModelResultCandidateSelectionMetadata(
                         for: suggestion
                     )
                     RawAutocompleteTraceLog.shared.record(
@@ -4179,19 +4179,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         request.behaviorProfileTraceMetadata
             .merging(fieldClassification.traceMetadata) { current, _ in current }
             .merging(suggestionAggressiveness.traceMetadata) { current, _ in current }
-    }
-
-    private func appModelResultCandidateSelectionMetadata(
-        for suggestion: CompletionSuggestion
-    ) -> [String: String] {
-        [
-            "candidateSelectionSource": "app-model-result",
-            "cleanedCandidateCount": "1",
-            "candidateTopScore": "1.000",
-            "candidateScoreMargin": "none",
-            "candidateSuppressionReason": "none",
-            "cleanedWordCount": String(suggestion.visibleWordCount)
-        ]
     }
 
     private func displayScore(
