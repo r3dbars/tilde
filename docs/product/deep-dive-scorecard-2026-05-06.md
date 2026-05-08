@@ -162,8 +162,9 @@ should stay lower until those rows are closed.
   prompt-app insertion gap is Codex; Claude Code is now a terminal-host proof gap.
   The remaining screenshot gap is Claude Code. Codex still needs same-slice one-word no-submit visual proof.
 - `./script/check_score_targets.sh`: exits 1 honestly on the current docs with
-  72 target misses across this scorecard, the Apple-native checklist, and the
-  app proof matrix. This makes the requested "all 10s / all 100s / all As"
+  69 target and proof-gate misses across this scorecard, the Apple-native
+  checklist, the app proof matrix, manual smoke status, visual evidence, and
+  the proof manifest. This makes the requested "all 10s / all 100s / all As"
   target executable instead of subjective.
 - `swift test --filter ClaudeCodeTerminalHostProofPolicyTests`: passed 8 tests
   after adding the Claude Code terminal-host proof profile and input-line

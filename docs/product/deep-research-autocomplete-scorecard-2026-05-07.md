@@ -730,6 +730,10 @@ these are true.
 66. Done: add a clipboard fallback policy so pasteboard insertion remains
    blocked unless the debug runtime flag is enabled and the specific
    compatibility profile explicitly opts into clipboard fallback.
+67. Done: wire strict manual-smoke, visual-evidence, and proof-manifest gates
+   into the score target script for the real scorecard files, so Markdown score
+   edits cannot report completion while proof artifacts are still partial or
+   pending.
 
 ## Goal Status
 
