@@ -298,18 +298,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return normalized.hasPrefix("that makes a lot of sense")
-            || normalized.hasPrefix("i would like to")
-            || normalized.hasPrefix("i will do that")
-            || normalized.hasPrefix("i'll do that")
-            || normalized.hasPrefix("let me know")
-            || normalized.hasPrefix("okay, i would")
-            || normalized.hasPrefix("okay, would")
-            || normalized.hasPrefix("integrate it seamlessly")
-            || normalized.hasPrefix("enhance the experience")
-            || normalized.hasPrefix("leverage the system")
-            || normalized.hasPrefix("sure,")
-            || normalized.hasPrefix("certainly,")
+        return Self.genericFillerPrefixes.contains { normalized.hasPrefix($0) }
     }
 
     private func looksLikeUnsafePromptAction(_ text: String) -> Bool {
@@ -576,9 +565,39 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "there is"
     ]
 
+    private static let genericFillerPrefixes: Set<String> = [
+        "boost productivity",
+        "certainly,",
+        "drive better outcomes",
+        "enhance the experience",
+        "enhance user experience",
+        "improve productivity",
+        "improve the user experience",
+        "increase productivity",
+        "integrate it seamlessly",
+        "i would like to",
+        "i will do that",
+        "i'll do that",
+        "let me know",
+        "leverage the system",
+        "make users more productive",
+        "maximize efficiency",
+        "okay, i would",
+        "okay, would",
+        "optimize the workflow",
+        "save time and effort",
+        "streamline the workflow",
+        "streamline workflows",
+        "sure,",
+        "that makes a lot of sense",
+        "unlock efficiency"
+    ]
+
     private static let adviceOrToneDriftStarters: Set<[String]> = [
         ["a", "good", "way"],
         ["absolutely"],
+        ["boost", "productivity"],
+        ["drive", "better", "outcomes"],
         ["great", "question"],
         ["happy", "to", "help"],
         ["i'd", "recommend"],
@@ -595,16 +614,23 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["let's"],
         ["lets"],
         ["make", "sure", "to"],
+        ["make", "users", "more", "productive"],
+        ["maximize", "efficiency"],
         ["one", "thing", "to", "consider"],
         ["next", "action"],
         ["next", "step"],
+        ["optimize", "the", "workflow"],
         ["rewrite", "this"],
+        ["save", "time", "and", "effort"],
         ["seamless", "experience"],
         ["sounds", "great"],
+        ["streamline", "the", "workflow"],
+        ["streamline", "workflows"],
         ["the", "best", "way"],
         ["this", "is", "a", "great"],
         ["this", "is", "exciting"],
         ["try", "saying"],
+        ["unlock", "efficiency"],
         ["you", "may", "want"],
         ["you", "might", "want"],
         ["you", "need", "to"],

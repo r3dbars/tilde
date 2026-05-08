@@ -67,6 +67,11 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("Let me know when it's done.") == nil)
         #expect(cleaner.clean("integrate it seamlessly.") == nil)
         #expect(cleaner.clean("enhance the experience") == nil)
+        #expect(cleaner.clean("boost productivity across the team") == nil)
+        #expect(cleaner.clean("streamline the workflow for everyone") == nil)
+        #expect(cleaner.clean("unlock efficiency at scale") == nil)
+        #expect(cleaner.clean("make users more productive") == nil)
+        #expect(cleaner.clean("save time and effort") == nil)
     }
 
     @Test("Suppresses unsafe prompt action suggestions")

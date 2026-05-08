@@ -35,6 +35,8 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("testing, using, building, debugging"))
         #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
         #expect(prompt.system.contains("integrate it seamlessly"))
+        #expect(prompt.system.contains("boost productivity"))
+        #expect(prompt.system.contains("streamline the workflow"))
     }
 
     @Test("Prompt includes aggregate kept style sketch")

@@ -389,6 +389,9 @@ should stay lower until those rows are closed.
 - Sentence-mode ranking now suppresses invented action commitments like
   scheduling, calls, new names, and dates instead of treating them as harmless
   sentence starters.
+- Dogfood prompt guidance and output cleaning now reject generic productivity
+  filler like boosting productivity, streamlining workflows, and unlocking
+  efficiency.
 - Repeated typed-over misses now escalate from a short prefix cooldown to a
   longer quiet period and then raise display thresholds for that same
   app/field/mode/prefix family after cooldown.
