@@ -151,8 +151,17 @@ write_manifest() {
   local surface="${9:-$manual_app}"
 
   local gaps_json="[]"
+  local requirements_json="[]"
   if [[ "$status" != "complete" ]]; then
     gaps_json='["still needs proof"]'
+    requirements_json='[
+        {
+          "id": "variant-proof",
+          "status": "pending",
+          "summary": "Add exact variant proof before this surface can be complete.",
+          "smokeCommand": "script/real_app_smoke.sh textedit --manual-gate"
+        }
+      ]'
   fi
 
   cat >"$path" <<JSON
@@ -178,7 +187,8 @@ write_manifest() {
       "screenshots": [
         "$screenshot"
       ],
-      "gaps": $gaps_json
+      "gaps": $gaps_json,
+      "requirements": $requirements_json
     }
   ]
 }
@@ -444,8 +454,14 @@ if script/check_proof_manifest.sh \
   exit 1
 fi
 
-if ! grep -F "proof is partial, not complete" "$TMP_DIR/partial-strict.out" >/dev/null; then
+if ! grep -F "proof is partial, not complete; pending requirement(s): variant-proof - Add exact variant proof before this surface can be complete. (run script/real_app_smoke.sh textedit --manual-gate)" "$TMP_DIR/partial-strict.out" >/dev/null; then
   echo "proof manifest self-test did not explain strict partial live proof" >&2
+  cat "$TMP_DIR/partial-strict.out" >&2
+  exit 1
+fi
+
+if ! grep -F "Pending requirements:" "$TMP_DIR/partial-strict.out" >/dev/null; then
+  echo "proof manifest self-test did not print pending requirements" >&2
   cat "$TMP_DIR/partial-strict.out" >&2
   exit 1
 fi
@@ -539,7 +555,7 @@ if script/check_proof_manifest.sh \
   exit 1
 fi
 
-if ! grep -F "proof is pending, not complete" "$TMP_DIR/pending-strict.out" >/dev/null; then
+if ! grep -F "proof is pending, not complete; pending requirement(s): variant-proof - Add exact variant proof before this surface can be complete. (run script/real_app_smoke.sh textedit --manual-gate)" "$TMP_DIR/pending-strict.out" >/dev/null; then
   echo "proof manifest self-test did not explain strict pending proof" >&2
   cat "$TMP_DIR/pending-strict.out" >&2
   exit 1

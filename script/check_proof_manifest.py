@@ -227,6 +227,58 @@ def app_proof_matrix_grades(path: Path, failures: list[str], require_matrix: boo
     return grades
 
 
+def requirement_label(requirement: dict) -> str:
+    requirement_id = str(requirement.get("id", "")).strip()
+    summary = str(requirement.get("summary", "")).strip()
+    smoke_command = str(requirement.get("smokeCommand", "")).strip()
+    label = requirement_id or "unnamed-requirement"
+    if summary:
+        label = f"{label} - {summary}"
+    if smoke_command:
+        label = f"{label} (run {smoke_command})"
+    return label
+
+
+def validate_requirements(name: str, surface: dict, failures: list[str]) -> list[dict]:
+    requirements = surface.get("requirements", [])
+    if requirements in (None, []):
+        return []
+    if not isinstance(requirements, list):
+        failures.append(f"{name}: requirements must be a list")
+        return []
+
+    valid: list[dict] = []
+    seen: set[str] = set()
+    for index, requirement in enumerate(requirements, start=1):
+        if not isinstance(requirement, dict):
+            failures.append(f"{name}: requirement {index} must be an object")
+            continue
+        requirement_id = str(requirement.get("id", "")).strip()
+        status = str(requirement.get("status", "")).strip()
+        summary = str(requirement.get("summary", "")).strip()
+        if not requirement_id:
+            failures.append(f"{name}: requirement {index} is missing id")
+        elif requirement_id in seen:
+            failures.append(f"{name}: duplicate requirement id: {requirement_id}")
+        seen.add(requirement_id)
+        if status not in {"complete", "pending", "blocked"}:
+            failures.append(
+                f"{name}: requirement {requirement_id or index} status must be complete, pending, or blocked"
+            )
+        if not summary:
+            failures.append(f"{name}: requirement {requirement_id or index} is missing summary")
+        valid.append(requirement)
+    return valid
+
+
+def pending_requirement_labels(requirements: list[dict]) -> list[str]:
+    return [
+        requirement_label(requirement)
+        for requirement in requirements
+        if str(requirement.get("status", "")).strip() in {"pending", "blocked"}
+    ]
+
+
 def find_manual_row(rows: list[dict[str, str]], claim: dict) -> dict[str, str] | None:
     expected_app = str(claim.get("app", ""))
     expected_bundle = str(claim.get("bundle", ""))
@@ -563,10 +615,17 @@ def verify_manifest(
             continue
 
         gaps = surface.get("gaps", [])
+        requirements = validate_requirements(name, surface, failures)
+        pending_requirements = pending_requirement_labels(requirements)
         if status == "complete":
             complete += 1
             if gaps:
                 failures.append(f"{name}: complete surfaces must not list gaps")
+            if pending_requirements:
+                failures.append(
+                    f"{name}: complete proof still has pending requirement(s): "
+                    + "; ".join(pending_requirements)
+                )
             if require_all and app_proof_grades.get(name) == "A-":
                 failures.append(
                     f"{name}: app proof matrix grade is A-; variant-incomplete proof must stay partial"
@@ -577,9 +636,15 @@ def verify_manifest(
             else:
                 pending.append(name)
             if require_all:
-                failures.append(f"{name}: proof is {status}, not complete")
-            if not gaps:
-                failures.append(f"{name}: {status} surfaces must list at least one gap")
+                if pending_requirements:
+                    failures.append(
+                        f"{name}: proof is {status}, not complete; pending requirement(s): "
+                        + "; ".join(pending_requirements)
+                    )
+                else:
+                    failures.append(f"{name}: proof is {status}, not complete")
+            if not gaps and not pending_requirements:
+                failures.append(f"{name}: {status} surfaces must list at least one gap or pending requirement")
 
         manual_smoke = surface.get("manualSmoke")
         if status == "complete" and not isinstance(manual_smoke, dict):
@@ -648,6 +713,22 @@ def verify_manifest(
         print("Pending proof:")
         for name in pending:
             print(f"- {name}")
+    requirement_rows: list[tuple[str, list[str]]] = []
+    for surface in surfaces:
+        if not isinstance(surface, dict):
+            continue
+        name = str(surface.get("surface", "")).strip()
+        if not name:
+            continue
+        labels = pending_requirement_labels(validate_requirements(name, surface, []))
+        if labels:
+            requirement_rows.append((name, labels))
+    if requirement_rows:
+        print("Pending requirements:")
+        for name, labels in requirement_rows:
+            print(f"- {name}")
+            for label in labels:
+                print(f"  - {label}")
     for warning in warnings:
         print(f"Warning: {warning}")
 

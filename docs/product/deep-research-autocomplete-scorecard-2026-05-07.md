@@ -140,6 +140,11 @@ Pass 1 shipped these improvements:
   fingerprints. It also parses `docs/product/app-proof-matrix.md` and rejects
   `complete` manifest rows for `A-` matrix surfaces, so variant-incomplete proof
   stays marked `partial`.
+- The proof manifest now carries named pending requirement labels for remaining
+  variant gaps, including Notes undo lanes, Obsidian variants, Claude desktop
+  prompt layouts, and production Chrome editor/chat variants. Strict manifest
+  output names those exact pending requirements instead of only saying a
+  surface is partial.
 - Fresh installs now start with suggestion-capable apps off, keep Settings open
   until a test app is enabled, and use plainer local-model recovery copy that
   says Ollama or another model server is not needed.

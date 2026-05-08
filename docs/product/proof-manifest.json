@@ -32,6 +32,13 @@
       ],
       "gaps": [
         "Still local fixture proof, not broad production website proof."
+      ],
+      "requirements": [
+        {
+          "id": "production-chrome-text-fields",
+          "status": "pending",
+          "summary": "Add bounded screenshot-backed smoke proof for representative production Chrome text fields beyond local fixtures."
+        }
       ]
     },
     {
@@ -46,6 +53,23 @@
       ],
       "gaps": [
         "Real Monaco and ProseMirror proof now pass under isolated Chrome with renderer accessibility forced, default Chrome AX exposure, and proof-gated inline synthetic-caret placement. Broad production-site proof remains open."
+      ],
+      "requirements": [
+        {
+          "id": "production-chrome-monaco",
+          "status": "pending",
+          "summary": "Add bounded default-Chrome proof against a production Monaco editor surface."
+        },
+        {
+          "id": "production-chrome-prosemirror",
+          "status": "pending",
+          "summary": "Add bounded default-Chrome proof against a production ProseMirror editor surface."
+        },
+        {
+          "id": "production-chrome-codemirror",
+          "status": "pending",
+          "summary": "Add bounded default-Chrome proof against a production CodeMirror editor surface."
+        }
       ]
     },
     {
@@ -93,6 +117,13 @@
       ],
       "gaps": [
         "Local no-submit fixture is proven, but real prompt/chat app proof is still missing."
+      ],
+      "requirements": [
+        {
+          "id": "production-chrome-chat-no-submit",
+          "status": "pending",
+          "summary": "Add bounded no-submit proof for a real browser chat composer before broad chat support."
+        }
       ]
     },
     {
@@ -103,6 +134,14 @@
       ],
       "gaps": [
         "Needs one strict trace slice that proves screenshot, one-word Tab accept, and no prompt submit together."
+      ],
+      "requirements": [
+        {
+          "id": "codex-same-slice-no-submit",
+          "status": "pending",
+          "summary": "Prove screenshot, one-word Tab accept, and no prompt submit in one bounded strict trace slice.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+        }
       ]
     },
     {
@@ -120,6 +159,23 @@
       ],
       "gaps": [
         "More vault themes, panes, long notes, and hidden-caret variants are still required before green support."
+      ],
+      "requirements": [
+        {
+          "id": "obsidian-theme-variants",
+          "status": "pending",
+          "summary": "Add bounded proof across at least one non-default vault theme."
+        },
+        {
+          "id": "obsidian-pane-variants",
+          "status": "pending",
+          "summary": "Add bounded proof with split panes or side panes visible."
+        },
+        {
+          "id": "obsidian-long-note-variants",
+          "status": "pending",
+          "summary": "Add bounded proof in a long scrolled note."
+        }
       ]
     },
     {
@@ -137,6 +193,19 @@
       ],
       "gaps": [
         "More title lengths and same-slice notes-title-undo proof are still required."
+      ],
+      "requirements": [
+        {
+          "id": "notes-title-length-variants",
+          "status": "pending",
+          "summary": "Add bounded proof across short and long Notes title lengths."
+        },
+        {
+          "id": "notes-title-undo-same-slice",
+          "status": "pending",
+          "summary": "Add same-slice accepted-insertion undo proof for the Notes title lane.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-undo --manual-gate"
+        }
       ]
     },
     {
@@ -154,6 +223,19 @@
       ],
       "gaps": [
         "More body lengths and same-slice notes-body-undo proof are still required."
+      ],
+      "requirements": [
+        {
+          "id": "notes-body-length-variants",
+          "status": "pending",
+          "summary": "Add bounded proof across short and long Notes body text."
+        },
+        {
+          "id": "notes-body-undo-same-slice",
+          "status": "pending",
+          "summary": "Add same-slice accepted-insertion undo proof for the Notes body lane.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-undo --manual-gate"
+        }
       ]
     },
     {
@@ -171,6 +253,24 @@
       ],
       "gaps": [
         "Checked items, longer checklist rows, and same-slice notes-checklist-undo proof are still required."
+      ],
+      "requirements": [
+        {
+          "id": "notes-checklist-checked-item-variants",
+          "status": "pending",
+          "summary": "Add bounded proof for checked and unchecked Notes checklist rows."
+        },
+        {
+          "id": "notes-checklist-long-row-variants",
+          "status": "pending",
+          "summary": "Add bounded proof for longer checklist rows."
+        },
+        {
+          "id": "notes-checklist-undo-same-slice",
+          "status": "pending",
+          "summary": "Add same-slice accepted-insertion undo proof for the Notes checklist lane.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-undo --manual-gate"
+        }
       ]
     },
     {
@@ -180,6 +280,14 @@
       "gaps": [
         "Direct com.anthropic.claude-code proof is diagnostics-only because the installed bundle is a background-only CLI helper.",
         "Needs a terminal-host adapter with screenshot and one-word no-submit accept proof before it can count as complete."
+      ],
+      "requirements": [
+        {
+          "id": "claude-code-terminal-host-no-submit",
+          "status": "pending",
+          "summary": "Add live terminal-host screenshot-backed one-word Tab accept proof without submitting shell input or an agent prompt.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
+        }
       ]
     },
     {
@@ -198,6 +306,18 @@
       ],
       "gaps": [
         "More prompt layouts and separate full-accept no-submit proof are still required before A-level support."
+      ],
+      "requirements": [
+        {
+          "id": "claude-desktop-prompt-layout-variants",
+          "status": "pending",
+          "summary": "Add bounded same-baseline proof for additional Claude desktop prompt layouts."
+        },
+        {
+          "id": "claude-desktop-full-accept-no-submit",
+          "status": "pending",
+          "summary": "Add separate full-accept no-submit proof before enabling full accept for Claude desktop."
+        }
       ]
     }
   ],
