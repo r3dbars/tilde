@@ -40,5 +40,6 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manua
   placement pass.
 - Codex, Claude desktop, and Claude Code: automation must not submit prompts.
   Use harmless local text, validate one-word Tab accept only, then press Esc or
-  clear the prompt manually. Backtick/full accept needs separate full-accept
-  no-submit proof before prompt profiles can enable it.
+  clear the prompt manually. Type `NO-SUBMIT` only after confirming the prompt
+  was not sent. Backtick/full accept needs separate full-accept no-submit proof
+  before prompt profiles can enable it.

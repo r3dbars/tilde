@@ -1,0 +1,118 @@
+import Foundation
+
+public enum CompletionConfidenceBucket: String, Equatable, Sendable {
+    case high
+    case medium
+    case low
+}
+
+public struct CompletionConfidenceDecision: Equatable, Sendable {
+    public let bucket: CompletionConfidenceBucket
+    public let score: Int
+    public let reasons: [String]
+
+    public init(bucket: CompletionConfidenceBucket, score: Int, reasons: [String]) {
+        self.bucket = bucket
+        self.score = max(0, min(100, score))
+        self.reasons = reasons
+    }
+
+    public var canDisplay: Bool {
+        bucket != .low
+    }
+}
+
+public struct CompletionConfidencePolicy: Equatable, Sendable {
+    public let lowConfidenceThreshold: Int
+
+    public init(lowConfidenceThreshold: Int = 60) {
+        self.lowConfidenceThreshold = max(0, min(100, lowConfidenceThreshold))
+    }
+
+    public func decision(
+        suggestion: CompletionSuggestion,
+        mode: CompletionRequestMode,
+        textBeforeCursor: String,
+        latencyMilliseconds: Int,
+        supportLevel: CompatibilitySupportLevel
+    ) -> CompletionConfidenceDecision {
+        var score = 100
+        var reasons: [String] = []
+
+        switch supportLevel {
+        case .green:
+            break
+        case .yellow:
+            score -= 12
+            reasons.append("yellow-app-profile")
+        case .diagnosticsOnly, .unsupported:
+            score -= 100
+            reasons.append("unsupported-app-profile")
+        }
+
+        if latencyMilliseconds > 1_000 {
+            score -= 25
+            reasons.append("slow-over-1000ms")
+        } else if latencyMilliseconds > 500 {
+            score -= 10
+            reasons.append("slow-over-500ms")
+        }
+
+        if mode == .phraseContinuation {
+            let wordCount = suggestion.visibleWordCount
+            if wordCount > 6 {
+                score -= 40
+                reasons.append("too-many-visible-words")
+            } else if wordCount > 4 {
+                score -= 30
+                reasons.append("long-visible-suggestion")
+            }
+
+            let contextWords = textBeforeCursor
+                .split(whereSeparator: { $0.isWhitespace })
+                .count
+            if contextWords < 3 {
+                score -= 45
+                reasons.append("thin-context")
+            } else if contextWords < 5 {
+                score -= 18
+                reasons.append("thin-context")
+            }
+        }
+
+        if looksGenericOrAssistantLike(suggestion.visibleText) {
+            score -= 35
+            reasons.append("generic-or-assistant-like")
+        }
+
+        let bucket: CompletionConfidenceBucket
+        if score < lowConfidenceThreshold {
+            bucket = .low
+        } else if score < 80 {
+            bucket = .medium
+        } else {
+            bucket = .high
+        }
+
+        return CompletionConfidenceDecision(bucket: bucket, score: score, reasons: reasons)
+    }
+
+    private func looksGenericOrAssistantLike(_ text: String) -> Bool {
+        let normalized = text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        return [
+            "let me know",
+            "i can help",
+            "here is",
+            "here are",
+            "you should",
+            "you can",
+            "you could",
+            "it's important",
+            "it is important",
+            "as an ai"
+        ].contains { normalized.hasPrefix($0) }
+    }
+}

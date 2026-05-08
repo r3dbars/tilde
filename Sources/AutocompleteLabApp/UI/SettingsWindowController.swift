@@ -7,9 +7,44 @@ struct SettingsCurrentAppState: Equatable {
     let supportStatus: CompatibilitySupportStatus
     let isEnabled: Bool
     let disabledAppCount: Int
+    let renderModeOverride: SuggestionRenderMode?
+    let canQuietCurrentField: Bool
+
+    init(
+        displayName: String,
+        bundleIdentifier: String?,
+        supportStatus: CompatibilitySupportStatus,
+        isEnabled: Bool,
+        disabledAppCount: Int,
+        renderModeOverride: SuggestionRenderMode? = nil,
+        canQuietCurrentField: Bool = false
+    ) {
+        self.displayName = displayName
+        self.bundleIdentifier = bundleIdentifier
+        self.supportStatus = supportStatus
+        self.isEnabled = isEnabled
+        self.disabledAppCount = disabledAppCount
+        self.renderModeOverride = renderModeOverride
+        self.canQuietCurrentField = canQuietCurrentField
+    }
 
     var canToggle: Bool {
         bundleIdentifier != nil && supportStatus.canToggleSuggestions
+    }
+
+    var canToggleMirrorMode: Bool {
+        guard case let .supported(profile) = supportStatus,
+              profile.canPresentSuggestions,
+              !profile.isSensitive else {
+            return false
+        }
+
+        return isMirrorForced
+            || (profile.renderMode == .inlineAdjacent && profile.fallbackRenderMode == .floatingMirror)
+    }
+
+    var isMirrorForced: Bool {
+        renderModeOverride == .floatingMirror
     }
 
     var statusText: String {
@@ -30,7 +65,7 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         guard supportStatus.canToggleSuggestions else {
-            return "\(supportStatus.userFacingReason) Suggestions stay off here."
+            return "\(supportStatus.userFacingReason) \(supportStatus.userFacingUnavailableText)"
         }
 
         if isEnabled {
@@ -46,10 +81,14 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         guard case let .supported(profile) = supportStatus else {
-            return "Mode: not tested yet"
+            return "Mode: \(supportStatus.interactionMode.displayName)"
         }
 
-        let primary = Self.renderModeName(profile.renderMode)
+        if isMirrorForced {
+            return "Mode: mirror forced"
+        }
+
+        let primary = profile.interactionMode.displayName
         guard let fallback = profile.fallbackRenderMode,
               fallback != profile.renderMode,
               fallback != .disabled else {
@@ -82,6 +121,98 @@ struct SettingsCurrentAppState: Equatable {
         }
     }
 
+    var pathText: String {
+        guard bundleIdentifier != nil else {
+            return "Path: choose a writing app"
+        }
+
+        guard case let .supported(profile) = supportStatus,
+              profile.canPresentSuggestions,
+              !profile.isSensitive else {
+            return "Path: display off | insert off"
+        }
+
+        let displayPath = [Self.renderModeName(profile.renderMode), profile.fallbackRenderMode.map(Self.renderModeName)]
+            .compactMap { $0 }
+            .filter { $0 != "disabled" }
+            .uniqued()
+            .joined(separator: " -> ")
+        let insertPath = [Self.insertionModeName(profile.insertionMode), profile.fallbackInsertionMode.map(Self.insertionModeName)]
+            .compactMap { $0 }
+            .filter { $0 != "off" }
+            .uniqued()
+            .joined(separator: " -> ")
+        let fieldTracking = Self.fieldIdentityName(profile.fieldIdentityMode)
+
+        return "Path: display \(displayPath.isEmpty ? "off" : displayPath) | insert \(insertPath.isEmpty ? "off" : insertPath) | track \(fieldTracking)"
+    }
+
+    var safetyText: String {
+        guard bundleIdentifier != nil else {
+            return "Safety: choose a writing app first"
+        }
+
+        if isMirrorForced {
+            return "Safety: Mirror forced by you; inline placement stays off for this app."
+        }
+
+        return "Safety: \(supportStatus.userFacingSafetySummary)"
+    }
+
+    var proofGuideText: String {
+        guard let bundleIdentifier else {
+            return "Proof: choose a writing app first."
+        }
+
+        switch bundleIdentifier {
+        case "com.apple.TextEdit":
+            return "Proof: copies the disposable TextEdit smoke command."
+        case "com.apple.Notes":
+            return "Proof: use only a disposable note; title, body, and checklist need separate passes."
+        case "md.obsidian":
+            return "Proof: use a disposable vault note."
+        case "com.google.Chrome":
+            return "Proof: copies the local Chrome fixture smoke command."
+        case "com.openai.codex", "com.anthropic.claude-code", "com.anthropic.claudefordesktop":
+            return "Proof: use harmless prompt text; press Tab only, never Enter; confirm NO-SUBMIT only after checking it was not sent."
+        default:
+            return "Proof: no proof flow for this app yet."
+        }
+    }
+
+    var proofCommandText: String? {
+        guard let bundleIdentifier else {
+            return nil
+        }
+
+        switch bundleIdentifier {
+        case "com.apple.TextEdit":
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit"
+        case "com.apple.Notes":
+            return [
+                "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate",
+                "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate",
+                "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate"
+            ].joined(separator: "\n")
+        case "md.obsidian":
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate"
+        case "com.google.Chrome":
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all"
+        case "com.openai.codex":
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+        case "com.anthropic.claude-code":
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
+        case "com.anthropic.claudefordesktop":
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
+        default:
+            return nil
+        }
+    }
+
+    var canCopyProofCommand: Bool {
+        proofCommandText != nil
+    }
+
     var toggleTitle: String {
         canToggle ? "Allow suggestions in this app" : "Suggestions unavailable in this app"
     }
@@ -96,6 +227,10 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         return isEnabled ? "Disable \(displayName)" : "Enable \(displayName)"
+    }
+
+    var mirrorModeTitle: String {
+        "Force mirror mode"
     }
 
     var blockedAppsText: String {
@@ -116,6 +251,39 @@ struct SettingsCurrentAppState: Equatable {
             return "disabled"
         }
     }
+
+    private static func insertionModeName(_ mode: InsertionMode) -> String {
+        switch mode {
+        case .axSelectedText:
+            return "selected text"
+        case .axValueReplacement:
+            return "value repair"
+        case .axThenKeyEvents:
+            return "AX then keys"
+        case .keyEvents:
+            return "keys"
+        case .clipboardFallbackOptIn:
+            return "clipboard opt-in"
+        case .disabled:
+            return "off"
+        }
+    }
+
+    private static func fieldIdentityName(_ mode: FocusedFieldIdentityMode) -> String {
+        switch mode {
+        case .accessibilityElement:
+            return "focused field"
+        case .stableBounds:
+            return "stable bounds"
+        }
+    }
+}
+
+private extension Array where Element == String {
+    func uniqued() -> [String] {
+        var seen: Set<String> = []
+        return filter { seen.insert($0).inserted }
+    }
 }
 
 struct SettingsPermissionState: Equatable {
@@ -127,10 +295,10 @@ struct SettingsPermissionState: Equatable {
 
     var detailText: String {
         if isTrusted {
-            return "Autocomplete Lab can read the active text field and insert accepted suggestions. Text stays on this Mac."
+            return "Autocomplete Lab can read the active field text around the cursor, read cursor and field bounds, and insert only text you accept. Text stays on this Mac."
         }
 
-        return "Allow Accessibility so Autocomplete Lab can read the active text field, find the cursor, and insert accepted suggestions. Text stays on this Mac."
+        return "Allow Accessibility so Autocomplete Lab can read the active field text around the cursor, read cursor and field bounds, and insert only text you accept. Text stays on this Mac."
     }
 }
 
@@ -156,10 +324,12 @@ struct SettingsPrivacyState: Equatable {
     }
 
     var contentStatusText: String {
-        let state = rawContentTracingEnabled
-            ? (rawContentTracingExpiresAt == nil ? "on" : "on temporarily")
-            : "off"
-        return "Raw text capture: \(state)"
+        guard rawContentTracingEnabled else {
+            return "Raw text capture: off"
+        }
+
+        let state = rawContentTracingExpiresAt == nil ? "on" : "on temporarily"
+        return "Raw text capture: \(state); can include what you type"
     }
 
     var screenRecordingPermissionText: String? {
@@ -168,14 +338,34 @@ struct SettingsPrivacyState: Equatable {
         }
 
         if screenshotTracingExpiresAt == nil {
-            return "Screen Recording: only used for placement screenshots while this debug switch is on."
+            return "Screen Recording: only captures placement screenshots while this debug switch is on. Normal suggestions do not need it."
         }
 
-        return "Screen Recording: only used for temporary placement screenshots."
+        return "Screen Recording: only captures temporary placement screenshots. Normal suggestions do not need it."
+    }
+
+    var screenRecordingSettingsButtonTitle: String? {
+        guard screenshotTracingEnabled else {
+            return nil
+        }
+
+        return "Open Screen Recording Settings"
     }
 
     var pathText: String {
         "Logs: \(diagnosticsPath) | Traces: \(tracePath)"
+    }
+
+    var statusPanelText: String {
+        [
+            "Autocomplete Lab keeps suggestions and diagnostics on this Mac.",
+            diagnosticsStatusText,
+            contentStatusText,
+            screenRecordingPermissionText ?? "Screen Recording: off; normal suggestions do not need it.",
+            "Leave raw text capture off for normal use.",
+            "Logs: \(diagnosticsPath)",
+            "Traces: \(tracePath)"
+        ].joined(separator: "\n")
     }
 }
 
@@ -183,11 +373,146 @@ struct SettingsKeyboardShortcutState: Equatable {
     let acceptAllShortcut: AcceptAllShortcut
 
     var statusText: String {
-        "Shortcuts: Tab next word | \(acceptAllShortcut.displayName) all"
+        if acceptAllShortcut == .disabled {
+            return "Shortcuts: Tab next word | full accept off"
+        }
+
+        return "Shortcuts: Tab next word | \(acceptAllShortcut.displayName) all"
     }
 
-    var cycleButtonTitle: String {
-        "Use \(acceptAllShortcut.next.displayName)"
+    var pickerTitles: [String] {
+        AcceptAllShortcut.allCases.map(\.displayName)
+    }
+
+    var selectedShortcutTitle: String {
+        acceptAllShortcut.displayName
+    }
+}
+
+struct SettingsSuggestionControlState: Equatable {
+    let suggestionsPaused: Bool
+    let pace: SuggestionPace
+
+    var statusText: String {
+        "Suggestions: \(suggestionsPaused ? "paused" : "ready") | Pace: \(pace.displayName)"
+    }
+
+    var detailText: String {
+        pace.detailText
+    }
+
+    var pickerTitles: [String] {
+        SuggestionPace.allCases.map(\.displayName)
+    }
+
+    var selectedPaceTitle: String {
+        pace.displayName
+    }
+}
+
+struct SettingsFirstRunState: Equatable {
+    let isTrusted: Bool
+    let suggestionsPaused: Bool
+    let runtimeReport: RuntimeReadinessReport
+    let currentApp: SettingsCurrentAppState
+
+    var message: String {
+        if !isTrusted {
+            return "Start here: allow Accessibility so Autocomplete Lab can read cursor text and bounds, then insert only what you accept. Text stays on this Mac."
+        }
+
+        guard runtimeReport.stage == .ready else {
+            return RuntimeReadinessGuidance(report: runtimeReport).message
+        }
+
+        if suggestionsPaused {
+            return "Start paused: open TextEdit with a disposable document, then turn on Suggestions when you are ready to test."
+        }
+
+        if currentApp.bundleIdentifier == "com.apple.TextEdit" {
+            return "Ready: TextEdit is the first test app. Use a disposable document; Tab accepts one word and Esc dismisses."
+        }
+
+        return "Ready: start in TextEdit with a disposable document before testing Notes, Obsidian, or prompt apps."
+    }
+
+    var checklistText: String {
+        [
+            isTrusted ? "Accessibility allowed" : "Accessibility needed",
+            modelStepText,
+            canOpenTextEditTest ? "TextEdit test ready" : "TextEdit test locked"
+        ].joined(separator: " | ")
+    }
+
+    var textEditTestButtonTitle: String {
+        "Open TextEdit Test"
+    }
+
+    var textEditTestButtonToolTip: String {
+        if !isTrusted {
+            return "Allow Accessibility before opening the disposable TextEdit test."
+        }
+
+        guard runtimeReport.stage == .ready else {
+            return "The local model must be ready before the disposable TextEdit test starts."
+        }
+
+        return "Opens a disposable TextEdit document for the first safe writing test."
+    }
+
+    var canOpenTextEditTest: Bool {
+        isTrusted && runtimeReport.stage == .ready
+    }
+
+    private var modelStepText: String {
+        switch runtimeReport.stage {
+        case .downloadNeeded:
+            return "Model install needed"
+        case .repairNeeded:
+            return "Model repair needed"
+        case .runtimeUnavailable:
+            return "Model unavailable"
+        case .warming:
+            return "Model warming"
+        case .ready:
+            return "Model ready"
+        case .failed:
+            return "Model retry needed"
+        }
+    }
+}
+
+struct SettingsRuntimeControlState: Equatable {
+    let report: RuntimeReadinessReport
+    let guidance: RuntimeReadinessGuidance
+    let installStatus: String?
+    let installInProgress: Bool
+
+    init(
+        report: RuntimeReadinessReport,
+        installStatus: String?,
+        installInProgress: Bool
+    ) {
+        self.report = report
+        self.guidance = RuntimeReadinessGuidance(report: report)
+        self.installStatus = installStatus
+        self.installInProgress = installInProgress
+    }
+
+    var action: RuntimeReadinessAction {
+        installInProgress ? .cancelModelInstall : report.action
+    }
+
+    var actionLabelText: String {
+        "Next step: \(action.displayName)"
+    }
+
+    var actionButtonTitle: String {
+        installInProgress ? "Cancel Install" : guidance.actionTitle
+    }
+
+    var isActionEnabled: Bool {
+        installInProgress || guidance.isActionEnabled
     }
 }
 
@@ -199,17 +524,44 @@ final class SettingsWindowController: NSObject {
     private let runtimeLabel = NSTextField(labelWithString: "")
     private let runtimeDetailLabel = NSTextField(labelWithString: "")
     private let runtimeActionLabel = NSTextField(labelWithString: "")
+    private let runtimeInstallStatusLabel = NSTextField(labelWithString: "")
     private let runtimeTargetLabel = NSTextField(labelWithString: "")
     private let modelDirectoryLabel = NSTextField(labelWithString: "")
     private let controlLabel = NSTextField(labelWithString: "")
+    private let suggestionPaceDetailLabel = NSTextField(labelWithString: "")
+    private let suggestionPacePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let togglePauseButton = NSButton(checkboxWithTitle: "Suggestions", target: nil, action: nil)
-    private let runtimeActionButton = NSButton(title: "Open Model Folder", target: nil, action: nil)
+    private let runtimeActionButton = NSButton(title: "Install Model", target: nil, action: nil)
+    private let revealModelFolderButton = NSButton(title: "Reveal Folder", target: nil, action: nil)
     private let currentAppLabel = NSTextField(labelWithString: "")
     private let currentAppDetailLabel = NSTextField(labelWithString: "")
     private let currentAppModeLabel = NSTextField(labelWithString: "")
     private let currentAppAcceptanceLabel = NSTextField(labelWithString: "")
+    private let currentAppPathLabel = NSTextField(labelWithString: "")
+    private let currentAppSafetyLabel = NSTextField(labelWithString: "")
+    private let currentAppProofLabel = NSTextField(labelWithString: "")
     private let disabledAppsLabel = NSTextField(labelWithString: "")
     private let suggestionDecisionLabel = NSTextField(labelWithString: "")
+    private let toggleMirrorModeButton = NSButton(
+        checkboxWithTitle: "Force mirror mode",
+        target: nil,
+        action: nil
+    )
+    private let quietCurrentFieldButton = NSButton(
+        title: "Quiet Current Field",
+        target: nil,
+        action: nil
+    )
+    private let copyProofCommandButton = NSButton(
+        title: "Copy Proof Command",
+        target: nil,
+        action: nil
+    )
+    private let openCommandContextButton = NSButton(
+        title: "Command Context...",
+        target: nil,
+        action: nil
+    )
     private let toggleCurrentAppButton = NSButton(
         checkboxWithTitle: "Allow suggestions in this app",
         target: nil,
@@ -220,6 +572,11 @@ final class SettingsWindowController: NSObject {
     private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
     private let rawContentStatusLabel = NSTextField(labelWithString: "")
     private let screenRecordingPermissionLabel = NSTextField(labelWithString: "")
+    private let openScreenRecordingSettingsButton = NSButton(
+        title: "Open Screen Recording Settings",
+        target: nil,
+        action: nil
+    )
     private let privacyPathLabel = NSTextField(labelWithString: "")
     private let toggleTracingButton = NSButton(
         checkboxWithTitle: "Performance and placement traces",
@@ -236,49 +593,78 @@ final class SettingsWindowController: NSObject {
         target: nil,
         action: nil
     )
+    private let privacyStatusButton = NSButton(title: "Privacy Status...", target: nil, action: nil)
     private let deleteLocalLogsButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
     private let shortcutLabel = NSTextField(labelWithString: "")
-    private let cycleAcceptAllShortcutButton = NSButton(title: "Use Option-Tab", target: nil, action: nil)
+    private let acceptAllShortcutPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
+    private let firstRunChecklistLabel = NSTextField(labelWithString: "")
+    private let openTextEditTestButton = NSButton(title: "Open TextEdit Test", target: nil, action: nil)
     private let requestPermission: () -> Void
     private let openAccessibilitySettings: () -> Void
+    private let openScreenRecordingSettings: () -> Void
     private let toggleSuggestionsPaused: () -> Void
+    private let openTextEditTest: () -> Void
     private let performRuntimeAction: (RuntimeReadinessAction) -> Void
     private let toggleCurrentApp: () -> Void
+    private let toggleMirrorMode: () -> Void
+    private let quietCurrentField: () -> Void
+    private let copyProofCommand: (String) -> Void
+    private let openCommandContext: () -> Void
     private let enableAllApps: () -> Void
     private let toggleTracingPaused: () -> Void
     private let toggleRawContentTracing: () -> Void
     private let toggleScreenshotTracing: () -> Void
     private let deleteLocalLogs: () -> Void
-    private let cycleAcceptAllShortcut: () -> Void
+    private let showPrivacyStatus: (String) -> Void
+    private let setAcceptAllShortcut: (AcceptAllShortcut) -> Void
+    private let setSuggestionPace: (SuggestionPace) -> Void
     private var currentRuntimeAction: RuntimeReadinessAction = .none
+    private var currentProofCommand: String?
+    private var currentPrivacyStatusText = ""
 
     init(
         requestPermission: @escaping () -> Void,
         openAccessibilitySettings: @escaping () -> Void,
+        openScreenRecordingSettings: @escaping () -> Void,
         toggleSuggestionsPaused: @escaping () -> Void,
+        openTextEditTest: @escaping () -> Void,
         performRuntimeAction: @escaping (RuntimeReadinessAction) -> Void,
         toggleCurrentApp: @escaping () -> Void,
+        toggleMirrorMode: @escaping () -> Void,
+        quietCurrentField: @escaping () -> Void,
+        copyProofCommand: @escaping (String) -> Void,
+        openCommandContext: @escaping () -> Void,
         enableAllApps: @escaping () -> Void,
         toggleTracingPaused: @escaping () -> Void,
         toggleRawContentTracing: @escaping () -> Void,
         toggleScreenshotTracing: @escaping () -> Void,
         deleteLocalLogs: @escaping () -> Void,
-        cycleAcceptAllShortcut: @escaping () -> Void
+        showPrivacyStatus: @escaping (String) -> Void,
+        setAcceptAllShortcut: @escaping (AcceptAllShortcut) -> Void,
+        setSuggestionPace: @escaping (SuggestionPace) -> Void
     ) {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
+        self.openScreenRecordingSettings = openScreenRecordingSettings
         self.toggleSuggestionsPaused = toggleSuggestionsPaused
+        self.openTextEditTest = openTextEditTest
         self.performRuntimeAction = performRuntimeAction
         self.toggleCurrentApp = toggleCurrentApp
+        self.toggleMirrorMode = toggleMirrorMode
+        self.quietCurrentField = quietCurrentField
+        self.copyProofCommand = copyProofCommand
+        self.openCommandContext = openCommandContext
         self.enableAllApps = enableAllApps
         self.toggleTracingPaused = toggleTracingPaused
         self.toggleRawContentTracing = toggleRawContentTracing
         self.toggleScreenshotTracing = toggleScreenshotTracing
         self.deleteLocalLogs = deleteLocalLogs
-        self.cycleAcceptAllShortcut = cycleAcceptAllShortcut
+        self.showPrivacyStatus = showPrivacyStatus
+        self.setAcceptAllShortcut = setAcceptAllShortcut
+        self.setSuggestionPace = setSuggestionPace
 
-        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 720))
+        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 760))
         contentView.material = .contentBackground
         contentView.blendingMode = .behindWindow
         contentView.state = .active
@@ -291,7 +677,7 @@ final class SettingsWindowController: NSObject {
         window.title = "Autocomplete Lab"
         window.contentView = contentView
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 540, height: 660)
+        window.contentMinSize = NSSize(width: 540, height: 700)
         window.isMovableByWindowBackground = true
 
         super.init()
@@ -302,8 +688,11 @@ final class SettingsWindowController: NSObject {
     func show(
         isTrusted: Bool,
         suggestionsPaused: Bool,
+        suggestionPace: SuggestionPace,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
+        runtimeInstallStatus: String?,
+        runtimeInstallInProgress: Bool,
         modelDirectoryPath: String,
         currentApp: SettingsCurrentAppState,
         privacy: SettingsPrivacyState,
@@ -313,8 +702,11 @@ final class SettingsWindowController: NSObject {
         refresh(
             isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
+            suggestionPace: suggestionPace,
             runtimeReport: runtimeReport,
             runtimeTargetSummary: runtimeTargetSummary,
+            runtimeInstallStatus: runtimeInstallStatus,
+            runtimeInstallInProgress: runtimeInstallInProgress,
             modelDirectoryPath: modelDirectoryPath,
             currentApp: currentApp,
             privacy: privacy,
@@ -333,34 +725,58 @@ final class SettingsWindowController: NSObject {
     func refresh(
         isTrusted: Bool,
         suggestionsPaused: Bool,
+        suggestionPace: SuggestionPace,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
+        runtimeInstallStatus: String?,
+        runtimeInstallInProgress: Bool,
         modelDirectoryPath: String,
         currentApp: SettingsCurrentAppState,
         privacy: SettingsPrivacyState,
         keyboardShortcuts: SettingsKeyboardShortcutState,
         lastSuggestionDecision: String
     ) {
-        let guidance = RuntimeReadinessGuidance(report: runtimeReport)
+        let suggestionControl = SettingsSuggestionControlState(
+            suggestionsPaused: suggestionsPaused,
+            pace: suggestionPace
+        )
+        let runtimeControl = SettingsRuntimeControlState(
+            report: runtimeReport,
+            installStatus: runtimeInstallStatus,
+            installInProgress: runtimeInstallInProgress
+        )
         let permission = SettingsPermissionState(isTrusted: isTrusted)
         permissionLabel.stringValue = permission.statusText
         permissionDetailLabel.stringValue = permission.detailText
-        controlLabel.stringValue = suggestionsPaused ? "Suggestions: paused" : "Suggestions: ready"
+        controlLabel.stringValue = suggestionControl.statusText
+        suggestionPaceDetailLabel.stringValue = suggestionControl.detailText
+        suggestionPacePopup.selectItem(withTitle: suggestionControl.selectedPaceTitle)
         suggestionDecisionLabel.stringValue = "Why: \(lastSuggestionDecision)"
         togglePauseButton.state = suggestionsPaused ? .off : .on
         runtimeLabel.stringValue = "Local model: \(runtimeReport.summary)"
         runtimeDetailLabel.stringValue = runtimeReport.detail ?? ""
         runtimeDetailLabel.isHidden = runtimeReport.detail == nil
-        runtimeActionLabel.stringValue = "Next step: \(runtimeReport.action.displayName)"
-        runtimeActionButton.title = guidance.actionTitle
-        runtimeActionButton.isEnabled = guidance.isActionEnabled
-        currentRuntimeAction = runtimeReport.action
+        runtimeActionLabel.stringValue = runtimeControl.actionLabelText
+        runtimeInstallStatusLabel.stringValue = runtimeControl.installStatus ?? ""
+        runtimeInstallStatusLabel.isHidden = runtimeControl.installStatus == nil
+        runtimeActionButton.title = runtimeControl.actionButtonTitle
+        runtimeActionButton.isEnabled = runtimeControl.isActionEnabled
+        currentRuntimeAction = runtimeControl.action
         runtimeTargetLabel.stringValue = "Runtime target: \(runtimeTargetSummary)"
         modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
         currentAppLabel.stringValue = currentApp.statusText
         currentAppDetailLabel.stringValue = currentApp.detailText
         currentAppModeLabel.stringValue = currentApp.modeText
         currentAppAcceptanceLabel.stringValue = currentApp.acceptanceText
+        currentAppPathLabel.stringValue = currentApp.pathText
+        currentAppSafetyLabel.stringValue = currentApp.safetyText
+        currentAppProofLabel.stringValue = currentApp.proofGuideText
+        currentProofCommand = currentApp.proofCommandText
+        copyProofCommandButton.isEnabled = currentApp.canCopyProofCommand
+        toggleMirrorModeButton.title = currentApp.mirrorModeTitle
+        toggleMirrorModeButton.state = currentApp.isMirrorForced ? .on : .off
+        toggleMirrorModeButton.isEnabled = currentApp.canToggleMirrorMode
+        quietCurrentFieldButton.isEnabled = currentApp.canQuietCurrentField
         toggleCurrentAppButton.title = currentApp.toggleTitle
         toggleCurrentAppButton.state = currentApp.isEnabled ? .on : .off
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
@@ -372,17 +788,28 @@ final class SettingsWindowController: NSObject {
         let screenRecordingText = privacy.screenRecordingPermissionText
         screenRecordingPermissionLabel.stringValue = screenRecordingText ?? ""
         screenRecordingPermissionLabel.isHidden = screenRecordingText == nil
+        let screenRecordingButtonTitle = privacy.screenRecordingSettingsButtonTitle
+        openScreenRecordingSettingsButton.title = screenRecordingButtonTitle ?? "Open Screen Recording Settings"
+        openScreenRecordingSettingsButton.isHidden = screenRecordingButtonTitle == nil
+        openScreenRecordingSettingsButton.isEnabled = screenRecordingButtonTitle != nil
         privacyPathLabel.stringValue = privacy.pathText
+        currentPrivacyStatusText = privacy.statusPanelText
         toggleTracingButton.state = privacy.tracingPaused ? .off : .on
         toggleRawTraceButton.state = privacy.rawContentTracingEnabled ? .on : .off
         toggleScreenshotTraceButton.state = privacy.screenshotTracingEnabled ? .on : .off
         shortcutLabel.stringValue = keyboardShortcuts.statusText
-        cycleAcceptAllShortcutButton.title = keyboardShortcuts.cycleButtonTitle
-        firstRunLabel.stringValue = onboardingText(
+        acceptAllShortcutPopup.selectItem(withTitle: keyboardShortcuts.selectedShortcutTitle)
+        let firstRun = SettingsFirstRunState(
             isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
-            guidance: guidance
+            runtimeReport: runtimeReport,
+            currentApp: currentApp
         )
+        firstRunLabel.stringValue = firstRun.message
+        firstRunChecklistLabel.stringValue = "Setup: \(firstRun.checklistText)"
+        openTextEditTestButton.title = firstRun.textEditTestButtonTitle
+        openTextEditTestButton.toolTip = firstRun.textEditTestButtonToolTip
+        openTextEditTestButton.isEnabled = firstRun.canOpenTextEditTest
     }
 
     private func buildContent(in contentView: NSView) {
@@ -403,17 +830,24 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(runtimeDetailLabel)
         runtimeActionLabel.font = NSFont.systemFont(ofSize: 12)
         runtimeActionLabel.textColor = .secondaryLabelColor
+        runtimeInstallStatusLabel.font = NSFont.systemFont(ofSize: 12)
+        configureSecondaryLabel(runtimeInstallStatusLabel)
         configureSecondaryLabel(runtimeTargetLabel)
         modelDirectoryLabel.lineBreakMode = .byTruncatingMiddle
         modelDirectoryLabel.maximumNumberOfLines = 1
         modelDirectoryLabel.preferredMaxLayoutWidth = 470
         controlLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(suggestionPaceDetailLabel)
         firstRunLabel.font = NSFont.systemFont(ofSize: 12)
         configureSecondaryLabel(firstRunLabel)
+        configureSecondaryLabel(firstRunChecklistLabel)
         currentAppLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(currentAppDetailLabel)
         configureSecondaryLabel(currentAppModeLabel)
         configureSecondaryLabel(currentAppAcceptanceLabel)
+        configureSecondaryLabel(currentAppPathLabel)
+        configureSecondaryLabel(currentAppSafetyLabel)
+        configureSecondaryLabel(currentAppProofLabel)
         configureSecondaryLabel(disabledAppsLabel)
         configureSecondaryLabel(suggestionDecisionLabel)
         privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
@@ -438,12 +872,42 @@ final class SettingsWindowController: NSObject {
         togglePauseButton.target = self
         togglePauseButton.action = #selector(togglePause)
         togglePauseButton.toolTip = "Turns suggestions on or off immediately."
+        openTextEditTestButton.target = self
+        openTextEditTestButton.action = #selector(openTextEditTestControl)
+        openTextEditTestButton.bezelStyle = .rounded
+        openTextEditTestButton.toolTip = "Opens a disposable TextEdit document for the first test."
+        suggestionPacePopup.removeAllItems()
+        suggestionPacePopupItems().forEach { item in
+            suggestionPacePopup.menu?.addItem(item)
+        }
+        suggestionPacePopup.target = self
+        suggestionPacePopup.action = #selector(selectSuggestionPaceControl)
+        suggestionPacePopup.toolTip = "Chooses how soon suggestions appear in allowed apps."
         runtimeActionButton.target = self
         runtimeActionButton.action = #selector(runRuntimeAction)
         runtimeActionButton.bezelStyle = .rounded
+        revealModelFolderButton.target = self
+        revealModelFolderButton.action = #selector(revealRuntimeFolderControl)
+        revealModelFolderButton.bezelStyle = .rounded
+        revealModelFolderButton.toolTip = "Shows the app-owned model folder in Finder."
         toggleCurrentAppButton.target = self
         toggleCurrentAppButton.action = #selector(toggleCurrentAppControl)
         toggleCurrentAppButton.toolTip = "Adds or removes the current app from your blocked-app list."
+        toggleMirrorModeButton.target = self
+        toggleMirrorModeButton.action = #selector(toggleMirrorModeControl)
+        toggleMirrorModeButton.toolTip = "Forces this app to use the safer mirror surface instead of inline placement."
+        quietCurrentFieldButton.target = self
+        quietCurrentFieldButton.action = #selector(quietCurrentFieldControl)
+        quietCurrentFieldButton.bezelStyle = .rounded
+        quietCurrentFieldButton.toolTip = "Hides suggestions for this field until focus changes."
+        copyProofCommandButton.target = self
+        copyProofCommandButton.action = #selector(copyProofCommandControl)
+        copyProofCommandButton.bezelStyle = .rounded
+        copyProofCommandButton.toolTip = "Copies the exact local smoke command for this app."
+        openCommandContextButton.target = self
+        openCommandContextButton.action = #selector(openCommandContextControl)
+        openCommandContextButton.bezelStyle = .rounded
+        openCommandContextButton.toolTip = "Opens a separate copy-only suggestion panel for uncertain apps."
         enableAllAppsButton.target = self
         enableAllAppsButton.action = #selector(enableAllAppsControl)
         enableAllAppsButton.bezelStyle = .rounded
@@ -456,12 +920,23 @@ final class SettingsWindowController: NSObject {
         toggleScreenshotTraceButton.target = self
         toggleScreenshotTraceButton.action = #selector(toggleScreenshotTraceControl)
         toggleScreenshotTraceButton.toolTip = "Captures local screenshots for placement debugging."
+        privacyStatusButton.target = self
+        privacyStatusButton.action = #selector(showPrivacyStatusControl)
+        privacyStatusButton.bezelStyle = .rounded
+        privacyStatusButton.toolTip = "Shows what privacy-sensitive diagnostics are enabled right now."
+        openScreenRecordingSettingsButton.target = self
+        openScreenRecordingSettingsButton.action = #selector(openScreenRecordingSettingsPane)
+        openScreenRecordingSettingsButton.bezelStyle = .rounded
         deleteLocalLogsButton.target = self
         deleteLocalLogsButton.action = #selector(deleteLocalLogsControl)
         deleteLocalLogsButton.bezelStyle = .rounded
-        cycleAcceptAllShortcutButton.target = self
-        cycleAcceptAllShortcutButton.action = #selector(cycleAcceptAllShortcutControl)
-        cycleAcceptAllShortcutButton.bezelStyle = .rounded
+        acceptAllShortcutPopup.removeAllItems()
+        keyboardShortcutPopupItems().forEach { item in
+            acceptAllShortcutPopup.menu?.addItem(item)
+        }
+        acceptAllShortcutPopup.target = self
+        acceptAllShortcutPopup.action = #selector(selectAcceptAllShortcutControl)
+        acceptAllShortcutPopup.toolTip = "Chooses the shortcut for accepting all visible suggestion text."
 
         [
             title,
@@ -479,7 +954,8 @@ final class SettingsWindowController: NSObject {
                     runtimeLabel,
                     runtimeDetailLabel,
                     runtimeActionLabel,
-                    makeButtonRow([runtimeActionButton]),
+                    runtimeInstallStatusLabel,
+                    makeButtonRow([runtimeActionButton, revealModelFolderButton]),
                     runtimeTargetLabel,
                     modelDirectoryLabel
                 ]
@@ -488,9 +964,12 @@ final class SettingsWindowController: NSObject {
                 title: "Suggestions",
                 views: [
                     controlLabel,
-                    togglePauseButton,
+                    makeButtonRow([togglePauseButton, suggestionPacePopup]),
+                    suggestionPaceDetailLabel,
                     suggestionDecisionLabel,
-                    firstRunLabel
+                    firstRunLabel,
+                    firstRunChecklistLabel,
+                    makeButtonRow([openTextEditTestButton])
                 ]
             ),
             makeSection(
@@ -500,7 +979,12 @@ final class SettingsWindowController: NSObject {
                     currentAppDetailLabel,
                     currentAppModeLabel,
                     currentAppAcceptanceLabel,
+                    currentAppPathLabel,
+                    currentAppSafetyLabel,
+                    currentAppProofLabel,
+                    toggleMirrorModeButton,
                     toggleCurrentAppButton,
+                    makeButtonRow([openCommandContextButton, copyProofCommandButton, quietCurrentFieldButton]),
                     makeButtonRow([disabledAppsLabel, enableAllAppsButton])
                 ]
             ),
@@ -511,31 +995,51 @@ final class SettingsWindowController: NSObject {
                     diagnosticsStatusLabel,
                     rawContentStatusLabel,
                     screenRecordingPermissionLabel,
+                    makeButtonRow([openScreenRecordingSettingsButton]),
                     toggleTracingButton,
                     toggleRawTraceButton,
                     toggleScreenshotTraceButton,
                     privacyPathLabel,
-                    makeButtonRow([deleteLocalLogsButton])
+                    makeButtonRow([privacyStatusButton, deleteLocalLogsButton])
                 ]
             ),
             makeSection(
                 title: "Keyboard",
                 views: [
                     shortcutLabel,
-                    makeButtonRow([cycleAcceptAllShortcutButton])
+                    makeButtonRow([acceptAllShortcutPopup])
                 ]
             )
         ].forEach {
             stack.addArrangedSubview($0)
         }
 
-        contentView.addSubview(stack)
+        let scrollView = NSScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+
+        let documentView = NSView()
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = documentView
+        documentView.addSubview(stack)
+        contentView.addSubview(scrollView)
 
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
-            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
-            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 24),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -24)
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            documentView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
+            documentView.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor),
+            documentView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
+            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+            stack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 24),
+            stack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -24),
+            stack.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 24),
+            stack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -24)
         ])
     }
 
@@ -569,20 +1073,20 @@ final class SettingsWindowController: NSObject {
         return row
     }
 
-    private func onboardingText(
-        isTrusted: Bool,
-        suggestionsPaused: Bool,
-        guidance: RuntimeReadinessGuidance
-    ) -> String {
-        if !isTrusted {
-            return "Finish Accessibility setup above, then open a writing app to test suggestions."
+    private func keyboardShortcutPopupItems() -> [NSMenuItem] {
+        AcceptAllShortcut.allCases.map { shortcut in
+            let item = NSMenuItem(title: shortcut.displayName, action: nil, keyEquivalent: "")
+            item.representedObject = shortcut.rawValue
+            return item
         }
+    }
 
-        if suggestionsPaused {
-            return "Paused. Resume when you want to test suggestions."
+    private func suggestionPacePopupItems() -> [NSMenuItem] {
+        SuggestionPace.allCases.map { pace in
+            let item = NSMenuItem(title: pace.displayName, action: nil, keyEquivalent: "")
+            item.representedObject = pace.rawValue
+            return item
         }
-
-        return guidance.message
     }
 
     @objc
@@ -596,8 +1100,18 @@ final class SettingsWindowController: NSObject {
     }
 
     @objc
+    private func openScreenRecordingSettingsPane() {
+        openScreenRecordingSettings()
+    }
+
+    @objc
     private func togglePause() {
         toggleSuggestionsPaused()
+    }
+
+    @objc
+    private func openTextEditTestControl() {
+        openTextEditTest()
     }
 
     @objc
@@ -606,8 +1120,37 @@ final class SettingsWindowController: NSObject {
     }
 
     @objc
+    private func revealRuntimeFolderControl() {
+        performRuntimeAction(.revealModelFolder)
+    }
+
+    @objc
     private func toggleCurrentAppControl() {
         toggleCurrentApp()
+    }
+
+    @objc
+    private func toggleMirrorModeControl() {
+        toggleMirrorMode()
+    }
+
+    @objc
+    private func quietCurrentFieldControl() {
+        quietCurrentField()
+    }
+
+    @objc
+    private func copyProofCommandControl() {
+        guard let currentProofCommand else {
+            return
+        }
+
+        copyProofCommand(currentProofCommand)
+    }
+
+    @objc
+    private func openCommandContextControl() {
+        openCommandContext()
     }
 
     @objc
@@ -636,7 +1179,27 @@ final class SettingsWindowController: NSObject {
     }
 
     @objc
-    private func cycleAcceptAllShortcutControl() {
-        cycleAcceptAllShortcut()
+    private func showPrivacyStatusControl() {
+        showPrivacyStatus(currentPrivacyStatusText)
+    }
+
+    @objc
+    private func selectAcceptAllShortcutControl() {
+        guard let rawValue = acceptAllShortcutPopup.selectedItem?.representedObject as? String,
+              let shortcut = AcceptAllShortcut(rawValue: rawValue) else {
+            return
+        }
+
+        setAcceptAllShortcut(shortcut)
+    }
+
+    @objc
+    private func selectSuggestionPaceControl() {
+        guard let rawValue = suggestionPacePopup.selectedItem?.representedObject as? String,
+              let pace = SuggestionPace(rawValue: rawValue) else {
+            return
+        }
+
+        setSuggestionPace(pace)
     }
 }

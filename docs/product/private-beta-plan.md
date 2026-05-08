@@ -29,8 +29,13 @@ Also read:
 - `docs/product/compatibility-matrix.md`
 - `docs/product/privacy-and-controls.md`
 
-If the build needs a user-started model server, Python setup, Ollama,
-llama.cpp, or mock fallback, do not invite testers.
+If the build needs a user-started model server, tester-side Python setup,
+Ollama, llama.cpp, or mock fallback, do not invite testers.
+
+The generated private-beta packet must also keep tester model setup inside the
+app. If the model is missing or invalid, testers should use Settings
+`Install Model` or `Repair Model`; if that in-app setup fails, stop the session
+instead of giving testers shell commands.
 
 The tester install path is inside Settings. If the model is missing, use
 `Install Local Model`; if the folder is incomplete, use `Repair Local Model`.
@@ -69,7 +74,8 @@ Walk each tester through this in 15 minutes or less:
 - Smoke check: open TextEdit, type a normal sentence, accept one word with
   `Tab`, dismiss with `Esc`, then export the redacted report.
 - Stop rules: one wrong insertion, sensitive-field suggestion, unreliable
-  `Tab`, mock fallback, or manual model setup ends the beta.
+  `Tab`, mock fallback, failed in-app model setup, or tester-side shell/Python
+  setup ends the beta.
 
 ## Daily 2-Minute Survey
 
@@ -150,6 +156,10 @@ capture:
 - best app,
 - worst app,
 - pause or disable reason.
+
+Do not paste raw typed text, prompts, screenshots, document names, URLs,
+recipients, subject lines, or trace excerpts into beta feedback. Use short
+labels like `wrong app`, `late`, `too much`, or `good word finish`.
 
 Run the trace checker before trusting the session:
 

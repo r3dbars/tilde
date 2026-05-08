@@ -105,6 +105,59 @@ struct PlacementHealthTests {
         #expect(presentation.metadata["placementConfidenceBand"] == "low")
     }
 
+    @Test("Cramped inline frames can fall back to mirror on the same caret")
+    func crampedInlineFramesCanFallbackToMirrorOnSameCaret() throws {
+        let plan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: .floatingMirror,
+            caretRect: CGRect(x: 140, y: 220, width: 0, height: 22),
+            elementRect: CGRect(x: 80, y: 180, width: 520, height: 160),
+            windowRect: CGRect(x: 40, y: 120, width: 640, height: 360),
+            textLineRect: CGRect(x: 80, y: 220, width: 60, height: 22),
+            allowsDetachedSuggestions: false
+        )
+
+        guard case let .present(inline) = plan else {
+            Issue.record("Expected inline placement to present before frame sizing")
+            return
+        }
+
+        let fallback = try #require(
+            inline.mirrorFallbackForCrampedInlineFrame(fallbackRenderMode: .floatingMirror)
+        )
+
+        #expect(fallback.requestedRenderMode == .inlineAdjacent)
+        #expect(fallback.renderMode == .floatingMirror)
+        #expect(fallback.anchorRect == inline.anchorRect)
+        #expect(fallback.anchorSource == .caret)
+        #expect(fallback.textLineRect == nil)
+        #expect(fallback.reason == .inlineRoomTooSmall)
+        #expect(fallback.metadata["placementHealthReason"] == "inline-room-too-small")
+        #expect(fallback.metadata["placementSelfHealingAction"] == "fallback-floating-mirror")
+        #expect(fallback.metadata["placementConfidenceBand"] == "medium")
+    }
+
+    @Test("Cramped inline fallback only runs when mirror fallback exists")
+    func crampedInlineFallbackOnlyRunsWhenMirrorFallbackExists() throws {
+        let plan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: nil,
+            caretRect: CGRect(x: 140, y: 220, width: 0, height: 22),
+            elementRect: CGRect(x: 80, y: 180, width: 520, height: 160),
+            windowRect: CGRect(x: 40, y: 120, width: 640, height: 360),
+            textLineRect: CGRect(x: 80, y: 220, width: 60, height: 22),
+            allowsDetachedSuggestions: false
+        )
+
+        guard case let .present(inline) = plan else {
+            Issue.record("Expected inline placement to present before frame sizing")
+            return
+        }
+
+        #expect(inline.mirrorFallbackForCrampedInlineFrame(fallbackRenderMode: nil) == nil)
+        #expect(inline.mirrorFallbackForCrampedInlineFrame(fallbackRenderMode: .disabled) == nil)
+    }
+
     @Test("Suppresses missing inline caret when detached anchors are disabled")
     func suppressesMissingInlineCaretWhenDetachedDisabled() {
         let plan = PlacementHealth.plan(
@@ -291,6 +344,33 @@ struct PlacementHealthTests {
         #expect(presentation.renderMode == .floatingMirror)
         #expect(presentation.anchorSource == .element)
         #expect(presentation.reason == .healthy)
+    }
+
+    @Test("Suppresses detached mirror anchors unless trusted")
+    func suppressesDetachedMirrorAnchorsUnlessTrusted() {
+        let plan = PlacementHealth.plan(
+            requestedRenderMode: .floatingMirror,
+            fallbackRenderMode: .floatingMirror,
+            caretRect: nil,
+            elementRect: CGRect(x: 100, y: 200, width: 500, height: 180),
+            windowRect: CGRect(x: 80, y: 160, width: 560, height: 300),
+            textLineRect: nil,
+            allowsDetachedSuggestions: true,
+            trustPolicy: PlacementTrustPolicy(
+                allowsLowConfidencePlacement: true,
+                allowsSyntheticCaretPlacement: true,
+                allowsDetachedAnchorPlacement: false
+            )
+        )
+
+        guard case let .suppress(suppression) = plan else {
+            Issue.record("Expected untrusted detached mirror placement to suppress")
+            return
+        }
+
+        #expect(suppression.reason == .untrustedDetachedAnchor)
+        #expect(suppression.metadata["placementHealthReason"] == "untrusted-detached-anchor")
+        #expect(suppression.metadata["placementSelfHealingAction"] == "suppress")
     }
 
     @Test("Keeps non-detached mirror placement on the caret")

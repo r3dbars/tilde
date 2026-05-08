@@ -18,7 +18,7 @@ swift test
 ./script/check_model_asset_self_test.sh
 ./script/manual_smoke_self_test.sh
 ./script/real_app_smoke_self_test.sh
-./script/no_accessibility_smoke_self_test.sh
+./script/manual_proof_queue_self_test.sh
 ./script/check_score_targets_self_test.sh
 ./script/check_visual_placement_evidence_self_test.sh
 ./script/check_visual_placement_evidence.sh
@@ -28,6 +28,7 @@ swift test
 ./script/typing_performance_soak_self_test.sh
 ./script/typing_performance_endurance_soak_self_test.sh
 ./script/model_latency_report_self_test.sh
+./script/private_beta_packet_self_test.sh
 ./script/package_release.sh --check
 ./script/check_model_asset.py
 ./script/build_and_run.sh --verify
