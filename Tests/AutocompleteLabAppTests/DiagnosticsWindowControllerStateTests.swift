@@ -132,6 +132,55 @@ struct DiagnosticsWindowControllerStateTests {
         #expect(diagnostics.text.contains("Caret failures by app: none yet"))
     }
 
+    @Test("Prompt context diagnostics expose shape without raw text")
+    func promptContextDiagnosticsExposeShapeWithoutRawText() {
+        let diagnostics = PromptContextDiagnostics(
+            recentEvents: [
+                event(metadata: [
+                    "documentTitleWordCount": "3",
+                    "documentTitleLengthBucket": "short",
+                    "documentTitleExtension": "md",
+                    "documentTitleIsUntitled": "false",
+                    "documentTitleHasUnsavedMarker": "true"
+                ]),
+                event(metadata: [
+                    "partialWordCharacters": "9",
+                    "partialWordLetters": "9",
+                    "partialWordDigits": "0",
+                    "partialWordCasing": "titlecase",
+                    "partialWordHasHyphen": "false",
+                    "partialWordHasApostrophe": "false"
+                ]),
+                event(
+                    metadata: [
+                        "currentLineStructure": "checklist_unchecked",
+                        "currentLineMarkerStyle": "dash",
+                        "currentLineIndentationColumns": "2",
+                        "currentLineContentWords": "4"
+                    ],
+                    displayedText: "Launch Plan"
+                )
+            ]
+        )
+
+        #expect(diagnostics.text.contains("Prompt context diagnostics: recent shape events 3"))
+        #expect(diagnostics.text.contains("Document title shape: length=short, words=3, extension=md, untitled=false, unsaved=true"))
+        #expect(diagnostics.text.contains("Partial word shape: chars=9, letters=9, digits=0, casing=titlecase, hyphen=false, apostrophe=false"))
+        #expect(diagnostics.text.contains("Current line shape: kind=checklist_unchecked, marker=dash, indent=2, contentWords=4"))
+        #expect(!diagnostics.text.contains("Launch"))
+        #expect(!diagnostics.text.contains("Plan"))
+    }
+
+    @Test("Prompt context diagnostics stay useful before shape data exists")
+    func promptContextDiagnosticsStayUsefulBeforeShapeDataExists() {
+        let diagnostics = PromptContextDiagnostics(recentEvents: [])
+
+        #expect(diagnostics.text.contains("Prompt context diagnostics: recent shape events 0"))
+        #expect(diagnostics.text.contains("Document title shape: no recent title-shape metadata"))
+        #expect(diagnostics.text.contains("Partial word shape: no recent partial-word metadata"))
+        #expect(diagnostics.text.contains("Current line shape: no recent line-shape metadata"))
+    }
+
     @Test("Learning diagnostics expose kept annoyance and miss state")
     func learningDiagnosticsExposeKeptAnnoyanceAndMissState() {
         let diagnostics = SuggestionLearningDiagnostics(
