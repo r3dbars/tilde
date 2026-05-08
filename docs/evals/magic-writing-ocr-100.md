@@ -122,6 +122,17 @@ Time: 2026-05-08T23:42:00Z
 - Fix: when a streaming partial is already visible for the same request and field, an empty final model result now records the empty result but keeps the visible suggestion on screen.
 - Verification: focused `SuggestionOrchestratorTests` and `MagicWritingOCRPromptEvalTests` passed, the full Swift suite passed with 976 tests, the app relaunched on `qwen3-0.6b`, and the post-relaunch typing-performance gate reported focused-text poll p95 0 ms, max 8 ms, zero slow markers, and zero skipped polls.
 
+## Latest TextEdit Real-App Proof
+
+Time: 2026-05-08T23:45:00Z
+
+- Ran the safe disposable TextEdit smoke lane with screenshot tracing on the current `qwen3-0.6b` app.
+- Result: 2 visible word-completion suggestions, 2 accepted insertions, 100% accept/useful rate, 100% insertion verification, zero caret failures, zero insertion failures, zero typed-over suggestions, and strict screenshot-backed visual evidence.
+- Trace slice: lines 59466-59475 in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`.
+- Diagnostics slice: lines 215046-215091 in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log`.
+- Real typing performance for the same slice passed: focused text poll p95 4 ms, max 27 ms, no slow markers or skipped polls; key event tap p95 132 microseconds.
+- The earlier 121 ms poll warnings in the wider launch window happened before TextEdit exposed an editable field, so they are startup/focus noise rather than typing-path latency.
+
 ## 100 Test Situations
 
 | # | App | Situation | Target behavior | Score |
