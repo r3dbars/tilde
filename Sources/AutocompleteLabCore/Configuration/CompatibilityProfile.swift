@@ -20,6 +20,28 @@ public enum FocusedFieldIdentityMode: String, Equatable, Sendable {
     case stableBounds
 }
 
+public enum CompatibilityPreferredPath: String, Equatable, Sendable {
+    case accessibility
+    case accessibilityFallback = "accessibility-fallback"
+    case browserExtension = "browser-extension"
+    case editorPlugin = "editor-plugin"
+    case appNativeIntegration = "app-native-integration"
+    case suggestOverlay = "suggest-overlay"
+    case blocked
+}
+
+public enum CompatibilityHardCap: String, Equatable, Sendable {
+    case caretSelectionProofRequired = "caret-selection-proof-required"
+    case undoProofRequired = "undo-proof-required"
+    case structureProofRequired = "structure-proof-required"
+    case noSubmitProofRequired = "no-submit-proof-required"
+    case productionSurfaceProofRequired = "production-surface-proof-required"
+    case unknownCustomEditorDetectOnly = "unknown-custom-editor-detect-only"
+    case secureSurfaceBlocked = "secure-surface-blocked"
+    case terminalExecutionBlocked = "terminal-execution-blocked"
+    case diagnosticsOnly = "diagnostics-only"
+}
+
 public enum CompatibilityAppFamily: String, Equatable, Sendable {
     case nativeAppKit
     case swiftUIAppKit
@@ -66,6 +88,10 @@ public enum CompatibilitySupportLevel: String, Equatable, Sendable {
 public struct CompatibilityProfile: Equatable, Sendable {
     public let bundleIdentifier: String
     public let displayName: String
+    public let surfaceIdentifier: String
+    public let versionRangeDescription: String
+    public let preferredPath: CompatibilityPreferredPath
+    public let hardCaps: [CompatibilityHardCap]
     public let appFamily: CompatibilityAppFamily
     public let supportLevel: CompatibilitySupportLevel
     public let supportReason: String
@@ -93,6 +119,10 @@ public struct CompatibilityProfile: Equatable, Sendable {
     public init(
         bundleIdentifier: String,
         displayName: String,
+        surfaceIdentifier: String = "default",
+        versionRangeDescription: String = "current-proof-only",
+        preferredPath: CompatibilityPreferredPath? = nil,
+        hardCaps: [CompatibilityHardCap] = [],
         appFamily: CompatibilityAppFamily = .unknown,
         supportLevel: CompatibilitySupportLevel,
         supportReason: String,
@@ -119,6 +149,13 @@ public struct CompatibilityProfile: Equatable, Sendable {
     ) {
         self.bundleIdentifier = bundleIdentifier
         self.displayName = displayName
+        self.surfaceIdentifier = surfaceIdentifier
+        self.versionRangeDescription = versionRangeDescription
+        self.preferredPath = preferredPath ?? Self.defaultPreferredPath(
+            renderMode: renderMode,
+            insertionMode: insertionMode
+        )
+        self.hardCaps = hardCaps
         self.appFamily = appFamily
         self.supportLevel = supportLevel
         self.supportReason = supportReason
@@ -154,6 +191,20 @@ public struct CompatibilityProfile: Equatable, Sendable {
         !isSensitive && supportLevel != .unsupported
     }
 
+    public var profileIdentifier: String {
+        "\(bundleIdentifier)::\(surfaceIdentifier)::\(preferredPath.rawValue)"
+    }
+
+    public var scopeMetadata: [String: String] {
+        [
+            "compatibilityProfileID": profileIdentifier,
+            "compatibilitySurface": surfaceIdentifier,
+            "compatibilityVersionRange": versionRangeDescription,
+            "compatibilityPreferredPath": preferredPath.rawValue,
+            "compatibilityHardCaps": hardCaps.map(\.rawValue).joined(separator: ",")
+        ]
+    }
+
     public var allowsStrictVisualProofSyntheticCaretPlacement: Bool {
         supportsOneWordAcceptance
             && !supportsFullAcceptance
@@ -169,7 +220,27 @@ public struct CompatibilityProfile: Equatable, Sendable {
         let fallbackInsertion = fallbackInsertionMode?.rawValue ?? "none"
         let anchors = anchorLadder.map(\.rawValue).joined(separator: ">")
 
-        return "support=\(supportLevel.rawValue); family=\(appFamily.rawValue); primary render=\(renderMode.rawValue), insert=\(insertionMode.rawValue); fallback render=\(fallbackRender), insert=\(fallbackInsertion); field=\(fieldIdentityMode.rawValue); anchors=\(anchors)"
+        return "profile=\(profileIdentifier); support=\(supportLevel.rawValue); family=\(appFamily.rawValue); primary render=\(renderMode.rawValue), insert=\(insertionMode.rawValue); fallback render=\(fallbackRender), insert=\(fallbackInsertion); field=\(fieldIdentityMode.rawValue); anchors=\(anchors)"
+    }
+
+    private static func defaultPreferredPath(
+        renderMode: SuggestionRenderMode,
+        insertionMode: InsertionMode
+    ) -> CompatibilityPreferredPath {
+        if renderMode == .disabled || insertionMode == .disabled {
+            return .blocked
+        }
+
+        switch insertionMode {
+        case .axSelectedText, .axValueReplacement, .axThenKeyEvents:
+            return .accessibility
+        case .keyEvents:
+            return .accessibilityFallback
+        case .clipboardFallbackOptIn:
+            return .suggestOverlay
+        case .disabled:
+            return .blocked
+        }
     }
 
     public func placementTrustPolicy(
@@ -251,6 +322,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.apple.TextEdit",
             displayName: "TextEdit",
+            surfaceIdentifier: "appkit-text-view",
+            preferredPath: .accessibility,
             appFamily: .nativeAppKit,
             supportLevel: .green,
             supportReason: "Verified inline suggestions and native text insertion.",
@@ -265,6 +338,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.apple.Notes",
             displayName: "Notes",
+            surfaceIdentifier: "notes-title-body-checklist",
+            preferredPath: .accessibility,
+            hardCaps: [.caretSelectionProofRequired, .undoProofRequired, .structureProofRequired],
             appFamily: .swiftUIAppKit,
             supportLevel: .yellow,
             supportReason: "Rich text can drift; display can fall back to floating, and insertion fails closed.",
@@ -280,6 +356,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "md.obsidian",
             displayName: "Obsidian",
+            surfaceIdentifier: "codemirror-fallback",
+            preferredPath: .accessibilityFallback,
+            hardCaps: [.caretSelectionProofRequired, .structureProofRequired, .unknownCustomEditorDetectOnly],
             appFamily: .electron,
             supportLevel: .yellow,
             supportReason: "Electron editors can hide caret bounds, so this uses floating or synthetic placement.",
@@ -301,6 +380,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.apple.mail",
             displayName: "Mail",
+            surfaceIdentifier: "mail-compose",
+            preferredPath: .blocked,
+            hardCaps: [.noSubmitProofRequired, .structureProofRequired, .diagnosticsOnly],
             appFamily: .nativeAppKit,
             supportLevel: .diagnosticsOnly,
             supportReason: "Mail compose is sensitive and insertion is not proven.",
@@ -322,6 +404,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.google.Chrome",
             displayName: "Chrome",
+            surfaceIdentifier: "local-textarea-contenteditable-editor-fixtures",
+            preferredPath: .accessibilityFallback,
+            hardCaps: [.productionSurfaceProofRequired, .noSubmitProofRequired],
             appFamily: .chromium,
             supportLevel: .yellow,
             supportReason: "Browser editors vary; display can fall back to floating and insertion can fall back to AX.",
@@ -337,6 +422,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.openai.codex",
             displayName: "Codex",
+            surfaceIdentifier: "prompt-composer",
+            preferredPath: .accessibility,
+            hardCaps: [.noSubmitProofRequired],
             appFamily: .customCanvas,
             supportLevel: .yellow,
             supportReason: "Dogfood prompt support still needs one-word no-submit proof before it is green.",
@@ -357,6 +445,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claude-code",
             displayName: "Claude Code",
+            surfaceIdentifier: "background-cli-helper",
+            preferredPath: .blocked,
+            hardCaps: [.terminalExecutionBlocked, .noSubmitProofRequired, .diagnosticsOnly],
             appFamily: .customCanvas,
             supportLevel: .diagnosticsOnly,
             supportReason: "The installed Claude Code bundle is a background-only CLI helper; interactive Claude Code typing usually happens inside a terminal host, which is blocked until a separate safe adapter exists.",
@@ -379,6 +470,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claudefordesktop",
             displayName: "Claude",
+            surfaceIdentifier: "prompt-composer",
+            preferredPath: .accessibility,
+            hardCaps: [.noSubmitProofRequired],
             appFamily: .electron,
             supportLevel: .yellow,
             supportReason: "Composer placement still needs one-word no-submit proof before it is green.",
@@ -398,6 +492,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.apple.Safari",
             displayName: "Safari",
+            surfaceIdentifier: "webkit-unknown",
+            preferredPath: .blocked,
+            hardCaps: [.productionSurfaceProofRequired, .diagnosticsOnly],
             appFamily: .webKit,
             supportLevel: .diagnosticsOnly,
             supportReason: "Browser rich editors need separate proof from textareas.",
@@ -416,6 +513,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.tinyspeck.slackmacgap",
             displayName: "Slack",
+            surfaceIdentifier: "message-composer",
+            preferredPath: .blocked,
+            hardCaps: [.noSubmitProofRequired, .diagnosticsOnly],
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
             supportReason: "Electron rich editor needs app-specific proof.",
@@ -434,6 +534,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.microsoft.VSCode",
             displayName: "VS Code",
+            surfaceIdentifier: "monaco-editor",
+            preferredPath: .blocked,
+            hardCaps: [.unknownCustomEditorDetectOnly, .productionSurfaceProofRequired, .diagnosticsOnly],
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
             supportReason: "Monaco editor exposes custom text geometry.",
@@ -452,6 +555,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         CompatibilityProfile(
             bundleIdentifier: "com.todesktop.230313mzl4w4u92",
             displayName: "Cursor",
+            surfaceIdentifier: "monaco-editor",
+            preferredPath: .blocked,
+            hardCaps: [.unknownCustomEditorDetectOnly, .productionSurfaceProofRequired, .diagnosticsOnly],
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
             supportReason: "Monaco editor exposes custom text geometry.",

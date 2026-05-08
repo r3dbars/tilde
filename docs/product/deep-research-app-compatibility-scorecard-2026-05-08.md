@@ -24,8 +24,9 @@ manual smoke logs, screenshot evidence, proof manifests, trace replay, and
 strict gates that still fail honestly. The main weakness is that the code still
 leans on bundle-level profiles in places where the research wants profile-level
 surface/path/version proof. This pass tightened browser hosted-surface blocking
-for action-bearing web apps and made fast word completions use the final stale
-context refresh before display.
+for action-bearing web apps, made fast word completions use the final stale
+context refresh before display, and added first-class surface/path/hard-cap
+metadata to compatibility profiles.
 
 ## Product Standard
 
@@ -76,7 +77,7 @@ fixture proof, not a general system-wide inserter.
 
 Starting score before this pass: 72/100
 
-Overall score after this pass: 75/100
+Overall score after this pass: 78/100
 
 This is a strict compatibility score. It is not a general app-quality score.
 Several individual surfaces score much higher, but hard gates prevent a broad
@@ -87,20 +88,22 @@ compatibility claim.
 ### Surface identification
 
 - Weight: 15
-- Current score: 12/15
+- Current score: 14/15
 - Why this score: The repo has explicit app profiles, AX field classification,
   browser hosted-surface blocking, prompt fingerprints, and proof-manifest
   coverage. This pass added action-bearing browser hosted surfaces such as
-  Gmail, ChatGPT, Claude web, Codex web, and Telegram web.
+  Gmail, ChatGPT, Claude web, Codex web, and Telegram web, plus trace-safe
+  profile metadata for surface ID, version range, preferred path, and hard caps.
 - Evidence found in repo:
   - `CompatibilityProfileStore.mvp` in `Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift`
   - `AXFieldClassifier` in `Sources/AutocompleteLabCore/Session/AXFieldClassifier.swift`
   - `BrowserHostedSurfacePolicy` in `Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift`
   - `PromptEditorFingerprintPolicy` in `Sources/AutocompleteLabCore/Configuration/PromptEditorFingerprintPolicy.swift`
   - `docs/product/proof-manifest.json`
-- Missing evidence: No first-class stored profile ID that includes app, surface,
-  version range, and insertion path. Browser support is still mostly Chrome
-  bundle plus fingerprint heuristics.
+- Missing evidence: First-class profile metadata now exists for app-owned MVP
+  profiles, but learned or user-created profiles are not persisted with full
+  surface/path/version proof yet. Browser support is still mostly Chrome bundle
+  plus fingerprint heuristics.
 - What would make it 100/100: Versioned compatibility profiles for every proven
   app/surface/path with hard caps, last-verified dates, and proof links.
 
@@ -179,7 +182,7 @@ compatibility claim.
 ### No-submit / no-side-effect safety
 
 - Weight: 15
-- Current score: 12/15
+- Current score: 13/15
 - Why this score: Prompt-app full accept is disabled, Claude desktop has
   one-word no-submit proof, Chrome chat-like local fixture has no-submit proof,
   and this pass blocks more action-bearing browser surfaces until no-submit
@@ -330,6 +333,8 @@ diagnostics-only by policy, not by accident.
   - Full Swift tests, proof manifest checks.
 - Risk level: Medium
 - Expected score impact: +3 surface identification.
+- Status: Initial app-owned metadata is done in this pass; persisted learned
+  or user-created versioned profiles are still future work.
 
 ### 4. Codex same-slice one-word no-submit proof
 

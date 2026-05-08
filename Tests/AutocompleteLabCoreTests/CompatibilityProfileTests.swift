@@ -9,6 +9,8 @@ struct CompatibilityProfileTests {
         let store = CompatibilityProfileStore.mvp
 
         #expect(store.profile(for: "com.apple.TextEdit")?.renderMode == .inlineAdjacent)
+        #expect(store.profile(for: "com.apple.TextEdit")?.surfaceIdentifier == "appkit-text-view")
+        #expect(store.profile(for: "com.apple.TextEdit")?.preferredPath == .accessibility)
         #expect(store.profile(for: "com.apple.TextEdit")?.appFamily == .nativeAppKit)
         #expect(store.profile(for: "com.apple.TextEdit")?.supportLevel == .green)
         #expect(store.profile(for: "com.apple.TextEdit")?.supportsObserverUpdates == true)
@@ -39,6 +41,10 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.mail")?.allowsDescendantTextFallback == true)
         #expect(store.profile(for: "com.apple.mail")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.google.Chrome")?.displayName == "Chrome")
+        #expect(store.profile(for: "com.google.Chrome")?.surfaceIdentifier == "local-textarea-contenteditable-editor-fixtures")
+        #expect(store.profile(for: "com.google.Chrome")?.preferredPath == .accessibilityFallback)
+        #expect(store.profile(for: "com.google.Chrome")?.hardCaps.contains(.productionSurfaceProofRequired) == true)
+        #expect(store.profile(for: "com.google.Chrome")?.hardCaps.contains(.noSubmitProofRequired) == true)
         #expect(store.profile(for: "com.google.Chrome")?.appFamily == .chromium)
         #expect(store.profile(for: "com.google.Chrome")?.anchorLadder == [.caret, .field])
         #expect(store.profile(for: "com.google.Chrome")?.supportLevel == .yellow)
@@ -49,6 +55,8 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.google.Chrome")?.allowsDescendantTextFallback == true)
         #expect(store.profile(for: "com.google.Chrome")?.allowsSyntheticCaretPlacement == false)
         #expect(store.profile(for: "com.openai.codex")?.displayName == "Codex")
+        #expect(store.profile(for: "com.openai.codex")?.surfaceIdentifier == "prompt-composer")
+        #expect(store.profile(for: "com.openai.codex")?.hardCaps == [.noSubmitProofRequired])
         #expect(store.profile(for: "com.openai.codex")?.appFamily == .customCanvas)
         #expect(store.profile(for: "com.openai.codex")?.allowsFieldAnchor == false)
         #expect(store.profile(for: "com.openai.codex")?.supportLevel == .yellow)
@@ -61,6 +69,9 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.supportsFullAcceptance == false)
         #expect(store.profile(for: "com.openai.codex")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claude-code")?.displayName == "Claude Code")
+        #expect(store.profile(for: "com.anthropic.claude-code")?.surfaceIdentifier == "background-cli-helper")
+        #expect(store.profile(for: "com.anthropic.claude-code")?.preferredPath == .blocked)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.hardCaps.contains(.terminalExecutionBlocked) == true)
         #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .diagnosticsOnly)
         #expect(store.profile(for: "com.anthropic.claude-code")?.renderMode == .disabled)
         #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackRenderMode == .disabled)
@@ -74,6 +85,8 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.anthropic.claude-code")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claude-code")?.isSensitive == true)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.displayName == "Claude")
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.surfaceIdentifier == "prompt-composer")
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.hardCaps == [.noSubmitProofRequired])
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackRenderMode == .floatingMirror)
@@ -190,6 +203,7 @@ struct CompatibilityProfileTests {
     func profilesExposeDebugSummaries() throws {
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
 
+        #expect(profile.debugSummary.contains("profile=com.google.Chrome::local-textarea-contenteditable-editor-fixtures::accessibility-fallback"))
         #expect(profile.debugSummary.contains("primary render=inlineAdjacent"))
         #expect(profile.debugSummary.contains("support=yellow"))
         #expect(profile.debugSummary.contains("family=chromium"))
@@ -198,6 +212,27 @@ struct CompatibilityProfileTests {
         #expect(profile.debugSummary.contains("insert=axValueReplacement"))
         #expect(profile.debugSummary.contains("field=accessibilityElement"))
         #expect(profile.debugSummary.contains("anchors=caret>field"))
+    }
+
+    @Test("Profiles expose trace-safe compatibility scope metadata")
+    func profilesExposeTraceSafeCompatibilityScopeMetadata() throws {
+        let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
+        let claudeCode = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claude-code"))
+
+        #expect(chrome.profileIdentifier == "com.google.Chrome::local-textarea-contenteditable-editor-fixtures::accessibility-fallback")
+        #expect(chrome.scopeMetadata["compatibilitySurface"] == "local-textarea-contenteditable-editor-fixtures")
+        #expect(chrome.scopeMetadata["compatibilityPreferredPath"] == "accessibility-fallback")
+        #expect(chrome.scopeMetadata["compatibilityHardCaps"]?.contains("production-surface-proof-required") == true)
+        #expect(chrome.scopeMetadata["compatibilityHardCaps"]?.contains("no-submit-proof-required") == true)
+
+        #expect(codex.profileIdentifier == "com.openai.codex::prompt-composer::accessibility")
+        #expect(codex.scopeMetadata["compatibilityHardCaps"] == "no-submit-proof-required")
+
+        #expect(claudeCode.profileIdentifier == "com.anthropic.claude-code::background-cli-helper::blocked")
+        #expect(claudeCode.scopeMetadata["compatibilityPreferredPath"] == "blocked")
+        #expect(claudeCode.scopeMetadata["compatibilityHardCaps"]?.contains("terminal-execution-blocked") == true)
+        #expect(!chrome.scopeMetadata.values.contains { $0.contains("Smoke proof") })
     }
 
     @Test("Insertion mode plans try primary then safe fallback")
