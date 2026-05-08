@@ -46,6 +46,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.google.Chrome")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .keyEvents)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .axValueReplacement)
+        #expect(store.profile(for: "com.google.Chrome")?.allowsDescendantTextFallback == true)
         #expect(store.profile(for: "com.google.Chrome")?.allowsSyntheticCaretPlacement == false)
         #expect(store.profile(for: "com.openai.codex")?.displayName == "Codex")
         #expect(store.profile(for: "com.openai.codex")?.appFamily == .customCanvas)

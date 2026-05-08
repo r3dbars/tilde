@@ -327,6 +327,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             fallbackInsertionMode: .axValueReplacement,
             anchorLadder: [.caret, .field],
             knownFailureModes: ["textarea support differs from rich editors", "zero-height caret bounds can occur"],
+            allowsDescendantTextFallback: true,
             notes: "Yellow browser target. Prefer synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback. Prefer key-event insertion across textarea and contenteditable surfaces because rich browser editors can report AX replacement success without keeping cursor verification stable."
         ),
         CompatibilityProfile(

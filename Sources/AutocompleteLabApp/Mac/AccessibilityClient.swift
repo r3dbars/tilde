@@ -137,6 +137,7 @@ private struct EditableTextSnapshot {
 
 final class AccessibilityClient: @unchecked Sendable {
     private let sensitiveTextFieldPolicy = SensitiveTextFieldPolicy()
+    private let descendantTextFallbackPolicy = DescendantTextFallbackPolicy()
     private let focusedContextBeforeUTF16Limit = 2_000
     private let focusedContextAfterUTF16Limit = 500
 
@@ -217,7 +218,9 @@ final class AccessibilityClient: @unchecked Sendable {
         guard let textSnapshot = editableTextSnapshot(
             in: focusedElement,
             role: role,
+            bundleIdentifier: app.bundleIdentifier,
             processIdentifier: app.processIdentifier,
+            windowTitle: fingerprint.windowTitle,
             allowDescendantTextFallback: allowDescendantTextFallback,
             selectedRange: selectedRange
         ) else {
@@ -448,7 +451,9 @@ final class AccessibilityClient: @unchecked Sendable {
         let text = editableText(
             in: focusedElement,
             role: role,
+            bundleIdentifier: app.bundleIdentifier,
             processIdentifier: app.processIdentifier,
+            windowTitle: fingerprint.windowTitle,
             allowDescendantTextFallback: allowDescendantTextFallback
         )
         let selectedRange = selectedTextRange(in: focusedElement)
@@ -644,7 +649,9 @@ final class AccessibilityClient: @unchecked Sendable {
     private func editableTextSnapshot(
         in element: AXUIElement,
         role: String?,
+        bundleIdentifier: String?,
         processIdentifier: pid_t,
+        windowTitle: String?,
         allowDescendantTextFallback: Bool,
         selectedRange: CFRange?
     ) -> EditableTextSnapshot? {
@@ -659,7 +666,9 @@ final class AccessibilityClient: @unchecked Sendable {
         guard let text = editableText(
             in: element,
             role: role,
+            bundleIdentifier: bundleIdentifier,
             processIdentifier: processIdentifier,
+            windowTitle: windowTitle,
             allowDescendantTextFallback: allowDescendantTextFallback
         ) else {
             return nil
@@ -755,14 +764,22 @@ final class AccessibilityClient: @unchecked Sendable {
     private func editableText(
         in element: AXUIElement,
         role: String?,
+        bundleIdentifier: String?,
         processIdentifier: pid_t,
+        windowTitle: String?,
         allowDescendantTextFallback: Bool
     ) -> String? {
         let directText = copyAttribute(element, attribute: kAXValueAttribute) as? String
         guard allowDescendantTextFallback,
-              role == "AXWebArea",
-              directText?.isEmpty != false,
-              containingWindowTitle(for: element, processIdentifier: processIdentifier) == "New Message" else {
+              descendantTextFallbackPolicy.allowsFallback(
+                  bundleIdentifier: bundleIdentifier,
+                  role: role,
+                  directText: directText,
+                  windowTitle: windowTitle ?? containingWindowTitle(
+                      for: element,
+                      processIdentifier: processIdentifier
+                  )
+              ) else {
             return directText
         }
 
