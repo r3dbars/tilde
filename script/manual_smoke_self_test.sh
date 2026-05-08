@@ -6,6 +6,9 @@ cd "$ROOT_DIR"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
+export AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=0
+export AUTOCOMPLETE_LAB_SMOKE_REQUIRE_VISUAL_EVIDENCE=0
+export AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE=0
 
 mkdir -p "$TMP_DIR/visual-placement-screenshots"
 cp docs/product/visual-placement-screenshots/textedit-inline.png "$TMP_DIR/visual-placement-screenshots/textedit-inline.png"
@@ -160,7 +163,7 @@ run_passing_case() {
   fi
 
   if ! grep -F " | lines 1-" "$REPORT_PATH" | grep -F "in \`$TRACE_PATH\` |" >/dev/null; then
-    if ! grep -F " | lines 1-" "$REPORT_PATH" | grep -F "in \`$TRACE_PATH\`; visual \`not-claimed\` |" >/dev/null; then
+    if ! grep -F " | lines 1-" "$REPORT_PATH" | grep -F "in \`$TRACE_PATH\`; visual \`not-claimed\`" >/dev/null; then
       echo "manual smoke self-test did not record the successful $display_name trace slice" >&2
       exit 1
     fi
@@ -212,7 +215,7 @@ run_strict_visual_case() {
     exit 1
   fi
 
-  if ! grep -F " | lines 1-" "$REPORT_PATH" | grep -F "in \`$TRACE_PATH\`; visual \`strict-complete\` |" >/dev/null; then
+  if ! grep -F " | lines 1-" "$REPORT_PATH" | grep -F "in \`$TRACE_PATH\`; visual \`strict-complete\`" >/dev/null; then
     echo "manual smoke self-test did not record the successful $proof_label strict visual trace slice" >&2
     exit 1
   fi

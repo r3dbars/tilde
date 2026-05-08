@@ -41,6 +41,7 @@ This is not yet a 98/100 real human dogfood score. It means the prompt, OCR cont
 - Codex polling now also skips window lookup, attribute fingerprint reads, and settable checks in the hot loop; acceptance still verifies through the normal insertion path.
 - Partial-word completion now reuses safe words from visible OCR context in the instant local ranker, so local terms like `Obsidian`, `Transcripted`, and `permission` can complete without waiting for the model.
 - Streaming model suggestions now persist when the final model result is empty, instead of blinking out after a useful partial suggestion is already visible.
+- Chrome forced-accessibility smoke now actually launches every local Chrome fixture in an isolated temp-profile Chrome, so the proof lane does not stall when normal Chrome exposes only browser chrome through AX.
 
 ## Latest Heartbeat Pass
 
@@ -132,6 +133,27 @@ Time: 2026-05-08T23:45:00Z
 - Diagnostics slice: lines 215046-215091 in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log`.
 - Real typing performance for the same slice passed: focused text poll p95 4 ms, max 27 ms, no slow markers or skipped polls; key event tap p95 132 microseconds.
 - The earlier 121 ms poll warnings in the wider launch window happened before TextEdit exposed an editable field, so they are startup/focus noise rather than typing-path latency.
+
+## Latest Chrome Real-App Proof
+
+Time: 2026-05-08T23:58:46Z
+
+- The first Chrome textarea attempt blocked before typing because normal Chrome exposed browser chrome only, with no focused editable web text target through Accessibility.
+- Fix: the forced Chrome lane now uses isolated temp-profile Chrome with `--force-renderer-accessibility` for every local fixture, not only Monaco/ProseMirror.
+- Ran the safe disposable Chrome textarea smoke lane with screenshot tracing on the current `qwen3-0.6b` app.
+- Result: 2 visible suggestions, 2 accepted insertions, 100% insertion verification, zero caret failures, zero insertion failures, and strict screenshot-backed visual evidence.
+- Trace slice: lines 59506-59526 in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`.
+- Diagnostics slice: lines 218531-218603 in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log`.
+- The recorded smoke row now includes source/build proof: `commit:49e569e20411` and app binary SHA `fe00ed1333ebd07e8f7f911637494c443387164a5d9b39c2e6ba98b23f16d91f`.
+- Smoke harness self-test and manual smoke recorder self-test both passed after removing stale deleted TextEdit lane assertions, adding build proof to smoke rows, and marking prompt one-word rows as no-submit confirmed.
+
+## Latest Score Gate
+
+Time: 2026-05-08T23:59:00Z
+
+- `./script/manual_smoke_status.sh` now recognizes the fresh Chrome textarea proof as current.
+- The broader score target gate is still not done: TextEdit, Notes, Obsidian, the other Chrome fixtures, Codex, Claude Code, and Claude desktop still need fresh current-build proof rows before the real dogfood score can replace the deterministic 98/100.
+- Biggest next product gap remains Codex same-slice no-submit proof, followed by real Notes/Obsidian variants and production Chrome editor/chat variants.
 
 ## 100 Test Situations
 

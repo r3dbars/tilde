@@ -237,7 +237,7 @@ case "$APP" in
     DISPLAY_NAME="Chrome"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-$PROOF_LABEL}}"
-    STEPS=$'- Open a local fixture page with a textarea, contenteditable field, editor-like field, Monaco-like editor, ProseMirror-like editor, real Monaco editor, real ProseMirror editor, official public editor demo, or chat-style composer.\n- Type `Smoke proof feels inst` in the focused field.\n- Confirm focus stays in the field.\n- Use Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- For real editor proof, prefer `script/real_app_smoke.sh chrome --fixture monaco-real` or `script/real_app_smoke.sh chrome --fixture prosemirror-real` so pinned upstream packages are used.\n- For default Chrome AX exposure proof, use `script/real_app_smoke.sh chrome --fixture monaco-real --chrome-accessibility default` or the matching ProseMirror command and keep that proof label distinct.\n- For public official editor demo proof, use `codemirror-official`, `monaco-official`, or `prosemirror-official` and keep those proof labels distinct from local fixtures.\n- For chat-like proof, prefer `script/real_app_smoke.sh chrome --fixture chat-like` so the no-submit guard is checked.'
+    STEPS=$'- Open a local fixture page with a textarea, contenteditable field, editor-like field, Monaco-like editor, ProseMirror-like editor, real Monaco editor, real ProseMirror editor, official public editor demo, or chat-style composer.\n- Type `Smoke proof feels inst` in the focused field.\n- Confirm focus stays in the field.\n- Use Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Forced Chrome proof uses an isolated temp-profile Chrome with renderer accessibility enabled for local fixtures.\n- For default Chrome AX exposure proof, add `--chrome-accessibility default` and keep that proof label distinct.\n- For public official editor demo proof, use `codemirror-official`, `monaco-official`, or `prosemirror-official` and keep those proof labels distinct from local fixtures.\n- For chat-like proof, prefer `script/real_app_smoke.sh chrome --fixture chat-like` so the no-submit guard is checked.'
     ;;
   codex)
     BUNDLE_ID="com.openai.codex"
@@ -486,6 +486,14 @@ append_report_row() {
   else
     trace_summary="$trace_summary; visual \`not-claimed\`"
   fi
+  if (( PROMPT_NO_SUBMIT_PROFILE == 1 )); then
+    trace_summary="$trace_summary; prompt no-submit confirmed"
+  fi
+  local build_proof
+  build_proof="$(current_build_proof_summary)"
+  if [[ -n "$build_proof" ]]; then
+    trace_summary="$trace_summary; build \`$build_proof\`"
+  fi
 
   if [[ ! -f "$REPORT_PATH" ]]; then
     mkdir -p "$(dirname "$REPORT_PATH")"
@@ -519,6 +527,44 @@ EOF
     "$log_end_line" \
     "$LOG_PATH" \
     "$trace_summary" >>"$REPORT_PATH"
+}
+
+current_build_proof_summary() {
+  local proofs=()
+  if [[ -n "${AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF:-}" ]]; then
+    proofs+=("$AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF")
+  fi
+
+  local commit
+  commit="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
+  if [[ -n "$commit" ]]; then
+    proofs+=("commit:$commit")
+  fi
+
+  local app_binary="${AUTOCOMPLETE_LAB_APP_BINARY:-dist/AutocompleteLab.app/Contents/MacOS/AutocompleteLab}"
+  if [[ -s "$app_binary" ]]; then
+    local app_sha
+    app_sha="$(shasum -a 256 "$app_binary" | awk '{print $1}')"
+    if [[ -n "$app_sha" ]]; then
+      proofs+=("app-sha256:$app_sha")
+    fi
+  fi
+
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/AutocompleteLab.zip}"
+  if [[ -s "$archive_path" ]]; then
+    local archive_sha
+    archive_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
+    if [[ -n "$archive_sha" ]]; then
+      proofs+=("archive-sha256:$archive_sha")
+    fi
+  fi
+
+  if (( ${#proofs[@]} == 0 )); then
+    return 0
+  fi
+
+  local IFS=", "
+  printf '%s' "${proofs[*]}"
 }
 
 if [[ "$APP" == "obsidian" ]] &&
