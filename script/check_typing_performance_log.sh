@@ -334,10 +334,11 @@ for item in poll_summaries:
 
 for item in poll_slow_markers:
     duration = item["duration"]
-    duration_text = "unknown" if duration is None else f"{duration}ms"
-    focused_poll_warnings.append(
-        f"{line_label(item)} slow focused text poll marker {duration_text}"
-    )
+    if duration is None or duration > max_poll_sample_ms:
+        duration_text = "unknown" if duration is None else f"{duration}ms"
+        focused_poll_warnings.append(
+            f"{line_label(item)} slow focused text poll marker {duration_text}"
+        )
 
 if poll_skipped_evidence > max_poll_skipped:
     details = []

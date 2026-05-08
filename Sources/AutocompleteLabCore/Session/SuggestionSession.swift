@@ -100,7 +100,10 @@ public struct SuggestionSession: Equatable, Sendable {
         )
     }
 
-    public mutating func commitNextWordAcceptance(_ acceptedText: String) {
+    public mutating func commitNextWordAcceptance(
+        _ acceptedText: String,
+        keepsResidual: Bool = true
+    ) {
         guard let suggestion = visibleSuggestion,
               !acceptedText.isEmpty,
               suggestion.text.hasPrefix(acceptedText) else {
@@ -109,7 +112,7 @@ public struct SuggestionSession: Equatable, Sendable {
 
         let remainingText = suggestion.text.dropFirst(acceptedText.count)
 
-        if remainingText.isEmpty {
+        if remainingText.isEmpty || !keepsResidual {
             visibleSuggestion = nil
         } else {
             visibleSuggestion = CompletionSuggestion(
@@ -117,6 +120,38 @@ public struct SuggestionSession: Equatable, Sendable {
                 maxVisibleWords: suggestion.maxVisibleWords
             )
         }
+    }
+
+    public mutating func commitTypedVisiblePrefix(_ typedText: String) -> Bool {
+        guard let suggestion = visibleSuggestion,
+              !typedText.isEmpty else {
+            return false
+        }
+
+        let suggestedPrefix = suggestion.text.prefix(typedText.count)
+        guard String(suggestedPrefix).folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: .current
+        ) == typedText.folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: .current
+        ) else {
+            return false
+        }
+
+        let remainingText = suggestion.text.dropFirst(typedText.count)
+
+        if remainingText.isEmpty {
+            visibleSuggestion = nil
+        } else {
+            visibleSuggestion = CompletionSuggestion(
+                text: String(remainingText),
+                maxVisibleWords: suggestion.maxVisibleWords,
+                maxVisibleCharacters: suggestion.maxVisibleCharacters
+            )
+        }
+
+        return true
     }
 
     public mutating func commitAllVisibleAcceptance(_ acceptedText: String) {
@@ -129,12 +164,12 @@ public struct SuggestionSession: Equatable, Sendable {
         visibleSuggestion = nil
     }
 
-    public mutating func acceptNextWord() -> String? {
+    public mutating func acceptNextWord(keepsResidual: Bool = true) -> String? {
         guard let acceptedText = nextWordAcceptance() else {
             return nil
         }
 
-        commitNextWordAcceptance(acceptedText)
+        commitNextWordAcceptance(acceptedText, keepsResidual: keepsResidual)
 
         return acceptedText
     }

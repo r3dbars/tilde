@@ -31,6 +31,23 @@ struct SuggestionPresentationGateTests {
         ))
     }
 
+    @Test("streamed sentence partials use phrase streaming rules")
+    func streamedSentencePartialsUsePhraseStreamingRules() {
+        let gate = SuggestionPresentationGate()
+
+        #expect(!gate.shouldPresent(
+            CompletionSuggestion(text: " The"),
+            mode: .sentenceContinuation,
+            phase: .streamingPartial
+        ))
+
+        #expect(gate.shouldPresent(
+            CompletionSuggestion(text: " The next"),
+            mode: .sentenceContinuation,
+            phase: .streamingPartial
+        ))
+    }
+
     @Test("word completions do not wait for phrase streaming rules")
     func wordCompletionsBypassPhraseStreamingRules() {
         let gate = SuggestionPresentationGate()

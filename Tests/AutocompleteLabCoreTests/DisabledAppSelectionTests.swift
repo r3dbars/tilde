@@ -63,4 +63,48 @@ struct DisabledAppSelectionTests {
         #expect(selection.isEmpty)
         #expect(selection.persistedBundleIdentifiers == [])
     }
+
+    @Test("Fresh install default off includes only suggestion capable apps")
+    func freshInstallDefaultOffIncludesOnlySuggestionCapableApps() {
+        let selection = DisabledAppSelection(defaultOffProfileStore: .mvp)
+
+        #expect(selection.contains("com.apple.TextEdit"))
+        #expect(selection.contains("com.apple.Notes"))
+        #expect(selection.contains("md.obsidian"))
+        #expect(selection.contains("com.google.Chrome"))
+        #expect(!selection.contains("com.apple.mail"))
+        #expect(!selection.contains("com.apple.Safari"))
+        #expect(!selection.contains("com.apple.Passwords"))
+    }
+
+    @Test("Temporary enable override removes target apps from disabled set")
+    func temporaryEnableOverrideRemovesTargetAppsFromDisabledSet() {
+        var selection = DisabledAppSelection(
+            bundleIdentifiers: [
+                "com.apple.TextEdit",
+                "com.google.Chrome",
+                "md.obsidian"
+            ]
+        )
+
+        selection.temporarilyEnable(bundleIdentifiers: "com.apple.TextEdit, md.obsidian")
+
+        #expect(!selection.contains("com.apple.TextEdit"))
+        #expect(selection.contains("com.google.Chrome"))
+        #expect(!selection.contains("md.obsidian"))
+    }
+
+    @Test("Temporary enable override parses comma space and newline lists")
+    func temporaryEnableOverrideParsesLists() {
+        #expect(
+            DisabledAppSelection.parseBundleIdentifierList(
+                "com.apple.TextEdit, md.obsidian\ncom.google.Chrome  "
+            )
+            == [
+                "com.apple.TextEdit",
+                "md.obsidian",
+                "com.google.Chrome"
+            ]
+        )
+    }
 }

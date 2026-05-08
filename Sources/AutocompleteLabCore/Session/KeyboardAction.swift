@@ -3,6 +3,7 @@ import Foundation
 public enum KeyboardAction: Equatable, Sendable {
     case acceptNextWord
     case acceptAllVisible
+    case undoAcceptedInsertion
     case dismiss
     case passThrough
 
@@ -12,6 +13,8 @@ public enum KeyboardAction: Equatable, Sendable {
             "acceptNextWord"
         case .acceptAllVisible:
             "acceptAllVisible"
+        case .undoAcceptedInsertion:
+            "undoAcceptedInsertion"
         case .dismiss:
             "dismiss"
         case .passThrough:
@@ -24,6 +27,7 @@ public enum AutocompleteKey: Equatable, Sendable {
     case tab
     case optionTab
     case backtick
+    case commandZ
     case escape
     case other
 
@@ -35,6 +39,8 @@ public enum AutocompleteKey: Equatable, Sendable {
             "optionTab"
         case .backtick:
             "backtick"
+        case .commandZ:
+            "commandZ"
         case .escape:
             "escape"
         case .other:
@@ -100,6 +106,7 @@ public struct KeyboardShortcutConfiguration: Equatable, Sendable {
 public enum AutocompletePhysicalKey: Equatable, Sendable {
     case tab
     case backtick
+    case z
     case escape
     case other
 }
@@ -144,6 +151,9 @@ public struct AutocompleteKeyMapper: Equatable, Sendable {
 
             return .other
 
+        case .z:
+            return modifiers == .command ? .commandZ : .other
+
         case .escape:
             return modifiers.isEmpty ? .escape : .other
 
@@ -160,7 +170,15 @@ public struct KeyboardActionRouter: Equatable, Sendable {
         self.shortcutConfiguration = shortcutConfiguration
     }
 
-    public func action(for key: AutocompleteKey, hasVisibleSuggestion: Bool) -> KeyboardAction {
+    public func action(
+        for key: AutocompleteKey,
+        hasVisibleSuggestion: Bool,
+        hasPendingAcceptedInsertionUndo: Bool = false
+    ) -> KeyboardAction {
+        if key == .commandZ, hasPendingAcceptedInsertionUndo {
+            return .undoAcceptedInsertion
+        }
+
         guard hasVisibleSuggestion else {
             return .passThrough
         }
@@ -172,6 +190,8 @@ public struct KeyboardActionRouter: Equatable, Sendable {
             return shortcutConfiguration.acceptAllShortcut == .optionTab ? .acceptAllVisible : .passThrough
         case .backtick:
             return shortcutConfiguration.acceptAllShortcut == .backtick ? .acceptAllVisible : .passThrough
+        case .commandZ:
+            return .passThrough
         case .escape:
             return .dismiss
         case .other:

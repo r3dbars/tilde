@@ -31,7 +31,7 @@ public struct CompletionModelPolicy: Equatable, Sendable {
     public static let minimumVisibleWords = 1
     public static let maximumVisibleWords = 7
     public static let minimumGeneratedTokens = 3
-    public static let maximumGeneratedTokens = 32
+    public static let maximumGeneratedTokens = 16
 
     public let model: LocalModelID
     public let runtimeOwnership: ModelRuntimeOwnership

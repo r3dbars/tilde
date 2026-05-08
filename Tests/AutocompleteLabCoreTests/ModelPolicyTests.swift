@@ -54,6 +54,13 @@ struct ModelPolicyTests {
         #expect(!policy.allowsVisibleWordCount(6))
     }
 
+    @Test("Request modes cap generated tokens by autocomplete role")
+    func requestModesCapGeneratedTokensByAutocompleteRole() {
+        #expect(CompletionRequestMode.wordCompletion.generatedTokenCeiling == 3)
+        #expect(CompletionRequestMode.phraseContinuation.generatedTokenCeiling == 16)
+        #expect(CompletionRequestMode.sentenceContinuation.generatedTokenCeiling == 10)
+    }
+
     @Test("Completion length configuration reads environment overrides")
     func completionLengthConfigurationReadsEnvironmentOverrides() {
         let defaultConfiguration = CompletionLengthConfiguration.fromEnvironment([:])
@@ -72,8 +79,8 @@ struct ModelPolicyTests {
         #expect(short.maxGeneratedTokens == 9)
         #expect(short.displaySummary == "3 words / 9 tokens")
         #expect(long.maxVisibleWords == 7)
-        #expect(long.maxGeneratedTokens == 32)
-        #expect(long.displaySummary == "7 words / 32 tokens")
+        #expect(long.maxGeneratedTokens == 16)
+        #expect(long.displaySummary == "7 words / 16 tokens")
     }
 
     @Test("Experiment arms set default completion lengths")

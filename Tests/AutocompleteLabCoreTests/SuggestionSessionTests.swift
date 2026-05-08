@@ -12,6 +12,37 @@ struct SuggestionSessionTests {
         #expect(suggestion.text == " we should ship")
     }
 
+    @Test("Visible text is capped under forty two characters")
+    func visibleTextIsCappedUnderFortyTwoCharacters() {
+        let suggestion = CompletionSuggestion(
+            text: " this is a very useful continuation that should not run long",
+            maxVisibleWords: 12
+        )
+
+        #expect(suggestion.visibleText.count <= CompletionSuggestion.defaultMaxVisibleCharacters)
+        #expect(suggestion.visibleText == " this is a very useful continuation that")
+    }
+
+    @Test("Visible text stays single line")
+    func visibleTextStaysSingleLine() {
+        let suggestion = CompletionSuggestion(
+            text: " keep this line\nbut never reveal this line",
+            maxVisibleWords: 8
+        )
+
+        #expect(suggestion.visibleText == " keep this line")
+    }
+
+    @Test("Long single word is hard capped")
+    func longSingleWordIsHardCapped() {
+        let suggestion = CompletionSuggestion(
+            text: " supercalifragilisticexpialidociousplusmore",
+            maxVisibleWords: 1
+        )
+
+        #expect(suggestion.visibleText.count == CompletionSuggestion.defaultMaxVisibleCharacters)
+    }
+
     @Test("Repeated word acceptance cannot reveal hidden overflow text")
     func repeatedWordAcceptanceCannotRevealOverflowText() {
         var session = SuggestionSession(
@@ -32,6 +63,64 @@ struct SuggestionSessionTests {
 
         #expect(session.acceptNextWord() == " we")
         #expect(session.visibleSuggestion?.visibleText == " should ship")
+    }
+
+    @Test("Tab can require recompute after one accepted word")
+    func tabCanRequireRecomputeAfterOneAcceptedWord() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: " we should ship", maxVisibleWords: 8)
+        )
+
+        #expect(session.acceptNextWord(keepsResidual: false) == " we")
+        #expect(!session.hasVisibleSuggestion)
+    }
+
+    @Test("Typing a visible prefix keeps the residual suggestion visible")
+    func typedVisiblePrefixKeepsResidualSuggestion() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: "tation", maxVisibleWords: 8)
+        )
+
+        let didCommit = session.commitTypedVisiblePrefix("t")
+
+        #expect(didCommit)
+        #expect(session.visibleSuggestion?.visibleText == "ation")
+    }
+
+    @Test("Typing a visible prefix ignores case differences")
+    func typedVisiblePrefixIgnoresCaseDifferences() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: "Tation", maxVisibleWords: 8)
+        )
+
+        let didCommit = session.commitTypedVisiblePrefix("t")
+
+        #expect(didCommit)
+        #expect(session.visibleSuggestion?.visibleText == "ation")
+    }
+
+    @Test("Typing the full visible suggestion dismisses it")
+    func typedFullVisiblePrefixDismissesSuggestion() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: "ation", maxVisibleWords: 8)
+        )
+
+        let didCommit = session.commitTypedVisiblePrefix("ation")
+
+        #expect(didCommit)
+        #expect(!session.hasVisibleSuggestion)
+    }
+
+    @Test("Typing conflicting text leaves the suggestion untouched")
+    func typedConflictingPrefixLeavesSuggestionUntouched() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: "ation", maxVisibleWords: 8)
+        )
+
+        let didCommit = session.commitTypedVisiblePrefix("x")
+
+        #expect(!didCommit)
+        #expect(session.visibleSuggestion?.visibleText == "ation")
     }
 
     @Test("Previewing next word does not consume the suggestion")

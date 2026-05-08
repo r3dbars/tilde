@@ -201,7 +201,21 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             return .block(.tooLittleContext)
         }
 
+        if endsAtSentenceBoundary(textBeforeCursor: textBeforeCursor) {
+            return .allow(.sentenceContinuation)
+        }
+
         return .allow(.phraseContinuation)
+    }
+
+    private func endsAtSentenceBoundary(textBeforeCursor: String) -> Bool {
+        guard let last = textBeforeCursor
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .last else {
+            return false
+        }
+
+        return [".", "!", "?"].contains(last)
     }
 
     private func isAtEndOfCurrentLine(textAfterCursor: String) -> Bool {

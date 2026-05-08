@@ -11,33 +11,43 @@ public struct CompletionPrompt: Equatable, Sendable {
 }
 
 public struct CompletionPromptBuilder: Equatable, Sendable {
-    public static let promptStyleIdentifier = "tiny-continuation-v1"
+    public static let promptStyleIdentifier = "tiny-continuation-v2"
+    public static let noSuggestionToken = "<NO_SUGGESTION>"
 
     public let maxContextCharacters: Int
+    public let maxContextTokens: Int
     public let maxCurrentParagraphCharacters: Int
     public let maxCurrentSentenceCharacters: Int
     public let maxVisibleWords: Int
 
     public init(
         maxContextCharacters: Int = 360,
+        maxContextTokens: Int = 72,
         maxCurrentParagraphCharacters: Int = 220,
         maxCurrentSentenceCharacters: Int = 160,
         maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords
     ) {
         self.maxContextCharacters = max(80, maxContextCharacters)
+        self.maxContextTokens = min(96, max(48, maxContextTokens))
         self.maxCurrentParagraphCharacters = max(80, maxCurrentParagraphCharacters)
         self.maxCurrentSentenceCharacters = max(80, maxCurrentSentenceCharacters)
         self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
     }
 
     public func prompt(for request: CompletionRequest) -> CompletionPrompt {
-        let context = promptContext(from: request.textBeforeCursor)
+        let context = promptContext(from: request.textBeforeCursor, mode: request.mode)
+        let behaviorProfile = behaviorProfile(for: request)
 
         if request.mode == .wordCompletion {
+            let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
+            let lineStructureGuidance = request.currentLineStructure?.promptGuidance ?? ""
             return CompletionPrompt(
                 system: """
                 Inline word completion.
                 Return only the missing suffix for the current word.
+                \(partialWordGuidance)
+                \(lineStructureGuidance)
+                Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, or the suffix would complete the wrong word.
                 No spaces, punctuation, quotes, reasoning, or extra words.
                 """,
                 user: "Before cursor:\n\(context)\n\nSuffix:"
@@ -45,22 +55,43 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         }
 
         return CompletionPrompt(
-            system: phraseContinuationSystemPrompt(for: request),
+            system: phraseContinuationSystemPrompt(for: request, behaviorProfile: behaviorProfile),
             user: "Before cursor:\n\(context)\n\nNext words:"
         )
     }
 
-    private func phraseContinuationSystemPrompt(for request: CompletionRequest) -> String {
-        let sentenceGuidance = request.textBeforeCursor.endsAtSentenceBoundary
-            ? "Start the next sentence naturally."
-            : "Continue the current sentence."
+    private func phraseContinuationSystemPrompt(
+        for request: CompletionRequest,
+        behaviorProfile: AutocompleteBehaviorProfile
+    ) -> String {
+        let effectiveMaxVisibleWords = min(maxVisibleWords, request.maxVisibleWords, behaviorProfile.maxVisibleWords)
+        let sentenceGuidance = sentenceGuidance(for: request)
+        let styleGuidance = request.acceptedTextStyleSketch?.promptGuidance ?? ""
+        let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
+        let lineStructureGuidance = request.currentLineStructure?.promptGuidance ?? ""
+        let modeGuidance = request.mode == .sentenceContinuation
+            ? "Sentence mode: start only the next sentence's first few words. Require higher confidence and return <NO_SUGGESTION> when the next sentence is not obvious."
+            : "Phrase mode: continue only the current local thought."
+        let behaviorGuidance = ([
+            "Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens"
+        ] + behaviorProfile.promptGuidance).joined(separator: "\n")
+        let supplementalGuidance = [
+            behaviorGuidance,
+            modeGuidance,
+            styleGuidance,
+            partialWordGuidance,
+            lineStructureGuidance
+        ]
+        .filter { !$0.isEmpty }
+        .joined(separator: "\n")
         let base = """
         Inline autocomplete.
-        Return only the next \(maxVisibleWords) words or fewer.
+        Return only the next \(effectiveMaxVisibleWords) words or fewer.
         Return only the suffix after the Before cursor text.
         Prefer boring connective tissue, names, repeated local terms, closers, and the next few words the user was already likely to type.
         \(sentenceGuidance) Do not answer, explain, greet, quote, reason, repeat the Before cursor text, or restart.
         Do not brainstorm, rewrite, introduce a new topic, or complete the user's whole thought.
+        \(supplementalGuidance)
         """
 
         guard let dogfoodAppName = request.appBundleIdentifier.dogfoodAppName else {
@@ -88,30 +119,146 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         """
     }
 
-    private func promptContext(from textBeforeCursor: String) -> String {
-        let nearbyContext = String(textBeforeCursor.suffix(maxContextCharacters))
-        let currentParagraph = nearbyContext
-            .components(separatedBy: "\n\n")
-            .last?
-            .trimmingCharacters(in: .newlines) ?? nearbyContext
-        let currentSentence = currentSentenceFragment(in: currentParagraph)
-
-        return String(currentSentence.suffix(maxCurrentSentenceCharacters))
+    private func behaviorProfile(for request: CompletionRequest) -> AutocompleteBehaviorProfile {
+        request.behaviorProfile
     }
 
-    private func currentSentenceFragment(in text: String) -> String {
-        guard let boundary = text.lastIndex(where: { $0.isSentenceBoundary }) else {
-            return String(text.suffix(maxCurrentParagraphCharacters))
+    private func sentenceGuidance(for request: CompletionRequest) -> String {
+        switch request.mode {
+        case .sentenceContinuation:
+            return "Start the next sentence naturally."
+        case .phraseContinuation:
+            return request.textBeforeCursor.endsAtSentenceBoundary
+                ? "Start the next sentence naturally."
+                : "Continue the current sentence."
+        case .wordCompletion:
+            return ""
         }
+    }
 
-        let fragment = text[text.index(after: boundary)...]
+    private func promptContext(from textBeforeCursor: String, mode: CompletionRequestMode) -> String {
+        let nearbyContext = String(textBeforeCursor.suffix(maxContextCharacters))
+        let paragraphs = nearbyContext.components(separatedBy: "\n\n")
+        let currentParagraph = paragraphs
+            .last?
+            .trimmingCharacters(in: .newlines) ?? nearbyContext
+        let previousParagraph = paragraphs
+            .dropLast()
+            .last?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let sentenceContext = sentenceContext(in: currentParagraph)
+        var pieces: [String] = []
 
-        guard !fragment.isEmpty else {
-            return String(text.suffix(maxCurrentParagraphCharacters))
+        if shouldIncludePreviousParagraph(
+            previousParagraph,
+            currentFragment: sentenceContext.current,
+            previousSentence: sentenceContext.previous,
+            mode: mode
+        ) {
+            pieces.append(String(previousParagraph?.suffix(maxCurrentSentenceCharacters) ?? ""))
         }
 
-        return fragment
+        if shouldIncludePreviousSentence(
+            sentenceContext.previous,
+            currentFragment: sentenceContext.current,
+            mode: mode
+        ) {
+            pieces.append(sentenceContext.previous ?? "")
+        }
+
+        pieces.append(sentenceContext.current)
+
+        return trimContext(pieces.joined(separator: " "))
+    }
+
+    private func sentenceContext(in text: String) -> (previous: String?, current: String) {
+        let paragraph = String(text.suffix(maxCurrentParagraphCharacters))
+        let fragments = sentenceFragments(in: paragraph)
+
+        guard let current = fragments.last else {
+            return (nil, paragraph.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        return (
+            fragments.dropLast().last.map { String($0.suffix(maxCurrentSentenceCharacters)) },
+            String(current.suffix(maxCurrentSentenceCharacters))
+        )
+    }
+
+    private func sentenceFragments(in text: String) -> [String] {
+        var fragments: [String] = []
+        var startIndex = text.startIndex
+
+        for index in text.indices where text[index].isSentenceBoundary {
+            let endIndex = text.index(after: index)
+            let fragment = text[startIndex..<endIndex]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !fragment.isEmpty {
+                fragments.append(String(fragment))
+            }
+            startIndex = endIndex
+        }
+
+        let tail = text[startIndex...]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !tail.isEmpty {
+            fragments.append(String(tail))
+        }
+
+        return fragments
+    }
+
+    private func shouldIncludePreviousSentence(
+        _ previousSentence: String?,
+        currentFragment: String,
+        mode: CompletionRequestMode
+    ) -> Bool {
+        guard previousSentence?.isEmpty == false else {
+            return false
+        }
+
+        if mode == .sentenceContinuation {
+            return true
+        }
+
+        return contentTokenCount(in: currentFragment) <= 2
+    }
+
+    private func shouldIncludePreviousParagraph(
+        _ previousParagraph: String?,
+        currentFragment: String,
+        previousSentence: String?,
+        mode: CompletionRequestMode
+    ) -> Bool {
+        guard mode == .sentenceContinuation,
+              previousSentence == nil,
+              previousParagraph?.isEmpty == false else {
+            return false
+        }
+
+        return contentTokenCount(in: currentFragment) <= 2
+    }
+
+    private func trimContext(_ text: String) -> String {
+        let characterTrimmed = String(text.suffix(maxContextCharacters))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let words = characterTrimmed
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+
+        guard words.count > maxContextTokens else {
+            return characterTrimmed
+        }
+
+        return words
+            .suffix(maxContextTokens)
+            .joined(separator: " ")
+    }
+
+    private func contentTokenCount(in text: String) -> Int {
+        text.components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .count
     }
 }
 

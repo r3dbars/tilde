@@ -335,8 +335,10 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
             0.8
         case .acceptedThenDeleted:
             0.7
-        case .searchOrFormLeakage, .caretGeometryFailed:
+        case .searchOrFormLeakage:
             0.6
+        case .caretGeometryFailed:
+            0.3
         case .rapidEscDismissal:
             0.5
         case .typedOver, .overlayFlicker, .repeatedRejection:

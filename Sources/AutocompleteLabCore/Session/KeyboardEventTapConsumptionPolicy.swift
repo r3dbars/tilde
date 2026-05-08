@@ -41,6 +41,8 @@ public struct KeyboardEventTapConsumptionPolicy: Equatable, Sendable {
             return true
         case .optionTab:
             return input.supportsFullAcceptance && input.acceptAllShortcut == .optionTab
+        case .commandZ:
+            return false
         case .other:
             return false
         }

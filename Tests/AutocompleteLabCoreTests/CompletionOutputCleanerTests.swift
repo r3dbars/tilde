@@ -39,6 +39,19 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("You could try another option") == nil)
     }
 
+    @Test("Suppresses recommendation rewrite and next action candidates")
+    func suppressesRecommendationRewriteAndNextActionCandidates() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("Recommendation: keep this smaller", after: "Can we") == nil)
+        #expect(cleaner.clean("Rewrite: keep this smaller", after: "Can we") == nil)
+        #expect(cleaner.clean("Next action: open the logs", after: "Can we") == nil)
+        #expect(cleaner.clean("try saying this more clearly", after: "Can we") == nil)
+        #expect(cleaner.clean("rewrite this as a calmer sentence", after: "Can we") == nil)
+        #expect(cleaner.clean("next step is to open the logs", after: "Can we") == nil)
+        #expect(cleaner.clean("keep this smaller", after: "Can we")?.visibleText == " keep this smaller")
+    }
+
     @Test("Suppresses generic chat filler")
     func suppressesGenericChatFiller() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
@@ -92,6 +105,60 @@ struct CompletionOutputCleanerTests {
         #expect(suggestion?.visibleText == " ship this today")
     }
 
+    @Test("Cleans numbered multiline candidates")
+    func cleansNumberedMultilineCandidates() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 5)
+        let suggestions = cleaner.cleanCandidates(
+            """
+            1. make this feel calm
+            2. make this feel calm
+            3. make this easier to ship
+            """,
+            after: "Can we",
+            mode: .phraseContinuation
+        )
+
+        #expect(suggestions.map(\.visibleText) == [
+            " make this feel calm",
+            " make this easier to ship"
+        ])
+    }
+
+    @Test("Cleans bulleted multiline candidates")
+    func cleansBulletedMultilineCandidates() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 5)
+        let suggestions = cleaner.cleanCandidates(
+            """
+            - keep this small
+            * make it easy to trust
+            A. return exactly <NO_SUGGESTION>
+            """,
+            after: "We should",
+            mode: .phraseContinuation
+        )
+
+        #expect(suggestions.map(\.visibleText) == [
+            " keep this small",
+            " make it easy to trust"
+        ])
+    }
+
+    @Test("Suppresses unsafe multiline candidates")
+    func suppressesUnsafeMultilineCandidates() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+        let suggestions = cleaner.cleanCandidates(
+            """
+            1. <NO_SUGGESTION>
+            2. press Enter to send the prompt
+            3. Inline autocomplete. Return only the continuation.
+            """,
+            after: "Can you",
+            mode: .phraseContinuation
+        )
+
+        #expect(suggestions.isEmpty)
+    }
+
     @Test("Strips echoed prompt labels")
     func stripsEchoedPromptLabels() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
@@ -111,6 +178,18 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("No spaces or punctuation.", after: "hel", mode: .wordCompletion) == nil)
         #expect(cleaner.clean("Continue the current sentence naturally.", after: "Can we") == nil)
         #expect(cleaner.clean("Start the next sentence if needed.", after: "We shipped it.") == nil)
+    }
+
+    @Test("Suppresses no suggestion sentinel outputs")
+    func suppressesNoSuggestionSentinelOutputs() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("<NO_SUGGESTION>", after: "Can we") == nil)
+        #expect(cleaner.clean("<no_suggestion>", after: "Can we") == nil)
+        #expect(cleaner.clean("`<NO_SUGGESTION>`", after: "Can we") == nil)
+        #expect(cleaner.clean("Next words: <NO_SUGGESTION>", after: "Can we") == nil)
+        #expect(cleaner.clean("Suffix: '<no_suggestion>'", after: "dic", mode: .wordCompletion) == nil)
+        #expect(cleaner.clean("<think>no confident suffix</think><NO_SUGGESTION>", after: "dic", mode: .wordCompletion) == nil)
     }
 
     @Test("Trims repeated typed prefix from real model output")

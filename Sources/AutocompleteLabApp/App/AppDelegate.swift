@@ -1739,6 +1739,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recordKeyboardAction(key: key, action: action, handled: true, reason: "dismissed")
             return true
 
+        case .undoAcceptedInsertion:
+            recordKeyboardAction(key: key, action: action, handled: false, reason: "undo-unavailable")
+            return false
+
         case .passThrough:
             if key != .other {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "pass-through")

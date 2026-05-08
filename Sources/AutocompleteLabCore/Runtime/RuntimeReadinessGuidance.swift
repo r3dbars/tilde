@@ -22,11 +22,11 @@ public struct RuntimeReadinessGuidance: Equatable, Sendable {
             actionTitle = "Warming..."
             isActionEnabled = false
         case .failed:
-            message = "Model failed to start: retry the local model. Suggestions stay off until startup succeeds."
+            message = "The local model did not start. Retry here. Suggestions stay off until startup succeeds."
             actionTitle = "Retry Model"
             isActionEnabled = true
         case .ready:
-            message = "Ready: open TextEdit, type a short sentence, press Tab for one word, or Esc to dismiss."
+            message = "Ready: open TextEdit, turn on suggestions for TextEdit, type a short sentence, press Tab for one word, or Esc to dismiss."
             actionTitle = "Ready"
             isActionEnabled = false
         }

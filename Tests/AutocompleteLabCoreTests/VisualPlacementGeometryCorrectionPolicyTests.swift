@@ -89,6 +89,30 @@ struct VisualPlacementGeometryCorrectionPolicyTests {
         #expect(correction.reason == .trusted)
     }
 
+    @Test("Accepts detector output through the same trust gate")
+    func acceptsDetectorOutputThroughTrustGate() {
+        let detection = ScreenshotPlacementOffsetDetection(
+            dx: 5,
+            dy: -2,
+            confidence: 0.86,
+            signalPixelCount: 48,
+            signalBounds: CGRect(x: 30, y: 18, width: 12, height: 4),
+            reason: .detected
+        )
+
+        let correction = VisualPlacementCorrectionPolicy().correction(
+            dx: detection.dx,
+            dy: detection.dy,
+            observations: 3,
+            confidence: detection.confidence
+        )
+
+        #expect(correction.decision == .accepted)
+        #expect(correction.reason == .trusted)
+        #expect(correction.dx == 5)
+        #expect(correction.dy == -2)
+    }
+
     @Test("Rejects non-finite corrections")
     func rejectsNonFiniteCorrections() {
         let correction = VisualPlacementCorrectionPolicy().correction(

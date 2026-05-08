@@ -14,6 +14,10 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture pr
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture chat-like
 ```
 
+Automated smoke launches temporarily enable only the target bundle ID for that
+proof pass. This keeps fresh installs default-off while still letting the
+disposable TextEdit and Chrome checks run unattended.
+
 Run all local Chrome browser/editor fixtures with one build:
 
 ```bash
@@ -69,7 +73,14 @@ Run the score target loop when working toward the product scorecards:
 ```
 
 The loop should keep failing until the deep dive scorecard is all 10/10, the
-Apple-native checklist is all 100/100, and the app proof matrix is all A.
+Apple-native checklist is all 100/100, the app proof matrix is all A, and the
+strict proof manifest has bounded current-fingerprint trace slices for every
+claimed surface.
+
+Prompt-app proof is intentionally stricter than normal app proof. The recorder
+requires exactly one trace-level accept for Codex, Claude Code, and Claude
+desktop, rejects full-accept or field-send finalization signals, and still
+depends on the human visual check that the prompt stayed unsent.
 
 Run the long typing endurance command when working the "typing must feel
 untouched" score:

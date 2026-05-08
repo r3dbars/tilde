@@ -99,6 +99,42 @@ struct FocusedTextPollingBackoffPolicyTests {
         ))
     }
 
+    @Test("Single slow AX read recommends throttle")
+    func singleSlowAXReadRecommendsThrottle() {
+        let policy = FocusedTextPollingBackoffPolicy(
+            maxPauseDurationMilliseconds: 360,
+            slowPollP95Milliseconds: 80,
+            minimumThrottleMilliseconds: 120
+        )
+
+        #expect(policy.throttleRecommendation(
+            queueDelayMilliseconds: 0,
+            readDurationMilliseconds: 95
+        ) == FocusedTextPollingThrottleRecommendation(
+            shouldThrottle: true,
+            reason: .slowAXRead,
+            pauseMilliseconds: 190
+        ))
+    }
+
+    @Test("Slow AX read throttle clamps to max pause")
+    func slowAXReadThrottleClampsToMaxPause() {
+        let policy = FocusedTextPollingBackoffPolicy(
+            maxPauseDurationMilliseconds: 360,
+            slowPollP95Milliseconds: 80,
+            minimumThrottleMilliseconds: 120
+        )
+
+        #expect(policy.throttleRecommendation(
+            queueDelayMilliseconds: 20,
+            readDurationMilliseconds: 420
+        ) == FocusedTextPollingThrottleRecommendation(
+            shouldThrottle: true,
+            reason: .slowAXRead,
+            pauseMilliseconds: 360
+        ))
+    }
+
     @Test("Fast clean polls do not throttle")
     func fastCleanPollsDoNotThrottle() {
         let policy = FocusedTextPollingBackoffPolicy(slowPollP95Milliseconds: 80)
@@ -113,6 +149,16 @@ struct FocusedTextPollingBackoffPolicyTests {
         #expect(policy.throttleRecommendation(
             latencySummary: latencySummary,
             skipSummary: skipSummary
+        ) == .none)
+    }
+
+    @Test("Fast AX read does not throttle")
+    func fastAXReadDoesNotThrottle() {
+        let policy = FocusedTextPollingBackoffPolicy(slowPollP95Milliseconds: 80)
+
+        #expect(policy.throttleRecommendation(
+            queueDelayMilliseconds: 20,
+            readDurationMilliseconds: 79
         ) == .none)
     }
 }

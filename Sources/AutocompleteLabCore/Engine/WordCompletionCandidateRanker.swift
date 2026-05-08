@@ -24,11 +24,11 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         )
 
         guard let candidate = candidates.first,
-              candidate.word.count > normalizedFragment.count else {
+              candidate.normalizedWord.count > normalizedFragment.count else {
             return nil
         }
 
-        let suffix = String(candidate.word.dropFirst(normalizedFragment.count))
+        let suffix = String(candidate.normalizedWord.dropFirst(normalizedFragment.count))
         let competingCandidateCount = candidates.filter { $0.source == candidate.source }.count
         guard isUsefulSuffix(
             suffix,
@@ -39,27 +39,34 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
             return nil
         }
 
-        return CompletionSuggestion(text: suffix, maxVisibleWords: 1)
+        return CompletionSuggestion(
+            text: displaySuffix(for: candidate, fragment: fragment),
+            maxVisibleWords: 1
+        )
     }
 
     private func rankedCandidates(fragment: String, recentWords: [String]) -> [Candidate] {
         let recent = recentWords
             .reversed()
-            .map { normalize($0) }
-            .filter { $0.hasPrefix(fragment) && $0.count > fragment.count }
+            .compactMap(candidateWord)
+            .filter { $0.normalized.hasPrefix(fragment) && $0.normalized.count > fragment.count }
 
         let staticMatches = staticWords
-            .map { normalize($0) }
-            .filter { $0.hasPrefix(fragment) && $0.count > fragment.count }
+            .compactMap(candidateWord)
+            .filter { $0.normalized.hasPrefix(fragment) && $0.normalized.count > fragment.count }
 
         var seen: Set<String> = []
-        return (recent.enumerated().map { (index, word) in Candidate(word: word, source: .recent, priority: 0, index: index) }
-            + staticMatches.enumerated().map { (index, word) in Candidate(word: word, source: .staticDictionary, priority: 1, index: index) })
+        return (recent.enumerated().map { (index, word) in
+            Candidate(normalizedWord: word.normalized, displayWord: word.display, source: .recent, priority: 0, index: index)
+        }
+            + staticMatches.enumerated().map { (index, word) in
+                Candidate(normalizedWord: word.normalized, displayWord: word.display, source: .staticDictionary, priority: 1, index: index)
+            })
             .filter { candidate in
-                guard !seen.contains(candidate.word) else {
+                guard !seen.contains(candidate.normalizedWord) else {
                     return false
                 }
-                seen.insert(candidate.word)
+                seen.insert(candidate.normalizedWord)
                 return true
             }
             .sorted { lhs, rhs in
@@ -69,6 +76,20 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
 
                 return lhs.index < rhs.index
             }
+    }
+
+    private func displaySuffix(for candidate: Candidate, fragment: String) -> String {
+        let rawSuffix = String(candidate.displayWord.dropFirst(fragment.count))
+
+        if fragment.allSatisfy({ $0.isUppercase }) {
+            return rawSuffix.uppercased()
+        }
+
+        if fragment.allSatisfy({ $0.isLowercase }) {
+            return rawSuffix.lowercased()
+        }
+
+        return rawSuffix
     }
 
     private func isUsefulSuffix(
@@ -124,10 +145,17 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         return text.split(whereSeparator: { !$0.isLetter }).last.map(String.init)
     }
 
-    private func normalize(_ word: String) -> String {
-        word
+    private func candidateWord(_ word: String) -> (normalized: String, display: String)? {
+        let display = word
             .trimmingCharacters(in: .punctuationCharacters)
-            .lowercased()
+        let normalized = display.lowercased()
+
+        guard !display.isEmpty,
+              normalized.allSatisfy({ $0.isLetter }) else {
+            return nil
+        }
+
+        return (normalized, display)
     }
 
     public static let defaultWords = [
@@ -154,7 +182,8 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
     ]
 
     private struct Candidate: Equatable {
-        let word: String
+        let normalizedWord: String
+        let displayWord: String
         let source: CandidateSource
         let priority: Int
         let index: Int
