@@ -395,6 +395,8 @@ should stay lower until those rows are closed.
 - Workspace app activation/deactivation now clears the focused field, hides
   visible suggestions, stops key capture, and invalidates pending requests
   immediately instead of waiting for the next poll.
+- Esc dismissal now records that it inserted zero suggestion text, so replay
+  and diagnostics can distinguish pure dismissal from acceptance paths.
 - Repeated typed-over misses now escalate from a short prefix cooldown to a
   longer quiet period and then raise display thresholds for that same
   app/field/mode/prefix family after cooldown.

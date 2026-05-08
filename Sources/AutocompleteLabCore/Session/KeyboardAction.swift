@@ -21,6 +21,15 @@ public enum KeyboardAction: Equatable, Sendable {
             "passThrough"
         }
     }
+
+    public var insertsSuggestionText: Bool {
+        switch self {
+        case .acceptNextWord, .acceptAllVisible:
+            true
+        case .undoAcceptedInsertion, .dismiss, .passThrough:
+            false
+        }
+    }
 }
 
 public enum AutocompleteKey: Equatable, Sendable {

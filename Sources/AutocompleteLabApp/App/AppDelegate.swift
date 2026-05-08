@@ -2100,6 +2100,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         case .dismiss:
             var metadata = currentSuggestionLifetimeMetadata()
+            metadata["escapeDismissalInsertedText"] = String(action.insertsSuggestionText)
+            metadata["escapeDismissalInsertedTextChars"] = "0"
             if let input = currentPrefixFamilyCooldownInput() {
                 metadata.merge(recordPrefixFamilyCooldown(.escapeDismissal, input: input)) { current, _ in current }
             }
@@ -2111,7 +2113,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: metadata
             )
             suppressCurrentField(reason: "escape")
-            hideSuggestion(reason: "escape")
+            hideSuggestion(
+                reason: "escape",
+                metadata: [
+                    "escapeDismissalInsertedText": String(action.insertsSuggestionText),
+                    "escapeDismissalInsertedTextChars": "0"
+                ]
+            )
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "dismissed")
             return true
@@ -2177,6 +2185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "key": key.diagnosticName,
                 "action": action.diagnosticName,
                 "handled": String(handled),
+                "insertsSuggestionText": String(action.insertsSuggestionText),
                 "reason": reason
             ]
         )
@@ -4602,7 +4611,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
-    private func hideSuggestion(reason: String = "hidden") {
+    private func hideSuggestion(
+        reason: String = "hidden",
+        metadata extraMetadata: [String: String] = [:]
+    ) {
         if suggestionSession.hasVisibleSuggestion,
            let suggestionID = currentSuggestionID {
             let appBundleIdentifier = currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
@@ -4634,6 +4646,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     metadata.merge(missRecord.traceMetadata) { current, _ in current }
                 }
             }
+            metadata.merge(extraMetadata) { current, _ in current }
 
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionHidden,
