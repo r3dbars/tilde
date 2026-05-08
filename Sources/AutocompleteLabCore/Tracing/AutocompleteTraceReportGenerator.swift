@@ -151,6 +151,7 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
             <div class="metric"><b>\(percent(summary.staleOrWrongContextRate))</b>stale/wrong-context</div>
             <div class="metric"><b>\(summary.p95LatencyMilliseconds.map { "\($0)ms" } ?? "n/a")</b>first-visible p95</div>
             <div class="metric"><b>\(summary.p95VisibleLifetimeMilliseconds.map { "\($0)ms" } ?? "n/a")</b>visible lifetime p95</div>
+            <div class="metric"><b>\(summary.p95HideLatencyMilliseconds.map { "\($0)ms" } ?? "n/a")</b>hide p95</div>
             <div class="metric"><b>\(summary.doNotShipCounters.values.reduce(0, +))</b>do-not-ship</div>
           </div>
           <h2>RAM-only retention proof</h2>

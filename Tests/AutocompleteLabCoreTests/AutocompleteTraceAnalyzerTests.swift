@@ -416,7 +416,7 @@ struct AutocompleteTraceAnalyzerTests {
                 timestamp: "2026-05-08T10:00:01Z",
                 outcome: "ignored",
                 reason: "escape",
-                metadata: ["lifetimeMs": "900"]
+                metadata: ["lifetimeMs": "900", "hideLatencyMs": "12"]
             ),
             event(.suggestionPresented, suggestionID: "two", timestamp: "2026-05-08T10:01:00Z"),
             event(.suggestionTypedOver, suggestionID: "two", timestamp: "2026-05-08T10:01:02Z"),
@@ -425,7 +425,15 @@ struct AutocompleteTraceAnalyzerTests {
                 .suggestionHidden,
                 suggestionID: "three",
                 timestamp: "2026-05-08T10:02:01Z",
-                reason: "stale-after-keydown"
+                reason: "stale-after-keydown",
+                metadata: ["hideLatencyMs": "31"]
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "three-b",
+                timestamp: "2026-05-08T10:02:01Z",
+                reason: "hidden",
+                metadata: ["hideLatencyMs": "4"]
             ),
             event(
                 .suggestionSuppressed,
@@ -447,6 +455,8 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.staleOrWrongContextRate == 2.0 / 3.0)
         #expect(summary.p50VisibleLifetimeMilliseconds == 900)
         #expect(summary.p95VisibleLifetimeMilliseconds == 900)
+        #expect(summary.p50HideLatencyMilliseconds == 12)
+        #expect(summary.p95HideLatencyMilliseconds == 31)
     }
 
     @Test("summarizes field-kind slices")

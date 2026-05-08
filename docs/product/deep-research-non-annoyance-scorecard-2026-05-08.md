@@ -58,10 +58,11 @@ This loop improves live non-annoyance behavior and proof:
 - `check_trace_eval.sh` and its self-test now print and verify those research metrics.
 - Accepted insertion now opens a short native Cmd-Z passthrough window, so immediate undo is tracked and replayed to the host app instead of being marked unavailable.
 - Older proof docs now reference tracked Obsidian and Notes title/body/checklist screenshots, so normal proof checks reflect the current evidence.
+- `hideSuggestion` now records `hideLatencyMs`, and analyzer/report/script output exposes hide-latency p50/p95.
 
 ## Score
 
-Overall score: 86/100.
+Overall score: 87/100.
 
 ## Score Breakdown
 
@@ -77,10 +78,10 @@ Overall score: 86/100.
 ### Disappearance discipline
 
 - Weight: 20
-- Current score: 18/20
-- Why this score: Focus change, stale keydown, typed-over progress, placement failure, panel-frame failure, and cooldown/quiet mode all hide or suppress suggestions. This loop added visible lifetime metadata, but there is still no automated hide-latency p95 measurement from invalidation to disappearance.
-- Evidence found in repo: `Sources/AutocompleteLabApp/App/AppDelegate.swift`, `Sources/AutocompleteLabCore/Session/SuggestionTypingProgressPolicy.swift`, `Sources/AutocompleteLabCore/Session/SuggestionPresentationGate.swift`, `Tests/AutocompleteLabCoreTests/SuggestionTypingProgressPolicyTests.swift`, `Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift`.
-- Missing evidence: p95 hide latency < 50ms from live invalidation events, IME/dead-key proof, current 10-minute typing endurance with suggestion activity.
+- Current score: 19/20
+- Why this score: Focus change, stale keydown, typed-over progress, placement failure, panel-frame failure, and cooldown/quiet mode all hide or suppress suggestions. This loop added visible lifetime metadata and hide request-to-panel-hide p50/p95 metrics. The remaining point requires live invalidation proof, not just instrumentation.
+- Evidence found in repo: `Sources/AutocompleteLabApp/App/AppDelegate.swift`, `Sources/AutocompleteLabCore/Session/SuggestionTypingProgressPolicy.swift`, `Sources/AutocompleteLabCore/Session/SuggestionPresentationGate.swift`, `Sources/AutocompleteLabCore/Tracing/AutocompleteTraceAnalyzer.swift`, `Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReportGenerator.swift`, `Tests/AutocompleteLabCoreTests/SuggestionTypingProgressPolicyTests.swift`, `Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift`, `script/check_trace_eval.sh`.
+- Missing evidence: real-app p95 hide latency < 50ms from live invalidation events, IME/dead-key proof, current 10-minute typing endurance with suggestion activity.
 - What would make it 100/100: Automated and manual proof that every invalidation path hides within budget and never leaves a stale ghost.
 
 ### Interruption load
@@ -165,9 +166,9 @@ Forgettably good. The app appears only when useful, hides before it becomes anno
 - Objective: Make the deep-research metrics visible in analyzer and CLI output.
 - Files likely involved: `Sources/AutocompleteLabCore/Tracing/AutocompleteTraceAnalyzer.swift`, `Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReportGenerator.swift`, `script/check_trace_eval.sh`.
 - Tests to add/update: `AutocompleteTraceAnalyzerTests`, `check_trace_eval_self_test.sh`.
-- Proof required: Unit tests and script self-test assert rates.
+- Proof required: Unit tests and script self-test assert rates, including hide-latency p50/p95.
 - Risk level: Low.
-- Expected score impact: +2.
+- Expected score impact: +3.
 - Status: Completed in this loop.
 
 ### 3. Refresh strict proof manifest and visual evidence docs
@@ -199,7 +200,7 @@ Forgettably good. The app appears only when useful, hides before it becomes anno
 
 ## Codex Execution Goal
 
-Make non-annoyance measurable and enforceable in the live app path by wiring rejection cooldowns and quiet modes into `AppDelegate`, adding visible lifetime trace metadata, exposing the research metrics in analyzer/CLI/report output, and updating this scorecard with exact evidence and remaining proof gaps.
+Make non-annoyance measurable and enforceable in the live app path by wiring rejection cooldowns and quiet modes into `AppDelegate`, adding visible lifetime and hide-latency trace metadata, exposing the research metrics in analyzer/CLI/report output, and updating this scorecard with exact evidence and remaining proof gaps.
 
 ## Stop Conditions
 
@@ -216,7 +217,7 @@ This goal is complete when:
 - `check_proof_manifest.sh` passes in normal mode; strict mode still cannot pass until partial/pending surfaces are complete.
 - `check_visual_placement_evidence.sh` passes in normal mode; strict mode still fails on Codex same-slice proof plus Claude Code/Claude desktop screenshot proof.
 - Codex, Claude Code, and Claude desktop need current same-slice prompt no-submit proof.
-- Hide latency is measured as visible lifetime, not true invalidation-to-disappear latency.
+- Hide latency is now instrumented as hide request-to-panel-hide time, but still needs real-app invalidation proof under the 50ms p95 target.
 - Prefix cooldown is now wired, but there is not yet a real-app trace run proving user-perceived annoyance improvement.
 - Accepted insertion undo now has a native passthrough path, but still needs real-app proof.
 - Human voice/style review and pause/resume baseline are still missing.
