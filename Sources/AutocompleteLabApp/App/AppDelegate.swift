@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let insertionVerificationTimingPolicy = InsertionVerificationTimingPolicy()
     private let suggestionAcceptanceProofPolicy = SuggestionAcceptanceProofPolicy()
     private let acceptanceSafetyPolicy = AcceptanceSafetyPolicy()
+    private let suggestionPresentationTracePayloadBuilder = SuggestionPresentationTracePayloadBuilder()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private lazy var suggestionOrchestrator = SuggestionOrchestrator(
         engine: engine,
@@ -3899,6 +3900,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: profile.bundleIdentifier,
             reason: "suggestion-presented"
         )
+        let presentationTracePayload = suggestionPresentationTracePayloadBuilder.presented(
+            suggestionID: suggestionID,
+            requestMode: request.mode.rawValue,
+            renderMode: placement.renderMode.rawValue,
+            visibleText: suggestion.visibleText,
+            visibleWordCount: suggestion.visibleWordCount,
+            latencyMilliseconds: latencyMilliseconds,
+            anchorRect: placement.anchorRect,
+            textLineRect: placement.textLineRect,
+            panelRect: panelRect,
+            clippingRect: placement.clippingRect,
+            screenshotCaptureRect: screenshotCapture.rectDescription,
+            requestMetadata: traceRequestMetadata(request: request, context: context),
+            geometryMetadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode),
+            learningMetadata: learningAdjustment.metadata,
+            placementMetadata: placement.metadata,
+            candidateSelectionMetadata: candidateSelectionMetadata,
+            displayScoreMetadata: displayScoreMetadata,
+            replacementMetadata: replacementMetadata
+        )
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionPresented,
             suggestionID: suggestionID,
@@ -3912,48 +3933,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             displayedText: suggestion.visibleText,
             latencyMilliseconds: latencyMilliseconds,
             screenshotPath: screenshotCapture.path,
-            metadata: [
-                "effectiveRenderMode": placement.renderMode.rawValue,
-                "visibleChars": String(suggestion.visibleText.count),
-                "visibleWords": String(suggestion.visibleWordCount),
-                "anchorRect": compactRectDescription(placement.anchorRect),
-                "textLineRect": placement.textLineRect.map(compactRectDescription) ?? "none",
-                "suggestionPanelRect": compactRectDescription(panelRect),
-                "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none",
-                "screenshotCaptureRect": screenshotCapture.rectDescription
-            ]
-            .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-            .merging(traceGeometryMetadata(context: context, renderMode: placement.renderMode)) { current, _ in current }
-            .merging(learningAdjustment.metadata) { current, _ in current }
-            .merging(placement.metadata) { current, _ in current }
-            .merging(candidateSelectionMetadata) { current, _ in current }
-            .merging(displayScoreMetadata) { current, _ in current }
-            .merging(replacementMetadata) { current, _ in current }
+            metadata: presentationTracePayload.rawTraceMetadata
         )
         recordSuggestionEvent(
             "suggestion-presented",
             context: context,
             profile: profile,
-            metadata: [
-                "effectiveRenderMode": placement.renderMode.rawValue,
-                "requestMode": request.mode.rawValue,
-                "traceID": String(suggestionID.prefix(8)),
-                "visibleChars": String(suggestion.visibleText.count),
-                "visibleWords": String(suggestion.visibleWordCount),
-                "suggestionID": suggestionID,
-                "latencyMilliseconds": String(latencyMilliseconds),
-                "anchorRect": compactRectDescription(placement.anchorRect),
-                "textLineRect": placement.textLineRect.map(compactRectDescription) ?? "none",
-                "suggestionPanelRect": compactRectDescription(panelRect),
-                "clippingRect": placement.clippingRect.map(compactRectDescription) ?? "none",
-                "screenshotCaptureRect": screenshotCapture.rectDescription
-            ]
-            .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-            .merging(learningAdjustment.metadata) { current, _ in current }
-            .merging(placement.metadata) { current, _ in current }
-            .merging(candidateSelectionMetadata) { current, _ in current }
-            .merging(displayScoreMetadata) { current, _ in current }
-            .merging(replacementMetadata) { current, _ in current }
+            metadata: presentationTracePayload.diagnosticsMetadata
         )
         updateKeyboardEventTapSnapshot()
     }
