@@ -567,6 +567,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
     private static let genericFillerPrefixes: Set<String> = [
         "boost productivity",
+        "absolutely,",
         "certainly,",
         "drive better outcomes",
         "enhance the experience",
@@ -582,8 +583,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "leverage the system",
         "make users more productive",
         "maximize efficiency",
+        "of course,",
         "okay, i would",
         "okay, would",
+        "one option is",
         "optimize the workflow",
         "save time and effort",
         "streamline the workflow",
@@ -595,6 +598,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
     private static let adviceOrToneDriftStarters: Set<[String]> = [
         ["a", "good", "way"],
+        ["a", "better", "approach"],
         ["absolutely"],
         ["boost", "productivity"],
         ["drive", "better", "outcomes"],
@@ -609,6 +613,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["i", "suggest"],
         ["i", "would", "recommend"],
         ["i", "would", "suggest"],
+        ["i", "think", "we", "should"],
         ["it", "is", "important"],
         ["it's", "important"],
         ["let's"],
@@ -617,6 +622,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["make", "users", "more", "productive"],
         ["maximize", "efficiency"],
         ["one", "thing", "to", "consider"],
+        ["one", "option", "is"],
         ["next", "action"],
         ["next", "step"],
         ["optimize", "the", "workflow"],
@@ -627,6 +633,8 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["streamline", "the", "workflow"],
         ["streamline", "workflows"],
         ["the", "best", "way"],
+        ["the", "next", "step"],
+        ["the", "best", "approach"],
         ["this", "is", "a", "great"],
         ["this", "is", "exciting"],
         ["try", "saying"],
@@ -636,7 +644,8 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["you", "need", "to"],
         ["you", "should"],
         ["we", "need", "to"],
-        ["we", "should"]
+        ["we", "should"],
+        ["what", "i", "would", "do"]
     ]
 }
 

@@ -54,6 +54,10 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("you should open the logs", after: "Can we") == nil)
         #expect(cleaner.clean("we need to make a plan", after: "Can we") == nil)
         #expect(cleaner.clean("make sure to save the file", after: "Can we") == nil)
+        #expect(cleaner.clean("what I would do next is open the logs", after: "Can we") == nil)
+        #expect(cleaner.clean("one option is to rewrite the prompt", after: "Can we") == nil)
+        #expect(cleaner.clean("the next step would be to submit it", after: "Can we") == nil)
+        #expect(cleaner.clean("I think we should make a plan", after: "Can we") == nil)
         #expect(cleaner.clean("keep this smaller", after: "Can we")?.visibleText == " keep this smaller")
     }
 
@@ -62,6 +66,8 @@ struct CompletionOutputCleanerTests {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
         #expect(cleaner.clean("That makes a lot of sense I would") == nil)
+        #expect(cleaner.clean("Absolutely, I can help with that") == nil)
+        #expect(cleaner.clean("Of course, here is a cleaner version") == nil)
         #expect(cleaner.clean("I would like to help with that") == nil)
         #expect(cleaner.clean("I will do that now.") == nil)
         #expect(cleaner.clean("Let me know when it's done.") == nil)

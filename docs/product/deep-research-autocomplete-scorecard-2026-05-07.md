@@ -720,6 +720,9 @@ these are true.
 63. Done: keep variant-incomplete A- proof rows marked `partial` in the proof
    manifest, so live smoke proof can be verified without hiding missing variant
    coverage from strict `--require-all`.
+64. Done: strengthen ambient output restraint by suppressing more assistant-like
+   advice and planning starters such as "what I would do", "one option is",
+   "the next step would", and "I think we should".
 
 ## Goal Status
 
