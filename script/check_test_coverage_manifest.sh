@@ -62,6 +62,8 @@ require_pattern "Tests/AutocompleteLabCoreTests/PromptEditorFingerprintPolicyTes
 require_file "Tests/AutocompleteLabCoreTests/DiagnosticValueRedactorTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/DiagnosticValueRedactorTests.swift" "without raw text" "privacy-safe diagnostics coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/DiagnosticValueRedactorTests.swift" "redacts likely raw text keys" "raw-text redaction coverage"
+require_file "Tests/AutocompleteLabAppTests/CompatibilityLearningStorePrivacyTests.swift"
+require_pattern "Tests/AutocompleteLabAppTests/CompatibilityLearningStorePrivacyTests.swift" "Delete all clears compatibility learning artifacts" "delete local learning artifact coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift" "Verifies accepted text landed exactly" "successful insertion verification coverage"

@@ -74,6 +74,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Keep screenshot traces per-app opt-in and clearly marked.
 - [x] Add retention controls for trace logs and screenshots.
 - [x] Add a "delete all local traces" proof test.
+- [x] Delete compatibility-learning artifacts when local privacy logs are deleted.
 
 ## P0 - Field Targeting
 

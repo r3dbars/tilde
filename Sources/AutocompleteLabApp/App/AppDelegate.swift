@@ -4354,7 +4354,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func deleteLocalPrivacyLogs(refreshSettings: Bool = true) {
         RawAutocompleteTraceLog.shared.deleteAll()
-        compatibilityLearningStore.disableScreenshotTracing()
+        compatibilityLearningStore.deleteAll()
         DiagnosticsLog.shared.deleteAll()
         DiagnosticsLog.shared.record(
             "local-privacy-logs-deleted",
