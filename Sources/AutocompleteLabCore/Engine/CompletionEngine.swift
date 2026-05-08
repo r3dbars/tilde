@@ -5,6 +5,17 @@ public enum CompletionRequestMode: String, Equatable, Sendable {
     case sentenceContinuation
     case wordCompletion
 
+    public var generatedTokenCeiling: Int {
+        switch self {
+        case .wordCompletion:
+            return 3
+        case .phraseContinuation:
+            return CompletionModelPolicy.maximumGeneratedTokens
+        case .sentenceContinuation:
+            return 10
+        }
+    }
+
     public var isContinuation: Bool {
         switch self {
         case .phraseContinuation, .sentenceContinuation:

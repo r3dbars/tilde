@@ -266,12 +266,11 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 
     private func maxGeneratedTokens(for request: CompletionRequest) -> Int {
-        switch request.mode {
-        case .wordCompletion:
-            return min(3, request.behaviorProfile.maxGeneratedTokens)
-        case .phraseContinuation, .sentenceContinuation:
-            return min(lengthConfiguration.maxGeneratedTokens, request.behaviorProfile.maxGeneratedTokens)
-        }
+        min(
+            lengthConfiguration.maxGeneratedTokens,
+            request.behaviorProfile.maxGeneratedTokens,
+            request.mode.generatedTokenCeiling
+        )
     }
 
     private func readyContainer() async throws -> ModelContainer {
