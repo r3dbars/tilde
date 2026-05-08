@@ -13,6 +13,9 @@ required and passed. Rows without that marker are insertion proof only.
 Rows with `lines N+` are historical open-ended proof. New recorder rows should
 use bounded `lines N-M` ranges so strict proof can replay exactly that slice.
 
+Rows also include a build proof token in the trace slice. Current proof must
+match either the current Git commit or the current release archive checksum.
+
 | Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
 | --- | --- | --- | --- | ---: | --- | --- | --- |
 | 2026-04-26T12:46:01Z | TextEdit | `com.apple.TextEdit` | `default` | 2 | `inlineAdjacent|floatingMirror` | lines 3037+ in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 137+ in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl` |

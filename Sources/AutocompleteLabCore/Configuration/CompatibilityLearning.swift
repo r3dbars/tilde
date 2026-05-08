@@ -1,6 +1,26 @@
 import CoreGraphics
 import Foundation
 
+public struct CompatibilityLearningVisualScope: Codable, Equatable, Sendable {
+    public let appVersion: String
+    public let screen: String
+    public let fieldShape: String
+
+    public init(
+        appVersion: String,
+        screen: String,
+        fieldShape: String
+    ) {
+        self.appVersion = appVersion
+        self.screen = screen
+        self.fieldShape = fieldShape
+    }
+
+    public var debugSummary: String {
+        "app=\(appVersion); screen=\(screen); field=\(fieldShape)"
+    }
+}
+
 public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
     public let bundleIdentifier: String
     public var xOffset: CGFloat
@@ -9,6 +29,7 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
     public var visualScreenFingerprint: String?
     public var visualFieldShapeFingerprint: String?
     public var renderModeOverride: SuggestionRenderMode?
+    public var visualScope: CompatibilityLearningVisualScope?
     public var screenshotTracingEnabled: Bool
     public var screenshotTracingExpiresAt: String?
     public var observations: Int
@@ -24,6 +45,7 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         visualScreenFingerprint: String? = nil,
         visualFieldShapeFingerprint: String? = nil,
         renderModeOverride: SuggestionRenderMode? = nil,
+        visualScope: CompatibilityLearningVisualScope? = nil,
         screenshotTracingEnabled: Bool = false,
         screenshotTracingExpiresAt: String? = nil,
         observations: Int = 0,
@@ -38,6 +60,7 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         self.visualScreenFingerprint = visualScreenFingerprint
         self.visualFieldShapeFingerprint = visualFieldShapeFingerprint
         self.renderModeOverride = renderModeOverride
+        self.visualScope = visualScope
         self.screenshotTracingEnabled = screenshotTracingEnabled
         self.screenshotTracingExpiresAt = screenshotTracingExpiresAt
         self.observations = observations
@@ -51,13 +74,8 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
     }
 
     public var hasTrustedVisualAdjustment: Bool {
-        hasTrustedVisualAdjustment(in: nil)
-    }
-
-    public func hasTrustedVisualAdjustment(
-        in context: CompatibilityLearningVisualTrustContext?
-    ) -> Bool {
-        guard hasVisualAdjustment else {
+        guard hasVisualAdjustment,
+              visualScope != nil else {
             return false
         }
 
@@ -73,9 +91,20 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         return matchesVisualTrustContext(context)
     }
 
+    public func hasTrustedVisualAdjustment(matching visualScope: CompatibilityLearningVisualScope?) -> Bool {
+        guard hasTrustedVisualAdjustment,
+              let storedScope = self.visualScope,
+              let visualScope else {
+            return false
+        }
+
+        return storedScope == visualScope
+    }
+
     public var debugSummary: String {
         let render = renderModeOverride?.rawValue ?? "profile"
-        return "offset=(\(Self.format(xOffset)), \(Self.format(yOffset))), render=\(render), screenshots=\(screenshotTracingEnabled), observations=\(observations), confidence=\(Self.format(confidence))"
+        let scope = visualScope?.debugSummary ?? "none"
+        return "offset=(\(Self.format(xOffset)), \(Self.format(yOffset))), render=\(render), scope=\(scope), screenshots=\(screenshotTracingEnabled), observations=\(observations), confidence=\(Self.format(confidence))"
     }
 
     private static func format(_ value: CGFloat) -> String {
@@ -122,13 +151,16 @@ public struct CompatibilityLearningVisualTrustContext: Codable, Equatable, Senda
 public struct CompatibilityLearningAdjustment: Equatable, Sendable {
     public let profile: CompatibilityLearningProfile?
     public let effectiveRenderMode: SuggestionRenderMode
+    public let renderModeOverrideIgnored: Bool
 
     public init(
         profile: CompatibilityLearningProfile?,
-        effectiveRenderMode: SuggestionRenderMode
+        effectiveRenderMode: SuggestionRenderMode,
+        renderModeOverrideIgnored: Bool = false
     ) {
         self.profile = profile
         self.effectiveRenderMode = effectiveRenderMode
+        self.renderModeOverrideIgnored = renderModeOverrideIgnored
     }
 
     public var shouldCaptureScreenshot: Bool {
@@ -145,19 +177,29 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
 
         return CompatibilityLearningAdjustment(
             profile: profile,
-            effectiveRenderMode: effectiveRenderMode
+            effectiveRenderMode: effectiveRenderMode,
+            renderModeOverrideIgnored: renderModeOverrideIgnored
         )
     }
 
     public var trustedVisualOffsetOnly: CompatibilityLearningAdjustment {
-        trustedVisualOffsetOnly(context: nil)
+        trustedVisualOffsetOnly(matching: nil, allowUnscopedTrustedOffset: true)
     }
 
     public func trustedVisualOffsetOnly(
-        context: CompatibilityLearningVisualTrustContext?
+        matching visualScope: CompatibilityLearningVisualScope?
+    ) -> CompatibilityLearningAdjustment {
+        trustedVisualOffsetOnly(matching: visualScope, allowUnscopedTrustedOffset: false)
+    }
+
+    private func trustedVisualOffsetOnly(
+        matching visualScope: CompatibilityLearningVisualScope?,
+        allowUnscopedTrustedOffset: Bool
     ) -> CompatibilityLearningAdjustment {
         guard let profile,
-              !profile.hasTrustedVisualAdjustment(in: context) else {
+              !(allowUnscopedTrustedOffset
+                ? profile.hasTrustedVisualAdjustment
+                : profile.hasTrustedVisualAdjustment(matching: visualScope)) else {
             return self
         }
 
@@ -169,16 +211,20 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
             return [
                 "learningApplied": "false",
                 "learningRenderMode": effectiveRenderMode.rawValue,
+                "learningRenderModeOverrideIgnored": "false",
                 "learningVisualOffsetTrusted": "false"
             ]
         }
 
+        let renderModeOverrideApplied = profile.renderModeOverride != nil && !renderModeOverrideIgnored
         return [
-            "learningApplied": String(profile.hasVisualAdjustment || profile.renderModeOverride != nil),
+            "learningApplied": String(profile.hasVisualAdjustment || renderModeOverrideApplied),
             "learningRenderMode": effectiveRenderMode.rawValue,
+            "learningRenderModeOverrideIgnored": String(renderModeOverrideIgnored),
             "learningXOffset": String(format: "%.1f", Double(profile.xOffset)),
             "learningYOffset": String(format: "%.1f", Double(profile.yOffset)),
             "learningVisualOffsetTrusted": String(profile.hasTrustedVisualAdjustment),
+            "learningVisualScope": profile.visualScope?.debugSummary ?? "none",
             "learningConfidence": String(format: "%.2f", profile.confidence),
             "learningObservations": String(profile.observations),
             "learningScreenshotTracing": String(profile.screenshotTracingEnabled)
@@ -196,6 +242,22 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
     }
 }
 
+public extension PlacementTrustPolicy {
+    static func compatibility(
+        profile: CompatibilityProfile,
+        learningAdjustment: CompatibilityLearningAdjustment
+    ) -> PlacementTrustPolicy {
+        let hasTrustedVisualAdjustment = learningAdjustment.profile?.hasTrustedVisualAdjustment == true
+        let isGreenProfile = profile.supportLevel == .green
+
+        return PlacementTrustPolicy(
+            allowsLowConfidencePlacement: isGreenProfile || hasTrustedVisualAdjustment,
+            allowsSyntheticCaretPlacement: isGreenProfile || hasTrustedVisualAdjustment,
+            allowsDetachedAnchorPlacement: isGreenProfile || hasTrustedVisualAdjustment
+        )
+    }
+}
+
 public struct CompatibilityLearningEngine: Equatable, Sendable {
     public let profiles: [String: CompatibilityLearningProfile]
 
@@ -208,9 +270,35 @@ public struct CompatibilityLearningEngine: Equatable, Sendable {
         profileRenderMode: SuggestionRenderMode
     ) -> CompatibilityLearningAdjustment {
         let profile = profiles[bundleIdentifier]
+        let safeOverride = Self.safeRenderModeOverride(
+            profile?.renderModeOverride,
+            profileRenderMode: profileRenderMode
+        )
         return CompatibilityLearningAdjustment(
             profile: profile,
-            effectiveRenderMode: profile?.renderModeOverride ?? profileRenderMode
+            effectiveRenderMode: safeOverride ?? profileRenderMode,
+            renderModeOverrideIgnored: profile?.renderModeOverride != nil && safeOverride == nil
         )
+    }
+
+    private static func safeRenderModeOverride(
+        _ override: SuggestionRenderMode?,
+        profileRenderMode: SuggestionRenderMode
+    ) -> SuggestionRenderMode? {
+        guard let override else {
+            return nil
+        }
+
+        switch override {
+        case .floatingMirror:
+            switch profileRenderMode {
+            case .inlineAdjacent, .floatingMirror:
+                return .floatingMirror
+            case .disabled:
+                return nil
+            }
+        case .inlineAdjacent, .disabled:
+            return nil
+        }
     }
 }

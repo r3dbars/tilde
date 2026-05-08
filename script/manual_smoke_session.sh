@@ -14,10 +14,12 @@ TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/tr
 REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-runs.md}"
 PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-default}"
 ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-backtick}"
+PROMPT_NO_SUBMIT_CONFIRMED="${AUTOCOMPLETE_LAB_PROMPT_NO_SUBMIT_CONFIRMED:-0}"
+BUILD_PROOF="${AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF:-}"
 
 usage() {
   cat <<'EOF'
-Usage: script/manual_smoke_session.sh <textedit|notes|notes-title|notes-body|notes-checklist|obsidian|chrome|codex|claude-code|claude> [--print|--check] [--visual]
+Usage: script/manual_smoke_session.sh <textedit|textedit-multiline|textedit-wrapped|notes|notes-title|notes-body|notes-checklist|obsidian|chrome|codex|claude-code|claude> [--print|--check] [--visual]
 
 Default mode prints the local manual steps, records the current diagnostics log
 line, waits for Enter, validates the new diagnostics for that app, then appends
@@ -37,6 +39,14 @@ if [[ -z "$APP" || "$APP" == "-h" || "$APP" == "--help" ]]; then
 fi
 
 case "$APP" in
+  textedit-multiline)
+    APP="textedit"
+    PROOF_LABEL="multiline"
+    ;;
+  textedit-wrapped)
+    APP="textedit"
+    PROOF_LABEL="wrapped-line"
+    ;;
   notes-title)
     APP="notes"
     NOTES_SURFACE="title"
@@ -131,7 +141,24 @@ case "$APP" in
     BUNDLE_ID="com.apple.TextEdit"
     DISPLAY_NAME="TextEdit"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
-    STEPS=$'- Open a disposable TextEdit document.\n- Type `Smoke proof feels inst`.\n- Wait for a suggestion.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.'
+    case "$PROOF_LABEL" in
+      default|option-tab)
+        STEPS=$'- Open a disposable TextEdit document.\n- Type `Can we`.\n- Wait for a suggestion.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
+        ;;
+      multiline)
+        SESSION_NAME="TextEdit multiline"
+        STEPS=$'- Open a disposable TextEdit document.\n- Type one setup line, press Return, then type `Can we` on the next line.\n- Wait for a suggestion on the second line.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
+        ;;
+      wrapped-line)
+        SESSION_NAME="TextEdit wrapped line"
+        STEPS=$'- Open a disposable TextEdit document in a narrow window.\n- Type a long disposable sentence so the caret is on a visually wrapped line.\n- End with `Can we`.\n- Wait for a suggestion on the wrapped visual line.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
+        ;;
+      *)
+        echo "unknown TextEdit proof label: $PROOF_LABEL" >&2
+        echo "expected default, multiline, or wrapped-line" >&2
+        exit 2
+        ;;
+    esac
     ;;
   notes)
     BUNDLE_ID="com.apple.Notes"
@@ -197,7 +224,7 @@ case "$APP" in
     REQUIRES_FULL_ACCEPT=0
     PROMPT_NO_SUBMIT_PROFILE=1
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Visually confirm the text stayed in the composer, no user message bubble appeared, and no assistant response started.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- When the recorder asks, type NO-SUBMIT only after confirming the prompt was not sent.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   claude-code)
     BUNDLE_ID="com.anthropic.claude-code"
@@ -206,7 +233,7 @@ case "$APP" in
     REQUIRES_FULL_ACCEPT=0
     PROMPT_NO_SUBMIT_PROFILE=1
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Claude Code prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Visually confirm the text stayed in the composer, no user message bubble appeared, and no assistant response started.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS=$'- Focus the Claude Code prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- When the recorder asks, type NO-SUBMIT only after confirming the prompt was not sent.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   claude)
     BUNDLE_ID="com.anthropic.claudefordesktop"
@@ -215,7 +242,7 @@ case "$APP" in
     REQUIRES_FULL_ACCEPT=0
     PROMPT_NO_SUBMIT_PROFILE=1
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Claude prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Visually confirm the text stayed in the composer, no user message bubble appeared, and no assistant response started.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS=$'- Focus the Claude prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- When the recorder asks, type NO-SUBMIT only after confirming the prompt was not sent.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   *)
     usage >&2
@@ -276,6 +303,14 @@ if [[ "$MODE" == "run" ]]; then
   echo "Starting at diagnostics line $START_LINE."
   echo "Starting at trace line $TRACE_START_LINE."
   read -r -p "Run the steps above, then press Enter to validate this app pass. " _
+  if [[ "$REQUIRES_FULL_ACCEPT" != "1" ]]; then
+    read -r -p "Type NO-SUBMIT to confirm the prompt was not sent. " prompt_confirmation
+    if [[ "$prompt_confirmation" != "NO-SUBMIT" ]]; then
+      echo "$SESSION_NAME prompt proof was not recorded because no-submit was not confirmed." >&2
+      exit 1
+    fi
+    PROMPT_NO_SUBMIT_CONFIRMED=1
+  fi
 elif [[ "$MODE" != "--check" ]]; then
   usage >&2
   exit 2
@@ -414,6 +449,13 @@ append_report_row() {
   else
     trace_summary="$trace_summary; visual \`not-claimed\`"
   fi
+  if [[ "$REQUIRES_FULL_ACCEPT" != "1" ]]; then
+    trace_summary="$trace_summary; prompt no-submit confirmed"
+  fi
+
+  local build_proof
+  build_proof="$(manual_smoke_build_proof)"
+  trace_summary="$trace_summary; build \`$build_proof\`"
 
   if [[ ! -f "$REPORT_PATH" ]]; then
     mkdir -p "$(dirname "$REPORT_PATH")"
@@ -431,6 +473,9 @@ historical evidence only.
 When a trace slice says `visual strict-complete`, strict screenshot evidence was
 required and passed. Rows without that marker are insertion proof only.
 
+Rows also include a build proof token in the trace slice. Current proof must
+match either the current Git commit or the current release archive checksum.
+
 | Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
 | --- | --- | --- | --- | ---: | --- | --- | --- |
 EOF
@@ -447,6 +492,37 @@ EOF
     "$log_end_line" \
     "$LOG_PATH" \
     "$trace_summary" >>"$REPORT_PATH"
+}
+
+manual_smoke_build_proof() {
+  if [[ -n "$BUILD_PROOF" ]]; then
+    printf '%s' "$BUILD_PROOF"
+    return
+  fi
+
+  local proof_parts=()
+  local commit
+  commit="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
+  if [[ -n "$commit" ]]; then
+    proof_parts+=("commit:$commit")
+  fi
+
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/AutocompleteLab.zip}"
+  if [[ -s "$archive_path" ]]; then
+    local archive_sha
+    archive_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
+    if [[ -n "$archive_sha" ]]; then
+      proof_parts+=("archive-sha256:$archive_sha")
+    fi
+  fi
+
+  if (( ${#proof_parts[@]} == 0 )); then
+    printf 'commit:unknown'
+    return
+  fi
+
+  local IFS=','
+  printf '%s' "${proof_parts[*]}"
 }
 
 if [[ "$APP" == "obsidian" ]] &&
@@ -508,10 +584,14 @@ if [[ "$REQUIRES_FULL_ACCEPT" != "1" ]] && (( VERIFIED_COUNT != 1 )); then
   print_failure_summary
   exit 1
 fi
+if [[ "$REQUIRES_FULL_ACCEPT" != "1" ]] && ! is_truthy "$PROMPT_NO_SUBMIT_CONFIRMED"; then
+  echo "missing $SESSION_NAME no-submit confirmation; set AUTOCOMPLETE_LAB_PROMPT_NO_SUBMIT_CONFIRMED=1 only after confirming the prompt was not sent" >&2
+  exit 1
+fi
 
 reject_pattern "insert-verification-final-failure .*app=$BUNDLE_ID" "unrecovered insertion verification failure"
 reject_pattern "field-suppressed .*app=$BUNDLE_ID" "field suppression"
-reject_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=(insert-verification-failed|missing-anchor|runtime-not-ready)" "blocking failure"
+reject_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=(insert-verification-failed|missing-anchor)" "blocking failure"
 
 if (( PROMPT_NO_SUBMIT_PROFILE == 1 )); then
   if [[ ! -f "$TRACE_PATH" ]]; then

@@ -65,8 +65,11 @@ struct AutocompleteKeyMapperTests {
     func shortcutConfigurationFallsBackToBacktick() {
         #expect(KeyboardShortcutConfiguration.default.acceptAllShortcut == .backtick)
         #expect(KeyboardShortcutConfiguration(persistedAcceptAllShortcutRawValue: "optionTab").acceptAllShortcut == .optionTab)
+        #expect(KeyboardShortcutConfiguration(persistedAcceptAllShortcutRawValue: "disabled").acceptAllShortcut == .disabled)
         #expect(KeyboardShortcutConfiguration(persistedAcceptAllShortcutRawValue: "unknown").acceptAllShortcut == .backtick)
+        #expect(AcceptAllShortcut.disabled.autocompleteKey == .other)
         #expect(AcceptAllShortcut.backtick.next == .optionTab)
-        #expect(AcceptAllShortcut.optionTab.next == .backtick)
+        #expect(AcceptAllShortcut.optionTab.next == .disabled)
+        #expect(AcceptAllShortcut.disabled.next == .backtick)
     }
 }

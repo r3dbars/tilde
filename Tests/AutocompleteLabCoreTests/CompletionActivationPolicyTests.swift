@@ -86,7 +86,7 @@ struct CompletionActivationPolicyTests {
     func blocksUnsafeFieldKinds() {
         let policy = CompletionActivationPolicy()
 
-        for fieldKind in [AXFieldKind.search, .form, .url] {
+        for fieldKind in [AXFieldKind.search, .form, .url, .unprovenSurface] {
             #expect(policy.decision(
                 textBeforeCursor: "I think this",
                 textAfterCursor: "",
@@ -322,5 +322,65 @@ struct CompletionActivationPolicyTests {
             isSecure: false,
             isFieldSuppressed: false
         ) == .block(.tooLittleContext))
+    }
+
+    @Test("Suggestion pace changes phrase and word completion eagerness")
+    func suggestionPaceChangesActivationThresholds() {
+        let quiet = CompletionActivationPolicy(pace: .quiet)
+        let normal = CompletionActivationPolicy(pace: .normal)
+        let eager = CompletionActivationPolicy(pace: .eager)
+
+        #expect(quiet.decision(
+            textBeforeCursor: "I think this through ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.tooLittleContext))
+        #expect(normal.decision(
+            textBeforeCursor: "I think this through ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.phraseContinuation))
+        #expect(eager.decision(
+            textBeforeCursor: "I think this ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.phraseContinuation))
+        #expect(quiet.decision(
+            textBeforeCursor: "di",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.tooLittleContext))
+        #expect(eager.decision(
+            textBeforeCursor: "dicti",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.wordCompletion))
+    }
+
+    @Test("App support level caps eager suggestion pace for unproven apps")
+    func appSupportLevelCapsEagerSuggestionPace() throws {
+        let store = CompatibilityProfileStore.mvp
+        let policy = SuggestionAggressivenessPolicy()
+        let textEdit = try #require(store.profile(for: "com.apple.TextEdit"))
+        let notes = try #require(store.profile(for: "com.apple.Notes"))
+
+        #expect(policy.pace(userPace: .eager, supportStatus: .supported(textEdit)) == .eager)
+        #expect(policy.pace(userPace: .eager, supportStatus: .supported(notes)) == .normal)
+        #expect(policy.pace(userPace: .normal, supportStatus: .supported(notes)) == .normal)
+        #expect(policy.pace(userPace: .quiet, supportStatus: .supported(notes)) == .quiet)
+        #expect(policy.pace(userPace: .eager, supportStatus: .unsupported) == .quiet)
+        #expect(policy.pace(userPace: .eager, supportStatus: .denylisted) == .quiet)
+    }
+
+    @Test("Suggestion pace falls back to normal for missing or bad defaults")
+    func suggestionPaceDefaultsToNormal() {
+        #expect(SuggestionPace(persistedRawValue: nil) == .normal)
+        #expect(SuggestionPace(persistedRawValue: "nope") == .normal)
+        #expect(SuggestionPace(persistedRawValue: "quiet") == .quiet)
     }
 }

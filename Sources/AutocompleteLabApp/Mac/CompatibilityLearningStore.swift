@@ -58,20 +58,30 @@ final class CompatibilityLearningStore: @unchecked Sendable {
         }
     }
 
+    func setRenderModeOverride(_ mode: SuggestionRenderMode?, for bundleIdentifier: String) {
+        update(
+            bundleIdentifier: bundleIdentifier,
+            reason: mode == .floatingMirror ? "mirror-mode-forced" : "profile-mode-restored"
+        ) { profile in
+            profile.renderModeOverride = mode
+            profile.observations += 1
+            profile.confidence = min(1, max(profile.confidence, confidence ?? 0.25))
+        }
+    }
+
     func updateOffset(
         x: Double,
         y: Double,
         for bundleIdentifier: String,
         reason: String,
-        visualTrustContext: CompatibilityLearningVisualTrustContext? = nil,
-        confidence: Double? = nil
+        visualScope: CompatibilityLearningVisualScope? = nil
     ) {
         update(bundleIdentifier: bundleIdentifier, reason: reason) { profile in
             profile.xOffset = x
             profile.yOffset = y
-            profile.applyVisualTrustContext(visualTrustContext)
+            profile.visualScope = visualScope
             profile.observations += 1
-            profile.confidence = min(1, max(profile.confidence, confidence ?? 0.25))
+            profile.confidence = min(1, max(profile.confidence, 0.25))
         }
     }
 
@@ -79,23 +89,12 @@ final class CompatibilityLearningStore: @unchecked Sendable {
         dx: Double,
         dy: Double,
         for bundleIdentifier: String,
-        visualTrustContext: CompatibilityLearningVisualTrustContext? = nil
+        visualScope: CompatibilityLearningVisualScope? = nil
     ) {
         update(bundleIdentifier: bundleIdentifier, reason: "manual-visual-nudge") { profile in
             profile.xOffset += dx
             profile.yOffset += dy
-            profile.applyVisualTrustContext(visualTrustContext)
-            profile.observations += 1
-            profile.confidence = min(1, max(profile.confidence, 0.35))
-        }
-    }
-
-    func setRenderModeOverride(_ renderMode: SuggestionRenderMode?, for bundleIdentifier: String) {
-        update(
-            bundleIdentifier: bundleIdentifier,
-            reason: renderMode == nil ? "manual-render-mode-reset" : "manual-render-mode-override"
-        ) { profile in
-            profile.renderModeOverride = renderMode
+            profile.visualScope = visualScope
             profile.observations += 1
             profile.confidence = min(1, max(profile.confidence, 0.35))
         }

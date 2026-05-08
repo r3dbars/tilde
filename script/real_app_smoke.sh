@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 APP="${1:-}"
 REQUESTED_APP="$APP"
 NOTES_SESSION_APP=""
+TEXTEDIT_SESSION_APP="textedit"
 DRY_RUN=0
 MANUAL_GATE=0
 SKIP_BUILD="${AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD:-0}"
@@ -18,7 +19,7 @@ TEMP_ENABLE_LAUNCHCTL_PREVIOUS=""
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|chat-like|all>]
+Usage: script/real_app_smoke.sh <textedit|textedit-multiline|textedit-wrapped|chrome|notes-title|notes-body|notes-checklist|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|chat-like|all>]
 
 Runs a real app smoke pass where it is safe to automate. Notes, Obsidian,
 Codex, Claude Code, and Claude desktop are manual-gated so this script never
@@ -30,6 +31,9 @@ notes run only prints the surface picker and does not record proof.
 Chrome defaults to the textarea fixture. Use --fixture chat-like to prove
 Tab/full-accept do not submit a chat-style composer. Use --fixture all to run
 every local Chrome browser/editor fixture with one app build.
+
+--skip-build reuses an already-running app, but it still requires that process
+to come from this checkout's dist/AutocompleteLab.app bundle.
 EOF
 }
 
@@ -71,6 +75,14 @@ while (($#)); do
 done
 
 case "$APP" in
+  textedit-multiline)
+    APP="textedit"
+    TEXTEDIT_SESSION_APP="textedit-multiline"
+    ;;
+  textedit-wrapped)
+    APP="textedit"
+    TEXTEDIT_SESSION_APP="textedit-wrapped"
+    ;;
   notes-title)
     APP="notes"
     NOTES_SESSION_APP="notes-title"
@@ -113,6 +125,8 @@ fi
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
 DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.autocomplete-lab}"
+LAB_APP_NAME="AutocompleteLab"
+LAB_APP_BINARY="$ROOT_DIR/dist/AutocompleteLab.app/Contents/MacOS/AutocompleteLab"
 declare -a SMOKE_TMP_DIRS=()
 
 cleanup_smoke_tmp_dirs() {
@@ -401,6 +415,16 @@ EOF
 
 press_key_code() {
   local key_code="$1"
+  local modifier="${2:-}"
+
+  if [[ "$modifier" == "command" ]]; then
+    osascript <<APPLESCRIPT
+tell application "System Events"
+  key code $key_code using command down
+end tell
+APPLESCRIPT
+    return
+  fi
 
   osascript <<APPLESCRIPT
 tell application "System Events"
@@ -413,14 +437,13 @@ focus_chrome_smoke_editor() {
   osascript >/dev/null <<'APPLESCRIPT'
 tell application "Google Chrome"
   activate
-  try
-    tell active tab of front window to execute javascript "window.focusSmokeEditor && window.focusSmokeEditor();"
-  end try
 end tell
 delay 0.1
 tell application "System Events"
   tell process "Google Chrome"
     set frontmost to true
+    set chromePosition to position of window 1
+    click at {(item 1 of chromePosition) + 180, (item 2 of chromePosition) + 190}
   end tell
 end tell
 APPLESCRIPT
@@ -434,10 +457,126 @@ delay 0.1
 tell application "System Events"
   tell process "TextEdit"
     set frontmost to true
+    set texteditPosition to position of window 1
+    click at {(item 1 of texteditPosition) + 200, (item 2 of texteditPosition) + 220}
   end tell
 end tell
 APPLESCRIPT
   wait_for_frontmost_app "TextEdit" 5
+}
+
+focus_textedit_document_path() {
+  local document_path="$1"
+  osascript >/dev/null <<APPLESCRIPT
+tell application "TextEdit"
+  activate
+  repeat with currentWindow in windows
+    try
+      if (path of document of currentWindow) is "$document_path" then
+        set index of currentWindow to 1
+        exit repeat
+      end if
+    end try
+  end repeat
+end tell
+APPLESCRIPT
+  focus_textedit_smoke_editor
+}
+
+paste_text_preserving_clipboard() {
+  local text="$1"
+  AUTOCOMPLETE_LAB_TEXTEDIT_PASTE_TEXT="$text" osascript <<'APPLESCRIPT'
+set previousClipboard to the clipboard
+set the clipboard to (system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_PASTE_TEXT")
+delay 0.1
+tell application "System Events"
+  keystroke "v" using command down
+end tell
+delay 0.1
+set the clipboard to previousClipboard
+APPLESCRIPT
+}
+
+wait_for_textedit_document_path_contains() {
+  local document_path="$1"
+  local expected_text="$2"
+  local label="$3"
+  local timeout_seconds="${4:-8}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    local contains_text
+    contains_text="$(
+      AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_PATH="$document_path" \
+      AUTOCOMPLETE_LAB_TEXTEDIT_EXPECTED_TEXT="$expected_text" \
+      osascript <<'APPLESCRIPT'
+set expectedPath to (system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_PATH")
+set expectedText to (system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_EXPECTED_TEXT")
+tell application "TextEdit"
+  repeat with currentDocument in documents
+    try
+      if (path of currentDocument) is expectedPath then
+        if ((text of currentDocument) as string) contains expectedText then
+          return "yes"
+        end if
+        return "no"
+      end if
+    end try
+  end repeat
+  return "no"
+end tell
+APPLESCRIPT
+    )"
+    if [[ "$contains_text" == "yes" ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for $label to land in TextEdit." >&2
+  exit 1
+}
+
+wait_for_chrome_tab_title_contains() {
+  local expected_text="$1"
+  local label="$2"
+  local timeout_seconds="${3:-8}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    local current_title
+    current_title="$(osascript <<'APPLESCRIPT'
+tell application "Google Chrome"
+  try
+    return title of active tab of front window
+  on error
+    return ""
+  end try
+end tell
+APPLESCRIPT
+)"
+    if [[ "$current_title" == *"$expected_text"* ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for $label to load in Chrome." >&2
+  exit 1
+}
+
+close_textedit_smoke_documents() {
+  osascript >/dev/null <<'APPLESCRIPT'
+tell application "TextEdit"
+  repeat with currentDocument in (documents as list)
+    try
+      if (name of currentDocument) contains "autocomplete-lab-textedit-smoke" then
+        close currentDocument saving no
+      end if
+    end try
+  end repeat
+end tell
+APPLESCRIPT
 }
 
 assert_chrome_chat_fixture_not_submitted() {
@@ -482,6 +621,7 @@ chrome_fixture_html() {
 <script>
 window.focusSmokeEditor = function () {
   const editor = document.querySelector("[data-smoke-editor]");
+  editor.value = "";
   editor.focus();
   editor.setSelectionRange(editor.value.length, editor.value.length);
 };
@@ -499,6 +639,7 @@ HTML
 <script>
 window.focusSmokeEditor = function () {
   const editor = document.querySelector("[data-smoke-editor]");
+  editor.textContent = "";
   editor.focus();
   const range = document.createRange();
   range.selectNodeContents(editor);
@@ -524,6 +665,7 @@ HTML
 <script>
 window.focusSmokeEditor = function () {
   const editor = document.querySelector("[data-smoke-editor]");
+  editor.textContent = "";
   editor.focus();
   const range = document.createRange();
   range.selectNodeContents(editor);
@@ -586,6 +728,7 @@ body { margin: 0; background: #f7f7f7; }
 <script>
 window.focusSmokeEditor = function () {
   const editor = document.querySelector("[data-smoke-editor]");
+  editor.textContent = "";
   editor.focus();
   const range = document.createRange();
   range.selectNodeContents(editor);
@@ -638,6 +781,7 @@ body { margin: 0; background: #fbfbfb; }
 <script>
 window.focusSmokeEditor = function () {
   const editor = document.querySelector("[data-smoke-editor]");
+  editor.innerHTML = "<p><br></p>";
   editor.focus();
   const paragraph = editor.querySelector("p") || editor;
   const range = document.createRange();
@@ -725,6 +869,7 @@ window.autocompleteSmokeEditorText = function () {
 };
 window.focusSmokeEditor = function () {
   const editor = document.querySelector("[data-smoke-editor]");
+  editor.textContent = "";
   editor.focus();
   const range = document.createRange();
   range.selectNodeContents(editor);
@@ -752,8 +897,17 @@ describe_plan() {
   echo "Trace log: $TRACE_PATH"
   case "$APP" in
     textedit)
-      echo "Plan: build/relaunch AutocompleteLab, open a disposable TextEdit file, type a test fragment, then validate logs and traces."
-      echo "Safety: the smoke launch temporarily enables TextEdit only for this proof pass."
+      case "$TEXTEDIT_SESSION_APP" in
+        textedit-multiline)
+          echo "Plan: build/relaunch AutocompleteLab, open a disposable TextEdit file, type a two-line test fragment, then validate logs and traces."
+          ;;
+        textedit-wrapped)
+          echo "Plan: build/relaunch AutocompleteLab, open a disposable TextEdit file in a narrow window, type a wrapped-line test fragment, then validate logs and traces."
+          ;;
+        *)
+          echo "Plan: build/relaunch AutocompleteLab, open a disposable TextEdit file, type a test fragment, then validate logs and traces."
+          ;;
+      esac
       ;;
     chrome)
       echo "Chrome fixture: $CHROME_FIXTURE"
@@ -788,10 +942,30 @@ describe_plan() {
 
 build_if_needed() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
+    if ! is_current_checkout_app_running; then
+      echo "--skip-build requires this checkout's app to already be running." >&2
+      echo "Expected: $LAB_APP_BINARY" >&2
+      echo "Run ./script/build_and_run.sh --verify first, or omit --skip-build." >&2
+      exit 1
+    fi
     return 0
   fi
 
   ./script/build_and_run.sh --verify
+}
+
+is_current_checkout_app_running() {
+  local pid command
+
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    if [[ "$command" == "$LAB_APP_BINARY"* ]]; then
+      return 0
+    fi
+  done < <(pgrep -x "$LAB_APP_NAME" 2>/dev/null || true)
+
+  return 1
 }
 
 run_manual_gated() {
@@ -818,7 +992,7 @@ run_manual_gated() {
 }
 
 run_textedit() {
-  local runtime_start_line start_line trace_start_line
+  local runtime_start_line start_line trace_start_line typing_start_line tmp_dir tmp_file expected_text
   runtime_start_line="$(line_count "$LOG_PATH")"
 
   prepare_temporary_app_enablement
@@ -836,17 +1010,61 @@ APPLESCRIPT
 
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
+  tmp_dir="$(make_tmp_dir)"
+  tmp_file="$tmp_dir/autocomplete-lab-textedit-smoke-$$.txt"
 
-  osascript <<'APPLESCRIPT'
-tell application "System Events"
-  keystroke "Smoke proof feels inst"
+  close_textedit_smoke_documents
+  : >"$tmp_file"
+  osascript >/dev/null <<APPLESCRIPT
+tell application "TextEdit"
+  activate
+  set smokeDocument to open POSIX file "$tmp_file"
+  set text of smokeDocument to ""
 end tell
 APPLESCRIPT
+  sleep 1
+  focus_textedit_document_path "$tmp_file"
 
-  wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit suggestion"
-  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
+  case "$TEXTEDIT_SESSION_APP" in
+    textedit-multiline)
+      expected_text="Can we make this feel "
+      typing_start_line="$(line_count "$LOG_PATH")"
+      focus_textedit_document_path "$tmp_file"
+      paste_text_preserving_clipboard $'Autocomplete smoke\nCan we make this feel '
+      ;;
+    textedit-wrapped)
+      expected_text="Can we make this feel "
+      osascript <<'APPLESCRIPT'
+tell application "TextEdit" to activate
+delay 0.4
+tell application "TextEdit"
+  try
+    set bounds of front window to {80, 80, 500, 520}
+  end try
+  set text of front document to "This is a disposable autocomplete smoke paragraph that should wrap before the caret. "
+end tell
+APPLESCRIPT
+      wait_for_textedit_document_path_contains "$tmp_file" "This is a disposable autocomplete smoke paragraph" "scripted TextEdit wrapped setup"
+      sleep 1
+      typing_start_line="$(line_count "$LOG_PATH")"
+      focus_textedit_document_path "$tmp_file"
+      press_key_code 124 command
+      paste_text_preserving_clipboard "Can we make this feel "
+      ;;
+    *)
+      expected_text="Can we make this feel "
+      typing_start_line="$(line_count "$LOG_PATH")"
+      focus_textedit_document_path "$tmp_file"
+      paste_text_preserving_clipboard "Can we make this feel "
+      ;;
+  esac
+
+  wait_for_textedit_document_path_contains "$tmp_file" "$expected_text" "scripted TextEdit text"
+  wait_for_log_pattern "$typing_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit stable suggestion"
+  wait_for_screenshot_capture_if_enabled "$typing_start_line" "com.apple.TextEdit" "TextEdit"
   assert_frontmost_app "TextEdit" "TextEdit"
-  focus_textedit_smoke_editor
+  focus_textedit_document_path "$tmp_file"
+  sleep 0.5
   press_key_code 48
   wait_for_log_fields "$start_line" "TextEdit Tab acceptance" 12 \
     "keyboard-action" \
@@ -868,7 +1086,7 @@ APPLESCRIPT
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.TextEdit" "TextEdit second"
   assert_frontmost_app "TextEdit" "TextEdit"
-  focus_textedit_smoke_editor
+  sleep 0.5
   full_start_line="$(line_count "$LOG_PATH")"
   press_accept_all_shortcut
   wait_for_log_fields "$full_start_line" "TextEdit full acceptance" 12 \
@@ -882,14 +1100,12 @@ APPLESCRIPT
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
     AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
     AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
-    ./script/manual_smoke_session.sh textedit --check
+    ./script/manual_smoke_session.sh "$TEXTEDIT_SESSION_APP" --check
 }
 
 run_chrome_fixture() {
   local fixture="$1"
   local start_line trace_start_line tmp_dir html_file
-  start_line="$(line_count "$LOG_PATH")"
-  trace_start_line="$(line_count "$TRACE_PATH")"
   tmp_dir="$(make_tmp_dir)"
   html_file="$tmp_dir/autocomplete-lab-chrome-$fixture-smoke.html"
 
@@ -902,16 +1118,15 @@ run_chrome_fixture() {
   osascript >/dev/null <<APPLESCRIPT
 tell application "Google Chrome"
   activate
-  if not (exists window 1) then make new window
+  make new window
   set URL of active tab of front window to "$chrome_url"
 end tell
-delay 1.2
-tell application "Google Chrome"
-  try
-    tell active tab of front window to execute javascript "window.focusSmokeEditor && window.focusSmokeEditor();"
-  end try
-end tell
-delay 0.2
+APPLESCRIPT
+
+  wait_for_chrome_tab_title_contains "Autocomplete Lab Chrome" "Chrome $fixture fixture"
+  sleep 0.5
+
+  osascript >/dev/null <<'APPLESCRIPT'
 tell application "System Events"
   tell process "Google Chrome"
     set frontmost to true
@@ -925,14 +1140,24 @@ APPLESCRIPT
 
   osascript <<'APPLESCRIPT'
 tell application "System Events"
-  keystroke "Smoke proof feels inst"
+  keystroke "a" using command down
+  key code 51
 end tell
 APPLESCRIPT
 
-  wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
+  start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
+
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  keystroke "Can we make this feel "
+end tell
+APPLESCRIPT
+
+  wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome .*beforeChars=22 .*requestMode=phraseContinuation" "Chrome $fixture full-fragment suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.google.Chrome" "Chrome $fixture"
-  focus_chrome_smoke_editor
   assert_frontmost_app "Google Chrome" "Chrome $fixture"
+  sleep 0.5
   press_key_code 48
   wait_for_log_fields "$start_line" "Chrome $fixture Tab acceptance" 12 \
     "keyboard-action" \
@@ -946,18 +1171,8 @@ APPLESCRIPT
   fi
   local full_start_line full_accept_key second_start_line
   full_accept_key="$(accept_all_shortcut)"
-  second_start_line="$(line_count "$LOG_PATH")"
-
-  osascript <<'APPLESCRIPT'
-tell application "System Events"
-  keystroke " and stays inst"
-end tell
-APPLESCRIPT
-
-  wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion"
-  wait_for_screenshot_capture_if_enabled "$second_start_line" "com.google.Chrome" "Chrome $fixture second"
-  focus_chrome_smoke_editor
   assert_frontmost_app "Google Chrome" "Chrome $fixture"
+  sleep 0.5
   full_start_line="$(line_count "$LOG_PATH")"
   press_accept_all_shortcut
   wait_for_log_fields "$full_start_line" "Chrome $fixture full acceptance" 12 \

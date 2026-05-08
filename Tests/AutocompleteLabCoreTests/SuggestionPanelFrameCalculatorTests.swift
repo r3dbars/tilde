@@ -33,6 +33,18 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(!SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(frame))
     }
 
+    @Test("Hides inline ghost when less than one useful word can fit")
+    func hidesInlineGhostWhenLessThanOneUsefulWordFits() {
+        let crampedFrame = CGRect(x: 100, y: 100, width: 30, height: 20)
+        let usefulFrame = CGRect(x: 100, y: 100, width: 36, height: 20)
+
+        #expect(
+            SuggestionPanelFrameCalculator.minimumUsefulInlineWordWidth == 36
+        )
+        #expect(!SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(crampedFrame))
+        #expect(SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(usefulFrame))
+    }
+
     @Test("Clips inline ghost instead of moving it before the caret")
     func clipsInlineGhostInsteadOfMovingBeforeCaret() {
         let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(

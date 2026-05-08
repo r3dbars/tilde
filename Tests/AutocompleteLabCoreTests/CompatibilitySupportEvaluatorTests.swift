@@ -86,12 +86,16 @@ struct CompatibilitySupportEvaluatorTests {
         let sensitiveField = base + [
             event(.suggestionPresented, suggestionID: "search", metadata: ["fieldKind": "search"])
         ]
+        let unprovenSurface = base + [
+            event(.suggestionPresented, suggestionID: "docs", metadata: ["fieldKind": "unprovenSurface"])
+        ]
 
         #expect(evaluator.evaluate(bundleIdentifier: "com.apple.TextEdit", events: duplicate).state == .blocked)
         #expect(evaluator.evaluate(bundleIdentifier: "com.apple.TextEdit", events: wrongInsertion).state == .blocked)
         #expect(evaluator.evaluate(bundleIdentifier: "com.apple.TextEdit", events: focusSteal).state == .blocked)
         #expect(evaluator.evaluate(bundleIdentifier: "com.apple.TextEdit", events: tabConflict).state == .blocked)
         #expect(evaluator.evaluate(bundleIdentifier: "com.apple.TextEdit", events: sensitiveField).state == .blocked)
+        #expect(evaluator.evaluate(bundleIdentifier: "com.apple.TextEdit", events: unprovenSurface).state == .blocked)
     }
 
     @Test("Obsidian detached suppression is a caveat, but detached display is blocked")

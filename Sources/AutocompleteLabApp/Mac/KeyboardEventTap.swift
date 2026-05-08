@@ -11,6 +11,7 @@ final class KeyboardEventTap: @unchecked Sendable {
     private let passthroughKeyDownObserver: PassthroughKeyDownObserver?
     private let disabledObserver: DisabledObserver?
     private let keyMapper = AutocompleteKeyMapper()
+    private let consumptionPolicy = KeyboardEventTapConsumptionPolicy()
     private let lifecycleLock = NSLock()
     private let snapshotLock = NSLock()
     private let passthroughLock = NSLock()
@@ -391,21 +392,14 @@ final class KeyboardEventTap: @unchecked Sendable {
         }
         suppressKeyUntilNanos[key] = nil
 
-        let shouldConsume: Bool
-        switch key {
-        case .tab:
-            shouldConsume = snapshot.supportsOneWordAcceptance
-        case .backtick:
-            shouldConsume = snapshot.supportsFullAcceptance && snapshot.acceptAllShortcut == .backtick
-        case .commandZ:
-            shouldConsume = snapshot.hasPendingAcceptedInsertionUndo
-        case .escape:
-            shouldConsume = true
-        case .optionTab:
-            shouldConsume = snapshot.supportsFullAcceptance && snapshot.acceptAllShortcut == .optionTab
-        case .other:
-            shouldConsume = false
-        }
+        let shouldConsume = consumptionPolicy.shouldConsume(KeyboardEventTapConsumptionInput(
+            key: key,
+            hasVisibleSuggestion: snapshot.hasVisibleSuggestion,
+            supportsOneWordAcceptance: snapshot.supportsOneWordAcceptance,
+            supportsFullAcceptance: snapshot.supportsFullAcceptance,
+            isInvalidatedByUserTyping: snapshot.isInvalidatedByUserTyping,
+            acceptAllShortcut: snapshot.acceptAllShortcut
+        ))
 
         if shouldConsume, !isAutorepeat {
             suppressKeyUntilNanos[key] = nowNanos + keySuppressDurationNanos
