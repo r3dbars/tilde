@@ -917,7 +917,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isSecure: context.isSecure,
             selectedTextLength: context.selectedTextLength,
             isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
-            fieldKind: context.fieldClassification.kind
+            fieldKind: context.fieldClassification.kind,
+            allowsUnknownFieldKind: profile.allowsUnknownFieldKind
         )
 
         guard activationDecision.canSuggest else {
