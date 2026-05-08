@@ -7,8 +7,9 @@ what has a screenshot, what has insertion proof, and what still needs a real
 manual pass.
 
 Source docs: `manual-smoke-runs.md`,
-`deep-dive-scorecard-2026-05-06.md`, and the committed screenshots in
-`visual-placement-screenshots/`.
+`deep-dive-scorecard-2026-05-06.md`,
+`deep-research-autocomplete-scorecard-2026-05-07.md`, and the committed
+screenshots in `visual-placement-screenshots/`.
 
 Grades are evidence grades, not product grades.
 
