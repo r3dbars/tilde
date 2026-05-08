@@ -79,7 +79,7 @@ fixture proof, not a general system-wide inserter.
 
 Starting score before this pass: 72/100
 
-Overall score after this pass: 81/100
+Overall score after this pass: 82/100
 
 This is a strict compatibility score. It is not a general app-quality score.
 Several individual surfaces score much higher, but hard gates prevent a broad
@@ -231,10 +231,12 @@ compatibility claim.
 ### Test coverage and telemetry
 
 - Weight: 5
-- Current score: 4/5
+- Current score: 4.5/5
 - Why this score: The repo has strong unit tests, smoke scripts, proof
   manifests, trace replay, visual evidence checks, and telemetry-safe traces.
-  The remaining gap is that strict manual gates still fail.
+  This scorecard now links all screenshot artifacts directly, so the visual
+  evidence checker can verify it without falling back to the older deep-dive
+  scorecard. The remaining gap is that strict manual gates still fail.
 - Evidence found in repo:
   - `swift test` test targets in `Package.swift`
   - `script/smoke_test.sh`
@@ -242,7 +244,8 @@ compatibility claim.
   - `script/manual_smoke_status.sh`
   - `script/check_visual_placement_evidence.sh`
   - `script/scorecard_goal_loop.sh`
-- Missing evidence: Passing require-all proof gates.
+- Missing evidence: Passing require-all proof gates for Codex, Claude Code, and
+  production browser surfaces.
 - What would make it 100/100: Require-all proof, manual smoke, visual evidence,
   and beta readiness gates pass on current build.
 
@@ -297,6 +300,27 @@ diagnostics-only by policy, not by accident.
 - Undo/redo proof for every accept-enabled surface above suggest-only.
 - Performance soak with event-tap and AX polling budgets.
 - Redacted privacy bundle proof and local trace deletion proof.
+
+## Screenshot Evidence References
+
+These are linked so the visual evidence checker can verify this scorecard
+directly.
+
+- [TextEdit](visual-placement-screenshots/textedit-inline.png)
+- [Chrome textarea](visual-placement-screenshots/chrome-textarea.png)
+- [Chrome contenteditable](visual-placement-screenshots/chrome-contenteditable.png)
+- [Chrome editor-like](visual-placement-screenshots/chrome-editor-like.png)
+- [Chrome Monaco-like](visual-placement-screenshots/chrome-monaco-like.png)
+- [Chrome ProseMirror-like](visual-placement-screenshots/chrome-prosemirror-like.png)
+- [Chrome real Monaco](visual-placement-screenshots/chrome-monaco-real.png)
+- [Chrome real ProseMirror](visual-placement-screenshots/chrome-prosemirror-real.png)
+- [Chrome chat-like](visual-placement-screenshots/chrome-chat-like.png)
+- [Codex](visual-placement-screenshots/codex-inline.png)
+- [Obsidian](visual-placement-screenshots/obsidian.png)
+- [Apple Notes title](visual-placement-screenshots/notes-title.png)
+- [Apple Notes body](visual-placement-screenshots/notes-body.png)
+- [Apple Notes checklist](visual-placement-screenshots/notes-checklist.png)
+- [Claude desktop](visual-placement-screenshots/claude-desktop.png)
 
 ## Implementation Queue
 
@@ -384,7 +408,21 @@ diagnostics-only by policy, not by accident.
 - Status: Done in this follow-up for TextEdit. Notes, Obsidian, Chrome, and
   prompt-app undo proof remain manual gaps.
 
-### 6. Codex same-slice one-word no-submit proof
+### 6. Scorecard visual evidence alignment
+
+- Objective: Link every tracked visual placement screenshot from this scorecard
+  so `check_visual_placement_evidence.sh` can verify it directly.
+- Files likely involved:
+  - `docs/product/deep-research-app-compatibility-scorecard-2026-05-08.md`
+- Tests to add/update:
+  - Existing visual evidence checker.
+- Proof required:
+  - `AUTOCOMPLETE_LAB_SCORECARD=docs/product/deep-research-app-compatibility-scorecard-2026-05-08.md ./script/check_visual_placement_evidence.sh --strict`
+- Risk level: Low
+- Expected score impact: +0.5 evidence loop.
+- Status: Done in this follow-up.
+
+### 7. Codex same-slice one-word no-submit proof
 
 - Objective: Record one bounded Codex proof slice with screenshot, one-word Tab
   accept, and no submit.
@@ -399,7 +437,7 @@ diagnostics-only by policy, not by accident.
 - Risk level: Medium
 - Expected score impact: +3 no-submit and visual proof.
 
-### 7. Claude Code terminal-host proof
+### 8. Claude Code terminal-host proof
 
 - Objective: Prove terminal-hosted Claude Code one-word accept without shell or
   agent submit.
