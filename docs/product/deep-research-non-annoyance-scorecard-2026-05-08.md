@@ -5,7 +5,7 @@
 - Deep Research topic: Non-Annoyance Rubric for System-Wide Autocomplete
 - Repo: `transcripted-autocomplete-lab`
 - Date: 2026-05-08
-- Commit inspected: `608d48243289` plus the archive-backed TextEdit smoke proof recorded in this loop.
+- Commit inspected: `295382bc6bb0` plus the smoke-harness and typed-over cooldown test changes recorded in this loop.
 
 ## Executive Summary
 
@@ -62,6 +62,8 @@ This loop improves live non-annoyance behavior and proof:
 - The macOS event-tap keycode bridge now maps Z, so Cmd-Z can actually reach the accepted-insertion undo route.
 - `real_app_smoke.sh` can now temporarily enable the target app without changing persisted app settings, and `build_and_run.sh` launches the app with that proof environment while avoiding stale worktree bundles.
 - TextEdit default now has a current archive-backed strict visual smoke row with two verified accepts in `docs/product/manual-smoke-runs.md`.
+- `real_app_smoke.sh` now scans large diagnostics slices without `tail | grep`/`pipefail` SIGPIPE exits and focuses Chrome fixtures by their AX text area instead of fixed toolbar-relative coordinates.
+- `AutocompleteFlowTests` now has an integrated typed-over rejection test that proves conflicting user typing is classified as typed-over and starts a same-field prefix cooldown.
 
 ## Score
 
@@ -182,7 +184,7 @@ Forgettably good. The app appears only when useful, hides before it becomes anno
 - Proof required: Scripts pass for complete rows and fail for pending rows only.
 - Risk level: Low.
 - Expected score impact: +3.
-- Status: Partially completed in this loop. Normal proof scripts pass; strict status now counts the current TextEdit default pass and still blocks stale/pending surfaces.
+- Status: Partially completed in this loop. Normal proof scripts pass; strict status now counts the current TextEdit default pass and still blocks stale/pending surfaces. Chrome fixture harness reliability improved, but no new Chrome row is counted until the smoke completes.
 
 ### 4. Prompt-app no-submit proof
 
@@ -223,6 +225,7 @@ This goal is complete when:
 - `check_visual_placement_evidence.sh` passes in normal mode; strict mode still fails on Codex same-slice proof plus Claude Code/Claude desktop screenshot proof.
 - TextEdit default has current archive-backed strict visual proof with two verified accepts; TextEdit multiline and wrapped-line proof are still pending.
 - Chrome fixtures, Notes title/body/checklist, and Obsidian have prior proof, but strict status marks them stale until they are rerun against the current commit or archive.
+- Chrome fixture reruns are safe and automatable, but the latest attempt did not record proof because another local process was killing `build_and_run.sh`/`real_app_smoke.sh` while sharing the same app bundle id.
 - Codex, Claude Code, and Claude desktop need current same-slice prompt no-submit proof.
 - Hide latency is now instrumented as hide request-to-panel-hide time, but still needs real-app invalidation proof under the 50ms p95 target.
 - Prefix cooldown is now wired, but there is not yet a real-app trace run proving user-perceived annoyance improvement.
