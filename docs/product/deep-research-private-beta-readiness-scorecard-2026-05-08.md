@@ -19,6 +19,8 @@ field blocking, accept-time focus guards, redacted tracing, manual smoke
 recorders, screenshot proof gates, and private beta packet scripts. This pass
 added preferred DMG packaging, a saved release-proof checklist, required beta
 docs, a structured feedback issue form, and a generated private beta packet. It
+also reconciled the default proof manifest with the scorecard so completed
+Notes and Obsidian screenshots are no longer treated as unreferenced. The app
 is still not private-beta ready because the current checkout has no fresh
 notarized artifact, no fresh VM/install proof, and no safe same-slice
 prompt-app no-submit proof.
@@ -51,13 +53,11 @@ must point to current proof.
 
 The app is a strong internal lab build, not yet a clean private beta. Runtime
 and privacy foundations are good. The highest-risk beta gaps are distribution
-proof and proof freshness: `script/package_release.sh` ships a ZIP path, but
-the research prefers a signed DMG and saved notarization/Gatekeeper evidence;
-`docs/product/proof-manifest.json` lists several surfaces as complete, while
-the default proof checker fails because the scorecard does not reference those
-screenshots; prompt-app no-submit proof is still partial or pending. Packaging
-and tester-facing docs are better after this pass, but the missing live proof
-still blocks beta.
+proof and proof freshness: the release path now creates a signed ZIP and
+preferred DMG with saved local proof files, but the research also requires
+notarization, stapling, fresh install proof, and same-slice prompt-app
+no-submit proof. Packaging, tester-facing docs, and proof-doc consistency are
+better after this pass, but the missing live proof still blocks beta.
 
 Current local evidence:
 
@@ -67,8 +67,10 @@ Current local evidence:
   `dist/AutocompleteLab.dmg`, checksums, and `dist/release-proof/`.
 - `./script/private_beta_packet.sh` created and verified
   `dist/private-beta/`.
-- `./script/check_proof_manifest.sh` failed on unreferenced Obsidian and Notes
-  screenshots in the default scorecard.
+- `./script/check_proof_manifest.sh` now passes; the remaining proof problems
+  are not manifest-linking errors.
+- `./script/check_visual_placement_evidence.sh --require-all` still fails on
+  Codex same-slice proof plus Claude Code/Claude desktop screenshot proof.
 - `./script/check_score_targets.sh` failed with 77 score/proof target misses.
 - `docs/product/beta-readiness-checklist.md` still lists fresh/manual proof
   blockers and says `dist/` artifacts must be recreated after app changes.
@@ -85,9 +87,9 @@ Current local evidence:
 
 Starting score: 70/100
 
-Current score after this pass: 79/100
+Current score after this pass: 80/100
 
-Score movement: +9
+Score movement: +10
 
 ## Implementation Progress
 
@@ -110,6 +112,10 @@ Score movement: +9
 - Ran the updated archive and packet flow locally. `script/beta_readiness.sh
   --check-only` now reports the release archive and beta packet as OK, with the
   remaining blockers limited to manual app proof and visual placement proof.
+- Reconciled `docs/product/deep-dive-scorecard-2026-05-06.md` with existing
+  tracked Notes and Obsidian screenshot proof. The default proof manifest check
+  now passes, while the strict visual proof gate still blocks on prompt-app
+  evidence.
 
 ## Score Breakdown
 
@@ -191,18 +197,19 @@ Score movement: +9
 ### App Compatibility
 
 - Weight: 15
-- Current score: 8/15
+- Current score: 9/15
 - Why this score: The app has narrow compatibility profiles and significant
-  smoke/proof infrastructure, but the proof is not fully current or complete.
-  Prompt apps remain the strictest gap because no-submit proof must be
-  same-slice and screenshot-backed. This score was made harsher after the
-  compatibility review confirmed stale proof conflicts.
+  smoke/proof infrastructure, and the default proof manifest now verifies after
+  reconciling the scorecard with tracked Notes and Obsidian screenshots. The
+  proof is still not fully current or complete. Prompt apps remain the strictest
+  gap because no-submit proof must be same-slice and screenshot-backed.
 - Evidence found in repo: `Sources/AutocompleteLabCore/Compatibility/AppCompatibilityProfile.swift`,
   `Sources/AutocompleteLabCore/Compatibility/CompatibilityRouter.swift`,
   `docs/product/compatibility-matrix.md`,
   `docs/product/app-proof-matrix.md`,
   `docs/product/manual-smoke-runs.md`,
   `docs/product/proof-manifest.json`,
+  `docs/product/deep-dive-scorecard-2026-05-06.md`,
   `script/manual_smoke_status.sh`,
   `script/check_proof_manifest.sh`,
   `script/check_visual_placement_evidence.sh`.

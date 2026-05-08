@@ -87,11 +87,11 @@ evidence-backed score should stay lower until those rows are closed.
 | Chrome Monaco-like | 8.5/10 | [chrome-monaco-like.png](visual-placement-screenshots/chrome-monaco-like.png) | Ghost is readable and close to the caret in a dark editor. | Pending: real Monaco proof and a slightly cleaner visual gap. |
 | Chrome ProseMirror-like | 9/10 | [chrome-prosemirror-like.png](visual-placement-screenshots/chrome-prosemirror-like.png) | Ghost is readable and inline with the editing line. | Pending: real production ProseMirror proof. |
 | Chrome chat-like no-submit | 9/10 | [chrome-chat-like.png](visual-placement-screenshots/chrome-chat-like.png) | Ghost is inline after the caret, Tab and full accept verified, and the local submit counter stayed at zero. | Pending: real prompt/chat-app no-submit proof before broad enablement. |
-| Obsidian | 8/10 | Pending fresh screenshot | Prior synthetic caret proof passes, and Obsidian is profiled. | Needs screenshot-backed proof in a disposable vault note. |
+| Obsidian | 8/10 | [obsidian.png](visual-placement-screenshots/obsidian.png) | Disposable vault proof shows floating mirror placement with two verified accepts. | Pending: more vault themes and editor-state variants. |
 | Codex | 8.5/10 | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Disposable prompt screenshot shows the ghost visible on the same line after the caret on a negative-origin side display, but current unproven prompt-app behavior is mirror-first. | Pending: needs a recorder-grade visual pass with one-word accept and no-submit proof in the same trace slice. |
-| Apple Notes title | 6.5/10 | Pending title screenshot | Partial generic Notes evidence exists from a disposable note, but it does not close title proof. | Needs `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate` with two verified accepts. |
-| Apple Notes body | 6.5/10 | Pending body screenshot | Safer insertion stance exists, but body proof cannot borrow title or generic Notes evidence. | Needs `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate` with two verified accepts. |
-| Apple Notes checklist | 6.5/10 | Pending checklist screenshot | Safer insertion stance exists, but checklist proof needs its own caret and insertion pass. | Needs `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate` with two verified accepts. |
+| Apple Notes title | 6.5/10 | [notes-title.png](visual-placement-screenshots/notes-title.png) | Recorder proof covers the title field with two verified accepts. | Pending: more title lengths and window sizes. |
+| Apple Notes body | 6.5/10 | [notes-body.png](visual-placement-screenshots/notes-body.png) | Recorder proof covers body insertion with two verified accepts. | Pending: longer body notes and wrapped-line variants. |
+| Apple Notes checklist | 6.5/10 | [notes-checklist.png](visual-placement-screenshots/notes-checklist.png) | Recorder proof covers a native checklist row with two verified accepts. | Pending: deeper checklist nesting and mixed note content. |
 | Claude Code | 4/10 | Pending safe prompt proof | Profile exists. | Needs a safe live prompt smoke before it can be scored high. |
 | Claude desktop | 8.4/10 | Pending fresh screenshot | Prior manual proof passed. | Needs screenshot-backed one-word no-submit proof on current renderer. |
 
@@ -169,6 +169,14 @@ evidence-backed score should stay lower until those rows are closed.
   passed at 2026-05-07T21:01:59Z with two verified accepts, strict screenshot
   trace evidence, bounded diagnostics lines 135065-135095, bounded trace lines
   34620-34630, and current trace/placement/key/runtime proof fingerprints.
+- Latest live Obsidian proof: `./script/manual_smoke_session.sh obsidian --check --visual`
+  passed at 2026-05-07T21:15:51Z with two verified accepts, strict visual trace
+  evidence, bounded diagnostics lines 136017-136060, bounded trace lines
+  34826-34841, and current trace/placement/key/runtime proof fingerprints.
+- Latest live Notes title proof: `AUTOCOMPLETE_LAB_LOG_START_LINE=136266 AUTOCOMPLETE_LAB_TRACE_START_LINE=34869 AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT=optionTab ./script/manual_smoke_session.sh notes-title --check --visual`
+  passed at 2026-05-07T21:24:14Z with two verified accepts, strict visual trace
+  evidence, bounded diagnostics lines 136267-136303, bounded trace lines
+  34870-34884, and current trace/placement/key/runtime proof fingerprints.
 - Latest live Notes body proof: `AUTOCOMPLETE_LAB_LOG_START_LINE=138145 AUTOCOMPLETE_LAB_TRACE_START_LINE=35010 AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT=optionTab ./script/manual_smoke_session.sh notes-body --check --visual`
   passed at 2026-05-07T23:33:48Z with two verified accepts, strict screenshot
   trace evidence, bounded diagnostics lines 138146-138299, bounded trace lines
