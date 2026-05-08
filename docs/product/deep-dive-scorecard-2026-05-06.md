@@ -496,6 +496,9 @@ should stay lower until those rows are closed.
 - Profile-aware acceptance safety now runs before insertion: no-submit prompt
   profiles block full accept and any accepted text that is multiword,
   non-visible, or contains newline/tab/control characters.
+- Clipboard fallback restore now preserves user clipboard changes by restoring
+  the original pasteboard only when the delayed restore still sees this app's
+  temporary fallback text at the same pasteboard change count.
 - `script/typing_performance_endurance_soak.sh` now wraps the safe TextEdit
   soak with a 10-minute default, typing-like 5-character chunks, exact named
   TextEdit document verification, temporary TextEdit enablement, temporary

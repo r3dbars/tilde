@@ -12,6 +12,7 @@ final class InsertionEngine {
     private let accessibilityClient: AccessibilityClient
     private let clipboardFallbackEnabled: Bool
     private let clipboardFallbackPolicy = ClipboardFallbackPolicy()
+    private let clipboardFallbackRestorePolicy = ClipboardFallbackRestorePolicy()
 
     init(
         accessibilityClient: AccessibilityClient,
@@ -115,10 +116,11 @@ final class InsertionEngine {
 
         let pasteboard = NSPasteboard.general
         let originalItems = pasteboard.pasteboardItems?.map { $0.copy() as! NSPasteboardItem } ?? []
-        let originalChangeCount = pasteboard.changeCount
+        let restorePolicy = clipboardFallbackRestorePolicy
 
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+        let fallbackChangeCount = pasteboard.changeCount
 
         let pasteEvent = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: true)
         pasteEvent?.flags = .maskCommand
@@ -128,7 +130,13 @@ final class InsertionEngine {
         pasteUpEvent?.post(tap: .cghidEventTap)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            if pasteboard.changeCount >= originalChangeCount {
+            let restoreDecision = restorePolicy.decision(
+                insertedText: text,
+                currentString: pasteboard.string(forType: .string),
+                fallbackChangeCount: fallbackChangeCount,
+                currentChangeCount: pasteboard.changeCount
+            )
+            if restoreDecision == .restoreOriginalPasteboard {
                 pasteboard.clearContents()
                 pasteboard.writeObjects(originalItems)
             }
