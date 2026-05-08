@@ -243,14 +243,14 @@ Baseline scorecard from the initial audit:
 | Ranking and expected utility | 12 | 70 | 8.4 | Word ranking, candidate score margins, accepted-kept suppression, and a bounded learned utility adjustment exist; phrase/sentence ranking still needs trace-tuned semantic utility. |
 | Context and prompt hygiene | 9 | 73 | 6.6 | Context is small and local, but lacks field metadata, style sketch, recent kept suffixes, and a hard `<NO_SUGGESTION>` prompt path. |
 | Output shape and cleanup | 8 | 89 | 7.1 | Cleaner is one of the strongest parts of the app, and now suppresses phrase restarts or visible typed-word duplicates that survive prefix trimming. |
-| Local runtime and latency | 10 | 86 | 8.6 | App-owned MLX runtime, warm model, streaming, timing slices, and trace-visible per-field session-cache eligibility/reset policy; live KV/session reuse and static prefix cache are still pending. |
+| Local runtime and latency | 10 | 87 | 8.7 | App-owned MLX runtime, warm model, streaming, timing slices, trace-visible static prompt cache, and trace-visible per-field session-cache eligibility/reset policy; live KV/session reuse is still pending. |
 | Ghost text UX and controls | 10 | 92 | 9.2 | One suggestion, Tab next word, full accept when allowed, direct accept-all shortcut editing, Esc dismiss, stale hiding, current-field/session silence, per-app force-mirror control, and app-level Command-Z restore for accepted insertions. |
 | Mode profiles and cross-app safety | 10 | 76 | 7.6 | Strong app profiles and a user-visible per-app mirror override now exist, but behavior modes are not first-class for email, notes, bullets, docs, code, forms, search, and AI chat. |
 | Learning, annoyance, accepted-and-kept loop | 12 | 66 | 7.9 | Accepted-kept learning now affects both affinity and utility, but the loop still needs fresh real-app threshold proof. |
 | Metrics, replay, and proof gates | 5 | 85 | 4.3 | Trace/report scripts are strong, and Settings can now start per-app screenshot proof from the current app; true replay-first real-app rig is still missing. |
 | Architecture and tests | 2 | 91 | 1.8 | Good policy/test structure, though AppDelegate still owns too much orchestration. |
 
-Weighted total: **79.9/100**, rounded to **80/100**.
+Weighted total: **80.0/100**, rounded to **80/100**.
 
 ## Exact Research Items
 
@@ -281,7 +281,7 @@ Weighted total: **79.9/100**, rounded to **80/100**.
 | Hard `<NO_SUGGESTION>` path | 86 | Word/phrase/sentence prompts include `<NO_SUGGESTION>` guidance, and cleaner suppresses direct sentinels plus prompt-echo sentinel lines. | Prove sentinel behavior in fresh real model traces. |
 | Privacy-first tracing | 95 | Raw content is redacted by default, raw/screenshot capture is opt-in with expiry, line/list shape metadata avoids item text, kept suffix shape stores aggregate rates/lengths instead of text, Settings can clear learned suggestion state separately from local logs, permission copy states what is read and why, and Diagnostics now exposes placement confidence/anchor/render/self-healing evidence without suggestion text. | Store prefix hashes and make compact style/learning features more inspectable. |
 | Local runtime ownership | 92 | App-owned embedded runtime and no user-managed server dependency. | Keep this stance through beta and fail clearly if model assets are missing. |
-| Warm/runtime cache | 80 | Model container is warm and reused, `CompletionRequest` now carries field identity, and `RuntimeSessionCachePolicy` defines a tested same-app/same-field/same-mode/same-neighborhood reuse gate with trace metadata for reuse eligibility and reset reasons. Each MLX request still builds a new `ChatSession`. | Add static prompt prefix cache and wire safe per-field session/KV reuse into the app runtime. |
+| Warm/runtime cache | 82 | Model container is warm and reused, static system prompts now go through a bounded redacted-key cache with hit/size trace metadata, `CompletionRequest` carries field identity, and `RuntimeSessionCachePolicy` defines a tested same-app/same-field/same-mode/same-neighborhood reuse gate with trace metadata for reuse eligibility and reset reasons. Each MLX request still builds a new `ChatSession`. | Wire safe per-field session/KV reuse into the app runtime. |
 | Generated length | 92 | MVP defaults to 5 visible words / 10 generated tokens, behavior profiles stay shorter by mode, env overrides clamp at 7 visible words / 16 generated tokens, and sentence mode has its own 10-token ceiling. | Tune defaults from fresh traces. |
 | Stale cancellation | 86 | Request IDs, text snapshots, and keydown invalidation are strong. | Add app-level async race tests and cancellation proof in replay rig. |
 | One visible suggestion | 95 | Single `SuggestionSession`, no dropdown or carousel. | Keep this invariant. |
