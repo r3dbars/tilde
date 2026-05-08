@@ -149,6 +149,14 @@ struct SettingsCurrentAppState: Equatable {
         isEnabled ? "Start App Proof" : "Enable App First"
     }
 
+    var copyProofCommandButtonTitle: String {
+        canCopyProofCommand ? "Copy Proof Command" : "No Proof Command"
+    }
+
+    var canCopyProofCommand: Bool {
+        proofCommandClipboardText != nil
+    }
+
     var proofText: String {
         guard bundleIdentifier != nil else {
             return "Proof: choose a writing app first."
@@ -176,6 +184,22 @@ struct SettingsCurrentAppState: Equatable {
     }
 
     var proofCommandText: String? {
+        guard let command = proofCommandClipboardText else {
+            return nil
+        }
+
+        if bundleIdentifier == "com.apple.Notes" {
+            return "Manual commands: \(command.replacingOccurrences(of: "\n", with: "; "))"
+        }
+
+        if supportStatus.supportLevel == .yellow {
+            return "Manual command: \(command)"
+        }
+
+        return "Command: \(command)"
+    }
+
+    var proofCommandClipboardText: String? {
         guard let bundleIdentifier,
               isEnabled,
               case let .supported(profile) = supportStatus,
@@ -186,17 +210,21 @@ struct SettingsCurrentAppState: Equatable {
 
         switch bundleIdentifier {
         case "com.apple.TextEdit":
-            return "Command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit"
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit"
         case "com.google.Chrome":
-            return "Command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all"
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all"
         case "md.obsidian":
-            return "Manual command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate"
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate"
         case "com.apple.Notes":
-            return "Manual commands: run notes-title, notes-body, and notes-checklist proof separately."
+            return """
+            AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate
+            AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate
+            AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
+            """
         case "com.openai.codex":
-            return "Manual command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
         case "com.anthropic.claudefordesktop":
-            return "Manual command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
+            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
         default:
             return nil
         }
@@ -405,6 +433,7 @@ final class SettingsWindowController: NSObject {
     )
     private let forceMirrorModeButton = NSButton(title: "Force Mirror Mode", target: nil, action: nil)
     private let startAppProofButton = NSButton(title: "Start App Proof", target: nil, action: nil)
+    private let copyProofCommandButton = NSButton(title: "Copy Proof Command", target: nil, action: nil)
     private let enableAllAppsButton = NSButton(title: "Clear Blocked Apps", target: nil, action: nil)
     private let privacyLabel = NSTextField(labelWithString: "")
     private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
@@ -452,6 +481,7 @@ final class SettingsWindowController: NSObject {
     private let cycleAcceptAllShortcut: () -> Void
     private let setAcceptAllShortcut: (AcceptAllShortcut) -> Void
     private var currentRuntimeAction: RuntimeReadinessAction = .none
+    private var currentProofCommandClipboardText: String?
 
     init(
         requestPermission: @escaping () -> Void,
@@ -596,6 +626,10 @@ final class SettingsWindowController: NSObject {
         currentAppProofLabel.stringValue = currentApp.proofText
         currentAppProofCommandLabel.stringValue = currentApp.proofCommandText ?? ""
         currentAppProofCommandLabel.isHidden = currentApp.proofCommandText == nil
+        currentProofCommandClipboardText = currentApp.proofCommandClipboardText
+        copyProofCommandButton.title = currentApp.copyProofCommandButtonTitle
+        copyProofCommandButton.isEnabled = currentApp.canCopyProofCommand
+        copyProofCommandButton.isHidden = !currentApp.canCopyProofCommand
         toggleCurrentAppButton.title = currentApp.toggleTitle
         toggleCurrentAppButton.state = currentApp.isEnabled ? .on : .off
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
@@ -708,6 +742,10 @@ final class SettingsWindowController: NSObject {
         startAppProofButton.action = #selector(startAppProofControl)
         startAppProofButton.bezelStyle = .rounded
         startAppProofButton.toolTip = "Turns on temporary screenshot proof for the enabled current app and opens Diagnostics."
+        copyProofCommandButton.target = self
+        copyProofCommandButton.action = #selector(copyProofCommandControl)
+        copyProofCommandButton.bezelStyle = .rounded
+        copyProofCommandButton.toolTip = "Copies the exact smoke command for the current app."
         enableAllAppsButton.target = self
         enableAllAppsButton.action = #selector(enableAllAppsControl)
         enableAllAppsButton.bezelStyle = .rounded
@@ -775,7 +813,7 @@ final class SettingsWindowController: NSObject {
                     currentAppAcceptanceLabel,
                     currentAppProofLabel,
                     currentAppProofCommandLabel,
-                    makeButtonRow([forceMirrorModeButton, startAppProofButton]),
+                    makeButtonRow([forceMirrorModeButton, startAppProofButton, copyProofCommandButton]),
                     toggleCurrentAppButton,
                     makeButtonRow([disabledAppsLabel, enableAllAppsButton])
                 ]
@@ -894,6 +932,16 @@ final class SettingsWindowController: NSObject {
     @objc
     private func startAppProofControl() {
         startCurrentAppProof()
+    }
+
+    @objc
+    private func copyProofCommandControl() {
+        guard let currentProofCommandClipboardText else {
+            return
+        }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(currentProofCommandClipboardText, forType: .string)
     }
 
     @objc

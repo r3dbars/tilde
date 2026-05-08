@@ -25,6 +25,9 @@ struct SettingsWindowControllerStateTests {
         #expect(allowed.acceptanceText == "Acceptance: Tab next word + full accept")
         #expect(allowed.proofText == "Proof: use disposable text, press Tab once, then the full-accept shortcut.")
         #expect(allowed.proofCommandText == "Command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit")
+        #expect(allowed.proofCommandClipboardText == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit")
+        #expect(allowed.copyProofCommandButtonTitle == "Copy Proof Command")
+        #expect(allowed.canCopyProofCommand)
         #expect(allowed.toggleTitle == "Allow suggestions in this app")
         #expect(allowed.menuToggleTitle == "Disable TextEdit")
         #expect(allowed.blockedAppsText == "Blocked apps: none")
@@ -47,9 +50,33 @@ struct SettingsWindowControllerStateTests {
         #expect(blocked.acceptanceText == "Acceptance: Tab next word + full accept")
         #expect(blocked.proofText == "Proof: turn on suggestions for this app first.")
         #expect(blocked.proofCommandText == nil)
+        #expect(blocked.proofCommandClipboardText == nil)
+        #expect(blocked.copyProofCommandButtonTitle == "No Proof Command")
+        #expect(!blocked.canCopyProofCommand)
         #expect(blocked.menuToggleTitle == "Enable Notes")
         #expect(blocked.blockedAppsText == "Blocked apps: 2")
         #expect(blocked.canToggle)
+
+        let enabledNotes = SettingsCurrentAppState(
+            displayName: "Notes",
+            bundleIdentifier: "com.apple.Notes",
+            supportStatus: store.supportStatus(for: "com.apple.Notes"),
+            isEnabled: true,
+            disabledAppCount: 0
+        )
+
+        #expect(enabledNotes.proofCommandText?.contains("notes-title --manual-gate") == true)
+        #expect(enabledNotes.proofCommandText?.contains("notes-body --manual-gate") == true)
+        #expect(enabledNotes.proofCommandText?.contains("notes-checklist --manual-gate") == true)
+        #expect(
+            enabledNotes.proofCommandClipboardText
+                == """
+                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate
+                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate
+                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
+                """
+        )
+        #expect(enabledNotes.canCopyProofCommand)
     }
 
     @Test("Diagnostics-only unsupported or missing current app cannot be toggled")
@@ -72,6 +99,8 @@ struct SettingsWindowControllerStateTests {
         #expect(diagnosticsOnly.acceptanceText == "Acceptance: off here")
         #expect(diagnosticsOnly.proofText == "Proof: unavailable here.")
         #expect(diagnosticsOnly.proofCommandText == nil)
+        #expect(diagnosticsOnly.proofCommandClipboardText == nil)
+        #expect(!diagnosticsOnly.canCopyProofCommand)
         #expect(diagnosticsOnly.menuToggleTitle == "Suggestions unavailable in Mail")
         #expect(!diagnosticsOnly.canToggle)
 
@@ -89,6 +118,8 @@ struct SettingsWindowControllerStateTests {
         #expect(unsupported.acceptanceText == "Acceptance: off here")
         #expect(unsupported.proofText == "Proof: unavailable here.")
         #expect(unsupported.proofCommandText == nil)
+        #expect(unsupported.proofCommandClipboardText == nil)
+        #expect(!unsupported.canCopyProofCommand)
         #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Atlas")
         #expect(!unsupported.canToggle)
 
@@ -106,6 +137,8 @@ struct SettingsWindowControllerStateTests {
         #expect(missing.acceptanceText == "Acceptance: off until an app is selected")
         #expect(missing.proofText == "Proof: choose a writing app first.")
         #expect(missing.proofCommandText == nil)
+        #expect(missing.proofCommandClipboardText == nil)
+        #expect(!missing.canCopyProofCommand)
         #expect(missing.menuToggleTitle == "Toggle Current App")
         #expect(!missing.canToggle)
     }
@@ -125,6 +158,8 @@ struct SettingsWindowControllerStateTests {
         #expect(codex.acceptanceText == "Acceptance: Tab next word only; full accept is off for safety")
         #expect(codex.proofText == "Proof: use disposable prompt text, press Tab once, and do not press Enter.")
         #expect(codex.proofCommandText == "Manual command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate")
+        #expect(codex.proofCommandClipboardText == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate")
+        #expect(codex.canCopyProofCommand)
     }
 
     @Test("Per-app mode copy exposes forced mirror overrides")
@@ -178,6 +213,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(disabled.proofButtonTitle == "Enable App First")
         #expect(!disabled.canStartProof)
+        #expect(!disabled.canCopyProofCommand)
     }
 
     @Test("Accessibility permission copy says what the app reads and keeps local")
