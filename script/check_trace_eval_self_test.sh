@@ -3,7 +3,8 @@ set -euo pipefail
 
 TRACE_FILE="$(mktemp)"
 SLICE_FAIL_FILE="$(mktemp)"
-trap 'rm -f "$TRACE_FILE" "$SLICE_FAIL_FILE"' EXIT
+RATE_FILE="$(mktemp)"
+trap 'rm -f "$TRACE_FILE" "$SLICE_FAIL_FILE" "$RATE_FILE"' EXIT
 
 cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionRequested","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion"}
@@ -127,6 +128,62 @@ fi
 if ! grep -F "Insertion verification success: 100%" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not report insertion verification success" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+cat >"$RATE_FILE" <<'JSONL'
+{"timestamp":"2026-05-08T10:00:00Z","type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":40,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
+{"timestamp":"2026-05-08T10:00:01Z","type":"suggestionHidden","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","outcome":"ignored","reason":"escape","metadata":{"lifetimeMs":"900","hideLatencyMs":"12"}}
+{"timestamp":"2026-05-08T10:01:00Z","type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":45,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
+{"timestamp":"2026-05-08T10:01:02Z","type":"suggestionTypedOver","suggestionID":"two","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","metadata":{"typedSuffix":"x"}}
+{"timestamp":"2026-05-08T10:02:00Z","type":"suggestionPresented","suggestionID":"three","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":50,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
+{"timestamp":"2026-05-08T10:02:01Z","type":"suggestionHidden","suggestionID":"three","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","reason":"stale-after-keydown","metadata":{"lifetimeMs":"1200","hideLatencyMs":"31"}}
+JSONL
+
+AUTOCOMPLETE_LAB_TRACE_PATH="$RATE_FILE" \
+  script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-self-test-rates.txt
+
+if ! grep -F "Active writing minutes: 3" /tmp/autocomplete-trace-eval-self-test-rates.txt >/dev/null; then
+  echo "trace eval self-test did not report active writing minutes" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-rates.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Shown per active minute: 1.00" /tmp/autocomplete-trace-eval-self-test-rates.txt >/dev/null; then
+  echo "trace eval self-test did not report shown per active minute" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-rates.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Explicit dismissals per shown: 0.33 (1/3)" /tmp/autocomplete-trace-eval-self-test-rates.txt >/dev/null; then
+  echo "trace eval self-test did not report explicit dismissals per shown" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-rates.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Typed-over rate: 0.33 (1/3)" /tmp/autocomplete-trace-eval-self-test-rates.txt >/dev/null; then
+  echo "trace eval self-test did not report typed-over rate" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-rates.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Stale/wrong-context rate: 0.33 (1/3)" /tmp/autocomplete-trace-eval-self-test-rates.txt >/dev/null; then
+  echo "trace eval self-test did not report stale/wrong-context rate" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-rates.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Visible lifetime p50: 900ms" /tmp/autocomplete-trace-eval-self-test-rates.txt >/dev/null ||
+   ! grep -F "Visible lifetime p95: 1200ms" /tmp/autocomplete-trace-eval-self-test-rates.txt >/dev/null; then
+  echo "trace eval self-test did not report visible lifetimes" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-rates.txt >&2
+  exit 1
+fi
+
+if ! grep -F "Hide latency p50: 12ms" /tmp/autocomplete-trace-eval-self-test-rates.txt >/dev/null ||
+   ! grep -F "Hide latency p95: 31ms" /tmp/autocomplete-trace-eval-self-test-rates.txt >/dev/null; then
+  echo "trace eval self-test did not report hide latencies" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-rates.txt >&2
   exit 1
 fi
 
