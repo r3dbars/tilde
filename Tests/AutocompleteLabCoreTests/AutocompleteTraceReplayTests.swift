@@ -33,6 +33,13 @@ struct AutocompleteTraceReplayTests {
                 metadata: ["acceptanceID": "accept-one", "acceptMode": "tab"]
             ),
             event(
+                .insertionVerified,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.phraseContinuation.rawValue,
+                outcome: "verified",
+                metadata: ["acceptanceID": "accept-one", "acceptMode": "tab"]
+            ),
+            event(
                 .suggestionSuppressed,
                 suggestionID: "stale-one",
                 requestMode: CompletionRequestMode.phraseContinuation.rawValue,
@@ -68,6 +75,7 @@ struct AutocompleteTraceReplayTests {
         #expect(report.proofFingerprintCoverageRate == 1)
         #expect(report.placementCoverageRate == 1)
         #expect(report.trustedPlacementCount == 1)
+        #expect(report.acceptedInsertionCoverageRate == 1)
         #expect(report.staleCancellationCount == 1)
         #expect(report.keptFinalHorizonEventCount == 1)
         #expect(report.latencyByApp.first?.p50Milliseconds == 220)
@@ -137,6 +145,22 @@ struct AutocompleteTraceReplayTests {
                 textBeforeCursor: "[redacted length=42]",
                 latencyMilliseconds: 90,
                 metadata: displayMetadata(decision: "display")
+            ),
+            event(
+                .suggestionAccepted,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                textBeforeCursor: "[redacted length=42]",
+                outcome: "acceptNextWord",
+                metadata: ["acceptanceID": "accept-redacted", "acceptMode": "tab"]
+            ),
+            event(
+                .insertionVerified,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                textBeforeCursor: "[redacted length=42]",
+                outcome: "verified",
+                metadata: ["acceptanceID": "accept-redacted", "acceptMode": "tab"]
             ),
             event(
                 .suggestionSuppressed,
@@ -334,7 +358,125 @@ struct AutocompleteTraceReplayTests {
         })
     }
 
+    @Test("Smoke slice profile accepts bounded real app word completion proof")
+    func smokeSliceProfileAcceptsBoundedRealAppWordCompletionProof() {
+        let events = [
+            event(
+                .suggestionRequested,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                metadata: ["delayMilliseconds": "120"]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                latencyMilliseconds: 92,
+                metadata: displayMetadata(decision: "display")
+                    .merging(placementMetadata(anchor: "synthetic-caret", confidence: "medium")) {
+                        current, _ in current
+                    },
+                includePlacementMetadata: false
+            ),
+            event(
+                .suggestionAccepted,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                outcome: "acceptNextWord",
+                metadata: ["acceptanceID": "accept-smoke", "acceptMode": "tab"]
+            ),
+            event(
+                .insertionVerified,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                outcome: "verified",
+                metadata: ["acceptanceID": "accept-smoke", "acceptMode": "tab"]
+            ),
+            event(
+                .acceptedTextEdited,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                metadata: [
+                    "acceptanceID": "accept-smoke",
+                    "checkpoint": AcceptanceSurvivalCheckpoint.twoSeconds.rawValue,
+                    "survivalClass": AcceptanceSurvivalClass.lightlyEditedKept.rawValue
+                ]
+            )
+        ]
 
+        let fullReport = AutocompleteTraceReplay().report(for: events)
+        let smokeReport = AutocompleteTraceReplay().report(for: events, profile: .smokeSlice)
+
+        #expect(!fullReport.passesReplayProofGate)
+        #expect(smokeReport.passesReplayProofGate)
+        #expect(smokeReport.profile == .smokeSlice)
+        #expect(smokeReport.acceptedInsertionCoverageRate == 1)
+        #expect(smokeReport.requirements.contains {
+            $0.name == "candidate selection replay"
+                && $0.passed
+                && $0.detail.contains("not required for smoke-slice")
+        })
+        #expect(smokeReport.requirements.contains {
+            $0.name == "kept horizon replay"
+                && $0.passed
+                && $0.detail.contains("short-horizon")
+        })
+    }
+
+    @Test("Accepted insertion replay requires matching acceptance proof")
+    func acceptedInsertionReplayRequiresMatchingAcceptanceProof() {
+        let events = [
+            event(
+                .suggestionRequested,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                metadata: ["delayMilliseconds": "120"]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                latencyMilliseconds: 92,
+                metadata: displayMetadata(decision: "display")
+                    .merging(placementMetadata(anchor: "synthetic-caret", confidence: "medium")) {
+                        current, _ in current
+                    },
+                includePlacementMetadata: false
+            ),
+            event(
+                .suggestionAccepted,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                outcome: "acceptNextWord",
+                metadata: ["acceptanceID": "accept-one", "acceptMode": "tab"]
+            ),
+            event(
+                .insertionVerified,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                outcome: "verified",
+                metadata: ["acceptanceID": "accept-other", "acceptMode": "tab"]
+            ),
+            event(
+                .acceptedTextEdited,
+                suggestionID: "one",
+                requestMode: CompletionRequestMode.wordCompletion.rawValue,
+                metadata: [
+                    "acceptanceID": "accept-one",
+                    "checkpoint": AcceptanceSurvivalCheckpoint.twoSeconds.rawValue,
+                    "survivalClass": AcceptanceSurvivalClass.lightlyEditedKept.rawValue
+                ]
+            )
+        ]
+
+        let report = AutocompleteTraceReplay().report(for: events, profile: .smokeSlice)
+
+        #expect(!report.passesReplayProofGate)
+        #expect(report.acceptedInsertionCoverageRate == 0)
+        #expect(report.requirements.contains {
+            $0.name == "accepted insertion replay" && !$0.passed
+        })
+    }
 
     private func event(
         _ type: AutocompleteTraceEventType,
