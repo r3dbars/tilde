@@ -61,12 +61,15 @@ Invite testers only when every applicable box is checked.
 
 ## Current Blockers - 2026-05-07
 
-- Manual proof is still pending for Notes title, Notes body, Notes checklist,
-  Codex one-word no-submit, Claude Code one-word no-submit, and Claude desktop
-  one-word no-submit. Run `script/manual_proof_queue.sh --print` for the
-  exact user-gated proof sequence.
-- Screenshot-backed proof is still pending for Obsidian, Notes title, Notes
-  body, Notes checklist, Claude Code, and Claude desktop.
+- Screenshot-backed proof now exists for Obsidian, Notes title, Notes body, and
+  Notes checklist in `docs/product/visual-placement-screenshots/`, but rerun
+  those proof paths after app code changes before treating this branch as
+  beta-current.
+- Manual proof is still pending for Codex one-word no-submit, Claude Code
+  one-word no-submit, and Claude desktop one-word no-submit. Run
+  `script/manual_proof_queue.sh --print` for the exact user-gated proof
+  sequence.
+- Screenshot-backed proof is still pending for Claude Code and Claude desktop.
 - Codex has a screenshot, but still needs one strict same-slice proof that shows
   screenshot, one-word Tab accept, verified insertion, and no prompt submit.
 - `dist/AutocompleteLab.zip` and `dist/private-beta/checksums.txt` have been
