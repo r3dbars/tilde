@@ -1438,6 +1438,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             horizontalPadding: tuning.horizontalPadding,
             verticalPadding: tuning.verticalPadding,
             inlineGap: tuning.inlineGap,
+            centerSingleLineWhenTall: tuning.centerSingleLineWhenTall,
             widthOfText: { width(of: $0, font: font) }
         )
     }
@@ -1447,28 +1448,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let horizontalPadding: CGFloat
         let verticalPadding: CGFloat
         let inlineGap: CGFloat
+        let centerSingleLineWhenTall: Bool
     }
 
     private func syntheticTextAreaTuning(
         for context: FocusedTextContext,
         bundleIdentifier: String
     ) -> SyntheticTextAreaTuning {
+        if bundleIdentifier == "com.anthropic.claudefordesktop" {
+            return SyntheticTextAreaTuning(
+                font: NSFont.systemFont(ofSize: 21),
+                horizontalPadding: 14,
+                verticalPadding: 4,
+                inlineGap: 2,
+                centerSingleLineWhenTall: true
+            )
+        }
+
         if PromptEditorFingerprintPolicy.dogfoodBundleIdentifiers.contains(bundleIdentifier) {
             return SyntheticTextAreaTuning(
                 font: NSFont.systemFont(ofSize: 15),
                 horizontalPadding: 0,
                 verticalPadding: 4,
-                inlineGap: 8
+                inlineGap: 8,
+                centerSingleLineWhenTall: false
             )
         }
 
         guard bundleIdentifier == "com.google.Chrome" else {
-            return SyntheticTextAreaTuning(font: nil, horizontalPadding: 18, verticalPadding: 4, inlineGap: 8)
+            return SyntheticTextAreaTuning(
+                font: nil,
+                horizontalPadding: 18,
+                verticalPadding: 4,
+                inlineGap: 8,
+                centerSingleLineWhenTall: false
+            )
         }
 
         let searchable = context.fingerprint.searchableText
         if searchable.contains("monaco") {
-            return SyntheticTextAreaTuning(font: nil, horizontalPadding: 18, verticalPadding: 4, inlineGap: 44)
+            return SyntheticTextAreaTuning(
+                font: nil,
+                horizontalPadding: 18,
+                verticalPadding: 4,
+                inlineGap: 44,
+                centerSingleLineWhenTall: false
+            )
         }
 
         if searchable.contains("prosemirror") {
@@ -1476,15 +1501,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 font: NSFont.systemFont(ofSize: 18),
                 horizontalPadding: 18,
                 verticalPadding: 14,
-                inlineGap: 8
+                inlineGap: 8,
+                centerSingleLineWhenTall: false
             )
         }
 
         if usesChromeRichEditorSyntheticTuning(for: context, bundleIdentifier: bundleIdentifier) {
-            return SyntheticTextAreaTuning(font: nil, horizontalPadding: 18, verticalPadding: 14, inlineGap: 20)
+            return SyntheticTextAreaTuning(
+                font: nil,
+                horizontalPadding: 18,
+                verticalPadding: 14,
+                inlineGap: 20,
+                centerSingleLineWhenTall: false
+            )
         }
 
-        return SyntheticTextAreaTuning(font: nil, horizontalPadding: 18, verticalPadding: 4, inlineGap: 8)
+        return SyntheticTextAreaTuning(
+            font: nil,
+            horizontalPadding: 18,
+            verticalPadding: 4,
+            inlineGap: 8,
+            centerSingleLineWhenTall: false
+        )
     }
 
     private func syntheticTextAreaFont(

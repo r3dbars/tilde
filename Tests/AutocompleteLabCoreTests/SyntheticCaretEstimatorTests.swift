@@ -51,6 +51,24 @@ struct SyntheticCaretEstimatorTests {
         #expect(wrappedCaret.origin.y > shortCaret.origin.y)
     }
 
+    @Test("Can vertically center a single-line prompt in a tall composer")
+    func canCenterSingleLinePromptInTallComposer() throws {
+        let caret = try #require(SyntheticCaretEstimator.caretRect(
+            textBeforeCursor: "Can we make this inst",
+            elementRect: CGRect(x: 400, y: 670, width: 680, height: 64),
+            windowRect: CGRect(x: 380, y: 640, width: 730, height: 120),
+            lineHeight: 24,
+            horizontalPadding: 14,
+            inlineGap: 2,
+            centerSingleLineWhenTall: true,
+            widthOfText: fixedWidth
+        ))
+
+        #expect(caret.origin.x == 626)
+        #expect(caret.origin.y == 690)
+        #expect(caret.height == 24)
+    }
+
     @Test("Clamps caret inside containing window")
     func clampsCaretInsideContainingWindow() throws {
         let caret = try #require(SyntheticCaretEstimator.caretRect(

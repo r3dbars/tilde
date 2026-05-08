@@ -26,8 +26,8 @@ It is not yet magical by the research bar. The biggest remaining misses are:
   margin suppression, but still needs real model proof and learned utility.
 - Cross-app proof is honest but incomplete for Codex, Claude Code,
   default-Chrome web-editor AX exposure, and more production-editor variants.
-  Claude desktop now has one-word no-submit proof, but its synthetic-caret
-  placement still needs baseline-level polish.
+  Claude desktop now has same-baseline one-word no-submit proof, but more
+  prompt layouts still need coverage.
 - Normal typing proof now includes exact 1,200-, 4,800-, and 12,000-character
   strict TextEdit endurance passes, and the current harness revalidates named
   TextEdit focus in shorter CGEvent batches with bounded cleanup. The latest
@@ -299,7 +299,7 @@ Weighted total: **79.2/100**, rounded to **79/100**.
 | Bullets profile | 84 | Bullet/checklist/numbered current-line shape is now detected without item text, feeds trace metadata and prompt guidance, maps generic list-shaped writing to the bullets profile, keeps AI/search/form safety profiles ahead of list shape, and runtime ranking penalizes repeated bullet/checklist markers. | Screenshot-backed same-slice accepts in Notes/TextEdit plus checklist undo proof. |
 | Forms profile | 84 | Field-kind resolver maps forms/secure/url to a suppressed-by-default form profile with full accept disabled, and runtime candidate ranking keeps generated form text below the display threshold. | Proven non-sensitive free-form exceptions only. |
 | Search profile | 84 | Search field kind maps to a suppressed-by-default search profile with full accept disabled, and runtime candidate ranking keeps generated search text below the display threshold. | Proven across browser/native search fields. |
-| AI chat profile | 86 | Codex/Claude profiles are conservative, one-word biased, block submit/run/Enter suggestions, disable full accept, and runtime candidate ranking suppresses submit-like action text if the model emits it anyway. Claude desktop now has same-slice strict visual proof with one verified Tab accept and no submit signal. | Same-slice visual plus one-word no-submit proof for Codex and Claude Code, plus baseline-level Claude desktop placement polish. |
+| AI chat profile | 88 | Codex/Claude profiles are conservative, one-word biased, block submit/run/Enter suggestions, disable full accept, and runtime candidate ranking suppresses submit-like action text if the model emits it anyway. Claude desktop now has same-baseline strict visual proof with one verified Tab accept, detector offset near zero, and no submit signal. | Same-slice visual plus one-word no-submit proof for Codex and Claude Code, plus more Claude desktop prompt layouts. |
 | Accepted-and-kept learning | 88 | Live survival events update a persisted app/field/mode/profile learning store that feeds display policy and decays with a 14-day half-life. Diagnostics now exposes accepted-kept rates and the current display-affinity probability/samples/threshold from trace metadata. | Prove thresholds with fresh real-app traces and add tuning controls. |
 | Typed-over learning | 88 | Typed-over trace, 5s prefix-family cooldown, 30s repeated typed-over escalation, and repeated-miss suppression exist; repeated-miss scores now decay by half-life instead of poisoning a prefix indefinitely, and Diagnostics exposes the current trace-safe miss score/threshold. | Prove thresholds with fresh real-app traces. |
 | Ignored learning | 84 | Ignored hides now record a weak repetition signal scaled by visible lifetime, with trace-safe weight/total metadata, the same decaying repeated-miss bucket, and Diagnostics visibility into passive ignored miss score/lifetime. | Prove thresholds with fresh real-app traces and separate passive ignored from explicit dismiss in diagnostics. |
@@ -492,7 +492,7 @@ these are true.
 - Notes title, body, and checklist are green with separate bounded proof rows.
 - Codex gets screenshot plus one-word accept plus no-submit in one strict slice.
 - Claude Code gets safe live prompt proof.
-- Claude desktop placement improves from functional proof to baseline-level polish.
+- Claude desktop same-baseline proof expands across multi-line and long prompt layouts.
 
 ### P2 - Runtime Polish
 
