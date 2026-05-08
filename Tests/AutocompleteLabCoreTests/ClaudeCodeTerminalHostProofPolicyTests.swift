@@ -175,7 +175,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             textAfterCursor: " this    \nOld output"
         )
 
-        #expect(input == "Can we make this")
+        #expect(input == "Can we make")
     }
 
     @Test("Terminal-host proof input accepts title-marker typed line")
@@ -185,6 +185,16 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         )
 
         #expect(input == "Can we make this")
+    }
+
+    @Test("Terminal-host proof input preserves one typed trailing space")
+    func terminalHostProofInputPreservesOneTypedTrailingSpace() {
+        let input = ClaudeCodeTerminalHostProofPolicy.proofInputText(
+            textBeforeCursor: "Welcome\n❯ AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF Can we make this ",
+            textAfterCursor: "screen padding that is not typed"
+        )
+
+        #expect(input == "Can we make this ")
     }
 
     @Test("Terminal-host proof input ignores Claude placeholder line")
