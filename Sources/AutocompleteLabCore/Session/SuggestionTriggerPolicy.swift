@@ -89,7 +89,8 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
     ) -> SuggestionTriggerDecision {
         if shouldSuppressAtLineStart(
             currentTextBeforeCursor,
-            behavior: lineStartBehavior
+            behavior: lineStartBehavior,
+            behaviorProfileID: behaviorProfileID
         ) {
             return .skip
         }
@@ -195,7 +196,8 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
 
     private func shouldSuppressAtLineStart(
         _ text: String,
-        behavior: SuggestionLineStartBehavior
+        behavior: SuggestionLineStartBehavior,
+        behaviorProfileID: AutocompleteBehaviorProfileID?
     ) -> Bool {
         let currentLine = text.split(
             omittingEmptySubsequences: false,
@@ -203,6 +205,12 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         ).last.map(String.init) ?? ""
 
         let contentWords = contentWordCount(in: currentLine)
+        if suppressesFreshParagraphStart(for: behaviorProfileID),
+           isFreshParagraphStart(text),
+           contentWords < 3 {
+            return true
+        }
+
         guard contentWords < 2 else {
             return false
         }
@@ -213,6 +221,32 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         case .listItem, .email:
             return !hasLineStartWordCompletionFragment(in: currentLine)
         }
+    }
+
+    private func suppressesFreshParagraphStart(for profileID: AutocompleteBehaviorProfileID?) -> Bool {
+        guard let profileID else {
+            return false
+        }
+
+        return AutocompleteBehaviorProfile.profile(profileID)
+            .suppressionDefaults
+            .suppressesFreshParagraphStart
+    }
+
+    private func isFreshParagraphStart(_ text: String) -> Bool {
+        let lines = text.split(
+            omittingEmptySubsequences: false,
+            whereSeparator: \.isNewline
+        ).map(String.init)
+
+        guard lines.count >= 3,
+              lines.last?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            return false
+        }
+
+        return lines.dropLast().last?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty == true
     }
 
     private func contentWordCount(in text: String) -> Int {

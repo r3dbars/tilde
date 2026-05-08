@@ -239,7 +239,7 @@ Baseline scorecard from the initial audit:
 | Category | Weight | Score | Weighted | Initial audit read |
 | --- | ---: | ---: | ---: | --- |
 | Product boundary and writer agency | 8 | 87 | 7.0 | Correctly avoids ambient rewrite/action behavior and keeps suggestions short, but sentence continuation can still drift into planning. |
-| Trigger gate and boundary timing | 14 | 69 | 9.7 | Strong stale/deletion/focus basics, but app timings are 0-15ms where research asks 90-450ms by mode. |
+| Trigger gate and boundary timing | 14 | 70 | 9.8 | Strong stale/deletion/focus basics, researched delays, and profile-aware fresh-paragraph suppression are now live; fresh replay proof is still needed. |
 | Ranking and expected utility | 12 | 68 | 8.2 | Word ranking exists; phrase/sentence ranking is still mostly single-candidate prompt plus cleaner. |
 | Context and prompt hygiene | 9 | 73 | 6.6 | Context is small and local, but lacks field metadata, style sketch, recent kept suffixes, and a hard `<NO_SUGGESTION>` prompt path. |
 | Output shape and cleanup | 8 | 89 | 7.1 | Cleaner is one of the strongest parts of the app, and now suppresses phrase restarts or visible typed-word duplicates that survive prefix trimming. |
@@ -250,7 +250,7 @@ Baseline scorecard from the initial audit:
 | Metrics, replay, and proof gates | 5 | 85 | 4.3 | Trace/report scripts are strong, and Settings can now start per-app screenshot proof from the current app; true replay-first real-app rig is still missing. |
 | Architecture and tests | 2 | 91 | 1.8 | Good policy/test structure, though AppDelegate still owns too much orchestration. |
 
-Weighted total: **79.5/100**, rounded to **80/100**.
+Weighted total: **79.6/100**, rounded to **80/100**.
 
 ## Exact Research Items
 
@@ -266,7 +266,7 @@ Weighted total: **79.5/100**, rounded to **80/100**.
 | Within-word mode | 88 | Word completion now requires 3+ alphabetic chars in trigger, activation, and fast ranking, uses a 90-140ms trigger delay, and word suffix cleaning rejects spaces/punctuation. | Perfect casing/punctuation preservation and fresh app-slice proof. |
 | Phrase mode | 84 | Word-boundary phrase requests use 140-240ms delay, phrase display threshold, behavior-profile prompt caps, and candidate ranking. | Fresh real-app proof and learned score margins. |
 | Sentence mode | 78 | First-class `sentenceContinuation` mode exists with activation, prompt guidance, stricter display threshold, streaming behavior, replay delay gate, and ranker penalties for question/planning drift. | Real-app proof that it does not take over the writer's next thought. |
-| Line/paragraph start | 84 | Trigger policy suppresses plain line starts until two content words, keeps bare markers quiet, and now allows constrained one-word completions in list/checklist and email contexts. | Add screenshot proof and tune profile-specific exceptions against real traces. |
+| Line/paragraph start | 86 | Trigger policy suppresses plain line starts until two content words, keeps bare markers quiet, allows constrained one-word completions in list/checklist and email contexts, and now enforces profile fresh-paragraph suppression for docs/email/code until the new paragraph has stronger local context. | Add screenshot proof and tune profile-specific exceptions against real traces. |
 | After deletion | 82 | Deletion skips requests and records a 250ms prefix-family cooldown. | Prove the live cooldown in fresh traces and feed longer-term deletion outcomes into learning. |
 | After accept | 90 | Tab accepts one word, full accept is profile-gated, accepted-and-kept horizons feed durable display affinity, and the app now discards residual Tab text so the next follow-on must be recomputed and rescored. | Prove the recompute behavior in fresh real-app traces. |
 | After typed-over | 86 | Typed-over is traced, learned as a miss, starts a 5s app/field/mode/prefix-family cooldown, and repeated typed-over on the same prefix escalates to 30s. | Prove thresholds with fresh real-app traces. |
@@ -292,10 +292,10 @@ Weighted total: **79.5/100**, rounded to **80/100**.
 | Esc dismiss | 88 | Implemented and traces keyboard action. | Add prefix-family cooldown and repeated-dismiss escalation. |
 | Atomic undo | 78 | Accepted insertions now arm an 8s one-step Command-Z restore for the same focused app/field; raw accepted text stays only in ephemeral memory and diagnostics log lengths/status only. | Prove the restore path per app and decide whether native undo grouping can replace the app-level fallback. |
 | Casual chat profile | 82 | `AutocompleteBehaviorProfile.casualChat` caps at 4 words, suppresses questions/emotional text, and runtime candidate ranking penalizes question-like or emotionally steering completions. | Fresh chat-app proof and learned style fit. |
-| Email profile | 78 | Mail resolves to an email profile with 2-6 word cap, blank/fresh paragraph suppression, no invented commitments/names/deadlines guidance, and runtime candidate ranking now penalizes invented meetings, dates, attachments, and unsupported commitments. | Real Mail proof plus safe free-form exceptions. |
+| Email profile | 79 | Mail resolves to an email profile with 2-6 word cap, prompt guidance plus trigger-level blank/fresh paragraph suppression, no invented commitments/names/deadlines guidance, and runtime candidate ranking now penalizes invented meetings, dates, attachments, and unsupported commitments. | Real Mail proof plus safe free-form exceptions. |
 | Notes profile | 90 | Notes app profile exists with terse 1-5 word guidance, blank-line suppression, list/checklist prompt guidance, safer AX-first insertion, delayed read-only verification for Notes AX lag, and stale text-after-cursor repair. Title, body, and checklist fields have same-slice strict visual proof with two verified accepts each. | More list lengths, checked items, and undo proof. |
 | Coding profile | 78 | Coding profile caps at 1-5 tokens, warns against invented APIs/imports/blocks, and runtime candidate ranking now penalizes block/import/function starters, multiline output, and unsupported identifiers. | Opt-in proof in real editors and deeper syntax-aware scoring from editor context. |
-| Docs/prose profile | 80 | Docs/prose profile matches rhythm/vocabulary, suppresses fresh paragraphs/blank lines, and runtime ranking penalizes candidates that start a new section or new point instead of continuing the current paragraph. | Fresh prose proof and learned rhythm/style fit. |
+| Docs/prose profile | 82 | Docs/prose profile matches rhythm/vocabulary, now enforces fresh-paragraph trigger suppression instead of only prompt guidance, and runtime ranking penalizes candidates that start a new section or new point instead of continuing the current paragraph. | Fresh prose proof and learned rhythm/style fit. |
 | Bullets profile | 84 | Bullet/checklist/numbered current-line shape is now detected without item text, feeds trace metadata and prompt guidance, maps generic list-shaped writing to the bullets profile, keeps AI/search/form safety profiles ahead of list shape, and runtime ranking penalizes repeated bullet/checklist markers. | Screenshot-backed same-slice accepts in Notes/TextEdit plus checklist undo proof. |
 | Forms profile | 84 | Field-kind resolver maps forms/secure/url to a suppressed-by-default form profile with full accept disabled, and runtime candidate ranking keeps generated form text below the display threshold. | Proven non-sensitive free-form exceptions only. |
 | Search profile | 84 | Search field kind maps to a suppressed-by-default search profile with full accept disabled, and runtime candidate ranking keeps generated search text below the display threshold. | Proven across browser/native search fields. |
