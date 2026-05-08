@@ -2778,7 +2778,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     fieldIdentity: fieldIdentity,
                     renderMode: renderMode,
                     latencyMilliseconds: 0,
-                    triggerReason: "fast-word-completion"
+                    triggerReason: "fast-word-completion",
+                    refreshBeforePresenting: false
                 )
                 return
             }
@@ -3020,14 +3021,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fieldIdentity: FocusedFieldIdentity,
         renderMode: SuggestionRenderMode,
         latencyMilliseconds: Int,
-        triggerReason: String
+        triggerReason: String,
+        refreshBeforePresenting: Bool = true
     ) {
         let originalContext = context
-        let refreshedContext = refreshedPresentationContext(
-            for: request,
-            profile: profile,
-            fieldIdentity: fieldIdentity
-        )
+        let refreshedContext = refreshBeforePresenting
+            ? refreshedPresentationContext(
+                for: request,
+                profile: profile,
+                fieldIdentity: fieldIdentity
+            )
+            : (context: Optional(context), reason: nil)
         guard let context = refreshedContext.context else {
             let reason = refreshedContext.reason ?? "stale-focused-context"
             RawAutocompleteTraceLog.shared.record(
