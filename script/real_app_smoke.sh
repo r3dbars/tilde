@@ -773,18 +773,73 @@ APPLESCRIPT
 }
 
 focus_textedit_smoke_editor() {
-  osascript >/dev/null <<'APPLESCRIPT'
+  local window_title="${1:-}"
+
+  if [[ -n "$window_title" ]]; then
+    osascript - "$window_title" >/dev/null <<'APPLESCRIPT'
+on run argv
+  set targetTitle to item 1 of argv
+  tell application "System Events"
+    tell process "TextEdit"
+      set foundTarget to false
+      set frontmost to true
+      repeat with candidateWindow in windows
+        if name of candidateWindow is targetTitle then
+          set foundTarget to true
+          perform action "AXRaise" of candidateWindow
+          exit repeat
+        end if
+      end repeat
+      if foundTarget is false then
+        error "No TextEdit smoke window named " & targetTitle number 1000
+      end if
+    end tell
+  end tell
+end run
+APPLESCRIPT
+  else
+    osascript >/dev/null <<'APPLESCRIPT'
 tell application "System Events"
   tell process "TextEdit"
     set frontmost to true
   end tell
 end tell
 APPLESCRIPT
+  fi
+
   wait_for_frontmost_app "TextEdit" 5
 }
 
 click_textedit_smoke_editor() {
-  osascript >/dev/null <<'APPLESCRIPT'
+  local window_title="${1:-}"
+
+  if [[ -n "$window_title" ]]; then
+    osascript - "$window_title" >/dev/null <<'APPLESCRIPT'
+on run argv
+  set targetTitle to item 1 of argv
+  tell application "System Events"
+    tell process "TextEdit"
+      set foundTarget to false
+      set frontmost to true
+      repeat with candidateWindow in windows
+        if name of candidateWindow is targetTitle then
+          set foundTarget to true
+          perform action "AXRaise" of candidateWindow
+          set windowPosition to position of candidateWindow
+          set windowSize to size of candidateWindow
+          click at {(item 1 of windowPosition) + ((item 1 of windowSize) / 2), (item 2 of windowPosition) + 160}
+          exit repeat
+        end if
+      end repeat
+      if foundTarget is false then
+        error "No TextEdit smoke window named " & targetTitle number 1000
+      end if
+    end tell
+  end tell
+end run
+APPLESCRIPT
+  else
+    osascript >/dev/null <<'APPLESCRIPT'
 tell application "System Events"
   tell process "TextEdit"
     set frontmost to true
@@ -796,6 +851,8 @@ tell application "System Events"
   end tell
 end tell
 APPLESCRIPT
+  fi
+
   wait_for_frontmost_app "TextEdit" 5
 }
 
@@ -1308,22 +1365,23 @@ run_claude_code_blocked() {
 }
 
 run_textedit() {
-  local runtime_start_line start_line textedit_file trace_start_line
+  local runtime_start_line start_line textedit_file textedit_tmp_dir textedit_window_title trace_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
 
   prepare_temporary_app_enablement
   build_if_needed
   wait_for_runtime_ready "$runtime_start_line" "TextEdit runtime readiness" 60 "$SKIP_BUILD"
 
-  mkdir -p "$HOME/Library/Logs/AutocompleteLab"
-  textedit_file="$HOME/Library/Logs/AutocompleteLab/textedit-smoke.txt"
+  textedit_tmp_dir="$(make_tmp_dir)"
+  textedit_file="$textedit_tmp_dir/textedit-smoke-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
+  textedit_window_title="$(basename "$textedit_file")"
   : >"$textedit_file"
   open -a TextEdit "$textedit_file"
   wait_for_frontmost_app "TextEdit" 5
   sleep 0.8
 
-  focus_textedit_smoke_editor
-  click_textedit_smoke_editor
+  focus_textedit_smoke_editor "$textedit_window_title"
+  click_textedit_smoke_editor "$textedit_window_title"
   osascript <<'APPLESCRIPT'
 tell application "System Events"
   keystroke "a" using command down
@@ -1332,7 +1390,7 @@ tell application "System Events"
 end tell
 delay 0.4
 APPLESCRIPT
-  click_textedit_smoke_editor
+  click_textedit_smoke_editor "$textedit_window_title"
 
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
@@ -1340,13 +1398,14 @@ APPLESCRIPT
   osascript <<'APPLESCRIPT'
 tell application "System Events"
   keystroke "Smoke proof feels inst"
+  key code 53
 end tell
 APPLESCRIPT
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
   assert_frontmost_app "TextEdit" "TextEdit"
-  focus_textedit_smoke_editor
+  focus_textedit_smoke_editor "$textedit_window_title"
   press_key_code 48
   wait_for_log_fields "$start_line" "TextEdit Tab acceptance" 12 \
     "keyboard-action" \
@@ -1362,13 +1421,14 @@ APPLESCRIPT
   osascript <<'APPLESCRIPT'
 tell application "System Events"
   keystroke " and stays inst"
+  key code 53
 end tell
 APPLESCRIPT
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.TextEdit" "TextEdit second"
   assert_frontmost_app "TextEdit" "TextEdit"
-  focus_textedit_smoke_editor
+  focus_textedit_smoke_editor "$textedit_window_title"
   full_start_line="$(line_count "$LOG_PATH")"
   press_accept_all_shortcut
   wait_for_log_fields "$full_start_line" "TextEdit full acceptance" 12 \
