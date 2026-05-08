@@ -52,11 +52,13 @@ Pass 1 fixed the biggest automatable scope gap: startup selection now defaults a
 
 Pass 2 added durable exact-suggestion suppression. A user can block the current visible suggestion from the menu, the app suppresses future matching fast-word/model suggestions before presentation, and the persisted blocklist stores only app/mode-scoped HMAC fingerprints plus shape metadata. Deleting local privacy logs now clears this blocklist too.
 
+Pass 3 added the safe core foundation for deterministic snippets/templates: explicit `;trigger` matching, per-app allowlisting, replacement safety checks, longest-trigger selection, and shape-only trace metadata. It is intentionally not wired into live insertion yet because replacing the trigger before the caret needs fresh app-specific proof.
+
 ## Score
 
 Starting score: 76/100
 
-Current score after pass 2: 82/100
+Current score after pass 3: 83/100
 
 This is a strict product score, not an implementation-depth score. The score is still capped by stale/manual proof, prompt-app no-submit proof, and missing deterministic snippets/templates.
 
@@ -128,10 +130,10 @@ This is a strict product score, not an implementation-depth score. The score is 
 ### Deterministic Fallback And Templates
 
 - Weight: 5
-- Current score: 2/5
-- Why this score: There are deterministic mock/local completion components and recent-word memory, but no user-facing snippet/template engine like TextExpander/Typinator.
-- Evidence found in repo: `MockCompletionEngine`, `LocalCompletionEngine`, `RecentWordMemory`, `WordCompletionCandidateRanker`.
-- Missing evidence: User-defined snippets, explicit triggers, protected phrases, searchable snippet recall, and tests that snippets work without probabilistic model behavior.
+- Current score: 3/5
+- Why this score: Deterministic mock/local completion, recent-word memory, and a safe core snippet matcher now exist. The snippet path supports explicit triggers, per-app allowlisting, replacement safety rules, and shape-only metadata, but it is not wired into live trigger replacement or UI yet.
+- Evidence found in repo: `MockCompletionEngine`, `LocalCompletionEngine`, `RecentWordMemory`, `WordCompletionCandidateRanker`, `SnippetTemplateMatcher`, `Tests/AutocompleteLabCoreTests/SnippetTemplateMatcherTests.swift`.
+- Missing evidence: User-facing snippet management, live trigger replacement proof, protected phrases, searchable snippet recall, and tests that snippet insertion works in real apps without probabilistic model behavior.
 - What would make it 100/100: Exact local snippets/templates alongside AI, with per-app enablement and no raw-text logging.
 
 ### Resource Efficiency And Native Feel
@@ -229,11 +231,12 @@ A 100/100 app is boringly trusted. Every supported surface has fresh same-commit
 ### 5. Add Deterministic Snippet Fallback
 
 - Objective: Add exact local snippets/templates as an explicit fallback path, separate from prediction.
-- Files likely involved: new core engine/configuration files, settings or command panel.
-- Tests to add/update: snippet parsing, matching, per-app enablement, no raw trace storage.
+- Files likely involved: `SnippetTemplateMatcher`, future settings or command panel, future insertion plan.
+- Tests to add/update: `SnippetTemplateMatcherTests`; future tests for app-side trigger replacement and no raw trace storage.
 - Proof required: unit tests and manual TextEdit proof.
 - Risk level: high.
-- Expected score impact: +4.
+- Status: Core matcher done in pass 3. Live insertion intentionally remains pending until app-specific proof can verify trigger replacement.
+- Expected score impact: +1 now, up to +4 after live proof.
 
 ### 6. Fresh Manual Proof Sweep
 
@@ -263,6 +266,6 @@ Improve Overall Excellence from 76/100 by closing automatable trust gaps first: 
 - Prompt-app full accept must stay disabled until separately proven.
 - Chrome fixture proof does not equal broad website proof.
 - Real Monaco/ProseMirror proof is missing beyond local fixtures.
-- Deterministic snippet/template fallback is missing.
+- Live deterministic snippet/template insertion is missing; only the safe core matcher exists.
 - Protected phrase/personal dictionary controls are missing beyond exact visible-suggestion suppression.
 - Some score/proof docs are stale relative to `proof-manifest.json`.
