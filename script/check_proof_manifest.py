@@ -32,6 +32,37 @@ PROOF_EVENT_TYPES = {
     "acceptedTextEdited",
     "caretGeometryFailed",
 }
+PROMPT_NO_SUBMIT_BUNDLES = {
+    "com.openai.codex",
+    "com.anthropic.claude-code",
+    "com.anthropic.claudefordesktop",
+}
+NO_SUBMIT_ONLY_PROMPT_BUNDLES = PROMPT_NO_SUBMIT_BUNDLES
+SUBMIT_LIKE_SIGNALS = {
+    "fieldsend",
+    "field-send",
+    "field-send-finalized",
+    "submit",
+    "submitted",
+    "prompt-submit",
+    "prompt-submitted",
+    "send",
+    "sent",
+    "enter",
+    "return",
+    "run",
+    "run-command",
+}
+SUBMIT_SIGNAL_METADATA_KEYS = {
+    "action",
+    "checkpoint",
+    "finishReason",
+    "key",
+    "keyboardAction",
+    "outcome",
+    "reason",
+    "result",
+}
 
 
 def fail(message: str) -> None:
@@ -268,6 +299,64 @@ def event_has_current_fingerprint(event: dict, current_versions: dict[str, str])
     return all(metadata.get(key) == expected for key, expected in current_versions.items())
 
 
+def normalized_signal(value: object) -> str:
+    return re.sub(r"[^a-z0-9-]+", "", str(value).strip().lower())
+
+
+def is_submit_like_signal(value: object) -> bool:
+    normalized = normalized_signal(value)
+    if not normalized:
+        return False
+    if normalized in SUBMIT_LIKE_SIGNALS:
+        return True
+    return any(signal in normalized for signal in {"fieldsend", "prompt-submit", "submitted"})
+
+
+def submit_like_trace_signal(event: dict) -> str | None:
+    for key in ["type", "outcome", "reason", "triggerReason"]:
+        value = event.get(key)
+        if is_submit_like_signal(value):
+            return f"{key}={value}"
+
+    metadata = event.get("metadata")
+    if isinstance(metadata, dict):
+        for key in SUBMIT_SIGNAL_METADATA_KEYS:
+            value = metadata.get(key)
+            if is_submit_like_signal(value):
+                return f"metadata.{key}={value}"
+
+    return None
+
+
+def is_full_accept_event(event: dict) -> bool:
+    metadata = event.get("metadata")
+    accept_mode = metadata.get("acceptMode") if isinstance(metadata, dict) else None
+    accepted_scope = metadata.get("acceptedVisibleScope") if isinstance(metadata, dict) else None
+    return (
+        event.get("outcome") == "acceptAllVisible"
+        or accept_mode in {"acceptAllVisible", "full"}
+        or accepted_scope == "fullVisible"
+    )
+
+
+def is_prompt_no_submit_surface(name: str, claim: dict) -> bool:
+    bundle = str(claim.get("bundle", "")).strip()
+    proof = str(claim.get("proof", "")).strip().lower()
+    normalized_name = name.strip().lower()
+    if bundle in PROMPT_NO_SUBMIT_BUNDLES:
+        return True
+    return bundle == "com.google.Chrome" and (
+        proof == "chat-like" or "chrome chat-like" in normalized_name
+    )
+
+
+def is_no_submit_only_prompt_surface(name: str, claim: dict) -> bool:
+    bundle = str(claim.get("bundle", "")).strip()
+    if bundle in NO_SUBMIT_ONLY_PROMPT_BUNDLES:
+        return True
+    return name.strip().lower() in {"codex", "claude code", "claude desktop"}
+
+
 def verify_manual_trace_slice(
     name: str,
     claim: dict,
@@ -275,6 +364,7 @@ def verify_manual_trace_slice(
     current_versions: dict[str, str],
     require_bounded_trace_slices: bool,
     trace_window_lines: int,
+    require_prompt_no_submit: bool,
 ) -> tuple[list[str], list[str], bool]:
     failures: list[str] = []
     warnings: list[str] = []
@@ -333,6 +423,31 @@ def verify_manual_trace_slice(
         ]
         if not screenshot_events:
             failures.append(f"{name}: strict visual proof requires screenshot-backed presented trace events")
+
+    if require_prompt_no_submit and is_prompt_no_submit_surface(name, claim):
+        submit_signals = [
+            signal
+            for event in app_events
+            if (signal := submit_like_trace_signal(event)) is not None
+        ]
+        if submit_signals:
+            failures.append(
+                f"{name}: prompt no-submit trace contains submit-like signal(s): "
+                + ", ".join(submit_signals[:3])
+            )
+
+        if is_no_submit_only_prompt_surface(name, claim):
+            full_accepts = [
+                event
+                for event in app_events
+                if event.get("type") in {"suggestionAccepted", "insertionVerified", "acceptedTextEdited"}
+                and is_full_accept_event(event)
+            ]
+            if full_accepts:
+                failures.append(
+                    f"{name}: no-submit-only prompt proof contains full accept; "
+                    "use one-word Tab proof until separate full-accept no-submit proof exists"
+                )
 
     proof_events = [event for event in app_events if event.get("type") in PROOF_EVENT_TYPES]
     if not proof_events:
@@ -486,6 +601,7 @@ def verify_manifest(
                     current_versions,
                     require_bounded_trace_slices,
                     trace_window_lines,
+                    require_all,
                 )
                 failures.extend(trace_failures)
                 warnings.extend(trace_warnings)

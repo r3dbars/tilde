@@ -754,6 +754,10 @@ these are true.
 70. Done: add profile-aware acceptance safety before insertion so no-submit
    prompt profiles block full accept and multiword/non-visible/control accepted
    text, while standard profiles still allow proven full visible accept.
+71. Done: strengthen strict proof-manifest replay for prompt no-submit slices:
+   Codex, Claude Code, Claude desktop, and Chrome chat-like trace verification
+   now fails on submit-like trace signals, and no-submit-only prompt surfaces
+   also fail if the slice used full accept instead of one-word Tab proof.
 
 ## Goal Status
 
