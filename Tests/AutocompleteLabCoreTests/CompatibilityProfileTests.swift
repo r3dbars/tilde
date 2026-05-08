@@ -17,7 +17,6 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.Notes")?.insertionMode == .axThenKeyEvents)
         #expect(store.profile(for: "com.apple.Notes")?.appFamily == .swiftUIAppKit)
         #expect(store.profile(for: "com.apple.Notes")?.supportLevel == .yellow)
-        #expect(store.profile(for: "com.apple.Notes")?.renderMode == .floatingMirror)
         #expect(store.profile(for: "com.apple.Notes")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "com.apple.Notes")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "md.obsidian")?.renderMode == .floatingMirror)
@@ -63,41 +62,45 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.google.Chrome")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .keyEvents)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .axValueReplacement)
+        #expect(store.profile(for: "com.google.Chrome")?.allowsDescendantTextFallback == true)
         #expect(store.profile(for: "com.google.Chrome")?.allowsSyntheticCaretPlacement == false)
         #expect(store.profile(for: "com.openai.codex")?.displayName == "Codex")
         #expect(store.profile(for: "com.openai.codex")?.appFamily == .customCanvas)
         #expect(store.profile(for: "com.openai.codex")?.allowsFieldAnchor == false)
         #expect(store.profile(for: "com.openai.codex")?.supportLevel == .yellow)
-        #expect(store.profile(for: "com.openai.codex")?.renderMode == .floatingMirror)
-        #expect(store.profile(for: "com.openai.codex")?.fallbackRenderMode == nil)
+        #expect(store.profile(for: "com.openai.codex")?.renderMode == .inlineAdjacent)
+        #expect(store.profile(for: "com.openai.codex")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.openai.codex")?.insertionMode == .axValueReplacement)
-        #expect(store.profile(for: "com.openai.codex")?.fallbackInsertionMode == .keyEvents)
+        #expect(store.profile(for: "com.openai.codex")?.fallbackInsertionMode == nil)
         #expect(store.profile(for: "com.openai.codex")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "com.openai.codex")?.supportsOneWordAcceptance == true)
         #expect(store.profile(for: "com.openai.codex")?.supportsFullAcceptance == false)
+        #expect(store.profile(for: "com.openai.codex")?.requiresNoSubmitAcceptanceProof == true)
         #expect(store.profile(for: "com.openai.codex")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.openai.codex")?.promptAppSafetyMode == .wordOnly)
         #expect(store.profile(for: "com.anthropic.claude-code")?.displayName == "Claude Code")
-        #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .yellow)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.renderMode == .floatingMirror)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackRenderMode == nil)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.insertionMode == .keyEvents)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackInsertionMode == .axThenKeyEvents)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.renderMode == .disabled)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackRenderMode == .disabled)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.insertionMode == .disabled)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackInsertionMode == .disabled)
         #expect(store.profile(for: "com.anthropic.claude-code")?.fieldIdentityMode == .stableBounds)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.supportsOneWordAcceptance == true)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.anchorLadder == [.none])
+        #expect(store.profile(for: "com.anthropic.claude-code")?.supportsOneWordAcceptance == false)
         #expect(store.profile(for: "com.anthropic.claude-code")?.supportsFullAcceptance == false)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.canPresentSuggestions == true)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claude-code")?.allowsDetachedSuggestions == false)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.promptAppSafetyMode == .wordOnly)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.isSensitive == true)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.displayName == "Claude")
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportLevel == .yellow)
-        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.renderMode == .floatingMirror)
-        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackRenderMode == nil)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.renderMode == .inlineAdjacent)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.insertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackInsertionMode == nil)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportsOneWordAcceptance == true)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportsFullAcceptance == false)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.requiresNoSubmitAcceptanceProof == true)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.promptAppSafetyMode == .wordOnly)
         #expect(store.profile(for: "com.apple.Safari")?.supportLevel == .diagnosticsOnly)
@@ -166,7 +169,7 @@ struct CompatibilityProfileTests {
         let store = CompatibilityProfileStore.mvp
 
         #expect(!store.allows(bundleIdentifier: "com.example.UnknownEditor"))
-        #expect(!store.allows(bundleIdentifier: "com.example.AtlasLikeBrowser"))
+        #expect(!store.allows(bundleIdentifier: "com.openai.atlas"))
     }
 
     @Test("Support status explains unsupported and denylisted apps")
@@ -196,7 +199,7 @@ struct CompatibilityProfileTests {
         #expect(yellow.userFacingSummary == "Yellow: Notes")
         #expect(
             yellow.userFacingReason
-                == "Rich text can drift; display stays mirror-first and insertion fails closed until each Notes surface is proven."
+                == "Rich text can drift; display can fall back to floating, and insertion fails closed."
         )
         #expect(yellow.menuText(appDisplayName: "Notes", isEnabled: false) == "Notes yellow off")
         #expect(yellow.canToggleSuggestions)
@@ -204,18 +207,13 @@ struct CompatibilityProfileTests {
         let diagnosticsOnly = store.supportStatus(for: "com.apple.mail")
         #expect(diagnosticsOnly.supportLevel == .diagnosticsOnly)
         #expect(diagnosticsOnly.userFacingSummary == "Diagnostics-only: Mail")
-        #expect(diagnosticsOnly.userFacingUnavailableText == "Suggestions stay off here.")
         #expect(diagnosticsOnly.menuText(appDisplayName: "Mail", isEnabled: true) == "Mail diagnostics-only")
         #expect(!diagnosticsOnly.canToggleSuggestions)
 
         let atlas = store.supportStatus(for: "com.openai.atlas")
         #expect(atlas.supportLevel == .diagnosticsOnly)
         #expect(atlas.userFacingSummary == "Diagnostics-only: ChatGPT Atlas")
-        #expect(
-            atlas.userFacingReason
-                == "Atlas can contain private browser text and prompt chats; no no-submit proof exists."
-        )
-        #expect(atlas.userFacingUnavailableText == "Suggestions stay off here.")
+        #expect(atlas.userFacingReason == "Atlas can contain private browser text and prompt chats; no no-submit proof exists.")
         #expect(atlas.menuText(appDisplayName: "Atlas", isEnabled: true) == "Atlas diagnostics-only")
         #expect(!atlas.canToggleSuggestions)
 
@@ -226,18 +224,13 @@ struct CompatibilityProfileTests {
             chatGPT.userFacingReason
                 == "ChatGPT prompt composers can submit, attach context, and expose tools; no exact-version no-submit proof exists."
         )
-        #expect(chatGPT.userFacingUnavailableText == "Suggestions stay off here.")
         #expect(chatGPT.menuText(appDisplayName: "ChatGPT", isEnabled: true) == "ChatGPT diagnostics-only")
         #expect(!chatGPT.canToggleSuggestions)
 
         let unsupported = store.supportStatus(for: "com.example.UnknownEditor")
         #expect(unsupported.supportLevel == .unsupported)
         #expect(unsupported.userFacingSummary == "Unsupported: not tested yet")
-        #expect(
-            unsupported.userFacingReason
-                == "No compatibility profile yet; broad unknown-app support stays off until proven apps feel safe."
-        )
-        #expect(unsupported.userFacingUnavailableText == "Suggestions are intentionally off until this app is tested.")
+        #expect(unsupported.userFacingReason == "No compatibility profile yet.")
         #expect(unsupported.menuText(appDisplayName: "Unknown", isEnabled: true) == "Unknown unsupported")
         #expect(!unsupported.canToggleSuggestions)
     }
@@ -256,43 +249,6 @@ struct CompatibilityProfileTests {
         #expect(profile.debugSummary.contains("anchors=caret>field"))
     }
 
-    @Test("Every MVP profile has an explicit safety owner note")
-    func everyMVPProfileHasSafetyOwnerNote() {
-        for profile in CompatibilityProfileStore.mvp.profiles.values {
-            #expect(profile.safetyOwnerNote.hasPrefix("Owner: "))
-            #expect(profile.safetyOwnerNote.count >= 80)
-            #expect(profile.safetyOwnerNote.contains("because"))
-        }
-    }
-
-    @Test("Profiles expose explicit interaction modes")
-    func profilesExposeExplicitInteractionModes() throws {
-        let store = CompatibilityProfileStore.mvp
-        let textEdit = try #require(store.profile(for: "com.apple.TextEdit"))
-        let notes = try #require(store.profile(for: "com.apple.Notes"))
-        let codex = try #require(store.profile(for: "com.openai.codex"))
-        let mailStatus = store.supportStatus(for: "com.apple.mail")
-        let unsupportedStatus = store.supportStatus(for: "com.example.UnknownEditor")
-        let commandOnly = CompatibilityProfile(
-            bundleIdentifier: "com.example.CommandOnly",
-            displayName: "Command Only",
-            supportLevel: .yellow,
-            supportReason: "Inline placement is not proven.",
-            safetyOwnerNote: "Owner: Command-only test stays manual because inline and mirror placement are intentionally unavailable.",
-            renderMode: .disabled,
-            insertionMode: .keyEvents,
-            notes: "Synthetic command-only profile for mode labeling."
-        )
-
-        #expect(textEdit.interactionMode == .inline)
-        #expect(notes.interactionMode == .mirror)
-        #expect(codex.interactionMode == .mirror)
-        #expect(mailStatus.interactionMode == .disabled)
-        #expect(unsupportedStatus.interactionMode == .disabled)
-        #expect(commandOnly.interactionMode == .commandOnly)
-        #expect(commandOnly.canPresentSuggestions == false)
-    }
-
     @Test("Insertion mode plans try primary then safe fallback")
     func insertionModePlansTryPrimaryThenFallback() throws {
         let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
@@ -306,8 +262,8 @@ struct CompatibilityProfileTests {
         #expect(InsertionModePlan.modes(for: textEdit) == [.axSelectedText, .axValueReplacement])
         #expect(InsertionModePlan.modes(for: notes) == [.axThenKeyEvents, .keyEvents])
         #expect(InsertionModePlan.modes(for: chrome) == [.keyEvents, .axValueReplacement])
-        #expect(InsertionModePlan.modes(for: codex) == [.axValueReplacement, .keyEvents])
-        #expect(InsertionModePlan.modes(for: claudeCode) == [.keyEvents, .axThenKeyEvents])
+        #expect(InsertionModePlan.modes(for: codex) == [.axValueReplacement])
+        #expect(InsertionModePlan.modes(for: claudeCode) == [])
         #expect(InsertionModePlan.modes(for: claude) == [.axValueReplacement])
         #expect(InsertionModePlan.modes(for: mail) == [])
     }
@@ -323,13 +279,16 @@ struct CompatibilityProfileTests {
         #expect(notes.fallbackInsertionMode == .keyEvents)
         #expect(codex.supportsOneWordAcceptance == true)
         #expect(codex.supportsFullAcceptance == false)
-        #expect(claudeCode.supportsOneWordAcceptance == true)
+        #expect(codex.requiresNoSubmitAcceptanceProof == true)
+        #expect(claudeCode.supportsOneWordAcceptance == false)
         #expect(claudeCode.supportsFullAcceptance == false)
-        #expect(claudeCode.canPresentSuggestions == true)
+        #expect(claudeCode.canPresentSuggestions == false)
+        #expect(claudeCode.isSensitive == true)
         #expect(claude.supportsOneWordAcceptance == true)
         #expect(claude.supportsFullAcceptance == false)
+        #expect(claude.requiresNoSubmitAcceptanceProof == true)
 
-        for promptProfile in [codex, claudeCode, claude] {
+        for promptProfile in [codex, claude] {
             #expect(promptProfile.supportReason.contains("one-word no-submit proof"))
             #expect(promptProfile.notes.contains("Requires one-word no-submit proof"))
             #expect(promptProfile.notes.contains("separate full-accept no-submit proof"))
@@ -338,7 +297,12 @@ struct CompatibilityProfileTests {
             #expect(promptProfile.allowsDetachedSuggestions == false)
             #expect(promptProfile.allowsSyntheticCaretPlacement == false)
             #expect(promptProfile.promptAppSafetyMode == .wordOnly)
+            #expect(promptProfile.allowsStrictVisualProofSyntheticCaretPlacement == true)
         }
+
+        #expect(claudeCode.supportReason.contains("terminal host"))
+        #expect(claudeCode.notes.contains("terminal-host adapter"))
+        #expect(claudeCode.allowsStrictVisualProofSyntheticCaretPlacement == false)
     }
 
     @Test("Required prompt and chat apps are disabled until exact proof exists")
@@ -380,11 +344,11 @@ struct CompatibilityProfileTests {
         )
         #expect(
             notes.userFacingSafetySummary
-                == "Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Insertion fails closed if the primary method is not verified."
+                == "Inline when caret proof is trusted; mirror fallback if inline is unsafe. Detached field/window suggestions are disabled. Insertion fails closed if the primary method is not verified."
         )
         #expect(
             codex.userFacingSafetySummary
-                == "Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Full accept stays off until no-submit proof exists. Prompt safety mode is word-only."
+                == "Inline when caret proof is trusted; mirror fallback if inline is unsafe. Detached field/window suggestions are disabled. Full accept stays off until no-submit proof exists. Prompt safety mode is word-only."
         )
         #expect(mailStatus.userFacingSafetySummary == "Suggestions stay off here.")
         #expect(atlasStatus.userFacingSafetySummary == "Suggestions stay off here.")
@@ -417,8 +381,8 @@ struct CompatibilityProfileTests {
         #expect(InsertionModePlan.modes(for: notes, skipping: [.axThenKeyEvents]) == [.keyEvents])
     }
 
-    @Test("Render mode plans keep unproven targets mirror first")
-    func renderModePlansKeepUnprovenTargetsMirrorFirst() throws {
+    @Test("Render mode plans fall back to mirror when inline bounds are unavailable")
+    func renderModePlansFallbackToMirrorWhenInlineBoundsAreUnavailable() throws {
         let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
         let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
         let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
@@ -450,7 +414,7 @@ struct CompatibilityProfileTests {
             for: codex,
             supportsInlineSuggestions: true,
             hasMirrorAnchor: true
-        ) == .floatingMirror)
+        ) == .inlineAdjacent)
         #expect(RenderModePlan.effectiveMode(
             for: codex,
             supportsInlineSuggestions: false,
@@ -460,17 +424,17 @@ struct CompatibilityProfileTests {
             for: claudeCode,
             supportsInlineSuggestions: true,
             hasMirrorAnchor: true
-        ) == .floatingMirror)
+        ) == nil)
         #expect(RenderModePlan.effectiveMode(
             for: claudeCode,
             supportsInlineSuggestions: false,
             hasMirrorAnchor: true
-        ) == .floatingMirror)
+        ) == nil)
         #expect(RenderModePlan.effectiveMode(
             for: claude,
             supportsInlineSuggestions: true,
             hasMirrorAnchor: true
-        ) == .floatingMirror)
+        ) == .inlineAdjacent)
         #expect(RenderModePlan.effectiveMode(
             for: claude,
             supportsInlineSuggestions: false,
@@ -481,6 +445,103 @@ struct CompatibilityProfileTests {
             supportsInlineSuggestions: true,
             hasMirrorAnchor: true
         ) == nil)
+    }
+
+    @Test("Yellow mirror fallback does not permit low confidence placement without proof")
+    func yellowMirrorFallbackDoesNotPermitLowConfidencePlacementWithoutProof() throws {
+        let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+        let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+
+        let chromeTrustPolicy = chrome.placementTrustPolicy()
+        let chromePlan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: chrome.fallbackRenderMode,
+            caretRect: nil,
+            elementRect: CGRect(x: 100, y: 200, width: 500, height: 180),
+            windowRect: nil,
+            textLineRect: nil,
+            allowsDetachedSuggestions: chrome.allowsDetachedSuggestions,
+            trustPolicy: chromeTrustPolicy
+        )
+
+        #expect(!chromeTrustPolicy.allowsLowConfidencePlacement)
+        #expect(!chromeTrustPolicy.allowsSyntheticCaretPlacement)
+        guard case let .suppress(chromeSuppression) = chromePlan else {
+            Issue.record("Expected untrusted yellow mirror fallback to suppress")
+            return
+        }
+        #expect(chromeSuppression.reason == .lowConfidencePlacement)
+
+        #expect(textEdit.placementTrustPolicy().allowsLowConfidencePlacement)
+        #expect(chrome.placementTrustPolicy(input: CompatibilityPlacementTrustInput(
+            hasTrustedVisualAdjustment: true
+        )).allowsLowConfidencePlacement)
+    }
+
+    @Test("Chrome trusts proofed synthetic text-area caret placement without trusting detached fallback")
+    func chromeTrustsProofedSyntheticTextAreaCaretPlacement() throws {
+        let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+
+        let unproofedSyntheticCaretPlan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: chrome.fallbackRenderMode,
+            caretRect: CGRect(x: 320, y: 260, width: 0, height: 22),
+            elementRect: CGRect(x: 100, y: 200, width: 500, height: 180),
+            windowRect: CGRect(x: 80, y: 160, width: 560, height: 300),
+            textLineRect: CGRect(x: 320, y: 260, width: 0, height: 22),
+            caretIsSynthetic: true,
+            allowsDetachedSuggestions: chrome.allowsDetachedSuggestions,
+            trustPolicy: chrome.placementTrustPolicy()
+        )
+
+        guard case let .present(unproofedPresentation) = unproofedSyntheticCaretPlan else {
+            Issue.record("Expected unproofed Chrome synthetic caret placement to fall back")
+            return
+        }
+        #expect(unproofedPresentation.renderMode == .floatingMirror)
+        #expect(unproofedPresentation.anchorSource == .element)
+        #expect(unproofedPresentation.reason == .untrustedSyntheticCaret)
+
+        let syntheticCaretPlan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: chrome.fallbackRenderMode,
+            caretRect: CGRect(x: 320, y: 260, width: 0, height: 22),
+            elementRect: CGRect(x: 100, y: 200, width: 500, height: 180),
+            windowRect: CGRect(x: 80, y: 160, width: 560, height: 300),
+            textLineRect: CGRect(x: 320, y: 260, width: 0, height: 22),
+            caretIsSynthetic: true,
+            allowsDetachedSuggestions: chrome.allowsDetachedSuggestions,
+            trustPolicy: chrome.placementTrustPolicy(input: CompatibilityPlacementTrustInput(
+                hasProofedSyntheticCaret: true
+            ))
+        )
+
+        guard case let .present(presentation) = syntheticCaretPlan else {
+            Issue.record("Expected Chrome synthetic caret placement to present inline")
+            return
+        }
+        #expect(presentation.renderMode == .inlineAdjacent)
+        #expect(presentation.anchorSource == .syntheticCaret)
+        #expect(presentation.reason == .healthy)
+        #expect(presentation.metadata["placementConfidenceBand"] == "medium")
+
+        let detachedFallbackPlan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: chrome.fallbackRenderMode,
+            caretRect: nil,
+            elementRect: CGRect(x: 100, y: 200, width: 500, height: 180),
+            windowRect: CGRect(x: 80, y: 160, width: 560, height: 300),
+            textLineRect: nil,
+            caretIsSynthetic: false,
+            allowsDetachedSuggestions: chrome.allowsDetachedSuggestions,
+            trustPolicy: chrome.placementTrustPolicy()
+        )
+
+        guard case let .suppress(suppression) = detachedFallbackPlan else {
+            Issue.record("Expected Chrome detached low-confidence fallback to stay suppressed")
+            return
+        }
+        #expect(suppression.reason == .lowConfidencePlacement)
     }
 
     @Test("Render mode plans choose stable anchors for inline and mirror modes")

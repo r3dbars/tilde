@@ -31,7 +31,17 @@ public struct TraceReplayRequirement: Equatable, Sendable {
     }
 }
 
+public enum AutocompleteTraceReplayProfile: String, CaseIterable, Equatable, Sendable {
+    case full
+    case smokeSlice = "smoke-slice"
+
+    public static var cliValues: String {
+        allCases.map(\.rawValue).joined(separator: "|")
+    }
+}
+
 public struct AutocompleteTraceReplayReport: Equatable, Sendable {
+    public let profile: AutocompleteTraceReplayProfile
     public let summary: AutocompleteTraceSummary
     public let triggerRequestCount: Int
     public let triggerDelayCoveredCount: Int
@@ -44,6 +54,8 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
     public let placementCandidateCount: Int
     public let placementCoveredCount: Int
     public let trustedPlacementCount: Int
+    public let acceptedCount: Int
+    public let acceptedInsertionVerifiedCount: Int
     public let staleCancellationCount: Int
     public let keptHorizonEventCount: Int
     public let keptFinalHorizonEventCount: Int
@@ -72,6 +84,10 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
         rate(placementCoveredCount, placementCandidateCount)
     }
 
+    public var acceptedInsertionCoverageRate: Double {
+        rate(acceptedInsertionVerifiedCount, acceptedCount)
+    }
+
     public var passesReplayProofGate: Bool {
         requirements.allSatisfy(\.passed)
     }
@@ -80,6 +96,7 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
         var lines: [String] = [
             "# Autocomplete Trace Replay",
             "",
+            "- profile: \(profile.rawValue)",
             "- events: \(summary.totalEvents)",
             "- presented: \(summary.presentedCount)",
             "- accepted-and-kept: \(summary.acceptedAndKeptCount)",
@@ -88,6 +105,7 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
             "- candidate selection coverage: \(Self.percent(candidateSelectionCoverageRate)) (\(candidateSelectionCoveredCount)/\(candidateSelectionCandidateCount))",
             "- proof fingerprint coverage: \(Self.percent(proofFingerprintCoverageRate)) (\(proofFingerprintCoveredCount)/\(proofFingerprintCandidateCount))",
             "- placement coverage: \(Self.percent(placementCoverageRate)) (\(placementCoveredCount)/\(placementCandidateCount), trusted=\(trustedPlacementCount))",
+            "- accepted insertion coverage: \(Self.percent(acceptedInsertionCoverageRate)) (\(acceptedInsertionVerifiedCount)/\(acceptedCount))",
             "- stale cancellations: \(staleCancellationCount)",
             "- kept horizon events: \(keptHorizonEventCount)",
             "- final kept horizon events: \(keptFinalHorizonEventCount)",
@@ -139,14 +157,17 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
 public struct AutocompleteTraceReplay: Sendable {
     public init() {}
 
-    public func report(for events: [AutocompleteTraceEvent]) -> AutocompleteTraceReplayReport {
+    public func report(
+        for events: [AutocompleteTraceEvent],
+        profile: AutocompleteTraceReplayProfile = .full
+    ) -> AutocompleteTraceReplayReport {
         let summary = AutocompleteTraceAnalyzer().summary(for: events)
         let requests = events.filter { $0.type == .suggestionRequested }
         let triggerDelayCoveredCount = requests.filter(hasResearchedTriggerDelay).count
         let displayCandidates = displayScoreCandidateEvents(in: events)
         let displayCovered = displayCandidates.filter(hasDisplayScoreMetadata)
-        let modelResults = events.filter { $0.type == .modelResult }
-        let candidateSelectionCovered = modelResults.filter(hasCandidateSelectionMetadata)
+        let candidateSelectionCandidates = candidateSelectionCandidateEvents(in: events)
+        let candidateSelectionCovered = candidateSelectionCandidates.filter(hasCandidateSelectionMetadata)
         let proofFingerprintCandidates = proofFingerprintCandidateEvents(in: events)
         let proofFingerprintCovered = proofFingerprintCandidates.filter {
             AutocompleteTraceProofMetadata.isCurrent($0.metadata)
@@ -154,6 +175,12 @@ public struct AutocompleteTraceReplay: Sendable {
         let presentedEvents = events.filter { $0.type == .suggestionPresented }
         let placementCovered = presentedEvents.filter(hasPlacementMetadata)
         let trustedPlacementCount = presentedEvents.filter(hasTrustedPlacement).count
+        let acceptedEvents = events.filter { $0.type == .suggestionAccepted }
+        let insertionVerifiedEvents = events.filter { $0.type == .insertionVerified }
+        let acceptedInsertionVerifiedCount = acceptedInsertionVerifiedCount(
+            acceptedEvents: acceptedEvents,
+            insertionVerifiedEvents: insertionVerifiedEvents
+        )
         let acceptedTextEdited = events.filter { $0.type == .acceptedTextEdited }
         let finalHorizonEvents = acceptedTextEdited.filter(isFinalKeptHorizonEvent)
         let staleCancellations = events.filter(isStaleCancellation)
@@ -166,7 +193,7 @@ public struct AutocompleteTraceReplay: Sendable {
             key: \.requestMode
         )
 
-        let requirements = [
+        var requirements = [
             TraceReplayRequirement(
                 name: "trace events loaded",
                 passed: !events.isEmpty,
@@ -183,11 +210,6 @@ public struct AutocompleteTraceReplay: Sendable {
                 detail: "\(displayCovered.count)/\(displayCandidates.count) display candidates include score metadata"
             ),
             TraceReplayRequirement(
-                name: "candidate selection replay",
-                passed: !modelResults.isEmpty && candidateSelectionCovered.count == modelResults.count,
-                detail: "\(candidateSelectionCovered.count)/\(modelResults.count) model results include candidate selection metadata"
-            ),
-            TraceReplayRequirement(
                 name: "proof fingerprint freshness",
                 passed: !proofFingerprintCandidates.isEmpty
                     && proofFingerprintCovered.count == proofFingerprintCandidates.count,
@@ -201,24 +223,27 @@ public struct AutocompleteTraceReplay: Sendable {
                 detail: "\(placementCovered.count)/\(presentedEvents.count) presented events include placement metadata, \(trustedPlacementCount) trusted"
             ),
             TraceReplayRequirement(
-                name: "stale cancellation replay",
-                passed: staleCancellations.count > 0,
-                detail: "\(staleCancellations.count) stale focus selection or request cancellations"
-            ),
-            TraceReplayRequirement(
-                name: "kept horizon replay",
-                passed: !acceptedTextEdited.isEmpty && !finalHorizonEvents.isEmpty,
-                detail: "\(acceptedTextEdited.count) survival events, \(finalHorizonEvents.count) final horizon events"
-            ),
+                name: "accepted insertion replay",
+                passed: !acceptedEvents.isEmpty && acceptedInsertionVerifiedCount == acceptedEvents.count,
+                detail: "\(acceptedInsertionVerifiedCount)/\(acceptedEvents.count) accepted suggestions have insertion verification"
+            )
+        ]
+
+        requirements += profileRequirements(
+            profile: profile,
+            candidateSelectionCandidates: candidateSelectionCandidates,
+            candidateSelectionCoveredCount: candidateSelectionCovered.count,
+            staleCancellationCount: staleCancellations.count,
+            acceptedTextEditedCount: acceptedTextEdited.count,
+            finalHorizonEventCount: finalHorizonEvents.count,
+            annoyanceSignalCount: summary.annoyanceSignalCounts.values.reduce(0, +)
+        )
+
+        requirements += [
             TraceReplayRequirement(
                 name: "latency slices",
                 passed: !latencyByApp.isEmpty && !latencyByMode.isEmpty,
                 detail: "\(latencyByApp.count) app slices, \(latencyByMode.count) mode slices"
-            ),
-            TraceReplayRequirement(
-                name: "annoyance replay",
-                passed: !summary.annoyanceSignalCounts.isEmpty,
-                detail: "\(summary.annoyanceSignalCounts.values.reduce(0, +)) annoyance signals"
             ),
             TraceReplayRequirement(
                 name: "redacted trace compatible",
@@ -228,18 +253,21 @@ public struct AutocompleteTraceReplay: Sendable {
         ]
 
         return AutocompleteTraceReplayReport(
+            profile: profile,
             summary: summary,
             triggerRequestCount: requests.count,
             triggerDelayCoveredCount: triggerDelayCoveredCount,
             displayScoreCandidateCount: displayCandidates.count,
             displayScoreCoveredCount: displayCovered.count,
-            candidateSelectionCandidateCount: modelResults.count,
+            candidateSelectionCandidateCount: candidateSelectionCandidates.count,
             candidateSelectionCoveredCount: candidateSelectionCovered.count,
             proofFingerprintCandidateCount: proofFingerprintCandidates.count,
             proofFingerprintCoveredCount: proofFingerprintCovered.count,
             placementCandidateCount: presentedEvents.count,
             placementCoveredCount: placementCovered.count,
             trustedPlacementCount: trustedPlacementCount,
+            acceptedCount: acceptedEvents.count,
+            acceptedInsertionVerifiedCount: acceptedInsertionVerifiedCount,
             staleCancellationCount: staleCancellations.count,
             keptHorizonEventCount: acceptedTextEdited.count,
             keptFinalHorizonEventCount: finalHorizonEvents.count,
@@ -248,6 +276,72 @@ public struct AutocompleteTraceReplay: Sendable {
             annoyanceSignalCounts: summary.annoyanceSignalCounts,
             requirements: requirements
         )
+    }
+
+    private func profileRequirements(
+        profile: AutocompleteTraceReplayProfile,
+        candidateSelectionCandidates: [AutocompleteTraceEvent],
+        candidateSelectionCoveredCount: Int,
+        staleCancellationCount: Int,
+        acceptedTextEditedCount: Int,
+        finalHorizonEventCount: Int,
+        annoyanceSignalCount: Int
+    ) -> [TraceReplayRequirement] {
+        switch profile {
+        case .full:
+            return [
+                TraceReplayRequirement(
+                    name: "candidate selection replay",
+                    passed: !candidateSelectionCandidates.isEmpty
+                        && candidateSelectionCoveredCount == candidateSelectionCandidates.count,
+                    detail: "\(candidateSelectionCoveredCount)/\(candidateSelectionCandidates.count) candidate events include selection metadata"
+                ),
+                TraceReplayRequirement(
+                    name: "stale cancellation replay",
+                    passed: staleCancellationCount > 0,
+                    detail: "\(staleCancellationCount) stale focus selection or request cancellations"
+                ),
+                TraceReplayRequirement(
+                    name: "kept horizon replay",
+                    passed: acceptedTextEditedCount > 0 && finalHorizonEventCount > 0,
+                    detail: "\(acceptedTextEditedCount) survival events, \(finalHorizonEventCount) final horizon events"
+                ),
+                TraceReplayRequirement(
+                    name: "annoyance replay",
+                    passed: annoyanceSignalCount > 0,
+                    detail: "\(annoyanceSignalCount) annoyance signals"
+                )
+            ]
+        case .smokeSlice:
+            let candidateSelectionPassed = candidateSelectionCandidates.isEmpty
+                || candidateSelectionCoveredCount == candidateSelectionCandidates.count
+            let candidateSelectionDetail = candidateSelectionCandidates.isEmpty
+                ? "not required for smoke-slice; 0 candidate events in bounded local completion slice"
+                : "\(candidateSelectionCoveredCount)/\(candidateSelectionCandidates.count) candidate events include selection metadata"
+
+            return [
+                TraceReplayRequirement(
+                    name: "candidate selection replay",
+                    passed: candidateSelectionPassed,
+                    detail: candidateSelectionDetail
+                ),
+                TraceReplayRequirement(
+                    name: "stale cancellation replay",
+                    passed: true,
+                    detail: "not required for smoke-slice; \(staleCancellationCount) stale cancellations observed"
+                ),
+                TraceReplayRequirement(
+                    name: "kept horizon replay",
+                    passed: acceptedTextEditedCount > 0,
+                    detail: "\(acceptedTextEditedCount) short-horizon survival events; final horizon is full-profile only"
+                ),
+                TraceReplayRequirement(
+                    name: "annoyance replay",
+                    passed: true,
+                    detail: "not required for smoke-slice; \(annoyanceSignalCount) annoyance signals observed"
+                )
+            ]
+        }
     }
 
     private func displayScoreCandidateEvents(in events: [AutocompleteTraceEvent]) -> [AutocompleteTraceEvent] {
@@ -274,6 +368,17 @@ public struct AutocompleteTraceReplay: Sendable {
             && event.metadata["displayScoreRisk"] != nil
             && event.metadata["displayScoreAcceptedAndKeptProbability"] != nil
             && event.metadata["displayScoreAcceptedAndKeptSamples"] != nil
+    }
+
+    private func candidateSelectionCandidateEvents(in events: [AutocompleteTraceEvent]) -> [AutocompleteTraceEvent] {
+        events.filter { event in
+            if event.type == .modelResult {
+                return true
+            }
+
+            return event.type == .suggestionPresented
+                && event.metadata["candidateSelectionSource"] == "fast-word-completion"
+        }
     }
 
     private func hasCandidateSelectionMetadata(_ event: AutocompleteTraceEvent) -> Bool {
@@ -328,6 +433,30 @@ public struct AutocompleteTraceReplay: Sendable {
                 (anchor == "caret" && confidence == "high")
                     || (anchor == "synthetic-caret" && confidence == "medium")
             )
+    }
+
+    private func acceptedInsertionVerifiedCount(
+        acceptedEvents: [AutocompleteTraceEvent],
+        insertionVerifiedEvents: [AutocompleteTraceEvent]
+    ) -> Int {
+        acceptedEvents.filter { accepted in
+            insertionVerifiedEvents.contains { verification in
+                hasSameAcceptanceProof(accepted, verification)
+            }
+        }.count
+    }
+
+    private func hasSameAcceptanceProof(
+        _ accepted: AutocompleteTraceEvent,
+        _ verification: AutocompleteTraceEvent
+    ) -> Bool {
+        if let acceptedID = accepted.metadata["acceptanceID"],
+           let verifiedID = verification.metadata["acceptanceID"],
+           !acceptedID.isEmpty || !verifiedID.isEmpty {
+            return acceptedID == verifiedID
+        }
+
+        return !accepted.suggestionID.isEmpty && accepted.suggestionID == verification.suggestionID
     }
 
     private func hasResearchedTriggerDelay(_ event: AutocompleteTraceEvent) -> Bool {

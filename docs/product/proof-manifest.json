@@ -32,6 +32,13 @@
       ],
       "gaps": [
         "Still local fixture proof, not broad production website proof."
+      ],
+      "requirements": [
+        {
+          "id": "production-chrome-text-fields",
+          "status": "pending",
+          "summary": "Add bounded screenshot-backed smoke proof for representative production Chrome text fields beyond local fixtures."
+        }
       ]
     },
     {
@@ -40,11 +47,60 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-editor-like.png",
         "docs/product/visual-placement-screenshots/chrome-monaco-like.png",
-        "docs/product/visual-placement-screenshots/chrome-prosemirror-like.png"
+        "docs/product/visual-placement-screenshots/chrome-prosemirror-like.png",
+        "docs/product/visual-placement-screenshots/chrome-monaco-real.png",
+        "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Needs real Monaco and real ProseMirror screenshots beyond local fixtures."
+        "Real Monaco and ProseMirror proof now pass under isolated Chrome with renderer accessibility forced, default Chrome AX exposure, and proof-gated inline synthetic-caret placement. Broad production-site proof remains open."
+      ],
+      "requirements": [
+        {
+          "id": "production-chrome-monaco",
+          "status": "pending",
+          "summary": "Add bounded default-Chrome proof against a production Monaco editor surface."
+        },
+        {
+          "id": "production-chrome-prosemirror",
+          "status": "pending",
+          "summary": "Add bounded default-Chrome proof against a production ProseMirror editor surface."
+        },
+        {
+          "id": "production-chrome-codemirror",
+          "status": "pending",
+          "summary": "Add bounded default-Chrome proof against a production CodeMirror editor surface."
+        }
       ]
+    },
+    {
+      "surface": "Chrome real Monaco",
+      "status": "complete",
+      "manualSmoke": {
+        "app": "Chrome",
+        "bundle": "com.google.Chrome",
+        "proof": "monaco-real-default",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/chrome-monaco-real.png"
+      ],
+      "gaps": []
+    },
+    {
+      "surface": "Chrome real ProseMirror",
+      "status": "complete",
+      "manualSmoke": {
+        "app": "Chrome",
+        "bundle": "com.google.Chrome",
+        "proof": "prosemirror-real-default",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
+      ],
+      "gaps": []
     },
     {
       "surface": "Chrome chat-like composer",
@@ -61,6 +117,13 @@
       ],
       "gaps": [
         "Local no-submit fixture is proven, but real prompt/chat app proof is still missing."
+      ],
+      "requirements": [
+        {
+          "id": "production-chrome-chat-no-submit",
+          "status": "pending",
+          "summary": "Add bounded no-submit proof for a real browser chat composer before broad chat support."
+        }
       ]
     },
     {
@@ -71,11 +134,19 @@
       ],
       "gaps": [
         "Needs one strict trace slice that proves screenshot, one-word Tab accept, and no prompt submit together."
+      ],
+      "requirements": [
+        {
+          "id": "codex-same-slice-no-submit",
+          "status": "pending",
+          "summary": "Prove screenshot, one-word Tab accept, and no prompt submit in one bounded strict trace slice.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+        }
       ]
     },
     {
       "surface": "Obsidian",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Obsidian",
         "bundle": "md.obsidian",
@@ -86,11 +157,30 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/obsidian.png"
       ],
-      "gaps": []
+      "gaps": [
+        "More vault themes, panes, long notes, and hidden-caret variants are still required before green support."
+      ],
+      "requirements": [
+        {
+          "id": "obsidian-theme-variants",
+          "status": "pending",
+          "summary": "Add bounded proof across at least one non-default vault theme."
+        },
+        {
+          "id": "obsidian-pane-variants",
+          "status": "pending",
+          "summary": "Add bounded proof with split panes or side panes visible."
+        },
+        {
+          "id": "obsidian-long-note-variants",
+          "status": "pending",
+          "summary": "Add bounded proof in a long scrolled note."
+        }
+      ]
     },
     {
       "surface": "Apple Notes title",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Notes",
         "bundle": "com.apple.Notes",
@@ -101,11 +191,26 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/notes-title.png"
       ],
-      "gaps": []
+      "gaps": [
+        "More title lengths and same-slice notes-title-undo proof are still required."
+      ],
+      "requirements": [
+        {
+          "id": "notes-title-length-variants",
+          "status": "pending",
+          "summary": "Add bounded proof across short and long Notes title lengths."
+        },
+        {
+          "id": "notes-title-undo-same-slice",
+          "status": "pending",
+          "summary": "Add same-slice accepted-insertion undo proof for the Notes title lane.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-undo --manual-gate"
+        }
+      ]
     },
     {
       "surface": "Apple Notes body",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Notes",
         "bundle": "com.apple.Notes",
@@ -116,11 +221,26 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/notes-body.png"
       ],
-      "gaps": []
+      "gaps": [
+        "More body lengths and same-slice notes-body-undo proof are still required."
+      ],
+      "requirements": [
+        {
+          "id": "notes-body-length-variants",
+          "status": "pending",
+          "summary": "Add bounded proof across short and long Notes body text."
+        },
+        {
+          "id": "notes-body-undo-same-slice",
+          "status": "pending",
+          "summary": "Add same-slice accepted-insertion undo proof for the Notes body lane.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-undo --manual-gate"
+        }
+      ]
     },
     {
       "surface": "Apple Notes checklist",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Notes",
         "bundle": "com.apple.Notes",
@@ -131,23 +251,190 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/notes-checklist.png"
       ],
-      "gaps": []
+      "gaps": [
+        "Checked items, longer checklist rows, and same-slice notes-checklist-undo proof are still required."
+      ],
+      "requirements": [
+        {
+          "id": "notes-checklist-checked-item-variants",
+          "status": "pending",
+          "summary": "Add bounded proof for checked and unchecked Notes checklist rows."
+        },
+        {
+          "id": "notes-checklist-long-row-variants",
+          "status": "pending",
+          "summary": "Add bounded proof for longer checklist rows."
+        },
+        {
+          "id": "notes-checklist-undo-same-slice",
+          "status": "pending",
+          "summary": "Add same-slice accepted-insertion undo proof for the Notes checklist lane.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-undo --manual-gate"
+        }
+      ]
     },
     {
       "surface": "Claude Code",
-      "status": "pending",
-      "screenshots": [],
-      "gaps": [
-        "Needs safe live prompt proof with screenshot and one-word no-submit accept."
+      "status": "complete",
+      "manualSmoke": {
+        "app": "Claude Code",
+        "bundle": "com.anthropic.claude-code",
+        "proof": "default",
+        "minVerifiedAccepts": 1,
+        "maxVerifiedAccepts": 1,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/claude-code-terminal.png"
+      ],
+      "gaps": [],
+      "requirements": [
+        {
+          "id": "claude-code-terminal-host-no-submit",
+          "status": "complete",
+          "summary": "Live terminal-host screenshot-backed one-word Tab accept proof completes without submitting shell input or an agent prompt."
+        }
       ]
     },
     {
       "surface": "Claude desktop",
       "status": "partial",
-      "screenshots": [],
+      "manualSmoke": {
+        "app": "Claude",
+        "bundle": "com.anthropic.claudefordesktop",
+        "proof": "default",
+        "minVerifiedAccepts": 1,
+        "maxVerifiedAccepts": 1,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/claude-desktop.png"
+      ],
       "gaps": [
-        "Prior accepts exist, but fresh screenshot-backed one-word no-submit proof is still missing."
+        "More prompt layouts and separate full-accept no-submit proof are still required before A-level support."
+      ],
+      "requirements": [
+        {
+          "id": "claude-desktop-prompt-layout-variants",
+          "status": "pending",
+          "summary": "Add bounded same-baseline proof for additional Claude desktop prompt layouts."
+        },
+        {
+          "id": "claude-desktop-full-accept-no-submit",
+          "status": "pending",
+          "summary": "Add separate full-accept no-submit proof before enabling full accept for Claude desktop."
+        }
       ]
+    }
+  ],
+  "profileCoverage": [
+    {
+      "bundle": "com.apple.TextEdit",
+      "displayName": "TextEdit",
+      "supportLevel": "green",
+      "surface": "TextEdit",
+      "status": "complete",
+      "owner": "core proof lane",
+      "safetyNote": "Reference native AppKit target with current strict visual smoke, screenshots, verified one-word acceptance, and full-accept proof."
+    },
+    {
+      "bundle": "com.apple.Notes",
+      "displayName": "Notes",
+      "supportLevel": "yellow",
+      "surface": "Apple Notes title/body/checklist",
+      "status": "partial",
+      "owner": "rich-text adapter lane",
+      "safetyNote": "Notes has separate title, body, and checklist proof, but rich-text drift and more lengths/undo variants keep the profile yellow."
+    },
+    {
+      "bundle": "md.obsidian",
+      "displayName": "Obsidian",
+      "supportLevel": "yellow",
+      "surface": "Obsidian",
+      "status": "partial",
+      "owner": "electron editor adapter lane",
+      "safetyNote": "Real CodeMirror proof exists, but more vault themes, panes, long notes, and hidden-caret variants are still required before green support."
+    },
+    {
+      "bundle": "com.apple.mail",
+      "displayName": "Mail",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "Mail",
+      "status": "blocked",
+      "owner": "sensitive-compose lane",
+      "safetyNote": "Mail compose remains diagnostics-only because private/sensitive content and insertion safety are not proven."
+    },
+    {
+      "bundle": "com.google.Chrome",
+      "displayName": "Chrome",
+      "supportLevel": "yellow",
+      "surface": "Chrome text fields/editor/chat-like surfaces",
+      "status": "partial",
+      "owner": "browser editor adapter lane",
+      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures and default-Chrome real-editor AX plus proof-gated inline synthetic-caret lanes are proven, but production-site variance remains open. Hosted Google Docs, Notion, Slack, and Discord are blocked by surface policy until real proof exists."
+    },
+    {
+      "bundle": "com.openai.codex",
+      "displayName": "Codex",
+      "supportLevel": "yellow",
+      "surface": "Codex",
+      "status": "partial",
+      "owner": "prompt-app proof lane",
+      "safetyNote": "Screenshot proof exists, but support must stay yellow until one trace slice proves one-word accept with no prompt submit."
+    },
+    {
+      "bundle": "com.anthropic.claude-code",
+      "displayName": "Claude Code",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "Claude Code",
+      "status": "blocked",
+      "owner": "terminal-host adapter lane",
+      "safetyNote": "The direct bundle is a background-only helper; terminal-hosted Claude Code must prove one-word accept without submitting shell or agent input."
+    },
+    {
+      "bundle": "com.anthropic.claudefordesktop",
+      "displayName": "Claude",
+      "supportLevel": "yellow",
+      "surface": "Claude desktop",
+      "status": "partial",
+      "owner": "prompt-app proof lane",
+      "safetyNote": "Same-baseline no-submit proof exists for one composer layout; full accept and more prompt layouts remain blocked."
+    },
+    {
+      "bundle": "com.apple.Safari",
+      "displayName": "Safari",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "Safari",
+      "status": "blocked",
+      "owner": "webkit browser adapter lane",
+      "safetyNote": "Safari rich editors need separate textarea, contenteditable, insertion, and no-submit proof before suggestions can be enabled."
+    },
+    {
+      "bundle": "com.tinyspeck.slackmacgap",
+      "displayName": "Slack",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "Slack",
+      "status": "blocked",
+      "owner": "electron chat adapter lane",
+      "safetyNote": "Slack message composition is diagnostics-only until composer geometry, insertion safety, and no-submit behavior are proven."
+    },
+    {
+      "bundle": "com.microsoft.VSCode",
+      "displayName": "VS Code",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "VS Code",
+      "status": "blocked",
+      "owner": "monaco editor adapter lane",
+      "safetyNote": "VS Code stays diagnostics-only until Monaco caret placement and Tab behavior are proven in the real app."
+    },
+    {
+      "bundle": "com.todesktop.230313mzl4w4u92",
+      "displayName": "Cursor",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "Cursor",
+      "status": "blocked",
+      "owner": "monaco editor adapter lane",
+      "safetyNote": "Cursor stays diagnostics-only until Monaco caret placement, AI composer safety, and Tab behavior are proven in the real app."
     }
   ]
 }

@@ -35,11 +35,9 @@ struct CommandContextSnapshot: Equatable {
         self.init(
             textBeforeCursorLength: context.textBeforeCursor.count,
             textAfterCursorLength: context.textAfterCursor.count,
-            selectedTextLength: context.selectedText.isEmpty
-                ? context.selectedTextLength
-                : context.selectedText.count,
+            selectedTextLength: context.selectedTextLength,
             isSecure: context.isSecure,
-            fieldKind: context.fieldClassification.kind,
+            fieldKind: .unknown,
             canInsertWithAccessibility: context.capabilities.supportsAXInsertion,
             hasCaretBounds: context.caretRect != nil,
             hasFieldBounds: context.elementRect != nil
