@@ -170,6 +170,9 @@ final class DiagnosticsWindowController {
             summary: traceSummary,
             recentEvents: recentTraceEvents
         ).text)
+        sections.append(PromptContextDiagnostics(
+            recentEvents: recentTraceEvents
+        ).text)
         sections.append(PlacementDiagnostics(
             summary: traceSummary,
             recentEvents: recentTraceEvents
@@ -366,6 +369,87 @@ final class DiagnosticsWindowController {
     @objc
     private func deleteTraces() {
         deleteTracesAction?()
+    }
+}
+
+struct PromptContextDiagnostics: Equatable {
+    let recentEvents: [AutocompleteTraceEvent]
+
+    var text: String {
+        [
+            headlineText,
+            latestDocumentTitleShapeText,
+            latestPartialWordShapeText,
+            latestCurrentLineShapeText
+        ].joined(separator: "\n")
+    }
+
+    private var headlineText: String {
+        "Prompt context diagnostics: recent shape events \(shapeEvents.count)"
+    }
+
+    private var latestDocumentTitleShapeText: String {
+        guard let event = latestEvent(containingAny: [
+            "documentTitleWordCount",
+            "documentTitleLengthBucket"
+        ]) else {
+            return "Document title shape: no recent title-shape metadata"
+        }
+
+        let words = event.metadata["documentTitleWordCount"] ?? "unknown"
+        let length = event.metadata["documentTitleLengthBucket"] ?? "unknown"
+        let fileExtension = event.metadata["documentTitleExtension"] ?? "none"
+        let untitled = event.metadata["documentTitleIsUntitled"] ?? "unknown"
+        let unsaved = event.metadata["documentTitleHasUnsavedMarker"] ?? "unknown"
+        return "Document title shape: length=\(length), words=\(words), extension=\(fileExtension), untitled=\(untitled), unsaved=\(unsaved)"
+    }
+
+    private var latestPartialWordShapeText: String {
+        guard let event = latestEvent(containingAny: [
+            "partialWordCharacters",
+            "partialWordLetters"
+        ]) else {
+            return "Partial word shape: no recent partial-word metadata"
+        }
+
+        let characters = event.metadata["partialWordCharacters"] ?? "unknown"
+        let letters = event.metadata["partialWordLetters"] ?? "unknown"
+        let digits = event.metadata["partialWordDigits"] ?? "unknown"
+        let casing = event.metadata["partialWordCasing"] ?? "unknown"
+        let hyphen = event.metadata["partialWordHasHyphen"] ?? "unknown"
+        let apostrophe = event.metadata["partialWordHasApostrophe"] ?? "unknown"
+        return "Partial word shape: chars=\(characters), letters=\(letters), digits=\(digits), casing=\(casing), hyphen=\(hyphen), apostrophe=\(apostrophe)"
+    }
+
+    private var latestCurrentLineShapeText: String {
+        guard let event = latestEvent(containingAny: [
+            "currentLineStructure",
+            "currentLineMarkerStyle"
+        ]) else {
+            return "Current line shape: no recent line-shape metadata"
+        }
+
+        let kind = event.metadata["currentLineStructure"] ?? "unknown"
+        let marker = event.metadata["currentLineMarkerStyle"] ?? "unknown"
+        let indentation = event.metadata["currentLineIndentationColumns"] ?? "unknown"
+        let contentWords = event.metadata["currentLineContentWords"] ?? "unknown"
+        return "Current line shape: kind=\(kind), marker=\(marker), indent=\(indentation), contentWords=\(contentWords)"
+    }
+
+    private var shapeEvents: [AutocompleteTraceEvent] {
+        recentEvents.filter { event in
+            event.metadata.keys.contains { key in
+                key.hasPrefix("documentTitle")
+                    || key.hasPrefix("partialWord")
+                    || key.hasPrefix("currentLine")
+            }
+        }
+    }
+
+    private func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
+        recentEvents.reversed().first { event in
+            !keys.isDisjoint(with: Set(event.metadata.keys))
+        }
     }
 }
 
