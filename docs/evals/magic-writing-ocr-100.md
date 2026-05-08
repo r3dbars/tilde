@@ -8,9 +8,9 @@ Model rule: keep the current fast model. Do not switch models for this loop.
 
 ## Current Score
 
-Overall score: 95/100 deterministic scorecard score.
+Overall score: 97/100 deterministic scorecard score.
 
-This is not yet a 95/100 real human dogfood score. It means the prompt, OCR context shape, max-aggression cadence, and safety gates now pass the 100-case code harness. The next loop should gather real TextEdit, Notes, and Obsidian traces and replace the deterministic score with an accepted-and-kept score.
+This is not yet a 97/100 real human dogfood score. It means the prompt, OCR context shape, max-aggression cadence, long-suggestion persistence gate, and safety gates now pass the code harnesses. The next loop should gather real TextEdit, Notes, and Obsidian traces and replace the deterministic score with an accepted-and-kept score.
 
 ## Scoring
 
@@ -28,7 +28,17 @@ This is not yet a 95/100 real human dogfood score. It means the prompt, OCR cont
 - Max aggression can trigger from a first useful letter or first word.
 - Word completion can fall back to the model when the fast local word list has no candidate.
 - A 100-scenario Swift prompt/cadence harness was added.
+- The replacement gate now keeps a fresh visible long suggestion on screen instead of hiding it when a weaker replacement arrives.
+- Added a focused replacement-visibility test so long suggestions should persist while the next model result is being filtered.
 - A five-minute heartbeat was set to keep this thread returning to this file until the score is genuinely strong.
+
+## Latest Heartbeat Pass
+
+Time: 2026-05-08T21:55:32Z
+
+- Fixed the main persistence bug found in this loop: the app logged "Kept current suggestion" but still hid the visible suggestion when replacement scoring suppressed a weaker update.
+- Verified `SuggestionReplacementVisibilityPolicyTests` and `MagicWritingOCRPromptEvalTests`.
+- Live app logs before this pass showed `visible-page-context-ready` in Codex with `captureScope=visible_screen`, about 1,000 OCR chars, and roughly 450-510 ms capture latency.
 
 ## 100 Test Situations
 
