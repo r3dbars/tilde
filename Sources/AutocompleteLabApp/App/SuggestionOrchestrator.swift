@@ -170,6 +170,19 @@ final class SuggestionOrchestrator {
         )
     }
 
+    func shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
+        suggestionID: String,
+        currentSuggestionID: String?,
+        ticket: SuggestionRequestTicket,
+        fieldIdentity: FocusedFieldIdentity,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        hasVisibleSuggestion: Bool
+    ) -> Bool {
+        hasVisibleSuggestion
+            && currentSuggestionID == suggestionID
+            && allows(ticket, fieldIdentity: fieldIdentity, currentFieldIdentity: currentFieldIdentity)
+    }
+
     func invalidate() {
         currentRequestStorage = nil
         requestGate.invalidate()
