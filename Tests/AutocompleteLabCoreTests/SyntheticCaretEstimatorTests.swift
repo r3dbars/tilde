@@ -51,6 +51,24 @@ struct SyntheticCaretEstimatorTests {
         #expect(wrappedCaret.origin.y > shortCaret.origin.y)
     }
 
+    @Test("Can vertically center a single-line prompt in a tall composer")
+    func canCenterSingleLinePromptInTallComposer() throws {
+        let caret = try #require(SyntheticCaretEstimator.caretRect(
+            textBeforeCursor: "Can we make this inst",
+            elementRect: CGRect(x: 400, y: 670, width: 680, height: 64),
+            windowRect: CGRect(x: 380, y: 640, width: 730, height: 120),
+            lineHeight: 24,
+            horizontalPadding: 14,
+            inlineGap: 2,
+            centerSingleLineWhenTall: true,
+            widthOfText: fixedWidth
+        ))
+
+        #expect(caret.origin.x == 626)
+        #expect(caret.origin.y == 690)
+        #expect(caret.height == 24)
+    }
+
     @Test("Clamps caret inside containing window")
     func clampsCaretInsideContainingWindow() throws {
         let caret = try #require(SyntheticCaretEstimator.caretRect(
@@ -111,6 +129,41 @@ struct SyntheticCaretEstimatorTests {
         )
 
         #expect(caret == nil)
+    }
+
+    @Test("Places synthetic carets inside Chrome real editor rows")
+    func placesSyntheticCaretsInsideChromeRealEditorRows() throws {
+        let monacoCaret = try #require(SyntheticCaretEstimator.caretRect(
+            textBeforeCursor: "Smoke proof feels inst",
+            elementRect: CGRect(x: 858, y: 216, width: 654, height: 24),
+            windowRect: CGRect(x: 760, y: 180, width: 776, height: 300),
+            lineHeight: 20,
+            horizontalPadding: 18,
+            verticalPadding: 4,
+            inlineGap: 44,
+            widthOfText: fixedWidth
+        ))
+
+        #expect(monacoCaret.minX >= 858)
+        #expect(monacoCaret.maxX <= 1512)
+        #expect(monacoCaret.minY >= 180)
+        #expect(monacoCaret.maxY <= 480)
+
+        let proseMirrorCaret = try #require(SyntheticCaretEstimator.caretRect(
+            textBeforeCursor: "Smoke proof feels inst",
+            elementRect: CGRect(x: 784, y: 237, width: 728, height: 206),
+            windowRect: CGRect(x: 760, y: 213, width: 776, height: 254),
+            lineHeight: 20,
+            horizontalPadding: 18,
+            verticalPadding: 14,
+            inlineGap: 8,
+            widthOfText: fixedWidth
+        ))
+
+        #expect(proseMirrorCaret.minX >= 784)
+        #expect(proseMirrorCaret.maxX <= 1512)
+        #expect(proseMirrorCaret.minY >= 213)
+        #expect(proseMirrorCaret.maxY <= 467)
     }
 
     private func fixedWidth(_ text: String) -> CGFloat {

@@ -47,7 +47,12 @@ case "$MODE" in
     fi
 
     if [[ "$MODE" == "--replay" ]]; then
-      swift run AutocompleteTraceReplay --start-line "$SAVED_LINE" "$TRACE_PATH"
+      REPLAY_ARGS=(swift run AutocompleteTraceReplay --start-line "$SAVED_LINE")
+      if [[ -n "$APP_BUNDLE_ID" ]]; then
+        REPLAY_ARGS+=(--profile "$APP_BUNDLE_ID")
+      fi
+      REPLAY_ARGS+=("$TRACE_PATH")
+      "${REPLAY_ARGS[@]}"
       exit 0
     fi
 
@@ -64,7 +69,7 @@ case "$MODE" in
   "")
     ;;
   *)
-    echo "usage: $0 [--quiet|--save|--eval [bundle-id]|--replay]" >&2
+    echo "usage: $0 [--quiet|--save|--eval [bundle-id]|--replay [full|smoke-slice]]" >&2
     exit 2
     ;;
 esac
@@ -86,4 +91,5 @@ Shortcut:
   ./script/trace_mark.sh --eval com.openai.codex
   ./script/trace_mark.sh --eval com.anthropic.claude-code
   ./script/trace_mark.sh --replay
+  ./script/trace_mark.sh --replay smoke-slice
 EOF

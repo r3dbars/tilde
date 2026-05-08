@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 DEFAULT_TRACE_PATH = Path.home() / "Library/Logs/AutocompleteLab/traces.jsonl"
-ANCHOR_SOURCES = ("caret", "line", "field", "window", "none")
+ANCHOR_SOURCES = ("caret", "synthetic-caret", "line", "field", "element", "window", "none")
 ANCHOR_QUALITIES = ("trusted", "usableFallback", "diagnosticsOnly", "invalid")
 
 
@@ -74,11 +74,59 @@ def bool_metadata(event: dict, key: str) -> bool | None:
     return None
 
 
+def anchor_source(event: dict) -> str:
+    return metadata_value(event, "anchorSource") or metadata_value(event, "placementAnchorSource")
+
+
+def anchor_quality(event: dict) -> str:
+    explicit = metadata_value(event, "anchorQuality")
+    if explicit:
+        return explicit
+
+    confidence = metadata_value(event, "placementConfidenceBand")
+    if confidence == "high":
+        return "trusted"
+    if confidence == "medium":
+        return "usableFallback"
+    if confidence == "low":
+        return "diagnosticsOnly"
+    if confidence == "none":
+        return "invalid"
+
+    return ""
+
+
+def anchor_reason(event: dict) -> str:
+    return metadata_value(event, "anchorReason") or metadata_value(event, "placementHealthReason")
+
+
+def anchor_can_present(event: dict, source: str, quality: str) -> bool | None:
+    explicit = bool_metadata(event, "anchorCanPresent")
+    if explicit is not None:
+        return explicit
+
+    if not source or not quality:
+        return None
+
+    return (
+        source not in {"window", "none"}
+        and quality not in {"invalid", "diagnosticsOnly"}
+    )
+
+
 def has_anchor_metadata(event: dict) -> bool:
     meta = metadata(event)
     return any(
         key in meta
-        for key in ("anchorSource", "anchorQuality", "anchorReason", "anchorCanPresent")
+        for key in (
+            "anchorSource",
+            "anchorQuality",
+            "anchorReason",
+            "anchorCanPresent",
+            "placementAnchorSource",
+            "placementConfidenceBand",
+            "placementHealthReason",
+        )
     )
 
 
@@ -95,9 +143,10 @@ def proof_failures(event: dict) -> list[str]:
     suggestion_id = event.get("suggestionID") or "unknown"
     line = event.get("_lineNumber", "?")
     label = f"line {line} {app}/{suggestion_id}"
-    source = metadata_value(event, "anchorSource")
-    quality = metadata_value(event, "anchorQuality")
-    reason = metadata_value(event, "anchorReason")
+    source = anchor_source(event)
+    quality = anchor_quality(event)
+    reason = anchor_reason(event)
+    can_present = anchor_can_present(event, source, quality)
     failures = []
 
     if not source:
@@ -113,7 +162,7 @@ def proof_failures(event: dict) -> list[str]:
     if not reason:
         failures.append(f"{label}: missing anchorReason")
 
-    if bool_metadata(event, "anchorCanPresent") is not True:
+    if can_present is not True:
         failures.append(f"{label}: anchorCanPresent is not true")
 
     if quality in {"invalid", "diagnosticsOnly"}:
@@ -125,12 +174,12 @@ def proof_failures(event: dict) -> list[str]:
     if not has_rect_metadata(event):
         failures.append(f"{label}: missing anchorRect")
 
-    if source == "caret" and bool_metadata(event, "hasCaretRect") is not True:
-        failures.append(f"{label}: caret anchor without hasCaretRect")
+    if source in {"caret", "synthetic-caret"} and bool_metadata(event, "hasCaretRect") is not True:
+        failures.append(f"{label}: {source} anchor without hasCaretRect")
     if source == "line" and bool_metadata(event, "hasTextLineRect") is not True:
         failures.append(f"{label}: line anchor without hasTextLineRect")
-    if source == "field" and bool_metadata(event, "hasElementRect") is not True:
-        failures.append(f"{label}: field anchor without hasElementRect")
+    if source in {"field", "element"} and bool_metadata(event, "hasElementRect") is not True:
+        failures.append(f"{label}: {source} anchor without hasElementRect")
 
     return failures
 
@@ -154,9 +203,9 @@ def build_report(events: list[dict]) -> tuple[str, list[str]]:
         app = event.get("appBundleIdentifier") or "unknown"
         if has_anchor_metadata(event):
             anchor_metadata_count += 1
-            source = metadata_value(event, "anchorSource") or "missing"
-            quality = metadata_value(event, "anchorQuality") or "missing"
-            reason = metadata_value(event, "anchorReason") or "missing"
+            source = anchor_source(event) or "missing"
+            quality = anchor_quality(event) or "missing"
+            reason = anchor_reason(event) or "missing"
             app_source_counts[app][source] += 1
             app_quality_counts[app][quality] += 1
             app_reason_counts[app][reason] += 1

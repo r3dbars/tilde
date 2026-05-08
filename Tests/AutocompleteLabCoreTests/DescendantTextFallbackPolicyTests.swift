@@ -1,0 +1,71 @@
+import Testing
+@testable import AutocompleteLabCore
+
+@Suite("Descendant text fallback policy")
+struct DescendantTextFallbackPolicyTests {
+    private let policy = DescendantTextFallbackPolicy()
+
+    @Test("Keeps Mail compose fallback scoped to New Message")
+    func mailComposeFallbackIsScoped() {
+        #expect(policy.allowsFallback(
+            bundleIdentifier: "com.apple.mail",
+            role: "AXWebArea",
+            directText: "",
+            windowTitle: "New Message"
+        ))
+        #expect(!policy.allowsFallback(
+            bundleIdentifier: "com.apple.mail",
+            role: "AXWebArea",
+            directText: "",
+            windowTitle: "Inbox"
+        ))
+    }
+
+    @Test("Allows Chrome disposable smoke web areas")
+    func chromeSmokeWebAreasCanUseDescendantText() {
+        #expect(policy.allowsFallback(
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXWebArea",
+            directText: nil,
+            windowTitle: "Autocomplete Lab Chrome Real Monaco Smoke [ready=1]"
+        ))
+        #expect(policy.allowsFallback(
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXWebArea",
+            directText: " ",
+            windowTitle: "Autocomplete Lab Chrome Real ProseMirror Smoke [ready=1]"
+        ))
+    }
+
+    @Test("Blocks broad Chrome production pages")
+    func broadChromePagesStayBlocked() {
+        #expect(!policy.allowsFallback(
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXWebArea",
+            directText: "",
+            windowTitle: "Project plan - Google Docs"
+        ))
+        #expect(!policy.allowsFallback(
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXWebArea",
+            directText: "",
+            windowTitle: "Roadmap - Notion"
+        ))
+    }
+
+    @Test("Requires empty direct AX text and a web area")
+    func requiresEmptyDirectTextAndWebArea() {
+        #expect(!policy.allowsFallback(
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXTextArea",
+            directText: "",
+            windowTitle: "Autocomplete Lab Chrome Textarea Smoke"
+        ))
+        #expect(!policy.allowsFallback(
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXWebArea",
+            directText: "already readable",
+            windowTitle: "Autocomplete Lab Chrome Textarea Smoke"
+        ))
+    }
+}
