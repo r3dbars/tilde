@@ -99,14 +99,6 @@ struct FocusedTextPollingBackoffPolicyTests {
         ))
     }
 
-    @Test("Overlapping poll throttle keeps a visible suggestion")
-    func overlappingPollThrottleKeepsVisibleSuggestion() {
-        let policy = FocusedTextPollingThrottleVisibilityPolicy()
-
-        #expect(!policy.shouldHideVisibleSuggestion(for: .overlappingPolls))
-        #expect(policy.shouldHideVisibleSuggestion(for: .slowPollLatency))
-    }
-
     @Test("Fast clean polls do not throttle")
     func fastCleanPollsDoNotThrottle() {
         let policy = FocusedTextPollingBackoffPolicy(slowPollP95Milliseconds: 80)

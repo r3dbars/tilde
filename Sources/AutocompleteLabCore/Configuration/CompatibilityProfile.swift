@@ -107,7 +107,6 @@ public struct CompatibilityProfile: Equatable, Sendable {
     public let suppressesAfterInsertionFailure: Bool
     public let allowsDescendantTextFallback: Bool
     public let allowsDetachedSuggestions: Bool
-    public let allowsSyntheticCaretPlacement: Bool
     public let isSensitive: Bool
     public let notes: String
 
@@ -135,7 +134,6 @@ public struct CompatibilityProfile: Equatable, Sendable {
         suppressesAfterInsertionFailure: Bool = true,
         allowsDescendantTextFallback: Bool = false,
         allowsDetachedSuggestions: Bool = true,
-        allowsSyntheticCaretPlacement: Bool = false,
         isSensitive: Bool = false,
         notes: String
     ) {
@@ -162,7 +160,6 @@ public struct CompatibilityProfile: Equatable, Sendable {
         self.suppressesAfterInsertionFailure = suppressesAfterInsertionFailure
         self.allowsDescendantTextFallback = allowsDescendantTextFallback
         self.allowsDetachedSuggestions = allowsDetachedSuggestions
-        self.allowsSyntheticCaretPlacement = allowsSyntheticCaretPlacement
         self.isSensitive = isSensitive
         self.notes = notes
     }
@@ -230,7 +227,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         let fallbackInsertion = fallbackInsertionMode?.rawValue ?? "none"
         let anchors = anchorLadder.map(\.rawValue).joined(separator: ">")
 
-        return "support=\(supportLevel.rawValue); family=\(appFamily.rawValue); primary render=\(renderMode.rawValue), insert=\(insertionMode.rawValue); fallback render=\(fallbackRender), insert=\(fallbackInsertion); field=\(fieldIdentityMode.rawValue); anchors=\(anchors); synthetic=\(allowsSyntheticCaretPlacement)"
+        return "support=\(supportLevel.rawValue); family=\(appFamily.rawValue); primary render=\(renderMode.rawValue), insert=\(insertionMode.rawValue); fallback render=\(fallbackRender), insert=\(fallbackInsertion); field=\(fieldIdentityMode.rawValue); anchors=\(anchors)"
     }
 }
 
@@ -378,7 +375,6 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             fallbackInsertionMode: .axValueReplacement,
             anchorLadder: [.caret, .field],
             knownFailureModes: ["textarea support differs from rich editors", "zero-height caret bounds can occur"],
-            allowsSyntheticCaretPlacement: true,
             notes: "Yellow browser target. Prefer synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback. Prefer key-event insertion across textarea and contenteditable surfaces because rich browser editors can report AX replacement success without keeping cursor verification stable."
         ),
         CompatibilityProfile(
@@ -458,25 +454,6 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportsOneWordAcceptance: false,
             supportsFullAcceptance: false,
             notes: "Diagnostics-only WebKit browser profile until textarea and rich-editor behavior are proven separately."
-        ),
-        CompatibilityProfile(
-            bundleIdentifier: "com.openai.atlas",
-            displayName: "Atlas",
-            appFamily: .chromium,
-            supportLevel: .diagnosticsOnly,
-            supportReason: "Atlas editor and browser surfaces need app-specific proof.",
-            renderMode: .disabled,
-            insertionMode: .disabled,
-            fallbackRenderMode: .disabled,
-            fallbackInsertionMode: .disabled,
-            fieldIdentityMode: .stableBounds,
-            anchorLadder: [.none],
-            knownFailureModes: ["browser and prompt surfaces need separate proof"],
-            allowsFieldAnchor: false,
-            allowsWindowAnchor: false,
-            supportsOneWordAcceptance: false,
-            supportsFullAcceptance: false,
-            notes: "Diagnostics-only Atlas profile. Collect focused AX, geometry, and insertion evidence, but do not present or insert suggestions until Atlas has current app-specific proof."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.tinyspeck.slackmacgap",

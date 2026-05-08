@@ -28,7 +28,6 @@ public enum LocalModelAssetState: Equatable, Sendable {
 public enum RuntimeReadinessStage: String, Equatable, Sendable {
     case downloadNeeded
     case repairNeeded
-    case installing
     case runtimeUnavailable
     case warming
     case ready

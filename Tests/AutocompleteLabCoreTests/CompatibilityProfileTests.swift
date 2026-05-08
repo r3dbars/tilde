@@ -54,7 +54,6 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.google.Chrome")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .keyEvents)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .axValueReplacement)
-        #expect(store.profile(for: "com.google.Chrome")?.allowsSyntheticCaretPlacement == true)
         #expect(store.profile(for: "com.openai.codex")?.displayName == "Codex")
         #expect(store.profile(for: "com.openai.codex")?.appFamily == .customCanvas)
         #expect(store.profile(for: "com.openai.codex")?.allowsFieldAnchor == false)
@@ -89,13 +88,6 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportsFullAcceptance == false)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.apple.Safari")?.supportLevel == .diagnosticsOnly)
-        #expect(store.profile(for: "com.openai.atlas")?.displayName == "Atlas")
-        #expect(store.profile(for: "com.openai.atlas")?.appFamily == .chromium)
-        #expect(store.profile(for: "com.openai.atlas")?.supportLevel == .diagnosticsOnly)
-        #expect(store.profile(for: "com.openai.atlas")?.renderMode == .disabled)
-        #expect(store.profile(for: "com.openai.atlas")?.insertionMode == .disabled)
-        #expect(store.profile(for: "com.openai.atlas")?.anchorLadder == [.none])
-        #expect(store.profile(for: "com.openai.atlas")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.tinyspeck.slackmacgap")?.appFamily == .electron)
         #expect(store.profile(for: "notion.id")?.supportLevel == .diagnosticsOnly)
         #expect(store.profile(for: "notion.id")?.canPresentSuggestions == false)
@@ -167,7 +159,6 @@ struct CompatibilityProfileTests {
         #expect(store.supportStatus(for: "com.example.UnknownEditor") == .unsupported)
         #expect(store.supportStatus(for: "com.apple.TextEdit").summary == "green: TextEdit")
         #expect(store.supportStatus(for: "com.apple.mail").summary == "diagnostics only: Mail")
-        #expect(store.supportStatus(for: "com.openai.atlas").summary == "diagnostics only: Atlas")
     }
 
     @Test("Support status exposes user-facing stance copy")
@@ -281,7 +272,6 @@ struct CompatibilityProfileTests {
         let claudeCode = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claude-code"))
         let claude = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claudefordesktop"))
         let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
-        let atlas = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.atlas"))
 
         #expect(InsertionModePlan.modes(for: textEdit) == [.axSelectedText, .axValueReplacement])
         #expect(InsertionModePlan.modes(for: notes) == [.keyEvents])
@@ -290,7 +280,6 @@ struct CompatibilityProfileTests {
         #expect(InsertionModePlan.modes(for: claudeCode) == [.keyEvents, .axThenKeyEvents])
         #expect(InsertionModePlan.modes(for: claude) == [.axValueReplacement])
         #expect(InsertionModePlan.modes(for: mail) == [])
-        #expect(InsertionModePlan.modes(for: atlas) == [])
     }
 
     @Test("Unproven real app profiles fail closed on risky affordances")
@@ -317,7 +306,6 @@ struct CompatibilityProfileTests {
             #expect(promptProfile.supportsOneWordAcceptance == true)
             #expect(promptProfile.supportsFullAcceptance == false)
             #expect(promptProfile.allowsDetachedSuggestions == false)
-            #expect(promptProfile.allowsSyntheticCaretPlacement == false)
         }
     }
 
@@ -378,7 +366,6 @@ struct CompatibilityProfileTests {
         let claudeCode = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claude-code"))
         let claude = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claudefordesktop"))
         let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
-        let atlas = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.atlas"))
 
         #expect(RenderModePlan.effectiveMode(
             for: textEdit,
@@ -432,11 +419,6 @@ struct CompatibilityProfileTests {
         ) == .floatingMirror)
         #expect(RenderModePlan.effectiveMode(
             for: mail,
-            supportsInlineSuggestions: true,
-            hasMirrorAnchor: true
-        ) == nil)
-        #expect(RenderModePlan.effectiveMode(
-            for: atlas,
             supportsInlineSuggestions: true,
             hasMirrorAnchor: true
         ) == nil)

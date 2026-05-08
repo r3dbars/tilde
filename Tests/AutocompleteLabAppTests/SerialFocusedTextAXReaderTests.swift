@@ -159,8 +159,6 @@ private func focusedTextContext(textBeforeCursor: String) -> FocusedTextContext 
         elementRect: nil,
         windowRect: nil,
         textLineRect: nil,
-        visibleCharacterRange: nil,
-        insertionPointLineNumber: nil,
         textStyle: nil,
         isSecure: false,
         fieldClassification: AXFieldClassification(kind: .unknown, reason: "unknown"),
@@ -171,7 +169,6 @@ private func focusedTextContext(textBeforeCursor: String) -> FocusedTextContext 
             canReadBoundsForRange: false,
             canReadAttributedText: false,
             canSetSelectedText: true
-        ),
-        axReadErrors: []
+        )
     )
 }
