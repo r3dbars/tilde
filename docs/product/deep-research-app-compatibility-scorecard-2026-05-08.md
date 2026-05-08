@@ -79,7 +79,7 @@ fixture proof, not a general system-wide inserter.
 
 Starting score before this pass: 72/100
 
-Overall score after this pass: 80/100
+Overall score after this pass: 81/100
 
 This is a strict compatibility score. It is not a general app-quality score.
 Several individual surfaces score much higher, but hard gates prevent a broad
@@ -155,12 +155,15 @@ compatibility claim.
 ### Undo/redo integrity
 
 - Weight: 15
-- Current score: 9/15
+- Current score: 10/15
 - Why this score: The app has accepted-insertion undo support and TextEdit has
-  recorded undo proof. Rich-editor and prompt-app undo coverage is incomplete.
+  recorded undo proof. This follow-up made TextEdit undo proof machine-readable
+  in the proof manifest. Rich-editor and prompt-app undo coverage is incomplete.
 - Evidence found in repo:
   - `AppDelegate.undoAcceptedInsertion`
   - `AcceptedInsertionUndo`
+  - `script/check_proof_manifest.py`
+  - `docs/product/proof-manifest.json`
   - TextEdit undo row in `docs/product/app-proof-matrix.md`
   - Notes undo commands listed in `docs/product/manual-smoke-checklist.md`
 - Missing evidence: Current undo/redo chain proof for Notes body/checklist,
@@ -363,7 +366,25 @@ diagnostics-only by policy, not by accident.
 - Expected score impact: +1 IME/composition safety.
 - Status: Done in this follow-up.
 
-### 5. Codex same-slice one-word no-submit proof
+### 5. Machine-readable undo proof
+
+- Objective: Require trace-level undo evidence where a surface claims undo
+  support, starting with TextEdit.
+- Files likely involved:
+  - `script/check_proof_manifest.py`
+  - `script/check_proof_manifest_self_test.sh`
+  - `docs/product/proof-manifest.json`
+- Tests to add/update:
+  - Proof manifest self-test.
+- Proof required:
+  - `./script/check_proof_manifest_self_test.sh`
+  - `./script/check_proof_manifest.sh --verify-trace-slices`
+- Risk level: Low
+- Expected score impact: +1 undo/redo evidence.
+- Status: Done in this follow-up for TextEdit. Notes, Obsidian, Chrome, and
+  prompt-app undo proof remain manual gaps.
+
+### 6. Codex same-slice one-word no-submit proof
 
 - Objective: Record one bounded Codex proof slice with screenshot, one-word Tab
   accept, and no submit.
@@ -378,7 +399,7 @@ diagnostics-only by policy, not by accident.
 - Risk level: Medium
 - Expected score impact: +3 no-submit and visual proof.
 
-### 6. Claude Code terminal-host proof
+### 7. Claude Code terminal-host proof
 
 - Objective: Prove terminal-hosted Claude Code one-word accept without shell or
   agent submit.

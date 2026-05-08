@@ -16,6 +16,7 @@
         "bundle": "com.apple.TextEdit",
         "proof": "default",
         "minVerifiedAccepts": 2,
+        "requiresUndoProof": true,
         "requiresVisualStrictComplete": true
       },
       "screenshots": [

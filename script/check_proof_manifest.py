@@ -28,6 +28,7 @@ PROOF_EVENT_TYPES = {
     "suggestionSuppressed",
     "insertionVerified",
     "insertionFailed",
+    "acceptanceRetentionCleared",
     "acceptedTextEdited",
     "caretGeometryFailed",
 }
@@ -294,6 +295,27 @@ def verify_manual_trace_slice(
         failures.append(f"{name}: trace slice has {len(verified)} verified insertions; expected at least {min_accepts}")
     if max_accepts is not None and len(verified) > max_accepts:
         failures.append(f"{name}: trace slice has {len(verified)} verified insertions; expected at most {max_accepts}")
+
+    if claim.get("requiresUndoProof") is True:
+        accepted_ids = {
+            str(metadata.get("acceptanceID", ""))
+            for event in accepted
+            for metadata in [event.get("metadata") if isinstance(event.get("metadata"), dict) else {}]
+            if str(metadata.get("acceptanceID", "")).strip()
+        }
+        undone_ids = {
+            str(metadata.get("acceptanceID", ""))
+            for event in app_events
+            for metadata in [event.get("metadata") if isinstance(event.get("metadata"), dict) else {}]
+            if event.get("type") == "acceptanceRetentionCleared"
+            and event.get("outcome") == "undone"
+            and event.get("reason") == "accepted-insertion-undone"
+            and str(metadata.get("acceptanceID", "")).strip()
+        }
+        if not accepted_ids:
+            failures.append(f"{name}: undo proof requires accepted events with acceptanceID metadata")
+        elif not accepted_ids.intersection(undone_ids):
+            failures.append(f"{name}: trace slice has no accepted insertion undo matching an accepted acceptanceID")
 
     if claim.get("requiresVisualStrictComplete") is True:
         if "strict-complete" not in matched["traceSlice"]:

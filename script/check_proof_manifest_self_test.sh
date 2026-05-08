@@ -20,7 +20,7 @@ write_manual_smoke() {
 
 | Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
 | --- | --- | --- | --- | ---: | --- | --- | --- |
-| 2026-05-07T12:00:00Z | TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 10+ | lines 20-25 in \`$trace_path\`; visual \`strict-complete\` |
+| 2026-05-07T12:00:00Z | TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 10+ | lines 20-26 in \`$trace_path\`; visual \`strict-complete\` |
 | 2026-05-07T12:05:00Z | Codex | \`com.openai.codex\` | \`default\` | 1 | \`inlineAdjacent\` | lines 30+ | lines 40-44 in \`$trace_path\`; visual \`strict-complete\` |
 MARKDOWN
 }
@@ -47,10 +47,11 @@ write_trace() {
   cat >>"$path" <<JSONL
 {"type":"suggestionRequested","appBundleIdentifier":"com.apple.TextEdit","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
 {"type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","screenshotPath":"docs/product/visual-placement-screenshots/textedit-inline.png","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
-{"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
-{"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
-{"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
-{"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{"acceptanceID":"accept-one","traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{"acceptanceID":"accept-one","traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"acceptanceRetentionCleared","appBundleIdentifier":"com.apple.TextEdit","outcome":"undone","reason":"accepted-insertion-undone","metadata":{"acceptanceID":"accept-one","traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{"acceptanceID":"accept-two","traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{"acceptanceID":"accept-two","traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
 JSONL
 }
 
@@ -64,10 +65,11 @@ write_stale_trace() {
   cat >>"$path" <<'JSONL'
 {"type":"suggestionRequested","appBundleIdentifier":"com.apple.TextEdit","metadata":{}}
 {"type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","screenshotPath":"docs/product/visual-placement-screenshots/textedit-inline.png","metadata":{}}
-{"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{}}
-{"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{}}
-{"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{}}
-{"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{}}
+{"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{"acceptanceID":"accept-one"}}
+{"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{"acceptanceID":"accept-one"}}
+{"type":"acceptanceRetentionCleared","appBundleIdentifier":"com.apple.TextEdit","outcome":"undone","reason":"accepted-insertion-undone","metadata":{"acceptanceID":"accept-one"}}
+{"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{"acceptanceID":"accept-two"}}
+{"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{"acceptanceID":"accept-two"}}
 JSONL
 }
 
@@ -119,6 +121,7 @@ write_manifest() {
         "bundle": "$bundle",
         "proof": "$proof",
         "minVerifiedAccepts": $min_accepts,
+        "requiresUndoProof": true,
         "requiresVisualStrictComplete": true
       },
       "screenshots": [
@@ -187,6 +190,7 @@ write_profile_manifest() {
         "bundle": "com.apple.TextEdit",
         "proof": "default",
         "minVerifiedAccepts": 2,
+        "requiresUndoProof": true,
         "requiresVisualStrictComplete": true
       },
       "screenshots": [
