@@ -29,6 +29,28 @@ struct DiagnosticsTypingHealthTests {
         #expect(health.axPollingStatus == "no recent AX samples")
     }
 
+    @Test("Flags event tap start failure as key capture attention")
+    func flagsEventTapStartFailureAsKeyCaptureAttention() {
+        let health = DiagnosticsTypingHealth(events: [
+            "2026-05-07T01:44:41Z keyboard-event-tap-start-failed",
+            "2026-05-07T01:44:42Z focused-text-poll-latency-summary count=30 maxMilliseconds=12 p95Milliseconds=8"
+        ])
+
+        #expect(health.keyCaptureStatus == "needs attention - event tap start failed 1x")
+        #expect(health.axPollingStatus == "healthy")
+    }
+
+    @Test("Flags failed closed event tap as key capture attention")
+    func flagsFailedClosedEventTapAsKeyCaptureAttention() {
+        let health = DiagnosticsTypingHealth(events: [
+            "2026-05-07T01:44:41Z keyboard-event-tap-failed-closed reason=timeout",
+            "2026-05-07T01:44:42Z focused-text-ax-read-slow app=com.apple.TextEdit readDurationMilliseconds=220"
+        ])
+
+        #expect(health.keyCaptureStatus == "needs attention - event tap failed closed 1x")
+        #expect(health.axPollingStatus == "warning - suggestions may lag, typing should pass through")
+    }
+
     @Test("Shows AX health cooldown separately from key capture")
     func showsAXHealthCooldownSeparatelyFromKeyCapture() {
         let health = DiagnosticsTypingHealth(events: [
