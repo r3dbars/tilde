@@ -2272,7 +2272,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        guard focusedFieldMatchesCurrentSuggestion() else {
+        recordClaudeCodeTerminalHostProofKeyboardProgress(
+            stage: "focus-check-start",
+            key: key,
+            action: action
+        )
+        guard focusedFieldMatchesCurrentSuggestion(
+            allowTerminalHostProofSnapshotFastPath: action == .acceptNextWord
+        ) else {
             setSuggestionDecision("Blocked: focus changed")
             hideSuggestion(reason: "focus-changed")
             recordKeyboardAction(
@@ -2283,8 +2290,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             return false
         }
+        recordClaudeCodeTerminalHostProofKeyboardProgress(
+            stage: "focus-check-passed",
+            key: key,
+            action: action
+        )
 
         if currentSuggestionInvalidatedByUserKeyDown {
+            recordClaudeCodeTerminalHostProofKeyboardProgress(
+                stage: "blocked-stale-after-keydown",
+                key: key,
+                action: action
+            )
             setSuggestionDecision("Blocked: stale suggestion passed through")
             hideSuggestion(reason: "stale-after-keydown")
             recordKeyboardAction(
@@ -2297,6 +2314,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if shouldSuppressKey(key, isAutorepeat: isAutorepeat) {
+            recordClaudeCodeTerminalHostProofKeyboardProgress(
+                stage: "suppressed-autorepeat",
+                key: key,
+                action: action
+            )
             recordKeyboardAction(key: key, action: .passThrough, handled: true, reason: "suppressed-autorepeat")
             return true
         }
@@ -2306,6 +2328,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
 
         case .acceptNextWord:
+            recordClaudeCodeTerminalHostProofKeyboardProgress(
+                stage: "accept-next-word-entered",
+                key: key,
+                action: action
+            )
             guard currentProfile?.supportsOneWordAcceptance == true else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-one-word")
                 return false
@@ -2318,18 +2345,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 acceptedAt: acceptedAt,
                 acceptMode: action.diagnosticName
             )
+            recordClaudeCodeTerminalHostProofKeyboardProgress(
+                stage: "accept-next-word-baseline-ready",
+                key: key,
+                action: action,
+                metadata: [
+                    "hasBaseline": String(verificationBaseline != nil)
+                ]
+            )
             guard let acceptedText = suggestionSession.nextWordAcceptance() else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "missing-accepted-text")
                 return false
             }
+            recordClaudeCodeTerminalHostProofKeyboardProgress(
+                stage: "accept-next-word-text-ready",
+                key: key,
+                action: action,
+                metadata: [
+                    "acceptedChars": String(acceptedText.count)
+                ]
+            )
             guard let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "acceptance-proof-failed")
                 return false
             }
+            recordClaudeCodeTerminalHostProofKeyboardProgress(
+                stage: "accept-next-word-proof-ready",
+                key: key,
+                action: action,
+                metadata: acceptanceProof.traceMetadata
+            )
+            recordClaudeCodeTerminalHostProofKeyboardProgress(
+                stage: "accept-next-word-insert-start",
+                key: key,
+                action: action
+            )
             guard insertAcceptedText(acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return false
             }
+            recordClaudeCodeTerminalHostProofKeyboardProgress(
+                stage: "accept-next-word-insert-succeeded",
+                key: key,
+                action: action
+            )
 
             armAcceptedInsertionUndo(
                 acceptedText: acceptedText,
@@ -2454,7 +2513,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func focusedFieldMatchesCurrentSuggestion() -> Bool {
+    private func recordClaudeCodeTerminalHostProofKeyboardProgress(
+        stage: String,
+        key: AutocompleteKey,
+        action: KeyboardAction,
+        metadata: [String: String] = [:]
+    ) {
+        guard currentSuggestionAppBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+            || currentProfile?.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier else {
+            return
+        }
+
+        var payload = metadata
+        payload["app"] = ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+        payload["key"] = key.diagnosticName
+        payload["action"] = action.diagnosticName
+        payload["stage"] = stage
+        payload["hasVisibleSuggestion"] = String(suggestionSession.hasVisibleSuggestion)
+        payload["requestMode"] = currentSuggestionRequestMode?.rawValue ?? "unknown"
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-keyboard-progress",
+            metadata: payload
+        )
+    }
+
+    private func focusedFieldMatchesCurrentSuggestion(
+        allowTerminalHostProofSnapshotFastPath: Bool = false
+    ) -> Bool {
+        if allowTerminalHostProofSnapshotFastPath,
+           terminalHostProofSnapshotMatchesCurrentSuggestion() {
+            return true
+        }
+
         guard let currentSuggestionAppBundleIdentifier,
               let currentSuggestionFieldIdentity,
               let frontmostApp = accessibilityClient.frontmostApplication(),
@@ -2492,6 +2582,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: context,
             profile: profile
         ) == currentSuggestionFieldIdentity
+    }
+
+    private func terminalHostProofSnapshotMatchesCurrentSuggestion() -> Bool {
+        guard currentSuggestionAppBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+              currentSuggestionRequestMode == .wordCompletion,
+              let currentProfile,
+              currentProfile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+              currentProfile.supportsOneWordAcceptance,
+              !currentProfile.supportsFullAcceptance,
+              currentProfile.requiresNoSubmitAcceptanceProof,
+              currentProfile.insertionMode == .clipboardFallbackOptIn,
+              let currentSuggestionFieldIdentity,
+              let lastTextSnapshot,
+              lastTextSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              let profile = effectiveProfile(for: frontmostApp),
+              profile == currentProfile,
+              frontmostAppMatchesSuggestion(
+                  frontmostApp,
+                  expectedBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                  profile: profile
+              ),
+              isClaudeCodeTerminalHostProof(
+                  profile: profile,
+                  hostBundleIdentifier: frontmostApp.bundleIdentifier
+              ),
+              let rawContext = accessibilityClient.focusedTextContext(
+                  allowDescendantTextFallback: profile.allowsDescendantTextFallback
+              ),
+              !rawContext.isSecure,
+              rawContext.selectedTextLength == 0,
+              claudeCodeTerminalHostProofBlockReason(
+                  app: frontmostApp,
+                  context: rawContext,
+                  profile: profile
+              ) == nil,
+              promptTextAreaMatch(
+                  for: frontmostApp.bundleIdentifier,
+                  context: rawContext
+              ).canSuggest else {
+            return false
+        }
+
+        let context = presentationAdjustedContext(
+            rawContext,
+            app: frontmostApp,
+            profile: profile,
+            previousSnapshot: lastTextSnapshot
+        )
+        guard fieldIdentity(app: frontmostApp, context: context, profile: profile) == currentSuggestionFieldIdentity else {
+            return false
+        }
+
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-focus-fast-path",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "host": frontmostApp.bundleIdentifier,
+                "requestMode": currentSuggestionRequestMode?.rawValue ?? "unknown"
+            ]
+        )
+        return true
     }
 
     private func recordKeyboardAction(
@@ -4396,8 +4548,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         keyboardEventTap?.suppressPassthroughObservation(
-            until: Date().addingTimeInterval(0.25)
+            until: Date().addingTimeInterval(
+                shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile) ? 0.75 : 0.25
+            )
         )
+
+        if shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile) {
+            let succeeded = insertClaudeCodeTerminalHostProofText(acceptedText)
+            DiagnosticsLog.shared.record(
+                "insert",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "mode": InsertionMode.clipboardFallbackOptIn.rawValue,
+                    "success": String(succeeded),
+                    "skippedModes": skippedModes
+                        .map(\.rawValue)
+                        .sorted()
+                        .joined(separator: ",")
+                ]
+            )
+            if succeeded {
+                focusedTextPollingPause.pause(
+                    now: Date(),
+                    durationMilliseconds: postInsertionPollPauseMilliseconds
+                )
+            }
+            return succeeded
+        }
 
         let result = insertionEngine.insert(
             acceptedText,
@@ -4425,6 +4602,143 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return result.succeeded
+    }
+
+    private func shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: CompatibilityProfile) -> Bool {
+        currentSuggestionAppBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+            && profile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+            && currentSuggestionRequestMode == .wordCompletion
+            && profile.insertionMode == .clipboardFallbackOptIn
+            && profile.requiresNoSubmitAcceptanceProof
+    }
+
+    private func insertClaudeCodeTerminalHostProofText(_ acceptedText: String) -> Bool {
+        guard !acceptedText.isEmpty else {
+            return false
+        }
+
+        guard terminalHostProofSnapshotMatchesCurrentSuggestion() else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "target-recheck-failed"
+                ]
+            )
+            return false
+        }
+        guard let frontmostApp = accessibilityClient.frontmostApplication() else {
+            return false
+        }
+
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        guard pasteboard.setString(acceptedText, forType: .string) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "pasteboard-set-failed",
+                    "source": "helperPaste"
+                ]
+            )
+            return false
+        }
+
+        let posted = Self.postClaudeCodeTerminalHostProofPasteViaAccessibilityMenu(
+            processIdentifier: frontmostApp.processIdentifier
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": String(posted),
+                "source": "accessibilityMenuPaste"
+            ]
+        )
+
+        return posted
+    }
+
+    nonisolated private static func postClaudeCodeTerminalHostProofPasteViaAccessibilityMenu(
+        processIdentifier: pid_t
+    ) -> Bool {
+        let appElement = AXUIElementCreateApplication(processIdentifier)
+        guard let menuBarValue = axAttribute(appElement, kAXMenuBarAttribute),
+              let editItem = axDescendant(
+                  in: menuBarValue as! AXUIElement,
+                  title: "Edit",
+                  role: kAXMenuBarItemRole as String,
+                  maxDepth: 2
+              ) else {
+            return false
+        }
+
+        AXUIElementPerformAction(editItem, kAXPressAction as CFString)
+        Thread.sleep(forTimeInterval: 0.05)
+
+        guard let pasteItem = axDescendant(
+            in: editItem,
+            title: "Paste",
+            role: kAXMenuItemRole as String,
+            maxDepth: 4
+        ) else {
+            return false
+        }
+
+        return AXUIElementPerformAction(pasteItem, kAXPressAction as CFString) == .success
+    }
+
+    nonisolated private static func axAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+        var value: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+        guard result == .success else {
+            return nil
+        }
+        return value
+    }
+
+    nonisolated private static func axTitle(_ element: AXUIElement) -> String? {
+        axAttribute(element, kAXTitleAttribute) as? String
+    }
+
+    nonisolated private static func axRole(_ element: AXUIElement) -> String? {
+        axAttribute(element, kAXRoleAttribute) as? String
+    }
+
+    nonisolated private static func axChildren(_ element: AXUIElement) -> [AXUIElement] {
+        axAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+    }
+
+    nonisolated private static func axDescendant(
+        in element: AXUIElement,
+        title: String,
+        role: String,
+        maxDepth: Int
+    ) -> AXUIElement? {
+        guard maxDepth >= 0 else {
+            return nil
+        }
+
+        if axTitle(element) == title,
+           axRole(element) == role {
+            return element
+        }
+
+        for child in axChildren(element) {
+            if let match = axDescendant(
+                in: child,
+                title: title,
+                role: role,
+                maxDepth: maxDepth - 1
+            ) {
+                return match
+            }
+        }
+
+        return nil
     }
 
     private func recordRawAcceptance(

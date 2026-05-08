@@ -27,6 +27,7 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate
 ```
 
@@ -50,5 +51,6 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gat
   Backtick/full accept needs separate full-accept no-submit proof before prompt
   profiles can enable it.
 - Claude Code: direct `com.anthropic.claude-code` proof is diagnostics-only in
-  this build because real typing happens in a terminal host. Add terminal-host
-  proof before taking screenshots.
+  this build because real typing happens in a terminal host. Only use the
+  marker-gated terminal-host proof lane, keep the prompt disposable, and do not
+  press Enter.

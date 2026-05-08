@@ -275,18 +275,24 @@
     },
     {
       "surface": "Claude Code",
-      "status": "pending",
-      "screenshots": [],
-      "gaps": [
-        "Direct com.anthropic.claude-code proof is diagnostics-only because the installed bundle is a background-only CLI helper.",
-        "Needs a terminal-host adapter with screenshot and one-word no-submit accept proof before it can count as complete."
+      "status": "complete",
+      "manualSmoke": {
+        "app": "Claude Code",
+        "bundle": "com.anthropic.claude-code",
+        "proof": "default",
+        "minVerifiedAccepts": 1,
+        "maxVerifiedAccepts": 1,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/claude-code-terminal.png"
       ],
+      "gaps": [],
       "requirements": [
         {
           "id": "claude-code-terminal-host-no-submit",
-          "status": "pending",
-          "summary": "Add live terminal-host screenshot-backed one-word Tab accept proof without submitting shell input or an agent prompt.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
+          "status": "complete",
+          "summary": "Live terminal-host screenshot-backed one-word Tab accept proof completes without submitting shell input or an agent prompt."
         }
       ]
     },
