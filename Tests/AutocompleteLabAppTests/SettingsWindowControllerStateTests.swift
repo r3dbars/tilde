@@ -462,6 +462,7 @@ struct SettingsWindowControllerStateTests {
             privacy.screenRecordingPermissionText
                 == "Screen Recording: only captures placement screenshots while this debug switch is on. Normal suggestions do not need it."
         )
+        #expect(privacy.screenRecordingSettingsButtonTitle == "Open Screen Recording Settings")
         #expect(privacy.pathText == "Logs: /tmp/diagnostics.log | Traces: /tmp/traces.jsonl")
         #expect(
             privacy.statusPanelText
@@ -492,6 +493,7 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(paused.contentStatusText == "Raw text capture: on temporarily; can include what you type")
         #expect(paused.screenRecordingPermissionText == nil)
+        #expect(paused.screenRecordingSettingsButtonTitle == nil)
         #expect(
             paused.statusPanelText.contains(
                 "Screen Recording: off; normal suggestions do not need it."

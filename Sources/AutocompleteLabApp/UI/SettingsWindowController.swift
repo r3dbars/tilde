@@ -344,6 +344,14 @@ struct SettingsPrivacyState: Equatable {
         return "Screen Recording: only captures temporary placement screenshots. Normal suggestions do not need it."
     }
 
+    var screenRecordingSettingsButtonTitle: String? {
+        guard screenshotTracingEnabled else {
+            return nil
+        }
+
+        return "Open Screen Recording Settings"
+    }
+
     var pathText: String {
         "Logs: \(diagnosticsPath) | Traces: \(tracePath)"
     }
@@ -564,6 +572,11 @@ final class SettingsWindowController: NSObject {
     private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
     private let rawContentStatusLabel = NSTextField(labelWithString: "")
     private let screenRecordingPermissionLabel = NSTextField(labelWithString: "")
+    private let openScreenRecordingSettingsButton = NSButton(
+        title: "Open Screen Recording Settings",
+        target: nil,
+        action: nil
+    )
     private let privacyPathLabel = NSTextField(labelWithString: "")
     private let toggleTracingButton = NSButton(
         checkboxWithTitle: "Performance and placement traces",
@@ -589,6 +602,7 @@ final class SettingsWindowController: NSObject {
     private let openTextEditTestButton = NSButton(title: "Open TextEdit Test", target: nil, action: nil)
     private let requestPermission: () -> Void
     private let openAccessibilitySettings: () -> Void
+    private let openScreenRecordingSettings: () -> Void
     private let toggleSuggestionsPaused: () -> Void
     private let openTextEditTest: () -> Void
     private let performRuntimeAction: (RuntimeReadinessAction) -> Void
@@ -612,6 +626,7 @@ final class SettingsWindowController: NSObject {
     init(
         requestPermission: @escaping () -> Void,
         openAccessibilitySettings: @escaping () -> Void,
+        openScreenRecordingSettings: @escaping () -> Void,
         toggleSuggestionsPaused: @escaping () -> Void,
         openTextEditTest: @escaping () -> Void,
         performRuntimeAction: @escaping (RuntimeReadinessAction) -> Void,
@@ -631,6 +646,7 @@ final class SettingsWindowController: NSObject {
     ) {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
+        self.openScreenRecordingSettings = openScreenRecordingSettings
         self.toggleSuggestionsPaused = toggleSuggestionsPaused
         self.openTextEditTest = openTextEditTest
         self.performRuntimeAction = performRuntimeAction
@@ -772,6 +788,10 @@ final class SettingsWindowController: NSObject {
         let screenRecordingText = privacy.screenRecordingPermissionText
         screenRecordingPermissionLabel.stringValue = screenRecordingText ?? ""
         screenRecordingPermissionLabel.isHidden = screenRecordingText == nil
+        let screenRecordingButtonTitle = privacy.screenRecordingSettingsButtonTitle
+        openScreenRecordingSettingsButton.title = screenRecordingButtonTitle ?? "Open Screen Recording Settings"
+        openScreenRecordingSettingsButton.isHidden = screenRecordingButtonTitle == nil
+        openScreenRecordingSettingsButton.isEnabled = screenRecordingButtonTitle != nil
         privacyPathLabel.stringValue = privacy.pathText
         currentPrivacyStatusText = privacy.statusPanelText
         toggleTracingButton.state = privacy.tracingPaused ? .off : .on
@@ -904,6 +924,9 @@ final class SettingsWindowController: NSObject {
         privacyStatusButton.action = #selector(showPrivacyStatusControl)
         privacyStatusButton.bezelStyle = .rounded
         privacyStatusButton.toolTip = "Shows what privacy-sensitive diagnostics are enabled right now."
+        openScreenRecordingSettingsButton.target = self
+        openScreenRecordingSettingsButton.action = #selector(openScreenRecordingSettingsPane)
+        openScreenRecordingSettingsButton.bezelStyle = .rounded
         deleteLocalLogsButton.target = self
         deleteLocalLogsButton.action = #selector(deleteLocalLogsControl)
         deleteLocalLogsButton.bezelStyle = .rounded
@@ -972,6 +995,7 @@ final class SettingsWindowController: NSObject {
                     diagnosticsStatusLabel,
                     rawContentStatusLabel,
                     screenRecordingPermissionLabel,
+                    makeButtonRow([openScreenRecordingSettingsButton]),
                     toggleTracingButton,
                     toggleRawTraceButton,
                     toggleScreenshotTraceButton,
@@ -1073,6 +1097,11 @@ final class SettingsWindowController: NSObject {
     @objc
     private func openAccessibilitySettingsPane() {
         openAccessibilitySettings()
+    }
+
+    @objc
+    private func openScreenRecordingSettingsPane() {
+        openScreenRecordingSettings()
     }
 
     @objc

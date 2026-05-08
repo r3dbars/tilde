@@ -65,7 +65,7 @@ evidence-backed score should stay lower until those rows are closed.
 | Diagnostics | 9.8/10 | Placement, placement confidence, event-tap latency, focused poll latency, AX cooldowns, insertion, trace, screenshot-file evidence, and smoke logs are strong. The Diagnostics window now separates key capture health from AX polling health and shows recent trace text as lengths instead of raw suggestion text. |
 | Automated tests | 10/10 | `swift test` passes 326 tests, including app-target settings state tests, diagnostics typing-health tests, scoped recent-word memory, privacy expiry, support status, serial AX reader, focused AX-health cooldown, focused-poll backoff, dogfood false-positive coverage, neutral word-completion vocabulary, screenshot trace capture policy, placement trust policy, and trace visual evidence. Script self-tests now cover strict score targets, the 10-pass score loop path, manual smoke status, visual proof, typing performance, and the 10-minute endurance soak command. |
 | Real-app smoke | 8.8/10 | TextEdit, core Chrome fixtures, and Chrome chat-like no-submit are green on the current build. The latest TextEdit strict visual smoke passed after the accept-all shortcut/race fix. Notes title/body/checklist, Codex, Claude Code, and Claude desktop remain honest insertion-proof gaps. |
-| Release readiness | 8/10 | Packaging is in decent shape, but beta readiness still correctly fails unless all required manual and screenshot-backed proof rows are closed. Notarization/stapling and beta onboarding still need a final product pass. |
+| Release readiness | 8/10 | Packaging is in decent shape, and the current local archive has been notarized, stapled, and Gatekeeper-verified. Beta readiness still correctly fails unless all required manual and screenshot-backed proof rows are closed, and beta onboarding still needs a final product pass. |
 | Architecture | 9.1/10 | Core policy, geometry, scoped word memory, trace analysis, privacy expiry, support status, serial AX focused-text reads, and AX-health cooldowns are tested and wired. AppDelegate still owns too much orchestration. |
 
 ## Visual Placement And Text Box Audit
@@ -89,6 +89,15 @@ evidence-backed score should stay lower until those rows are closed.
 
 ## Latest Proof
 
+- Current 2026-05-07 goal pass: added a pre-accept snapshot guard for app,
+  process, focused field, selected text, and before/after cursor text; records
+  accept-key focus mismatches as `wrong-app-or-field-before-accept` severe
+  do-not-ship blockers; suppresses phrase continuation during fast typing
+  bursts while leaving word completion available; and gates low-confidence
+  suggestions before display. Added privacy tests for secure fields,
+  unsupported apps, and screenshot/raw-text separation. `swift test` passed 437
+  tests, and `./script/smoke_test.sh` passed, including bundle and diagnostics
+  log checks.
 - Five-agent continuation pass: prompt-app safety hardening, strict visual proof
   gates, focused-text AX-health cooldown, Notes/Obsidian proof triage, and
   Apple-native polish ranking all completed on branch
@@ -327,9 +336,10 @@ evidence-backed score should stay lower until those rows are closed.
 
 ## Remaining Gaps
 
-1. Run recorder-grade screenshot-backed audits for Obsidian, Claude desktop,
-   and Claude Code with disposable text only. Run Notes as three explicit
-   surface commands: `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`,
+1. Run recorder-grade screenshot-backed audits for Obsidian, Notes title/body/checklist,
+   Claude desktop, and Claude Code with disposable text only. Run Notes as
+   three explicit surface commands:
+   `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`,
    `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate`,
    and `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`.
    Codex has visual proof now, but still needs one-word accept/no-submit proof
