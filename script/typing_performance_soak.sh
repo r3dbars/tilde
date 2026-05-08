@@ -161,14 +161,34 @@ PY
 }
 
 prepare_textedit_document() {
-  local attempt actual_name
+  local target_file="${1:-}"
+  local target_name attempt actual_name
+
+  if [[ -z "$target_file" ]]; then
+    echo "prepare_textedit_document needs a target file path" >&2
+    return 1
+  fi
+
+  target_name="$(basename "$target_file")"
+  : >"$target_file"
 
   for attempt in 1 2; do
-    open -a TextEdit >/dev/null 2>&1 || true
+    open -F -a TextEdit "$target_file" >/dev/null 2>&1 || true
+    osascript - "$target_file" "$target_name" <<'APPLESCRIPT' >/dev/null 2>&1 || true
+on run argv
+  set targetPath to item 1 of argv
+  set targetName to item 2 of argv
+  tell application "TextEdit"
+    activate
+    open (POSIX file targetPath)
+  end tell
+end run
+APPLESCRIPT
     sleep 0.5
     if actual_name="$(
-      osascript <<'APPLESCRIPT'
-on run
+      osascript - "$target_name" <<'APPLESCRIPT'
+on run argv
+  set expectedName to item 1 of argv
   with timeout of 20 seconds
     tell application "System Events"
       repeat 50 times
@@ -180,15 +200,14 @@ on run
       tell process "TextEdit"
         set frontmost to true
         delay 0.2
-        key code 45 using {command down}
       end tell
 
       set targetName to ""
       repeat 40 times
         tell process "TextEdit"
           set frontmost to true
-          if exists front window then
-            set targetName to name of front window
+          if exists window expectedName then
+            set targetName to name of window expectedName
             exit repeat
           end if
         end tell
@@ -197,15 +216,14 @@ on run
 
       tell process "TextEdit"
         if targetName is "" then error "missing TextEdit soak front window"
-        set targetName to name of front window
-        set frontmost to true
-        perform action "AXRaise" of front window
+        perform action "AXRaise" of window targetName
         delay 0.1
-        if exists text area 1 of scroll area 1 of front window then
-          click text area 1 of scroll area 1 of front window
+        if exists text area 1 of scroll area 1 of window targetName then
+          click text area 1 of scroll area 1 of window targetName
         end if
         keystroke "a" using {command down}
         key code 51
+        key code 53
       end tell
     end tell
 
@@ -219,7 +237,15 @@ APPLESCRIPT
     fi
 
     echo "TextEdit document setup attempt $attempt failed; retrying." >&2
-    open -a TextEdit
+    open -F -a TextEdit "$target_file" >/dev/null 2>&1 || true
+    osascript - "$target_file" <<'APPLESCRIPT' >/dev/null 2>&1 || true
+on run argv
+  tell application "TextEdit"
+    activate
+    open (POSIX file (item 1 of argv))
+  end tell
+end run
+APPLESCRIPT
     sleep 1
   done
 
@@ -568,13 +594,12 @@ type_textedit_fixture() {
   tmp_dir="$(make_tmp_dir)"
   text_file="$tmp_dir/autocomplete-lab-typing-soak-input.txt"
   actual_file="$tmp_dir/autocomplete-lab-typing-soak-actual.txt"
-  target_file="$tmp_dir/autocomplete-lab-typing-soak-target.txt"
+  target_file="$tmp_dir/autocomplete-lab-typing-soak-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
   SOAK_EXPECTED_TEXT_FILE="$text_file"
   SOAK_ACTUAL_TEXT_FILE="$actual_file"
   SOAK_TARGET_TEXT_FILE="$target_file"
   SOAK_TARGET_DOCUMENT_NAME=""
   generate_soak_text "$TARGET_CHARS" >"$text_file"
-  printf 'AutocompleteLab typing soak target\n' >"$target_file"
   SOAK_TARGET_DOCUMENT_NAME="$(prepare_textedit_document "$SOAK_TARGET_TEXT_FILE")"
   focus_textedit_document "$SOAK_TARGET_DOCUMENT_NAME"
   sleep 1

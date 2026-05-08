@@ -39,8 +39,10 @@ It is not yet magical by the research bar. The biggest remaining misses are:
   poll skips, focused-poll p95 max 57ms, focused-poll max 87ms, and 4
   under-threshold slow markers. The current build now backs off focused-text
   polling after observed text changes while keeping the fast cadence for visible
-  suggestions; a fresh endurance run still needs to prove the marker count falls
-  to zero.
+  suggestions; a fresh 2026-05-08 1-minute strict run verified exact
+  1,200-character TextEdit text with focused-poll p95 max 11ms, max 37ms, zero
+  slow markers, and zero skips. A fresh longer endurance run still needs to
+  prove the marker count falls to zero.
 
 The repo's existing Apple-native visual-feel score is **95/100**. This score is lower
 because it grades against the research definition of "magical autocomplete,"
