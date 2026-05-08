@@ -211,7 +211,8 @@ Remaining high-impact gaps:
   scoring, candidate-selection metadata, proof fingerprints, kept-horizon
   events, and researched trigger delays.
 - Cross-app proof rows still need a screenshot-backed acceptance slice for
-  Codex and a terminal-host adapter before Claude Code can enter prompt proof.
+  Codex and a live screenshot/no-submit terminal-host slice before Claude Code
+  can count as prompt proof.
 - Real Chrome editor-engine proof now passes under isolated forced-renderer AX,
   but still needs default Chrome focused web-editor AX context and caret-quality
   placement before the browser-editor scores can reach target.
@@ -245,12 +246,12 @@ Baseline scorecard from the initial audit:
 | Output shape and cleanup | 8 | 89 | 7.1 | Cleaner is one of the strongest parts of the app, and now suppresses phrase restarts or visible typed-word duplicates that survive prefix trimming. |
 | Local runtime and latency | 10 | 87 | 8.7 | App-owned MLX runtime, warm model, streaming, timing slices, trace-visible static prompt cache, and trace-visible per-field session-cache eligibility/reset policy; live KV/session reuse is still pending. |
 | Ghost text UX and controls | 10 | 92 | 9.2 | One suggestion, Tab next word, full accept when allowed, direct accept-all shortcut editing, Esc dismiss, stale hiding, current-field/session silence, per-app force-mirror control, and app-level Command-Z restore for accepted insertions. |
-| Mode profiles and cross-app safety | 10 | 76 | 7.6 | Strong app profiles and a user-visible per-app mirror override now exist, but behavior modes are not first-class for email, notes, bullets, docs, code, forms, search, and AI chat. |
+| Mode profiles and cross-app safety | 10 | 77 | 7.7 | Strong app profiles, a user-visible per-app mirror override, and a proof-only terminal-host Claude Code adapter now exist, but behavior modes are not first-class for every email, notes, bullets, docs, code, forms, search, and AI chat surface. |
 | Learning, annoyance, accepted-and-kept loop | 12 | 66 | 7.9 | Accepted-kept learning now affects both affinity and utility, but the loop still needs fresh real-app threshold proof. |
 | Metrics, replay, and proof gates | 5 | 85 | 4.3 | Trace/report scripts are strong, and Settings can now start per-app screenshot proof from the current app; true replay-first real-app rig is still missing. |
 | Architecture and tests | 2 | 91 | 1.8 | Good policy/test structure, though AppDelegate still owns too much orchestration. |
 
-Weighted total: **80.0/100**, rounded to **80/100**.
+Weighted total: **80.1/100**, rounded to **80/100**.
 
 ## Exact Research Items
 
@@ -299,7 +300,7 @@ Weighted total: **80.0/100**, rounded to **80/100**.
 | Bullets profile | 84 | Bullet/checklist/numbered current-line shape is now detected without item text, feeds trace metadata and prompt guidance, maps generic list-shaped writing to the bullets profile, keeps AI/search/form safety profiles ahead of list shape, and runtime ranking penalizes repeated bullet/checklist markers. | Screenshot-backed same-slice accepts in Notes/TextEdit plus checklist undo proof. |
 | Forms profile | 84 | Field-kind resolver maps forms/secure/url to a suppressed-by-default form profile with full accept disabled, and runtime candidate ranking keeps generated form text below the display threshold. | Proven non-sensitive free-form exceptions only. |
 | Search profile | 84 | Search field kind maps to a suppressed-by-default search profile with full accept disabled, and runtime candidate ranking keeps generated search text below the display threshold. | Proven across browser/native search fields. |
-| AI chat profile | 88 | Codex/Claude desktop profiles are conservative, one-word biased, block submit/run/Enter suggestions, disable full accept, and runtime candidate ranking suppresses submit-like action text if the model emits it anyway. Claude Code direct bundle support is now diagnostics-only because the interactive surface is terminal-hosted. Claude desktop now has same-baseline strict visual proof with one verified Tab accept, detector offset near zero, and no submit signal. | Same-slice visual plus one-word no-submit proof for Codex, a terminal-host adapter for Claude Code, and more Claude desktop prompt layouts. |
+| AI chat profile | 89 | Codex/Claude desktop profiles are conservative, one-word biased, block submit/run/Enter suggestions, disable full accept, and runtime candidate ranking suppresses submit-like action text if the model emits it anyway. Claude Code direct bundle support is diagnostics-only, but a proof-only terminal-host adapter now maps supported terminal hosts to a virtual Claude Code profile only when proof mode, the marker, and the current input-line safety checks pass. Claude desktop now has same-baseline strict visual proof with one verified Tab accept, detector offset near zero, and no submit signal. | Same-slice visual plus one-word no-submit proof for Codex, live terminal-host proof for Claude Code, and more Claude desktop prompt layouts. |
 | Accepted-and-kept learning | 90 | Live survival events update a persisted app/field/mode/profile learning store that feeds display affinity, display utility, and suppression thresholds with a 14-day half-life. Diagnostics now exposes accepted-kept rates and the current display-affinity probability/samples/threshold from trace metadata. | Prove thresholds with fresh real-app traces and add tuning controls. |
 | Typed-over learning | 88 | Typed-over trace, 5s prefix-family cooldown, 30s repeated typed-over escalation, and repeated-miss suppression exist; repeated-miss scores now decay by half-life instead of poisoning a prefix indefinitely, and Diagnostics exposes the current trace-safe miss score/threshold. | Prove thresholds with fresh real-app traces. |
 | Ignored learning | 84 | Ignored hides now record a weak repetition signal scaled by visible lifetime, with trace-safe weight/total metadata, the same decaying repeated-miss bucket, and Diagnostics visibility into passive ignored miss score/lifetime. | Prove thresholds with fresh real-app traces and separate passive ignored from explicit dismiss in diagnostics. |
@@ -491,7 +492,7 @@ these are true.
 - Obsidian has disposable-vault screenshot plus same-slice accepts; expand it across themes, panes, and long notes.
 - Notes title, body, and checklist are green with separate bounded proof rows.
 - Codex gets screenshot plus one-word accept plus no-submit in one strict slice.
-- Claude Code gets a terminal-host adapter plus safe live prompt proof.
+- Claude Code gets safe live terminal-host prompt proof through the proof-only adapter.
 - Claude desktop same-baseline proof expands across multi-line and long prompt layouts.
 
 ### P2 - Runtime Polish

@@ -328,6 +328,12 @@ open_app() {
     launchctl unsetenv AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS >/dev/null 2>&1 || true
   fi
 
+  if [[ -n "${AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS:-}" ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS "$AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS >/dev/null 2>&1 || true
+  fi
+
   if [[ "${AUTOCOMPLETE_LAB_DIRECT_LAUNCH:-}" =~ ^(1|true|yes|on)$ ]]; then
     nohup "$APP_BINARY" >"$DIST_DIR/$APP_NAME.launch.log" 2>&1 </dev/null &
     disown "$!" 2>/dev/null || true

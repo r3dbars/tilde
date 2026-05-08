@@ -33,6 +33,8 @@ public enum ClaudeCodeTerminalHostProofBlockReason: String, Equatable, Sendable 
 }
 
 public enum ClaudeCodeTerminalHostProofPolicy {
+    public static let virtualBundleIdentifier = "com.anthropic.claude-code"
+
     public static let supportedTerminalHosts: Set<String> = [
         "com.apple.Terminal",
         "com.googlecode.iterm2",
@@ -43,6 +45,34 @@ public enum ClaudeCodeTerminalHostProofPolicy {
     ]
 
     public static let proofMarker = "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF"
+
+    public static var proofProfile: CompatibilityProfile {
+        CompatibilityProfile(
+            bundleIdentifier: virtualBundleIdentifier,
+            displayName: "Claude Code",
+            appFamily: .customCanvas,
+            supportLevel: .yellow,
+            supportReason: "Claude Code can be proofed only through an explicit terminal-host proof lane.",
+            renderMode: .inlineAdjacent,
+            insertionMode: .keyEvents,
+            fallbackRenderMode: .floatingMirror,
+            fallbackInsertionMode: nil,
+            fieldIdentityMode: .stableBounds,
+            anchorLadder: [.caret],
+            knownFailureModes: [
+                "terminal-hosted CLI input can submit shell commands",
+                "terminal accessibility text can include scrollback instead of only the prompt line"
+            ],
+            allowsFieldAnchor: false,
+            allowsWindowAnchor: false,
+            supportsOneWordAcceptance: true,
+            supportsFullAcceptance: false,
+            suppressesAfterInsertionFailure: true,
+            allowsDetachedSuggestions: false,
+            allowsSyntheticCaretPlacement: true,
+            notes: "Proof-only virtual Claude Code profile. It may be used only when a supported terminal host is frontmost, Claude Code proof mode is active, the proof marker is present, and the current input line is not a shell command."
+        )
+    }
 
     public static func evaluate(
         _ context: ClaudeCodeTerminalHostProofContext
@@ -78,6 +108,22 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         }
 
         return .eligible
+    }
+
+    public static func focusedInputLine(
+        textBeforeCursor: String,
+        textAfterCursor: String
+    ) -> String {
+        let beforeLine = textBeforeCursor
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .last
+            .map(String.init) ?? ""
+        let afterLine = textAfterCursor
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .first
+            .map(String.init) ?? ""
+
+        return beforeLine + afterLine
     }
 
     private static func looksLikeShellPrompt(_ line: String) -> Bool {

@@ -74,4 +74,36 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
 
         #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.unsupportedTerminalHost))
     }
+
+    @Test("Terminal-host proof profile is one-word proof only")
+    func terminalHostProofProfileIsOneWordProofOnly() {
+        let profile = ClaudeCodeTerminalHostProofPolicy.proofProfile
+
+        #expect(profile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier)
+        #expect(profile.supportLevel == .yellow)
+        #expect(profile.canPresentSuggestions)
+        #expect(profile.supportsOneWordAcceptance)
+        #expect(!profile.supportsFullAcceptance)
+        #expect(profile.insertionMode == .keyEvents)
+        #expect(profile.anchorLadder == [.caret])
+        #expect(!profile.allowsDetachedSuggestions)
+    }
+
+    @Test("Terminal-host proof extracts the current input line from scrollback")
+    func terminalHostProofExtractsCurrentInputLineFromScrollback() {
+        let focusedLine = ClaudeCodeTerminalHostProofPolicy.focusedInputLine(
+            textBeforeCursor: "Welcome\nAUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF\nCan we make",
+            textAfterCursor: " this\nOld output"
+        )
+
+        #expect(focusedLine == "Can we make this")
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(
+            ClaudeCodeTerminalHostProofContext(
+                hostBundleIdentifier: "com.apple.Terminal",
+                windowTitle: "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF",
+                focusedText: focusedLine,
+                proofModeEnabled: true
+            )
+        ) == .eligible)
+    }
 }

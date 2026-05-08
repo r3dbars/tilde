@@ -15,6 +15,7 @@ REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-r
 PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-default}"
 ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-backtick}"
 CODEX_PROOF_MARKER="${AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER:-AUTOCOMPLETE_LAB_CODEX_PROOF}"
+CLAUDE_CODE_PROOF_MARKER="${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER:-AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF}"
 
 usage() {
   cat <<'EOF'
@@ -213,7 +214,14 @@ case "$APP" in
     REQUIRES_FULL_ACCEPT=0
     PROMPT_NO_SUBMIT_PROFILE=1
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Current direct Claude Code proof is diagnostics-only: the installed bundle is a background-only CLI helper.\n- Do not record terminal-hosted Claude Code as direct `com.anthropic.claude-code` proof.\n- After a terminal-host adapter exists, focus only a disposable Claude Code prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Visually confirm the text stayed in the composer, no user message bubble appeared, no shell input executed, and no assistant response started.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS="- In a supported terminal host, focus only a disposable Claude Code prompt without submitting.
+- Include \`$CLAUDE_CODE_PROOF_MARKER\` in the prompt or terminal title.
+- Type a harmless local test fragment like \`Can we make this\`.
+- Confirm a suggestion appears near the prompt or in a stable mirror position.
+- Use Tab once for one word/suffix.
+- Visually confirm the text stayed in the composer, no user message bubble appeared, no shell input executed, and no assistant response started.
+- Do not press Enter as part of the smoke pass.
+- Full visible accept stays disabled until separate full-accept no-submit proof exists."
     ;;
   claude)
     BUNDLE_ID="com.anthropic.claudefordesktop"
@@ -285,6 +293,9 @@ if [[ "$MODE" == "run" ]]; then
   if [[ "$APP" == "codex" ]]; then
     read -r -p "Run the steps above with marker $CODEX_PROOF_MARKER, do not submit, then press Enter to validate this app pass. " _
     AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1
+  elif [[ "$APP" == "claude-code" ]]; then
+    read -r -p "Run the steps above with marker $CLAUDE_CODE_PROOF_MARKER, do not submit, then press Enter to validate this app pass. " _
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1
   else
     read -r -p "Run the steps above, then press Enter to validate this app pass. " _
   fi
@@ -530,6 +541,13 @@ if (( PROMPT_NO_SUBMIT_PROFILE == 1 )); then
     echo "failed $SESSION_NAME prompt no-submit proof: Codex proof marker was not confirmed" >&2
     echo "expected disposable prompt marker: $CODEX_PROOF_MARKER" >&2
     echo "set AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1 only after the prompt contains the marker and was not submitted" >&2
+    print_failure_summary
+    exit 1
+  fi
+  if [[ "$APP" == "claude-code" ]] && ! is_truthy "${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED:-0}"; then
+    echo "failed $SESSION_NAME prompt no-submit proof: Claude Code proof marker was not confirmed" >&2
+    echo "expected disposable terminal marker: $CLAUDE_CODE_PROOF_MARKER" >&2
+    echo "set AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1 only after the prompt contains the marker and was not submitted" >&2
     print_failure_summary
     exit 1
   fi

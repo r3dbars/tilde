@@ -568,13 +568,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func shouldRunFocusedTextPoll(now: Date) -> Bool {
         let activeApp = accessibilityClient.frontmostApplication()
         let hasSupportedProfile = activeApp.flatMap { app -> Bool? in
-            guard let profile = profileStore.profile(for: app.bundleIdentifier) else {
+            guard let profile = effectiveProfile(for: app) else {
                 return false
             }
 
             return profile.canPresentSuggestions
                 && !profile.isSensitive
-                && !disabledBundleIdentifiers.contains(app.bundleIdentifier)
+                && isSuggestionEnabled(for: app, profile: profile)
         } ?? false
         let interval = focusPollingCadencePolicy.interval(
             isTrustedForAccessibility: accessibilityClient.isTrusted,
@@ -587,6 +587,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return now.timeIntervalSince(lastFocusedTextPollAttemptAt) >= interval
+    }
+
+    private func effectiveProfile(for app: RunningApplicationInfo) -> CompatibilityProfile? {
+        if let terminalProofProfile = claudeCodeTerminalHostProofProfile(for: app) {
+            return terminalProofProfile
+        }
+
+        return profileStore.profile(for: app.bundleIdentifier)
+    }
+
+    private func isSuggestionEnabled(
+        for app: RunningApplicationInfo,
+        profile: CompatibilityProfile
+    ) -> Bool {
+        if isClaudeCodeTerminalHostProof(profile: profile, hostBundleIdentifier: app.bundleIdentifier) {
+            return activeAppProofBundleIdentifiers.contains(
+                ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+            )
+        }
+
+        return !disabledBundleIdentifiers.contains(app.bundleIdentifier)
+    }
+
+    private func claudeCodeTerminalHostProofProfile(for app: RunningApplicationInfo) -> CompatibilityProfile? {
+        guard ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts.contains(app.bundleIdentifier),
+              activeAppProofBundleIdentifiers.contains(
+                  ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+              ) else {
+            return nil
+        }
+
+        return ClaudeCodeTerminalHostProofPolicy.proofProfile
+    }
+
+    private func isClaudeCodeTerminalHostProof(
+        profile: CompatibilityProfile,
+        hostBundleIdentifier: String
+    ) -> Bool {
+        profile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+            && ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts.contains(hostBundleIdentifier)
     }
 
     private func finishFocusedTextPoll(startedAt: UInt64) {
@@ -604,8 +644,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let frontmostApp = accessibilityClient.frontmostApplication()
             updateStatusMenu(
                 app: frontmostApp,
-                profile: frontmostApp.flatMap { profileStore.profile(for: $0.bundleIdentifier) },
-                appEnabled: frontmostApp.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
+                profile: frontmostApp.flatMap { effectiveProfile(for: $0) },
+                appEnabled: frontmostApp
+                    .flatMap { app in effectiveProfile(for: app).map { isSuggestionEnabled(for: app, profile: $0) } }
+                    ?? false
             )
             hideSuggestion(reason: reason.hideReason)
             return
@@ -625,7 +667,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let activeApp = accessibilityClient.frontmostApplication()
         guard let frontmostApp = activeApp,
-              let profile = profileStore.profile(for: frontmostApp.bundleIdentifier) else {
+              let profile = effectiveProfile(for: frontmostApp) else {
             clearFocusedFieldState()
             currentProfile = nil
             setSuggestionDecision("Blocked: unsupported app")
@@ -635,7 +677,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         rememberEligibleTargetApp(frontmostApp)
-        let appEnabled = !disabledBundleIdentifiers.contains(frontmostApp.bundleIdentifier)
+        let appEnabled = isSuggestionEnabled(for: frontmostApp, profile: profile)
         currentProfile = profile
         updateStatusMenu(app: frontmostApp, profile: profile, appEnabled: appEnabled)
 
@@ -748,6 +790,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         frontmostApp: RunningApplicationInfo,
         profile: CompatibilityProfile
     ) async {
+        if let terminalHostBlockReason = claudeCodeTerminalHostProofBlockReason(
+            app: frontmostApp,
+            context: rawContext,
+            profile: profile
+        ) {
+            clearFocusedFieldState(resetBlockLogGate: false)
+            currentProfile = profile
+            setSuggestionDecision("Blocked: \(terminalHostBlockReason)")
+            recordBlockedSuggestionEvent(
+                "suggestion-blocked",
+                context: rawContext,
+                profile: profile,
+                fieldIdentity: fieldIdentity(app: frontmostApp, context: rawContext, profile: profile),
+                metadata: [
+                    "reason": terminalHostBlockReason,
+                    "terminalHostBundleIdentifier": frontmostApp.bundleIdentifier
+                ]
+            )
+            hideSuggestion()
+            return
+        }
+
         let promptMatch = promptTextAreaMatch(
             for: frontmostApp.bundleIdentifier,
             context: rawContext
@@ -1089,13 +1153,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduleSuggestion(
             context: context,
             profile: profile,
-            appBundleIdentifier: frontmostApp.bundleIdentifier,
+            appBundleIdentifier: suggestionBundleIdentifier(for: frontmostApp, profile: profile),
             fieldIdentity: fieldIdentity,
             fieldClassification: fieldClassification,
             renderMode: renderMode,
             delayMilliseconds: delayMilliseconds,
             requestMode: requestMode
         )
+    }
+
+    private func claudeCodeTerminalHostProofBlockReason(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) -> String? {
+        guard isClaudeCodeTerminalHostProof(
+            profile: profile,
+            hostBundleIdentifier: app.bundleIdentifier
+        ) else {
+            return nil
+        }
+
+        let focusedLine = ClaudeCodeTerminalHostProofPolicy.focusedInputLine(
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor
+        )
+        let decision = ClaudeCodeTerminalHostProofPolicy.evaluate(
+            ClaudeCodeTerminalHostProofContext(
+                hostBundleIdentifier: app.bundleIdentifier,
+                windowTitle: context.fingerprint.windowTitle ?? "",
+                focusedText: focusedLine,
+                proofModeEnabled: activeAppProofBundleIdentifiers.contains(
+                    ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+                )
+            )
+        )
+
+        switch decision {
+        case .eligible:
+            return nil
+        case let .blocked(reason):
+            return "claude-code-terminal-host-\(reason.rawValue)"
+        }
+    }
+
+    private func suggestionBundleIdentifier(
+        for app: RunningApplicationInfo,
+        profile: CompatibilityProfile
+    ) -> String {
+        if isClaudeCodeTerminalHostProof(profile: profile, hostBundleIdentifier: app.bundleIdentifier) {
+            return ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+        }
+
+        return app.bundleIdentifier
     }
 
     private func allowFocusedTextAXRead(for bundleIdentifier: String) -> Bool {
@@ -1954,13 +2064,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let currentSuggestionAppBundleIdentifier,
               let currentSuggestionFieldIdentity,
               let frontmostApp = accessibilityClient.frontmostApplication(),
-              frontmostApp.bundleIdentifier == currentSuggestionAppBundleIdentifier,
-              let profile = profileStore.profile(for: frontmostApp.bundleIdentifier),
+              let profile = effectiveProfile(for: frontmostApp),
+              frontmostAppMatchesSuggestion(
+                  frontmostApp,
+                  expectedBundleIdentifier: currentSuggestionAppBundleIdentifier,
+                  profile: profile
+              ),
               let rawContext = accessibilityClient.focusedTextContext(
                   allowDescendantTextFallback: profile.allowsDescendantTextFallback
               ),
               !rawContext.isSecure,
               rawContext.selectedTextLength == 0,
+              claudeCodeTerminalHostProofBlockReason(
+                  app: frontmostApp,
+                  context: rawContext,
+                  profile: profile
+              ) == nil,
               promptTextAreaMatch(
                   for: frontmostApp.bundleIdentifier,
                   context: rawContext
@@ -2111,13 +2230,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard let frontmostApp = accessibilityClient.frontmostApplication(),
-              frontmostApp.bundleIdentifier == undo.appBundleIdentifier,
-              let profile = profileStore.profile(for: frontmostApp.bundleIdentifier),
+              let profile = effectiveProfile(for: frontmostApp),
+              frontmostAppMatchesSuggestion(
+                  frontmostApp,
+                  expectedBundleIdentifier: undo.appBundleIdentifier,
+                  profile: profile
+              ),
               let rawContext = accessibilityClient.focusedTextContext(
                   allowDescendantTextFallback: profile.allowsDescendantTextFallback
               ),
               !rawContext.isSecure,
               rawContext.selectedTextLength == 0,
+              claudeCodeTerminalHostProofBlockReason(
+                  app: frontmostApp,
+                  context: rawContext,
+                  profile: profile
+              ) == nil,
               promptTextAreaMatch(for: frontmostApp.bundleIdentifier, context: rawContext).canSuggest else {
             clearPendingAcceptedInsertionUndo(reason: "stale-focus")
             return false
@@ -2570,7 +2698,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func currentTextWindow(for tracker: AcceptanceSurvivalTracker) -> String? {
         guard let frontmostApp = accessibilityClient.frontmostApplication(),
-              frontmostApp.bundleIdentifier == tracker.appBundleIdentifier,
+              frontmostAppMatchesSuggestion(
+                  frontmostApp,
+                  expectedBundleIdentifier: tracker.appBundleIdentifier,
+                  profile: tracker.profile
+              ),
               let rawContext = accessibilityClient.focusedTextContext(
                   allowDescendantTextFallback: tracker.profile.allowsDescendantTextFallback
               ),
@@ -3453,7 +3585,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> (context: FocusedTextContext?, reason: String?) {
         let expectedBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
         guard let frontmostApp = accessibilityClient.frontmostApplication(),
-              frontmostApp.bundleIdentifier == expectedBundleIdentifier else {
+              frontmostAppMatchesSuggestion(
+                  frontmostApp,
+                  expectedBundleIdentifier: expectedBundleIdentifier,
+                  profile: profile
+              ) else {
             return (nil, "stale-app")
         }
 
@@ -3462,6 +3598,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ), !rawContext.isSecure,
            rawContext.selectedTextLength == 0 else {
             return (nil, "stale-focused-context")
+        }
+
+        guard claudeCodeTerminalHostProofBlockReason(
+            app: frontmostApp,
+            context: rawContext,
+            profile: profile
+        ) == nil else {
+            return (nil, "stale-terminal-host-proof")
         }
 
         guard promptTextAreaMatch(
@@ -3491,6 +3635,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return (context, nil)
+    }
+
+    private func frontmostAppMatchesSuggestion(
+        _ frontmostApp: RunningApplicationInfo,
+        expectedBundleIdentifier: String,
+        profile: CompatibilityProfile
+    ) -> Bool {
+        if frontmostApp.bundleIdentifier == expectedBundleIdentifier {
+            return true
+        }
+
+        return expectedBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+            && isClaudeCodeTerminalHostProof(
+                profile: profile,
+                hostBundleIdentifier: frontmostApp.bundleIdentifier
+            )
     }
 
     private func placementHealthPlan(
@@ -4442,7 +4602,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let control = suggestionControlState.statusName
         let appName = app?.localizedName ?? "No app"
         let enabled = appEnabled ? "on" : "off"
-        let supportStatus = app.map { profileStore.supportStatus(for: $0.bundleIdentifier) } ?? .unsupported
+        let supportStatus = profile.map { CompatibilitySupportStatus.supported($0) }
+            ?? app.map { profileStore.supportStatus(for: $0.bundleIdentifier) }
+            ?? .unsupported
         let profileName = app.map { _ in supportStatus.summary } ?? "none"
         let appStatus = app.map {
             supportStatus.menuText(appDisplayName: $0.localizedName, isEnabled: appEnabled)
