@@ -16,10 +16,12 @@ controls, and feedback loop are all proven together.
 
 The current repo has serious trust machinery: local MLX runtime policy, secure
 field blocking, accept-time focus guards, redacted tracing, manual smoke
-recorders, screenshot proof gates, and private beta packet scripts. It is not
-private-beta ready because the current checkout has no fresh distributable
-artifact, no preferred DMG path, no saved release-proof folder, stale proof
-references in score docs, and no fresh VM/install/notary/manual prompt-app proof.
+recorders, screenshot proof gates, and private beta packet scripts. This pass
+added preferred DMG packaging, a saved release-proof checklist, required beta
+docs, a structured feedback issue form, and a generated private beta packet. It
+is still not private-beta ready because the current checkout has no fresh
+notarized artifact, no fresh VM/install proof, and no safe same-slice
+prompt-app no-submit proof.
 
 ## Product Standard
 
@@ -53,12 +55,18 @@ proof and proof freshness: `script/package_release.sh` ships a ZIP path, but
 the research prefers a signed DMG and saved notarization/Gatekeeper evidence;
 `docs/product/proof-manifest.json` lists several surfaces as complete, while
 the default proof checker fails because the scorecard does not reference those
-screenshots; prompt-app no-submit proof is still partial or pending.
+screenshots; prompt-app no-submit proof is still partial or pending. Packaging
+and tester-facing docs are better after this pass, but the missing live proof
+still blocks beta.
 
 Current local evidence:
 
 - `./script/package_release.sh --check` found a Developer ID identity and ready
   model asset, but no `NOTARYTOOL_PROFILE`.
+- `./script/package_release.sh archive` created `dist/AutocompleteLab.zip`,
+  `dist/AutocompleteLab.dmg`, checksums, and `dist/release-proof/`.
+- `./script/private_beta_packet.sh` created and verified
+  `dist/private-beta/`.
 - `./script/check_proof_manifest.sh` failed on unreferenced Obsidian and Notes
   screenshots in the default scorecard.
 - `./script/check_score_targets.sh` failed with 77 score/proof target misses.
@@ -71,29 +79,60 @@ Current local evidence:
 - `Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift` redacts
   raw text and screenshots by default.
 - `script/private_beta_packet.sh` creates local feedback/checksum/privacy packet
-  files, but root beta docs and a structured external issue form are missing.
+  files and now points at the required beta docs and issue form.
 
 ## Score
 
-Overall score: 70/100
+Starting score: 70/100
+
+Current score after this pass: 79/100
+
+Score movement: +9
+
+## Implementation Progress
+
+- Added preferred `dist/AutocompleteLab.dmg` packaging next to the existing ZIP
+  path in `script/package_release.sh`.
+- Added `dist/release-proof/` checklist/checksum/proof output scaffolding for
+  codesign, entitlements, notarization, stapler, and Gatekeeper evidence.
+- Added `script/package_release_self_test.sh` and wired it into
+  `script/smoke_test.sh`.
+- Added beta-facing docs: `PRIVACY-BETA.md`, `KNOWN-LIMITATIONS.md`,
+  `UNINSTALL-DELETE-DATA.md`, `DIAGNOSTIC-EXPORT.md`, and `RELEASE-NOTES.md`.
+- Added `.github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml` with required
+  build, app, permission, severity, expected/actual, repro, and redacted
+  diagnostics fields.
+- Updated `script/private_beta_packet.sh` and its self-test so the generated
+  beta packet points testers at the required docs and feedback form.
+- Fixed `script/build_and_run.sh --verify` to call the current app-stop helper
+  and added `script/build_and_run_self_test.sh` so stale launch helper names do
+  not silently break the smoke gate again.
+- Ran the updated archive and packet flow locally. `script/beta_readiness.sh
+  --check-only` now reports the release archive and beta packet as OK, with the
+  remaining blockers limited to manual app proof and visual placement proof.
 
 ## Score Breakdown
 
 ### Build, Signing, Notarization, And Install Integrity
 
 - Weight: 20
-- Current score: 11/20
+- Current score: 15/20
 - Why this score: The repo can find a Developer ID identity, verify a release
-  app bundle, create `dist/AutocompleteLab.zip`, submit the ZIP to notarytool,
-  staple the app, and regenerate the ZIP. The current checkout has no fresh
-  archive, no preferred DMG artifact, no saved release-proof folder, no
-  quarantine/fresh-VM proof, and no current notary profile in the environment.
+  app bundle, create `dist/AutocompleteLab.zip`, create a preferred
+  `dist/AutocompleteLab.dmg`, and write release-proof/checksum outputs. The
+  latest local archive path ran successfully, but the artifact is still
+  unnotarized. The current checkout has no saved successful notary/stapler
+  proof, no quarantine/fresh-VM proof, and no current notary profile in the
+  environment.
 - Evidence found in repo: `script/package_release.sh`,
   `script/check_app_bundle.sh`, `script/beta_readiness.sh`,
-  `script/private_beta_packet.sh`, `docs/product/beta-readiness-checklist.md`.
-- Missing evidence: signed DMG, saved codesign/notary/stapler/spctl logs,
-  checksums for each artifact, fresh-machine Gatekeeper proof, Accessibility
-  grant/deny install proof, offline staple proof.
+  `script/private_beta_packet.sh`, `script/package_release_self_test.sh`,
+  `docs/product/beta-readiness-checklist.md`, local
+  `dist/release-proof/release-proof-checklist.md`,
+  `dist/release-proof/checksums.txt`.
+- Missing evidence: notarized DMG, saved successful notary/stapler/spctl logs,
+  fresh-machine Gatekeeper proof, Accessibility grant/deny install proof,
+  offline staple proof.
 - What would make it 100/100: A reproducible signed DMG flow, accepted
   notarization for the exact tester artifact, stapled artifact validation,
   Gatekeeper assessment from a quarantined fresh download, checksums, and saved
@@ -115,7 +154,8 @@ Overall score: 70/100
   `Sources/AutocompleteLabApp/App/AppDelegate.swift`,
   `Tests/AutocompleteLabCoreTests/RuntimePolicyTests.swift`,
   `Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift`,
-  `script/check_model_asset.py`, `script/model_latency_report.py`.
+  `script/check_model_asset.py`, `script/model_latency_report.py`,
+  `script/build_and_run.sh`, `script/build_and_run_self_test.sh`.
 - Missing evidence: MetricKit/crash-hang proof, fresh p95 typing-path proof for
   this build, and a beta gate artifact proving no mock fallback.
 - What would make it 100/100: Fresh build proof with native MLX ready, zero mock
@@ -126,11 +166,12 @@ Overall score: 70/100
 ### Privacy
 
 - Weight: 20
-- Current score: 17/20
+- Current score: 18/20
 - Why this score: Defaults are local-first and redacted. Raw trace and
   screenshot capture are opt-in. Diagnostics export avoids raw text by default.
-  The missing pieces are a build-specific privacy doc, SDK/dependency data
-  inventory, and beta-facing diagnostic export documentation.
+  This pass added beta privacy and diagnostic export docs. The missing pieces
+  are a deeper SDK/dependency data inventory and fresh exported bundle proof
+  from the exact beta artifact.
 - Evidence found in repo: `docs/product/privacy-and-controls.md`,
   `Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift`,
   `Sources/AutocompleteLabCore/Text/DiagnosticsMetadataRedactor.swift`,
@@ -138,11 +179,11 @@ Overall score: 70/100
   `Sources/AutocompleteLabApp/Mac/LocalReportExporter.swift`,
   `Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift`,
   `Tests/AutocompleteLabAppTests/RawTraceReportExportTests.swift`,
-  `script/check_redacted_report_export.sh`,
+  `script/check_redacted_report_export.sh`, `PRIVACY-BETA.md`,
+  `DIAGNOSTIC-EXPORT.md`,
   `script/delete_local_traces.sh`.
-- Missing evidence: root beta privacy document, third-party SDK/dependency data
-  collection inventory, versioned diagnostic export guide, and fresh exported
-  bundle proof from the exact beta artifact.
+- Missing evidence: deeper third-party SDK/dependency data collection
+  inventory and fresh exported bundle proof from the exact beta artifact.
 - What would make it 100/100: Versioned privacy docs that match the build,
   explicit dependency/SDK inventory, verified redacted export contents, clear
   opt-in paths, and proof that no raw typed text leaves the device by default.
@@ -150,11 +191,12 @@ Overall score: 70/100
 ### App Compatibility
 
 - Weight: 15
-- Current score: 9/15
+- Current score: 8/15
 - Why this score: The app has narrow compatibility profiles and significant
   smoke/proof infrastructure, but the proof is not fully current or complete.
   Prompt apps remain the strictest gap because no-submit proof must be
-  same-slice and screenshot-backed.
+  same-slice and screenshot-backed. This score was made harsher after the
+  compatibility review confirmed stale proof conflicts.
 - Evidence found in repo: `Sources/AutocompleteLabCore/Compatibility/AppCompatibilityProfile.swift`,
   `Sources/AutocompleteLabCore/Compatibility/CompatibilityRouter.swift`,
   `docs/product/compatibility-matrix.md`,
@@ -175,11 +217,12 @@ Overall score: 70/100
 ### Trust And Safety
 
 - Weight: 15
-- Current score: 12/15
+- Current score: 13/15
 - Why this score: The app has visible controls, per-app disable, pause/delete
   trace controls, secure-field blocking, accept-time focus guards, and severe
-  failure tracing. It is still missing complete beta docs and manual proof that
-  these controls work through install, deny, uninstall, and prompt-app cases.
+  failure tracing. This pass added uninstall/delete-data documentation. It is
+  still missing manual proof that these controls work through install, deny,
+  uninstall, and prompt-app cases.
 - Evidence found in repo: `Sources/AutocompleteLabApp/UI/MenuBarIcon.swift`,
   `Sources/AutocompleteLabApp/UI/SettingsWindowController.swift`,
   `Sources/AutocompleteLabCore/Session/SuggestionAcceptanceGuard.swift`,
@@ -188,10 +231,10 @@ Overall score: 70/100
   `Tests/AutocompleteLabCoreTests/SuggestionAcceptanceGuardTests.swift`,
   `Tests/AutocompleteLabCoreTests/SensitiveTextFieldPolicyTests.swift`,
   `Tests/AutocompleteLabCoreTests/AcceptedTextSafetyPolicyTests.swift`,
-  `script/manual_proof_queue.sh`.
-- Missing evidence: verified uninstall/delete-data doc, fresh Accessibility
-  grant/deny proof, fresh no-submit proof in Codex/Claude surfaces, and
-  build-specific stop-condition proof.
+  `script/manual_proof_queue.sh`, `UNINSTALL-DELETE-DATA.md`.
+- Missing evidence: verified fresh Accessibility grant/deny proof, fresh
+  no-submit proof in Codex/Claude surfaces, and build-specific stop-condition
+  proof.
 - What would make it 100/100: All hard-stop flows are tested from the beta
   artifact, prompt apps cannot submit accidentally, pause/disable/delete are
   verified, and every severe trust failure has a proof gate.
@@ -199,20 +242,23 @@ Overall score: 70/100
 ### Documentation And Feedback Operations
 
 - Weight: 10
-- Current score: 5/10
+- Current score: 9/10
 - Why this score: Product docs and the private beta packet are useful, but the
   research requires release notes, known limitations, privacy, uninstall/delete
   data, diagnostic export, and structured feedback artifacts for every invited
-  build. Some of that exists only as scattered product docs or generated packet
-  snippets.
+  build. This pass added those docs, a structured issue form, and a generated
+  `dist/private-beta/` packet verified by the readiness script. Remaining gaps
+  are an in-app feedback button and real feedback triage use.
 - Evidence found in repo: `README.md`, `docs/product/private-beta-plan.md`,
   `docs/product/beta-readiness-checklist.md`,
   `docs/product/privacy-and-controls.md`,
   `script/private_beta_packet.sh`,
-  `script/private_beta_packet_self_test.sh`.
-- Missing evidence: `PRIVACY-BETA.md`, `KNOWN-LIMITATIONS.md`,
-  `UNINSTALL-DELETE-DATA.md`, `DIAGNOSTIC-EXPORT.md`, a release-notes template,
-  and a structured external issue form.
+  `script/private_beta_packet_self_test.sh`, `PRIVACY-BETA.md`,
+  `KNOWN-LIMITATIONS.md`, `UNINSTALL-DELETE-DATA.md`,
+  `DIAGNOSTIC-EXPORT.md`, `RELEASE-NOTES.md`,
+  `.github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml`, local
+  `dist/private-beta/`.
+- Missing evidence: in-app feedback button and real feedback triage use.
 - What would make it 100/100: A beta packet and repo docs that tell testers
   exactly what is supported, what is unsafe, how to install, how to remove all
   local traces, how to export redacted diagnostics, and how to file feedback
