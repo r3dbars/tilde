@@ -3,15 +3,19 @@ import Testing
 
 @Suite("Suggestion aggressiveness")
 struct SuggestionAggressivenessTests {
-    @Test("normal preserves the current app cadence")
-    func normalPreservesCurrentAppCadence() {
+    @Test("normal starts suggestions sooner without using the most eager thresholds")
+    func normalStartsSuggestionsSooner() {
         let policy = SuggestionAggressiveness.normal.triggerPolicy
+        let display = SuggestionAggressiveness.normal.displayScorePolicy
 
         #expect(policy.charactersBeforePauseRequest == 1)
-        #expect(policy.wordCompletionDelayMilliseconds == 90)
-        #expect(policy.wordBoundaryDelayMilliseconds == 140)
-        #expect(policy.pauseDelayMilliseconds == 140)
-        #expect(SuggestionAggressiveness.normal.displayScorePolicy.threshold(for: .phraseContinuation) == 1.00)
+        #expect(policy.wordCompletionDelayMilliseconds == 70)
+        #expect(policy.wordBoundaryDelayMilliseconds == 100)
+        #expect(policy.pauseDelayMilliseconds == 100)
+        #expect(policy.sentenceBoundaryDelayMilliseconds == 260)
+        #expect(display.threshold(for: .wordCompletion) == 0.55)
+        #expect(display.threshold(for: .phraseContinuation) == 0.90)
+        #expect(display.threshold(for: .sentenceContinuation) == 1.10)
     }
 
     @Test("quiet waits longer and requires stronger scores")
@@ -34,7 +38,9 @@ struct SuggestionAggressivenessTests {
         let display = SuggestionAggressiveness.eager.displayScorePolicy
 
         #expect(trigger.charactersBeforePauseRequest == 1)
-        #expect(trigger.wordCompletionDelayMilliseconds == 90)
+        #expect(trigger.wordCompletionDelayMilliseconds == 50)
+        #expect(trigger.wordBoundaryDelayMilliseconds == 80)
+        #expect(trigger.pauseDelayMilliseconds == 80)
         #expect(trigger.sentenceBoundaryDelayMilliseconds == 280)
         #expect(display.threshold(for: .wordCompletion) == 0.50)
         #expect(display.threshold(for: .phraseContinuation) == 0.85)

@@ -495,7 +495,7 @@ struct SettingsWindowControllerStateTests {
         #expect(quiet.detailText == "Waits longer and needs stronger scores before showing.")
         #expect(quiet.cycleButtonTitle == "Use Normal")
         #expect(normal.statusText == "Aggressiveness: Normal")
-        #expect(normal.detailText == "Uses the current balanced timing and score gates.")
+        #expect(normal.detailText == "Shows a little sooner with longer suggestions.")
         #expect(normal.cycleButtonTitle == "Use Eager")
         #expect(eager.statusText == "Aggressiveness: Eager")
         #expect(eager.detailText == "Shows sooner when safe, while keeping sensitive-field and high-risk blocks.")

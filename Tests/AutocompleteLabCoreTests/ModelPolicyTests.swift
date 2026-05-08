@@ -3,15 +3,15 @@ import Testing
 
 @Suite("Model policy")
 struct ModelPolicyTests {
-    @Test("MVP uses an app-owned Qwen MLX model with reasoning off")
+    @Test("MVP uses an app-owned Qwen MLX model with longer suggestions and reasoning off")
     func mvpPolicy() {
         let policy = CompletionModelPolicy.mvp
 
         #expect(policy.model == .qwen35FourB)
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)
-        #expect(policy.maxGeneratedTokens == 10)
-        #expect(policy.maxVisibleWords == 5)
+        #expect(policy.maxGeneratedTokens == 14)
+        #expect(policy.maxVisibleWords == 7)
         #expect(policy.maxVisibleWords >= CompletionModelPolicy.minimumVisibleWords)
         #expect(policy.maxVisibleWords <= CompletionModelPolicy.maximumVisibleWords)
     }
@@ -43,15 +43,17 @@ struct ModelPolicyTests {
         #expect(huge.maxVisibleWords == 7)
     }
 
-    @Test("Model policy accepts only tiny autocomplete-sized visible output")
-    func modelPolicyAcceptsOnlyTinyVisibleOutput() {
+    @Test("Model policy accepts autocomplete-sized visible output")
+    func modelPolicyAcceptsVisibleOutput() {
         let policy = CompletionModelPolicy.mvp
 
         #expect(policy.allowsVisibleWordCount(1))
         #expect(policy.allowsVisibleWordCount(2))
         #expect(policy.allowsVisibleWordCount(3))
         #expect(policy.allowsVisibleWordCount(5))
-        #expect(!policy.allowsVisibleWordCount(6))
+        #expect(policy.allowsVisibleWordCount(6))
+        #expect(policy.allowsVisibleWordCount(7))
+        #expect(!policy.allowsVisibleWordCount(8))
     }
 
     @Test("Request modes cap generated tokens by autocomplete role")
@@ -72,9 +74,9 @@ struct ModelPolicyTests {
             "AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS": "99"
         ])
 
-        #expect(defaultConfiguration.maxVisibleWords == 5)
-        #expect(defaultConfiguration.maxGeneratedTokens == 10)
-        #expect(defaultConfiguration.displaySummary == "5 words / 10 tokens")
+        #expect(defaultConfiguration.maxVisibleWords == 7)
+        #expect(defaultConfiguration.maxGeneratedTokens == 14)
+        #expect(defaultConfiguration.displaySummary == "7 words / 14 tokens")
         #expect(short.maxVisibleWords == 3)
         #expect(short.maxGeneratedTokens == 9)
         #expect(short.displaySummary == "3 words / 9 tokens")
@@ -100,8 +102,8 @@ struct ModelPolicyTests {
         #expect(oneWord.maxVisibleWords == 1)
         #expect(oneWord.maxGeneratedTokens == 4)
         #expect(threeWord.experimentArm == .length3Word)
-        #expect(threeWord.maxVisibleWords == 3)
-        #expect(threeWord.maxGeneratedTokens == 9)
+        #expect(threeWord.maxVisibleWords == 6)
+        #expect(threeWord.maxGeneratedTokens == 12)
         #expect(overridden.experimentArm == .length1Word)
         #expect(overridden.maxVisibleWords == 3)
         #expect(overridden.maxGeneratedTokens == 9)

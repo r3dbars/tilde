@@ -54,9 +54,13 @@ public enum SuggestionAggressiveness: String, Codable, Equatable, Sendable, Case
         case .normal:
             return SuggestionTriggerPolicy(
                 charactersBeforePauseRequest: 1,
-                wordCompletionDelayMilliseconds: 0,
-                wordBoundaryDelayMilliseconds: 0,
-                pauseDelayMilliseconds: 15
+                wordCompletionDelayMilliseconds: 70,
+                wordBoundaryDelayMilliseconds: 100,
+                softPunctuationDelayMilliseconds: 140,
+                structuralPunctuationDelayMilliseconds: 140,
+                closingPunctuationDelayMilliseconds: 140,
+                sentenceBoundaryDelayMilliseconds: 260,
+                pauseDelayMilliseconds: 100
             )
         case .eager:
             return SuggestionTriggerPolicy(
@@ -81,7 +85,11 @@ public enum SuggestionAggressiveness: String, Codable, Equatable, Sendable, Case
                 sentenceContinuationThreshold: 1.45
             )
         case .normal:
-            return DisplayScorePolicy()
+            return DisplayScorePolicy(
+                wordCompletionThreshold: 0.55,
+                phraseContinuationThreshold: 0.90,
+                sentenceContinuationThreshold: 1.10
+            )
         case .eager:
             return DisplayScorePolicy(
                 wordCompletionThreshold: 0.50,

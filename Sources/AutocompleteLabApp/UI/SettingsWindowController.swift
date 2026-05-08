@@ -398,7 +398,7 @@ struct SettingsSuggestionAggressivenessState: Equatable {
         case .quiet:
             return "Waits longer and needs stronger scores before showing."
         case .normal:
-            return "Uses the current balanced timing and score gates."
+            return "Shows a little sooner with longer suggestions."
         case .eager:
             return "Shows sooner when safe, while keeping sensitive-field and high-risk blocks."
         }
