@@ -4893,6 +4893,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let value = axAttribute(element, kAXSelectedTextRangeAttribute) else {
             return false
         }
+        guard CFGetTypeID(value as CFTypeRef) == AXValueGetTypeID() else {
+            return false
+        }
 
         var range = CFRange(location: -1, length: -1)
         guard AXValueGetValue(value as! AXValue, .cfRange, &range) else {
