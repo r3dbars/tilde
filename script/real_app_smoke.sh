@@ -814,43 +814,159 @@ APPLESCRIPT
   wait_for_frontmost_app "Google Chrome" 5
 }
 
+raise_textedit_smoke_window() {
+  local window_title="$1"
+
+  swift - "$window_title" <<'SWIFT'
+import AppKit
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 2 else {
+    exit(2)
+}
+
+let targetTitle = CommandLine.arguments[1]
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    AXUIElementSetMessagingTimeout(appElement, 0.5)
+    guard let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] else {
+        continue
+    }
+
+    for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+        app.activate(options: [.activateAllWindows])
+        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+        print(app.processIdentifier)
+        exit(0)
+    }
+}
+
+exit(1)
+SWIFT
+}
+
+click_textedit_smoke_window() {
+  local window_title="$1"
+
+  swift - "$window_title" <<'SWIFT'
+import AppKit
+import ApplicationServices
+import CoreGraphics
+import Foundation
+
+guard CommandLine.arguments.count == 2 else {
+    exit(2)
+}
+
+let targetTitle = CommandLine.arguments[1]
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+func bounds(for element: AXUIElement) -> CGRect? {
+    guard let positionValue = copyAttribute(element, kAXPositionAttribute),
+          let sizeValue = copyAttribute(element, kAXSizeAttribute) else {
+        return nil
+    }
+
+    var position = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+          AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else {
+        return nil
+    }
+
+    return CGRect(origin: position, size: size)
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func firstTextInput(in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
+    guard depth <= 8 else {
+        return nil
+    }
+
+    let role = copyAttribute(element, kAXRoleAttribute) as? String
+    if role == kAXTextAreaRole as String || role == kAXTextFieldRole as String {
+        return element
+    }
+
+    for child in children(of: element) {
+        if let found = firstTextInput(in: child, depth: depth + 1) {
+            return found
+        }
+    }
+
+    return nil
+}
+
+for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    AXUIElementSetMessagingTimeout(appElement, 0.5)
+    guard let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] else {
+        continue
+    }
+
+    for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+        let textInput = firstTextInput(in: window)
+        if let textInput {
+            AXUIElementSetAttributeValue(textInput, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        }
+
+        guard let targetBounds = bounds(for: textInput ?? window),
+              let source = CGEventSource(stateID: .hidSystemState) else {
+            exit(1)
+        }
+        app.activate(options: [.activateAllWindows])
+        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+        Thread.sleep(forTimeInterval: 0.2)
+
+        let point = CGPoint(x: targetBounds.midX, y: targetBounds.midY)
+        for eventType in [CGEventType.leftMouseDown, .leftMouseUp] {
+            guard let event = CGEvent(
+                mouseEventSource: source,
+                mouseType: eventType,
+                mouseCursorPosition: point,
+                mouseButton: .left
+            ) else {
+                exit(1)
+            }
+            event.post(tap: .cghidEventTap)
+        }
+        print(app.processIdentifier)
+        exit(0)
+    }
+}
+
+exit(1)
+SWIFT
+}
+
 focus_textedit_smoke_editor() {
   local window_title="${1:-}"
 
   if [[ -n "$window_title" ]]; then
-    local target_pid_file target_pid
-    target_pid_file="$(mktemp)"
-    osascript - "$window_title" >"$target_pid_file" <<'APPLESCRIPT' &
-on run argv
-  set targetTitle to item 1 of argv
-  tell application "System Events"
-    set foundTarget to false
-    set targetPID to ""
-    repeat with textEditProcess in application processes whose name is "TextEdit"
-      tell textEditProcess
-        repeat with candidateWindow in windows
-          if name of candidateWindow is targetTitle then
-            set foundTarget to true
-            set targetPID to unix id of textEditProcess as text
-            set frontmost to true
-            perform action "AXRaise" of candidateWindow
-            exit repeat
-          end if
-        end repeat
-      end tell
-      if foundTarget is true then exit repeat
-    end repeat
-    if foundTarget is false then
-      error "No TextEdit smoke window named " & targetTitle number 1000
-    end if
-    return targetPID
-  end tell
-end run
-APPLESCRIPT
-    local osascript_pid=$!
-    wait_for_background_process "$osascript_pid" 8 "TextEdit smoke window focus"
-    target_pid="$(tr -d '\r\n' <"$target_pid_file")"
-    rm -f "$target_pid_file"
+    local target_pid
+    target_pid="$(raise_textedit_smoke_window "$window_title" | tr -d '\r\n')"
     if [[ -z "$target_pid" ]]; then
       echo "Could not resolve TextEdit smoke window pid for '$window_title'." >&2
       return 1
@@ -874,42 +990,8 @@ click_textedit_smoke_editor() {
   local window_title="${1:-}"
 
   if [[ -n "$window_title" ]]; then
-    local target_pid_file target_pid
-    target_pid_file="$(mktemp)"
-    osascript - "$window_title" >"$target_pid_file" <<'APPLESCRIPT' &
-on run argv
-  set targetTitle to item 1 of argv
-  tell application "System Events"
-    set foundTarget to false
-    set targetPID to ""
-    repeat with textEditProcess in application processes whose name is "TextEdit"
-      tell textEditProcess
-        repeat with candidateWindow in windows
-          if name of candidateWindow is targetTitle then
-            set foundTarget to true
-            set targetPID to unix id of textEditProcess as text
-            set frontmost to true
-            perform action "AXRaise" of candidateWindow
-            set windowPosition to position of candidateWindow
-            set windowSize to size of candidateWindow
-            click at {(item 1 of windowPosition) + ((item 1 of windowSize) / 2), (item 2 of windowPosition) + 160}
-            exit repeat
-          end if
-        end repeat
-      end tell
-      if foundTarget is true then exit repeat
-    end repeat
-    if foundTarget is false then
-      error "No TextEdit smoke window named " & targetTitle number 1000
-    end if
-    return targetPID
-  end tell
-end run
-APPLESCRIPT
-    local osascript_pid=$!
-    wait_for_background_process "$osascript_pid" 8 "TextEdit smoke window click"
-    target_pid="$(tr -d '\r\n' <"$target_pid_file")"
-    rm -f "$target_pid_file"
+    local target_pid
+    target_pid="$(click_textedit_smoke_window "$window_title" | tr -d '\r\n')"
     if [[ -z "$target_pid" ]]; then
       echo "Could not resolve TextEdit smoke window pid for '$window_title'." >&2
       return 1
@@ -937,19 +1019,157 @@ APPLESCRIPT
 textedit_document_text() {
   local window_title="$1"
 
-  osascript - "$window_title" 2>/dev/null <<'APPLESCRIPT' || true
+  swift - "$window_title" <<'SWIFT' 2>/dev/null || true
+import AppKit
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 2 else {
+    exit(2)
+}
+
+let targetTitle = CommandLine.arguments[1]
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func textValue(in element: AXUIElement, depth: Int = 0) -> String? {
+    guard depth <= 8 else {
+        return nil
+    }
+
+    let role = copyAttribute(element, kAXRoleAttribute) as? String
+    if role == kAXTextAreaRole as String || role == kAXTextFieldRole as String {
+        if let value = copyAttribute(element, kAXValueAttribute) as? String {
+            return value
+        }
+    }
+
+    for child in children(of: element) {
+        if let value = textValue(in: child, depth: depth + 1) {
+            return value
+        }
+    }
+
+    return nil
+}
+
+for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    AXUIElementSetMessagingTimeout(appElement, 0.5)
+    guard let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] else {
+        continue
+    }
+
+    for window in windows {
+        guard (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle else {
+            continue
+        }
+
+        print(textValue(in: window) ?? "")
+        exit(0)
+    }
+}
+
+print("")
+SWIFT
+}
+
+textedit_document_exists() {
+  local window_title="$1"
+
+  swift - "$window_title" <<'SWIFT' 2>/dev/null || true
+import AppKit
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 2 else {
+    exit(2)
+}
+
+let targetTitle = CommandLine.arguments[1]
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    AXUIElementSetMessagingTimeout(appElement, 0.5)
+    guard let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] else {
+        continue
+    }
+
+    for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+        print("1")
+        exit(0)
+    }
+}
+
+print("0")
+SWIFT
+}
+
+wait_for_textedit_document_open() {
+  local window_title="$1"
+  local timeout_seconds="${2:-5}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    if [[ "$(textedit_document_exists "$window_title")" == "1" ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  return 1
+}
+
+open_textedit_smoke_document() {
+  local file_path="$1"
+  local window_title="$2"
+
+  open -F -n -a TextEdit "$file_path"
+  if wait_for_textedit_document_open "$window_title" 8; then
+    return 0
+  fi
+
+  osascript - "$file_path" <<'APPLESCRIPT' >/dev/null 2>&1 || true
 on run argv
-  set targetTitle to item 1 of argv
+  set targetPath to item 1 of argv
   tell application "TextEdit"
-    repeat with candidateDocument in documents
-      if name of candidateDocument is targetTitle then
-        return text of candidateDocument
-      end if
-    end repeat
+    activate
+    open (POSIX file targetPath)
   end tell
-  return ""
 end run
 APPLESCRIPT
+
+  if wait_for_textedit_document_open "$window_title" 6; then
+    return 0
+  fi
+
+  open -a TextEdit "$file_path"
+  if wait_for_textedit_document_open "$window_title" 8; then
+    return 0
+  fi
+
+  echo "Timed out waiting for TextEdit to open disposable document '$window_title'." >&2
+  return 1
 }
 
 textedit_document_contains_fragment() {
@@ -979,12 +1199,94 @@ wait_for_textedit_document_fragment() {
   return 1
 }
 
+insert_textedit_smoke_fragment() {
+  local window_title="$1"
+  local fragment="$2"
+
+  swift - "$window_title" "$fragment" <<'SWIFT'
+import AppKit
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 3 else {
+    exit(2)
+}
+
+let targetTitle = CommandLine.arguments[1]
+let fragment = CommandLine.arguments[2]
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func firstTextInput(in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
+    guard depth <= 8 else {
+        return nil
+    }
+
+    let role = copyAttribute(element, kAXRoleAttribute) as? String
+    if role == kAXTextAreaRole as String || role == kAXTextFieldRole as String {
+        return element
+    }
+
+    for child in children(of: element) {
+        if let found = firstTextInput(in: child, depth: depth + 1) {
+            return found
+        }
+    }
+
+    return nil
+}
+
+for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    AXUIElementSetMessagingTimeout(appElement, 0.5)
+    guard let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] else {
+        continue
+    }
+
+    for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+        guard let textInput = firstTextInput(in: window) else {
+            exit(1)
+        }
+        app.activate(options: [.activateAllWindows])
+        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+        AXUIElementSetAttributeValue(textInput, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+
+        let currentValue = copyAttribute(textInput, kAXValueAttribute) as? String ?? ""
+        var range = CFRange(location: currentValue.utf16.count, length: 0)
+        guard let rangeValue = AXValueCreate(.cfRange, &range) else {
+            exit(1)
+        }
+        AXUIElementSetAttributeValue(textInput, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+        let result = AXUIElementSetAttributeValue(textInput, kAXSelectedTextAttribute as CFString, fragment as CFString)
+        exit(result == .success ? 0 : 1)
+    }
+}
+
+exit(1)
+SWIFT
+}
+
 type_textedit_smoke_fragment() {
   local window_title="$1"
   local fragment="$2"
 
   focus_textedit_smoke_editor "$window_title"
   click_textedit_smoke_editor "$window_title"
+  if insert_textedit_smoke_fragment "$window_title" "$fragment"; then
+    return 0
+  fi
+
   osascript - "$fragment" <<'APPLESCRIPT'
 on run argv
   set smokeText to item 1 of argv
@@ -1554,7 +1856,7 @@ run_textedit() {
   textedit_file="$textedit_tmp_dir/textedit-smoke-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
   textedit_window_title="$(basename "$textedit_file")"
   : >"$textedit_file"
-  open -a TextEdit "$textedit_file"
+  open_textedit_smoke_document "$textedit_file" "$textedit_window_title"
   sleep 0.8
 
   wait_for_textedit_smoke_editor "$textedit_window_title"
