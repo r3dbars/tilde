@@ -11,6 +11,8 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture co
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture editor-like
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-like
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-like
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-real
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-real
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture chat-like
 ```
 
@@ -47,8 +49,9 @@ What this proves:
 - strict screenshot trace evidence can be required with `--visual` through the
   manual recorder or by setting `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1`
 - Chrome works in plain textareas, contenteditable fields, editor-like nested
-  contenteditables, Monaco-like editors, ProseMirror-like editors, and a
-  chat-style composer fixture that fails if Tab/full-accept submits the form
+  contenteditables, Monaco-like editors, ProseMirror-like editors, pinned
+  upstream Monaco/ProseMirror fixtures when Chrome exposes web-editor AX focus,
+  and a chat-style composer fixture that fails if Tab/full-accept submits the form
 
 Notes, Obsidian, Codex, Claude desktop, and Claude Code checks are manual-gated.
 Do not use real notes, vault content, or live prompts for proof. Use disposable
@@ -59,9 +62,13 @@ exists.
 For Notes, `notes-title`, `notes-body`, and `notes-checklist` are separate
 proof targets. A generic `notes` run is only a picker and does not count.
 
-All Chrome fixtures are local and dependency-free. The Monaco-like and
+The default Chrome fixtures are local and dependency-free. The Monaco-like and
 ProseMirror-like fixtures copy the DOM shape and focus behavior those editors
-usually expose, but they do not load the real upstream libraries. The chat-like
+usually expose, but they do not load the real upstream libraries. The
+`monaco-real` and `prosemirror-real` fixtures install pinned npm packages into a
+temporary folder during the run and never commit `node_modules`. They are the
+right proof lane for real editor engines, but they still depend on Chrome
+exposing the focused web editor through macOS Accessibility. The chat-like
 fixture is not a real Codex or Claude proof; it is a local no-submit guardrail
 that must pass before trusting prompt app smoke results.
 

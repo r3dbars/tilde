@@ -38,6 +38,10 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manua
 - Obsidian: automation must not open or scan a private vault. Use a disposable
   note and treat detached-suggestion suppression as safety evidence, not a full
   placement pass.
+- Chrome real editor fixtures: `monaco-real` and `prosemirror-real` install
+  pinned npm packages into a temp folder. Do not add screenshots unless Chrome
+  exposes a focused editable AX context and the run verifies insertion in the
+  same bounded trace slice.
 - Codex, Claude desktop, and Claude Code: automation must not submit prompts.
   Use harmless local text, validate one-word Tab accept only, then press Esc or
   clear the prompt manually. Backtick/full accept needs separate full-accept
