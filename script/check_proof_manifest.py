@@ -13,6 +13,8 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT_DIR / "docs/product/proof-manifest.json"
 DEFAULT_MANUAL_SMOKE = ROOT_DIR / "docs/product/manual-smoke-runs.md"
 DEFAULT_SCORECARD = ROOT_DIR / "docs/product/deep-dive-scorecard-2026-05-06.md"
+DEFAULT_APP_PROOF_MATRIX = ROOT_DIR / "docs/product/app-proof-matrix.md"
+DEFAULT_COMPATIBILITY_PROFILES = ROOT_DIR / "Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift"
 PROOF_METADATA_SOURCE = ROOT_DIR / "Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift"
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 TRACE_REFERENCE_PATTERN = re.compile(
@@ -29,6 +31,37 @@ PROOF_EVENT_TYPES = {
     "insertionFailed",
     "acceptedTextEdited",
     "caretGeometryFailed",
+}
+PROMPT_NO_SUBMIT_BUNDLES = {
+    "com.openai.codex",
+    "com.anthropic.claude-code",
+    "com.anthropic.claudefordesktop",
+}
+NO_SUBMIT_ONLY_PROMPT_BUNDLES = PROMPT_NO_SUBMIT_BUNDLES
+SUBMIT_LIKE_SIGNALS = {
+    "fieldsend",
+    "field-send",
+    "field-send-finalized",
+    "submit",
+    "submitted",
+    "prompt-submit",
+    "prompt-submitted",
+    "send",
+    "sent",
+    "enter",
+    "return",
+    "run",
+    "run-command",
+}
+SUBMIT_SIGNAL_METADATA_KEYS = {
+    "action",
+    "checkpoint",
+    "finishReason",
+    "key",
+    "keyboardAction",
+    "outcome",
+    "reason",
+    "result",
 }
 
 
@@ -74,6 +107,28 @@ def current_commit() -> str:
         ).strip()
     except subprocess.CalledProcessError:
         return ""
+
+
+def compatibility_profiles(path: Path) -> dict[str, dict[str, str]]:
+    if not path.exists():
+        fail(f"missing compatibility profile source {path}")
+
+    source = path.read_text(encoding="utf-8")
+    pattern = re.compile(
+        r'CompatibilityProfile\(\s*bundleIdentifier:\s*"([^"]+)",\s*'
+        r'displayName:\s*"([^"]+)".*?supportLevel:\s*\.([A-Za-z0-9_]+)',
+        re.DOTALL,
+    )
+    profiles: dict[str, dict[str, str]] = {}
+    for bundle, display_name, support_level in pattern.findall(source):
+        profiles[bundle] = {
+            "displayName": display_name,
+            "supportLevel": support_level,
+        }
+
+    if not profiles:
+        fail(f"could not find compatibility profiles in {path}")
+    return profiles
 
 
 def is_tracked(path: Path) -> bool:
@@ -143,6 +198,85 @@ def manual_smoke_rows(path: Path) -> list[dict[str, str]]:
             }
         )
     return rows
+
+
+def app_proof_matrix_grades(path: Path, failures: list[str], require_matrix: bool) -> dict[str, str]:
+    if not path.exists():
+        if require_matrix:
+            failures.append(f"missing app proof matrix {path}")
+        return {}
+
+    grades: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line.startswith("|"):
+            continue
+        if "| Surface |" in line or "| --- |" in line:
+            continue
+        cells = split_markdown_row(line)
+        if len(cells) < 2:
+            continue
+        surface = cells[0].strip()
+        grade = cells[1].strip()
+        if not surface or not re.fullmatch(r"[A-D][+-]?", grade):
+            continue
+        grades[surface] = grade
+
+    if require_matrix and not grades:
+        failures.append(f"app proof matrix has no parseable surface grades: {path}")
+    return grades
+
+
+def requirement_label(requirement: dict) -> str:
+    requirement_id = str(requirement.get("id", "")).strip()
+    summary = str(requirement.get("summary", "")).strip()
+    smoke_command = str(requirement.get("smokeCommand", "")).strip()
+    label = requirement_id or "unnamed-requirement"
+    if summary:
+        label = f"{label} - {summary}"
+    if smoke_command:
+        label = f"{label} (run {smoke_command})"
+    return label
+
+
+def validate_requirements(name: str, surface: dict, failures: list[str]) -> list[dict]:
+    requirements = surface.get("requirements", [])
+    if requirements in (None, []):
+        return []
+    if not isinstance(requirements, list):
+        failures.append(f"{name}: requirements must be a list")
+        return []
+
+    valid: list[dict] = []
+    seen: set[str] = set()
+    for index, requirement in enumerate(requirements, start=1):
+        if not isinstance(requirement, dict):
+            failures.append(f"{name}: requirement {index} must be an object")
+            continue
+        requirement_id = str(requirement.get("id", "")).strip()
+        status = str(requirement.get("status", "")).strip()
+        summary = str(requirement.get("summary", "")).strip()
+        if not requirement_id:
+            failures.append(f"{name}: requirement {index} is missing id")
+        elif requirement_id in seen:
+            failures.append(f"{name}: duplicate requirement id: {requirement_id}")
+        seen.add(requirement_id)
+        if status not in {"complete", "pending", "blocked"}:
+            failures.append(
+                f"{name}: requirement {requirement_id or index} status must be complete, pending, or blocked"
+            )
+        if not summary:
+            failures.append(f"{name}: requirement {requirement_id or index} is missing summary")
+        valid.append(requirement)
+    return valid
+
+
+def pending_requirement_labels(requirements: list[dict]) -> list[str]:
+    return [
+        requirement_label(requirement)
+        for requirement in requirements
+        if str(requirement.get("status", "")).strip() in {"pending", "blocked"}
+    ]
 
 
 def find_manual_row(rows: list[dict[str, str]], claim: dict) -> dict[str, str] | None:
@@ -217,6 +351,64 @@ def event_has_current_fingerprint(event: dict, current_versions: dict[str, str])
     return all(metadata.get(key) == expected for key, expected in current_versions.items())
 
 
+def normalized_signal(value: object) -> str:
+    return re.sub(r"[^a-z0-9-]+", "", str(value).strip().lower())
+
+
+def is_submit_like_signal(value: object) -> bool:
+    normalized = normalized_signal(value)
+    if not normalized:
+        return False
+    if normalized in SUBMIT_LIKE_SIGNALS:
+        return True
+    return any(signal in normalized for signal in {"fieldsend", "prompt-submit", "submitted"})
+
+
+def submit_like_trace_signal(event: dict) -> str | None:
+    for key in ["type", "outcome", "reason", "triggerReason"]:
+        value = event.get(key)
+        if is_submit_like_signal(value):
+            return f"{key}={value}"
+
+    metadata = event.get("metadata")
+    if isinstance(metadata, dict):
+        for key in SUBMIT_SIGNAL_METADATA_KEYS:
+            value = metadata.get(key)
+            if is_submit_like_signal(value):
+                return f"metadata.{key}={value}"
+
+    return None
+
+
+def is_full_accept_event(event: dict) -> bool:
+    metadata = event.get("metadata")
+    accept_mode = metadata.get("acceptMode") if isinstance(metadata, dict) else None
+    accepted_scope = metadata.get("acceptedVisibleScope") if isinstance(metadata, dict) else None
+    return (
+        event.get("outcome") == "acceptAllVisible"
+        or accept_mode in {"acceptAllVisible", "full"}
+        or accepted_scope == "fullVisible"
+    )
+
+
+def is_prompt_no_submit_surface(name: str, claim: dict) -> bool:
+    bundle = str(claim.get("bundle", "")).strip()
+    proof = str(claim.get("proof", "")).strip().lower()
+    normalized_name = name.strip().lower()
+    if bundle in PROMPT_NO_SUBMIT_BUNDLES:
+        return True
+    return bundle == "com.google.Chrome" and (
+        proof == "chat-like" or "chrome chat-like" in normalized_name
+    )
+
+
+def is_no_submit_only_prompt_surface(name: str, claim: dict) -> bool:
+    bundle = str(claim.get("bundle", "")).strip()
+    if bundle in NO_SUBMIT_ONLY_PROMPT_BUNDLES:
+        return True
+    return name.strip().lower() in {"codex", "claude code", "claude desktop"}
+
+
 def verify_manual_trace_slice(
     name: str,
     claim: dict,
@@ -224,6 +416,7 @@ def verify_manual_trace_slice(
     current_versions: dict[str, str],
     require_bounded_trace_slices: bool,
     trace_window_lines: int,
+    require_prompt_no_submit: bool,
 ) -> tuple[list[str], list[str], bool]:
     failures: list[str] = []
     warnings: list[str] = []
@@ -283,6 +476,31 @@ def verify_manual_trace_slice(
         if not screenshot_events:
             failures.append(f"{name}: strict visual proof requires screenshot-backed presented trace events")
 
+    if require_prompt_no_submit and is_prompt_no_submit_surface(name, claim):
+        submit_signals = [
+            signal
+            for event in app_events
+            if (signal := submit_like_trace_signal(event)) is not None
+        ]
+        if submit_signals:
+            failures.append(
+                f"{name}: prompt no-submit trace contains submit-like signal(s): "
+                + ", ".join(submit_signals[:3])
+            )
+
+        if is_no_submit_only_prompt_surface(name, claim):
+            full_accepts = [
+                event
+                for event in app_events
+                if event.get("type") in {"suggestionAccepted", "insertionVerified", "acceptedTextEdited"}
+                and is_full_accept_event(event)
+            ]
+            if full_accepts:
+                failures.append(
+                    f"{name}: no-submit-only prompt proof contains full accept; "
+                    "use one-word Tab proof until separate full-accept no-submit proof exists"
+                )
+
     proof_events = [event for event in app_events if event.get("type") in PROOF_EVENT_TYPES]
     if not proof_events:
         failures.append(f"{name}: trace slice has no proof-gated events")
@@ -324,8 +542,11 @@ def verify_manifest(
     manifest_path: Path,
     manual_smoke_path: Path,
     scorecard_path: Path,
+    app_proof_matrix_path: Path,
+    compatibility_profiles_path: Path,
     require_all: bool,
     require_current_commit: bool,
+    skip_profile_coverage: bool,
     verify_trace_slices: bool,
     require_bounded_trace_slices: bool,
     trace_window_lines: int,
@@ -336,6 +557,14 @@ def verify_manifest(
 
     if manifest.get("schemaVersion") != 1:
         failures.append("schemaVersion must be 1")
+
+    profile_coverage_count = 0
+    if not skip_profile_coverage:
+        profile_coverage_count = verify_profile_coverage(
+            manifest,
+            compatibility_profiles(compatibility_profiles_path),
+            failures,
+        )
 
     proof_fingerprint = manifest.get("proofFingerprint", {})
     current_versions = current_proof_versions()
@@ -357,6 +586,11 @@ def verify_manifest(
     names: set[str] = set()
     smoke_rows = manual_smoke_rows(manual_smoke_path)
     scorecard_screenshots = referenced_scorecard_screenshots(scorecard_path)
+    app_proof_grades = app_proof_matrix_grades(
+        app_proof_matrix_path,
+        failures,
+        require_matrix=require_all,
+    )
     pending: list[str] = []
     partial: list[str] = []
     complete = 0
@@ -381,19 +615,36 @@ def verify_manifest(
             continue
 
         gaps = surface.get("gaps", [])
+        requirements = validate_requirements(name, surface, failures)
+        pending_requirements = pending_requirement_labels(requirements)
         if status == "complete":
             complete += 1
             if gaps:
                 failures.append(f"{name}: complete surfaces must not list gaps")
+            if pending_requirements:
+                failures.append(
+                    f"{name}: complete proof still has pending requirement(s): "
+                    + "; ".join(pending_requirements)
+                )
+            if require_all and app_proof_grades.get(name) == "A-":
+                failures.append(
+                    f"{name}: app proof matrix grade is A-; variant-incomplete proof must stay partial"
+                )
         else:
             if status == "partial":
                 partial.append(name)
             else:
                 pending.append(name)
             if require_all:
-                failures.append(f"{name}: proof is {status}, not complete")
-            if not gaps:
-                failures.append(f"{name}: {status} surfaces must list at least one gap")
+                if pending_requirements:
+                    failures.append(
+                        f"{name}: proof is {status}, not complete; pending requirement(s): "
+                        + "; ".join(pending_requirements)
+                    )
+                else:
+                    failures.append(f"{name}: proof is {status}, not complete")
+            if not gaps and not pending_requirements:
+                failures.append(f"{name}: {status} surfaces must list at least one gap or pending requirement")
 
         manual_smoke = surface.get("manualSmoke")
         if status == "complete" and not isinstance(manual_smoke, dict):
@@ -415,6 +666,7 @@ def verify_manifest(
                     current_versions,
                     require_bounded_trace_slices,
                     trace_window_lines,
+                    require_all,
                 )
                 failures.extend(trace_failures)
                 warnings.extend(trace_warnings)
@@ -449,6 +701,8 @@ def verify_manifest(
     print(f"Complete surfaces: {complete}")
     print(f"Partial surfaces: {len(partial)}")
     print(f"Pending surfaces: {len(pending)}")
+    if not skip_profile_coverage:
+        print(f"Profile coverage rows: {profile_coverage_count}")
     if verify_trace_slices:
         print(f"Verified trace slices: {verified_trace_slices}")
     if partial:
@@ -459,6 +713,22 @@ def verify_manifest(
         print("Pending proof:")
         for name in pending:
             print(f"- {name}")
+    requirement_rows: list[tuple[str, list[str]]] = []
+    for surface in surfaces:
+        if not isinstance(surface, dict):
+            continue
+        name = str(surface.get("surface", "")).strip()
+        if not name:
+            continue
+        labels = pending_requirement_labels(validate_requirements(name, surface, []))
+        if labels:
+            requirement_rows.append((name, labels))
+    if requirement_rows:
+        print("Pending requirements:")
+        for name, labels in requirement_rows:
+            print(f"- {name}")
+            for label in labels:
+                print(f"  - {label}")
     for warning in warnings:
         print(f"Warning: {warning}")
 
@@ -474,13 +744,73 @@ def verify_manifest(
     return 0
 
 
+def verify_profile_coverage(
+    manifest: dict,
+    expected_profiles: dict[str, dict[str, str]],
+    failures: list[str],
+) -> int:
+    rows = manifest.get("profileCoverage")
+    if not isinstance(rows, list) or not rows:
+        failures.append("profileCoverage must list every CompatibilityProfile bundle")
+        return 0
+
+    allowed_statuses = {"complete", "partial", "pending", "blocked"}
+    seen: dict[str, dict] = {}
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            failures.append(f"profileCoverage entry {index + 1} must be an object")
+            continue
+
+        bundle = str(row.get("bundle", "")).strip()
+        if not bundle:
+            failures.append(f"profileCoverage entry {index + 1} is missing bundle")
+            continue
+        if bundle in seen:
+            failures.append(f"profileCoverage duplicate bundle: {bundle}")
+        seen[bundle] = row
+
+        if bundle not in expected_profiles:
+            failures.append(f"profileCoverage unknown bundle: {bundle}")
+            continue
+
+        expected = expected_profiles[bundle]
+        display_name = str(row.get("displayName", "")).strip()
+        if display_name != expected["displayName"]:
+            failures.append(
+                f"profileCoverage {bundle}: displayName is {display_name!r}; expected {expected['displayName']!r}"
+            )
+
+        support_level = str(row.get("supportLevel", "")).strip()
+        if support_level != expected["supportLevel"]:
+            failures.append(
+                f"profileCoverage {bundle}: supportLevel is {support_level!r}; expected {expected['supportLevel']!r}"
+            )
+
+        status = str(row.get("status", "")).strip()
+        if status not in allowed_statuses:
+            failures.append(f"profileCoverage {bundle}: status must be complete, partial, pending, or blocked")
+
+        for key in ["surface", "owner", "safetyNote"]:
+            if not str(row.get(key, "")).strip():
+                failures.append(f"profileCoverage {bundle}: missing {key}")
+
+    missing = sorted(set(expected_profiles) - set(seen))
+    if missing:
+        failures.append("profileCoverage missing bundle(s): " + ", ".join(missing))
+
+    return len(seen)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify machine-readable app proof status.")
     parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST))
     parser.add_argument("--manual-smoke", default=str(DEFAULT_MANUAL_SMOKE))
     parser.add_argument("--scorecard", default=str(DEFAULT_SCORECARD))
+    parser.add_argument("--app-proof-matrix", default=str(DEFAULT_APP_PROOF_MATRIX))
+    parser.add_argument("--compatibility-profiles", default=str(DEFAULT_COMPATIBILITY_PROFILES))
     parser.add_argument("--require-all", "--strict", action="store_true", dest="require_all")
     parser.add_argument("--require-current-commit", action="store_true")
+    parser.add_argument("--skip-profile-coverage", action="store_true")
     parser.add_argument("--verify-trace-slices", action="store_true")
     parser.add_argument("--require-bounded-trace-slices", action="store_true")
     parser.add_argument("--trace-window-lines", type=int, default=80)
@@ -492,8 +822,11 @@ def main() -> int:
         manifest_path=repo_path(args.manifest),
         manual_smoke_path=repo_path(args.manual_smoke),
         scorecard_path=repo_path(args.scorecard),
+        app_proof_matrix_path=repo_path(args.app_proof_matrix),
+        compatibility_profiles_path=repo_path(args.compatibility_profiles),
         require_all=args.require_all,
         require_current_commit=args.require_current_commit,
+        skip_profile_coverage=args.skip_profile_coverage,
         verify_trace_slices=args.verify_trace_slices or args.require_all,
         require_bounded_trace_slices=args.require_bounded_trace_slices or args.require_all,
         trace_window_lines=args.trace_window_lines,

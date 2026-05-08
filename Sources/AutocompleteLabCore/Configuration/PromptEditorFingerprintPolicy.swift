@@ -25,7 +25,12 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
         role: String?,
         fingerprintText: String,
         elementRect: CGRect?,
-        windowRect: CGRect?
+        windowRect: CGRect?,
+        proofModeEnabled: Bool = false,
+        textBeforeCursor: String = "",
+        textAfterCursor: String = "",
+        selectedTextLength: Int = 0,
+        codexProofMarker: String = "AUTOCOMPLETE_LAB_CODEX_PROOF"
     ) -> PromptEditorFingerprintDecision {
         guard Self.dogfoodBundleIdentifiers.contains(bundleIdentifier) else {
             return PromptEditorFingerprintDecision(canSuggest: true, reason: "non-dogfood-profile")
@@ -33,6 +38,16 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
 
         guard Self.promptCompatibleRoles.contains(role ?? "") else {
             return PromptEditorFingerprintDecision(canSuggest: false, reason: "non-prompt-role")
+        }
+
+        if bundleIdentifier == "com.openai.codex",
+           proofModeEnabled,
+           role == "AXTextArea",
+           selectedTextLength == 0,
+           textAfterCursor.isEmpty,
+           !codexProofMarker.isEmpty,
+           textBeforeCursor.contains(codexProofMarker) {
+            return PromptEditorFingerprintDecision(canSuggest: true, reason: "codex-proof-marker")
         }
 
         let searchable = fingerprintText.lowercased()

@@ -57,6 +57,6 @@ struct AXFieldClassifierTests {
     @Test("Classifies unknown fields")
     func classifiesUnknownFields() {
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXGroup")) == .unknown)
-        #expect(!AXFieldKind.unknown.suppressesSuggestionsByDefault)
+        #expect(AXFieldKind.unknown.suppressesSuggestionsByDefault)
     }
 }

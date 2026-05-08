@@ -38,6 +38,8 @@ public enum DiagnosticsMetadataRedactor {
             || normalized.hasSuffix("rect")
             || normalized.hasSuffix("frame")
             || normalized.hasPrefix("has")
+            || normalized.contains("hmac")
+            || (normalized.hasPrefix("acceptedtext") && normalized.contains("fingerprint"))
     }
 
     private static func flattenedValue(_ value: String) -> String {

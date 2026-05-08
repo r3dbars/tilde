@@ -5,6 +5,42 @@ import AutocompleteLabCore
 
 @Suite("Raw trace report export")
 struct RawTraceReportExportTests {
+    @Test("Raw trace events include current proof metadata")
+    func rawTraceEventsIncludeCurrentProofMetadata() throws {
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RawTraceProofMetadataTests-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: temporaryFolder)
+        }
+
+        let traceURL = temporaryFolder.appendingPathComponent("traces.jsonl")
+        let log = RawAutocompleteTraceLog(
+            logURL: traceURL,
+            screenshotsURL: temporaryFolder.appendingPathComponent("screenshots"),
+            environment: [:]
+        )
+
+        log.record(
+            type: .acceptedTextEdited,
+            suggestionID: "one",
+            appBundleIdentifier: "com.apple.TextEdit",
+            requestMode: "wordCompletion",
+            metadata: [
+                "acceptanceID": "accept-one",
+                "traceProofVersion": "stale"
+            ]
+        )
+
+        let events = try waitForEvents(at: traceURL)
+        let event = try #require(events.first)
+
+        #expect(event.metadata["traceProofVersion"] == AutocompleteTraceProofMetadata.traceProofVersion)
+        #expect(event.metadata["placementProofVersion"] == AutocompleteTraceProofMetadata.placementProofVersion)
+        #expect(event.metadata["keyCaptureProofVersion"] == AutocompleteTraceProofMetadata.keyCaptureProofVersion)
+        #expect(event.metadata["runtimeProofVersion"] == AutocompleteTraceProofMetadata.runtimeProofVersion)
+        #expect(event.metadata["acceptanceID"] == "accept-one")
+    }
+
     @Test("Diagnostics export writes redacted HTML and survival reports")
     func diagnosticsExportWritesRedactedReports() throws {
         let temporaryFolder = FileManager.default.temporaryDirectory
@@ -90,6 +126,21 @@ struct RawTraceReportExportTests {
             .joined(separator: "\n")
             .appending("\n")
         try jsonl.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private func waitForEvents(at url: URL) throws -> [AutocompleteTraceEvent] {
+        let decoder = JSONDecoder()
+        for _ in 0..<100 {
+            if let data = try? Data(contentsOf: url),
+               !data.isEmpty {
+                return try data
+                    .split(separator: UInt8(ascii: "\n"))
+                    .map { try decoder.decode(AutocompleteTraceEvent.self, from: Data($0)) }
+            }
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+
+        return []
     }
 
     private func event(

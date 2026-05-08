@@ -24,20 +24,26 @@ public struct StreamingPresentationState: Equatable, Sendable {
 
 public struct SuggestionPresentationGate: Equatable, Sendable {
     public let minimumStreamingPhraseWords: Int
+    public let minimumStreamingSentenceWords: Int
     public let minimumStreamingPhraseCharacterDelta: Int
     public let minimumStreamingIntervalMilliseconds: Int
     public let maximumStreamingPartialPresentations: Int
+    public let maximumStreamingSentencePartialPresentations: Int
 
     public init(
         minimumStreamingPhraseWords: Int = 2,
+        minimumStreamingSentenceWords: Int = 3,
         minimumStreamingPhraseCharacterDelta: Int = 6,
         minimumStreamingIntervalMilliseconds: Int = 50,
-        maximumStreamingPartialPresentations: Int = 2
+        maximumStreamingPartialPresentations: Int = 2,
+        maximumStreamingSentencePartialPresentations: Int = 1
     ) {
         self.minimumStreamingPhraseWords = max(1, minimumStreamingPhraseWords)
+        self.minimumStreamingSentenceWords = max(1, minimumStreamingSentenceWords)
         self.minimumStreamingPhraseCharacterDelta = max(1, minimumStreamingPhraseCharacterDelta)
         self.minimumStreamingIntervalMilliseconds = max(0, minimumStreamingIntervalMilliseconds)
         self.maximumStreamingPartialPresentations = max(1, maximumStreamingPartialPresentations)
+        self.maximumStreamingSentencePartialPresentations = max(1, maximumStreamingSentencePartialPresentations)
     }
 
     public func shouldPresent(
@@ -57,7 +63,7 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
 
         let visibleText = normalizedVisibleText(suggestion.visibleText)
         let visibleWords = words(in: visibleText)
-        guard visibleWords.count >= minimumStreamingPhraseWords else {
+        guard visibleWords.count >= minimumStreamingWords(for: mode) else {
             return false
         }
 
@@ -95,7 +101,7 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
             return false
         }
 
-        guard state.presentedCount < maximumStreamingPartialPresentations else {
+        guard state.presentedCount < maximumStreamingPartialPresentations(for: mode) else {
             return false
         }
 
@@ -119,5 +125,23 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
 
     private func words(in text: String) -> [Substring] {
         text.split(whereSeparator: { $0.isWhitespace })
+    }
+
+    private func minimumStreamingWords(for mode: CompletionRequestMode) -> Int {
+        switch mode {
+        case .sentenceContinuation:
+            minimumStreamingSentenceWords
+        case .phraseContinuation, .wordCompletion:
+            minimumStreamingPhraseWords
+        }
+    }
+
+    private func maximumStreamingPartialPresentations(for mode: CompletionRequestMode) -> Int {
+        switch mode {
+        case .sentenceContinuation:
+            maximumStreamingSentencePartialPresentations
+        case .phraseContinuation, .wordCompletion:
+            maximumStreamingPartialPresentations
+        }
     }
 }

@@ -31,6 +31,7 @@ public struct AcceptedAndKeptLearningSignal: Equatable, Sendable {
     public let rejectedCount: Int
     public let priorProbability: Double
     public let userAffinityAdjustment: Double
+    public let utilityAdjustment: Double
     public let decayFactor: Double
 
     public var traceMetadata: [String: String] {
@@ -41,6 +42,7 @@ public struct AcceptedAndKeptLearningSignal: Equatable, Sendable {
             "acceptedAndKeptRejected": String(rejectedCount),
             "acceptedAndKeptPrior": Self.format(priorProbability),
             "acceptedAndKeptAffinityAdjustment": Self.format(userAffinityAdjustment),
+            "acceptedAndKeptUtilityAdjustment": Self.format(utilityAdjustment),
             "acceptedAndKeptDecayFactor": Self.format(decayFactor)
         ]
     }
@@ -114,6 +116,10 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
             (probability - prior) * 0.45 * adjustmentScale,
             to: -0.14...0.18
         )
+        let utilityAdjustment = Self.bounded(
+            (probability - prior) * 0.35 * adjustmentScale,
+            to: -0.10...0.12
+        )
 
         return AcceptedAndKeptLearningSignal(
             probability: probability,
@@ -122,6 +128,7 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
             rejectedCount: bucket.rejectedCount,
             priorProbability: prior,
             userAffinityAdjustment: adjustment,
+            utilityAdjustment: utilityAdjustment,
             decayFactor: decayFactor
         )
     }

@@ -13,6 +13,7 @@ public struct DisplayScore: Equatable, Sendable {
     public let instability: Double
     public let acceptedAndKeptProbability: Double?
     public let acceptedAndKeptSampleCount: Int
+    public let acceptedAndKeptUtilityAdjustment: Double
 
     public init(
         utility: Double,
@@ -23,7 +24,8 @@ public struct DisplayScore: Equatable, Sendable {
         repetition: Double,
         instability: Double,
         acceptedAndKeptProbability: Double? = nil,
-        acceptedAndKeptSampleCount: Int = 0
+        acceptedAndKeptSampleCount: Int = 0,
+        acceptedAndKeptUtilityAdjustment: Double = 0
     ) {
         self.utility = Self.component(utility)
         self.styleFit = Self.component(styleFit)
@@ -34,6 +36,10 @@ public struct DisplayScore: Equatable, Sendable {
         self.instability = Self.component(instability)
         self.acceptedAndKeptProbability = acceptedAndKeptProbability.map(Self.component)
         self.acceptedAndKeptSampleCount = max(0, acceptedAndKeptSampleCount)
+        self.acceptedAndKeptUtilityAdjustment = Self.bounded(
+            acceptedAndKeptUtilityAdjustment,
+            to: -1...1
+        )
     }
 
     public var rawScore: Double {
@@ -59,6 +65,8 @@ public struct DisplayScore: Equatable, Sendable {
         if let acceptedAndKeptProbability {
             metadata["displayScoreAcceptedAndKeptProbability"] = Self.format(acceptedAndKeptProbability)
             metadata["displayScoreAcceptedAndKeptSamples"] = String(acceptedAndKeptSampleCount)
+            metadata["displayScoreAcceptedAndKeptUtilityAdjustment"] =
+                Self.format(acceptedAndKeptUtilityAdjustment)
         }
         return metadata
     }
@@ -87,17 +95,20 @@ public enum DisplayScoreSuppressionReason: String, Equatable, Sendable {
 public struct DisplayScoreTrace: Equatable, Sendable {
     public let score: DisplayScore
     public let mode: CompletionRequestMode
+    public let behaviorProfileID: AutocompleteBehaviorProfileID?
     public let threshold: Double
     public let acceptedAndKeptProbabilityThreshold: Double
 
     public init(
         score: DisplayScore,
         mode: CompletionRequestMode,
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
         threshold: Double,
         acceptedAndKeptProbabilityThreshold: Double
     ) {
         self.score = score
         self.mode = mode
+        self.behaviorProfileID = behaviorProfileID
         self.threshold = threshold
         self.acceptedAndKeptProbabilityThreshold = acceptedAndKeptProbabilityThreshold
     }
@@ -105,6 +116,9 @@ public struct DisplayScoreTrace: Equatable, Sendable {
     public var metadata: [String: String] {
         var metadata = score.traceMetadata
         metadata["displayScoreMode"] = mode.rawValue
+        if let behaviorProfileID {
+            metadata["displayScoreBehaviorProfile"] = behaviorProfileID.rawValue
+        }
         metadata["displayScoreThreshold"] = DisplayScore.format(threshold)
         if score.acceptedAndKeptProbability != nil {
             metadata["displayScoreAcceptedAndKeptThreshold"] =
@@ -215,15 +229,37 @@ public struct DisplayScorePolicy: Equatable, Sendable {
         }
     }
 
+    public func adjustingThresholds(by adjustment: Double) -> DisplayScorePolicy {
+        let safeAdjustment = max(0, adjustment)
+        guard safeAdjustment > 0 else {
+            return self
+        }
+
+        return DisplayScorePolicy(
+            wordCompletionThreshold: wordCompletionThreshold + safeAdjustment,
+            phraseContinuationThreshold: phraseContinuationThreshold + safeAdjustment,
+            sentenceContinuationThreshold: sentenceContinuationThreshold + safeAdjustment,
+            highRiskThreshold: highRiskThreshold,
+            highRepetitionThreshold: highRepetitionThreshold,
+            highInstabilityThreshold: highInstabilityThreshold,
+            minimumAcceptedAndKeptSamples: minimumAcceptedAndKeptSamples
+        )
+    }
+
     public func decision(
         for score: DisplayScore,
-        mode: CompletionRequestMode
+        mode: CompletionRequestMode,
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil
     ) -> DisplayScoreDecision {
         let trace = DisplayScoreTrace(
             score: score,
             mode: mode,
+            behaviorProfileID: behaviorProfileID,
             threshold: threshold(for: mode),
-            acceptedAndKeptProbabilityThreshold: acceptedAndKeptProbabilityThreshold(for: mode)
+            acceptedAndKeptProbabilityThreshold: acceptedAndKeptProbabilityThreshold(
+                for: mode,
+                behaviorProfileID: behaviorProfileID
+            )
         )
 
         if score.risk >= highRiskThreshold {
@@ -251,14 +287,65 @@ public struct DisplayScorePolicy: Equatable, Sendable {
         return .display(trace)
     }
 
-    public func acceptedAndKeptProbabilityThreshold(for mode: CompletionRequestMode) -> Double {
-        switch mode {
+    public func acceptedAndKeptProbabilityThreshold(
+        for mode: CompletionRequestMode,
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil
+    ) -> Double {
+        let baseThreshold: Double = switch mode {
         case .wordCompletion:
-            return 0.20
+            0.20
         case .phraseContinuation:
-            return 0.12
+            0.12
         case .sentenceContinuation:
-            return 0.18
+            0.18
         }
+
+        guard let behaviorProfileID else {
+            return baseThreshold
+        }
+
+        let profileFloor: Double = switch behaviorProfileID {
+        case .aiChat:
+            switch mode {
+            case .wordCompletion:
+                0.28
+            case .phraseContinuation, .sentenceContinuation:
+                0.24
+            }
+        case .casualChat:
+            switch mode {
+            case .wordCompletion:
+                0.22
+            case .phraseContinuation, .sentenceContinuation:
+                0.20
+            }
+        case .docsProse, .email, .notes:
+            switch mode {
+            case .wordCompletion:
+                0.20
+            case .phraseContinuation:
+                0.16
+            case .sentenceContinuation:
+                0.22
+            }
+        case .coding:
+            switch mode {
+            case .wordCompletion:
+                0.22
+            case .phraseContinuation, .sentenceContinuation:
+                0.18
+            }
+        case .bullets:
+            switch mode {
+            case .wordCompletion:
+                0.20
+            case .phraseContinuation, .sentenceContinuation:
+                0.14
+            }
+        case .forms, .search:
+            0.30
+        }
+
+        return max(baseThreshold, profileFloor)
     }
 }

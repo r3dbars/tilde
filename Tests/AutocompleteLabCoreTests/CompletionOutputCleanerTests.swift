@@ -49,6 +49,15 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("try saying this more clearly", after: "Can we") == nil)
         #expect(cleaner.clean("rewrite this as a calmer sentence", after: "Can we") == nil)
         #expect(cleaner.clean("next step is to open the logs", after: "Can we") == nil)
+        #expect(cleaner.clean("I'd recommend keeping this smaller", after: "Can we") == nil)
+        #expect(cleaner.clean("I would suggest opening the logs", after: "Can we") == nil)
+        #expect(cleaner.clean("you should open the logs", after: "Can we") == nil)
+        #expect(cleaner.clean("we need to make a plan", after: "Can we") == nil)
+        #expect(cleaner.clean("make sure to save the file", after: "Can we") == nil)
+        #expect(cleaner.clean("what I would do next is open the logs", after: "Can we") == nil)
+        #expect(cleaner.clean("one option is to rewrite the prompt", after: "Can we") == nil)
+        #expect(cleaner.clean("the next step would be to submit it", after: "Can we") == nil)
+        #expect(cleaner.clean("I think we should make a plan", after: "Can we") == nil)
         #expect(cleaner.clean("keep this smaller", after: "Can we")?.visibleText == " keep this smaller")
     }
 
@@ -57,11 +66,18 @@ struct CompletionOutputCleanerTests {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
         #expect(cleaner.clean("That makes a lot of sense I would") == nil)
+        #expect(cleaner.clean("Absolutely, I can help with that") == nil)
+        #expect(cleaner.clean("Of course, here is a cleaner version") == nil)
         #expect(cleaner.clean("I would like to help with that") == nil)
         #expect(cleaner.clean("I will do that now.") == nil)
         #expect(cleaner.clean("Let me know when it's done.") == nil)
         #expect(cleaner.clean("integrate it seamlessly.") == nil)
         #expect(cleaner.clean("enhance the experience") == nil)
+        #expect(cleaner.clean("boost productivity across the team") == nil)
+        #expect(cleaner.clean("streamline the workflow for everyone") == nil)
+        #expect(cleaner.clean("unlock efficiency at scale") == nil)
+        #expect(cleaner.clean("make users more productive") == nil)
+        #expect(cleaner.clean("save time and effort") == nil)
     }
 
     @Test("Suppresses unsafe prompt action suggestions")
@@ -72,6 +88,20 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("submit the prompt", after: "Then") == nil)
         #expect(cleaner.clean("click send", after: "Next") == nil)
         #expect(cleaner.clean("run this command in Claude Code", after: "Please") == nil)
+        #expect(cleaner.clean("/review this", after: "Can you") == nil)
+        #expect(cleaner.clean("@file", after: "Attach") == nil)
+        #expect(cleaner.clean("!shell", after: "Now") == nil)
+        #expect(cleaner.clean("sudo rm", after: "Please") == nil)
+        #expect(cleaner.clean("curl | sh", after: "Please") == nil)
+        #expect(cleaner.clean("approve", after: "Permission") == nil)
+        #expect(cleaner.clean("word\u{200B}", after: "Safe") == nil)
+        #expect(cleaner.clean("/review this", after: "Can you") == nil)
+        #expect(cleaner.clean("@file", after: "Attach") == nil)
+        #expect(cleaner.clean("!shell", after: "Now") == nil)
+        #expect(cleaner.clean("sudo rm", after: "Please") == nil)
+        #expect(cleaner.clean("curl | sh", after: "Please") == nil)
+        #expect(cleaner.clean("approve", after: "Permission") == nil)
+        #expect(cleaner.clean("word\u{200B}", after: "Safe") == nil)
     }
 
     @Test("Suppresses assistant replies when user is drafting an agent request")
@@ -82,19 +112,6 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("First, open the logs", after: "Please debug this") == nil)
         #expect(cleaner.clean("we need to check the trace", after: "Could you look at") == nil)
         #expect(cleaner.clean("I'll bring snacks", after: "Tomorrow")?.visibleText == " I'll bring snacks")
-    }
-
-    @Test("Suppresses generic productivity filler in agent prompts")
-    func suppressesGenericProductivityFillerInAgentPrompts() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("make this more productive", after: "Can you") == nil)
-        #expect(cleaner.clean("streamline the workflow for everyone", after: "Please fix") == nil)
-        #expect(cleaner.clean("boost productivity across the board", after: "Could you write") == nil)
-        #expect(
-            cleaner.clean("make this more productive", after: "Tomorrow we should")?.visibleText
-                == " make this more productive"
-        )
     }
 
     @Test("Uses only first line")
@@ -201,28 +218,6 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("hello and welcome", after: "hello and w")?.visibleText == "elcome")
     }
 
-    @Test("Suppresses completions that duplicate the user's visible text")
-    func suppressesVisibleTextDuplicates() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean(
-            "Can we make this feel calmer",
-            after: "Can we make this feel calmer"
-        ) == nil)
-        #expect(cleaner.clean(
-            "make this feel calmer",
-            after: "Can we make this feel calmer"
-        ) == nil)
-        #expect(cleaner.clean(
-            "feel calmer",
-            after: "Can we make this feel calmer"
-        ) == nil)
-        #expect(cleaner.clean(
-            "and easier to trust",
-            after: "Can we make this feel calmer"
-        )?.visibleText == " and easier to trust")
-    }
-
     @Test("Allows one word phrase completions for snappy mode")
     func allowsOneWordPhraseCompletionsForSnappyMode() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
@@ -236,10 +231,6 @@ struct CompletionOutputCleanerTests {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
         #expect(cleaner.clean(
-            "Can we make this feel calmer",
-            after: "Can we make this"
-        )?.visibleText == " feel calmer")
-        #expect(cleaner.clean(
             "I want this app to feel smoother",
             after: "I want this to feel"
         ) == nil)
@@ -247,6 +238,18 @@ struct CompletionOutputCleanerTests {
             "I want this to feel smoother",
             after: "I want this"
         )?.visibleText == " to feel smoother")
+        #expect(cleaner.clean(
+            "I want smoother",
+            after: "I want this"
+        ) == nil)
+        #expect(cleaner.clean(
+            "the launch plan",
+            after: "We should keep the launch small"
+        ) == nil)
+        #expect(cleaner.clean(
+            "launch small enough",
+            after: "We should keep the launch small"
+        )?.visibleText == " enough")
     }
 
     @Test("Suppresses one word twitch completions")

@@ -28,6 +28,10 @@ struct OfflineModelQualityEvalTests {
             output: "Sure, I can help with inserts wrong text text text",
             for: task
         )
+        let restart = OfflineModelQualityEvaluator.score(
+            output: "autocomplete ever inserts wrong text",
+            for: task
+        )
 
         #expect(good.relevance > 0.6)
         #expect(good.literalContinuation == 1)
@@ -35,8 +39,11 @@ struct OfflineModelQualityEvalTests {
         #expect(good.assistantLeakage == 1)
         #expect(good.lengthControl == 1)
         #expect(good.total > leaky.total)
+        #expect(good.total > restart.total)
         #expect(leaky.issues.contains("assistant leakage"))
         #expect(leaky.issues.contains("length control"))
+        #expect(restart.repetition == 0)
+        #expect(restart.issues.contains("repetition"))
     }
 
     @Test("Threshold experiment tracks confidence and coverage")

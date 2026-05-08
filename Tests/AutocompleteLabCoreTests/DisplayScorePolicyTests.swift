@@ -124,6 +124,34 @@ struct DisplayScorePolicyTests {
         #expect(sentenceDecision.metadata["displayScoreThreshold"] == "1.20")
     }
 
+    @Test("threshold adjustment makes display policy less eager without weakening safety gates")
+    func thresholdAdjustmentMakesDisplayPolicyLessEagerWithoutWeakeningSafetyGates() {
+        let policy = DisplayScorePolicy()
+        let adjusted = policy.adjustingThresholds(by: 0.30)
+        let score = DisplayScore(
+            utility: 0.70,
+            styleFit: 0.40,
+            contextFit: 0.20,
+            userAffinity: 0.10,
+            risk: 0.05,
+            repetition: 0.05,
+            instability: 0.05
+        )
+
+        let originalDecision = policy.decision(for: score, mode: .phraseContinuation)
+        let adjustedDecision = adjusted.decision(for: score, mode: .phraseContinuation)
+
+        #expect(originalDecision.shouldDisplay)
+        #expect(!adjustedDecision.shouldDisplay)
+        #expect(adjustedDecision.metadata["displayScoreSuppressionReason"] == "below-threshold")
+        #expect(abs(adjusted.threshold(for: .wordCompletion) - 0.90) < 0.0001)
+        #expect(adjusted.threshold(for: .phraseContinuation) == 1.30)
+        #expect(adjusted.threshold(for: .sentenceContinuation) == 1.50)
+        #expect(adjusted.highRiskThreshold == policy.highRiskThreshold)
+        #expect(adjusted.highRepetitionThreshold == policy.highRepetitionThreshold)
+        #expect(adjusted.highInstabilityThreshold == policy.highInstabilityThreshold)
+    }
+
     @Test("low accepted and kept probability suppresses only after enough evidence")
     func lowAcceptedAndKeptProbabilitySuppressesOnlyAfterEnoughEvidence() {
         let policy = DisplayScorePolicy(minimumAcceptedAndKeptSamples: 4)
@@ -136,7 +164,8 @@ struct DisplayScorePolicyTests {
             repetition: 0.05,
             instability: 0.05,
             acceptedAndKeptProbability: 0.01,
-            acceptedAndKeptSampleCount: 3
+            acceptedAndKeptSampleCount: 3,
+            acceptedAndKeptUtilityAdjustment: -0.04
         )
         let scoreWithEnoughEvidence = DisplayScore(
             utility: 0.80,
@@ -147,7 +176,8 @@ struct DisplayScorePolicyTests {
             repetition: 0.05,
             instability: 0.05,
             acceptedAndKeptProbability: 0.01,
-            acceptedAndKeptSampleCount: 4
+            acceptedAndKeptSampleCount: 4,
+            acceptedAndKeptUtilityAdjustment: -0.04
         )
 
         let earlyDecision = policy.decision(
@@ -165,5 +195,93 @@ struct DisplayScorePolicyTests {
         #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptProbability"] == "0.01")
         #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptSamples"] == "4")
         #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.12")
+        #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptUtilityAdjustment"] == "-0.04")
+    }
+
+    @Test("profile-aware kept probability stays stricter in AI chat after evidence")
+    func profileAwareKeptProbabilityStaysStricterInAIChatAfterEvidence() {
+        let policy = DisplayScorePolicy(minimumAcceptedAndKeptSamples: 6)
+        let score = DisplayScore(
+            utility: 0.80,
+            styleFit: 0.60,
+            contextFit: 0.55,
+            userAffinity: 0.20,
+            risk: 0.05,
+            repetition: 0.05,
+            instability: 0.05,
+            acceptedAndKeptProbability: 0.14,
+            acceptedAndKeptSampleCount: 6,
+            acceptedAndKeptUtilityAdjustment: 0
+        )
+        let scoreWithoutEnoughEvidence = DisplayScore(
+            utility: 0.80,
+            styleFit: 0.60,
+            contextFit: 0.55,
+            userAffinity: 0.20,
+            risk: 0.05,
+            repetition: 0.05,
+            instability: 0.05,
+            acceptedAndKeptProbability: 0.14,
+            acceptedAndKeptSampleCount: 5,
+            acceptedAndKeptUtilityAdjustment: 0
+        )
+
+        let genericDecision = policy.decision(
+            for: score,
+            mode: .phraseContinuation
+        )
+        let earlyAIChatDecision = policy.decision(
+            for: scoreWithoutEnoughEvidence,
+            mode: .phraseContinuation,
+            behaviorProfileID: .aiChat
+        )
+        let learnedAIChatDecision = policy.decision(
+            for: score,
+            mode: .phraseContinuation,
+            behaviorProfileID: .aiChat
+        )
+
+        #expect(genericDecision.shouldDisplay)
+        #expect(genericDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.12")
+        #expect(earlyAIChatDecision.shouldDisplay)
+        #expect(earlyAIChatDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.24")
+        #expect(!learnedAIChatDecision.shouldDisplay)
+        #expect(learnedAIChatDecision.metadata["displayScoreBehaviorProfile"] == "ai_chat")
+        #expect(learnedAIChatDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.24")
+        #expect(learnedAIChatDecision.metadata["displayScoreSuppressionReason"] == "low-accepted-and-kept-probability")
+    }
+
+    @Test("profile-aware kept probability is stricter for sentence-like prose")
+    func profileAwareKeptProbabilityIsStricterForSentenceLikeProse() {
+        let policy = DisplayScorePolicy()
+        let score = DisplayScore(
+            utility: 0.90,
+            styleFit: 0.65,
+            contextFit: 0.55,
+            userAffinity: 0.20,
+            risk: 0.05,
+            repetition: 0.05,
+            instability: 0.05,
+            acceptedAndKeptProbability: 0.20,
+            acceptedAndKeptSampleCount: 6,
+            acceptedAndKeptUtilityAdjustment: 0
+        )
+
+        let genericDecision = policy.decision(
+            for: score,
+            mode: .sentenceContinuation
+        )
+        let docsDecision = policy.decision(
+            for: score,
+            mode: .sentenceContinuation,
+            behaviorProfileID: .docsProse
+        )
+
+        #expect(genericDecision.shouldDisplay)
+        #expect(genericDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.18")
+        #expect(!docsDecision.shouldDisplay)
+        #expect(docsDecision.metadata["displayScoreBehaviorProfile"] == "docs_prose")
+        #expect(docsDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.22")
+        #expect(docsDecision.metadata["displayScoreSuppressionReason"] == "low-accepted-and-kept-probability")
     }
 }
