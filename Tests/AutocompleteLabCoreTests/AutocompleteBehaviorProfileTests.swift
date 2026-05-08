@@ -68,6 +68,9 @@ struct AutocompleteBehaviorProfileTests {
         #expect(guidance.contains("one word"))
         #expect(guidance.contains("Never suggest sending"))
         #expect(guidance.contains("pressing Enter or Return"))
+        #expect(guidance.contains("slash commands"))
+        #expect(guidance.contains("@ references"))
+        #expect(guidance.contains("shell text"))
     }
 
     @Test("Forms and search profiles suppress by default")
@@ -159,6 +162,9 @@ struct AutocompleteBehaviorProfileTests {
             "behaviorProfileMaxVisibleWords": "6",
             "behaviorProfileMaxGeneratedTokens": "12",
             "behaviorProfileSuppressedByDefault": "false",
+            "behaviorProfileSuppressesFreshParagraphStart": "true",
+            "behaviorProfileSuppressesBlankLine": "true",
+            "behaviorProfileSuppressesQuestions": "false",
             "behaviorProfileFullAccept": "true",
             "behaviorProfileSubmitLikeCompletions": "false"
         ])

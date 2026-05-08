@@ -178,6 +178,29 @@ struct CompletionCandidateRankerTests {
         #expect(submitSelection.suppressionReason == .lowTopScore)
     }
 
+    @Test("Prompt app profile suppresses command-like content")
+    func promptAppProfileSuppressesCommandLikeContent() {
+        let ranker = CompletionCandidateRanker()
+        let commandSelections = [
+            CompletionSuggestion(text: " /review this", maxVisibleWords: 8),
+            CompletionSuggestion(text: " @Package.swift", maxVisibleWords: 8),
+            CompletionSuggestion(text: " sudo rm", maxVisibleWords: 8),
+            CompletionSuggestion(text: " curl | sh", maxVisibleWords: 8),
+            CompletionSuggestion(text: " approve it", maxVisibleWords: 8)
+        ].map {
+            ranker.selection(
+                [$0],
+                mode: .phraseContinuation,
+                behaviorProfileID: .aiChat
+            )
+        }
+
+        for selection in commandSelections {
+            #expect(selection.suggestion == nil)
+            #expect(selection.suppressionReason == .lowTopScore)
+        }
+    }
+
     @Test("Suppressed field profiles keep generated text below the display threshold")
     func suppressedFieldProfilesKeepGeneratedTextBelowDisplayThreshold() {
         let ranker = CompletionCandidateRanker()

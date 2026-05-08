@@ -31,6 +31,8 @@ swift test
 ./script/typing_performance_endurance_soak_self_test.sh
 ./script/model_latency_report_self_test.sh
 ./script/private_beta_packet_self_test.sh
+./script/package_release_self_test.sh
+./script/build_and_run_self_test.sh
 ./script/package_release.sh --check
 ./script/check_model_asset.py
 ./script/build_and_run.sh --verify
@@ -44,6 +46,7 @@ AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
 
 echo
 echo "Manual app smoke checklist: docs/product/manual-smoke-checklist.md"
-echo "Manual app smoke recorder: script/manual_smoke_session.sh <textedit|notes|obsidian|chrome|codex|claude-code|claude>"
+echo "Manual app smoke recorder: script/manual_smoke_session.sh <textedit|notes|obsidian|chrome|codex|claude>"
+echo "Claude Code remains diagnostics-only until terminal-host proof exists."
 echo "Manual app smoke status: script/manual_smoke_status.sh"
 echo "Diagnostics log: $HOME/Library/Logs/AutocompleteLab/diagnostics.log"

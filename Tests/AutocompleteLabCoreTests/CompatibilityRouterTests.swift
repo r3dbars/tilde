@@ -20,7 +20,8 @@ struct CompatibilityRouterTests {
         #expect(decision.rung == .stableBeta)
         #expect(decision.shouldRequestSuggestion)
         #expect(decision.canAcceptSuggestion)
-        #expect(decision.acceptMode == .clipboardFallback)
+        #expect(decision.acceptMode == .directAccessibility)
+        #expect(!decision.allowsClipboardFallback)
     }
 
     @Test("Unsupported apps are blocked instead of treated as default editors")

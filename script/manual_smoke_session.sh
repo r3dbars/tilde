@@ -8,24 +8,26 @@ fi
 
 MODE="run"
 NOTES_SURFACE=""
+REQUIRES_UNDO_ACCEPT=0
 STRICT_VISUAL_EVIDENCE="${AUTOCOMPLETE_LAB_SMOKE_REQUIRE_VISUAL_EVIDENCE:-${AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE:-0}}"
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
 REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-runs.md}"
 PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-default}"
 ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-backtick}"
-PROMPT_NO_SUBMIT_CONFIRMED="${AUTOCOMPLETE_LAB_PROMPT_NO_SUBMIT_CONFIRMED:-0}"
-BUILD_PROOF="${AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF:-}"
+CODEX_PROOF_MARKER="${AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER:-AUTOCOMPLETE_LAB_CODEX_PROOF}"
+CLAUDE_CODE_PROOF_MARKER="${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER:-AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF}"
 
 usage() {
   cat <<'EOF'
-Usage: script/manual_smoke_session.sh <textedit|textedit-multiline|textedit-wrapped|notes|notes-title|notes-body|notes-checklist|obsidian|chrome|codex|claude-code|claude> [--print|--check] [--visual]
+Usage: script/manual_smoke_session.sh <textedit|notes|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|obsidian|chrome|codex|claude-code|claude> [--print|--check] [--visual]
 
 Default mode prints the local manual steps, records the current diagnostics log
 line, waits for Enter, validates the new diagnostics for that app, then appends
 a pass row to docs/product/manual-smoke-runs.md.
 
-Notes proof must be recorded as notes-title, notes-body, or notes-checklist.
+Notes proof must be recorded as notes-title, notes-body, notes-checklist,
+or their notes-*-undo variants.
 Use --visual when the trace slice must include strict screenshot evidence.
 
 Set AUTOCOMPLETE_LAB_LOG_START_LINE when using --check against a known log slice.
@@ -39,25 +41,32 @@ if [[ -z "$APP" || "$APP" == "-h" || "$APP" == "--help" ]]; then
 fi
 
 case "$APP" in
-  textedit-multiline)
-    APP="textedit"
-    PROOF_LABEL="multiline"
-    ;;
-  textedit-wrapped)
-    APP="textedit"
-    PROOF_LABEL="wrapped-line"
-    ;;
   notes-title)
     APP="notes"
     NOTES_SURFACE="title"
+    ;;
+  notes-title-undo)
+    APP="notes"
+    NOTES_SURFACE="title"
+    REQUIRES_UNDO_ACCEPT=1
     ;;
   notes-body)
     APP="notes"
     NOTES_SURFACE="body"
     ;;
+  notes-body-undo)
+    APP="notes"
+    NOTES_SURFACE="body"
+    REQUIRES_UNDO_ACCEPT=1
+    ;;
   notes-checklist)
     APP="notes"
     NOTES_SURFACE="checklist"
+    ;;
+  notes-checklist-undo)
+    APP="notes"
+    NOTES_SURFACE="checklist"
+    REQUIRES_UNDO_ACCEPT=1
     ;;
 esac
 
@@ -141,24 +150,7 @@ case "$APP" in
     BUNDLE_ID="com.apple.TextEdit"
     DISPLAY_NAME="TextEdit"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
-    case "$PROOF_LABEL" in
-      default|option-tab)
-        STEPS=$'- Open a disposable TextEdit document.\n- Type `Can we`.\n- Wait for a suggestion.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
-        ;;
-      multiline)
-        SESSION_NAME="TextEdit multiline"
-        STEPS=$'- Open a disposable TextEdit document.\n- Type one setup line, press Return, then type `Can we` on the next line.\n- Wait for a suggestion on the second line.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
-        ;;
-      wrapped-line)
-        SESSION_NAME="TextEdit wrapped line"
-        STEPS=$'- Open a disposable TextEdit document in a narrow window.\n- Type a long disposable sentence so the caret is on a visually wrapped line.\n- End with `Can we`.\n- Wait for a suggestion on the wrapped visual line.\n- Press Tab once.\n- Press the key above Tab for full visible accept.'
-        ;;
-      *)
-        echo "unknown TextEdit proof label: $PROOF_LABEL" >&2
-        echo "expected default, multiline, or wrapped-line" >&2
-        exit 2
-        ;;
-    esac
+    STEPS=$'- Open a disposable TextEdit document.\n- Type `Smoke proof feels inst`.\n- Wait for a suggestion.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.'
     ;;
   notes)
     BUNDLE_ID="com.apple.Notes"
@@ -168,11 +160,23 @@ case "$APP" in
       notes-title)
         NOTES_SURFACE="${NOTES_SURFACE:-title}"
         ;;
+      notes-title-undo)
+        NOTES_SURFACE="${NOTES_SURFACE:-title}"
+        REQUIRES_UNDO_ACCEPT=1
+        ;;
       notes-body)
         NOTES_SURFACE="${NOTES_SURFACE:-body}"
         ;;
+      notes-body-undo)
+        NOTES_SURFACE="${NOTES_SURFACE:-body}"
+        REQUIRES_UNDO_ACCEPT=1
+        ;;
       notes-checklist)
         NOTES_SURFACE="${NOTES_SURFACE:-checklist}"
+        ;;
+      notes-checklist-undo)
+        NOTES_SURFACE="${NOTES_SURFACE:-checklist}"
+        REQUIRES_UNDO_ACCEPT=1
         ;;
     esac
 
@@ -180,22 +184,40 @@ case "$APP" in
       "")
         PROOF_LABEL="choose-notes-surface"
         SESSION_NAME="Notes surface selector"
-        STEPS=$'- Open the disposable autocomplete smoke note.\n- Record three separate Notes passes:\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate`\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`\n- Title, body, and checklist rows are separate proof. A generic Notes row does not count.'
+        STEPS=$'- Open the disposable autocomplete smoke note.\n- Record three separate Notes passes:\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate`\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`\n- Record optional undo proof with:\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-undo --manual-gate`\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-undo --manual-gate`\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-undo --manual-gate`\n- Title, body, checklist, and undo rows are separate proof. A generic Notes row does not count.'
         ;;
       title)
-        PROOF_LABEL="notes-title"
-        SESSION_NAME="Notes title"
-        STEPS=$'- Open the disposable autocomplete smoke note.\n- Put the caret in the note title.\n- Type `Smoke proof feels inst` in the title only.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        if (( REQUIRES_UNDO_ACCEPT == 1 )); then
+          PROOF_LABEL="notes-title-undo"
+          SESSION_NAME="Notes title undo"
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put the caret in the note title.\n- Type `Smoke proof feels inst` in the title only.\n- Press Tab once and expect `instant`.\n- Press Command-Z and confirm only the accepted `ant` suffix is removed.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        else
+          PROOF_LABEL="notes-title"
+          SESSION_NAME="Notes title"
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put the caret in the note title.\n- Type `Smoke proof feels inst` in the title only.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        fi
         ;;
       body)
-        PROOF_LABEL="notes-body"
-        SESSION_NAME="Notes body"
-        STEPS=$'- Open the disposable autocomplete smoke note.\n- Put `Autocomplete smoke` on the first body line.\n- Put the caret on the next body line and type `Smoke proof feels inst`.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        if (( REQUIRES_UNDO_ACCEPT == 1 )); then
+          PROOF_LABEL="notes-body-undo"
+          SESSION_NAME="Notes body undo"
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put `Autocomplete smoke` on the first body line.\n- Put the caret on the next body line and type `Smoke proof feels inst`.\n- Press Tab once and expect `instant`.\n- Press Command-Z and confirm only the accepted `ant` suffix is removed.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        else
+          PROOF_LABEL="notes-body"
+          SESSION_NAME="Notes body"
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put `Autocomplete smoke` on the first body line.\n- Put the caret on the next body line and type `Smoke proof feels inst`.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        fi
         ;;
       checklist)
-        PROOF_LABEL="notes-checklist"
-        SESSION_NAME="Notes checklist"
-        STEPS=$'- Open the disposable autocomplete smoke note.\n- Toggle Checklist and create a disposable checklist row.\n- Type `Smoke proof feels inst` in that checklist row.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        if (( REQUIRES_UNDO_ACCEPT == 1 )); then
+          PROOF_LABEL="notes-checklist-undo"
+          SESSION_NAME="Notes checklist undo"
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Toggle Checklist and create a disposable checklist row.\n- Type `Smoke proof feels inst` in that checklist row.\n- Press Tab once and expect `instant`.\n- Press Command-Z and confirm only the accepted `ant` suffix is removed.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        else
+          PROOF_LABEL="notes-checklist"
+          SESSION_NAME="Notes checklist"
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Toggle Checklist and create a disposable checklist row.\n- Type `Smoke proof feels inst` in that checklist row.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        fi
         ;;
       *)
         echo "unknown Notes surface: $NOTES_SURFACE" >&2
@@ -214,8 +236,8 @@ case "$APP" in
     BUNDLE_ID="com.google.Chrome"
     DISPLAY_NAME="Chrome"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
-    PROOF_LABEL="${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-$PROOF_LABEL}"
-    STEPS=$'- Open a local fixture page with a textarea, contenteditable field, editor-like field, Monaco-like editor, ProseMirror-like editor, or chat-style composer.\n- Type `Smoke proof feels inst` in the focused field.\n- Confirm focus stays in the field.\n- Use Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- For chat-like proof, prefer `script/real_app_smoke.sh chrome --fixture chat-like` so the no-submit guard is checked.'
+    PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-$PROOF_LABEL}}"
+    STEPS=$'- Open a local fixture page with a textarea, contenteditable field, editor-like field, Monaco-like editor, ProseMirror-like editor, real Monaco editor, real ProseMirror editor, official public editor demo, or chat-style composer.\n- Type `Smoke proof feels inst` in the focused field.\n- Confirm focus stays in the field.\n- Use Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- For real editor proof, prefer `script/real_app_smoke.sh chrome --fixture monaco-real` or `script/real_app_smoke.sh chrome --fixture prosemirror-real` so pinned upstream packages are used.\n- For default Chrome AX exposure proof, use `script/real_app_smoke.sh chrome --fixture monaco-real --chrome-accessibility default` or the matching ProseMirror command and keep that proof label distinct.\n- For public official editor demo proof, use `codemirror-official`, `monaco-official`, or `prosemirror-official` and keep those proof labels distinct from local fixtures.\n- For chat-like proof, prefer `script/real_app_smoke.sh chrome --fixture chat-like` so the no-submit guard is checked.'
     ;;
   codex)
     BUNDLE_ID="com.openai.codex"
@@ -224,7 +246,13 @@ case "$APP" in
     REQUIRES_FULL_ACCEPT=0
     PROMPT_NO_SUBMIT_PROFILE=1
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- When the recorder asks, type NO-SUBMIT only after confirming the prompt was not sent.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS="- Focus the Codex message box without submitting.
+- Type only disposable prompt text that includes \`$CODEX_PROOF_MARKER\`, then a harmless local fragment like \`Can we make this\`.
+- Confirm a suggestion appears near the prompt or in a stable mirror position.
+- Use Tab once for one word/suffix.
+- Visually confirm the text stayed in the composer, no user message bubble appeared, and no assistant response started.
+- Do not press Enter as part of the smoke pass.
+- Full visible accept stays disabled until separate full-accept no-submit proof exists."
     ;;
   claude-code)
     BUNDLE_ID="com.anthropic.claude-code"
@@ -233,7 +261,14 @@ case "$APP" in
     REQUIRES_FULL_ACCEPT=0
     PROMPT_NO_SUBMIT_PROFILE=1
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Claude Code prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- When the recorder asks, type NO-SUBMIT only after confirming the prompt was not sent.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS="- In a supported terminal host, focus only a disposable Claude Code prompt without submitting.
+- Include \`$CLAUDE_CODE_PROOF_MARKER\` in the prompt or terminal title.
+- Type a harmless local test fragment like \`Can we make this\`.
+- Confirm a suggestion appears near the prompt or in a stable mirror position.
+- Use Tab once for one word/suffix.
+- Visually confirm the text stayed in the composer, no user message bubble appeared, no shell input executed, and no assistant response started.
+- Do not press Enter as part of the smoke pass.
+- Full visible accept stays disabled until separate full-accept no-submit proof exists."
     ;;
   claude)
     BUNDLE_ID="com.anthropic.claudefordesktop"
@@ -242,7 +277,7 @@ case "$APP" in
     REQUIRES_FULL_ACCEPT=0
     PROMPT_NO_SUBMIT_PROFILE=1
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Claude prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- When the recorder asks, type NO-SUBMIT only after confirming the prompt was not sent.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS=$'- Focus the Claude prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Visually confirm the text stayed in the composer, no user message bubble appeared, and no assistant response started.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   *)
     usage >&2
@@ -255,7 +290,7 @@ REPORT_APP_NAME="${REPORT_APP_NAME:-$DISPLAY_NAME}"
 
 if [[ "$APP" == "notes" && -z "$NOTES_SURFACE" && "$MODE" != "--print" ]]; then
   echo "Notes proof cannot be recorded as a generic Notes pass." >&2
-  echo "Choose one surface: notes-title, notes-body, or notes-checklist." >&2
+  echo "Choose one surface: notes-title, notes-body, notes-checklist, or a notes-*-undo variant." >&2
   echo "Example: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate" >&2
   exit 2
 fi
@@ -302,14 +337,14 @@ fi
 if [[ "$MODE" == "run" ]]; then
   echo "Starting at diagnostics line $START_LINE."
   echo "Starting at trace line $TRACE_START_LINE."
-  read -r -p "Run the steps above, then press Enter to validate this app pass. " _
-  if [[ "$REQUIRES_FULL_ACCEPT" != "1" ]]; then
-    read -r -p "Type NO-SUBMIT to confirm the prompt was not sent. " prompt_confirmation
-    if [[ "$prompt_confirmation" != "NO-SUBMIT" ]]; then
-      echo "$SESSION_NAME prompt proof was not recorded because no-submit was not confirmed." >&2
-      exit 1
-    fi
-    PROMPT_NO_SUBMIT_CONFIRMED=1
+  if [[ "$APP" == "codex" ]]; then
+    read -r -p "Run the steps above with marker $CODEX_PROOF_MARKER, do not submit, then press Enter to validate this app pass. " _
+    AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1
+  elif [[ "$APP" == "claude-code" ]]; then
+    read -r -p "Run the steps above with marker $CLAUDE_CODE_PROOF_MARKER, do not submit, then press Enter to validate this app pass. " _
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1
+  else
+    read -r -p "Run the steps above, then press Enter to validate this app pass. " _
   fi
 elif [[ "$MODE" != "--check" ]]; then
   usage >&2
@@ -349,6 +384,8 @@ print_failure_summary() {
     echo "- synthetic caret placement: $(count_line_with_fields "suggestion-presented" "app=$BUNDLE_ID" "placementAnchorSource=synthetic-caret" "placementConfidenceBand=medium" "hasCaretRect=true")"
     echo "- Tab autocomplete action: $(count_line_with_fields "keyboard-action" "app=$BUNDLE_ID" "key=tab" "action=acceptNextWord" "handled=true")"
     echo "- full autocomplete action: $(count_line_with_fields "keyboard-action" "app=$BUNDLE_ID" "key=$ACCEPT_ALL_SHORTCUT" "action=acceptAllVisible" "handled=true")"
+    echo "- accepted insertion undo action: $(count_line_with_fields "keyboard-action" "app=$BUNDLE_ID" "action=undoAcceptedInsertion" "handled=true")"
+    echo "- accepted insertion undone: $(count_line_with_fields "accepted-insertion-undone" "app=$BUNDLE_ID")"
     echo "- successful insert: $(count_pattern "insert .*app=$BUNDLE_ID .*success=true")"
     echo "- verified insertions: $(count_pattern "insert-verification .*app=$BUNDLE_ID .*result=verified")"
     echo "- failed verification: $(count_pattern "insert-verification .*app=$BUNDLE_ID .*result=(unchanged|partial|changedUnexpectedly|missing-context)")"
@@ -449,13 +486,6 @@ append_report_row() {
   else
     trace_summary="$trace_summary; visual \`not-claimed\`"
   fi
-  if [[ "$REQUIRES_FULL_ACCEPT" != "1" ]]; then
-    trace_summary="$trace_summary; prompt no-submit confirmed"
-  fi
-
-  local build_proof
-  build_proof="$(manual_smoke_build_proof)"
-  trace_summary="$trace_summary; build \`$build_proof\`"
 
   if [[ ! -f "$REPORT_PATH" ]]; then
     mkdir -p "$(dirname "$REPORT_PATH")"
@@ -473,9 +503,6 @@ historical evidence only.
 When a trace slice says `visual strict-complete`, strict screenshot evidence was
 required and passed. Rows without that marker are insertion proof only.
 
-Rows also include a build proof token in the trace slice. Current proof must
-match either the current Git commit or the current release archive checksum.
-
 | Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
 | --- | --- | --- | --- | ---: | --- | --- | --- |
 EOF
@@ -492,37 +519,6 @@ EOF
     "$log_end_line" \
     "$LOG_PATH" \
     "$trace_summary" >>"$REPORT_PATH"
-}
-
-manual_smoke_build_proof() {
-  if [[ -n "$BUILD_PROOF" ]]; then
-    printf '%s' "$BUILD_PROOF"
-    return
-  fi
-
-  local proof_parts=()
-  local commit
-  commit="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
-  if [[ -n "$commit" ]]; then
-    proof_parts+=("commit:$commit")
-  fi
-
-  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/AutocompleteLab.zip}"
-  if [[ -s "$archive_path" ]]; then
-    local archive_sha
-    archive_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
-    if [[ -n "$archive_sha" ]]; then
-      proof_parts+=("archive-sha256:$archive_sha")
-    fi
-  fi
-
-  if (( ${#proof_parts[@]} == 0 )); then
-    printf 'commit:unknown'
-    return
-  fi
-
-  local IFS=','
-  printf '%s' "${proof_parts[*]}"
 }
 
 if [[ "$APP" == "obsidian" ]] &&
@@ -570,6 +566,10 @@ else
 fi
 require_pattern "insert .*app=$BUNDLE_ID .*success=true" "successful insert"
 require_pattern "insert-verification .*app=$BUNDLE_ID .*result=verified" "verified insertion"
+if (( REQUIRES_UNDO_ACCEPT == 1 )); then
+  require_line_with_fields "accepted insertion undo handled" "keyboard-action" "app=$BUNDLE_ID" "action=undoAcceptedInsertion" "handled=true"
+  require_line_with_fields "accepted insertion undone" "accepted-insertion-undone" "app=$BUNDLE_ID"
+fi
 
 VERIFIED_COUNT="$(grep -E "insert-verification .*app=$BUNDLE_ID .*result=verified" <<<"$SCAN_LINES" | wc -l | tr -d ' ')"
 if (( VERIFIED_COUNT < MIN_VERIFIED_ACCEPTS )); then
@@ -584,16 +584,27 @@ if [[ "$REQUIRES_FULL_ACCEPT" != "1" ]] && (( VERIFIED_COUNT != 1 )); then
   print_failure_summary
   exit 1
 fi
-if [[ "$REQUIRES_FULL_ACCEPT" != "1" ]] && ! is_truthy "$PROMPT_NO_SUBMIT_CONFIRMED"; then
-  echo "missing $SESSION_NAME no-submit confirmation; set AUTOCOMPLETE_LAB_PROMPT_NO_SUBMIT_CONFIRMED=1 only after confirming the prompt was not sent" >&2
-  exit 1
-fi
 
 reject_pattern "insert-verification-final-failure .*app=$BUNDLE_ID" "unrecovered insertion verification failure"
 reject_pattern "field-suppressed .*app=$BUNDLE_ID" "field suppression"
 reject_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=(insert-verification-failed|missing-anchor)" "blocking failure"
 
 if (( PROMPT_NO_SUBMIT_PROFILE == 1 )); then
+  if [[ "$APP" == "codex" ]] && ! is_truthy "${AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED:-0}"; then
+    echo "failed $SESSION_NAME prompt no-submit proof: Codex proof marker was not confirmed" >&2
+    echo "expected disposable prompt marker: $CODEX_PROOF_MARKER" >&2
+    echo "set AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1 only after the prompt contains the marker and was not submitted" >&2
+    print_failure_summary
+    exit 1
+  fi
+  if [[ "$APP" == "claude-code" ]] && ! is_truthy "${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED:-0}"; then
+    echo "failed $SESSION_NAME prompt no-submit proof: Claude Code proof marker was not confirmed" >&2
+    echo "expected disposable terminal marker: $CLAUDE_CODE_PROOF_MARKER" >&2
+    echo "set AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1 only after the prompt contains the marker and was not submitted" >&2
+    print_failure_summary
+    exit 1
+  fi
+
   if [[ ! -f "$TRACE_PATH" ]]; then
     echo "missing $SESSION_NAME trace coverage: prompt no-submit proof" >&2
     echo "trace: $TRACE_PATH" >&2

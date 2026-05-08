@@ -21,7 +21,7 @@ public struct FocusedFieldIdentity: Equatable, Hashable, Sendable {
     }
 }
 
-public struct FocusedElementFingerprint: Equatable, Sendable {
+public struct FocusedElementFingerprint: Equatable, Hashable, Sendable {
     public let identifier: String?
     public let title: String?
     public let description: String?
@@ -56,6 +56,199 @@ public struct FocusedElementFingerprint: Equatable, Sendable {
         ]
         .compactMap { $0?.lowercased() }
         .joined(separator: " ")
+    }
+}
+
+public struct RoundedFocusedRect: Equatable, Hashable, Sendable {
+    public let x: Int
+    public let y: Int
+    public let width: Int
+    public let height: Int
+
+    public init(x: Int, y: Int, width: Int, height: Int) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    }
+
+    public init(_ rect: CGRect) {
+        self.init(
+            x: Int(rect.origin.x.rounded()),
+            y: Int(rect.origin.y.rounded()),
+            width: Int(rect.width.rounded()),
+            height: Int(rect.height.rounded())
+        )
+    }
+}
+
+public struct FocusedTextRevision: Equatable, Hashable, Sendable {
+    public let textBeforeCursorLength: Int
+    public let textAfterCursorLength: Int
+    public let textBeforeCursorHash: UInt64
+    public let textAfterCursorHash: UInt64
+
+    public init(
+        textBeforeCursorLength: Int,
+        textAfterCursorLength: Int,
+        textBeforeCursorHash: UInt64,
+        textAfterCursorHash: UInt64
+    ) {
+        self.textBeforeCursorLength = max(0, textBeforeCursorLength)
+        self.textAfterCursorLength = max(0, textAfterCursorLength)
+        self.textBeforeCursorHash = textBeforeCursorHash
+        self.textAfterCursorHash = textAfterCursorHash
+    }
+
+    public init(textBeforeCursor: String, textAfterCursor: String) {
+        self.init(
+            textBeforeCursorLength: textBeforeCursor.count,
+            textAfterCursorLength: textAfterCursor.count,
+            textBeforeCursorHash: Self.stableHash(textBeforeCursor),
+            textAfterCursorHash: Self.stableHash(textAfterCursor)
+        )
+    }
+
+    private static func stableHash(_ text: String) -> UInt64 {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in text.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return hash
+    }
+}
+
+public struct FocusedTargetFingerprint: Equatable, Hashable, Sendable {
+    public let role: String?
+    public let subrole: String?
+    public let elementFingerprint: FocusedElementFingerprint
+    public let windowIdentifier: Int?
+    public let elementBounds: RoundedFocusedRect?
+    public let windowBounds: RoundedFocusedRect?
+    public let caretBounds: RoundedFocusedRect?
+    public let surroundingTextRevision: FocusedTextRevision?
+
+    public init(
+        role: String?,
+        subrole: String?,
+        elementFingerprint: FocusedElementFingerprint,
+        windowIdentifier: Int?,
+        elementBounds: RoundedFocusedRect?,
+        windowBounds: RoundedFocusedRect?,
+        caretBounds: RoundedFocusedRect?,
+        surroundingTextRevision: FocusedTextRevision?
+    ) {
+        self.role = Self.normalized(role)
+        self.subrole = Self.normalized(subrole)
+        self.elementFingerprint = Self.normalized(elementFingerprint)
+        self.windowIdentifier = windowIdentifier
+        self.elementBounds = elementBounds
+        self.windowBounds = windowBounds
+        self.caretBounds = caretBounds
+        self.surroundingTextRevision = surroundingTextRevision
+    }
+
+    public init(
+        role: String?,
+        subrole: String?,
+        elementFingerprint: FocusedElementFingerprint,
+        windowIdentifier: Int?,
+        elementRect: CGRect?,
+        windowRect: CGRect?,
+        caretRect: CGRect?,
+        textBeforeCursor: String,
+        textAfterCursor: String
+    ) {
+        self.init(
+            role: role,
+            subrole: subrole,
+            elementFingerprint: elementFingerprint,
+            windowIdentifier: windowIdentifier,
+            elementBounds: elementRect.map(RoundedFocusedRect.init),
+            windowBounds: windowRect.map(RoundedFocusedRect.init),
+            caretBounds: caretRect.map(RoundedFocusedRect.init),
+            surroundingTextRevision: FocusedTextRevision(
+                textBeforeCursor: textBeforeCursor,
+                textAfterCursor: textAfterCursor
+            )
+        )
+    }
+
+    public func matches(_ current: FocusedTargetFingerprint) -> Bool {
+        guard role == current.role,
+              subrole == current.subrole,
+              elementFingerprint == current.elementFingerprint,
+              windowIdentifier == current.windowIdentifier,
+              elementBounds == current.elementBounds,
+              windowBounds == current.windowBounds else {
+            return false
+        }
+
+        if let caretBounds, caretBounds != current.caretBounds {
+            return false
+        }
+
+        if let surroundingTextRevision,
+           surroundingTextRevision != current.surroundingTextRevision {
+            return false
+        }
+
+        return true
+    }
+
+    public var postInsertionScope: FocusedTargetFingerprint {
+        FocusedTargetFingerprint(
+            role: role,
+            subrole: subrole,
+            elementFingerprint: elementFingerprint,
+            windowIdentifier: windowIdentifier,
+            elementBounds: elementBounds,
+            windowBounds: windowBounds,
+            caretBounds: nil,
+            surroundingTextRevision: nil
+        )
+    }
+
+    public func advancingTextRevision(
+        textBeforeCursor: String,
+        textAfterCursor: String
+    ) -> FocusedTargetFingerprint {
+        FocusedTargetFingerprint(
+            role: role,
+            subrole: subrole,
+            elementFingerprint: elementFingerprint,
+            windowIdentifier: windowIdentifier,
+            elementBounds: elementBounds,
+            windowBounds: windowBounds,
+            caretBounds: nil,
+            surroundingTextRevision: FocusedTextRevision(
+                textBeforeCursor: textBeforeCursor,
+                textAfterCursor: textAfterCursor
+            )
+        )
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let value = value?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+            !value.isEmpty else {
+            return nil
+        }
+
+        return value
+    }
+
+    private static func normalized(_ fingerprint: FocusedElementFingerprint) -> FocusedElementFingerprint {
+        FocusedElementFingerprint(
+            identifier: normalized(fingerprint.identifier),
+            title: normalized(fingerprint.title),
+            description: normalized(fingerprint.description),
+            help: normalized(fingerprint.help),
+            placeholder: normalized(fingerprint.placeholder),
+            windowTitle: normalized(fingerprint.windowTitle)
+        )
     }
 }
 
@@ -127,12 +320,12 @@ public struct FocusedFieldIdentityPolicy: Sendable {
 
     private func stableBoundsIdentifier(input: FocusedFieldIdentityInput) -> Int {
         var hasher = StableFieldIdentityHasher()
-        hasher.combine(input.role ?? "unknown")
-        hasher.combine(input.subrole ?? "none")
+        hasher.combine("role", normalizedStableValue(input.role))
+        hasher.combine("subrole", normalizedStableValue(input.subrole))
         combineStableFingerprint(input.fingerprint, into: &hasher)
-        combineRoundedRect(input.elementRect, into: &hasher)
-        combineRoundedRect(input.windowRect, into: &hasher)
-        return hasher.finalizeInt()
+        combineRoundedRect(input.elementRect, label: "elementRect", into: &hasher)
+        combineRoundedRect(input.windowRect, label: "windowRect", into: &hasher)
+        return hasher.finalize()
     }
 
     private func combineStableFingerprint(
@@ -152,59 +345,65 @@ public struct FocusedFieldIdentityPolicy: Sendable {
         label: String,
         into hasher: inout StableFieldIdentityHasher
     ) {
+        hasher.combine(label, normalizedStableValue(value))
+    }
+
+    private func combineRoundedRect(
+        _ rect: CGRect?,
+        label: String,
+        into hasher: inout StableFieldIdentityHasher
+    ) {
+        guard let rect else {
+            hasher.combine(label, "missing")
+            return
+        }
+
+        hasher.combine(label, "x", Int(rect.origin.x.rounded()))
+        hasher.combine(label, "y", Int(rect.origin.y.rounded()))
+        hasher.combine(label, "width", Int(rect.width.rounded()))
+        hasher.combine(label, "height", Int(rect.height.rounded()))
+    }
+
+    private func normalizedStableValue(_ value: String?) -> String {
         let normalized = value?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
 
         guard let normalized, !normalized.isEmpty else {
-            hasher.combine("\(label):missing")
-            return
+            return "missing"
         }
 
-        hasher.combine(label)
-        hasher.combine(normalized)
-    }
-
-    private func combineRoundedRect(_ rect: CGRect?, into hasher: inout StableFieldIdentityHasher) {
-        guard let rect else {
-            hasher.combine("missing")
-            return
-        }
-
-        hasher.combine(Int(rect.origin.x.rounded()))
-        hasher.combine(Int(rect.origin.y.rounded()))
-        hasher.combine(Int(rect.width.rounded()))
-        hasher.combine(Int(rect.height.rounded()))
+        return normalized
     }
 }
 
 private struct StableFieldIdentityHasher {
-    private var hash: UInt64 = 14_695_981_039_346_656_037
-    private let prime: UInt64 = 1_099_511_628_211
+    private static let offsetBasis: UInt64 = 14_695_981_039_346_656_037
+    private static let prime: UInt64 = 1_099_511_628_211
+    private static let positiveMask: UInt64 = 0x7fff_ffff_ffff_ffff
 
-    mutating func combine(_ value: Int) {
-        combine(String(value))
+    private var value = offsetBasis
+
+    mutating func combine(_ parts: CustomStringConvertible...) {
+        for part in parts {
+            update(String(describing: part))
+            update(byte: 0xff)
+        }
+        update(byte: 0xfe)
     }
 
-    mutating func combine(_ value: String) {
-        mix(bytes: String(value.utf8.count).utf8)
-        mix(0)
-        mix(bytes: value.utf8)
-        mix(255)
+    func finalize() -> Int {
+        Int(value & Self.positiveMask)
     }
 
-    func finalizeInt() -> Int {
-        Int(truncatingIfNeeded: hash)
-    }
-
-    private mutating func mix(bytes: String.UTF8View) {
-        for byte in bytes {
-            mix(byte)
+    private mutating func update(_ string: String) {
+        for byte in string.utf8 {
+            update(byte: byte)
         }
     }
 
-    private mutating func mix(_ byte: UInt8) {
-        hash ^= UInt64(byte)
-        hash = hash &* prime
+    private mutating func update(byte: UInt8) {
+        value ^= UInt64(byte)
+        value = value &* Self.prime
     }
 }

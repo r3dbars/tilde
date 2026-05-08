@@ -46,8 +46,8 @@ struct CompatibilitySupportEvaluatorTests {
         #expect(evaluation.reasons.contains("Needs 15 shown suggestions for supported."))
     }
 
-    @Test("Low sample dogfood traces stay experimental")
-    func lowSampleDogfoodTracesStayExperimental() {
+    @Test("Dogfood traces stay blocked until prompt support is re-enabled")
+    func dogfoodTracesStayBlockedUntilPromptSupportIsReenabled() {
         let events = cleanEvents(
             appBundleIdentifier: "com.openai.codex",
             shown: 4,
@@ -57,8 +57,9 @@ struct CompatibilitySupportEvaluatorTests {
 
         let evaluation = evaluator.evaluate(bundleIdentifier: "com.openai.codex", events: events)
 
-        #expect(evaluation.state == .experimental)
-        #expect(evaluation.reasons.contains("Needs 10 shown suggestions for caveated."))
+        #expect(evaluation.state == .blocked)
+        #expect(evaluation.reasons.contains("Codex is diagnostics-only because it is sensitive."))
+        #expect(evaluation.reasons.contains("Codex cannot present suggestions safely yet."))
     }
 
     @Test("Blocked apps stay blocked")

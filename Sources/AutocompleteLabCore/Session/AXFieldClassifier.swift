@@ -12,9 +12,9 @@ public enum AXFieldKind: String, Codable, Equatable, Sendable, CaseIterable {
 
     public var suppressesSuggestionsByDefault: Bool {
         switch self {
-        case .search, .form, .secure, .url, .unprovenSurface:
+        case .search, .form, .secure, .url, .unprovenSurface, .unknown:
             true
-        case .multilineCompose, .singlelineCompose, .unknown:
+        case .multilineCompose, .singlelineCompose:
             false
         }
     }
@@ -135,9 +135,14 @@ public struct AXFieldClassifier: Equatable, Sendable {
             return AXFieldClassification(kind: .multilineCompose, reason: "multipleLines")
         }
 
-        if hasRole(input, "AXWebArea"),
-           input.textAfterCursorLength + input.textBeforeCursorLength > 0 || hasComposeHint(input) {
-            return AXFieldClassification(kind: .multilineCompose, reason: "webCompose")
+        if hasRole(input, "AXWebArea") {
+            if hasComposeHint(input) {
+                return AXFieldClassification(kind: .multilineCompose, reason: "webComposeHint")
+            }
+
+            if input.textAfterCursorLength + input.textBeforeCursorLength > 0 {
+                return AXFieldClassification(kind: .unprovenSurface, reason: "webAreaWithoutComposeHint")
+            }
         }
 
         if hasRole(input, "AXTextField") {

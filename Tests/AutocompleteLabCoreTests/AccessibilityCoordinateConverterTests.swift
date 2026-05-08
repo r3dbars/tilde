@@ -64,4 +64,47 @@ struct AccessibilityCoordinateConverterTests {
         #expect(probeRect.height == 20)
         #expect(screenFrame.intersects(probeRect))
     }
+
+    @Test("Finds screen above the main display")
+    func findsScreenAboveMainDisplay() {
+        let mainScreenHeight: CGFloat = 900
+        let mainScreen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let upperScreen = CGRect(x: 0, y: 900, width: 1440, height: 900)
+        let caretOnUpperScreen = CGRect(x: 640, y: -140, width: 0, height: 20)
+
+        let bestScreen = AccessibilityCoordinateConverter.bestScreenFrame(
+            containingAccessibilityRect: caretOnUpperScreen,
+            screenFrames: [mainScreen, upperScreen],
+            screenHeight: mainScreenHeight
+        )
+
+        #expect(bestScreen == upperScreen)
+    }
+
+    @Test("Finds screen below the main display")
+    func findsScreenBelowMainDisplay() {
+        let mainScreenHeight: CGFloat = 900
+        let lowerScreen = CGRect(x: 0, y: -900, width: 1440, height: 900)
+        let mainScreen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let caretOnLowerScreen = CGRect(x: 640, y: 1_040, width: 0, height: 20)
+
+        let bestScreen = AccessibilityCoordinateConverter.bestScreenFrame(
+            containingAccessibilityRect: caretOnLowerScreen,
+            screenFrames: [lowerScreen, mainScreen],
+            screenHeight: mainScreenHeight
+        )
+
+        #expect(bestScreen == lowerScreen)
+    }
+
+    @Test("Returns nil when no screen contains the converted caret")
+    func returnsNilWhenNoScreenContainsConvertedCaret() {
+        let bestScreen = AccessibilityCoordinateConverter.bestScreenFrame(
+            containingAccessibilityRect: CGRect(x: 4_000, y: 4_000, width: 0, height: 20),
+            screenFrames: [CGRect(x: 0, y: 0, width: 1440, height: 900)],
+            screenHeight: 900
+        )
+
+        #expect(bestScreen == nil)
+    }
 }

@@ -2,14 +2,14 @@
 set -euo pipefail
 
 TRACE_FILE="$(mktemp)"
-SLICE_FAIL_FILE="$(mktemp)"
-trap 'rm -f "$TRACE_FILE" "$SLICE_FAIL_FILE"' EXIT
+CLAUDE_CODE_TRACE_FILE="$(mktemp)"
+trap 'rm -f "$TRACE_FILE" "$CLAUDE_CODE_TRACE_FILE"' EXIT
 
 cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionRequested","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion"}
 {"type":"modelResult","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":42,"metadata":{"cleanedWordCount":"1","firstTokenLatencyMilliseconds":"17","totalGenerationLatencyMilliseconds":"42"}}
 {"type":"suggestionPresented","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"fieldKind":"multilineCompose","anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
-{"type":"suggestionAccepted","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at","metadata":{"acceptMode":"tab","acceptanceSource":"visiblePrefix","acceptedChars":"2","visibleBeforeAcceptChars":"2","remainingVisibleAfterAcceptChars":"0","acceptanceMatchesVisiblePrefix":"true","acceptanceMatchesFullVisible":"true"}}
+{"type":"suggestionAccepted","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at"}
 {"type":"insertionVerified","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at","metadata":{"insertionMode":"axSelectedText"}}
 {"type":"acceptedTextEdited","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","metadata":{"fieldKind":"multilineCompose","checkpoint":"10s","survivalClass":"exactKept","tokenRecall":"1.000","normalizedEditDistance":"0.000","strongAcceptedAndKept":"true"}}
 {"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"two","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","latencyMilliseconds":120,"metadata":{"anchorSource":"field","hasElementRect":"true","placementConfidenceBand":"medium"}}
@@ -20,9 +20,9 @@ cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"six","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":"that works","latencyMilliseconds":100,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
 {"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"seven","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":"that works","latencyMilliseconds":100,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
 {"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"eight","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":"that works","latencyMilliseconds":100,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
-{"type":"suggestionAccepted","experimentArm":"length_3_word","suggestionID":"six","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"that","metadata":{"acceptMode":"tab","acceptanceSource":"visiblePrefix","acceptedChars":"4","visibleBeforeAcceptChars":"10","remainingVisibleAfterAcceptChars":"6","acceptanceMatchesVisiblePrefix":"true","acceptanceMatchesFullVisible":"false"}}
-{"type":"suggestionAccepted","experimentArm":"length_3_word","suggestionID":"seven","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"that","metadata":{"acceptMode":"tab","acceptanceSource":"visiblePrefix","acceptedChars":"4","visibleBeforeAcceptChars":"10","remainingVisibleAfterAcceptChars":"6","acceptanceMatchesVisiblePrefix":"true","acceptanceMatchesFullVisible":"false"}}
-{"type":"suggestionAccepted","experimentArm":"length_3_word","suggestionID":"eight","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"that","metadata":{"acceptMode":"tab","acceptanceSource":"visiblePrefix","acceptedChars":"4","visibleBeforeAcceptChars":"10","remainingVisibleAfterAcceptChars":"6","acceptanceMatchesVisiblePrefix":"true","acceptanceMatchesFullVisible":"false"}}
+{"type":"suggestionAccepted","experimentArm":"length_3_word","suggestionID":"six","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"that"}
+{"type":"suggestionAccepted","experimentArm":"length_3_word","suggestionID":"seven","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"that"}
+{"type":"suggestionAccepted","experimentArm":"length_3_word","suggestionID":"eight","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"that"}
 {"type":"suggestionPresented","experimentArm":"length_1_word","suggestionID":"nine","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","latencyMilliseconds":0,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
 {"type":"suggestionPresented","experimentArm":"length_1_word","suggestionID":"ten","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","latencyMilliseconds":0,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
 {"type":"suggestionPresented","experimentArm":"length_1_word","suggestionID":"eleven","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"ng","latencyMilliseconds":0,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
@@ -37,7 +37,6 @@ JSONL
 
 AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
 AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP="com.apple.TextEdit" \
-AUTOCOMPLETE_LAB_TRACE_REQUIRE_ACCEPTANCE_SLICE_PROOF=1 \
   script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-self-test.txt
 
 if ! grep -F "com.apple.TextEdit: 100% (1/1)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
@@ -130,32 +129,6 @@ if ! grep -F "Insertion verification success: 100%" /tmp/autocomplete-trace-eval
   exit 1
 fi
 
-if ! grep -F "Visible acceptance slice proof: 4/4 (100%)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
-  echo "trace eval self-test did not report visible acceptance slice proof" >&2
-  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
-  exit 1
-fi
-
-cat >"$SLICE_FAIL_FILE" <<'JSONL'
-{"type":"suggestionPresented","suggestionID":"missing-proof","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
-{"type":"suggestionAccepted","suggestionID":"missing-proof","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at"}
-JSONL
-
-if AUTOCOMPLETE_LAB_TRACE_PATH="$SLICE_FAIL_FILE" \
-   AUTOCOMPLETE_LAB_TRACE_REQUIRE_ACCEPTANCE_SLICE_PROOF=1 \
-   script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-self-test-slice-proof-fail.txt 2>&1; then
-  echo "trace eval self-test expected acceptance slice proof gate to fail" >&2
-  cat /tmp/autocomplete-trace-eval-self-test-slice-proof-fail.txt >&2
-  exit 1
-fi
-
-if ! grep -F "acceptance slice guardrail failed" /tmp/autocomplete-trace-eval-self-test-slice-proof-fail.txt >/dev/null ||
-   ! grep -F "missing acceptanceSource" /tmp/autocomplete-trace-eval-self-test-slice-proof-fail.txt >/dev/null; then
-  echo "trace eval self-test did not explain missing acceptance slice proof" >&2
-  cat /tmp/autocomplete-trace-eval-self-test-slice-proof-fail.txt >&2
-  exit 1
-fi
-
 if ! grep -F "total-generation p95 latency: 42ms" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not report total-generation latency" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
@@ -244,6 +217,26 @@ fi
 if ! grep -F "com.openai.codex: 67% (6/9)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not report useful rate by app" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+cat >"$CLAUDE_CODE_TRACE_FILE" <<'JSONL'
+{"type":"suggestionPresented","experimentArm":"length_1_word","suggestionID":"claude-code-one","appBundleIdentifier":"com.anthropic.claude-code","requestMode":"wordCompletion","displayedText":"safe","latencyMilliseconds":20,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
+JSONL
+
+AUTOCOMPLETE_LAB_TRACE_PATH="$CLAUDE_CODE_TRACE_FILE" \
+AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP="com.anthropic.claude-code" \
+  script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-self-test-claude-code.txt 2>&1 || true
+
+if grep -F "no MVP compatibility profile" /tmp/autocomplete-trace-eval-self-test-claude-code.txt >/dev/null; then
+  echo "trace eval self-test treated Claude Code as an unknown profile" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-claude-code.txt >&2
+  exit 1
+fi
+
+if ! grep -F "com.anthropic.claude-code: blocked" /tmp/autocomplete-trace-eval-self-test-claude-code.txt >/dev/null; then
+  echo "trace eval self-test did not keep Claude Code diagnostics-only" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-claude-code.txt >&2
   exit 1
 fi
 

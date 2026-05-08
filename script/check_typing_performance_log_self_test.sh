@@ -271,6 +271,38 @@ if ! grep -F "event tap disabled reason=user-input" "$TMP_DIR/disabled-user-inpu
 fi
 
 cat >"$LOG_PATH" <<'EOF'
+2026-05-06T10:00:00Z keyboard-event-tap-start-failed
+EOF
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" script/check_typing_performance_log.sh >"$TMP_DIR/start-failed.txt" 2>&1; then
+  echo "typing performance self-test expected event-tap start failure to fail" >&2
+  cat "$TMP_DIR/start-failed.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "event tap start failed reason=unknown" "$TMP_DIR/start-failed.txt" >/dev/null; then
+  echo "typing performance self-test did not catch event-tap start failure" >&2
+  cat "$TMP_DIR/start-failed.txt" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-05-06T10:00:00Z keyboard-event-tap-failed-closed reason=timeout
+EOF
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" script/check_typing_performance_log.sh >"$TMP_DIR/failed-closed.txt" 2>&1; then
+  echo "typing performance self-test expected event-tap failed-closed marker to fail" >&2
+  cat "$TMP_DIR/failed-closed.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "event tap failed closed reason=timeout" "$TMP_DIR/failed-closed.txt" >/dev/null; then
+  echo "typing performance self-test did not catch event-tap failed-closed marker" >&2
+  cat "$TMP_DIR/failed-closed.txt" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
 2026-05-06T10:00:00Z keyboard-event-tap-disabled reason=timeout
 2026-05-06T10:00:01Z keyboard-event-tap-latency decision=consume durationMicros=500 key=tab
 EOF

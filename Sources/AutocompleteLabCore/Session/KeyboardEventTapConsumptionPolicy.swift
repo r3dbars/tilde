@@ -4,6 +4,7 @@ public struct KeyboardEventTapConsumptionInput: Equatable, Sendable {
     public let supportsOneWordAcceptance: Bool
     public let supportsFullAcceptance: Bool
     public let isInvalidatedByUserTyping: Bool
+    public let hasPendingAcceptedInsertionUndo: Bool
     public let acceptAllShortcut: AcceptAllShortcut
 
     public init(
@@ -12,6 +13,7 @@ public struct KeyboardEventTapConsumptionInput: Equatable, Sendable {
         supportsOneWordAcceptance: Bool,
         supportsFullAcceptance: Bool,
         isInvalidatedByUserTyping: Bool,
+        hasPendingAcceptedInsertionUndo: Bool = false,
         acceptAllShortcut: AcceptAllShortcut
     ) {
         self.key = key
@@ -19,6 +21,7 @@ public struct KeyboardEventTapConsumptionInput: Equatable, Sendable {
         self.supportsOneWordAcceptance = supportsOneWordAcceptance
         self.supportsFullAcceptance = supportsFullAcceptance
         self.isInvalidatedByUserTyping = isInvalidatedByUserTyping
+        self.hasPendingAcceptedInsertionUndo = hasPendingAcceptedInsertionUndo
         self.acceptAllShortcut = acceptAllShortcut
     }
 }
@@ -27,6 +30,11 @@ public struct KeyboardEventTapConsumptionPolicy: Equatable, Sendable {
     public init() {}
 
     public func shouldConsume(_ input: KeyboardEventTapConsumptionInput) -> Bool {
+        if input.key == .commandZ {
+            return input.hasPendingAcceptedInsertionUndo
+                && !input.isInvalidatedByUserTyping
+        }
+
         guard input.hasVisibleSuggestion,
               !input.isInvalidatedByUserTyping else {
             return false
@@ -45,6 +53,15 @@ public struct KeyboardEventTapConsumptionPolicy: Equatable, Sendable {
             return false
         case .other:
             return false
+        }
+    }
+
+    public func shouldReplayUnhandledConsumedKey(_ key: AutocompleteKey) -> Bool {
+        switch key {
+        case .tab, .backtick, .optionTab, .escape:
+            false
+        case .commandZ, .other:
+            true
         }
     }
 }

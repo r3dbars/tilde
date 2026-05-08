@@ -290,8 +290,16 @@ final class KeyboardEventTap: @unchecked Sendable {
 
         Task { @MainActor in
             let handled = handler(key, isAutorepeat, hadPassthroughKeyDown)
-            if !handled {
+            if !handled,
+               consumptionPolicy.shouldReplayUnhandledConsumedKey(key) {
                 replayKey(replay)
+            } else if !handled {
+                DiagnosticsLog.shared.record(
+                    "keyboard-event-tap-unhandled-consumed-key-dropped",
+                    metadata: [
+                        "key": key.diagnosticName
+                    ]
+                )
             }
         }
         return finish(nil, key: key, decision: "consume", startedAt: startedAt)
@@ -376,6 +384,13 @@ final class KeyboardEventTap: @unchecked Sendable {
         snapshotLock.lock()
         let snapshot = self.snapshot
 
+        if key == .commandZ,
+           snapshot.hasPendingAcceptedInsertionUndo,
+           !snapshot.isInvalidatedByUserTyping {
+            snapshotLock.unlock()
+            return true
+        }
+
         guard snapshot.hasVisibleSuggestion,
               !snapshot.isInvalidatedByUserTyping else {
             suppressKeyUntilNanos.removeAll(keepingCapacity: true)
@@ -397,6 +412,7 @@ final class KeyboardEventTap: @unchecked Sendable {
             supportsOneWordAcceptance: snapshot.supportsOneWordAcceptance,
             supportsFullAcceptance: snapshot.supportsFullAcceptance,
             isInvalidatedByUserTyping: snapshot.isInvalidatedByUserTyping,
+            hasPendingAcceptedInsertionUndo: snapshot.hasPendingAcceptedInsertionUndo,
             acceptAllShortcut: snapshot.acceptAllShortcut
         ))
 
@@ -512,6 +528,7 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
     var supportsOneWordAcceptance: Bool
     var supportsFullAcceptance: Bool
     var isInvalidatedByUserTyping: Bool
+    var hasPendingAcceptedInsertionUndo: Bool
     var acceptAllShortcut: AcceptAllShortcut
 
     init(
@@ -519,12 +536,14 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
         supportsOneWordAcceptance: Bool = false,
         supportsFullAcceptance: Bool = false,
         isInvalidatedByUserTyping: Bool = false,
+        hasPendingAcceptedInsertionUndo: Bool = false,
         acceptAllShortcut: AcceptAllShortcut = .backtick
     ) {
         self.hasVisibleSuggestion = hasVisibleSuggestion
         self.supportsOneWordAcceptance = supportsOneWordAcceptance
         self.supportsFullAcceptance = supportsFullAcceptance
         self.isInvalidatedByUserTyping = isInvalidatedByUserTyping
+        self.hasPendingAcceptedInsertionUndo = hasPendingAcceptedInsertionUndo
         self.acceptAllShortcut = acceptAllShortcut
     }
 }
@@ -610,18 +629,24 @@ private func keyboardEventTapCallback(
     return eventTap.handle(type: type, event: event)
 }
 
+func autocompletePhysicalKey(forMacVirtualKeyCode keyCode: Int64) -> AutocompletePhysicalKey {
+    switch keyCode {
+    case 6:
+        .z
+    case 48:
+        .tab
+    case 50:
+        .backtick
+    case 53:
+        .escape
+    default:
+        .other
+    }
+}
+
 private extension AutocompletePhysicalKey {
     init(keyCode: Int64) {
-        switch keyCode {
-        case 48:
-            self = .tab
-        case 50:
-            self = .backtick
-        case 53:
-            self = .escape
-        default:
-            self = .other
-        }
+        self = autocompletePhysicalKey(forMacVirtualKeyCode: keyCode)
     }
 }
 

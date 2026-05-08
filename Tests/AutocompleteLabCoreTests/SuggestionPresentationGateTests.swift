@@ -31,18 +31,18 @@ struct SuggestionPresentationGateTests {
         ))
     }
 
-    @Test("streamed sentence partials use phrase streaming rules")
-    func streamedSentencePartialsUsePhraseStreamingRules() {
+    @Test("streamed sentence partials wait for a fuller thought")
+    func streamedSentencePartialsWaitForFullerThought() {
         let gate = SuggestionPresentationGate()
 
         #expect(!gate.shouldPresent(
-            CompletionSuggestion(text: " The"),
+            CompletionSuggestion(text: " The next"),
             mode: .sentenceContinuation,
             phase: .streamingPartial
         ))
 
         #expect(gate.shouldPresent(
-            CompletionSuggestion(text: " The next"),
+            CompletionSuggestion(text: " The next step"),
             mode: .sentenceContinuation,
             phase: .streamingPartial
         ))
@@ -120,6 +120,46 @@ struct SuggestionPresentationGateTests {
             mode: .phraseContinuation,
             state: &state,
             nowMilliseconds: 230
+        ))
+    }
+
+    @Test("sentence streaming allows one partial while phrase streaming allows two")
+    func sentenceStreamingAllowsOnePartialWhilePhraseStreamingAllowsTwo() {
+        let gate = SuggestionPresentationGate(
+            minimumStreamingPhraseWords: 2,
+            minimumStreamingSentenceWords: 3,
+            minimumStreamingPhraseCharacterDelta: 4,
+            minimumStreamingIntervalMilliseconds: 0,
+            maximumStreamingPartialPresentations: 2,
+            maximumStreamingSentencePartialPresentations: 1
+        )
+        var phraseState = StreamingPresentationState()
+        var sentenceState = StreamingPresentationState()
+
+        #expect(gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this", maxVisibleWords: 3),
+            mode: .phraseContinuation,
+            state: &phraseState,
+            nowMilliseconds: 100
+        ))
+        #expect(gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this quieter", maxVisibleWords: 3),
+            mode: .phraseContinuation,
+            state: &phraseState,
+            nowMilliseconds: 110
+        ))
+
+        #expect(gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " The next step", maxVisibleWords: 4),
+            mode: .sentenceContinuation,
+            state: &sentenceState,
+            nowMilliseconds: 100
+        ))
+        #expect(!gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " The next step is", maxVisibleWords: 4),
+            mode: .sentenceContinuation,
+            state: &sentenceState,
+            nowMilliseconds: 110
         ))
     }
 }
