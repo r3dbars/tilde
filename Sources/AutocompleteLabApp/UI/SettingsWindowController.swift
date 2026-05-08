@@ -176,6 +176,10 @@ struct SettingsCurrentAppState: Equatable {
             return "Proof: turn on suggestions for this app first."
         }
 
+        if bundleIdentifier == "com.openai.codex" {
+            return "Proof: include AUTOCOMPLETE_LAB_CODEX_PROOF, press Tab once, and do not press Enter."
+        }
+
         if profile.supportsOneWordAcceptance && !profile.supportsFullAcceptance {
             return "Proof: use disposable prompt text, press Tab once, and do not press Enter."
         }

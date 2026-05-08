@@ -373,6 +373,8 @@ should stay lower until those rows are closed.
 - Codex prompt proof now also requires explicit confirmation that the disposable
   prompt contains `AUTOCOMPLETE_LAB_CODEX_PROOF`; unmarked Codex proof slices
   fail before they can be recorded.
+- Settings now mirrors that Codex proof marker requirement so the in-app proof
+  copy cannot guide an operator into a recorder-rejected prompt pass.
 - Output cleaning suppresses more assistant-y starts and rejects unrelated
   whole-word completions in word-completion mode. It also rejects
   recommendation, rewrite, and next-action candidates so a separate product
