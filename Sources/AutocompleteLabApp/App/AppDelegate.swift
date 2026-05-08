@@ -1876,7 +1876,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             role: context.role,
             fingerprintText: context.fingerprint.searchableText,
             elementRect: context.elementRect,
-            windowRect: context.windowRect
+            windowRect: context.windowRect,
+            proofModeEnabled: activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            selectedTextLength: context.selectedTextLength
         )
         return PromptTextAreaMatch(canSuggest: decision.canSuggest, reason: decision.reason)
     }
@@ -4549,9 +4553,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         keyboardEventTap?.suppressPassthroughObservation(
             until: Date().addingTimeInterval(
-                shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile) ? 0.75 : 0.25
+                shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile)
+                    || shouldUseCodexProofDirectInsertion(profile: profile) ? 0.75 : 0.25
             )
         )
+
+        if shouldUseCodexProofDirectInsertion(profile: profile) {
+            let succeeded = insertCodexProofText(acceptedText)
+            DiagnosticsLog.shared.record(
+                "insert",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "mode": InsertionMode.axValueReplacement.rawValue,
+                    "success": String(succeeded),
+                    "skippedModes": skippedModes
+                        .map(\.rawValue)
+                        .sorted()
+                        .joined(separator: ",")
+                ]
+            )
+            if succeeded {
+                focusedTextPollingPause.pause(
+                    now: Date(),
+                    durationMilliseconds: postInsertionPollPauseMilliseconds
+                )
+            }
+            return succeeded
+        }
 
         if shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile) {
             let succeeded = insertClaudeCodeTerminalHostProofText(acceptedText)
@@ -4610,6 +4638,101 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && currentSuggestionRequestMode == .wordCompletion
             && profile.insertionMode == .clipboardFallbackOptIn
             && profile.requiresNoSubmitAcceptanceProof
+    }
+
+    private func shouldUseCodexProofDirectInsertion(profile: CompatibilityProfile) -> Bool {
+        currentSuggestionAppBundleIdentifier == "com.openai.codex"
+            && profile.bundleIdentifier == "com.openai.codex"
+            && currentSuggestionRequestMode == .wordCompletion
+            && profile.insertionMode == .axValueReplacement
+            && profile.requiresNoSubmitAcceptanceProof
+            && activeAppProofBundleIdentifiers.contains("com.openai.codex")
+    }
+
+    private func insertCodexProofText(_ acceptedText: String) -> Bool {
+        let bundleIdentifier = "com.openai.codex"
+        let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+        guard !acceptedText.isEmpty,
+              let lastTextSnapshot,
+              lastTextSnapshot.textBeforeCursor.contains(marker),
+              lastTextSnapshot.textAfterCursor.isEmpty,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == bundleIdentifier else {
+            DiagnosticsLog.shared.record(
+                "codex-proof-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "precondition-failed"
+                ]
+            )
+            return false
+        }
+
+        let previousText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
+        let replacementText = lastTextSnapshot.textBeforeCursor + acceptedText + lastTextSnapshot.textAfterCursor
+        let cursorUTF16Offset = lastTextSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        guard let textArea = Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: previousText,
+            containing: marker,
+            maxDepth: 32
+        ) else {
+            DiagnosticsLog.shared.record(
+                "codex-proof-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "marked-text-area-not-found"
+                ]
+            )
+            return false
+        }
+
+        AXUIElementSetAttributeValue(textArea, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        let valueResult = AXUIElementSetAttributeValue(
+            textArea,
+            kAXValueAttribute as CFString,
+            replacementText as CFTypeRef
+        )
+        guard valueResult == .success else {
+            DiagnosticsLog.shared.record(
+                "codex-proof-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "set-value-failed",
+                    "axResult": String(valueResult.rawValue)
+                ]
+            )
+            return false
+        }
+
+        Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+        Thread.sleep(forTimeInterval: 0.05)
+        if !Self.axSelectedTextRangeMatches(textArea, location: cursorUTF16Offset, length: 0) {
+            Self.postCommandRightKey()
+            Thread.sleep(forTimeInterval: 0.05)
+            Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+        }
+
+        let currentText = Self.axStringAttribute(textArea, kAXValueAttribute)
+        let cursorMatches = Self.axSelectedTextRangeMatches(textArea, location: cursorUTF16Offset, length: 0)
+        let succeeded = currentText == replacementText && cursorMatches
+        DiagnosticsLog.shared.record(
+            "codex-proof-insert",
+            metadata: [
+                "app": bundleIdentifier,
+                "success": String(succeeded),
+                "source": "markedAXTextArea",
+                "cursorMatches": String(cursorMatches),
+                "previousBeforeChars": String(lastTextSnapshot.textBeforeCursor.count),
+                "acceptedChars": String(acceptedText.count),
+                "currentChars": String(currentText?.count ?? -1)
+            ]
+        )
+        return succeeded
     }
 
     private func insertClaudeCodeTerminalHostProofText(_ acceptedText: String) -> Bool {
@@ -4708,8 +4831,88 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         axAttribute(element, kAXRoleAttribute) as? String
     }
 
+    nonisolated private static func axStringAttribute(_ element: AXUIElement, _ attribute: String) -> String? {
+        axAttribute(element, attribute) as? String
+    }
+
     nonisolated private static func axChildren(_ element: AXUIElement) -> [AXUIElement] {
         axAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+    }
+
+    nonisolated private static func axTextAreaDescendant(
+        in element: AXUIElement,
+        matchingValue expectedValue: String,
+        containing marker: String,
+        maxDepth: Int
+    ) -> AXUIElement? {
+        guard maxDepth >= 0 else {
+            return nil
+        }
+
+        if axRole(element) == "AXTextArea",
+           let value = axStringAttribute(element, kAXValueAttribute),
+           value == expectedValue,
+           value.contains(marker) {
+            return element
+        }
+
+        for child in axChildren(element) {
+            if let match = axTextAreaDescendant(
+                in: child,
+                matchingValue: expectedValue,
+                containing: marker,
+                maxDepth: maxDepth - 1
+            ) {
+                return match
+            }
+        }
+
+        return nil
+    }
+
+    nonisolated private static func setAXSelectedTextRange(
+        _ element: AXUIElement,
+        location: Int,
+        length: Int
+    ) {
+        var range = CFRange(location: location, length: length)
+        if let rangeValue = AXValueCreate(.cfRange, &range) {
+            AXUIElementSetAttributeValue(
+                element,
+                kAXSelectedTextRangeAttribute as CFString,
+                rangeValue
+            )
+        }
+    }
+
+    nonisolated private static func axSelectedTextRangeMatches(
+        _ element: AXUIElement,
+        location: Int,
+        length: Int
+    ) -> Bool {
+        guard let value = axAttribute(element, kAXSelectedTextRangeAttribute) else {
+            return false
+        }
+
+        var range = CFRange(location: -1, length: -1)
+        guard AXValueGetValue(value as! AXValue, .cfRange, &range) else {
+            return false
+        }
+
+        return range.location == location && range.length == length
+    }
+
+    nonisolated private static func postCommandRightKey() {
+        let source = CGEventSource(stateID: .hidSystemState)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: false) else {
+            return
+        }
+
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
     }
 
     nonisolated private static func axDescendant(

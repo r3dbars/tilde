@@ -346,17 +346,16 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             renderMode: .inlineAdjacent,
             insertionMode: .axValueReplacement,
             fallbackRenderMode: .floatingMirror,
-            fallbackInsertionMode: .keyEvents,
             fieldIdentityMode: .stableBounds,
             anchorLadder: [.caret],
-            knownFailureModes: ["prompt editor may need synthetic caret", "detached whole-box suggestions are disallowed"],
+            knownFailureModes: ["prompt editor may need synthetic caret", "detached whole-box suggestions are disallowed", "key-event insertion can land at the start of the prompt"],
             allowsFieldAnchor: false,
             allowsWindowAnchor: false,
             supportsFullAcceptance: false,
             requiresNoSubmitAcceptanceProof: true,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Dogfood target. Prefer caret-bound inline suggestions and AX value replacement in the prompt editor. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
+            notes: "Dogfood target. Prefer caret-bound inline suggestions and AX value replacement in the prompt editor. Do not fall back to key-event insertion because Codex can keep the AX cursor at the start of the prompt after typed text. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claude-code",
