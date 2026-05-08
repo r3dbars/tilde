@@ -24,9 +24,14 @@ public struct CompletionConfidenceDecision: Equatable, Sendable {
 
 public struct CompletionConfidencePolicy: Equatable, Sendable {
     public let lowConfidenceThreshold: Int
+    public let maximumDisplayLatencyMilliseconds: Int
 
-    public init(lowConfidenceThreshold: Int = 60) {
+    public init(
+        lowConfidenceThreshold: Int = 60,
+        maximumDisplayLatencyMilliseconds: Int = 750
+    ) {
         self.lowConfidenceThreshold = max(0, min(100, lowConfidenceThreshold))
+        self.maximumDisplayLatencyMilliseconds = max(1, maximumDisplayLatencyMilliseconds)
     }
 
     public func decision(
@@ -56,6 +61,11 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
         } else if latencyMilliseconds > 500 {
             score -= 10
             reasons.append("slow-over-500ms")
+        }
+
+        if latencyMilliseconds > maximumDisplayLatencyMilliseconds {
+            score -= 100
+            reasons.append("too-slow-to-display")
         }
 
         if mode == .phraseContinuation {
