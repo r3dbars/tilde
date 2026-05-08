@@ -63,6 +63,42 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
     }
 
+    @Test("Terminal-host proof accepts Claude Code prompt glyph when marker is on the input line")
+    func terminalHostProofAcceptsMarkedClaudeCodePromptGlyph() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code",
+            focusedText: "❯ AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF Can we make this",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+    }
+
+    @Test("Terminal-host proof keeps shell-like prompt glyph blocked without marker")
+    func terminalHostProofKeepsUnmarkedPromptGlyphBlocked() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF",
+            focusedText: "❯ git status",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.shellPromptDetected))
+    }
+
+    @Test("Terminal-host proof still rejects dollar shell prompts even with marker")
+    func terminalHostProofStillRejectsDollarShellPromptWithMarker() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF",
+            focusedText: "$ AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF git status",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.shellPromptDetected))
+    }
+
     @Test("Unsupported terminal hosts remain blocked")
     func unsupportedTerminalHostsRemainBlocked() {
         let context = ClaudeCodeTerminalHostProofContext(
