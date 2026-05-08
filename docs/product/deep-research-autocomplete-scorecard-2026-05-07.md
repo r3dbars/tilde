@@ -24,9 +24,10 @@ It is not yet magical by the research bar. The biggest remaining misses are:
   and proof that accepted-and-kept tuning improves real usage.
 - Phrase and sentence quality now has conservative candidate ranking and score
   margin suppression, but still needs real model proof and learned utility.
-- Cross-app proof is honest but incomplete for Codex, Claude Code, Claude
-  desktop, default-Chrome web-editor AX exposure, and more production-editor
-  variants.
+- Cross-app proof is honest but incomplete for Codex, Claude Code,
+  default-Chrome web-editor AX exposure, and more production-editor variants.
+  Claude desktop now has one-word no-submit proof, but its synthetic-caret
+  placement still needs baseline-level polish.
 - Normal typing proof now includes exact 1,200-, 4,800-, and 12,000-character
   strict TextEdit endurance passes, and the current harness revalidates named
   TextEdit focus in shorter CGEvent batches with bounded cleanup. The latest
@@ -209,8 +210,8 @@ Remaining high-impact gaps:
   current local trace corpus fails the proof gate because it predates display
   scoring, candidate-selection metadata, proof fingerprints, kept-horizon
   events, and researched trigger delays.
-- Cross-app proof rows still need fresh screenshot-backed acceptance slices for
-  prompt apps.
+- Cross-app proof rows still need screenshot-backed acceptance slices for Codex
+  and Claude Code prompt apps.
 - Real Chrome editor-engine proof now passes under isolated forced-renderer AX,
   but still needs default Chrome focused web-editor AX context and caret-quality
   placement before the browser-editor scores can reach target.
@@ -298,7 +299,7 @@ Weighted total: **79.2/100**, rounded to **79/100**.
 | Bullets profile | 84 | Bullet/checklist/numbered current-line shape is now detected without item text, feeds trace metadata and prompt guidance, maps generic list-shaped writing to the bullets profile, keeps AI/search/form safety profiles ahead of list shape, and runtime ranking penalizes repeated bullet/checklist markers. | Screenshot-backed same-slice accepts in Notes/TextEdit plus checklist undo proof. |
 | Forms profile | 84 | Field-kind resolver maps forms/secure/url to a suppressed-by-default form profile with full accept disabled, and runtime candidate ranking keeps generated form text below the display threshold. | Proven non-sensitive free-form exceptions only. |
 | Search profile | 84 | Search field kind maps to a suppressed-by-default search profile with full accept disabled, and runtime candidate ranking keeps generated search text below the display threshold. | Proven across browser/native search fields. |
-| AI chat profile | 84 | Codex/Claude profiles are conservative, one-word biased, block submit/run/Enter suggestions, disable full accept, and runtime candidate ranking suppresses submit-like action text if the model emits it anyway. | Same-slice visual plus one-word no-submit proof for Codex, Claude Code, Claude desktop. |
+| AI chat profile | 86 | Codex/Claude profiles are conservative, one-word biased, block submit/run/Enter suggestions, disable full accept, and runtime candidate ranking suppresses submit-like action text if the model emits it anyway. Claude desktop now has same-slice strict visual proof with one verified Tab accept and no submit signal. | Same-slice visual plus one-word no-submit proof for Codex and Claude Code, plus baseline-level Claude desktop placement polish. |
 | Accepted-and-kept learning | 88 | Live survival events update a persisted app/field/mode/profile learning store that feeds display policy and decays with a 14-day half-life. Diagnostics now exposes accepted-kept rates and the current display-affinity probability/samples/threshold from trace metadata. | Prove thresholds with fresh real-app traces and add tuning controls. |
 | Typed-over learning | 88 | Typed-over trace, 5s prefix-family cooldown, 30s repeated typed-over escalation, and repeated-miss suppression exist; repeated-miss scores now decay by half-life instead of poisoning a prefix indefinitely, and Diagnostics exposes the current trace-safe miss score/threshold. | Prove thresholds with fresh real-app traces. |
 | Ignored learning | 84 | Ignored hides now record a weak repetition signal scaled by visible lifetime, with trace-safe weight/total metadata, the same decaying repeated-miss bucket, and Diagnostics visibility into passive ignored miss score/lifetime. | Prove thresholds with fresh real-app traces and separate passive ignored from explicit dismiss in diagnostics. |
@@ -306,7 +307,7 @@ Weighted total: **79.2/100**, rounded to **79/100**.
 | Style memory | 92 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, question rates, short-suffix rate, and average final-token length with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, Settings can clear it, and Diagnostics exposes the trace-safe aggregate sketch. | Add tuning controls and fresh real-app trace validation. |
 | Annoyance index | 90 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, exposes current-field/session silence in Settings and the menu, records manual field pauses as scoped trace events, records placement uncertainty as caret-geometry failures, and Diagnostics now exposes annoyance score, active quiet-mode scope, and signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
 | Replay-first test rig | 84 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, placement metadata, trusted caret placement, stale cancellation, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. It can replay a fresh line-bounded trace slice, and the proof manifest now parses matched manual-smoke trace slices, requires bounded proof ranges, verifies accepts plus insertion verification, checks screenshot-backed strict visual trace events, and rejects stale proof fingerprints. | Replay recorded real app sessions with screenshots, accepts, kept horizon, and latency after every app/runtime change. |
-| Cross-app proof honesty | 98 | App proof matrix explicitly keeps failing rows non-A until evidence exists, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, and the proof manifest now verifies TextEdit, Chrome chat-like, real Monaco/ProseMirror under forced renderer AX, Obsidian, and Apple Notes title/body/checklist with bounded current-fingerprint traces while still failing strict mode on prompt-app and default-Chrome/editor-placement gaps. | Close every pending proof row. |
+| Cross-app proof honesty | 98 | App proof matrix explicitly keeps failing rows non-A until evidence exists, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, and the proof manifest now verifies TextEdit, Chrome chat-like, real Monaco/ProseMirror under forced renderer AX, Obsidian, Apple Notes title/body/checklist, and Claude desktop with bounded current-fingerprint traces while still failing strict mode on Codex, Claude Code, and default-Chrome/editor-placement gaps. | Close every pending proof row. |
 
 ## Baseline Evidence Notes
 
@@ -491,7 +492,7 @@ these are true.
 - Notes title, body, and checklist are green with separate bounded proof rows.
 - Codex gets screenshot plus one-word accept plus no-submit in one strict slice.
 - Claude Code gets safe live prompt proof.
-- Claude desktop gets fresh screenshot-backed one-word no-submit proof.
+- Claude desktop placement improves from functional proof to baseline-level polish.
 
 ### P2 - Runtime Polish
 

@@ -92,7 +92,7 @@ Research-backed caret-locking work now lives in
   - [x] Chrome text field and local editor fixture one-word and full accept.
   - [ ] Codex one-word no-submit accept; full accept stays disabled until separately proven.
   - [ ] Claude Code one-word no-submit accept; full accept stays disabled until separately proven.
-  - [ ] Claude desktop one-word no-submit accept; full accept stays disabled until separately proven.
+  - [x] Claude desktop one-word no-submit accept; full accept stays disabled until separately proven.
 
 - [x] Build the local eval loop.
   - [x] Add local prompt/output tracing for private local tuning.
