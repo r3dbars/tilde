@@ -94,6 +94,20 @@ struct SuggestionOrchestratorTests {
         #expect(partials.visibleTexts == [" make"])
         #expect(suggestion?.visibleText == " make this feel")
     }
+
+    @MainActor
+    @Test("Updating the engine changes future suggestions")
+    func updateEngineChangesFutureSuggestions() async throws {
+        let orchestrator = SuggestionOrchestrator(engine: FixedCompletionEngine(text: " old path"))
+        let request = CompletionRequest(textBeforeCursor: "Can we", maxVisibleWords: 3)
+
+        let first = try await orchestrator.suggestion(for: request) { _ in }
+        orchestrator.updateEngine(FixedCompletionEngine(text: " new path"))
+        let second = try await orchestrator.suggestion(for: request) { _ in }
+
+        #expect(first?.visibleText == " old path")
+        #expect(second?.visibleText == " new path")
+    }
 }
 
 private final class PartialRecorder: @unchecked Sendable {
@@ -124,5 +138,13 @@ private struct EchoCompletionEngine: CompletionEngine {
     ) async throws -> CompletionSuggestion? {
         onPartialSuggestion(CompletionSuggestion(text: " make", maxVisibleWords: request.maxVisibleWords))
         return try await suggestion(for: request)
+    }
+}
+
+private struct FixedCompletionEngine: CompletionEngine {
+    let text: String
+
+    func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
+        CompletionSuggestion(text: text, maxVisibleWords: request.maxVisibleWords)
     }
 }

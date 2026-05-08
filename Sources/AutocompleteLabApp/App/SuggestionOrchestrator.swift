@@ -3,7 +3,7 @@ import AutocompleteLabCore
 
 @MainActor
 final class SuggestionOrchestrator {
-    private let engine: any CompletionEngine
+    private let engineBox: CompletionEngineBox
     private let wordCompletionRanker: WordCompletionCandidateRanker
     private var requestGate = SuggestionRequestGate()
     private var currentRequestStorage: CompletionRequest?
@@ -12,7 +12,7 @@ final class SuggestionOrchestrator {
         engine: any CompletionEngine,
         wordCompletionRanker: WordCompletionCandidateRanker = WordCompletionCandidateRanker()
     ) {
-        self.engine = engine
+        self.engineBox = CompletionEngineBox(engine: engine)
         self.wordCompletionRanker = wordCompletionRanker
     }
 
@@ -62,6 +62,10 @@ final class SuggestionOrchestrator {
         requestGate.invalidate()
     }
 
+    func updateEngine(_ engine: any CompletionEngine) {
+        engineBox.update(engine)
+    }
+
     nonisolated func fastWordSuggestion(
         for textBeforeCursor: String,
         recentWords: [String]
@@ -86,10 +90,32 @@ final class SuggestionOrchestrator {
         for request: CompletionRequest,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
     ) async throws -> CompletionSuggestion? {
-        try await engine.suggestion(
+        let engine = engineBox.current()
+        return try await engine.suggestion(
             for: request,
             onPartialSuggestion: onPartialSuggestion
         )
+    }
+}
+
+private final class CompletionEngineBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var engine: any CompletionEngine
+
+    init(engine: any CompletionEngine) {
+        self.engine = engine
+    }
+
+    func current() -> any CompletionEngine {
+        lock.withLock {
+            engine
+        }
+    }
+
+    func update(_ engine: any CompletionEngine) {
+        lock.withLock {
+            self.engine = engine
+        }
     }
 }
 

@@ -5587,6 +5587,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runtimeWarmTask?.cancel()
         modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
         engine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
+        suggestionOrchestrator.updateEngine(engine)
         currentRuntimeState = .unavailable(reason: "model install completed")
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
         refreshRuntimeChrome()
