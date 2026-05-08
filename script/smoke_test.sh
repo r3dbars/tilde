@@ -18,6 +18,7 @@ swift test
 ./script/check_model_asset_self_test.sh
 ./script/manual_smoke_self_test.sh
 ./script/real_app_smoke_self_test.sh
+./script/manual_proof_queue_self_test.sh
 ./script/check_score_targets_self_test.sh
 ./script/check_visual_placement_evidence_self_test.sh
 ./script/check_visual_placement_evidence.sh

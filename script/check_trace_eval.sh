@@ -300,6 +300,8 @@ def overlay_flicker(event):
 def severe_failure(event):
     metadata = event.get("metadata") or {}
     return (
+        metadata.get("severe") == "true"
+        or
         event.get("type") in {"insertionFailed", "appDisabled"}
         or (event.get("type") == "caretGeometryFailed" and metadata.get("severe") == "true")
         or metadata.get("focusStealing") == "true"
