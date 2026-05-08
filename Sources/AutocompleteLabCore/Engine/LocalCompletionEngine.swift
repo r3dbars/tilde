@@ -136,15 +136,11 @@ public final class LocalCompletionEngine: CompletionEngine, @unchecked Sendable 
 
     private func clean(_ rawOutput: String, request: CompletionRequest) -> CompletionSuggestion? {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: request.maxVisibleWords)
-        guard let suggestion = cleaner.clean(rawOutput) else {
-            return nil
-        }
-
-        let trimmed = CompletionPrefixTrimmer.trim(suggestion.text, after: request.textBeforeCursor)
-        return CompletionSuggestion(
-            text: trimmed,
-            maxVisibleWords: request.maxVisibleWords
-        ).nonEmpty
+        return cleaner.clean(
+            rawOutput,
+            after: request.textBeforeCursor,
+            mode: request.mode
+        )
     }
 }
 

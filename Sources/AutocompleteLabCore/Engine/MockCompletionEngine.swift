@@ -13,8 +13,10 @@ public final class MockCompletionEngine: CompletionEngine, @unchecked Sendable {
         let lowercased = trimmed.lowercased()
         let text: String
 
-        if let partialWordCompletion = Self.partialWordCompletion(after: trimmed) {
-            text = partialWordCompletion
+        if request.mode == .wordCompletion, lowercased.hasSuffix("dic") {
+            text = "dictation"
+        } else if request.mode == .wordCompletion, lowercased.hasSuffix("ar") {
+            text = "are"
         } else if lowercased.hasSuffix("i think") {
             text = " we should ship this"
         } else if lowercased.hasSuffix("can we") {
@@ -26,34 +28,8 @@ public final class MockCompletionEngine: CompletionEngine, @unchecked Sendable {
         }
 
         return CompletionSuggestion(
-            text: CompletionPrefixTrimmer.trim(text, after: request.textBeforeCursor),
+            text: CompletionPrefixTrimmer.trim(text, after: trimmed),
             maxVisibleWords: request.maxVisibleWords
-        ).nonEmpty
-    }
-
-    private static func partialWordCompletion(after text: String) -> String? {
-        guard text.last?.isWhitespace != true,
-              let fragment = text.split(whereSeparator: { $0.isWhitespace }).last?.lowercased(),
-              fragment.count >= 2 else {
-            return nil
-        }
-
-        let candidates = [
-            "hello",
-            "this project",
-            "that sounds good",
-            "sounds good",
-            "thanks for asking",
-            "there is a better way",
-            "would be great",
-            "works well",
-            "instant",
-            "project",
-            "because"
-        ]
-
-        return candidates.first { candidate in
-            candidate.hasPrefix(fragment)
-        }.map { " " + $0 }
+        )
     }
 }

@@ -12,8 +12,14 @@ struct AutocompleteFlowTests {
 
         var session = SuggestionSession(visibleSuggestion: suggestion)
 
-        #expect(session.acceptNextWord() == " we")
-        #expect(session.acceptAllVisible() == " should ship this")
+        let nextWord = session.nextWordAcceptance()
+        #expect(nextWord == " we")
+        #expect(session.visibleSuggestion?.visibleText == " we should ship this")
+        session.commitNextWordAcceptance(nextWord ?? "")
+
+        let remaining = session.allVisibleAcceptance()
+        #expect(remaining == " should ship this")
+        session.commitAllVisibleAcceptance(remaining ?? "")
         #expect(!session.hasVisibleSuggestion)
     }
 
@@ -48,27 +54,13 @@ struct AutocompleteFlowTests {
         #expect(suggestion?.visibleText == "nd keep moving")
     }
 
-    @Test("Mock engine completes active partial words")
-    func mockSuggestionCompletesActivePartialWords() async throws {
-        let engine = MockCompletionEngine()
-        let thisSuggestion = try await engine.suggestion(
-            for: CompletionRequest(textBeforeCursor: "Hey how are we going to do th", maxVisibleWords: 8)
-        )
-        let soundSuggestion = try await engine.suggestion(
-            for: CompletionRequest(textBeforeCursor: "Hey that soun", maxVisibleWords: 8)
-        )
-
-        #expect(thisSuggestion?.visibleText == "is project")
-        #expect(soundSuggestion?.visibleText == "ds good")
-    }
-
-    @Test("Mock engine suppresses unmatched typo fragments")
-    func mockSuggestionSuppressesUnmatchedTypoFragments() async throws {
+    @Test("Word completion mode completes only the current word")
+    func wordCompletionModeCompletesOnlyCurrentWord() async throws {
         let engine = MockCompletionEngine()
         let suggestion = try await engine.suggestion(
-            for: CompletionRequest(textBeforeCursor: "Hey\nHry", maxVisibleWords: 8)
+            for: CompletionRequest(textBeforeCursor: "dic", maxVisibleWords: 8, mode: .wordCompletion)
         )
 
-        #expect(suggestion == nil)
+        #expect(suggestion?.visibleText == "tation")
     }
 }

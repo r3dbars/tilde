@@ -1,0 +1,125 @@
+import Testing
+@testable import AutocompleteLabCore
+
+@Suite("Suggestion presentation gate")
+struct SuggestionPresentationGateTests {
+    @Test("streamed phrase partials wait for enough visible words")
+    func streamedPhrasePartialsWaitForEnoughWords() {
+        let gate = SuggestionPresentationGate()
+
+        #expect(!gate.shouldPresent(
+            CompletionSuggestion(text: " ready."),
+            mode: .phraseContinuation,
+            phase: .streamingPartial
+        ))
+
+        #expect(gate.shouldPresent(
+            CompletionSuggestion(text: " ready to"),
+            mode: .phraseContinuation,
+            phase: .streamingPartial
+        ))
+    }
+
+    @Test("final phrase suggestions can still be short")
+    func finalPhraseSuggestionsCanStillBeShort() {
+        let gate = SuggestionPresentationGate()
+
+        #expect(gate.shouldPresent(
+            CompletionSuggestion(text: " ready."),
+            mode: .phraseContinuation,
+            phase: .final
+        ))
+    }
+
+    @Test("streamed sentence partials use phrase streaming rules")
+    func streamedSentencePartialsUsePhraseStreamingRules() {
+        let gate = SuggestionPresentationGate()
+
+        #expect(!gate.shouldPresent(
+            CompletionSuggestion(text: " The"),
+            mode: .sentenceContinuation,
+            phase: .streamingPartial
+        ))
+
+        #expect(gate.shouldPresent(
+            CompletionSuggestion(text: " The next"),
+            mode: .sentenceContinuation,
+            phase: .streamingPartial
+        ))
+    }
+
+    @Test("word completions do not wait for phrase streaming rules")
+    func wordCompletionsBypassPhraseStreamingRules() {
+        let gate = SuggestionPresentationGate()
+
+        #expect(gate.shouldPresent(
+            CompletionSuggestion(text: "tation", maxVisibleWords: 1),
+            mode: .wordCompletion,
+            phase: .streamingPartial
+        ))
+    }
+
+    @Test("streaming suppresses duplicate and tiny same-word changes")
+    func streamingSuppressesDuplicateAndTinySameWordChanges() {
+        let gate = SuggestionPresentationGate(minimumStreamingPhraseCharacterDelta: 3)
+
+        #expect(!gate.shouldPresent(
+            CompletionSuggestion(text: " make this"),
+            mode: .phraseContinuation,
+            phase: .streamingPartial,
+            previousVisibleText: " make this"
+        ))
+
+        #expect(!gate.shouldPresent(
+            CompletionSuggestion(text: " make this."),
+            mode: .phraseContinuation,
+            phase: .streamingPartial,
+            previousVisibleText: " make this"
+        ))
+
+        #expect(gate.shouldPresent(
+            CompletionSuggestion(text: " make this work"),
+            mode: .phraseContinuation,
+            phase: .streamingPartial,
+            previousVisibleText: " make this"
+        ))
+    }
+
+    @Test("streaming partials are paced and capped")
+    func streamingPartialsArePacedAndCapped() {
+        let gate = SuggestionPresentationGate(
+            minimumStreamingPhraseCharacterDelta: 6,
+            minimumStreamingIntervalMilliseconds: 50,
+            maximumStreamingPartialPresentations: 2
+        )
+        var state = StreamingPresentationState()
+
+        #expect(gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this"),
+            mode: .phraseContinuation,
+            state: &state,
+            nowMilliseconds: 100
+        ))
+
+        #expect(!gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this work"),
+            mode: .phraseContinuation,
+            state: &state,
+            nowMilliseconds: 130
+        ))
+
+        #expect(gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this work now"),
+            mode: .phraseContinuation,
+            state: &state,
+            nowMilliseconds: 160
+        ))
+
+        #expect(!gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this work now please"),
+            mode: .phraseContinuation,
+            state: &state,
+            nowMilliseconds: 230
+        ))
+    }
+}

@@ -4,8 +4,8 @@ import Testing
 
 @Suite("Local completion engine")
 struct LocalCompletionEngineTests {
-    @Test("Uses Gemma 4 E2B config with short output and reasoning off")
-    func usesShortGemmaConfig() async throws {
+    @Test("Uses MVP runtime config with short output and reasoning off")
+    func usesMVPRuntimeConfig() async throws {
         let runner = FakeLocalRunner(result: .success(" keep it tiny"))
         let engine = LocalCompletionEngine(runner: runner)
 
@@ -14,9 +14,9 @@ struct LocalCompletionEngineTests {
         )
 
         let configuration = await runner.lastConfiguration
-        #expect(configuration?.model == .gemma4E2B)
-        #expect(configuration?.maxGeneratedTokens == 16)
-        #expect(configuration?.maxVisibleWords == 3)
+        #expect(configuration?.model == .qwen35FourB)
+        #expect(configuration?.maxGeneratedTokens == 10)
+        #expect(configuration?.maxVisibleWords == 5)
         #expect(configuration?.reasoningEnabled == false)
     }
 
@@ -67,7 +67,7 @@ struct LocalCompletionEngineTests {
             for: CompletionRequest(textBeforeCursor: "I wrote test ", maxVisibleWords: 8)
         )
 
-        #expect(suggestion?.visibleText == "and keep moving")
+        #expect(suggestion?.visibleText == " and keep moving")
     }
 
     @Test("Falls back to mock when runtime echoes earlier context")
@@ -79,11 +79,11 @@ struct LocalCompletionEngineTests {
             for: CompletionRequest(textBeforeCursor: "Hey. How are we going to do th", maxVisibleWords: 8)
         )
 
-        #expect(suggestion?.visibleText == "is project")
+        #expect(suggestion?.visibleText == " and keep moving")
     }
 
-    @Test("Suppresses runtime echoes for unmatched typo fragments")
-    func suppressesRuntimeEchoesForUnmatchedTypoFragments() async throws {
+    @Test("Keeps cleaned runtime suggestions for unmatched typo fragments")
+    func keepsCleanedRuntimeSuggestionsForUnmatchedTypoFragments() async throws {
         let runner = FakeLocalRunner(result: .success("Hey that sounds"))
         let engine = LocalCompletionEngine(runner: runner)
 
@@ -91,7 +91,7 @@ struct LocalCompletionEngineTests {
             for: CompletionRequest(textBeforeCursor: "Hey\nHry", maxVisibleWords: 8)
         )
 
-        #expect(suggestion == nil)
+        #expect(suggestion?.visibleText == " Hey that sounds")
     }
 
     @Test("Factory selects mock when app-owned runtime is missing")
