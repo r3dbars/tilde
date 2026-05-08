@@ -55,7 +55,7 @@ declare -a APPS=(
   "Chrome real ProseMirror|Chrome|com.google.Chrome|full|prosemirror-real|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-real"
   "Chrome chat-like no-submit|Chrome|com.google.Chrome|full|chat-like|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture chat-like"
   "Codex|Codex|com.openai.codex|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
-  "Claude Code|Claude Code|com.anthropic.claude-code|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
+  "Claude Code|Claude Code|com.anthropic.claude-code|one-word|default|terminal-host adapter required; direct com.anthropic.claude-code proof is diagnostics-only"
   "Claude desktop|Claude|com.anthropic.claudefordesktop|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
 )
 
@@ -250,7 +250,11 @@ for app_entry in "${APPS[@]}"; do
     missing=$((missing + 1))
     pending_apps+=("$display_name - $run_hint")
   else
-    echo "- $display_name: pending (run $run_hint)"
+    if [[ "$run_hint" == terminal-host* ]]; then
+      echo "- $display_name: pending ($run_hint)"
+    else
+      echo "- $display_name: pending (run $run_hint)"
+    fi
     missing=$((missing + 1))
     pending_apps+=("$display_name - $run_hint")
   fi

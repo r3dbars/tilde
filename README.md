@@ -32,9 +32,11 @@ Target apps for the first pass:
 - Notes
 - Obsidian
 - Chrome text fields
-- Codex and Claude Code prompt fields
+- Codex and Claude desktop prompt fields
 
-Mail is diagnostics-only until compose insertion is proven safe.
+Mail is diagnostics-only until compose insertion is proven safe. Claude Code
+CLI sessions are also diagnostics-only for now because the live typing surface
+is a terminal host, not the background-only `com.anthropic.claude-code` bundle.
 
 ## Model Decision
 

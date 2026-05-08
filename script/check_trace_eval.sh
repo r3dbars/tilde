@@ -318,10 +318,16 @@ profiles = {
     "com.apple.mail": {"display": "Mail", "can_present": False, "sensitive": True},
     "com.google.Chrome": {"display": "Chrome", "can_present": True, "sensitive": False},
     "com.openai.codex": {"display": "Codex", "can_present": True, "sensitive": False},
+    "com.anthropic.claude-code": {"display": "Claude Code", "can_present": False, "sensitive": True},
+    "com.anthropic.claudefordesktop": {"display": "Claude", "can_present": True, "sensitive": False},
 }
 denylist = {
     "com.apple.Terminal",
     "com.googlecode.iterm2",
+    "dev.warp.Warp",
+    "com.mitchellh.ghostty",
+    "net.kovidgoyal.kitty",
+    "org.alacritty",
     "com.apple.keychainaccess",
     "com.1password.1password",
     "com.agilebits.onepassword7",
