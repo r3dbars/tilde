@@ -209,6 +209,53 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Empty final preserves visible streaming suggestion for same request")
+    func emptyFinalPreservesVisibleStreamingSuggestionForSameRequest() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: "com.example.editor",
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let ticket = orchestrator.beginRequest(
+            CompletionRequest(textBeforeCursor: "Can we", suggestionID: "stream")
+        ).ticket
+
+        #expect(orchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
+            suggestionID: "stream",
+            currentSuggestionID: "stream",
+            ticket: ticket,
+            fieldIdentity: field,
+            currentFieldIdentity: field,
+            hasVisibleSuggestion: true
+        ))
+        #expect(!orchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
+            suggestionID: "stream",
+            currentSuggestionID: "other",
+            ticket: ticket,
+            fieldIdentity: field,
+            currentFieldIdentity: field,
+            hasVisibleSuggestion: true
+        ))
+        #expect(!orchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
+            suggestionID: "stream",
+            currentSuggestionID: "stream",
+            ticket: ticket,
+            fieldIdentity: field,
+            currentFieldIdentity: nil,
+            hasVisibleSuggestion: true
+        ))
+        #expect(!orchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
+            suggestionID: "stream",
+            currentSuggestionID: "stream",
+            ticket: ticket,
+            fieldIdentity: field,
+            currentFieldIdentity: field,
+            hasVisibleSuggestion: false
+        ))
+    }
+
+    @MainActor
     @Test("Invalidating clears the current request and blocks stale tickets")
     func invalidateClearsCurrentRequestAndBlocksTickets() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())

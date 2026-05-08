@@ -40,6 +40,7 @@ This is not yet a 98/100 real human dogfood score. It means the prompt, OCR cont
 - Codex dogfood typing now uses a focused-text fast path: direct text snapshot plus synthetic text-area caret, skipping expensive AX range geometry and attributed text reads during the polling loop.
 - Codex polling now also skips window lookup, attribute fingerprint reads, and settable checks in the hot loop; acceptance still verifies through the normal insertion path.
 - Partial-word completion now reuses safe words from visible OCR context in the instant local ranker, so local terms like `Obsidian`, `Transcripted`, and `permission` can complete without waiting for the model.
+- Streaming model suggestions now persist when the final model result is empty, instead of blinking out after a useful partial suggestion is already visible.
 
 ## Latest Heartbeat Pass
 
@@ -111,6 +112,15 @@ Time: 2026-05-08T23:36:00Z
 - Fix: `VisiblePageContext` now exposes sanitized OCR candidate words, and word completion feeds those words into the fast local ranker before falling back to the model.
 - Prompt fallback was tightened too: partial product names, app names, permissions, people, project terms, and repeated OCR words should complete the visible local word before a generic dictionary guess.
 - Verification: focused prompt/OCR/ranker tests passed, the 100-scenario magic-writing harness now asserts the exact instant suffixes `ian`, `ted`, and `sion`, the full Swift suite passed with 975 tests, the app relaunched on `qwen3-0.6b`, and the fresh typing-performance gate reported focused-text poll p95 2 ms, max 4 ms, zero slow markers, and zero skipped polls.
+
+## Latest Streaming Persistence Pass
+
+Time: 2026-05-08T23:42:00Z
+
+- Fresh live dogfood trace slice after the OCR word-completion patch: 280 events, 12 visible suggestions, p50 first-visible latency 99 ms, p95 147 ms, zero insertion failures, zero caret placement failures, and one accepted TextEdit word completion kept through 10 seconds / blur.
+- The same slice exposed a persistence bug: model-stream suggestions were visible, but the final empty model result hid them almost immediately. Trace lifetime p50 was 43 ms, p95 193 ms, with 9 hidden-ignored events.
+- Fix: when a streaming partial is already visible for the same request and field, an empty final model result now records the empty result but keeps the visible suggestion on screen.
+- Verification: focused `SuggestionOrchestratorTests` and `MagicWritingOCRPromptEvalTests` passed, the full Swift suite passed with 976 tests, the app relaunched on `qwen3-0.6b`, and the post-relaunch typing-performance gate reported focused-text poll p95 0 ms, max 8 ms, zero slow markers, and zero skipped polls.
 
 ## 100 Test Situations
 

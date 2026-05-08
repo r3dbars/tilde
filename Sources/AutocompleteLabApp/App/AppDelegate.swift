@@ -4017,6 +4017,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 await MainActor.run {
                     let latencyMilliseconds = max(0, Int(Date().timeIntervalSince(requestStartedAt) * 1000))
+                    self.suggestionOrchestrator.finishStreamingPresentation(suggestionID: suggestionID)
                     guard self.suggestionOrchestrator.allows(
                         requestTicket,
                         fieldIdentity: fieldIdentity,
@@ -4032,6 +4033,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         windowRect: context.windowRect
                     )
                     guard let suggestion, !suggestion.isEmpty else {
+                        let shouldKeepStreamedSuggestion = self.suggestionOrchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
+                            suggestionID: suggestionID,
+                            currentSuggestionID: self.currentSuggestionID,
+                            ticket: requestTicket,
+                            fieldIdentity: fieldIdentity,
+                            currentFieldIdentity: self.currentFieldIdentity,
+                            hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion
+                        )
                         RawAutocompleteTraceLog.shared.record(
                             type: .suggestionSuppressed,
                             suggestionID: suggestionID,
@@ -4043,7 +4052,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             textAfterCursor: request.textAfterCursor,
                             latencyMilliseconds: latencyMilliseconds,
                             reason: "empty-suggestion",
-                            metadata: requestMetadata
+                            metadata: requestMetadata.merging([
+                                "keptVisibleStreamingSuggestion": String(shouldKeepStreamedSuggestion)
+                            ]) { current, _ in current }
                         )
                         self.recordSuggestionEvent(
                             "suggestion-blocked",
@@ -4053,6 +4064,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 "reason": "empty-suggestion"
                             ]
                         )
+                        if shouldKeepStreamedSuggestion {
+                            self.setSuggestionDecision("Shown: kept streamed suggestion")
+                            self.repositionVisibleSuggestion(context: context, profile: profile)
+                            return
+                        }
+
                         self.hideSuggestion()
                         return
                     }
@@ -4149,7 +4166,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         triggerReason: "model-result",
                         candidateSelectionMetadata: appModelResultMetadata
                     )
-                    self.suggestionOrchestrator.finishStreamingPresentation(suggestionID: suggestionID)
                 }
             } catch {
                 await MainActor.run {
