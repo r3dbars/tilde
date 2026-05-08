@@ -30,8 +30,9 @@ and Notes checklist now have screenshot-backed proof, prompt-app full accept is 
 separate full-accept no-submit proof exists, app-specific slow AX reads cool
 down without blocking typing, slow no-context AX reads cool down immediately,
 single slow AX reads with context now throttle polling and drop the stale read,
-TextEdit now has a live typing soak where event tap p95 stayed at 35us,
-app support status is visible in Settings and the menu, Diagnostics
+TextEdit now has a full 10-minute live typing soak with exact 12,000-character
+verification, no focused-poll skips, and normal key capture staying idle unless
+a suggestion is visible, app support status is visible in Settings and the menu, Diagnostics
 separates key-capture health from AX-poll health, placement confidence is
 visible without suggestion text, placement uncertainty hides stale ghosts and
 feeds quiet mode, active quiet mode is visible in Diagnostics, Settings now
@@ -60,7 +61,7 @@ unsure. Wrong-place text is worse than no suggestion.
 
 | Category | Weight | Current | Target | Why |
 | --- | ---: | ---: | ---: | --- |
-| Typing must feel untouched | 15 | 95 | 100 | Live TextEdit soak proves event tap p95 max 35us, p99 max 95us, max 161us over 600 samples with zero slow markers and zero tap disable events. A fresh strict 1-minute TextEdit endurance pass verified exactly 1,200 typed characters with event-tap p95 max 36us, p99 max 95us, focused-poll max 88ms, and zero focused-poll skips. A 10-minute endurance soak command now exists and is self-tested, but its live unattended wrapper still needs to complete cleanly before this can be 100. |
+| Typing must feel untouched | 15 | 98 | 100 | The strict TextEdit endurance harness now creates and captures the disposable target through UI automation, restores the clipboard, and refocuses before each segment. Fresh live proof passed exact 1,200-, 4,800-, and 12,000-character TextEdit runs. The full 10-minute pass had no tap disables, focused-poll p95 max 48ms, focused-poll max 96ms, 13 under-threshold slow markers, and zero focused-poll skips. Normal typing no longer requires event-tap samples because keyboard capture intentionally starts only while a suggestion is visible. The last gap to 100 is reducing long-document focused-poll slow markers to zero or proving they are visually/user-invisible under real hardware typing. |
 | Visual placement and caret alignment | 18 | 74 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, inline mode now hides when less than one useful word fits after the caret, screenshot-derived correction is wired behind explicit per-app screenshot tracing, learned visual offsets now expire when target app version, screen, or field shape changes, Chrome chat-like, Obsidian, and Notes title/body/checklist now have proof, and Diagnostics exposes placement confidence without suggestion text. Codex same-slice accept/no-submit proof plus Claude Code and Claude desktop are still blockers. |
 | Acceptance safety | 10 | 90 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Prompt-app one-word no-submit proof is still incomplete. |
 | Cross-app reliability | 10 | 78 | 100 | The proof matrix now has 12 screenshot artifacts, Notes title/body/checklist are all split out, and the app exposes green/yellow/diagnostics-only/unsupported status. Prompt apps and more real production editors are still pending proof. |
@@ -94,7 +95,7 @@ Weighted score: 88/100.
 
 ## Category 1: Typing Must Feel Untouched
 
-Current score: 95/100.
+Current score: 98/100.
 
 Native target: the user cannot tell the app is running unless a suggestion is
 visible.
@@ -119,8 +120,9 @@ visible.
 - [x] Slow app-specific AX calls with no focused text context should disable suggestions immediately for that app.
 - [x] Single slow focused-text AX calls with context should throttle polling and drop that stale read.
 - [x] Diagnostics should distinguish event-tap latency from AX polling latency in the UI.
-- [x] Live TextEdit soak proves the event-tap key path stays in microseconds while typing.
-- [x] A 10-minute disposable TextEdit endurance soak command exists and is self-tested.
+- [x] Normal typing proof keeps keyboard capture idle until a suggestion is visible.
+- [x] A 10-minute disposable TextEdit endurance soak command exists, is self-tested, and has a current live exact-text pass.
+- [x] Zero missed or swallowed keys in the latest 10-minute TextEdit typing session.
 - [ ] Focused-text AX polling should stay below the warning threshold during long active typing so diagnostics do not show 200ms-class off-main reads.
 
 ### Acceptance Bar
