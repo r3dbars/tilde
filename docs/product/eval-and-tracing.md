@@ -173,11 +173,15 @@ For repeated dogfood sessions, save a mark and report from it later:
 # type for a while
 ./script/trace_mark.sh --eval com.openai.codex
 ./script/trace_mark.sh --replay
+./script/trace_mark.sh --replay smoke-slice
 ```
 
 `--eval` runs the trace evaluation script from the saved mark. `--replay`
 runs `AutocompleteTraceReplay` against only the fresh JSONL rows after that
-mark, so stale historical trace rows do not mask current proof.
+mark, so stale historical trace rows do not mask current proof. The default
+replay profile is `full`; use `smoke-slice` for bounded real-app smoke proof
+that does not try to prove stale cancellation, annoyance, final kept horizon,
+or model-result candidate metadata in the same slice.
 
 For a frozen replay slice, capture both bounds:
 
@@ -186,6 +190,7 @@ START_LINE=$(wc -l < "$HOME/Library/Logs/AutocompleteLab/traces.jsonl" | tr -d '
 # type for a while
 END_LINE=$(wc -l < "$HOME/Library/Logs/AutocompleteLab/traces.jsonl" | tr -d ' ')
 swift run AutocompleteTraceReplay \
+  --profile smoke-slice \
   --start-line "$START_LINE" \
   --end-line "$END_LINE" \
   "$HOME/Library/Logs/AutocompleteLab/traces.jsonl"

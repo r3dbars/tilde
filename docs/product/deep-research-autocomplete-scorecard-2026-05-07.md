@@ -169,19 +169,23 @@ Pass 1 shipped these improvements:
 - Replay now also requires every presented suggestion in the proof slice to
   include placement anchor, confidence band, and caret-rect metadata, with at
   least one trusted caret or synthetic-caret placement.
+- Replay now requires accepted insertions to have matching insertion
+  verification, so a displayed suggestion cannot count as replay proof unless
+  the accepted text actually landed.
 - Replay now requires at least one stale cancellation and at least one annoyance
   signal, so those research outcomes cannot be skipped by a happy-path-only
   trace.
 - Notes body now has bounded screenshot-backed proof with two verified accepts,
   and accepted word-completion suffixes now count as kept when the completed
   current token keeps that suffix.
-- The replay CLI now accepts `--start-line` and `--end-line`, and
-  `script/trace_mark.sh --replay` replays only the fresh trace slice after a
-  saved mark instead of mixing new proof with stale historical logs. Fresh
-  proof can now be isolated and replayed, but it still needs a passing fresh
-  real-app slice.
+- The replay CLI now accepts `--start-line`, `--end-line`, and `--profile
+  full|smoke-slice`, and `script/trace_mark.sh --replay [profile]` replays
+  only the fresh trace slice after a saved mark instead of mixing new proof
+  with stale historical logs. Fresh bounded smoke proof can now be isolated
+  from the stricter full-scenario gate.
 - `script/autocomplete_trace_replay_self_test.sh` proves the CLI and
-  `trace_mark --replay` skip stale rows and honor frozen slice bounds.
+  `trace_mark --replay` skip stale rows, honor frozen slice bounds, and select
+  the smoke-slice profile.
 - Screenshot placement now has a pure pixel offset detector that can identify
   bounded ghost/panel drift, reject blank or low-contrast images, reject
   excessive outliers, and feed the existing trusted visual correction policy.
@@ -215,7 +219,8 @@ Pass 1 shipped these improvements:
   proof-gated Chrome trust path. The remaining Chrome editor gap is production
   editor variants, not default AX absence or local real-editor caret quality.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
-  /path/to/traces.jsonl`.
+  /path/to/traces.jsonl`; bounded smoke slices can use `--profile
+  smoke-slice`.
 
 Remaining high-impact gaps:
 
@@ -242,10 +247,11 @@ Remaining high-impact gaps:
 - Atomic undo now has an app-level restore path and fresh TextEdit proof, but
   still needs per-app proof that Command-Z restores the accepted insertion
   cleanly in real editors beyond TextEdit.
-- Replay-first real-app proof is still missing. The command exists, but the
-  current local trace corpus fails the proof gate because it predates display
-  scoring, candidate-selection metadata, proof fingerprints, kept-horizon
-  events, and researched trigger delays.
+- Full replay-first real-app proof is still missing. The command exists, and
+  fresh bounded Chrome Monaco/ProseMirror smoke slices now pass the
+  `smoke-slice` profile, but the full gate still needs model-result
+  candidate metadata, stale cancellation, annoyance, and final kept-horizon
+  proof in one current real-app pass.
 - Cross-app proof rows still need a screenshot-backed acceptance slice for
   Codex and a live screenshot/no-submit terminal-host slice before Claude Code
   can count as prompt proof.
@@ -277,7 +283,7 @@ Baseline scorecard from the initial audit:
 | Category | Weight | Score | Weighted | Initial audit read |
 | --- | ---: | ---: | ---: | --- |
 | Product boundary and writer agency | 8 | 87 | 7.0 | Correctly avoids ambient rewrite/action behavior and keeps suggestions short, but sentence continuation can still drift into planning. |
-| Trigger gate and boundary timing | 14 | 71 | 9.9 | Strong stale/deletion/focus basics, researched delays, quiet/normal/eager cadence control, and profile-aware fresh-paragraph suppression are now live; fresh replay proof is still needed. |
+| Trigger gate and boundary timing | 14 | 71 | 9.9 | Strong stale/deletion/focus basics, researched delays, quiet/normal/eager cadence control, and profile-aware fresh-paragraph suppression are now live; bounded smoke replay proof exists, but full replay proof is still needed. |
 | Ranking and expected utility | 12 | 70 | 8.4 | Word ranking, candidate score margins, accepted-kept suppression, and a bounded learned utility adjustment exist; phrase/sentence ranking still needs trace-tuned semantic utility. |
 | Context and prompt hygiene | 9 | 73 | 6.6 | Context is small and local, but lacks field metadata, style sketch, recent kept suffixes, and a hard `<NO_SUGGESTION>` prompt path. |
 | Output shape and cleanup | 8 | 89 | 7.1 | Cleaner is one of the strongest parts of the app, and now suppresses phrase restarts or visible typed-word duplicates that survive prefix trimming. |
@@ -285,10 +291,10 @@ Baseline scorecard from the initial audit:
 | Ghost text UX and controls | 10 | 94 | 9.4 | One suggestion, Tab next word, full accept when allowed, direct accept-all shortcut editing, Esc dismiss, stale hiding, current-field/session silence, per-app force-mirror control, app-level Command-Z restore for accepted insertions, explicit copy-only fallback status when inline is unsafe, and trace-safe proof that full accept matches the visible text while Tab is a visible-prefix accept. |
 | Mode profiles and cross-app safety | 10 | 78 | 7.8 | Strong app profiles, a user-visible per-app mirror override, a proof-only terminal-host Claude Code adapter, and copy-only fallback stance for non-sensitive diagnostics-only or untrusted-placement cases now exist, but behavior modes are not first-class for every email, notes, bullets, docs, code, forms, search, and AI chat surface. |
 | Learning, annoyance, accepted-and-kept loop | 12 | 67 | 8.0 | Accepted-kept learning now affects both affinity and utility, and user-selected quiet/normal/eager aggressiveness can tune eagerness without clearing learning; the loop still needs fresh real-app threshold proof. |
-| Metrics, replay, and proof gates | 5 | 85 | 4.3 | Trace/report scripts are strong, and Settings can now start per-app screenshot proof from the current app; true replay-first real-app rig is still missing. |
+| Metrics, replay, and proof gates | 5 | 87 | 4.4 | Trace/report scripts are strong, Settings can start per-app screenshot proof from the current app, and fresh bounded real-app slices now pass a replay smoke profile; full replay proof still needs all scenario signals in one current pass. |
 | Architecture and tests | 2 | 92 | 1.8 | Good policy/test structure, and app-proof command execution is now behind a small coordinator; AppDelegate still owns too much suggestion orchestration. |
 
-Weighted total: **80.6/100**, rounded to **81/100**.
+Weighted total: **80.7/100**, rounded to **81/100**.
 
 ## Exact Research Items
 
@@ -344,7 +350,7 @@ Weighted total: **80.6/100**, rounded to **81/100**.
 | Esc learning | 87 | Esc dismiss now records annoyance, suppresses eligible fields until blur, starts a 15s app/field/mode/prefix cooldown, repeated Esc on the same prefix escalates to 60s, and Diagnostics exposes prefix cooldown duration/escalation metadata plus the keyed prefix-family HMAC token. | Prove real-app thresholds. |
 | Style memory | 92 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, question rates, short-suffix rate, and average final-token length with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, Settings can clear it, and Diagnostics exposes the trace-safe aggregate sketch. | Add tuning controls and fresh real-app trace validation. |
 | Annoyance index | 91 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, exposes current-field/session silence and quiet/normal/eager aggressiveness in Settings, records manual field pauses as scoped trace events, records placement uncertainty as caret-geometry failures, and Diagnostics now exposes annoyance score, active quiet-mode scope, and signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
-| Replay-first test rig | 84 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, placement metadata, trusted caret placement, stale cancellation, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. It can replay a fresh line-bounded trace slice, and the proof manifest now parses matched manual-smoke trace slices, requires bounded proof ranges, verifies accepts plus insertion verification, checks screenshot-backed strict visual trace events, and rejects stale proof fingerprints. | Replay recorded real app sessions with screenshots, accepts, kept horizon, and latency after every app/runtime change. |
+| Replay-first test rig | 87 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, placement metadata, trusted caret placement, accepted insertion verification, stale cancellation, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. It can replay fresh line-bounded trace slices, including a `smoke-slice` profile that passes current Chrome Monaco/ProseMirror bounded real-app proof while keeping the default full gate strict. The proof manifest parses matched manual-smoke trace slices, requires bounded proof ranges, verifies accepts plus insertion verification, checks screenshot-backed strict visual trace events, and rejects stale proof fingerprints. | Replay recorded real app sessions with screenshots, accepts, final kept horizon, stale cancellation, annoyance, model candidate metadata, and latency after every app/runtime change. |
 | Cross-app proof honesty | 99 | App proof matrix explicitly keeps failing rows non-A until evidence exists, unsupported/sensitive apps expose an intentional off or copy-only stance instead of silent breakage, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, and the proof manifest now verifies TextEdit, Chrome chat-like, real Monaco/ProseMirror under forced renderer AX and default Chrome AX with proof-gated inline synthetic-caret placement, Obsidian, Apple Notes title/body/checklist, and Claude desktop with bounded current-fingerprint traces while requiring every compatibility profile to have owner/safety coverage. Chrome-hosted Google Docs, Notion, Slack, and Discord now have a trace-safe unsupported-surface block until proof exists. Strict mode still fails on Codex, terminal-hosted Claude Code, and production-editor variant gaps. | Close every pending proof row. |
 
 ## Baseline Evidence Notes
@@ -572,8 +578,10 @@ these are true.
    app/field.
 19. Done: add trace-safe bullet/checklist/numbered current-line shape, prompt
    guidance, generic bullet-profile activation, and trigger/activation tests.
-20. Partial: build the replay-first proof command. The command exists; a fresh
-   post-pass trace proof still has to pass.
+20. Partial: build the replay-first proof command. The command exists, and
+   fresh Chrome Monaco/ProseMirror bounded slices pass the `smoke-slice`
+   replay profile. The full replay profile still needs a current all-scenario
+   real-app pass.
 21. Pending: capture screenshot-backed same-slice bullet/checklist accepts in
    Notes/TextEdit and prove Command-Z restore on those accepted items.
 22. Done: make ignored-hidden repetition learning weak, lifetime-aware, and
@@ -627,8 +635,7 @@ these are true.
 41. Done: make replay proof require stale cancellation and annoyance outcomes
    instead of treating them as side metrics.
 42. Done: add replay line slicing and `trace_mark --replay` so fresh proof can
-   be isolated and replayed without stale historical trace rows. A passing fresh
-   real-app slice is still required.
+   be isolated and replayed without stale historical trace rows.
 43. Done: add a replay CLI self-test that fails an unsliced stale fixture,
    passes the fresh slice, checks frozen bounds, and covers `trace_mark
    --replay`.
@@ -639,6 +646,11 @@ these are true.
 45. Done: scope trusted visual offsets to target app version, screen, and field
    shape so manual and future screenshot corrections expire when the layout
    context changes.
+46. Done: add `full` and `smoke-slice` replay profiles. The default full gate
+   still requires candidate-selection metadata, stale cancellation, final kept
+   horizon, and annoyance signals; the smoke-slice gate proves bounded
+   trigger/display/fingerprint/placement/accepted-insertion evidence for
+   fresh real-app slices.
 
 ## Goal Status
 
@@ -654,15 +666,35 @@ Replay proof status:
 - Command: `swift run AutocompleteTraceReplay
   /Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`
 - Fresh-slice command after a saved mark: `./script/trace_mark.sh --replay`.
+- Bounded smoke-slice command after a saved mark: `./script/trace_mark.sh
+  --replay smoke-slice`.
 - Frozen-slice command: `swift run AutocompleteTraceReplay --start-line
   "$START_LINE" --end-line "$END_LINE"
   /Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`.
+- Frozen bounded smoke-slice command: `swift run AutocompleteTraceReplay
+  --profile smoke-slice --start-line "$START_LINE" --end-line "$END_LINE"
+  /Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`.
+- Fresh bounded Chrome smoke proof now passes `smoke-slice`:
+  `--start-line 56348 --end-line 56359` for `monaco-real-default` passed with
+  11 events, 2/2 trigger delay coverage, 2/2 display score coverage, 11/11
+  proof fingerprint freshness, 2/2 trusted placement coverage, 2/2 accepted
+  insertion coverage, and 2 short-horizon survival events.
+- Fresh bounded Chrome smoke proof also passes `smoke-slice`:
+  `--start-line 56360 --end-line 56373` for `prosemirror-real-default` passed
+  with 13 events, 2/2 trigger delay coverage, 2/2 display score coverage,
+  13/13 proof fingerprint freshness, 2/2 trusted placement coverage, 2/2
+  accepted insertion coverage, 4 short-horizon survival events, and 2 final
+  kept-horizon events.
 - Result on the current local trace corpus with proof-fingerprint gating: proof gate
   **failed**, as expected for stale pre-pass traces.
 - Key failures: trigger delay coverage 3% (198/7186), display score coverage
   0% (6/6411), candidate selection coverage 0% (4/4001), and proof fingerprint
   coverage 0% (0/24336). Placement metadata coverage is now also checked and is
   21% (1336/6411, trusted=1153) on the stale corpus.
+- The default `full` profile remains intentionally stricter than the bounded
+  smoke profile: it still requires current model-result candidate metadata,
+  stale cancellation, final kept-horizon, and annoyance evidence in the proof
+  slice.
 - Useful proof still present in the stale corpus: 25,229 events, 3,267
   presented suggestions, 289 stale cancellations, 12 kept-horizon events,
   6 app latency slices, 2 mode latency slices, and 976 annoyance signals.
