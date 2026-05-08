@@ -2028,6 +2028,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     outcome: String(describing: result),
                     reason: "insert-verification-failed",
                     metadata: [
+                        "acceptanceID": acceptanceID,
                         "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                         "currentBeforeChars": String(context.textBeforeCursor.count)
                     ]
@@ -2056,7 +2057,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 fieldIdentity: baseline.fieldIdentity.traceDescription,
                 requestMode: baseline.requestMode?.rawValue ?? "",
                 acceptedText: acceptedText,
-                outcome: "verified"
+                outcome: "verified",
+                metadata: ["acceptanceID": acceptanceID]
             )
             recordAnnoyance(
                 .accepted,
@@ -4485,6 +4487,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func deleteLocalPrivacyLogs(refreshSettings: Bool = true) {
+        acceptanceSurvivalTasks.values
+            .flatMap { $0 }
+            .forEach { $0.cancel() }
+        acceptanceSurvivalTasks.removeAll()
+        Task {
+            await acceptanceSurvivalChecker.cancelAll()
+        }
         RawAutocompleteTraceLog.shared.deleteAll()
         compatibilityLearningStore.disableScreenshotTracing()
         DiagnosticsLog.shared.deleteAll()
@@ -4867,10 +4876,17 @@ private extension AppDelegate {
     }
 
     func loadDisabledApps() {
-        let persisted = UserDefaults.standard.stringArray(forKey: Self.disabledAppsDefaultsKey) ?? []
-        disabledBundleIdentifiers = DisabledAppSelection(
-            persistedBundleIdentifiers: persisted
-        ).bundleIdentifiers
+        let defaultsKeyExists = UserDefaults.standard.object(forKey: Self.disabledAppsDefaultsKey) != nil
+        let selection = DisabledAppSelection(
+            persistedBundleIdentifiers: defaultsKeyExists
+                ? UserDefaults.standard.stringArray(forKey: Self.disabledAppsDefaultsKey) ?? []
+                : nil,
+            defaultOffProfileStore: profileStore
+        )
+        disabledBundleIdentifiers = selection.bundleIdentifiers
+        if !defaultsKeyExists {
+            persistDisabledApps()
+        }
     }
 
     func persistDisabledApps() {

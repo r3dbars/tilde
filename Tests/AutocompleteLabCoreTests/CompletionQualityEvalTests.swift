@@ -93,6 +93,27 @@ struct CompletionQualityEvalTests {
                 expectedVisibleText: nil
             ),
             EvalCase(
+                name: "second sentence blocked",
+                rawOutput: "keep this small. Then add another point",
+                textBeforeCursor: "Can we",
+                mode: .phraseContinuation,
+                expectedVisibleText: nil
+            ),
+            EvalCase(
+                name: "new bullet blocked",
+                rawOutput: "- Update docs",
+                textBeforeCursor: "- Add retry logic for",
+                mode: .phraseContinuation,
+                expectedVisibleText: nil
+            ),
+            EvalCase(
+                name: "assistant pivot blocked",
+                rawOutput: "Overall, this looks ready",
+                textBeforeCursor: "Can we",
+                mode: .phraseContinuation,
+                expectedVisibleText: nil
+            ),
+            EvalCase(
                 name: "earlier context repeat blocked",
                 rawOutput: "know you are ready",
                 textBeforeCursor: "I know you are\n\nHey how are you",

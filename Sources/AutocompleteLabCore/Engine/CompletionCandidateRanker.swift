@@ -37,6 +37,21 @@ public struct CompletionCandidateSelection: Equatable, Sendable {
     public var suggestion: CompletionSuggestion? {
         selectedCandidate?.suggestion
     }
+
+    public var traceMetadata: [String: String] {
+        [
+            "candidateCount": String(rankedCandidates.count),
+            "candidateTopScore": selectedCandidate.map { Self.format($0.score) }
+                ?? rankedCandidates.first.map { Self.format($0.score) }
+                ?? "0.00",
+            "candidateScoreMargin": scoreMargin.map(Self.format) ?? "none",
+            "candidateSuppressionReason": suppressionReason?.rawValue ?? "none"
+        ]
+    }
+
+    private static func format(_ value: Double) -> String {
+        String(format: "%.2f", value)
+    }
 }
 
 public struct CompletionCandidateRanker: Equatable, Sendable {

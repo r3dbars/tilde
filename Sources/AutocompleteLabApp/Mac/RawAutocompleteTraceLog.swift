@@ -209,7 +209,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         cleanedSuggestion: CompletionSuggestion?,
         suggestionID: String = "",
         latencyMilliseconds: Int? = nil,
-        firstTokenLatencyMilliseconds: Int? = nil
+        firstTokenLatencyMilliseconds: Int? = nil,
+        metadata extraMetadata: [String: String] = [:]
     ) {
         guard isEnabled else {
             return
@@ -225,6 +226,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         if let firstTokenLatencyMilliseconds {
             metadata["firstTokenLatencyMilliseconds"] = String(firstTokenLatencyMilliseconds)
         }
+        metadata.merge(extraMetadata) { current, _ in current }
 
         record(
             type: .modelResult,
