@@ -200,9 +200,10 @@ Pass 1 shipped these improvements:
   events as candidate-selection proof without treating them as MLX model
   results.
 - `SuggestionOrchestrator` now owns the active completion request, request
-  ticket gate, fast word-selection delegation, and engine delegation behind a
-  focused app-level test suite. AppDelegate still owns presentation, insertion,
-  screenshot, and placement orchestration.
+  ticket gate, fast word-selection delegation, engine delegation, and engine
+  replacement after model runtime reload behind a focused app-level test suite.
+  AppDelegate still owns presentation, insertion, screenshot, and placement
+  orchestration.
 - Slow focused-text AX reads that return no focused text context now start a
   short app-specific cooldown immediately instead of requiring a repeated slow
   read, so failing editors back off sooner without touching the key path.
@@ -664,9 +665,10 @@ these are true.
    full replay count those fast-word presented events as candidate-selection
    proof.
 48. Done: move active request ownership, request-ticket gating, fast-word
-   selection, and engine delegation behind `SuggestionOrchestrator`, with
-   app-level tests for current-request storage, stale ticket blocking,
-   invalidation, candidate metadata, and engine delegation.
+   selection, engine delegation, and runtime-reload engine replacement behind
+   `SuggestionOrchestrator`, with app-level tests for current-request storage,
+   stale ticket blocking, invalidation, candidate metadata, engine delegation,
+   and replacement-engine suggestions.
 
 ## Goal Status
 
