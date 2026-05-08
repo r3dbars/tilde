@@ -188,6 +188,19 @@ final class SuggestionOrchestrator {
         )
     }
 
+    nonisolated func appModelResultCandidateSelectionMetadata(
+        for suggestion: CompletionSuggestion
+    ) -> [String: String] {
+        [
+            "candidateSelectionSource": "app-model-result",
+            "cleanedCandidateCount": "1",
+            "candidateTopScore": "1.000",
+            "candidateScoreMargin": "none",
+            "candidateSuppressionReason": "none",
+            "cleanedWordCount": String(suggestion.visibleWordCount)
+        ]
+    }
+
     nonisolated func suggestion(
         for request: CompletionRequest,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void

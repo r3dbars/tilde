@@ -204,8 +204,9 @@ Pass 1 shipped these improvements:
   completion request, request ticket gate, field-delivery race gate, fast
   word-selection delegation, failure visibility gate, engine delegation, and
   engine replacement after model runtime reload behind a focused app-level test
-  suite. AppDelegate still owns presentation, insertion, screenshot, and
-  placement orchestration.
+  suite. Trace-safe app-model candidate metadata now lives there too, next to
+  fast-word candidate metadata. AppDelegate still owns presentation, insertion,
+  screenshot, and placement orchestration.
 - Slow focused-text AX reads that return no focused text context now start a
   short app-specific cooldown immediately instead of requiring a repeated slow
   read, so failing editors back off sooner without touching the key path.
@@ -303,7 +304,7 @@ Baseline scorecard from the initial audit:
 | Mode profiles and cross-app safety | 10 | 78 | 7.8 | Strong app profiles, a user-visible per-app mirror override, a proof-only terminal-host Claude Code adapter, and copy-only fallback stance for non-sensitive diagnostics-only or untrusted-placement cases now exist, but behavior modes are not first-class for every email, notes, bullets, docs, code, forms, search, and AI chat surface. |
 | Learning, annoyance, accepted-and-kept loop | 12 | 67 | 8.0 | Accepted-kept learning now affects both affinity and utility, and user-selected quiet/normal/eager aggressiveness can tune eagerness without clearing learning; the loop still needs fresh real-app threshold proof. |
 | Metrics, replay, and proof gates | 5 | 88 | 4.4 | Trace/report scripts are strong, Settings can start per-app screenshot proof from the current app, fresh bounded real-app slices now pass a replay smoke profile, and deterministic fast-word selection now has trace-safe candidate metadata; full replay proof still needs all scenario signals in one current pass. |
-| Architecture and tests | 2 | 96 | 1.9 | Good policy/test structure, app-proof command execution is behind a small coordinator, and request construction/session-cache/request-ticket/field-delivery/failure-visibility/fast-word suggestion orchestration is now behind `SuggestionOrchestrator`; AppDelegate still owns presentation, insertion, screenshot, and placement orchestration. |
+| Architecture and tests | 2 | 97 | 1.9 | Good policy/test structure, app-proof command execution is behind a small coordinator, and request construction/session-cache/request-ticket/candidate-metadata/field-delivery/failure-visibility/fast-word suggestion orchestration is now behind `SuggestionOrchestrator`; AppDelegate still owns presentation, insertion, screenshot, and placement orchestration. |
 
 Weighted total: **80.9/100**, rounded to **81/100**.
 
@@ -681,6 +682,9 @@ these are true.
 51. Done: move engine-failure visibility gating into `SuggestionOrchestrator`,
    so stale failed requests or failures from another focused field cannot hide
    the visible suggestion through AppDelegate-owned request-gate plumbing.
+52. Done: move app-level model-result candidate metadata into
+   `SuggestionOrchestrator`, keeping deterministic fast-word and MLX-result
+   candidate metadata in the same tested orchestration boundary.
 
 ## Goal Status
 

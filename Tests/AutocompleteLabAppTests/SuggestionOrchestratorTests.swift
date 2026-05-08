@@ -231,6 +231,22 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("App model result metadata is trace safe")
+    func appModelResultMetadataIsTraceSafe() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let metadata = orchestrator.appModelResultCandidateSelectionMetadata(
+            for: CompletionSuggestion(text: " make this feel instant", maxVisibleWords: 3)
+        )
+
+        #expect(metadata["candidateSelectionSource"] == "app-model-result")
+        #expect(metadata["cleanedCandidateCount"] == "1")
+        #expect(metadata["candidateTopScore"] == "1.000")
+        #expect(metadata["candidateScoreMargin"] == "none")
+        #expect(metadata["candidateSuppressionReason"] == "none")
+        #expect(metadata["cleanedWordCount"] == "3")
+    }
+
+    @MainActor
     @Test("Suggestion calls delegate to the configured engine")
     func suggestionDelegatesToEngine() async throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
