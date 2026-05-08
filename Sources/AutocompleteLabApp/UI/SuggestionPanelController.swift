@@ -89,9 +89,20 @@ final class SuggestionPanelController {
             width: max(ceil(textSize.width + textPadding.width), minimumSize.width),
             height: max(ceil(textSize.height + textPadding.height), minimumSize.height)
         )
-        let screen = screen(containing: anchorRect) ?? NSScreen.main
-        let screenFrame = screen?.frame ?? .zero
         let screenHeight = Self.accessibilityScreenHeight()
+        guard let screen = screen(containing: anchorRect, screenHeight: screenHeight) else {
+            hide()
+            DiagnosticsLog.shared.record(
+                "suggestion-panel-frame-suppressed",
+                metadata: [
+                    "reason": "anchor-outside-active-display",
+                    "renderMode": renderMode.rawValue,
+                    "anchor": compactFrameDescription(anchorRect)
+                ]
+            )
+            return nil
+        }
+        let screenFrame = screen.frame
         let appKitAnchorRect = AccessibilityCoordinateConverter.appKitRect(
             fromAccessibilityRect: anchorRect,
             screenHeight: screenHeight
@@ -203,22 +214,17 @@ final class SuggestionPanelController {
         panel.orderOut(nil)
     }
 
-    private func screen(containing accessibilityRect: CGRect) -> NSScreen? {
-        let screenHeight = Self.accessibilityScreenHeight()
-        let candidates = NSScreen.screens.compactMap { screen -> (screen: NSScreen, area: CGFloat)? in
-            let probeRect = AccessibilityCoordinateConverter.appKitProbeRect(
-                fromAccessibilityRect: accessibilityRect,
-                screenHeight: screenHeight
-            )
-            let intersection = screen.frame.intersection(probeRect)
-            guard !intersection.isNull, intersection.width > 0, intersection.height > 0 else {
-                return nil
-            }
-
-            return (screen, intersection.width * intersection.height)
+    private func screen(containing accessibilityRect: CGRect, screenHeight: CGFloat) -> NSScreen? {
+        let screens = NSScreen.screens
+        guard let index = SuggestionDisplaySelectionPolicy.selectedScreenIndex(
+            containingAccessibilityRect: accessibilityRect,
+            screenFrames: screens.map(\.frame),
+            accessibilityScreenHeight: screenHeight
+        ), screens.indices.contains(index) else {
+            return nil
         }
 
-        return candidates.max { $0.area < $1.area }?.screen
+        return screens[index]
     }
 
     private static func accessibilityScreenHeight() -> CGFloat {
