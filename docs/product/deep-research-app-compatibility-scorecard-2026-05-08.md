@@ -38,6 +38,8 @@ accepted after the field text changes behind the event-tap path. This latest
 loop expands conservative browser prompt/message blocks and strengthens the
 Chrome chat-like no-submit fixture so future proof must keep form submits,
 Enter-style field sends, send-button clicks, and network-send attempts at zero.
+The current loop also stores proof label, proof artifact path, and last-verified
+timestamp on compatibility profiles and learned profile scope metadata.
 
 ## Product Standard
 
@@ -93,8 +95,9 @@ Overall score after this pass: 85/100
 Latest automatable loop: evidence hygiene improved, the app now has a focused
 automated trust-flow harness, accept-time stale-text fail-closed coverage,
 broader browser prompt/message hard blocks, and stricter local no-submit smoke
-guards. The score still cannot approach 100 without new live Codex, Claude
-Code, and production browser proof.
+guards. Compatibility profiles now carry trace-safe proof metadata directly.
+The score still cannot approach 100 without new live Codex, Claude Code, and
+production browser proof.
 
 This is a strict compatibility score. It is not a general app-quality score.
 Several individual surfaces score much higher, but hard gates prevent a broad
@@ -112,7 +115,7 @@ compatibility claim.
   Gmail, ChatGPT, Claude web, Codex web, Gemini web, Perplexity web, Copilot
   web, Poe web, Telegram web, Teams web, WhatsApp web, and Messenger web, plus
   trace-safe profile metadata for surface ID, version range, preferred path,
-  and hard caps.
+  hard caps, proof label, proof artifact path, and last-verified timestamp.
   This follow-up also persists that scope on learned/user-created compatibility
   profiles and upgrades legacy learned profiles on read.
 - Evidence found in repo:
@@ -127,7 +130,7 @@ compatibility claim.
   fingerprint heuristics. Production browser-site proof is scored in later
   categories rather than treated as broad compatibility.
 - What would make it 100/100: Versioned compatibility profiles for every proven
-  app/surface/path with hard caps, last-verified dates, and proof links.
+  app/surface/path with current real proof for each production variant.
 
 ### Caret and selection fidelity
 
@@ -402,8 +405,9 @@ directly.
 - Risk level: Medium
 - Expected score impact: +3 surface identification.
 - Status: App-owned metadata and learned compatibility profile scope are done.
-  Legacy learned profiles upgrade on read. Last-verified/proof-link metadata is
-  still future work.
+  Legacy learned profiles upgrade on read. Proof label, proof artifact path,
+  and last-verified metadata are now stored directly on profile scope where
+  current proof exists.
 
 ### 4. IME/composition fail-closed gate
 
@@ -594,8 +598,6 @@ This goal is complete when:
 - Chrome chat-like should be rerun successfully now that the fixture checks
   field-send, send-click, and network-send counters.
 - Chrome production editor/chat surfaces need real site proof before broadening.
-- Learned compatibility profiles now carry versioned scope; last-verified and
-  proof-link metadata is still not stored directly on learned profiles.
 - IME/dead-key and undo/redo matrix proof remains incomplete.
 - The app-level trust-flow harness now covers the core path, but live proof is
   still needed for Codex, Claude Code, and production browser surfaces.

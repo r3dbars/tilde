@@ -225,9 +225,14 @@ struct CompatibilityProfileTests {
         #expect(chrome.scopeMetadata["compatibilityPreferredPath"] == "accessibility-fallback")
         #expect(chrome.scopeMetadata["compatibilityHardCaps"]?.contains("production-surface-proof-required") == true)
         #expect(chrome.scopeMetadata["compatibilityHardCaps"]?.contains("no-submit-proof-required") == true)
+        #expect(chrome.scopeMetadata["compatibilityProofLabel"] == "Chrome local fixtures")
+        #expect(chrome.scopeMetadata["compatibilityProofArtifactPath"] == "docs/product/proof-manifest.json")
+        #expect(chrome.scopeMetadata["compatibilityLastVerifiedAt"] == "2026-05-08T12:46:09Z")
 
         #expect(codex.profileIdentifier == "com.openai.codex::prompt-composer::accessibility")
         #expect(codex.scopeMetadata["compatibilityHardCaps"] == "no-submit-proof-required")
+        #expect(codex.scopeMetadata["compatibilityProofLabel"] == "Codex")
+        #expect(codex.scopeMetadata["compatibilityLastVerifiedAt"] == nil)
 
         #expect(claudeCode.profileIdentifier == "com.anthropic.claude-code::background-cli-helper::blocked")
         #expect(claudeCode.scopeMetadata["compatibilityPreferredPath"] == "blocked")

@@ -123,11 +123,20 @@ struct CompatibilityLearningStorePrivacyTests {
         #expect(profile?.versionRangeDescription == "current-proof-only")
         #expect(profile?.preferredPath == .accessibility)
         #expect(profile?.hardCaps == [.noSubmitProofRequired])
+        #expect(profile?.proofLabel == "Codex")
+        #expect(profile?.proofArtifactPath == "docs/product/proof-manifest.json")
+        #expect(profile?.lastVerifiedAt == nil)
         #expect(
             store.engine()
                 .adjustment(for: bundleIdentifier, profileRenderMode: .inlineAdjacent)
                 .metadata["learningCompatibilityProfileID"]
                 == "com.openai.codex::prompt-composer::accessibility"
+        )
+        #expect(
+            store.engine()
+                .adjustment(for: bundleIdentifier, profileRenderMode: .inlineAdjacent)
+                .metadata["learningCompatibilityProofLabel"]
+                == "Codex"
         )
     }
 
@@ -168,6 +177,9 @@ struct CompatibilityLearningStorePrivacyTests {
             .structureProofRequired,
             .unknownCustomEditorDetectOnly
         ])
+        #expect(profile?.proofLabel == "Obsidian")
+        #expect(profile?.proofArtifactPath == "docs/product/proof-manifest.json")
+        #expect(profile?.lastVerifiedAt == "2026-05-07T21:15:51Z")
     }
 
     @Test("Screenshot visual corrections persist scoped trust context")

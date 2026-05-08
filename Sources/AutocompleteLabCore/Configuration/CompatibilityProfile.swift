@@ -95,6 +95,9 @@ public struct CompatibilityProfile: Equatable, Sendable {
     public let appFamily: CompatibilityAppFamily
     public let supportLevel: CompatibilitySupportLevel
     public let supportReason: String
+    public let proofLabel: String?
+    public let proofArtifactPath: String?
+    public let lastVerifiedAt: String?
     public let renderMode: SuggestionRenderMode
     public let insertionMode: InsertionMode
     public let fallbackRenderMode: SuggestionRenderMode?
@@ -126,6 +129,9 @@ public struct CompatibilityProfile: Equatable, Sendable {
         appFamily: CompatibilityAppFamily = .unknown,
         supportLevel: CompatibilitySupportLevel,
         supportReason: String,
+        proofLabel: String? = nil,
+        proofArtifactPath: String? = nil,
+        lastVerifiedAt: String? = nil,
         renderMode: SuggestionRenderMode,
         insertionMode: InsertionMode,
         fallbackRenderMode: SuggestionRenderMode? = nil,
@@ -159,6 +165,9 @@ public struct CompatibilityProfile: Equatable, Sendable {
         self.appFamily = appFamily
         self.supportLevel = supportLevel
         self.supportReason = supportReason
+        self.proofLabel = proofLabel
+        self.proofArtifactPath = proofArtifactPath
+        self.lastVerifiedAt = lastVerifiedAt
         self.renderMode = renderMode
         self.insertionMode = insertionMode
         self.fallbackRenderMode = fallbackRenderMode
@@ -196,13 +205,18 @@ public struct CompatibilityProfile: Equatable, Sendable {
     }
 
     public var scopeMetadata: [String: String] {
-        [
+        var metadata = [
             "compatibilityProfileID": profileIdentifier,
             "compatibilitySurface": surfaceIdentifier,
             "compatibilityVersionRange": versionRangeDescription,
             "compatibilityPreferredPath": preferredPath.rawValue,
             "compatibilityHardCaps": hardCaps.map(\.rawValue).joined(separator: ",")
         ]
+
+        metadata["compatibilityProofLabel"] = proofLabel
+        metadata["compatibilityProofArtifactPath"] = proofArtifactPath
+        metadata["compatibilityLastVerifiedAt"] = lastVerifiedAt
+        return metadata
     }
 
     public var allowsStrictVisualProofSyntheticCaretPlacement: Bool {
@@ -327,6 +341,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .nativeAppKit,
             supportLevel: .green,
             supportReason: "Verified inline suggestions and native text insertion.",
+            proofLabel: "TextEdit",
+            proofArtifactPath: "docs/product/proof-manifest.json",
+            lastVerifiedAt: "2026-05-08T09:16:49Z",
             renderMode: .inlineAdjacent,
             insertionMode: .axSelectedText,
             fallbackRenderMode: .floatingMirror,
@@ -344,6 +361,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .swiftUIAppKit,
             supportLevel: .yellow,
             supportReason: "Rich text can drift; display can fall back to floating, and insertion fails closed.",
+            proofLabel: "Apple Notes title/body/checklist",
+            proofArtifactPath: "docs/product/proof-manifest.json",
+            lastVerifiedAt: "2026-05-08T00:21:33Z",
             renderMode: .inlineAdjacent,
             insertionMode: .axThenKeyEvents,
             fallbackRenderMode: .floatingMirror,
@@ -362,6 +382,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .electron,
             supportLevel: .yellow,
             supportReason: "Electron editors can hide caret bounds, so this uses floating or synthetic placement.",
+            proofLabel: "Obsidian",
+            proofArtifactPath: "docs/product/proof-manifest.json",
+            lastVerifiedAt: "2026-05-07T21:15:51Z",
             renderMode: .floatingMirror,
             insertionMode: .axThenKeyEvents,
             fallbackRenderMode: .floatingMirror,
@@ -410,6 +433,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .chromium,
             supportLevel: .yellow,
             supportReason: "Browser editors vary; display can fall back to floating and insertion can fall back to AX.",
+            proofLabel: "Chrome local fixtures",
+            proofArtifactPath: "docs/product/proof-manifest.json",
+            lastVerifiedAt: "2026-05-08T12:46:09Z",
             renderMode: .inlineAdjacent,
             insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
@@ -428,6 +454,8 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .customCanvas,
             supportLevel: .yellow,
             supportReason: "Dogfood prompt support still needs one-word no-submit proof before it is green.",
+            proofLabel: "Codex",
+            proofArtifactPath: "docs/product/proof-manifest.json",
             renderMode: .inlineAdjacent,
             insertionMode: .axValueReplacement,
             fallbackRenderMode: .floatingMirror,
@@ -476,6 +504,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .electron,
             supportLevel: .yellow,
             supportReason: "Composer placement still needs one-word no-submit proof before it is green.",
+            proofLabel: "Claude desktop",
+            proofArtifactPath: "docs/product/proof-manifest.json",
+            lastVerifiedAt: "2026-05-08T03:49:56Z",
             renderMode: .inlineAdjacent,
             insertionMode: .axValueReplacement,
             fallbackRenderMode: .floatingMirror,
