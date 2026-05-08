@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let activationPolicy = CompletionActivationPolicy()
     private let fieldClassifier = AXFieldClassifier()
     private let textContextRepairPolicy = TextContextRepairPolicy()
+    private let tracePrivacySecretStore = TracePrivacySecretStore()
     private var triggerPolicy: SuggestionTriggerPolicy {
         suggestionAggressiveness.triggerPolicy
     }
@@ -161,7 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionRequestGate = SuggestionRequestGate()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
-    private var prefixFamilyCooldownPolicy = PrefixFamilyCooldownPolicy()
+    private lazy var prefixFamilyCooldownPolicy = makePrefixFamilyCooldownPolicy()
     private var currentCompletionRequest: CompletionRequest?
     private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
     private var currentSuggestionID: String?
@@ -5195,12 +5196,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         DiagnosticsLog.shared.record(
             "prefix-family-cooldown",
-            metadata: [
+            metadata: cooldown.metadata.merging([
                 "app": input.appBundleIdentifier,
                 "reason": reason.rawValue,
-                "durationMilliseconds": String(cooldown.durationMilliseconds),
-                "prefixFamilyTokenCount": String(cooldown.prefixTokenCount)
-            ]
+                "durationMilliseconds": String(cooldown.durationMilliseconds)
+            ]) { current, _ in current }
         )
         return cooldown.metadata
     }
@@ -5684,7 +5684,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
         recentWordMemory = ScopedRecentWordMemory()
         suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
-        prefixFamilyCooldownPolicy = PrefixFamilyCooldownPolicy()
+        prefixFamilyCooldownPolicy = makePrefixFamilyCooldownPolicy()
         UserDefaults.standard.removeObject(forKey: Self.acceptedAndKeptLearningDefaultsKey)
         UserDefaults.standard.removeObject(forKey: Self.acceptedTextStyleMemoryDefaultsKey)
         DiagnosticsLog.shared.record(
@@ -5696,6 +5696,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func cycleAcceptAllShortcut() {
         setAcceptAllShortcut(keyboardShortcutConfiguration.acceptAllShortcut.next)
+    }
+
+    private func makePrefixFamilyCooldownPolicy() -> PrefixFamilyCooldownPolicy {
+        PrefixFamilyCooldownPolicy(traceFingerprintSecret: tracePrivacySecretStore.secret())
     }
 
     private func setAcceptAllShortcut(_ shortcut: AcceptAllShortcut) {

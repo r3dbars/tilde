@@ -188,7 +188,7 @@ struct PrefixFamilyCooldownPolicyTests {
 
     @Test("Trace metadata is shape only")
     func traceMetadataIsShapeOnly() throws {
-        var policy = PrefixFamilyCooldownPolicy()
+        var policy = PrefixFamilyCooldownPolicy(traceFingerprintSecret: Data("unit-test-secret".utf8))
         let recordedCooldown = policy.record(
             .typedOver,
             input: input(textBeforeCursor: "secret customer name"),
@@ -200,6 +200,8 @@ struct PrefixFamilyCooldownPolicyTests {
         #expect(cooldown.metadata["prefixCooldownDurationMilliseconds"] == "5000")
         #expect(cooldown.metadata["prefixFamilyTokenCount"] == "3")
         #expect(cooldown.metadata["prefixCooldownEscalated"] == "false")
+        #expect(cooldown.metadata["prefixFamilyFingerprintVersion"] == TracePrivacyFingerprint.prefixFamilyVersion)
+        #expect(cooldown.metadata["prefixFamilyHMACToken"]?.count == 24)
         #expect(!cooldown.metadata.values.joined(separator: " ").contains("secret"))
     }
 
@@ -207,7 +209,8 @@ struct PrefixFamilyCooldownPolicyTests {
     func eagernessMetadataIsShapeOnly() throws {
         var policy = PrefixFamilyCooldownPolicy(
             typedOverCooldownMilliseconds: 0,
-            repeatedTypedOverCooldownMilliseconds: 0
+            repeatedTypedOverCooldownMilliseconds: 0,
+            traceFingerprintSecret: Data("unit-test-secret".utf8)
         )
         let now = Date(timeIntervalSince1970: 1_000)
         let sensitive = input(textBeforeCursor: "secret customer name")
@@ -219,8 +222,46 @@ struct PrefixFamilyCooldownPolicyTests {
         #expect(adjustment.metadata["prefixEagernessApplied"] == "true")
         #expect(adjustment.metadata["prefixEagernessRepeatedTypedOverThreshold"] == "1.50")
         #expect(adjustment.metadata["prefixFamilyTokenCount"] == "3")
+        #expect(adjustment.metadata["prefixFamilyFingerprintVersion"] == TracePrivacyFingerprint.prefixFamilyVersion)
+        #expect(adjustment.metadata["prefixFamilyHMACToken"]?.count == 24)
         #expect(!adjustment.metadata.values.joined(separator: " ").contains("secret"))
         #expect(!adjustment.metadata.values.joined(separator: " ").contains("customer"))
+    }
+
+    @Test("Prefix family fingerprints are stable and keyed")
+    func prefixFamilyFingerprintsAreStableAndKeyed() throws {
+        let secret = Data("unit-test-secret".utf8)
+        var policy = PrefixFamilyCooldownPolicy(traceFingerprintSecret: secret)
+        var samePolicy = PrefixFamilyCooldownPolicy(traceFingerprintSecret: secret)
+        var differentSecretPolicy = PrefixFamilyCooldownPolicy(
+            traceFingerprintSecret: Data("different-secret".utf8)
+        )
+
+        let maybeFirst = policy.record(
+            .typedOver,
+            input: input(textBeforeCursor: "Secret   customer NAME"),
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+        let maybeSame = samePolicy.record(
+            .typedOver,
+            input: input(textBeforeCursor: "secret customer name"),
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+        let maybeDifferentSecret = differentSecretPolicy.record(
+            .typedOver,
+            input: input(textBeforeCursor: "secret customer name"),
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+        let first = try #require(maybeFirst)
+        let same = try #require(maybeSame)
+        let differentSecret = try #require(maybeDifferentSecret)
+
+        #expect(first.metadata["prefixFamilyHMACToken"] == same.metadata["prefixFamilyHMACToken"])
+        #expect(first.metadata["prefixFamilyHMACToken"] != differentSecret.metadata["prefixFamilyHMACToken"])
+        let json = String(decoding: try JSONEncoder().encode(first.metadata), as: UTF8.self)
+        #expect(!json.localizedCaseInsensitiveContains("secret"))
+        #expect(!json.localizedCaseInsensitiveContains("customer"))
+        #expect(!json.localizedCaseInsensitiveContains("name"))
     }
 
     private func input(

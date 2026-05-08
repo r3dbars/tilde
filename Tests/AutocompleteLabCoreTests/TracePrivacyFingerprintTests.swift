@@ -30,6 +30,31 @@ struct TracePrivacyFingerprintTests {
         #expect(!json.localizedCaseInsensitiveContains("useful"))
     }
 
+    @Test("Builds keyed prefix family fingerprints without raw tokens")
+    func buildsPrefixFamilyFingerprints() throws {
+        let secret = Data("unit-test-secret".utf8)
+        let metadata = TracePrivacyFingerprint.prefixFamilyMetadata(
+            for: ["secret", "customer", "name"],
+            secret: secret
+        )
+        let same = TracePrivacyFingerprint.prefixFamilyMetadata(
+            for: ["secret", "customer", "name"],
+            secret: secret
+        )
+        let differentSecret = TracePrivacyFingerprint.prefixFamilyMetadata(
+            for: ["secret", "customer", "name"],
+            secret: Data("different-secret".utf8)
+        )
+
+        #expect(metadata["prefixFamilyFingerprintVersion"] == TracePrivacyFingerprint.prefixFamilyVersion)
+        #expect(metadata["prefixFamilyHMACToken"] == same["prefixFamilyHMACToken"])
+        #expect(metadata["prefixFamilyHMACToken"] != differentSecret["prefixFamilyHMACToken"])
+        #expect(metadata["prefixFamilyHMACToken"]?.count == 24)
+        let json = String(decoding: try JSONEncoder().encode(metadata), as: UTF8.self)
+        #expect(!json.localizedCaseInsensitiveContains("secret"))
+        #expect(!json.localizedCaseInsensitiveContains("customer"))
+    }
+
     @Test("Rotates default trace session ids once per UTC day")
     func rotatesSessionIDsDaily() throws {
         let firstDay = try #require(ISO8601DateFormatter().date(from: "2026-05-07T12:00:00Z"))
