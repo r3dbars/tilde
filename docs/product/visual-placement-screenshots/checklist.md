@@ -45,8 +45,10 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gat
   Chrome AX exposure and caret-quality placement are proven.
 - Codex and Claude desktop: automation must not submit prompts. Use harmless
   local text, validate one-word Tab accept only, then press Esc or clear the
-  prompt manually. Backtick/full accept needs separate full-accept no-submit
-  proof before prompt profiles can enable it.
+  prompt manually. Codex proof must include the disposable marker
+  `AUTOCOMPLETE_LAB_CODEX_PROOF` before the recorder can accept it.
+  Backtick/full accept needs separate full-accept no-submit proof before prompt
+  profiles can enable it.
 - Claude Code: direct `com.anthropic.claude-code` proof is diagnostics-only in
   this build because real typing happens in a terminal host. Add terminal-host
   proof before taking screenshots.

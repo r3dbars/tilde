@@ -110,11 +110,14 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
 ```
 
 - Focus the Codex message box without submitting.
-- Type a harmless local test fragment like `Can we make this`.
+- Type only disposable prompt text that includes `AUTOCOMPLETE_LAB_CODEX_PROOF`,
+  then a harmless local test fragment like `Can we make this`.
 - Confirm a suggestion appears near the prompt or in a stable mirror position.
 - Press Tab and expect the next word/suffix to insert without submitting.
 - Confirm the text stayed in the composer, no user message bubble appeared, and
   no assistant response started.
+- The recorder will not accept a Codex proof unless the disposable proof marker
+  is explicitly confirmed.
 - Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
 

@@ -42,7 +42,7 @@ evidence exists in the repo.
 
 ## Required Next Proof
 
-1. Run `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate` and keep one trace slice that proves visual placement plus one-word accept without submit.
+1. Run `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate` with disposable prompt text containing `AUTOCOMPLETE_LAB_CODEX_PROOF`, then keep one trace slice that proves visual placement plus one-word accept without submit.
 2. Expand Obsidian coverage across vault themes, panes, and long notes.
 3. Build a terminal-host Claude Code proof lane before running any Claude Code prompt pass.
 4. Expand Claude desktop same-baseline proof across prompt layouts.
