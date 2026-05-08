@@ -465,6 +465,62 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Streaming partial pacing is scoped by suggestion")
+    func streamingPartialPacingIsScopedBySuggestion() {
+        let orchestrator = SuggestionOrchestrator(
+            engine: EchoCompletionEngine(),
+            suggestionPresentationGate: SuggestionPresentationGate(
+                minimumStreamingPhraseWords: 2,
+                minimumStreamingPhraseCharacterDelta: 4,
+                minimumStreamingIntervalMilliseconds: 50,
+                maximumStreamingPartialPresentations: 2
+            )
+        )
+        orchestrator.startStreamingPresentation(suggestionID: "stream")
+
+        #expect(orchestrator.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this", maxVisibleWords: 3),
+            suggestionID: "stream",
+            mode: .phraseContinuation,
+            nowMilliseconds: 100
+        ))
+        #expect(!orchestrator.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this better", maxVisibleWords: 3),
+            suggestionID: "stream",
+            mode: .phraseContinuation,
+            nowMilliseconds: 120
+        ))
+        #expect(orchestrator.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this better", maxVisibleWords: 3),
+            suggestionID: "stream",
+            mode: .phraseContinuation,
+            nowMilliseconds: 160
+        ))
+        #expect(!orchestrator.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this better today", maxVisibleWords: 4),
+            suggestionID: "stream",
+            mode: .phraseContinuation,
+            nowMilliseconds: 240
+        ))
+
+        orchestrator.finishStreamingPresentation(suggestionID: "stream")
+        #expect(orchestrator.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this", maxVisibleWords: 3),
+            suggestionID: "stream",
+            mode: .phraseContinuation,
+            nowMilliseconds: 300
+        ))
+
+        orchestrator.clearStreamingPresentations()
+        #expect(orchestrator.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this", maxVisibleWords: 3),
+            suggestionID: "stream",
+            mode: .phraseContinuation,
+            nowMilliseconds: 360
+        ))
+    }
+
+    @MainActor
     @Test("Suggestion calls delegate to the configured engine")
     func suggestionDelegatesToEngine() async throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())

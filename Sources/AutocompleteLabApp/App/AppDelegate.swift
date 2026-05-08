@@ -50,7 +50,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         prefixFamilyCooldownPolicy: makePrefixFamilyCooldownPolicy()
     )
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
-    private let suggestionPresentationGate = SuggestionPresentationGate()
     private var displayScorePolicy: DisplayScorePolicy {
         suggestionAggressiveness.displayScorePolicy
     }
@@ -164,7 +163,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var focusedTextPollSkipStats = FocusedTextPollSkipStats()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
-    private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
     private var currentSuggestionID: String?
     private var currentSuggestionAppBundleIdentifier: String?
     private var currentSuggestionFieldIdentity: FocusedFieldIdentity?
@@ -3143,7 +3141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let suggestionID = orchestration.suggestionID
         let fieldIdentityDescription = orchestration.fieldIdentityDescription
         let requestMetadata = orchestration.requestMetadata
-        streamingPresentationStates[suggestionID] = StreamingPresentationState()
+        suggestionOrchestrator.startStreamingPresentation(suggestionID: suggestionID)
         let requestTicket = orchestration.ticket
         let requestStartedAt = orchestration.startedAt
 
@@ -3290,17 +3288,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 return
                             }
 
-                            var streamingState = self.streamingPresentationStates[suggestionID]
-                                ?? StreamingPresentationState()
-                            guard self.suggestionPresentationGate.shouldPresentStreamingPartial(
+                            guard self.suggestionOrchestrator.shouldPresentStreamingPartial(
                                 partialSuggestion,
+                                suggestionID: suggestionID,
                                 mode: request.mode,
-                                state: &streamingState,
                                 nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1000)
                             ) else {
                                 return
                             }
-                            self.streamingPresentationStates[suggestionID] = streamingState
 
                             self.presentSuggestion(
                                 partialSuggestion,
@@ -3450,11 +3445,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         triggerReason: "model-result",
                         candidateSelectionMetadata: appModelResultMetadata
                     )
-                    self.streamingPresentationStates[suggestionID] = nil
+                    self.suggestionOrchestrator.finishStreamingPresentation(suggestionID: suggestionID)
                 }
             } catch {
                 await MainActor.run {
-                    self.streamingPresentationStates[suggestionID] = nil
+                    self.suggestionOrchestrator.finishStreamingPresentation(suggestionID: suggestionID)
                     guard self.suggestionOrchestrator.shouldHideVisibleSuggestionAfterFailure(
                         ticket: requestTicket,
                         failedRequestFieldIdentity: fieldIdentity,
@@ -4760,7 +4755,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionPresentedAt = nil
         currentSuggestionDisplayScoreFinal = nil
         currentSuggestionInvalidatedByUserKeyDown = false
-        streamingPresentationStates.removeAll(keepingCapacity: true)
+        suggestionOrchestrator.clearStreamingPresentations()
         lastCaretRect = nil
         lastTextLineRect = nil
         lastClippingRect = nil
@@ -5203,7 +5198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func invalidatePendingSuggestionRequest() {
         debounceTask?.cancel()
         debounceTask = nil
-        streamingPresentationStates.removeAll(keepingCapacity: true)
+        suggestionOrchestrator.clearStreamingPresentations()
         suggestionOrchestrator.invalidate()
     }
 
