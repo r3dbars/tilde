@@ -32,7 +32,7 @@ record_blocker_theme() {
   local target="$3"
 
   case "$label" in
-    *Codex*|*"Claude Code"*|*"AI chat profile"*|*"Proof status"*)
+    *Codex*|*"AI chat profile"*|*"Proof status"*)
       LIVE_PROMPT_PROOF_ISSUES=$((LIVE_PROMPT_PROOF_ISSUES + 1))
       return
       ;;
@@ -92,7 +92,7 @@ print_blocker_summary() {
   echo
   echo "Blocking themes"
   if ((LIVE_PROMPT_PROOF_ISSUES > 0)); then
-    echo "- Live prompt proof: $LIVE_PROMPT_PROOF_ISSUES issue(s). Finish Codex same-slice no-submit proof and Claude Code terminal-host proof."
+    echo "- Live prompt proof: $LIVE_PROMPT_PROOF_ISSUES issue(s). Finish Codex same-slice no-submit proof."
   fi
   if ((DEFAULT_CHROME_EDITOR_ISSUES > 0)); then
     echo "- Chrome editor production proof: $DEFAULT_CHROME_EDITOR_ISSUES issue(s). Local real Monaco/ProseMirror caret-quality proof exists; add production variants before target scores can reach 100."

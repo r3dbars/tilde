@@ -54,14 +54,15 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             supportLevel: .yellow,
             supportReason: "Claude Code can be proofed only through an explicit terminal-host proof lane.",
             renderMode: .inlineAdjacent,
-            insertionMode: .keyEvents,
+            insertionMode: .clipboardFallbackOptIn,
             fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: nil,
             fieldIdentityMode: .stableBounds,
             anchorLadder: [.caret],
             knownFailureModes: [
                 "terminal-hosted CLI input can submit shell commands",
-                "terminal accessibility text can include scrollback instead of only the prompt line"
+                "terminal accessibility text can include scrollback instead of only the prompt line",
+                "terminal hosts often ignore synthetic Unicode key events"
             ],
             allowsFieldAnchor: false,
             allowsWindowAnchor: false,
@@ -71,7 +72,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             suppressesAfterInsertionFailure: true,
             allowsDetachedSuggestions: false,
             allowsSyntheticCaretPlacement: true,
-            notes: "Proof-only virtual Claude Code profile. It may be used only when a supported terminal host is frontmost, Claude Code proof mode is active, the proof marker is present, and the current input line is not a shell command."
+            notes: "Proof-only virtual Claude Code profile. It may be used only when a supported terminal host is frontmost, Claude Code proof mode is active, the proof marker is present, and the current input line is not a shell command. It uses clipboard paste insertion so Terminal accepts one-word completion text without submitting the prompt."
         )
     }
 
@@ -104,7 +105,8 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             return .blocked(.multilineCommandDetected)
         }
 
-        if let line = nonEmptyLines.last, looksLikeShellPrompt(line) {
+        if let line = nonEmptyLines.last,
+           looksLikeShellPrompt(line, windowTitle: context.windowTitle) {
             return .blocked(.shellPromptDetected)
         }
 
@@ -127,11 +129,50 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         return beforeLine + afterLine
     }
 
-    private static func looksLikeShellPrompt(_ line: String) -> Bool {
+    public static func proofInputText(
+        textBeforeCursor: String,
+        textAfterCursor _: String
+    ) -> String? {
+        let beforeLine = textBeforeCursor
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .last
+            .map(String.init) ?? ""
+        return sanitizedProofInputLine(beforeLine)
+    }
+
+    public static func sanitizedProofInputLine(_ line: String) -> String? {
+        var text = line.trimmingCharacters(in: .newlines)
+        text = text.trimmingLeadingWhitespace()
+
+        if text.hasPrefix("❯") {
+            text.removeFirst()
+            text = text.trimmingLeadingWhitespace()
+        }
+
+        text = text
+            .replacingOccurrences(of: proofMarker, with: "")
+            .trimmingLeadingWhitespace()
+
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty,
+              !looksLikePlaceholderPrompt(trimmedText) else {
+            return nil
+        }
+
+        if text.last?.isWhitespace == true {
+            return trimmedText + " "
+        }
+
+        return trimmedText
+    }
+
+    private static func looksLikeShellPrompt(_ line: String, windowTitle: String) -> Bool {
         let shellPrefixes = ["$", "%", "#", "❯", "➜"]
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("❯"),
-           trimmed.localizedCaseInsensitiveContains(proofMarker) {
+           (trimmed.localizedCaseInsensitiveContains(proofMarker)
+            || windowTitle.localizedCaseInsensitiveContains("Claude Code")
+            && windowTitle.localizedCaseInsensitiveContains(proofMarker)) {
             return false
         }
 
@@ -144,5 +185,17 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         }
 
         return false
+    }
+
+    private static func looksLikePlaceholderPrompt(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix("Try \"")
+            || trimmed.hasPrefix("Try '")
+    }
+}
+
+private extension String {
+    func trimmingLeadingWhitespace() -> String {
+        String(drop { $0.isWhitespace && !$0.isNewline })
     }
 }

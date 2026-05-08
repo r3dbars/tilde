@@ -39,6 +39,7 @@ Use this before a private beta build. This is manual proof, not a code claim.
 - [ ] Start without the local model installed.
 - [ ] Confirm Settings says the model download uses Hugging Face once and suggestions run locally after install.
 - [ ] Start the install and confirm progress is visible.
+- [ ] Confirm low disk space is caught before a network download starts, or record why the scenario could not be safely reproduced.
 - [ ] Cancel the install and confirm the app returns to a recoverable state.
 - [ ] Repair an incomplete model folder and confirm suggestions stay off until validation passes.
 

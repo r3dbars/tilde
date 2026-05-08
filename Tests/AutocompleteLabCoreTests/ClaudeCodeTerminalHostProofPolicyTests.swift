@@ -79,6 +79,30 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func terminalHostProofKeepsUnmarkedPromptGlyphBlocked() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code",
+            focusedText: "❯ git status",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.missingProofMarker))
+    }
+
+    @Test("Terminal-host proof accepts Claude Code title marker when AX exposes placeholder line")
+    func terminalHostProofAcceptsClaudeCodeTitleMarkerForPromptGlyph() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF",
+            focusedText: "❯ Try \"fix lint errors\"",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+    }
+
+    @Test("Terminal-host proof rejects prompt glyph when title marker is not Claude Code scoped")
+    func terminalHostProofRejectsPromptGlyphWithUnscopedTitleMarker() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
             windowTitle: "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF",
             focusedText: "❯ git status",
             proofModeEnabled: true
@@ -121,7 +145,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(profile.supportsOneWordAcceptance)
         #expect(!profile.supportsFullAcceptance)
         #expect(profile.requiresNoSubmitAcceptanceProof)
-        #expect(profile.insertionMode == .keyEvents)
+        #expect(profile.insertionMode == .clipboardFallbackOptIn)
         #expect(profile.anchorLadder == [.caret])
         #expect(!profile.allowsDetachedSuggestions)
     }
@@ -142,5 +166,43 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
                 proofModeEnabled: true
             )
         ) == .eligible)
+    }
+
+    @Test("Terminal-host proof input strips prompt glyph and marker")
+    func terminalHostProofInputStripsPromptGlyphAndMarker() {
+        let input = ClaudeCodeTerminalHostProofPolicy.proofInputText(
+            textBeforeCursor: "Welcome\n❯ AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF Can we make",
+            textAfterCursor: " this    \nOld output"
+        )
+
+        #expect(input == "Can we make")
+    }
+
+    @Test("Terminal-host proof input accepts title-marker typed line")
+    func terminalHostProofInputAcceptsTitleMarkerTypedLine() {
+        let input = ClaudeCodeTerminalHostProofPolicy.sanitizedProofInputLine(
+            "❯ Can we make this"
+        )
+
+        #expect(input == "Can we make this")
+    }
+
+    @Test("Terminal-host proof input preserves one typed trailing space")
+    func terminalHostProofInputPreservesOneTypedTrailingSpace() {
+        let input = ClaudeCodeTerminalHostProofPolicy.proofInputText(
+            textBeforeCursor: "Welcome\n❯ AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF Can we make this ",
+            textAfterCursor: "screen padding that is not typed"
+        )
+
+        #expect(input == "Can we make this ")
+    }
+
+    @Test("Terminal-host proof input ignores Claude placeholder line")
+    func terminalHostProofInputIgnoresClaudePlaceholderLine() {
+        let input = ClaudeCodeTerminalHostProofPolicy.sanitizedProofInputLine(
+            "❯ Try \"fix lint errors\""
+        )
+
+        #expect(input == nil)
     }
 }

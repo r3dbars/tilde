@@ -24,8 +24,8 @@ It is not yet magical by the research bar. The biggest remaining misses are:
   and proof that accepted-and-kept tuning improves real usage.
 - Phrase and sentence quality now has conservative candidate ranking and score
   margin suppression, but still needs real model proof and learned utility.
-- Cross-app proof is honest but incomplete for Codex, terminal-hosted Claude Code,
-  and more production-editor variants.
+- Cross-app proof is honest but incomplete for Codex and more production-editor variants.
+  Terminal-hosted Claude Code now has strict visual one-word no-submit proof.
   Claude desktop now has same-baseline one-word no-submit proof, but more
   prompt layouts still need coverage.
 - Chrome-hosted Google Docs, Notion, Slack, and Discord now fail closed with an
@@ -282,9 +282,8 @@ Remaining high-impact gaps:
   `smoke-slice` profile, but the full gate still needs model-result
   candidate metadata, stale cancellation, annoyance, and final kept-horizon
   proof in one current real-app pass.
-- Cross-app proof rows still need a screenshot-backed acceptance slice for
-  Codex and a live screenshot/no-submit terminal-host slice before Claude Code
-  can count as prompt proof.
+- Cross-app proof rows still need a screenshot-backed one-word no-submit
+  acceptance slice for Codex.
 - Real Chrome editor-engine proof now passes under isolated forced-renderer AX
   and default Chrome AX with proof-gated inline synthetic-caret placement, but
   still needs production editor variants before the browser-editor scores can
@@ -373,7 +372,7 @@ Weighted total: **80.9/100**, rounded to **81/100**.
 | Bullets profile | 84 | Bullet/checklist/numbered current-line shape is now detected without item text, feeds trace metadata and prompt guidance, maps generic list-shaped writing to the bullets profile, keeps AI/search/form safety profiles ahead of list shape, and runtime ranking penalizes repeated bullet/checklist markers. | Screenshot-backed same-slice accepts in Notes/TextEdit plus checklist undo proof. |
 | Forms profile | 84 | Field-kind resolver maps forms/secure/url to a suppressed-by-default form profile with full accept disabled, and runtime candidate ranking keeps generated form text below the display threshold. | Proven non-sensitive free-form exceptions only. |
 | Search profile | 84 | Search field kind maps to a suppressed-by-default search profile with full accept disabled, and runtime candidate ranking keeps generated search text below the display threshold. | Proven across browser/native search fields. |
-| AI chat profile | 89 | Codex/Claude desktop profiles are conservative, one-word biased, block submit/run/Enter suggestions, require no-submit acceptance safety, disable full accept, and runtime candidate ranking suppresses submit-like action text if the model emits it anyway. Claude Code direct bundle support is diagnostics-only, but a proof-only terminal-host adapter now maps supported terminal hosts to a virtual Claude Code profile only when proof mode, the marker, and the current input-line safety checks pass; that virtual profile also requires no-submit acceptance safety. Claude desktop now has same-baseline strict visual proof with one verified Tab accept, detector offset near zero, and no submit signal. | Same-slice visual plus one-word no-submit proof for Codex, live terminal-host proof for Claude Code, and more Claude desktop prompt layouts. |
+| AI chat profile | 92 | Codex/Claude desktop profiles are conservative, one-word biased, block submit/run/Enter suggestions, require no-submit acceptance safety, disable full accept, and runtime candidate ranking suppresses submit-like action text if the model emits it anyway. Claude Code direct bundle support is diagnostics-only, but a proof-only terminal-host adapter now maps supported terminal hosts to a virtual Claude Code profile only when proof mode, the marker, and the current input-line safety checks pass; that virtual profile also requires no-submit acceptance safety. Claude Code and Claude desktop now have same-slice strict visual proof with one verified Tab accept and no submit signal. | Same-slice visual plus one-word no-submit proof for Codex, plus more Claude Code terminal-host and Claude desktop prompt layouts. |
 | Accepted-and-kept learning | 91 | Live survival events update a persisted app/field/mode/profile learning store that feeds display affinity, display utility, and profile-aware suppression thresholds with a 14-day half-life. Diagnostics now exposes accepted-kept rates and the current display-affinity probability/samples/threshold from trace metadata. | Prove thresholds with fresh real-app traces and add tuning controls. |
 | Typed-over learning | 91 | Typed-over trace, 5s prefix-family cooldown, 30s repeated typed-over escalation, repeated-miss suppression, and post-cooldown prefix-family display-threshold backoff exist; repeated-miss scores now decay by half-life instead of poisoning a prefix indefinitely, and Diagnostics exposes the current trace-safe miss score/threshold plus the keyed prefix-family HMAC token. | Prove thresholds with fresh real-app traces. |
 | Ignored learning | 84 | Ignored hides now record a weak repetition signal scaled by visible lifetime, with trace-safe weight/total metadata, the same decaying repeated-miss bucket, and Diagnostics visibility into passive ignored miss score/lifetime. | Prove thresholds with fresh real-app traces and separate passive ignored from explicit dismiss in diagnostics. |
@@ -381,7 +380,7 @@ Weighted total: **80.9/100**, rounded to **81/100**.
 | Style memory | 92 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, question rates, short-suffix rate, and average final-token length with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, Settings can clear it, and Diagnostics exposes the trace-safe aggregate sketch. | Add tuning controls and fresh real-app trace validation. |
 | Annoyance index | 91 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, exposes current-field/session silence and quiet/normal/eager aggressiveness in Settings, records manual field pauses as scoped trace events, records placement uncertainty as caret-geometry failures, and Diagnostics now exposes annoyance score, active quiet-mode scope, and signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
 | Replay-first test rig | 88 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, placement metadata, trusted caret placement, accepted insertion verification, stale cancellation, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. It can replay fresh line-bounded trace slices, including a `smoke-slice` profile that passes current Chrome Monaco/ProseMirror bounded real-app proof while keeping the default full gate strict. Full replay can now count trace-safe deterministic fast-word candidate metadata on presented events, not only MLX `modelResult` rows. The proof manifest parses matched manual-smoke trace slices, requires bounded proof ranges, verifies accepts plus insertion verification, checks screenshot-backed strict visual trace events, and rejects stale proof fingerprints. | Replay recorded real app sessions with screenshots, accepts, final kept horizon, stale cancellation, annoyance, model candidate metadata, fast-word candidate metadata, and latency after every app/runtime change. |
-| Cross-app proof honesty | 99 | App proof matrix explicitly keeps failing rows non-A until evidence exists, unsupported/sensitive apps expose an intentional off or copy-only stance instead of silent breakage, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, stable-bounds field identity is deterministic for proof traces, and the proof manifest now verifies TextEdit, Chrome chat-like, real Monaco/ProseMirror under forced renderer AX and default Chrome AX with proof-gated inline synthetic-caret placement, Obsidian, Apple Notes title/body/checklist, and Claude desktop with bounded current-fingerprint traces while requiring every compatibility profile to have owner/safety coverage. Chrome-hosted Google Docs, Notion, Slack, and Discord now have a trace-safe unsupported-surface block until proof exists. Strict mode still fails on Codex, terminal-hosted Claude Code, and production-editor variant gaps. | Close every pending proof row. |
+| Cross-app proof honesty | 99 | App proof matrix explicitly keeps failing rows non-A until evidence exists, unsupported/sensitive apps expose an intentional off or copy-only stance instead of silent breakage, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, stable-bounds field identity is deterministic for proof traces, and the proof manifest now verifies TextEdit, Chrome chat-like, real Monaco/ProseMirror under forced renderer AX and default Chrome AX with proof-gated inline synthetic-caret placement, Obsidian, Apple Notes title/body/checklist, Claude Code, and Claude desktop with bounded current-fingerprint traces while requiring every compatibility profile to have owner/safety coverage. Chrome-hosted Google Docs, Notion, Slack, and Discord now have a trace-safe unsupported-surface block until proof exists. Strict mode still fails on Codex and production-editor variant gaps. | Close every pending proof row. |
 
 ## Baseline Evidence Notes
 
@@ -564,8 +563,8 @@ these are true.
   production editor variants beyond the local real-engine fixtures.
 - Obsidian has disposable-vault screenshot plus same-slice accepts; expand it across themes, panes, and long notes.
 - Notes title, body, and checklist are green with separate bounded proof rows.
-- Codex gets screenshot plus one-word accept plus no-submit in one strict slice.
-- Claude Code gets safe live terminal-host prompt proof through the proof-only adapter.
+- Codex still needs screenshot plus one-word accept plus no-submit in one strict slice.
+- Claude Code has safe live terminal-host prompt proof through the proof-only adapter.
 - Claude desktop same-baseline proof expands across multi-line and long prompt layouts.
 
 ### P2 - Runtime Polish
@@ -763,6 +762,20 @@ these are true.
    Codex, Claude Code, Claude desktop, and Chrome chat-like trace verification
    now fails on submit-like trace signals, and no-submit-only prompt surfaces
    also fail if the slice used full accept instead of one-word Tab proof.
+72. Done: add guarded official Chrome editor smoke lanes for CodeMirror,
+   Monaco, and ProseMirror, plus a single-run smoke lock and pre-keystroke
+   Chrome/frontmost/URL checks so proof attempts fail closed instead of typing
+   into the wrong app. These lanes are implementation-ready but still score as
+   pending until bounded screenshot-backed official-demo traces pass.
+73. Done: harden Chrome proof typing further after live proof exposed stale
+   worktree smoke processes, disabled Chrome JavaScript-from-Apple-Events
+   preflight, and global setup-keystroke focus changes. Non-dry real-app smoke
+   now scans for other active smoke scripts before acquiring the lock, fails
+   official-demo lanes fast when Chrome cannot run Apple Event JavaScript,
+   requires a focused editable web text AX target before Chrome setup text,
+   sends that setup text to the Chrome process, and verifies the focused editor
+   value changed before waiting for app logs. This improves proof safety but
+   does not raise Chrome scores until official-demo traces pass.
 
 ## Goal Status
 

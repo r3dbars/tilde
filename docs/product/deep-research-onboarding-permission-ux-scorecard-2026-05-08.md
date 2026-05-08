@@ -3,13 +3,13 @@
 **Source**
 
 - Deep Research topic: Onboarding and Permission UX Rubric
-- Repo: `/Users/redbars/.codex/worktrees/380f/transcripted-autocomplete-lab`
+- Repo: `/Users/redbars/redbars/code/transcripted-autocomplete-lab`
 - Date: 2026-05-08
-- Commit inspected: `96cfba969fbd7c82b21ddca30f9fbd2291173d1e` plus this scorecard pass
+- Commit inspected: `96cfba9` plus current working-tree changes
 
 **Executive Summary**
 
-The research says this app must earn trust before asking for power. Accessibility is core, Screen Recording is diagnostic-only, and model setup is product setup. Autocomplete Lab is already conservative in the typing loop, privacy defaults, app allowlist, and proof gates. The largest onboarding gap was that launch could trigger the macOS Accessibility prompt before the app-owned explanation. This pass changes launch sequencing, tightens local-first copy, adds timed pause controls, adds a clean manual onboarding QA checklist, and updates the public README trust story.
+The research says this app must earn trust before asking for power. Accessibility is core, Screen Recording is diagnostic-only, and model setup is product setup. Autocomplete Lab is already conservative in the typing loop, privacy defaults, app allowlist, and proof gates. The biggest onboarding gap was that launch could trigger the macOS Accessibility prompt before the app-owned explanation. This pass changes launch sequencing, tightens local-first copy, adds a clean manual onboarding QA checklist, and updates the public README trust story.
 
 **Product Standard**
 
@@ -29,11 +29,11 @@ Excellent onboarding for this app means a new user sees a short native explanati
 
 Starting score before this pass: **77/100**. The app had strong Settings copy, default-off app enablement, local model repair controls, redacted exports, and honest proof gates, but launch still called `AccessibilityClient.requestPermissionIfNeeded()` from `AppDelegate.applicationDidFinishLaunching`, which could show the system prompt too early.
 
-Current score after this pass: **85/100**. Launch now defers the Accessibility system prompt behind app-owned Settings via `StartupOnboardingPolicy`. Settings says the model download uses Hugging Face once and suggestions run locally after install. Privacy copy now says what leaves the Mac automatically. README scope is narrower, timed menu pauses exist, and `docs/product/onboarding-permission-qa-checklist.md` makes manual onboarding proof a beta requirement.
+Current score after this pass: **86/100**. Launch now defers the Accessibility system prompt behind app-owned Settings via `StartupOnboardingPolicy`. Settings says the model download uses Hugging Face once and suggestions run locally after install. Privacy copy now says what leaves the Mac automatically. Model install preflights low disk space before network work. README scope is narrower, timed menu pauses exist, and `docs/product/onboarding-permission-qa-checklist.md` makes manual onboarding proof a beta requirement.
 
 **Score**
 
-Overall score: **85/100**
+Overall score: **86/100**
 
 **Score Breakdown**
 
@@ -55,10 +55,10 @@ Overall score: **85/100**
 
 - Category name: Model install and repair
 - Weight: 15
-- Current score: 12/15
-- Why this score: The app owns MLX runtime setup, validates the model folder, shows install progress, supports cancel/repair/retry, and says the Hugging Face download happens once.
-- Evidence found in repo: `LocalModelAssetInstaller`, `RuntimeBootstrapPlan`, `RuntimeReadinessGuidance`, `LocalModelAssetInstallerTests`, `RuntimePolicyTests`.
-- Missing evidence: no low-disk or low-memory UX proof, no smaller-model switch flow, and no recent manual cancel/resume proof.
+- Current score: 13/15
+- Why this score: The app owns MLX runtime setup, validates the model folder, shows install progress, supports cancel/repair/retry, says the Hugging Face download happens once, and preflights low disk space before starting the download.
+- Evidence found in repo: `LocalModelAssetInstaller`, `LocalModelInstallPreflightPolicy`, `RuntimeBootstrapPlan`, `RuntimeReadinessGuidance`, `LocalModelAssetInstallerTests`, `RuntimePolicyTests`.
+- Missing evidence: no low-memory UX proof, no smaller-model switch flow, and no recent manual cancel/resume/low-disk proof.
 - What would make it 100/100: hardware fit, storage preflight, smaller-model fallback, and clean manual model install/repair proof.
 
 - Category name: Menu bar, Settings, and privacy surfaces
@@ -118,6 +118,7 @@ A clean install feels calm and native. The user sees value before risk, grants o
 - Automated: `swift test --filter SuggestionPauseSchedulePolicyTests`.
 - Automated: `swift test --filter SettingsWindowControllerStateTests`.
 - Automated: `swift test --filter RuntimePolicyTests`.
+- Automated: `swift test --filter LocalModelAssetInstallerTests`.
 - Automated: `./script/check_proof_manifest.sh`.
 - Automated: `./script/check_score_targets.sh` must keep failing honestly until proof gaps close.
 - Manual: `docs/product/onboarding-permission-qa-checklist.md` on a clean macOS user account.
@@ -148,11 +149,18 @@ A clean install feels calm and native. The user sees value before risk, grants o
 - Expected score impact: +1.
 
 - Objective: add timed pause controls.
-- Files likely involved: `SuggestionPauseSchedulePolicy.swift`, `AppDelegate.swift`, `SuggestionPauseSchedulePolicyTests.swift`.
+- Files likely involved: `SuggestionControlPolicy.swift`, `AppDelegate.swift`, `SettingsWindowController.swift`, tests.
 - Tests to add/update: pause duration and state expiry tests.
 - Proof required: menu and Settings state parity proof.
 - Risk level: medium.
 - Expected score impact: shipped +1; manual state parity proof can add more.
+
+- Objective: block doomed model installs before network download.
+- Files likely involved: `LocalModelAssetInstaller.swift`, `LocalModelAssetInstallerTests.swift`.
+- Tests to add/update: low-disk preflight policy tests.
+- Proof required: manual low-disk or simulated low-disk QA before beta.
+- Risk level: low.
+- Expected score impact: +1.
 
 - Objective: add a dedicated first-success practice field.
 - Files likely involved: Settings/onboarding UI, app proof runner, tests.
@@ -163,19 +171,21 @@ A clean install feels calm and native. The user sees value before risk, grants o
 
 **Codex Execution Goal**
 
-Make onboarding and permission UX safe enough for private beta by ensuring launch explains before prompting, Settings tells the exact local-first story, manual onboarding proof is required before beta, timed pause exists, and remaining unautomated proof gaps are explicit.
+Make onboarding and permission UX safe enough for private beta by ensuring launch explains before prompting, Settings tells the exact local-first story, manual onboarding proof is required before beta, and remaining unautomated proof gaps are explicit.
 
 **Stop Conditions**
 
 - Launch no longer prompts Accessibility before app-owned copy.
-- Automated tests for launch, pause scheduling, Settings copy, and runtime copy pass.
+- Automated tests for launch, Settings copy, and runtime copy pass.
+- Timed pause controls exist with expiry policy coverage.
+- Low-disk model install preflight exists with recovery-copy coverage.
 - Scorecard exists and names current score honestly.
-- Remaining work is manual proof, timed-pause UI parity, or larger onboarding UI.
+- Remaining work is manual proof, broader pause UX, or larger onboarding UI.
 
 **Remaining Gaps**
 
 - Clean-user manual onboarding proof is still required.
 - No dedicated in-app practice field exists yet.
-- Timed pause has policy/menu coverage but no clean-user Settings parity proof.
+- Timed pause controls still need manual menu and Settings parity proof.
 - Screen Recording diagnostics still need stronger active-capture proof.
 - Release/notarization/privacy-policy proof is outside this pass.

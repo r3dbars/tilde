@@ -48,6 +48,7 @@ struct LocalModelInstallProgress: Equatable, Sendable {
 enum LocalModelAssetInstallerError: LocalizedError, Equatable {
     case missingSource(model: String)
     case invalidRepository(String)
+    case insufficientDiskSpace(requiredBytes: Int64, availableBytes: Int64)
     case invalidAfterInstall(String)
 
     var errorDescription: String? {
@@ -56,8 +57,36 @@ enum LocalModelAssetInstallerError: LocalizedError, Equatable {
             return "This model cannot be installed in the app yet: \(model). Open the model folder or choose the default model."
         case let .invalidRepository(repoID):
             return "The model download address is invalid: \(repoID)."
+        case let .insufficientDiskSpace(requiredBytes, availableBytes):
+            return "Not enough free space for the local model. Free about \(Self.gigabytes(requiredBytes - availableBytes)) GB and try again."
         case let .invalidAfterInstall(reason):
             return "The downloaded model files still look incomplete: \(reason)."
+        }
+    }
+
+    private static func gigabytes(_ bytes: Int64) -> Int64 {
+        max(1, Int64(ceil(Double(max(0, bytes)) / 1_000_000_000)))
+    }
+}
+
+struct LocalModelInstallPreflightPolicy: Equatable, Sendable {
+    let overheadMultiplier: Double
+
+    init(overheadMultiplier: Double = 1.25) {
+        self.overheadMultiplier = max(1, overheadMultiplier)
+    }
+
+    func validate(availableBytes: Int64?, expectedMinimumBytes: Int64) throws {
+        guard let availableBytes else {
+            return
+        }
+
+        let requiredBytes = Int64((Double(max(1, expectedMinimumBytes)) * overheadMultiplier).rounded(.up))
+        guard availableBytes >= requiredBytes else {
+            throw LocalModelAssetInstallerError.insufficientDiskSpace(
+                requiredBytes: requiredBytes,
+                availableBytes: max(0, availableBytes)
+            )
         }
     }
 }
@@ -65,6 +94,17 @@ enum LocalModelAssetInstallerError: LocalizedError, Equatable {
 struct LocalModelAssetInstaller: Sendable {
     let manifest: LocalModelAssetManifest
     let destinationURL: URL
+    let preflightPolicy: LocalModelInstallPreflightPolicy
+
+    init(
+        manifest: LocalModelAssetManifest,
+        destinationURL: URL,
+        preflightPolicy: LocalModelInstallPreflightPolicy = LocalModelInstallPreflightPolicy()
+    ) {
+        self.manifest = manifest
+        self.destinationURL = destinationURL
+        self.preflightPolicy = preflightPolicy
+    }
 
     func install(
         progressHandler: (@MainActor @Sendable (LocalModelInstallProgress) -> Void)? = nil
@@ -76,6 +116,11 @@ struct LocalModelAssetInstaller: Sendable {
         guard let repoID = Repo.ID(rawValue: source.repoID) else {
             throw LocalModelAssetInstallerError.invalidRepository(source.repoID)
         }
+
+        try preflightPolicy.validate(
+            availableBytes: availableBytesForInstallVolume(),
+            expectedMinimumBytes: manifest.expectedMinimumBytes
+        )
 
         await progressHandler?(.init(phase: .preparing))
         try FileManager.default.createDirectory(
@@ -135,5 +180,15 @@ struct LocalModelAssetInstaller: Sendable {
             childFileNames: childFileNames,
             modelBytes: modelBytes
         )
+    }
+
+    private func availableBytesForInstallVolume() -> Int64? {
+        let volumeURL = destinationURL.deletingLastPathComponent()
+        let values = try? volumeURL.resourceValues(forKeys: [
+            .volumeAvailableCapacityForImportantUsageKey,
+            .volumeAvailableCapacityKey
+        ])
+        return values?.volumeAvailableCapacityForImportantUsage
+            ?? values?.volumeAvailableCapacity.map(Int64.init)
     }
 }

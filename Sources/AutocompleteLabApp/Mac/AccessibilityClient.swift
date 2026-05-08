@@ -232,12 +232,16 @@ final class AccessibilityClient: @unchecked Sendable {
             return nil
         }
 
-        let selectedTextLength = max(0, selectedRange?.length ?? 0)
-        let caretRect = selectedRange.flatMap {
-            AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
-        }
         let elementRect = elementBounds(for: focusedElement)
         let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
+        let selectedTextLength = max(0, selectedRange?.length ?? 0)
+        let caretRect = selectedRange.flatMap {
+            AccessibilityTextBoundsPolicy.usableTextBounds(
+                caretBounds(for: focusedElement, range: $0),
+                elementRect: elementRect,
+                windowRect: windowRect
+            )
+        }
         let textLineRect = selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(
                 textLineBounds(
@@ -245,7 +249,9 @@ final class AccessibilityClient: @unchecked Sendable {
                     textLength: textSnapshot.utf16Length,
                     textBeforeCursor: textSnapshot.slice.textBeforeCursor,
                     range: $0
-                )
+                ),
+                elementRect: elementRect,
+                windowRect: windowRect
             )
         }
         let textStyle = selectedRange.flatMap {
@@ -484,11 +490,15 @@ final class AccessibilityClient: @unchecked Sendable {
         let textSlice = text.map {
             CursorTextSplitter.split($0, utf16Offset: selectedRange?.location ?? $0.utf16.count)
         }
-        let caretRect = selectedRange.flatMap {
-            AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
-        }
         let elementRect = elementBounds(for: focusedElement)
         let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
+        let caretRect = selectedRange.flatMap {
+            AccessibilityTextBoundsPolicy.usableTextBounds(
+                caretBounds(for: focusedElement, range: $0),
+                elementRect: elementRect,
+                windowRect: windowRect
+            )
+        }
         let textLineRect = selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(
                 textLineBounds(
@@ -496,7 +506,9 @@ final class AccessibilityClient: @unchecked Sendable {
                     textLength: text?.utf16.count ?? 0,
                     textBeforeCursor: textSlice?.textBeforeCursor ?? "",
                     range: $0
-                )
+                ),
+                elementRect: elementRect,
+                windowRect: windowRect
             )
         }
         let textStyle = selectedRange.flatMap {
@@ -565,7 +577,7 @@ final class AccessibilityClient: @unchecked Sendable {
             return nil
         }
 
-        return firstEditableDescendant(in: focusedWindow)
+        return bestEditableDescendant(in: focusedWindow)
     }
 
     private func focusedWindow(for processIdentifier: pid_t) -> AXUIElement? {
@@ -578,25 +590,37 @@ final class AccessibilityClient: @unchecked Sendable {
         return (windowValue as! AXUIElement)
     }
 
-    private func firstEditableDescendant(in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
+    private func bestEditableDescendant(in element: AXUIElement) -> AXUIElement? {
+        let result = editableDescendantSearchResult(in: element)
+        return result.focused ?? result.first
+    }
+
+    private func editableDescendantSearchResult(
+        in element: AXUIElement,
+        depth: Int = 0
+    ) -> (focused: AXUIElement?, first: AXUIElement?) {
         guard depth < 8 else {
-            return nil
+            return (focused: nil, first: nil)
         }
 
         configureMessagingTimeout(for: element)
         let role = copyAttribute(element, attribute: kAXRoleAttribute) as? String
         if ["AXTextArea", "AXTextField", "AXWebArea"].contains(role ?? "") {
-            return element
+            let isFocused = (copyAttribute(element, attribute: kAXFocusedAttribute) as? Bool) == true
+            return (focused: isFocused ? element : nil, first: element)
         }
 
         let children = copyAttribute(element, attribute: kAXChildrenAttribute) as? [AXUIElement] ?? []
+        var first: AXUIElement?
         for child in children {
-            if let match = firstEditableDescendant(in: child, depth: depth + 1) {
-                return match
+            let result = editableDescendantSearchResult(in: child, depth: depth + 1)
+            if let focused = result.focused {
+                return (focused: focused, first: first ?? result.first)
             }
+            first = first ?? result.first
         }
 
-        return nil
+        return (focused: nil, first: first)
     }
 
     private func copyAttribute(_ element: AXUIElement, attribute: String) -> CFTypeRef? {
