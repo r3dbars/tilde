@@ -150,6 +150,10 @@ public struct CompatibilityProfile: Equatable, Sendable {
             && (supportsOneWordAcceptance || supportsFullAcceptance)
     }
 
+    public var allowsCopyOnlyCommandFallback: Bool {
+        !isSensitive && supportLevel != .unsupported
+    }
+
     public var allowsStrictVisualProofSyntheticCaretPlacement: Bool {
         supportsOneWordAcceptance
             && !supportsFullAcceptance

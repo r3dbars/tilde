@@ -23,6 +23,7 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(allowed.modeText == "Mode: inline, mirror fallback")
         #expect(allowed.acceptanceText == "Acceptance: Tab next word + full accept")
+        #expect(allowed.fallbackText == "Fallback: not needed; inline is available.")
         #expect(allowed.proofText == "Proof: use disposable text, press Tab once, then the full-accept shortcut.")
         #expect(allowed.proofCommandText == "Command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit")
         #expect(allowed.proofCommandClipboardText == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit")
@@ -49,6 +50,7 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(blocked.modeText == "Mode: inline, mirror fallback")
         #expect(blocked.acceptanceText == "Acceptance: Tab next word + full accept")
+        #expect(blocked.fallbackText == "Fallback: off because this app is disabled.")
         #expect(blocked.proofText == "Proof: turn on suggestions for this app first.")
         #expect(blocked.proofCommandText == nil)
         #expect(blocked.proofCommandClipboardText == nil)
@@ -98,6 +100,7 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(diagnosticsOnly.modeText == "Mode: disabled")
         #expect(diagnosticsOnly.acceptanceText == "Acceptance: off here")
+        #expect(diagnosticsOnly.fallbackText == "Fallback: unavailable in sensitive apps or fields.")
         #expect(diagnosticsOnly.proofText == "Proof: unavailable here.")
         #expect(diagnosticsOnly.proofCommandText == nil)
         #expect(diagnosticsOnly.proofCommandClipboardText == nil)
@@ -117,6 +120,7 @@ struct SettingsWindowControllerStateTests {
         #expect(unsupported.detailText == "No compatibility profile yet. Suggestions stay off here.")
         #expect(unsupported.modeText == "Mode: not tested yet")
         #expect(unsupported.acceptanceText == "Acceptance: off here")
+        #expect(unsupported.fallbackText == "Fallback: unavailable until this app has a profile.")
         #expect(unsupported.proofText == "Proof: unavailable here.")
         #expect(unsupported.proofCommandText == nil)
         #expect(unsupported.proofCommandClipboardText == nil)
@@ -136,12 +140,32 @@ struct SettingsWindowControllerStateTests {
         #expect(missing.detailText == "Open a writing app to see whether suggestions are supported.")
         #expect(missing.modeText == "Mode: choose a writing app")
         #expect(missing.acceptanceText == "Acceptance: off until an app is selected")
+        #expect(missing.fallbackText == "Fallback: choose a writing app first.")
         #expect(missing.proofText == "Proof: choose a writing app first.")
         #expect(missing.proofCommandText == nil)
         #expect(missing.proofCommandClipboardText == nil)
         #expect(!missing.canCopyProofCommand)
         #expect(missing.menuToggleTitle == "Toggle Current App")
         #expect(!missing.canToggle)
+    }
+
+    @Test("Diagnostics-only non-sensitive apps show copy-only fallback")
+    func diagnosticsOnlyNonSensitiveAppsShowCopyOnlyFallback() {
+        let store = CompatibilityProfileStore.mvp
+        let safari = SettingsCurrentAppState(
+            displayName: "Safari",
+            bundleIdentifier: "com.apple.Safari",
+            supportStatus: store.supportStatus(for: "com.apple.Safari"),
+            isEnabled: true,
+            disabledAppCount: 0
+        )
+
+        #expect(safari.statusText == "Current app: Safari is diagnostics-only")
+        #expect(safari.modeText == "Mode: disabled")
+        #expect(safari.acceptanceText == "Acceptance: off here")
+        #expect(safari.fallbackText == "Fallback: copy-only; inline and auto-insert stay off until proof passes.")
+        #expect(safari.proofText == "Proof: unavailable here.")
+        #expect(!safari.canToggle)
     }
 
     @Test("Prompt apps show full accept is off for safety")

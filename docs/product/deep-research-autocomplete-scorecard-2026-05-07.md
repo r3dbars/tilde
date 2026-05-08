@@ -86,6 +86,9 @@ Pass 1 shipped these improvements:
   failure rates without showing suggestion text.
 - Placement uncertainty now hides any stale ghost immediately, records a
   caret-geometry failure, and feeds repeated failures into field quiet mode.
+- Command fallback policy now makes non-sensitive diagnostics-only and
+  untrusted-placement cases explicitly copy-only instead of making unsupported
+  apps look broken.
 - Diagnostics now exposes the active quiet-mode scope, reason, score, and
   expiry from trace metadata without user text.
 - Settings first-run copy now explains Accessibility in one short paragraph,
@@ -248,13 +251,13 @@ Baseline scorecard from the initial audit:
 | Context and prompt hygiene | 9 | 73 | 6.6 | Context is small and local, but lacks field metadata, style sketch, recent kept suffixes, and a hard `<NO_SUGGESTION>` prompt path. |
 | Output shape and cleanup | 8 | 89 | 7.1 | Cleaner is one of the strongest parts of the app, and now suppresses phrase restarts or visible typed-word duplicates that survive prefix trimming. |
 | Local runtime and latency | 10 | 87 | 8.7 | App-owned MLX runtime, warm model, streaming, timing slices, trace-visible static prompt cache, and trace-visible per-field session-cache eligibility/reset policy; live KV/session reuse is still pending. |
-| Ghost text UX and controls | 10 | 92 | 9.2 | One suggestion, Tab next word, full accept when allowed, direct accept-all shortcut editing, Esc dismiss, stale hiding, current-field/session silence, per-app force-mirror control, and app-level Command-Z restore for accepted insertions. |
-| Mode profiles and cross-app safety | 10 | 77 | 7.7 | Strong app profiles, a user-visible per-app mirror override, and a proof-only terminal-host Claude Code adapter now exist, but behavior modes are not first-class for every email, notes, bullets, docs, code, forms, search, and AI chat surface. |
+| Ghost text UX and controls | 10 | 93 | 9.3 | One suggestion, Tab next word, full accept when allowed, direct accept-all shortcut editing, Esc dismiss, stale hiding, current-field/session silence, per-app force-mirror control, app-level Command-Z restore for accepted insertions, and explicit copy-only fallback status when inline is unsafe. |
+| Mode profiles and cross-app safety | 10 | 78 | 7.8 | Strong app profiles, a user-visible per-app mirror override, a proof-only terminal-host Claude Code adapter, and copy-only fallback stance for non-sensitive diagnostics-only or untrusted-placement cases now exist, but behavior modes are not first-class for every email, notes, bullets, docs, code, forms, search, and AI chat surface. |
 | Learning, annoyance, accepted-and-kept loop | 12 | 66 | 7.9 | Accepted-kept learning now affects both affinity and utility, but the loop still needs fresh real-app threshold proof. |
 | Metrics, replay, and proof gates | 5 | 85 | 4.3 | Trace/report scripts are strong, and Settings can now start per-app screenshot proof from the current app; true replay-first real-app rig is still missing. |
 | Architecture and tests | 2 | 91 | 1.8 | Good policy/test structure, though AppDelegate still owns too much orchestration. |
 
-Weighted total: **80.1/100**, rounded to **80/100**.
+Weighted total: **80.3/100**, rounded to **80/100**.
 
 ## Exact Research Items
 
@@ -311,7 +314,7 @@ Weighted total: **80.1/100**, rounded to **80/100**.
 | Style memory | 92 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, question rates, short-suffix rate, and average final-token length with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, Settings can clear it, and Diagnostics exposes the trace-safe aggregate sketch. | Add tuning controls and fresh real-app trace validation. |
 | Annoyance index | 90 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, exposes current-field/session silence in Settings and the menu, records manual field pauses as scoped trace events, records placement uncertainty as caret-geometry failures, and Diagnostics now exposes annoyance score, active quiet-mode scope, and signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
 | Replay-first test rig | 84 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, placement metadata, trusted caret placement, stale cancellation, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. It can replay a fresh line-bounded trace slice, and the proof manifest now parses matched manual-smoke trace slices, requires bounded proof ranges, verifies accepts plus insertion verification, checks screenshot-backed strict visual trace events, and rejects stale proof fingerprints. | Replay recorded real app sessions with screenshots, accepts, kept horizon, and latency after every app/runtime change. |
-| Cross-app proof honesty | 99 | App proof matrix explicitly keeps failing rows non-A until evidence exists, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, and the proof manifest now verifies TextEdit, Chrome chat-like, real Monaco/ProseMirror under forced renderer AX, Obsidian, Apple Notes title/body/checklist, and Claude desktop with bounded current-fingerprint traces while requiring every compatibility profile to have owner/safety coverage. Strict mode still fails on Codex, terminal-hosted Claude Code, and default-Chrome/editor-placement gaps. | Close every pending proof row. |
+| Cross-app proof honesty | 99 | App proof matrix explicitly keeps failing rows non-A until evidence exists, unsupported/sensitive apps expose an intentional off or copy-only stance instead of silent breakage, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, and the proof manifest now verifies TextEdit, Chrome chat-like, real Monaco/ProseMirror under forced renderer AX, Obsidian, Apple Notes title/body/checklist, and Claude desktop with bounded current-fingerprint traces while requiring every compatibility profile to have owner/safety coverage. Strict mode still fails on Codex, terminal-hosted Claude Code, and default-Chrome/editor-placement gaps. | Close every pending proof row. |
 
 ## Baseline Evidence Notes
 
