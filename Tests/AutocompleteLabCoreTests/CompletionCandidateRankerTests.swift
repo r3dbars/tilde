@@ -51,6 +51,35 @@ struct CompletionCandidateRankerTests {
         #expect(ranked.first?.suggestion.visibleText == " It keeps the scope clear.")
     }
 
+    @Test("Sentence mode suppresses invented action commitments")
+    func sentenceModeSuppressesInventedActionCommitments() {
+        let ranker = CompletionCandidateRanker()
+        let safe = CompletionSuggestion(text: " It keeps the scope local.", maxVisibleWords: 8)
+        let inventedAction = CompletionSuggestion(text: " Make sure we call Sarah tomorrow.", maxVisibleWords: 8)
+
+        let ranked = ranker.ranked(
+            [inventedAction, safe],
+            mode: .sentenceContinuation,
+            textBeforeCursor: "That is enough for this pass."
+        )
+        let selection = ranker.selection(
+            [inventedAction],
+            mode: .sentenceContinuation,
+            textBeforeCursor: "That is enough for this pass."
+        )
+        let followUpSelection = ranker.selection(
+            [CompletionSuggestion(text: " Follow up with Sarah tomorrow.", maxVisibleWords: 8)],
+            mode: .sentenceContinuation,
+            textBeforeCursor: "That is enough for this pass."
+        )
+
+        #expect(ranked.first?.suggestion.visibleText == safe.visibleText)
+        #expect(selection.suggestion == nil)
+        #expect(selection.suppressionReason == .lowTopScore)
+        #expect(followUpSelection.suggestion == nil)
+        #expect(followUpSelection.suppressionReason == .lowTopScore)
+    }
+
     @Test("Ranking penalizes unsupported names and dates")
     func rankingPenalizesUnsupportedNamesAndDates() {
         let ranker = CompletionCandidateRanker()

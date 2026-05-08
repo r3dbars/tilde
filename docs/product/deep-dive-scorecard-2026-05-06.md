@@ -355,6 +355,9 @@ evidence-backed score should stay lower until those rows are closed.
 - Word completion keeps suffix-only behavior while preserving typed casing, so
   uppercase fragments complete with uppercase suffixes and mixed-case recent
   words can keep their useful casing.
+- Sentence-mode ranking now suppresses invented action commitments like
+  scheduling, calls, new names, and dates instead of treating them as harmless
+  sentence starters.
 - Chrome chat-like no-submit proof now uses a tab-title submit counter so the
   smoke test works even when Chrome JavaScript execution from Apple Events is
   disabled.

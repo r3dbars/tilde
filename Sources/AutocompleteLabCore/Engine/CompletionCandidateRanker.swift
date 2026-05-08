@@ -406,8 +406,10 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
     private func sentencePlanningDriftPenalty(_ text: String) -> Double {
         let normalized = normalizedPhrase(text)
         let planningPrefixes = [
-            "action item", "let's", "lets", "make sure to", "next step",
-            "the next step", "then we can", "we can", "we should",
+            "action item", "follow up", "let's", "lets", "make sure",
+            "make sure to", "next,", "next action", "next step", "remember to",
+            "schedule ", "set up", "the next step", "then we can", "we can",
+            "we need to", "we should",
             "you can", "you should"
         ]
         if planningPrefixes.contains(where: { normalized.hasPrefix($0) }) {
@@ -415,7 +417,9 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         }
 
         let planningWords: Set<String> = [
-            "roadmap", "schedule", "sprint", "task", "timeline"
+            "call", "calls", "deadline", "meeting", "meetings", "proposal",
+            "roadmap", "schedule", "scheduled", "sprint", "task", "timeline",
+            "today", "tomorrow"
         ]
         return Set(contentWords(in: text)).isDisjoint(with: planningWords) ? 0 : 0.18
     }
