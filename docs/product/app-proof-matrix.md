@@ -49,7 +49,10 @@ A- rows as `partial`, even when they have a passing live smoke slice.
 4. Expand Claude desktop same-baseline proof across prompt layouts.
 5. Run the guarded official Chrome editor lanes: `codemirror-official`,
    `monaco-official`, and `prosemirror-official`. Keep them non-A until each
-   lane has bounded screenshot-backed trace evidence.
+   lane has bounded screenshot-backed trace evidence. The smoke harness now
+   refuses concurrent runs, checks the active Chrome URL, requires a focused
+   editable web AX target, and verifies Chrome setup text against the focused
+   editor value before proceeding.
 6. Add real production proof paths for Google Docs, Notion, browser Slack, and
    browser Discord before removing their `unsupported-browser-surface` block.
 

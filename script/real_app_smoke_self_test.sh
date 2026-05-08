@@ -36,6 +36,14 @@ if ! grep -F "temporarily enables Chrome only for this proof pass" "$TMP_DIR/chr
   echo "real app smoke self-test did not explain temporary Chrome enablement" >&2
   exit 1
 fi
+if ! grep -F "requires Chrome to expose a focused editable web text target" "$TMP_DIR/chrome.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Chrome focused editable guard" >&2
+  exit 1
+fi
+if ! grep -F "Chrome setup text is sent to the Chrome process and verified through the focused AX editor" "$TMP_DIR/chrome.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain targeted Chrome setup insertion" >&2
+  exit 1
+fi
 
 script/real_app_smoke.sh chrome --fixture contenteditable --dry-run >"$TMP_DIR/chrome-contenteditable.txt"
 if ! grep -F "disposable Chrome contenteditable fixture" "$TMP_DIR/chrome-contenteditable.txt" >/dev/null; then
@@ -158,6 +166,15 @@ if ! grep -F "Another real app smoke run is already active" "$TMP_DIR/lock-fail.
   exit 1
 fi
 rm -rf "$LOCK_DIR"
+
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 999 bash ./script/real_app_smoke.sh chrome --fixture textarea\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/process-fail.txt"; then
+  echo "real app smoke self-test expected concurrent process scan to fail" >&2
+  exit 1
+fi
+if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/process-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the concurrent process scan" >&2
+  exit 1
+fi
 
 if script/real_app_smoke.sh chrome --fixture >/dev/null 2>&1; then
   echo "real app smoke self-test expected missing Chrome fixture values to fail" >&2
