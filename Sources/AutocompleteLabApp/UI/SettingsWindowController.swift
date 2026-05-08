@@ -355,6 +355,29 @@ struct SettingsKeyboardShortcutState: Equatable {
     }
 }
 
+struct SettingsSuggestionAggressivenessState: Equatable {
+    let aggressiveness: SuggestionAggressiveness
+
+    var statusText: String {
+        "Aggressiveness: \(aggressiveness.displayName)"
+    }
+
+    var detailText: String {
+        switch aggressiveness {
+        case .quiet:
+            return "Waits longer and needs stronger scores before showing."
+        case .normal:
+            return "Uses the current balanced timing and score gates."
+        case .eager:
+            return "Shows sooner when safe, while keeping sensitive-field and high-risk blocks."
+        }
+    }
+
+    var cycleButtonTitle: String {
+        "Use \(aggressiveness.next.displayName)"
+    }
+}
+
 struct SettingsOnboardingState: Equatable {
     let isTrusted: Bool
     let suggestionsPaused: Bool
@@ -480,6 +503,9 @@ final class SettingsWindowController: NSObject {
     private let acceptAllShortcutLabel = NSTextField(labelWithString: "Accept all:")
     private let acceptAllShortcutPopup = NSPopUpButton()
     private let cycleAcceptAllShortcutButton = NSButton(title: "Use Option-Tab", target: nil, action: nil)
+    private let aggressivenessLabel = NSTextField(labelWithString: "")
+    private let aggressivenessDetailLabel = NSTextField(labelWithString: "")
+    private let cycleAggressivenessButton = NSButton(title: "Use Eager", target: nil, action: nil)
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
     private let requestPermission: () -> Void
     private let openAccessibilitySettings: () -> Void
@@ -497,6 +523,7 @@ final class SettingsWindowController: NSObject {
     private let clearLearningData: () -> Void
     private let cycleAcceptAllShortcut: () -> Void
     private let setAcceptAllShortcut: (AcceptAllShortcut) -> Void
+    private let cycleSuggestionAggressiveness: () -> Void
     private var currentRuntimeAction: RuntimeReadinessAction = .none
     private var currentProofCommandClipboardText: String?
 
@@ -516,7 +543,8 @@ final class SettingsWindowController: NSObject {
         deleteLocalLogs: @escaping () -> Void,
         clearLearningData: @escaping () -> Void,
         cycleAcceptAllShortcut: @escaping () -> Void,
-        setAcceptAllShortcut: @escaping (AcceptAllShortcut) -> Void
+        setAcceptAllShortcut: @escaping (AcceptAllShortcut) -> Void,
+        cycleSuggestionAggressiveness: @escaping () -> Void
     ) {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
@@ -534,6 +562,7 @@ final class SettingsWindowController: NSObject {
         self.clearLearningData = clearLearningData
         self.cycleAcceptAllShortcut = cycleAcceptAllShortcut
         self.setAcceptAllShortcut = setAcceptAllShortcut
+        self.cycleSuggestionAggressiveness = cycleSuggestionAggressiveness
 
         let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 780))
         contentView.material = .contentBackground
@@ -568,6 +597,7 @@ final class SettingsWindowController: NSObject {
         fieldControl: SettingsFieldControlState,
         privacy: SettingsPrivacyState,
         keyboardShortcuts: SettingsKeyboardShortcutState,
+        suggestionAggressiveness: SettingsSuggestionAggressivenessState,
         lastSuggestionDecision: String
     ) {
         refresh(
@@ -582,6 +612,7 @@ final class SettingsWindowController: NSObject {
             fieldControl: fieldControl,
             privacy: privacy,
             keyboardShortcuts: keyboardShortcuts,
+            suggestionAggressiveness: suggestionAggressiveness,
             lastSuggestionDecision: lastSuggestionDecision
         )
         window.center()
@@ -605,6 +636,7 @@ final class SettingsWindowController: NSObject {
         fieldControl: SettingsFieldControlState,
         privacy: SettingsPrivacyState,
         keyboardShortcuts: SettingsKeyboardShortcutState,
+        suggestionAggressiveness: SettingsSuggestionAggressivenessState,
         lastSuggestionDecision: String
     ) {
         let guidance = RuntimeReadinessGuidance(report: runtimeReport)
@@ -673,6 +705,9 @@ final class SettingsWindowController: NSObject {
         acceptAllShortcutLabel.stringValue = keyboardShortcuts.acceptAllPickerLabel
         refreshAcceptAllShortcutPopup(selected: keyboardShortcuts.acceptAllShortcut)
         cycleAcceptAllShortcutButton.title = keyboardShortcuts.cycleButtonTitle
+        aggressivenessLabel.stringValue = suggestionAggressiveness.statusText
+        aggressivenessDetailLabel.stringValue = suggestionAggressiveness.detailText
+        cycleAggressivenessButton.title = suggestionAggressiveness.cycleButtonTitle
         firstRunLabel.stringValue = SettingsOnboardingState(
             isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
@@ -731,6 +766,8 @@ final class SettingsWindowController: NSObject {
         shortcutLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         acceptAllShortcutLabel.font = NSFont.systemFont(ofSize: 12)
         acceptAllShortcutLabel.textColor = .secondaryLabelColor
+        aggressivenessLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(aggressivenessDetailLabel)
 
         let requestButton = NSButton(title: "Allow Accessibility", target: self, action: #selector(requestAccessibility))
         requestButton.bezelStyle = .rounded
@@ -786,6 +823,10 @@ final class SettingsWindowController: NSObject {
         cycleAcceptAllShortcutButton.target = self
         cycleAcceptAllShortcutButton.action = #selector(cycleAcceptAllShortcutControl)
         cycleAcceptAllShortcutButton.bezelStyle = .rounded
+        cycleAggressivenessButton.target = self
+        cycleAggressivenessButton.action = #selector(cycleAggressivenessControl)
+        cycleAggressivenessButton.bezelStyle = .rounded
+        cycleAggressivenessButton.toolTip = "Cycles between quiet, normal, and eager suggestions."
         acceptAllShortcutPopup.target = self
         acceptAllShortcutPopup.action = #selector(selectAcceptAllShortcutControl)
 
@@ -858,7 +899,10 @@ final class SettingsWindowController: NSObject {
                 title: "Keyboard",
                 views: [
                     shortcutLabel,
-                    makeButtonRow([acceptAllShortcutLabel, acceptAllShortcutPopup, cycleAcceptAllShortcutButton])
+                    makeButtonRow([acceptAllShortcutLabel, acceptAllShortcutPopup, cycleAcceptAllShortcutButton]),
+                    aggressivenessLabel,
+                    aggressivenessDetailLabel,
+                    makeButtonRow([cycleAggressivenessButton])
                 ]
             )
         ].forEach {
@@ -997,6 +1041,11 @@ final class SettingsWindowController: NSObject {
     @objc
     private func cycleAcceptAllShortcutControl() {
         cycleAcceptAllShortcut()
+    }
+
+    @objc
+    private func cycleAggressivenessControl() {
+        cycleSuggestionAggressiveness()
     }
 
     @objc

@@ -10,12 +10,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let activationPolicy = CompletionActivationPolicy()
     private let fieldClassifier = AXFieldClassifier()
     private let textContextRepairPolicy = TextContextRepairPolicy()
-    private let triggerPolicy = SuggestionTriggerPolicy(
-        charactersBeforePauseRequest: 1,
-        wordCompletionDelayMilliseconds: 0,
-        wordBoundaryDelayMilliseconds: 0,
-        pauseDelayMilliseconds: 15
-    )
+    private var triggerPolicy: SuggestionTriggerPolicy {
+        suggestionAggressiveness.triggerPolicy
+    }
     private let suggestionCadenceResetPolicy = SuggestionCadenceResetPolicy()
     private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
     private var completionLengthConfiguration: CompletionLengthConfiguration {
@@ -36,7 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionPresentationGate = SuggestionPresentationGate()
     private let suggestionReplacementPolicy = SuggestionReplacementPolicy()
     private let completionFailureVisibilityPolicy = CompletionFailureVisibilityPolicy()
-    private let displayScorePolicy = DisplayScorePolicy()
+    private var displayScorePolicy: DisplayScorePolicy {
+        suggestionAggressiveness.displayScorePolicy
+    }
     private var acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
     private var acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
     private var activeAppProofBundleIdentifiers: Set<String> = []
@@ -103,6 +102,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         setAcceptAllShortcut: { [weak self] shortcut in
             self?.setAcceptAllShortcut(shortcut)
+        },
+        cycleSuggestionAggressiveness: { [weak self] in
+            self?.cycleSuggestionAggressiveness()
         }
     )
 
@@ -182,6 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionsPaused = false
     private var appEnablementSetupCompleted = true
     private var keyboardShortcutConfiguration = KeyboardShortcutConfiguration.default
+    private var suggestionAggressiveness = SuggestionAggressiveness.normal
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ProcessInfo.processInfo.disableAutomaticTermination("AutocompleteLab runs as a persistent menu bar agent.")
@@ -189,6 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadPauseState()
         loadDisabledApps()
         loadKeyboardShortcutConfiguration()
+        loadSuggestionAggressiveness()
         loadAcceptedAndKeptLearning()
         loadAcceptedTextStyleMemory()
         loadProofModeOverrides()
@@ -383,6 +387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 fieldControl: settingsFieldControlState,
                 privacy: settingsPrivacyState,
                 keyboardShortcuts: settingsKeyboardShortcutState,
+                suggestionAggressiveness: settingsSuggestionAggressivenessState,
                 lastSuggestionDecision: lastSuggestionDecision
             )
         }
@@ -511,8 +516,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private var settingsSuggestionAggressivenessState: SettingsSuggestionAggressivenessState {
+        SettingsSuggestionAggressivenessState(aggressiveness: suggestionAggressiveness)
+    }
+
     private var runtimeTargetSummary: String {
-        "\(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(completionLengthConfiguration.displaySummary)"
+        "\(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(completionLengthConfiguration.displaySummary) • \(suggestionAggressiveness.displayName.lowercased())"
     }
 
     private var shouldShowSettingsForCurrentReadiness: Bool {
@@ -3846,6 +3855,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> [String: String] {
         request.behaviorProfileTraceMetadata
             .merging(fieldClassification.traceMetadata) { current, _ in current }
+            .merging(suggestionAggressiveness.traceMetadata) { current, _ in current }
     }
 
     private func displayScore(
@@ -4665,6 +4675,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 fieldControl: settingsFieldControlState,
                 privacy: settingsPrivacyState,
                 keyboardShortcuts: settingsKeyboardShortcutState,
+                suggestionAggressiveness: settingsSuggestionAggressivenessState,
                 lastSuggestionDecision: lastSuggestionDecision
             )
         }
@@ -5045,6 +5056,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldControl: settingsFieldControlState,
             privacy: settingsPrivacyState,
             keyboardShortcuts: settingsKeyboardShortcutState,
+            suggestionAggressiveness: settingsSuggestionAggressivenessState,
             lastSuggestionDecision: lastSuggestionDecision
         )
         DiagnosticsLog.shared.record("request-accessibility")
@@ -5074,6 +5086,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldControl: settingsFieldControlState,
             privacy: settingsPrivacyState,
             keyboardShortcuts: settingsKeyboardShortcutState,
+            suggestionAggressiveness: settingsSuggestionAggressivenessState,
             lastSuggestionDecision: lastSuggestionDecision
         )
     }
@@ -5361,6 +5374,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "surface": "settings",
                 "acceptAllShortcut": shortcut.rawValue
+            ]
+        )
+        refreshRuntimeChrome()
+    }
+
+    private func cycleSuggestionAggressiveness() {
+        suggestionAggressiveness = suggestionAggressiveness.next
+        persistSuggestionAggressiveness()
+        lastRequestedTextBeforeCursor = nil
+        invalidatePendingSuggestionRequest()
+        if suggestionSession.hasVisibleSuggestion {
+            hideSuggestion(reason: "aggressiveness-changed")
+        }
+        setSuggestionDecision("Ready: \(suggestionAggressiveness.displayName.lowercased()) suggestions")
+        DiagnosticsLog.shared.record(
+            "suggestion-aggressiveness-control",
+            metadata: [
+                "surface": "settings",
+                "suggestionAggressiveness": suggestionAggressiveness.rawValue
             ]
         )
         refreshRuntimeChrome()
@@ -5944,6 +5976,10 @@ private extension AppDelegate {
         "AcceptAllShortcut"
     }
 
+    static var suggestionAggressivenessDefaultsKey: String {
+        "SuggestionAggressiveness"
+    }
+
     static var temporarilyEnabledBundleIDsEnvironmentKey: String {
         "AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
     }
@@ -6053,6 +6089,19 @@ private extension AppDelegate {
         UserDefaults.standard.set(
             keyboardShortcutConfiguration.acceptAllShortcut.rawValue,
             forKey: Self.acceptAllShortcutDefaultsKey
+        )
+    }
+
+    func loadSuggestionAggressiveness() {
+        suggestionAggressiveness = SuggestionAggressiveness.parsed(
+            UserDefaults.standard.string(forKey: Self.suggestionAggressivenessDefaultsKey)
+        )
+    }
+
+    func persistSuggestionAggressiveness() {
+        UserDefaults.standard.set(
+            suggestionAggressiveness.rawValue,
+            forKey: Self.suggestionAggressivenessDefaultsKey
         )
     }
 
