@@ -175,6 +175,33 @@ struct SettingsCurrentAppState: Equatable {
         return "Proof: use disposable text and verify accepted text stays in the field."
     }
 
+    var proofCommandText: String? {
+        guard let bundleIdentifier,
+              isEnabled,
+              case let .supported(profile) = supportStatus,
+              profile.canPresentSuggestions,
+              !profile.isSensitive else {
+            return nil
+        }
+
+        switch bundleIdentifier {
+        case "com.apple.TextEdit":
+            return "Command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit"
+        case "com.google.Chrome":
+            return "Command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all"
+        case "md.obsidian":
+            return "Manual command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate"
+        case "com.apple.Notes":
+            return "Manual commands: run notes-title, notes-body, and notes-checklist proof separately."
+        case "com.openai.codex":
+            return "Manual command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+        case "com.anthropic.claudefordesktop":
+            return "Manual command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
+        default:
+            return nil
+        }
+    }
+
     var blockedAppsText: String {
         if disabledAppCount == 0 {
             return "Blocked apps: none"
@@ -368,6 +395,7 @@ final class SettingsWindowController: NSObject {
     private let currentAppModeLabel = NSTextField(labelWithString: "")
     private let currentAppAcceptanceLabel = NSTextField(labelWithString: "")
     private let currentAppProofLabel = NSTextField(labelWithString: "")
+    private let currentAppProofCommandLabel = NSTextField(labelWithString: "")
     private let disabledAppsLabel = NSTextField(labelWithString: "")
     private let suggestionDecisionLabel = NSTextField(labelWithString: "")
     private let toggleCurrentAppButton = NSButton(
@@ -566,6 +594,8 @@ final class SettingsWindowController: NSObject {
         currentAppModeLabel.stringValue = currentApp.modeText
         currentAppAcceptanceLabel.stringValue = currentApp.acceptanceText
         currentAppProofLabel.stringValue = currentApp.proofText
+        currentAppProofCommandLabel.stringValue = currentApp.proofCommandText ?? ""
+        currentAppProofCommandLabel.isHidden = currentApp.proofCommandText == nil
         toggleCurrentAppButton.title = currentApp.toggleTitle
         toggleCurrentAppButton.state = currentApp.isEnabled ? .on : .off
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
@@ -631,6 +661,7 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(currentAppModeLabel)
         configureSecondaryLabel(currentAppAcceptanceLabel)
         configureSecondaryLabel(currentAppProofLabel)
+        configureSecondaryLabel(currentAppProofCommandLabel)
         configureSecondaryLabel(disabledAppsLabel)
         configureSecondaryLabel(suggestionDecisionLabel)
         privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
@@ -743,6 +774,7 @@ final class SettingsWindowController: NSObject {
                     currentAppModeLabel,
                     currentAppAcceptanceLabel,
                     currentAppProofLabel,
+                    currentAppProofCommandLabel,
                     makeButtonRow([forceMirrorModeButton, startAppProofButton]),
                     toggleCurrentAppButton,
                     makeButtonRow([disabledAppsLabel, enableAllAppsButton])
