@@ -199,6 +199,10 @@ Pass 1 shipped these improvements:
   deterministic local completions, and replay counts those presented fast-word
   events as candidate-selection proof without treating them as MLX model
   results.
+- `SuggestionOrchestrator` now owns the active completion request, request
+  ticket gate, fast word-selection delegation, and engine delegation behind a
+  focused app-level test suite. AppDelegate still owns presentation, insertion,
+  screenshot, and placement orchestration.
 - Slow focused-text AX reads that return no focused text context now start a
   short app-specific cooldown immediately instead of requiring a repeated slow
   read, so failing editors back off sooner without touching the key path.
@@ -296,9 +300,9 @@ Baseline scorecard from the initial audit:
 | Mode profiles and cross-app safety | 10 | 78 | 7.8 | Strong app profiles, a user-visible per-app mirror override, a proof-only terminal-host Claude Code adapter, and copy-only fallback stance for non-sensitive diagnostics-only or untrusted-placement cases now exist, but behavior modes are not first-class for every email, notes, bullets, docs, code, forms, search, and AI chat surface. |
 | Learning, annoyance, accepted-and-kept loop | 12 | 67 | 8.0 | Accepted-kept learning now affects both affinity and utility, and user-selected quiet/normal/eager aggressiveness can tune eagerness without clearing learning; the loop still needs fresh real-app threshold proof. |
 | Metrics, replay, and proof gates | 5 | 88 | 4.4 | Trace/report scripts are strong, Settings can start per-app screenshot proof from the current app, fresh bounded real-app slices now pass a replay smoke profile, and deterministic fast-word selection now has trace-safe candidate metadata; full replay proof still needs all scenario signals in one current pass. |
-| Architecture and tests | 2 | 92 | 1.8 | Good policy/test structure, and app-proof command execution is now behind a small coordinator; AppDelegate still owns too much suggestion orchestration. |
+| Architecture and tests | 2 | 93 | 1.9 | Good policy/test structure, app-proof command execution is behind a small coordinator, and request/ticket/fast-word suggestion orchestration is now behind `SuggestionOrchestrator`; AppDelegate still owns presentation, insertion, screenshot, and placement orchestration. |
 
-Weighted total: **80.8/100**, rounded to **81/100**.
+Weighted total: **80.9/100**, rounded to **81/100**.
 
 ## Exact Research Items
 
@@ -331,7 +335,7 @@ Weighted total: **80.8/100**, rounded to **81/100**.
 | Local runtime ownership | 92 | App-owned embedded runtime and no user-managed server dependency. | Keep this stance through beta and fail clearly if model assets are missing. |
 | Warm/runtime cache | 82 | Model container is warm and reused, static system prompts now go through a bounded redacted-key cache with hit/size trace metadata, `CompletionRequest` carries field identity, and `RuntimeSessionCachePolicy` defines a tested same-app/same-field/same-mode/same-neighborhood reuse gate with trace metadata for reuse eligibility and reset reasons. Each MLX request still builds a new `ChatSession`. | Wire safe per-field session/KV reuse into the app runtime. |
 | Generated length | 92 | MVP defaults to 5 visible words / 10 generated tokens, behavior profiles stay shorter by mode, env overrides clamp at 7 visible words / 16 generated tokens, and sentence mode has its own 10-token ceiling. | Tune defaults from fresh traces. |
-| Stale cancellation | 86 | Request IDs, text snapshots, and keydown invalidation are strong. | Add app-level async race tests and cancellation proof in replay rig. |
+| Stale cancellation | 87 | Request IDs, text snapshots, keydown invalidation, and the app-level request/ticket gate are now behind tested `SuggestionOrchestrator` ownership. | Add async race tests and cancellation proof in replay rig. |
 | One visible suggestion | 95 | Single `SuggestionSession`, no dropdown or carousel. | Keep this invariant. |
 | Single-line under 42 chars | 90 | `CompletionSuggestion` caps visible text to one line, bounded words, and 42 visible characters. | Add screenshot proof across narrow editors and long wrapped lines. |
 | Flicker control | 90 | Streaming presentation gate limits partial updates, and replacement now suppresses fresh/low-margin candidate swaps with 1.2s fresh and 2s stale lifetime tests. | Add screenshot proof across narrow editors and streaming model output. |
@@ -659,6 +663,10 @@ these are true.
    candidate count, top score, score margin, and suppression reason, then let
    full replay count those fast-word presented events as candidate-selection
    proof.
+48. Done: move active request ownership, request-ticket gating, fast-word
+   selection, and engine delegation behind `SuggestionOrchestrator`, with
+   app-level tests for current-request storage, stale ticket blocking,
+   invalidation, candidate metadata, and engine delegation.
 
 ## Goal Status
 
