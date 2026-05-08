@@ -120,11 +120,18 @@
     },
     {
       "surface": "Apple Notes checklist",
-      "status": "pending",
-      "screenshots": [],
-      "gaps": [
-        "Needs separate notes-checklist manual-gated screenshot and accept proof."
-      ]
+      "status": "complete",
+      "manualSmoke": {
+        "app": "Notes",
+        "bundle": "com.apple.Notes",
+        "proof": "notes-checklist",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/notes-checklist.png"
+      ],
+      "gaps": []
     },
     {
       "surface": "Claude Code",
@@ -137,12 +144,6 @@
     {
       "surface": "Claude desktop",
       "status": "partial",
-      "manualSmoke": {
-        "app": "Claude",
-        "bundle": "com.anthropic.claudefordesktop",
-        "proof": "default",
-        "minVerifiedAccepts": 2
-      },
       "screenshots": [],
       "gaps": [
         "Prior accepts exist, but fresh screenshot-backed one-word no-submit proof is still missing."

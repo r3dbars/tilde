@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionControlPolicy = SuggestionControlPolicy()
     private let activationPolicy = CompletionActivationPolicy()
     private let fieldClassifier = AXFieldClassifier()
+    private let textContextRepairPolicy = TextContextRepairPolicy()
     private let triggerPolicy = SuggestionTriggerPolicy(
         charactersBeforePauseRequest: 1,
         wordCompletionDelayMilliseconds: 0,
@@ -160,6 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastStatusLine: String?
     private var lastSuggestionDecision = "Starting"
     private var lastSyntheticCaretDiagnosticSignature: String?
+    private var lastTextContextRepairDiagnosticSignature: String?
     private var lastEligibleTargetApp: RunningApplicationInfo?
     private var lastObservedSettingsApp: RunningApplicationInfo?
     private var lastFieldControlTarget: FieldControlTarget?
@@ -762,8 +764,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion()
             return
         }
-        let context = presentationAdjustedContext(rawContext, app: frontmostApp, profile: profile)
+        let rawFieldIdentity = fieldIdentity(
+            app: frontmostApp,
+            context: rawContext,
+            profile: profile
+        )
+        transitionToField(rawFieldIdentity)
 
+        let previousSnapshot = lastTextSnapshot
+        let context = presentationAdjustedContext(
+            rawContext,
+            app: frontmostApp,
+            profile: profile,
+            previousSnapshot: previousSnapshot
+        )
         let fieldIdentity = fieldIdentity(
             app: frontmostApp,
             context: context,
@@ -776,14 +790,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requestMode: nil,
             fieldKind: fieldClassification.kind
         )
-        transitionToField(fieldIdentity)
 
         let snapshot = FocusedTextSnapshot(
             fieldIdentity: fieldIdentity,
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor
         )
-        let previousSnapshot = lastTextSnapshot
 
         guard snapshot != previousSnapshot else {
             setSuggestionDecision(
@@ -1291,8 +1303,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func presentationAdjustedContext(
         _ context: FocusedTextContext,
         app: RunningApplicationInfo,
-        profile: CompatibilityProfile
+        profile: CompatibilityProfile,
+        previousSnapshot: FocusedTextSnapshot? = nil
     ) -> FocusedTextContext {
+        let repair = textContextRepairPolicy.repair(TextContextRepairInput(
+            bundleIdentifier: app.bundleIdentifier,
+            role: context.role,
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            selectedTextLength: context.selectedTextLength,
+            previousTextBeforeCursor: previousSnapshot?.textBeforeCursor,
+            previousTextAfterCursor: previousSnapshot?.textAfterCursor
+        ))
+        let context = repair.wasRepaired
+            ? contextReplacingText(
+                context,
+                textBeforeCursor: repair.textBeforeCursor,
+                textAfterCursor: repair.textAfterCursor
+            )
+            : context
+        if repair.wasRepaired {
+            recordTextContextRepairIfNeeded(repair, context: context, profile: profile)
+        }
+
         guard supportsSyntheticTextAreaCaret(for: app.bundleIdentifier),
               promptTextAreaMatch(for: app.bundleIdentifier, context: context).canSuggest,
               context.caretRect == nil,
@@ -1329,6 +1362,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isSecure: context.isSecure,
             caretIsSynthetic: true,
             capabilities: capabilities
+        )
+    }
+
+    private func contextReplacingText(
+        _ context: FocusedTextContext,
+        textBeforeCursor: String,
+        textAfterCursor: String
+    ) -> FocusedTextContext {
+        FocusedTextContext(
+            elementIdentifier: context.elementIdentifier,
+            role: context.role,
+            subrole: context.subrole,
+            fingerprint: context.fingerprint,
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: textAfterCursor,
+            selectedTextLength: context.selectedTextLength,
+            caretRect: context.caretRect,
+            elementRect: context.elementRect,
+            windowRect: context.windowRect,
+            textLineRect: context.textLineRect,
+            textStyle: context.textStyle,
+            isSecure: context.isSecure,
+            caretIsSynthetic: context.caretIsSynthetic,
+            capabilities: context.capabilities
         )
     }
 
@@ -1491,6 +1548,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "source": "text-area-estimate",
                 "caret": compactRectDescription(caret),
                 "beforeChars": String(context.textBeforeCursor.count)
+            ]
+        )
+    }
+
+    private func recordTextContextRepairIfNeeded(
+        _ repair: TextContextRepairResult,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) {
+        guard let reason = repair.reason else {
+            return
+        }
+
+        let signature = [
+            profile.bundleIdentifier,
+            String(context.elementIdentifier),
+            reason.rawValue,
+            String(context.textBeforeCursor.count),
+            String(context.textAfterCursor.count)
+        ].joined(separator: "|")
+
+        guard signature != lastTextContextRepairDiagnosticSignature else {
+            return
+        }
+
+        lastTextContextRepairDiagnosticSignature = signature
+        DiagnosticsLog.shared.record(
+            "text-context-repaired",
+            metadata: [
+                "app": profile.bundleIdentifier,
+                "reason": reason.rawValue,
+                "role": context.role ?? "unknown",
+                "beforeChars": String(context.textBeforeCursor.count),
+                "afterChars": String(context.textAfterCursor.count),
+                "hasCaretRect": String(context.caretRect != nil),
+                "hasElementRect": String(context.elementRect != nil)
             ]
         )
     }
@@ -1832,7 +1925,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        let context = presentationAdjustedContext(rawContext, app: frontmostApp, profile: profile)
+        let context = presentationAdjustedContext(
+            rawContext,
+            app: frontmostApp,
+            profile: profile,
+            previousSnapshot: lastTextSnapshot
+        )
         return fieldIdentity(
             app: frontmostApp,
             context: context,
@@ -1982,7 +2080,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        let context = presentationAdjustedContext(rawContext, app: frontmostApp, profile: profile)
+        let context = presentationAdjustedContext(
+            rawContext,
+            app: frontmostApp,
+            profile: profile,
+            previousSnapshot: lastTextSnapshot
+        )
         guard fieldIdentity(app: frontmostApp, context: context, profile: profile) == undo.fieldIdentity else {
             clearPendingAcceptedInsertionUndo(reason: "stale-field")
             return false
@@ -2045,6 +2148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return InsertionVerificationBaseline(
             fieldIdentity: currentFieldIdentity,
             previousTextBeforeCursor: lastTextSnapshot.textBeforeCursor,
+            previousTextAfterCursor: lastTextSnapshot.textAfterCursor,
             profile: profile,
             suggestionID: currentSuggestionID,
             requestMode: currentSuggestionRequestMode,
@@ -2099,7 +2203,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var result = insertionVerification.verify(
                 previousTextBeforeCursor: baseline.previousTextBeforeCursor,
                 acceptedText: acceptedText,
-                currentTextBeforeCursor: context.textBeforeCursor
+                currentTextBeforeCursor: context.textBeforeCursor,
+                previousTextAfterCursor: baseline.previousTextAfterCursor,
+                currentTextAfterCursor: context.textAfterCursor
             )
 
             DiagnosticsLog.shared.record(
@@ -2129,7 +2235,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     result = insertionVerification.verify(
                         previousTextBeforeCursor: baseline.previousTextBeforeCursor,
                         acceptedText: acceptedText,
-                        currentTextBeforeCursor: context.textBeforeCursor
+                        currentTextBeforeCursor: context.textBeforeCursor,
+                        previousTextAfterCursor: baseline.previousTextAfterCursor,
+                        currentTextAfterCursor: context.textAfterCursor
                     )
                     DiagnosticsLog.shared.record(
                         "insert-verification",
@@ -2171,6 +2279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         let retryBaseline = InsertionVerificationBaseline(
                             fieldIdentity: baseline.fieldIdentity,
                             previousTextBeforeCursor: baseline.previousTextBeforeCursor,
+                            previousTextAfterCursor: baseline.previousTextAfterCursor,
                             profile: baseline.profile,
                             suggestionID: baseline.suggestionID,
                             requestMode: baseline.requestMode,
@@ -2293,9 +2402,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return .missingContext
         }
 
+        let previousSnapshot = FocusedTextSnapshot(
+            fieldIdentity: baseline.fieldIdentity,
+            textBeforeCursor: baseline.previousTextBeforeCursor,
+            textAfterCursor: baseline.previousTextAfterCursor
+        )
+        let adjustedContext = presentationAdjustedContext(
+            context,
+            app: frontmostApp,
+            profile: baseline.profile,
+            previousSnapshot: previousSnapshot
+        )
+
         let currentIdentity = fieldIdentity(
             app: frontmostApp,
-            context: context,
+            context: adjustedContext,
             profile: baseline.profile
         )
 
@@ -2303,7 +2424,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return .fieldChanged
         }
 
-        return .ready(context: context)
+        return .ready(context: adjustedContext)
     }
 
     private func startAcceptanceSurvivalTracking(_ tracker: AcceptanceSurvivalTracker) {
@@ -2417,7 +2538,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let context = presentationAdjustedContext(
             rawContext,
             app: frontmostApp,
-            profile: tracker.profile
+            profile: tracker.profile,
+            previousSnapshot: lastTextSnapshot
         )
         guard fieldIdentity(
             app: frontmostApp,
@@ -3299,7 +3421,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let context = presentationAdjustedContext(
             rawContext,
             app: frontmostApp,
-            profile: profile
+            profile: profile,
+            previousSnapshot: lastTextSnapshot
         )
         guard self.fieldIdentity(
             app: frontmostApp,
@@ -5572,10 +5695,11 @@ private extension AppDelegate {
     }
 }
 
-private struct InsertionVerificationBaseline: Equatable {
-    let fieldIdentity: FocusedFieldIdentity
-    let previousTextBeforeCursor: String
-    let profile: CompatibilityProfile
+    private struct InsertionVerificationBaseline: Equatable {
+        let fieldIdentity: FocusedFieldIdentity
+        let previousTextBeforeCursor: String
+        let previousTextAfterCursor: String
+        let profile: CompatibilityProfile
     let suggestionID: String?
     let requestMode: CompletionRequestMode?
     let acceptanceID: String
