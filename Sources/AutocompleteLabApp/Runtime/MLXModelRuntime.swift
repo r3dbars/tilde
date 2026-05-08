@@ -76,6 +76,9 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             throw CancellationError()
         }
 
+        try await prewarm(loadedContainer)
+        try Task.checkCancellation()
+
         stateQueue.sync {
             container = loadedContainer
             storedState = .ready(candidate: .mlx)
@@ -108,6 +111,26 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let container = try await readyContainer()
         try Task.checkCancellation()
 
+        return try await performCompletion(
+            request,
+            using: container,
+            timingEventName: "mlx-completion-timing",
+            cancellationEventName: "mlx-completion-cancelled",
+            shouldPublishPartials: true,
+            shouldRecordTrace: true,
+            onPartialSuggestion: onPartialSuggestion
+        )
+    }
+
+    private func performCompletion(
+        _ request: CompletionRequest,
+        using container: ModelContainer,
+        timingEventName: String,
+        cancellationEventName: String,
+        shouldPublishPartials: Bool,
+        shouldRecordTrace: Bool,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+    ) async throws -> CompletionSuggestion? {
         let startedAt = Date()
         let prompt = promptBuilder.prompt(for: request)
         let promptBuiltAt = Date()
@@ -138,6 +161,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
                 if let partialSuggestion = cleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode),
                    !partialSuggestion.isEmpty,
+                   shouldPublishPartials,
                    partialSuggestion.visibleText != lastPartialVisibleText {
                     lastPartialVisibleText = partialSuggestion.visibleText
                     onPartialSuggestion(partialSuggestion)
@@ -149,7 +173,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             }
         } catch is CancellationError {
             DiagnosticsLog.shared.record(
-                "mlx-completion-cancelled",
+                cancellationEventName,
                 metadata: [
                     "app": request.appBundleIdentifier ?? "unknown",
                     "mode": request.mode.rawValue,
@@ -166,7 +190,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let cleanedAt = Date()
         let totalMilliseconds = Self.milliseconds(from: startedAt, to: cleanedAt)
         DiagnosticsLog.shared.record(
-            "mlx-completion-timing",
+            timingEventName,
             metadata: [
                 "app": request.appBundleIdentifier ?? "unknown",
                 "mode": request.mode.rawValue,
@@ -182,17 +206,40 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                 "cleanedChars": String(cleanedSuggestion?.visibleText.count ?? 0)
             ]
         )
-        RawAutocompleteTraceLog.shared.recordModelResult(
-            request: request,
-            prompt: prompt,
-            rawOutput: rawOutput,
-            cleanedSuggestion: cleanedSuggestion,
-            suggestionID: request.suggestionID,
-            latencyMilliseconds: totalMilliseconds,
-            firstTokenLatencyMilliseconds: firstChunkMilliseconds
-        )
+
+        if shouldRecordTrace {
+            RawAutocompleteTraceLog.shared.recordModelResult(
+                request: request,
+                prompt: prompt,
+                rawOutput: rawOutput,
+                cleanedSuggestion: cleanedSuggestion,
+                suggestionID: request.suggestionID,
+                latencyMilliseconds: totalMilliseconds,
+                firstTokenLatencyMilliseconds: firstChunkMilliseconds
+            )
+        }
 
         return cleanedSuggestion
+    }
+
+    private func prewarm(_ container: ModelContainer) async throws {
+        let request = CompletionRequest(
+            textBeforeCursor: "A quiet local autocomplete should",
+            appBundleIdentifier: "app.transcripted.autocomplete-lab.runtime-warmup",
+            maxVisibleWords: lengthConfiguration.maxVisibleWords,
+            mode: .phraseContinuation,
+            suggestionID: "runtime-warmup-\(UUID().uuidString)"
+        )
+
+        _ = try await performCompletion(
+            request,
+            using: container,
+            timingEventName: "mlx-warmup-generation",
+            cancellationEventName: "mlx-warmup-cancelled",
+            shouldPublishPartials: false,
+            shouldRecordTrace: false,
+            onPartialSuggestion: { _ in }
+        )
     }
 
     private func shouldStopEarly(_ rawOutput: String, request: CompletionRequest) -> Bool {

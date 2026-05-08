@@ -19,6 +19,10 @@ let package = Package(
         .executable(
             name: "AutocompleteTraceReplay",
             targets: ["AutocompleteTraceReplay"]
+        ),
+        .executable(
+            name: "AutocompleteRuntimeProbe",
+            targets: ["AutocompleteRuntimeProbe"]
         )
     ],
     dependencies: [
@@ -65,6 +69,17 @@ let package = Package(
         .executableTarget(
             name: "AutocompleteTraceReplay",
             dependencies: ["AutocompleteLabCore"]
+        ),
+        .executableTarget(
+            name: "AutocompleteRuntimeProbe",
+            dependencies: [
+                "AutocompleteLabCore",
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "MLXHuggingFace", package: "mlx-swift-lm"),
+                .product(name: "Tokenizers", package: "swift-transformers")
+            ],
+            exclude: ["AGENTS.md"]
         ),
         .testTarget(
             name: "AutocompleteLabCoreTests",

@@ -5,13 +5,13 @@
 - Deep Research topic: Local Runtime Rubric for Mac Autocomplete
 - Repo: `transcripted-autocomplete-lab`
 - Date: 2026-05-08
-- Commit inspected: `771f14dee37a4c8a44d89f1059f8a2aec9ca4e40`, plus local branch changes on `codex/local-runtime-scorecard-20260508`
+- Commit inspected: `32a78a23457fb1ccb725fb219f5b3c96f3073502`, plus local branch changes on `codex/local-runtime-scorecard-20260508`
 
 ## Executive Summary
 
 The research says this app cannot be beta-ready just because it is "local." It needs an app-owned, warm, real model path that stays fast while the user types, fails closed under pressure, never asks testers to run a server, and never hides behind mock output.
 
-This repo has a real MLX/Qwen3.5 app-owned path, in-app model install/repair, strong output cleaning, local privacy defaults, stale-result guards, pinned installed-asset proof, runtime failure backoff, and good trace tooling. The biggest blockers are still fresh Qwen latency proof, no helper/XPC isolation, no real power or memory-pressure proof run, and incomplete benchmark gating.
+This repo has a real MLX/Qwen3.5 app-owned path, in-app model install/repair, strong output cleaning, local privacy defaults, stale-result guards, pinned installed-asset proof, runtime failure backoff, warm default-model latency proof, and good trace tooling. The biggest blockers are still no helper/XPC isolation, no real power or memory-pressure proof run, incomplete benchmark gating, and incomplete manual real-app proof.
 
 ## Product Standard
 
@@ -45,23 +45,23 @@ Starting score before this pass: **72/100**.
 
 The starting app had real MLX runtime code and in-app model setup, but still had production-facing mock fallback wiring in `RuntimeBootstrapPlan` and `AppModelRuntimeFactory`, README copy claiming mock fallback, a macOS package target that disagreed with runtime docs, and no memory/thermal response.
 
-After this pass, runtime bootstrap fails closed instead of selecting `MockModelRuntime`, the legacy local engine fails closed instead of returning mock suggestions, app diagnostics state `mockFallbackAllowed=false`, the package target matches macOS 14, a backend sanity gate is part of smoke/beta checks, resource pressure now suppresses suggestions and unloads the runtime on serious/critical pressure, and the preferred Qwen3.5 4B model source is pinned.
+After this pass, runtime bootstrap fails closed instead of selecting `MockModelRuntime`, the legacy local engine fails closed instead of returning mock suggestions, app diagnostics state `mockFallbackAllowed=false`, the package target matches macOS 14, a backend sanity gate is part of smoke/beta checks, resource pressure now suppresses suggestions and unloads the runtime on serious/critical pressure, the preferred Qwen3.5 4B model source is pinned, and runtime warmup now includes one hidden generation before the app reports the model ready.
 
-The score is still capped because `./script/model_latency_report.py --default-model-proof` has not passed with current Qwen3.5 4B samples, the runtime runs inside the menu bar app process instead of a helper/XPC process, and real battery/thermal/memory-pressure proof is still missing.
+The score is still capped because the runtime runs inside the menu bar app process instead of a helper/XPC process, real battery/thermal/memory-pressure proof is still missing, and the passing latency proof is an automated runtime probe rather than fresh manual typing proof in every target app.
 
 ## Score
 
-Overall score: **83/100**
+Overall score: **88/100**
 
 ## Score Breakdown
 
 ### Latency and Responsiveness
 
 - Weight: 25
-- Current score: 19/25
-- Why this score: The app has MLX timing logs, streaming partials, short 3-word/9-token MVP generation caps, stale request tickets, and a default-model latency proof script. Current live proof is incomplete.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Configuration/ModelPolicy.swift`, `Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift`, `Sources/AutocompleteLabCore/Session/SuggestionRequestGate.swift`, `script/model_latency_report.py`, `script/model_latency_report_self_test.sh`
-- Missing evidence: Passing `./script/model_latency_report.py --default-model-proof` with current Qwen3.5 4B samples; p50/p95/p99 from replay; cold/warm/wake split.
+- Current score: 23/25
+- Why this score: The app has MLX timing logs, streaming partials, short 3-word/9-token MVP generation caps, stale request tickets, hidden generation warmup before ready state, and passing default-model latency proof. The latest automated Qwen3.5 4B probe produced five shown phrase samples with p95 155ms and average 144ms.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Configuration/ModelPolicy.swift`, `Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift`, `Sources/AutocompleteLabCore/Session/SuggestionRequestGate.swift`, `Sources/AutocompleteRuntimeProbe/main.swift`, `script/runtime_latency_probe.sh`, `script/build_mlx_metallib.sh`, `script/model_latency_report.py`, `script/model_latency_report_self_test.sh`
+- Missing evidence: p50/p95/p99 from replay; cold/warm/wake split; manual target-app typing proof that the app UI path matches the probe.
 - What would make it 100/100: Automated replay and live default-model proof show ideal or high-acceptable TTFS on reference 16 GB Macs, with stale suggestions dropped under target.
 
 ### Output Validity and Usefulness
@@ -85,9 +85,9 @@ Overall score: **83/100**
 ### Runtime Ownership and Lifecycle
 
 - Weight: 15
-- Current score: 13/15
-- Why this score: The app owns the MLX runtime and model path, does not allow user-managed servers, and now fails closed instead of falling back to mock in the app target. Runtime is still inside the menu bar app process, not a helper/XPC process.
-- Evidence found in repo: `Sources/AutocompleteLabApp/Runtime/AppModelRuntimeFactory.swift`, `Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift`, `Sources/AutocompleteLabApp/Runtime/UnavailableModelRuntime.swift`, `Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swift`, `script/check_backend_sanity.sh`
+- Current score: 13.5/15
+- Why this score: The app owns the MLX runtime and model path, does not allow user-managed servers, fails closed instead of falling back to mock in the app target, and now keeps the runtime in warming state until a hidden generation has completed. Runtime is still inside the menu bar app process, not a helper/XPC process.
+- Evidence found in repo: `Sources/AutocompleteLabApp/Runtime/AppModelRuntimeFactory.swift`, `Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift`, `Sources/AutocompleteLabApp/Runtime/UnavailableModelRuntime.swift`, `Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swift`, `Sources/AutocompleteRuntimeProbe/main.swift`, `script/check_backend_sanity.sh`
 - Missing evidence: XPC/helper isolation, helper restart/backoff, process-level crash recovery, shared cache lifecycle, sleep/wake proof.
 - What would make it 100/100: Bundled helper owns model/tokenizer/cache, menu bar process survives helper crash/OOM, warm/cold/sleep/wake paths are measured.
 
@@ -112,9 +112,9 @@ Overall score: **83/100**
 ### Benchmark Coverage
 
 - Weight: 5
-- Current score: 4/5
-- Why this score: There are good self-tests and scripts for latency, trace eval, model assets, app bundle checks, and beta readiness. They do not yet cover the full research matrix.
-- Evidence found in repo: `script/model_latency_report.py`, `script/check_trace_eval.sh`, `script/check_model_asset.py`, `script/check_diagnostics_log.sh`, `script/smoke_test.sh`, `script/beta_readiness.sh`
+- Current score: 4.5/5
+- Why this score: There are good self-tests and scripts for latency, trace eval, model assets, app bundle checks, beta readiness, and now a standalone default-runtime latency probe that emits diagnostics compatible with the readiness report. They do not yet cover the full research matrix.
+- Evidence found in repo: `Sources/AutocompleteRuntimeProbe/main.swift`, `script/runtime_latency_probe.sh`, `script/build_mlx_metallib.sh`, `script/model_latency_report.py`, `script/check_trace_eval.sh`, `script/check_model_asset.py`, `script/check_diagnostics_log.sh`, `script/smoke_test.sh`, `script/beta_readiness.sh`
 - Missing evidence: Replay benchmark scripts for cold/warm, model matrix, memory pressure, install repair, power trace, and backend sanity as a release artifact report.
 - What would make it 100/100: CI/release gating records TTFS p50/p95/p99, RSS, CPU/GPU, battery delta, fallback, invalid output, stale output, install failures, and thermal transitions.
 
@@ -152,7 +152,7 @@ The app owns the runtime in an isolated helper, ships one pinned default model p
 - `swift test` passing.
 - `./script/check_backend_sanity.sh` passing.
 - `./script/check_model_asset.py` passing for Qwen3.5 4B.
-- `./script/model_latency_report.py --default-model-proof` passing from a current launch.
+- `./script/model_latency_report.py --default-model-proof` passing from a current launch or `./script/runtime_latency_probe.sh 5` producing equivalent current default-model diagnostics.
 - `AUTOCOMPLETE_LAB_REQUIRE_READY=1 AUTOCOMPLETE_LAB_EXPECTED_ASSET=Qwen3.5-4B-4bit ./script/check_diagnostics_log.sh` passing.
 - Bounded trace replay proving stale drops, invalid output drops, accepted-and-kept metadata, and no mock fallback.
 - Memory-pressure proof showing warning/fair suppression and critical/serious unload.
@@ -173,9 +173,10 @@ The app owns the runtime in an isolated helper, ships one pinned default model p
 - `./script/check_model_asset_self_test.sh`: passed.
 - `./script/check_test_coverage_manifest.sh`: passed.
 - `./script/check_model_asset.py`: passed for Qwen3.5 4B MLX after repairing the local model folder to pinned revision `32f3e8ecf65426fc3306969496342d504bfa13f3`; report includes metadata fingerprint `sha256:27f35688a1eacdcb59b9767e177cbce42a5545cbfd202a67f61e9f70140c4c41`.
-- `./script/model_latency_report.py --default-model-proof`: blocked, not enough current model timing samples.
-- `./script/smoke_test.sh`: blocked by visual placement evidence gaps after Swift tests, backend sanity, coverage manifest, and self-tests passed.
-- `./script/beta_readiness.sh --check-only`: blocked by stale/manual app proof, visual proof gaps, and missing beta archive; backend sanity, model asset, runtime production gate, redacted export, and package prerequisites passed.
+- `./script/runtime_latency_probe.sh 5`: passed. It built the MLX metallib, ran a hidden warmup generation, produced five Qwen3.5 4B phrase samples, and `./script/model_latency_report.py --default-model-proof` passed with shown p95 155ms and average 144ms.
+- `./script/model_latency_report.py --default-model-proof`: failed when run later by itself because the live app wrote a newer Qwen bootstrap with no phrase samples. This does not invalidate the probe proof, but it means the raw report command must be run immediately after collecting the intended samples.
+- `./script/smoke_test.sh`: blocked by visual placement evidence gaps after Swift tests, backend sanity, coverage manifest, quality eval, model asset self-test, manual smoke self-test, real-app smoke self-test, proof manifest self-test, and visual evidence self-test passed.
+- `./script/beta_readiness.sh --check-only`: blocked by 16 stale or pending manual app proof rows, 6 screenshot-backed visual proof gaps plus stale Codex proof, and missing `dist/AutocompleteLab.zip`; backend sanity, model asset, runtime production gate, redacted export, and package prerequisites passed.
 
 ## Implementation Queue
 
@@ -224,14 +225,14 @@ The app owns the runtime in an isolated helper, ships one pinned default model p
 - Risk level: Medium
 - Expected score impact: +1
 
-### Next: Generate Fresh Qwen Latency Proof
+### Done In This Pass: Generate Fresh Qwen Latency Proof
 
-- Objective: Produce enough current Qwen3.5 4B phrase timing and shown-latency samples to pass default proof.
-- Files likely involved: no code required unless proof fails; possibly `MLXModelRuntime.swift` and `model_latency_report.py`
-- Tests to add/update: add any failed edge to latency report self-test
-- Proof required: `./script/model_latency_report.py --default-model-proof`
+- Objective: Produce enough current Qwen3.5 4B phrase timing and shown-latency samples to pass default proof, and make model warmup pay the first-generation cost before suggestions are allowed.
+- Files likely involved: `MLXModelRuntime.swift`, `AutocompleteRuntimeProbe/main.swift`, `runtime_latency_probe.sh`, `build_mlx_metallib.sh`
+- Tests to add/update: build the probe and rerun the default latency report
+- Proof required: `./script/runtime_latency_probe.sh 5`
 - Risk level: High
-- Expected score impact: +6 to +10
+- Expected score impact: +5
 
 ### Next: Move Runtime Into Helper/XPC
 
@@ -273,18 +274,17 @@ This goal is complete when:
 - `swift test` passes.
 - `./script/check_backend_sanity.sh` passes.
 - `./script/check_model_asset.py` passes.
-- `./script/model_latency_report.py --default-model-proof` passes or is recorded as requiring manual typing proof.
+- `./script/model_latency_report.py --default-model-proof` passes from current default-model diagnostics.
 - Runtime pressure behavior has automated policy tests and app wiring.
 - The scorecard is updated with the final score and remaining proof gaps.
 - Changes are committed and pushed.
 
 ## Remaining Gaps
 
-- Fresh default Qwen3.5 4B latency proof is still needed.
+- Manual real-app typing proof is still needed to confirm the warmed probe numbers match target-app UI paths.
 - Runtime is not isolated into XPC/helper.
 - Real memory-pressure, battery, and thermal proof is missing.
 - Installed model revision is now verified from local Hugging Face metadata; full file digest verification is still missing.
 - Install is not resumable/background-safe.
-- Runtime generation errors need degraded-state backoff.
 - Benchmark matrix is not broad enough for 100/100.
 - Prompt-app proof is still relevant to beta trust, but it is outside the core local-runtime score.
