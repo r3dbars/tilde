@@ -43,7 +43,8 @@ struct SettingsCurrentAppState: Equatable {
     var canStartProof: Bool {
         guard bundleIdentifier != nil,
               case let .supported(profile) = supportStatus,
-              !profile.isSensitive else {
+              !profile.isSensitive,
+              isEnabled else {
             return false
         }
 
@@ -145,7 +146,33 @@ struct SettingsCurrentAppState: Equatable {
     }
 
     var proofButtonTitle: String {
-        "Start App Proof"
+        isEnabled ? "Start App Proof" : "Enable App First"
+    }
+
+    var proofText: String {
+        guard bundleIdentifier != nil else {
+            return "Proof: choose a writing app first."
+        }
+
+        guard case let .supported(profile) = supportStatus,
+              profile.canPresentSuggestions,
+              !profile.isSensitive else {
+            return "Proof: unavailable here."
+        }
+
+        guard isEnabled else {
+            return "Proof: turn on suggestions for this app first."
+        }
+
+        if profile.supportsOneWordAcceptance && !profile.supportsFullAcceptance {
+            return "Proof: use disposable prompt text, press Tab once, and do not press Enter."
+        }
+
+        if profile.supportsOneWordAcceptance && profile.supportsFullAcceptance {
+            return "Proof: use disposable text, press Tab once, then the full-accept shortcut."
+        }
+
+        return "Proof: use disposable text and verify accepted text stays in the field."
     }
 
     var blockedAppsText: String {
@@ -340,6 +367,7 @@ final class SettingsWindowController: NSObject {
     private let currentAppDetailLabel = NSTextField(labelWithString: "")
     private let currentAppModeLabel = NSTextField(labelWithString: "")
     private let currentAppAcceptanceLabel = NSTextField(labelWithString: "")
+    private let currentAppProofLabel = NSTextField(labelWithString: "")
     private let disabledAppsLabel = NSTextField(labelWithString: "")
     private let suggestionDecisionLabel = NSTextField(labelWithString: "")
     private let toggleCurrentAppButton = NSButton(
@@ -537,6 +565,7 @@ final class SettingsWindowController: NSObject {
         currentAppDetailLabel.stringValue = currentApp.detailText
         currentAppModeLabel.stringValue = currentApp.modeText
         currentAppAcceptanceLabel.stringValue = currentApp.acceptanceText
+        currentAppProofLabel.stringValue = currentApp.proofText
         toggleCurrentAppButton.title = currentApp.toggleTitle
         toggleCurrentAppButton.state = currentApp.isEnabled ? .on : .off
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
@@ -601,6 +630,7 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(currentAppDetailLabel)
         configureSecondaryLabel(currentAppModeLabel)
         configureSecondaryLabel(currentAppAcceptanceLabel)
+        configureSecondaryLabel(currentAppProofLabel)
         configureSecondaryLabel(disabledAppsLabel)
         configureSecondaryLabel(suggestionDecisionLabel)
         privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
@@ -646,7 +676,7 @@ final class SettingsWindowController: NSObject {
         startAppProofButton.target = self
         startAppProofButton.action = #selector(startAppProofControl)
         startAppProofButton.bezelStyle = .rounded
-        startAppProofButton.toolTip = "Turns on temporary screenshot proof for the current app and opens Diagnostics."
+        startAppProofButton.toolTip = "Turns on temporary screenshot proof for the enabled current app and opens Diagnostics."
         enableAllAppsButton.target = self
         enableAllAppsButton.action = #selector(enableAllAppsControl)
         enableAllAppsButton.bezelStyle = .rounded
@@ -712,6 +742,7 @@ final class SettingsWindowController: NSObject {
                     currentAppDetailLabel,
                     currentAppModeLabel,
                     currentAppAcceptanceLabel,
+                    currentAppProofLabel,
                     makeButtonRow([forceMirrorModeButton, startAppProofButton]),
                     toggleCurrentAppButton,
                     makeButtonRow([disabledAppsLabel, enableAllAppsButton])
