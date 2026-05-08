@@ -14,6 +14,7 @@ TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/tr
 REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-runs.md}"
 PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-default}"
 ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-backtick}"
+CODEX_PROOF_MARKER="${AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER:-AUTOCOMPLETE_LAB_CODEX_PROOF}"
 
 usage() {
   cat <<'EOF'
@@ -197,7 +198,13 @@ case "$APP" in
     REQUIRES_FULL_ACCEPT=0
     PROMPT_NO_SUBMIT_PROFILE=1
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Visually confirm the text stayed in the composer, no user message bubble appeared, and no assistant response started.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS="- Focus the Codex message box without submitting.
+- Type only disposable prompt text that includes \`$CODEX_PROOF_MARKER\`, then a harmless local fragment like \`Can we make this\`.
+- Confirm a suggestion appears near the prompt or in a stable mirror position.
+- Use Tab once for one word/suffix.
+- Visually confirm the text stayed in the composer, no user message bubble appeared, and no assistant response started.
+- Do not press Enter as part of the smoke pass.
+- Full visible accept stays disabled until separate full-accept no-submit proof exists."
     ;;
   claude-code)
     BUNDLE_ID="com.anthropic.claude-code"
@@ -275,7 +282,12 @@ fi
 if [[ "$MODE" == "run" ]]; then
   echo "Starting at diagnostics line $START_LINE."
   echo "Starting at trace line $TRACE_START_LINE."
-  read -r -p "Run the steps above, then press Enter to validate this app pass. " _
+  if [[ "$APP" == "codex" ]]; then
+    read -r -p "Run the steps above with marker $CODEX_PROOF_MARKER, do not submit, then press Enter to validate this app pass. " _
+    AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1
+  else
+    read -r -p "Run the steps above, then press Enter to validate this app pass. " _
+  fi
 elif [[ "$MODE" != "--check" ]]; then
   usage >&2
   exit 2
@@ -514,6 +526,14 @@ reject_pattern "field-suppressed .*app=$BUNDLE_ID" "field suppression"
 reject_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=(insert-verification-failed|missing-anchor|runtime-not-ready)" "blocking failure"
 
 if (( PROMPT_NO_SUBMIT_PROFILE == 1 )); then
+  if [[ "$APP" == "codex" ]] && ! is_truthy "${AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED:-0}"; then
+    echo "failed $SESSION_NAME prompt no-submit proof: Codex proof marker was not confirmed" >&2
+    echo "expected disposable prompt marker: $CODEX_PROOF_MARKER" >&2
+    echo "set AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1 only after the prompt contains the marker and was not submitted" >&2
+    print_failure_summary
+    exit 1
+  fi
+
   if [[ ! -f "$TRACE_PATH" ]]; then
     echo "missing $SESSION_NAME trace coverage: prompt no-submit proof" >&2
     echo "trace: $TRACE_PATH" >&2

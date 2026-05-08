@@ -370,6 +370,9 @@ should stay lower until those rows are closed.
   suggestion and rejects full-accept or field-send finalization signals before
   it records Codex or Claude desktop as a prompt no-submit pass. Claude Code
   must use the same bar after terminal-host support exists.
+- Codex prompt proof now also requires explicit confirmation that the disposable
+  prompt contains `AUTOCOMPLETE_LAB_CODEX_PROOF`; unmarked Codex proof slices
+  fail before they can be recorded.
 - Output cleaning suppresses more assistant-y starts and rejects unrelated
   whole-word completions in word-completion mode. It also rejects
   recommendation, rewrite, and next-action candidates so a separate product

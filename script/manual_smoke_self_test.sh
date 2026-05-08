@@ -150,6 +150,7 @@ run_one_word_case() {
     AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
     AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
     AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+    AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1 \
     AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
     script/manual_smoke_session.sh "$app" --check >/dev/null
 
@@ -219,6 +220,24 @@ run_one_word_case claude "Claude desktop" Claude com.anthropic.claudefordesktop 
 run_strict_visual_case notes-title notes-title
 
 write_one_word_log "com.openai.codex" "inlineAdjacent"
+write_one_word_trace "com.openai.codex"
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh codex --check >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected Codex proof without marker confirmation to fail" >&2
+  exit 1
+fi
+
+if ! grep -F 'Codex proof marker was not confirmed' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not reject unmarked Codex proof" >&2
+  exit 1
+fi
+
+write_one_word_log "com.openai.codex" "inlineAdjacent"
 cat >"$TRACE_PATH" <<'EOF'
 {"type":"suggestionPresented","suggestionID":"codex-field-send","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"anchorSource":"caret","anchorQuality":"trusted","anchorReason":"caretBoundsTrusted","anchorCanPresent":"true","anchorRect":"10,20,0,18","hasCaretRect":"true","hasTextLineRect":"true","hasElementRect":"true","hasWindowRect":"true","placementConfidenceBand":"high"}}
 {"type":"suggestionAccepted","suggestionID":"codex-field-send","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","acceptedText":"make","metadata":{"acceptMode":"acceptNextWord"}}
@@ -230,6 +249,7 @@ if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
   AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
   AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
   AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1 \
   AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   script/manual_smoke_session.sh codex --check >"$FAILURE_OUTPUT" 2>&1; then
   echo "manual smoke self-test expected Codex field-send proof to fail" >&2
