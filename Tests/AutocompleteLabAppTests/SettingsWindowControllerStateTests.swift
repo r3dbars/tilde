@@ -10,6 +10,9 @@ struct SettingsWindowControllerStateTests {
         let style = SettingsLayoutStyle.nativeUtility
 
         #expect(!style.usesFramedCards)
+        #expect(style.usesSystemFonts)
+        #expect(style.usesDynamicSystemColors)
+        #expect(style.appearanceCoverage.coversLightDarkAndHighContrast)
         #expect(style.sectionSpacing == 14)
         #expect(style.sectionItemSpacing == 5)
         #expect(style.contentInsets.top == 24)

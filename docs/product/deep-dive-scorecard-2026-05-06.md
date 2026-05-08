@@ -351,6 +351,10 @@ should stay lower until those rows are closed.
   suggestions toward autocomplete debugging topics.
 - Settings now uses clearer native sections, checkbox controls, app state copy,
   privacy diagnostics copy, and app-target state tests.
+- Inline ghost text now uses the system placeholder color instead of a fixed
+  gray, with light, dark, and high-contrast appearance coverage tests.
+- App bundle checks now verify the generated ICNS is valid, multi-size, and
+  declared by Info.plist.
 - Raw text capture, global screenshot tracing, and per-app screenshot tracing
   now expire when enabled from Settings, and deleting local privacy logs also
   disables those capture modes where possible.
