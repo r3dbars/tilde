@@ -8,6 +8,7 @@ fi
 
 MODE="run"
 NOTES_SURFACE=""
+REQUIRES_UNDO_ACCEPT=0
 STRICT_VISUAL_EVIDENCE="${AUTOCOMPLETE_LAB_SMOKE_REQUIRE_VISUAL_EVIDENCE:-${AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE:-0}}"
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
@@ -19,13 +20,14 @@ CLAUDE_CODE_PROOF_MARKER="${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER:-AUTOCOMPL
 
 usage() {
   cat <<'EOF'
-Usage: script/manual_smoke_session.sh <textedit|notes|notes-title|notes-body|notes-checklist|obsidian|chrome|codex|claude-code|claude> [--print|--check] [--visual]
+Usage: script/manual_smoke_session.sh <textedit|notes|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|obsidian|chrome|codex|claude-code|claude> [--print|--check] [--visual]
 
 Default mode prints the local manual steps, records the current diagnostics log
 line, waits for Enter, validates the new diagnostics for that app, then appends
 a pass row to docs/product/manual-smoke-runs.md.
 
-Notes proof must be recorded as notes-title, notes-body, or notes-checklist.
+Notes proof must be recorded as notes-title, notes-body, notes-checklist,
+or their notes-*-undo variants.
 Use --visual when the trace slice must include strict screenshot evidence.
 
 Set AUTOCOMPLETE_LAB_LOG_START_LINE when using --check against a known log slice.
@@ -43,13 +45,28 @@ case "$APP" in
     APP="notes"
     NOTES_SURFACE="title"
     ;;
+  notes-title-undo)
+    APP="notes"
+    NOTES_SURFACE="title"
+    REQUIRES_UNDO_ACCEPT=1
+    ;;
   notes-body)
     APP="notes"
     NOTES_SURFACE="body"
     ;;
+  notes-body-undo)
+    APP="notes"
+    NOTES_SURFACE="body"
+    REQUIRES_UNDO_ACCEPT=1
+    ;;
   notes-checklist)
     APP="notes"
     NOTES_SURFACE="checklist"
+    ;;
+  notes-checklist-undo)
+    APP="notes"
+    NOTES_SURFACE="checklist"
+    REQUIRES_UNDO_ACCEPT=1
     ;;
 esac
 
@@ -143,11 +160,23 @@ case "$APP" in
       notes-title)
         NOTES_SURFACE="${NOTES_SURFACE:-title}"
         ;;
+      notes-title-undo)
+        NOTES_SURFACE="${NOTES_SURFACE:-title}"
+        REQUIRES_UNDO_ACCEPT=1
+        ;;
       notes-body)
         NOTES_SURFACE="${NOTES_SURFACE:-body}"
         ;;
+      notes-body-undo)
+        NOTES_SURFACE="${NOTES_SURFACE:-body}"
+        REQUIRES_UNDO_ACCEPT=1
+        ;;
       notes-checklist)
         NOTES_SURFACE="${NOTES_SURFACE:-checklist}"
+        ;;
+      notes-checklist-undo)
+        NOTES_SURFACE="${NOTES_SURFACE:-checklist}"
+        REQUIRES_UNDO_ACCEPT=1
         ;;
     esac
 
@@ -155,22 +184,40 @@ case "$APP" in
       "")
         PROOF_LABEL="choose-notes-surface"
         SESSION_NAME="Notes surface selector"
-        STEPS=$'- Open the disposable autocomplete smoke note.\n- Record three separate Notes passes:\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate`\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`\n- Title, body, and checklist rows are separate proof. A generic Notes row does not count.'
+        STEPS=$'- Open the disposable autocomplete smoke note.\n- Record three separate Notes passes:\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate`\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`\n- Record optional undo proof with:\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-undo --manual-gate`\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-undo --manual-gate`\n  - `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-undo --manual-gate`\n- Title, body, checklist, and undo rows are separate proof. A generic Notes row does not count.'
         ;;
       title)
-        PROOF_LABEL="notes-title"
-        SESSION_NAME="Notes title"
-        STEPS=$'- Open the disposable autocomplete smoke note.\n- Put the caret in the note title.\n- Type `Smoke proof feels inst` in the title only.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        if (( REQUIRES_UNDO_ACCEPT == 1 )); then
+          PROOF_LABEL="notes-title-undo"
+          SESSION_NAME="Notes title undo"
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put the caret in the note title.\n- Type `Smoke proof feels inst` in the title only.\n- Press Tab once and expect `instant`.\n- Press Command-Z and confirm only the accepted `ant` suffix is removed.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        else
+          PROOF_LABEL="notes-title"
+          SESSION_NAME="Notes title"
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put the caret in the note title.\n- Type `Smoke proof feels inst` in the title only.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        fi
         ;;
       body)
-        PROOF_LABEL="notes-body"
-        SESSION_NAME="Notes body"
-        STEPS=$'- Open the disposable autocomplete smoke note.\n- Put `Autocomplete smoke` on the first body line.\n- Put the caret on the next body line and type `Smoke proof feels inst`.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        if (( REQUIRES_UNDO_ACCEPT == 1 )); then
+          PROOF_LABEL="notes-body-undo"
+          SESSION_NAME="Notes body undo"
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put `Autocomplete smoke` on the first body line.\n- Put the caret on the next body line and type `Smoke proof feels inst`.\n- Press Tab once and expect `instant`.\n- Press Command-Z and confirm only the accepted `ant` suffix is removed.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        else
+          PROOF_LABEL="notes-body"
+          SESSION_NAME="Notes body"
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put `Autocomplete smoke` on the first body line.\n- Put the caret on the next body line and type `Smoke proof feels inst`.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        fi
         ;;
       checklist)
-        PROOF_LABEL="notes-checklist"
-        SESSION_NAME="Notes checklist"
-        STEPS=$'- Open the disposable autocomplete smoke note.\n- Toggle Checklist and create a disposable checklist row.\n- Type `Smoke proof feels inst` in that checklist row.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        if (( REQUIRES_UNDO_ACCEPT == 1 )); then
+          PROOF_LABEL="notes-checklist-undo"
+          SESSION_NAME="Notes checklist undo"
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Toggle Checklist and create a disposable checklist row.\n- Type `Smoke proof feels inst` in that checklist row.\n- Press Tab once and expect `instant`.\n- Press Command-Z and confirm only the accepted `ant` suffix is removed.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        else
+          PROOF_LABEL="notes-checklist"
+          SESSION_NAME="Notes checklist"
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Toggle Checklist and create a disposable checklist row.\n- Type `Smoke proof feels inst` in that checklist row.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+        fi
         ;;
       *)
         echo "unknown Notes surface: $NOTES_SURFACE" >&2
@@ -243,7 +290,7 @@ REPORT_APP_NAME="${REPORT_APP_NAME:-$DISPLAY_NAME}"
 
 if [[ "$APP" == "notes" && -z "$NOTES_SURFACE" && "$MODE" != "--print" ]]; then
   echo "Notes proof cannot be recorded as a generic Notes pass." >&2
-  echo "Choose one surface: notes-title, notes-body, or notes-checklist." >&2
+  echo "Choose one surface: notes-title, notes-body, notes-checklist, or a notes-*-undo variant." >&2
   echo "Example: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate" >&2
   exit 2
 fi
@@ -337,6 +384,8 @@ print_failure_summary() {
     echo "- synthetic caret placement: $(count_line_with_fields "suggestion-presented" "app=$BUNDLE_ID" "placementAnchorSource=synthetic-caret" "placementConfidenceBand=medium" "hasCaretRect=true")"
     echo "- Tab autocomplete action: $(count_line_with_fields "keyboard-action" "app=$BUNDLE_ID" "key=tab" "action=acceptNextWord" "handled=true")"
     echo "- full autocomplete action: $(count_line_with_fields "keyboard-action" "app=$BUNDLE_ID" "key=$ACCEPT_ALL_SHORTCUT" "action=acceptAllVisible" "handled=true")"
+    echo "- accepted insertion undo action: $(count_line_with_fields "keyboard-action" "app=$BUNDLE_ID" "action=undoAcceptedInsertion" "handled=true")"
+    echo "- accepted insertion undone: $(count_line_with_fields "accepted-insertion-undone" "app=$BUNDLE_ID")"
     echo "- successful insert: $(count_pattern "insert .*app=$BUNDLE_ID .*success=true")"
     echo "- verified insertions: $(count_pattern "insert-verification .*app=$BUNDLE_ID .*result=verified")"
     echo "- failed verification: $(count_pattern "insert-verification .*app=$BUNDLE_ID .*result=(unchanged|partial|changedUnexpectedly|missing-context)")"
@@ -517,6 +566,10 @@ else
 fi
 require_pattern "insert .*app=$BUNDLE_ID .*success=true" "successful insert"
 require_pattern "insert-verification .*app=$BUNDLE_ID .*result=verified" "verified insertion"
+if (( REQUIRES_UNDO_ACCEPT == 1 )); then
+  require_line_with_fields "accepted insertion undo handled" "keyboard-action" "app=$BUNDLE_ID" "action=undoAcceptedInsertion" "handled=true"
+  require_line_with_fields "accepted insertion undone" "accepted-insertion-undone" "app=$BUNDLE_ID"
+fi
 
 VERIFIED_COUNT="$(grep -E "insert-verification .*app=$BUNDLE_ID .*result=verified" <<<"$SCAN_LINES" | wc -l | tr -d ' ')"
 if (( VERIFIED_COUNT < MIN_VERIFIED_ACCEPTS )); then

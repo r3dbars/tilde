@@ -33,6 +33,24 @@ write_passing_log() {
 EOF
 }
 
+write_undo_passing_log() {
+  local bundle_id="$1"
+  local render_mode="$2"
+
+  cat >"$LOG_PATH" <<EOF
+2026-04-26T08:00:00Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=caret placementConfidenceBand=high hasCaretRect=true
+2026-04-26T08:00:01Z keyboard-action action=acceptNextWord app=$bundle_id handled=true key=tab reason=accepted
+2026-04-26T08:00:01Z insert app=$bundle_id success=true mode=axSelectedText
+2026-04-26T08:00:02Z insert-verification app=$bundle_id result=verified acceptedChars=5 previousBeforeChars=6 currentBeforeChars=11
+2026-04-26T08:00:03Z keyboard-action action=undoAcceptedInsertion app=$bundle_id handled=true key=cmdZ reason=accepted-insertion-undone
+2026-04-26T08:00:03Z accepted-insertion-undone app=$bundle_id acceptedTextLength=3 restoredTextLength=23
+2026-04-26T08:00:04Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=caret placementConfidenceBand=high hasCaretRect=true
+2026-04-26T08:00:05Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=backtick reason=accepted
+2026-04-26T08:00:05Z insert app=$bundle_id success=true mode=axSelectedText
+2026-04-26T08:00:06Z insert-verification app=$bundle_id result=verified acceptedChars=12 previousBeforeChars=11 currentBeforeChars=23
+EOF
+}
+
 write_option_tab_passing_log() {
   local bundle_id="$1"
   local render_mode="$2"
@@ -185,10 +203,33 @@ run_strict_visual_case() {
   fi
 }
 
+run_notes_undo_case() {
+  local app="$1"
+  local proof_label="$2"
+
+  write_undo_passing_log "com.apple.Notes" "floatingMirror"
+  write_passing_trace "com.apple.Notes"
+
+  AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+    AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+    AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+    AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+    AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+    script/manual_smoke_session.sh "$app" --check >/dev/null
+
+  if ! grep -F "| Notes | \`com.apple.Notes\` | \`$proof_label\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-" "$REPORT_PATH" >/dev/null; then
+    echo "manual smoke self-test did not record the successful $proof_label undo pass" >&2
+    exit 1
+  fi
+}
+
 run_passing_case textedit TextEdit com.apple.TextEdit 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-title
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-body
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-checklist
+run_notes_undo_case notes-title-undo notes-title-undo
+run_notes_undo_case notes-body-undo notes-body-undo
+run_notes_undo_case notes-checklist-undo notes-checklist-undo
 run_passing_case obsidian Obsidian md.obsidian floatingMirror floatingMirror
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent textarea
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent contenteditable
@@ -283,6 +324,22 @@ if ! grep -F "Notes surface: title" "$TMP_DIR/notes-title-print.txt" >/dev/null;
   exit 1
 fi
 
+script/manual_smoke_session.sh notes-title-undo --print >"$TMP_DIR/notes-title-undo-print.txt"
+if ! grep -F "Manual smoke: Notes title undo" "$TMP_DIR/notes-title-undo-print.txt" >/dev/null; then
+  echo "manual smoke self-test did not print the Notes title undo session label" >&2
+  exit 1
+fi
+
+if ! grep -F "Proof: notes-title-undo" "$TMP_DIR/notes-title-undo-print.txt" >/dev/null; then
+  echo "manual smoke self-test did not label Notes title undo proof" >&2
+  exit 1
+fi
+
+if ! grep -F "Press Command-Z" "$TMP_DIR/notes-title-undo-print.txt" >/dev/null; then
+  echo "manual smoke self-test did not print the Notes undo instruction" >&2
+  exit 1
+fi
+
 write_passing_log "com.apple.Notes" "floatingMirror"
 write_passing_trace "com.apple.Notes"
 
@@ -317,6 +374,24 @@ fi
 
 if ! grep -F 'missing Notes body diagnostics: Tab handled by autocomplete' "$FAILURE_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not label the Notes body diagnostics failure" >&2
+  exit 1
+fi
+
+write_passing_log "com.apple.Notes" "floatingMirror"
+write_passing_trace "com.apple.Notes"
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh notes-body-undo --check >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected Notes undo proof to fail without undo diagnostics" >&2
+  exit 1
+fi
+
+if ! grep -F 'missing Notes body undo diagnostics: accepted insertion undo handled' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not label missing Notes undo diagnostics" >&2
   exit 1
 fi
 

@@ -56,15 +56,19 @@ Recorder:
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-undo --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-undo --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-undo --manual-gate
 ```
 
 - Use the existing autocomplete smoke note.
 - Do not let automation create, delete, or search private notes.
-- Do not record a generic `notes` pass as proof. Title, body, and checklist are separate proof targets.
+- Do not record a generic `notes` pass as proof. Title, body, checklist, and undo are separate proof targets.
 - Test title-only text with `Smoke proof feels inst`, then ` and stays inst`.
 - Test body text with `Autocomplete smoke` on line one and `Smoke proof feels inst` on line two, then ` and stays inst`.
 - Toggle Checklist and test a checklist row with `Smoke proof feels inst`, then ` and stays inst`.
 - Confirm one-word and full accepts verify.
+- In undo lanes, press Command-Z after the first Tab accept and confirm `accepted-insertion-undone` before the second accept.
 
 ## Obsidian
 

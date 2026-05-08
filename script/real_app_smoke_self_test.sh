@@ -105,7 +105,7 @@ if ! grep -F "choose a manual-gated Apple Notes surface" "$TMP_DIR/notes.txt" >/
   exit 1
 fi
 
-for notes_surface in notes-title notes-body notes-checklist; do
+for notes_surface in notes-title notes-body notes-checklist notes-title-undo notes-body-undo notes-checklist-undo; do
   script/real_app_smoke.sh "$notes_surface" --dry-run >"$TMP_DIR/$notes_surface.txt"
   if ! grep -F "manual-gated Apple Notes ${notes_surface#notes-} proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
     echo "real app smoke self-test did not print the $notes_surface proof plan" >&2
@@ -218,6 +218,11 @@ fi
 
 if ! grep -F "script/real_app_smoke.sh notes-title --manual-gate" "$TMP_DIR/notes-generic-fail.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Notes title command after generic proof failure" >&2
+  exit 1
+fi
+
+if ! grep -F "script/real_app_smoke.sh notes-title-undo --manual-gate" "$TMP_DIR/notes-generic-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Notes title undo command after generic proof failure" >&2
   exit 1
 fi
 
