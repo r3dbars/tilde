@@ -392,6 +392,9 @@ should stay lower until those rows are closed.
 - Dogfood prompt guidance and output cleaning now reject generic productivity
   filler like boosting productivity, streamlining workflows, and unlocking
   efficiency.
+- Workspace app activation/deactivation now clears the focused field, hides
+  visible suggestions, stops key capture, and invalidates pending requests
+  immediately instead of waiting for the next poll.
 - Repeated typed-over misses now escalate from a short prefix cooldown to a
   longer quiet period and then raise display thresholds for that same
   app/field/mode/prefix family after cooldown.

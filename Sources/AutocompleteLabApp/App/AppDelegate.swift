@@ -114,6 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pauseSuggestionsMenuItem: NSMenuItem?
     private var silenceFieldMenuItem: NSMenuItem?
     private var toggleAppMenuItem: NSMenuItem?
+    private var workspaceFocusObservers: [NSObjectProtocol] = []
     private var pollTimer: Timer?
     private var keyboardEventTap: KeyboardEventTap?
     private var keyboardEventTapStopTask: Task<Void, Never>?
@@ -204,6 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if shouldShowSettingsForCurrentReadiness {
             showSettings()
         }
+        startWorkspaceFocusObservers()
         startPolling()
     }
 
@@ -217,7 +219,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         invalidatePendingSuggestionRequest()
         modelRuntime.cancel()
         pollTimer?.invalidate()
+        stopWorkspaceFocusObservers()
         stopKeyboardEventTapNow(reason: "terminate")
+    }
+
+    private func startWorkspaceFocusObservers() {
+        guard workspaceFocusObservers.isEmpty else {
+            return
+        }
+
+        let center = NSWorkspace.shared.notificationCenter
+        workspaceFocusObservers = [
+            center.addObserver(
+                forName: NSWorkspace.didActivateApplicationNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.handleWorkspaceFocusChange(reason: "workspace-app-activated")
+                }
+            },
+            center.addObserver(
+                forName: NSWorkspace.didDeactivateApplicationNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.handleWorkspaceFocusChange(reason: "workspace-app-deactivated")
+                }
+            }
+        ]
+    }
+
+    private func stopWorkspaceFocusObservers() {
+        let center = NSWorkspace.shared.notificationCenter
+        workspaceFocusObservers.forEach { center.removeObserver($0) }
+        workspaceFocusObservers.removeAll()
+    }
+
+    private func handleWorkspaceFocusChange(reason: String) {
+        guard suggestionSession.hasVisibleSuggestion
+            || currentCompletionRequest != nil
+            || currentFieldIdentity != nil else {
+            return
+        }
+
+        setSuggestionDecision("Blocked: focus changed")
+        clearFocusedFieldState(hideReason: "focus-changed", resetBlockLogGate: false)
+        stopKeyboardEventTapNow(reason: reason)
+        DiagnosticsLog.shared.record(
+            "workspace-focus-changed",
+            metadata: [
+                "reason": reason
+            ]
+        )
     }
 
     private func configureStatusItem() {
