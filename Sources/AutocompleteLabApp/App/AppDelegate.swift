@@ -684,9 +684,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard shouldRunFocusedTextPoll(now: now) else {
             return
         }
-        lastFocusedTextPollAttemptAt = now
 
         guard !isFocusedTextPollInFlight else {
+            guard focusedTextPollingBackoffPolicy.shouldRecordInFlightSkip(
+                lastPollAttemptAt: lastFocusedTextPollAttemptAt,
+                now: now
+            ) else {
+                return
+            }
+
+            lastFocusedTextPollAttemptAt = now
             if let notice = focusedTextPollSkipStats.recordSkippedInFlight(now: now) {
                 DiagnosticsLog.shared.record(
                     "focused-text-poll-skipped",
@@ -699,6 +706,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        lastFocusedTextPollAttemptAt = now
         isFocusedTextPollInFlight = true
         let startedAt = DispatchTime.now().uptimeNanoseconds
         var completesAsync = false
