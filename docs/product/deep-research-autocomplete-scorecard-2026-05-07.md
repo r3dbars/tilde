@@ -25,7 +25,8 @@ It is not yet magical by the research bar. The biggest remaining misses are:
 - Phrase and sentence quality now has conservative candidate ranking and score
   margin suppression, but still needs real model proof and learned utility.
 - Cross-app proof is honest but incomplete for Codex, Claude Code, Claude
-  desktop, and more production-editor variants.
+  desktop, default-Chrome web-editor AX exposure, and more production-editor
+  variants.
 - Normal typing proof now includes exact 1,200-, 4,800-, and 12,000-character
   strict TextEdit endurance passes, and the current harness revalidates named
   TextEdit focus in shorter CGEvent batches with bounded cleanup. The latest
@@ -171,10 +172,12 @@ Pass 1 shipped these improvements:
   throttle and drop that returned context, so a slow read cannot become the
   next visible suggestion while the app is trying to catch up.
 - Chrome smoke now has pinned upstream `monaco-real` and `prosemirror-real`
-  fixture lanes in addition to the dependency-free lookalikes. The first local
-  `prosemirror-real` attempt loaded and received disposable typing, but Chrome
-  did not expose a focused editable AX context to Autocomplete Lab, so the real
-  editor proof gap is now explicit instead of hidden behind local lookalikes.
+  fixture lanes in addition to the dependency-free lookalikes. Both real-engine
+  lanes now pass with isolated temp-profile Chrome, renderer accessibility
+  forced, strict screenshot evidence, Tab accept, Option-Tab full accept, and
+  two verified insertions. This closes the hidden lookalike-only gap, but the
+  score stays below target because default Chrome AX exposure and caret-quality
+  real-editor placement are still open.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 
@@ -206,9 +209,11 @@ Remaining high-impact gaps:
   current local trace corpus fails the proof gate because it predates display
   scoring, candidate-selection metadata, proof fingerprints, kept-horizon
   events, and researched trigger delays.
-- Cross-app proof rows still need fresh screenshot-backed acceptance slices.
-- Real Chrome editor-engine proof now has executable lanes, but still needs
-  Chrome focused web-editor AX context before scores can move.
+- Cross-app proof rows still need fresh screenshot-backed acceptance slices for
+  prompt apps.
+- Real Chrome editor-engine proof now passes under isolated forced-renderer AX,
+  but still needs default Chrome focused web-editor AX context and caret-quality
+  placement before the browser-editor scores can reach target.
 
 ## Research Bar
 
@@ -301,7 +306,7 @@ Weighted total: **79.2/100**, rounded to **79/100**.
 | Style memory | 92 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, question rates, short-suffix rate, and average final-token length with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, Settings can clear it, and Diagnostics exposes the trace-safe aggregate sketch. | Add tuning controls and fresh real-app trace validation. |
 | Annoyance index | 90 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, exposes current-field/session silence in Settings and the menu, records manual field pauses as scoped trace events, records placement uncertainty as caret-geometry failures, and Diagnostics now exposes annoyance score, active quiet-mode scope, and signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
 | Replay-first test rig | 84 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, placement metadata, trusted caret placement, stale cancellation, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. It can replay a fresh line-bounded trace slice, and the proof manifest now parses matched manual-smoke trace slices, requires bounded proof ranges, verifies accepts plus insertion verification, checks screenshot-backed strict visual trace events, and rejects stale proof fingerprints. | Replay recorded real app sessions with screenshots, accepts, kept horizon, and latency after every app/runtime change. |
-| Cross-app proof honesty | 97 | App proof matrix explicitly keeps failing rows non-A until evidence exists, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, and the proof manifest now verifies TextEdit, Chrome chat-like, Obsidian, and Apple Notes title/body/checklist with bounded current-fingerprint traces while still failing strict mode on prompt-app and production-editor gaps. | Close every pending proof row. |
+| Cross-app proof honesty | 98 | App proof matrix explicitly keeps failing rows non-A until evidence exists, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, and the proof manifest now verifies TextEdit, Chrome chat-like, real Monaco/ProseMirror under forced renderer AX, Obsidian, and Apple Notes title/body/checklist with bounded current-fingerprint traces while still failing strict mode on prompt-app and default-Chrome/editor-placement gaps. | Close every pending proof row. |
 
 ## Baseline Evidence Notes
 
@@ -479,8 +484,9 @@ these are true.
 
 - TextEdit stays green with light/dark variants.
 - Chrome text fields and local editor fixtures stay screenshot-backed.
-- Replace local editor fixture confidence with real CodeMirror, Monaco, and
-  ProseMirror proof.
+- Real CodeMirror, Monaco, and ProseMirror now have bounded proof; improve
+  Chrome real-editor proof from isolated forced renderer AX to default-Chrome
+  caret-quality placement.
 - Obsidian has disposable-vault screenshot plus same-slice accepts; expand it across themes, panes, and long notes.
 - Notes title, body, and checklist are green with separate bounded proof rows.
 - Codex gets screenshot plus one-word accept plus no-submit in one strict slice.
