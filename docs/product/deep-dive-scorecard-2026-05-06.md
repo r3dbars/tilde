@@ -349,7 +349,9 @@ evidence-backed score should stay lower until those rows are closed.
   suggestion and rejects full-accept or field-send finalization signals before
   it records Codex, Claude Code, or Claude desktop as a prompt no-submit pass.
 - Output cleaning suppresses more assistant-y starts and rejects unrelated
-  whole-word completions in word-completion mode.
+  whole-word completions in word-completion mode. It also rejects
+  recommendation, rewrite, and next-action candidates so a separate product
+  behavior cannot masquerade as inline autocomplete.
 - Chrome chat-like no-submit proof now uses a tab-title submit counter so the
   smoke test works even when Chrome JavaScript execution from Apple Events is
   disabled.

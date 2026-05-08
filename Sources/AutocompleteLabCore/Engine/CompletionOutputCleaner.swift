@@ -255,10 +255,14 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
         return normalized.hasPrefix("before cursor:")
             || normalized.hasPrefix("after cursor:")
+            || normalized.hasPrefix("action:")
             || normalized.hasPrefix("inline autocomplete")
             || normalized.hasPrefix("inline word completion")
+            || normalized.hasPrefix("next action:")
+            || normalized.hasPrefix("recommendation:")
             || normalized.hasPrefix("return only")
             || normalized.hasPrefix("return exactly")
+            || normalized.hasPrefix("rewrite:")
             || normalized.hasPrefix("no spaces")
             || normalized.hasPrefix("continue the current sentence")
             || normalized.hasPrefix("start the next sentence")
@@ -539,11 +543,15 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["it", "is", "important"],
         ["it's", "important"],
         ["one", "thing", "to", "consider"],
+        ["next", "action"],
+        ["next", "step"],
+        ["rewrite", "this"],
         ["seamless", "experience"],
         ["sounds", "great"],
         ["the", "best", "way"],
         ["this", "is", "a", "great"],
         ["this", "is", "exciting"],
+        ["try", "saying"],
         ["you", "may", "want"],
         ["you", "might", "want"]
     ]
