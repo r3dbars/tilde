@@ -13,10 +13,13 @@ DEFAULT_PROOF_P95_SHOWN_MS = 750
 DEFAULT_PROOF_AVERAGE_SHOWN_MS = 700
 
 BOOTSTRAP_RE = re.compile(
-    r"^(?P<timestamp>\S+) runtime-bootstrap .*?\basset=(?P<asset>\S+)"
+    r"^(?P<timestamp>\S+) runtime-bootstrap (?P<fields>.*)$"
 )
 TIMING_RE = re.compile(
     r"^(?P<timestamp>\S+) mlx-completion-timing (?P<fields>.*)$"
+)
+WARMUP_RE = re.compile(
+    r"^(?P<timestamp>\S+) mlx-warmup-generation (?P<fields>.*)$"
 )
 PRESENTED_RE = re.compile(
     r"^(?P<timestamp>\S+) suggestion-presented (?P<fields>.*)$"
@@ -67,10 +70,17 @@ def parse_launches(lines):
     for line in lines:
         bootstrap = BOOTSTRAP_RE.search(line)
         if bootstrap:
+            fields = bootstrap.group("fields")
+            asset = field_value(fields, "asset")
+            if asset is None:
+                continue
+
             current = {
                 "timestamp": bootstrap.group("timestamp"),
-                "asset": bootstrap.group("asset"),
+                "asset": asset,
+                "probe": field_value(fields, "probe"),
                 "timings": [],
+                "warmups": [],
                 "presented": [],
             }
             launches.append(current)
@@ -82,6 +92,9 @@ def parse_launches(lines):
         timing = TIMING_RE.search(line)
         if timing:
             fields = timing.group("fields")
+            if not belongs_to_launch(fields, current):
+                continue
+
             mode = field_value(fields, "mode")
             generation = int_field(fields, "generationMilliseconds")
             total = int_field(fields, "totalMilliseconds")
@@ -103,9 +116,39 @@ def parse_launches(lines):
             )
             continue
 
+        warmup = WARMUP_RE.search(line)
+        if warmup:
+            fields = warmup.group("fields")
+            if not belongs_to_launch(fields, current):
+                continue
+
+            mode = field_value(fields, "mode")
+            generation = int_field(fields, "generationMilliseconds")
+            total = int_field(fields, "totalMilliseconds")
+            if mode is None or generation is None or total is None:
+                continue
+
+            current["warmups"].append(
+                {
+                    "timestamp": warmup.group("timestamp"),
+                    "mode": mode,
+                    "first": int_field(fields, "firstChunkMilliseconds"),
+                    "generation": generation,
+                    "session": int_field(fields, "sessionMilliseconds"),
+                    "prompt": int_field(fields, "promptMilliseconds"),
+                    "cleanup": int_field(fields, "cleanupMilliseconds"),
+                    "total": total,
+                    "maxTokens": int_field(fields, "maxTokens"),
+                }
+            )
+            continue
+
         presented = PRESENTED_RE.search(line)
         if presented:
             fields = presented.group("fields")
+            if not belongs_to_launch(fields, current):
+                continue
+
             mode = field_value(fields, "requestMode")
             latency = int_field(fields, "latencyMilliseconds")
             if mode is None or latency is None:
@@ -121,6 +164,14 @@ def parse_launches(lines):
             )
 
     return launches
+
+
+def belongs_to_launch(fields, launch):
+    launch_probe = launch.get("probe")
+    if launch_probe:
+        return field_value(fields, "probe") == launch_probe
+
+    return True
 
 
 def first_presented_samples(presented):
@@ -140,12 +191,26 @@ def print_launch(launch):
     print(f"Launch: {launch['timestamp']} asset={launch['asset']}")
 
     timings = launch["timings"]
+    warmups = launch["warmups"]
     presented = first_presented_samples(launch["presented"])
-    if not timings and not presented:
+    if not timings and not warmups and not presented:
         print("  no timing samples yet")
         print("  try: type one short sentence in TextEdit or Codex, wait for a phrase suggestion, then rerun this report")
         print("  note: instant word-completion may bypass the model and only appear as shown latency")
         return
+
+    if warmups:
+        first = [item["first"] for item in warmups if item["first"] is not None]
+        generation = [item["generation"] for item in warmups]
+        total = [item["total"] for item in warmups]
+        token_budgets = sorted({item["maxTokens"] for item in warmups if item["maxTokens"] is not None})
+
+        print("  warmup")
+        if token_budgets:
+            print(f"    max tokens: {', '.join(map(str, token_budgets))}")
+        print(f"    {metric_line('first token', first)}")
+        print(f"    {metric_line('generation', generation)}")
+        print(f"    {metric_line('model total', total)}")
 
     modes = sorted({item["mode"] for item in timings} | {item["mode"] for item in presented})
     for mode in modes:
@@ -195,6 +260,34 @@ def mode_presented_samples(launches, mode):
         for item in first_presented_samples(launch["presented"])
         if item["mode"] == mode
     ]
+
+
+def launch_has_enough_phrase_samples(launch, args):
+    selected = [launch]
+    if args.require_timing_samples is not None and count_samples(selected, "timings") < args.require_timing_samples:
+        return False
+    if args.require_shown_samples is not None and count_samples(selected, "presented") < args.require_shown_samples:
+        return False
+    if (
+        args.require_phrase_timing_samples is not None
+        and len(mode_timing_samples(selected, "phraseContinuation")) < args.require_phrase_timing_samples
+    ):
+        return False
+    if (
+        args.require_phrase_shown_samples is not None
+        and len(mode_presented_samples(selected, "phraseContinuation")) < args.require_phrase_shown_samples
+    ):
+        return False
+    if args.require_phrase_max_tokens is not None:
+        token_budgets = {
+            item["maxTokens"]
+            for item in mode_timing_samples(selected, "phraseContinuation")
+            if item["maxTokens"] is not None
+        }
+        if args.require_phrase_max_tokens not in token_budgets:
+            return False
+
+    return True
 
 
 def enforce_minimum(label, actual, expected):
@@ -282,7 +375,6 @@ def main():
     args = parser.parse_args()
 
     if args.default_model_proof:
-        args.latest = True
         args.asset = DEFAULT_MODEL_ASSET
         args.require_timing_samples = args.require_timing_samples or DEFAULT_PROOF_MIN_SAMPLES
         args.require_shown_samples = args.require_shown_samples or DEFAULT_PROOF_MIN_SAMPLES
@@ -299,7 +391,17 @@ def main():
     launches = parse_launches(log_path.read_text(errors="ignore").splitlines())
     if args.asset:
         launches = [launch for launch in launches if args.asset in launch["asset"]]
-    if args.latest and launches:
+    if args.default_model_proof and launches:
+        proof_launch = next(
+            (
+                launch
+                for launch in reversed(launches)
+                if launch_has_enough_phrase_samples(launch, args)
+            ),
+            None,
+        )
+        launches = [proof_launch if proof_launch is not None else launches[-1]]
+    elif args.latest and launches:
         launches = [launches[-1]]
 
     if not launches:
@@ -354,6 +456,7 @@ def main():
         print(
             "Default model proof passed: "
             f"asset={DEFAULT_MODEL_ASSET} "
+            f"launch={launches[-1]['timestamp']} "
             f"phraseShownP95<={args.require_p95_shown_ms}ms "
             f"phraseShownAverage<={args.require_average_shown_ms}ms "
             f"phraseMaxTokens={args.require_phrase_max_tokens}"

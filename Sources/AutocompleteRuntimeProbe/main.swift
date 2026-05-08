@@ -274,7 +274,6 @@ let prompts = [
 ]
 
 do {
-    try await runtime.warm()
     try diagnostics.record(
         "runtime-bootstrap",
         metadata: [
@@ -298,6 +297,7 @@ do {
             "probe": "runtime-latency"
         ]
     )
+    try await runtime.warm()
 
     var shownCount = 0
     for index in 0..<configuration.samples {
