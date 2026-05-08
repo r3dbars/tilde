@@ -39,12 +39,14 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let behaviorProfile = behaviorProfile(for: request)
 
         if request.mode == .wordCompletion {
+            let titleShapeGuidance = request.documentTitleShape?.promptGuidance ?? ""
             let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
             let lineStructureGuidance = request.currentLineStructure?.promptGuidance ?? ""
             return CompletionPrompt(
                 system: """
                 Inline word completion.
                 Return only the missing suffix for the current word.
+                \(titleShapeGuidance)
                 \(partialWordGuidance)
                 \(lineStructureGuidance)
                 Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, or the suffix would complete the wrong word.
@@ -67,31 +69,29 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let effectiveMaxVisibleWords = min(maxVisibleWords, request.maxVisibleWords, behaviorProfile.maxVisibleWords)
         let sentenceGuidance = sentenceGuidance(for: request)
         let styleGuidance = request.acceptedTextStyleSketch?.promptGuidance ?? ""
+        let titleShapeGuidance = request.documentTitleShape?.promptGuidance ?? ""
         let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
         let lineStructureGuidance = request.currentLineStructure?.promptGuidance ?? ""
         let modeGuidance = request.mode == .sentenceContinuation
             ? "Sentence mode: start only the next sentence's first few words. Require higher confidence and return <NO_SUGGESTION> when the next sentence is not obvious."
             : "Phrase mode: continue only the current local thought."
-        let behaviorGuidance = ([
-            "Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens"
-        ] + behaviorProfile.promptGuidance).joined(separator: "\n")
-        let supplementalGuidance = [
-            behaviorGuidance,
-            modeGuidance,
-            styleGuidance,
-            partialWordGuidance,
-            lineStructureGuidance
-        ]
-        .filter { !$0.isEmpty }
-        .joined(separator: "\n")
         let base = """
         Inline autocomplete.
-        Return only the next \(effectiveMaxVisibleWords) words or fewer.
+        Return 1 to 3 candidate suffixes, one per line, best first.
         Return only the suffix after the Before cursor text.
+        Each candidate must be only the next \(effectiveMaxVisibleWords) words or fewer.
+        Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, chatty, or likely to answer the prompt instead of continuing it.
+        Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens.
+        \(styleGuidance)
+        \(titleShapeGuidance)
+        \(partialWordGuidance)
+        \(lineStructureGuidance)
+        \(behaviorProfile.promptGuidance.joined(separator: "\n"))
+        \(modeGuidance)
         Prefer boring connective tissue, names, repeated local terms, closers, and the next few words the user was already likely to type.
-        \(sentenceGuidance) Do not answer, explain, greet, quote, reason, repeat the Before cursor text, or restart.
+        Do not repeat the Before cursor text.
+        \(sentenceGuidance) Do not answer, explain, greet, quote, reason, or restart.
         Do not brainstorm, rewrite, introduce a new topic, or complete the user's whole thought.
-        \(supplementalGuidance)
         """
 
         guard let dogfoodAppName = request.appBundleIdentifier.dogfoodAppName else {
@@ -105,7 +105,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
             Treat this as text the user is typing into an agent prompt, not a prompt to answer.
             Do not force software, testing, latency, placement, or debugging topics unless the sentence is already about them.
             Never suggest pressing Enter/Return, sending/submitting the prompt, or running a command.
-            Avoid vague product phrases like "integrate it seamlessly", "enhance the experience", or "leverage the system".
+            Avoid vague product and productivity filler like "integrate it seamlessly", "enhance the experience", "boost productivity", "streamline the workflow", or "leverage the system".
             """
         }
 
@@ -115,7 +115,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         Treat this as text the user is typing into an agent prompt, not a prompt to answer.
         Prefer concrete continuations about testing, using, building, debugging, logs, traces, placement, or app behavior.
         Never suggest pressing Enter/Return, sending/submitting the prompt, or running a command.
-        Avoid vague product phrases like "integrate it seamlessly", "enhance the experience", or "leverage the system".
+        Avoid vague product and productivity filler like "integrate it seamlessly", "enhance the experience", "boost productivity", "streamline the workflow", or "leverage the system".
         """
     }
 

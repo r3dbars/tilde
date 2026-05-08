@@ -34,6 +34,7 @@ struct AcceptedAndKeptLearningTests {
         #expect(positive.rejectedCount == 0)
         #expect(positive.probability > positive.priorProbability)
         #expect(positive.userAffinityAdjustment > 0)
+        #expect(positive.utilityAdjustment > 0)
 
         _ = store.record(.rejected, key: learningKey, now: now)
         _ = store.record(.rejected, key: learningKey, now: now)
@@ -45,7 +46,9 @@ struct AcceptedAndKeptLearningTests {
         #expect(negative.rejectedCount == 4)
         #expect(negative.probability < negative.priorProbability)
         #expect(negative.userAffinityAdjustment < 0)
+        #expect(negative.utilityAdjustment < 0)
         #expect(negative.traceMetadata["acceptedAndKeptSamples"] == "6")
+        #expect(negative.traceMetadata["acceptedAndKeptUtilityAdjustment"] != nil)
     }
 
     @Test("Buckets are scoped by app field mode and behavior profile")

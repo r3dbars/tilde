@@ -44,4 +44,28 @@ public enum AccessibilityCoordinateConverter {
         )
     }
 
+    public static func bestScreenFrame(
+        containingAccessibilityRect rect: CGRect,
+        screenFrames: [CGRect],
+        screenHeight: CGFloat
+    ) -> CGRect? {
+        let probeRect = appKitProbeRect(
+            fromAccessibilityRect: rect,
+            screenHeight: screenHeight
+        )
+        return screenFrames
+            .compactMap { screenFrame -> (frame: CGRect, area: CGFloat)? in
+                let intersection = screenFrame.intersection(probeRect)
+                guard !intersection.isNull,
+                      intersection.width > 0,
+                      intersection.height > 0 else {
+                    return nil
+                }
+
+                return (screenFrame, intersection.width * intersection.height)
+            }
+            .max { $0.area < $1.area }?
+            .frame
+    }
+
 }

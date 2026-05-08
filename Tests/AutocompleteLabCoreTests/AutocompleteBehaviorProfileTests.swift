@@ -159,6 +159,9 @@ struct AutocompleteBehaviorProfileTests {
             "behaviorProfileMaxVisibleWords": "6",
             "behaviorProfileMaxGeneratedTokens": "12",
             "behaviorProfileSuppressedByDefault": "false",
+            "behaviorProfileSuppressesFreshParagraphStart": "true",
+            "behaviorProfileSuppressesBlankLine": "true",
+            "behaviorProfileSuppressesQuestions": "false",
             "behaviorProfileFullAccept": "true",
             "behaviorProfileSubmitLikeCompletions": "false"
         ])

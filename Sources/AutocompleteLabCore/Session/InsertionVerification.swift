@@ -26,12 +26,21 @@ public struct InsertionVerification: Equatable, Sendable {
         currentTextAfterCursor: String = ""
     ) -> InsertionVerificationResult {
         let expectedTextBeforeCursor = previousTextBeforeCursor + acceptedText
+        let textAfterCursorChanged = !previousTextAfterCursor.isEmpty
+            && normalizeRichEditorWhitespace(previousTextAfterCursor)
+                != normalizeRichEditorWhitespace(currentTextAfterCursor)
 
         if currentTextBeforeCursor == expectedTextBeforeCursor {
+            if textAfterCursorChanged {
+                return .selectionChangedUnexpectedly
+            }
             return .verified
         }
 
         if normalizeRichEditorWhitespace(currentTextBeforeCursor) == normalizeRichEditorWhitespace(expectedTextBeforeCursor) {
+            if textAfterCursorChanged {
+                return .selectionChangedUnexpectedly
+            }
             return .verified
         }
 
@@ -41,8 +50,7 @@ public struct InsertionVerification: Equatable, Sendable {
         }
 
         if currentTextBeforeCursor == previousTextBeforeCursor {
-            if !previousTextAfterCursor.isEmpty,
-               previousTextAfterCursor != currentTextAfterCursor {
+            if textAfterCursorChanged {
                 return .selectionChangedUnexpectedly
             }
             return .unchanged

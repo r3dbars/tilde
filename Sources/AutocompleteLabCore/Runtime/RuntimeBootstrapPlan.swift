@@ -389,15 +389,15 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
             return RuntimeReadinessReport(
                 stage: .downloadNeeded,
                 summary: fallbackSummary("download needed (\(preferredAsset.model.rawValue))", runtimeState: runtimeState),
-                detail: "Expected MLX model folder at \(expectedPath)",
-                action: .installModel
+                detail: "The local model is not installed yet. Expected folder: \(expectedPath)",
+                action: preferredAsset.source == nil ? .revealModelFolder : .installModel
             )
 
         case let .invalid(path, reason):
             return RuntimeReadinessReport(
                 stage: .repairNeeded,
                 summary: fallbackSummary("model folder needs repair", runtimeState: runtimeState),
-                detail: "\(path): \(reason)",
+                detail: "The local model folder is incomplete: \(reason). Folder: \(path)",
                 action: .repairModel
             )
 

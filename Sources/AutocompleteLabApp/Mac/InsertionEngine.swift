@@ -11,6 +11,8 @@ struct InsertionResult: Equatable {
 final class InsertionEngine {
     private let accessibilityClient: AccessibilityClient
     private let clipboardFallbackEnabled: Bool
+    private let clipboardFallbackPolicy = ClipboardFallbackPolicy()
+    private let clipboardFallbackRestorePolicy = ClipboardFallbackRestorePolicy()
 
     init(
         accessibilityClient: AccessibilityClient,
@@ -100,20 +102,25 @@ final class InsertionEngine {
     }
 
     private func clipboardFallback(_ text: String, profile: CompatibilityProfile) -> InsertionResult {
-        guard clipboardFallbackEnabled, !profile.isSensitive else {
+        let fallbackDecision = clipboardFallbackPolicy.decision(
+            profile: profile,
+            runtimeEnabled: clipboardFallbackEnabled
+        )
+        guard fallbackDecision == .allowed else {
             return InsertionResult(
                 succeeded: false,
                 mode: .clipboardFallbackOptIn,
-                message: "AX insertion failed and clipboard fallback is disabled."
+                message: fallbackDecision.message
             )
         }
 
         let pasteboard = NSPasteboard.general
         let originalItems = pasteboard.pasteboardItems?.map { $0.copy() as! NSPasteboardItem } ?? []
-        let originalChangeCount = pasteboard.changeCount
+        let restorePolicy = clipboardFallbackRestorePolicy
 
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+        let fallbackChangeCount = pasteboard.changeCount
 
         let pasteEvent = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: true)
         pasteEvent?.flags = .maskCommand
@@ -123,7 +130,13 @@ final class InsertionEngine {
         pasteUpEvent?.post(tap: .cghidEventTap)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            if pasteboard.changeCount >= originalChangeCount {
+            let restoreDecision = restorePolicy.decision(
+                insertedText: text,
+                currentString: pasteboard.string(forType: .string),
+                fallbackChangeCount: fallbackChangeCount,
+                currentChangeCount: pasteboard.changeCount
+            )
+            if restoreDecision == .restoreOriginalPasteboard {
                 pasteboard.clearContents()
                 pasteboard.writeObjects(originalItems)
             }
