@@ -158,6 +158,10 @@ struct SettingsCurrentAppState: Equatable {
             return "Run TextEdit Proof"
         }
 
+        if bundleIdentifier == "com.google.Chrome", isEnabled {
+            return "Run Chrome Proof"
+        }
+
         return isEnabled ? "Start App Proof" : "Enable App First"
     }
 

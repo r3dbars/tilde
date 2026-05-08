@@ -20,6 +20,10 @@ Automated smoke launches temporarily enable only the target bundle ID for that
 proof pass. This keeps fresh installs default-off while still letting the
 disposable TextEdit and Chrome checks run unattended.
 
+The Settings app-proof button can run the safe unattended lanes for TextEdit
+and Chrome. Chrome runs the full local fixture set with `--fixture all` and
+`--skip-build`; prompt apps and private-content apps stay manual-gated.
+
 Run all local Chrome browser/editor fixtures with one build:
 
 ```bash
