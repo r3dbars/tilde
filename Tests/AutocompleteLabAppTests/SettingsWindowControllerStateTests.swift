@@ -157,7 +157,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(codex.modeText == "Mode: inline, mirror fallback")
         #expect(codex.acceptanceText == "Acceptance: Tab next word only; full accept is off for safety")
-        #expect(codex.proofText == "Proof: use disposable prompt text, press Tab once, and do not press Enter.")
+        #expect(codex.proofText == "Proof: include AUTOCOMPLETE_LAB_CODEX_PROOF, press Tab once, and do not press Enter.")
         #expect(codex.proofCommandText == "Manual command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate")
         #expect(codex.proofCommandClipboardText == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate")
         #expect(codex.canCopyProofCommand)
