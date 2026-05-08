@@ -89,8 +89,10 @@ Useful commands:
 ./script/check_model_asset.py
 ./script/beta_readiness.sh
 ./script/manual_smoke_status.sh --require-all
+./script/manual_proof_queue.sh --print
 ./script/check_trace_eval.sh
 ./script/model_latency_report.py --latest
+./script/check_redacted_report_export.sh
 open "\$HOME/Library/Logs/AutocompleteLab"
 \`\`\`
 EOF
@@ -106,8 +108,9 @@ EOF
 6. Confirm Settings says the model is ready.
 7. Open TextEdit and type a normal sentence.
 8. Use Tab for one-word accept.
-9. Use the key above Tab for full accept.
+9. Use the key above Tab for full accept only in non-prompt apps where the profile allows it.
 10. Press Esc if a suggestion feels wrong.
+11. Use Diagnostics -> Export to create the local redacted trace report and survival report.
 
 Stop the test if suggestions feel distracting, appear in the wrong app, or
 insert text somewhere surprising.
@@ -173,6 +176,7 @@ Use this after each real beta writing session.
 ./script/check_trace_eval.sh
 ./script/model_latency_report.py --latest
 ./script/model_latency_report.py --latest --require-shown-samples 5
+./script/check_redacted_report_export.sh
 ```
 
 ## Notes

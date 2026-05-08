@@ -52,9 +52,9 @@ declare -a APPS=(
   "Chrome Monaco-like|Chrome|com.google.Chrome|full|monaco-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=monaco-like script/manual_smoke_session.sh chrome --visual"
   "Chrome ProseMirror-like|Chrome|com.google.Chrome|full|prosemirror-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=prosemirror-like script/manual_smoke_session.sh chrome --visual"
   "Chrome chat-like no-submit|Chrome|com.google.Chrome|full|chat-like|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture chat-like"
-  "Codex|Codex|com.openai.codex|one-word|default|script/manual_smoke_session.sh codex --visual"
-  "Claude Code|Claude Code|com.anthropic.claude-code|one-word|default|script/manual_smoke_session.sh claude-code --visual"
-  "Claude desktop|Claude|com.anthropic.claudefordesktop|one-word|default|script/manual_smoke_session.sh claude --visual"
+  "Codex|Codex|com.openai.codex|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+  "Claude Code|Claude Code|com.anthropic.claude-code|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
+  "Claude desktop|Claude|com.anthropic.claudefordesktop|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
 )
 
 trim() {
@@ -227,8 +227,8 @@ for app_entry in "${APPS[@]}"; do
   required_verified_regex='[2-9][0-9]*'
   pass_suffix=""
   if [[ "$proof_mode" == "one-word" ]]; then
-    required_verified_regex='[1-9][0-9]*'
-    pass_suffix=" (one-word profile)"
+    required_verified_regex='1'
+    pass_suffix=" (one-word no-submit profile)"
   fi
   limited_reason="needs full accept proof"
   if [[ "$proof_mode" == "one-word" ]]; then

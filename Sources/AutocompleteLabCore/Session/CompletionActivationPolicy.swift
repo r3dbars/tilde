@@ -26,6 +26,8 @@ public enum CompletionActivationDecision: Equatable, Sendable {
 public enum CompletionActivationBlockReason: String, Equatable, Sendable {
     case secureField
     case suppressedField
+    case blockedFieldKind
+    case sensitiveContent
     case selectedText
     case tooLittleContext
     case middleOfLine
@@ -35,16 +37,22 @@ public enum CompletionActivationBlockReason: String, Equatable, Sendable {
 public struct CompletionActivationPolicy: Equatable, Sendable {
     public let minimumContextCharacters: Int
     public let minimumContextWords: Int
+    public let minimumPhraseContinuationWords: Int
     public let minimumWordCompletionCharacters: Int
+    public let maximumWordCompletionCharacters: Int
 
     public init(
         minimumContextCharacters: Int = 3,
         minimumContextWords: Int = 2,
-        minimumWordCompletionCharacters: Int = 2
+        minimumPhraseContinuationWords: Int = 4,
+        minimumWordCompletionCharacters: Int = 2,
+        maximumWordCompletionCharacters: Int = 4
     ) {
         self.minimumContextCharacters = max(1, minimumContextCharacters)
         self.minimumContextWords = max(1, minimumContextWords)
+        self.minimumPhraseContinuationWords = max(self.minimumContextWords, minimumPhraseContinuationWords)
         self.minimumWordCompletionCharacters = max(1, minimumWordCompletionCharacters)
+        self.maximumWordCompletionCharacters = max(self.minimumWordCompletionCharacters, maximumWordCompletionCharacters)
     }
 
     public func canSuggest(
@@ -52,14 +60,16 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         textAfterCursor: String,
         isSecure: Bool,
         selectedTextLength: Int = 0,
-        isFieldSuppressed: Bool
+        isFieldSuppressed: Bool,
+        fieldKind: AXFieldKind = .unknown
     ) -> Bool {
         decision(
             textBeforeCursor: textBeforeCursor,
             textAfterCursor: textAfterCursor,
             isSecure: isSecure,
             selectedTextLength: selectedTextLength,
-            isFieldSuppressed: isFieldSuppressed
+            isFieldSuppressed: isFieldSuppressed,
+            fieldKind: fieldKind
         ).canSuggest
     }
 
@@ -68,9 +78,10 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         textAfterCursor: String,
         isSecure: Bool,
         selectedTextLength: Int = 0,
-        isFieldSuppressed: Bool
+        isFieldSuppressed: Bool,
+        fieldKind: AXFieldKind = .unknown
     ) -> CompletionActivationDecision {
-        if isSecure {
+        if isSecure || fieldKind == .secure {
             return .block(.secureField)
         }
 
@@ -82,9 +93,18 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             return .block(.suppressedField)
         }
 
+        if fieldKind.suppressesSuggestionsByDefault {
+            return .block(.blockedFieldKind)
+        }
+
+        if looksSensitive(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
+            return .block(.sensitiveContent)
+        }
+
         let trimmedContext = textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines)
+        let contextWordCount = trimmedContext.split(whereSeparator: { $0.isWhitespace }).count
         guard trimmedContext.count >= minimumContextCharacters,
-              trimmedContext.split(whereSeparator: { $0.isWhitespace }).count >= minimumContextWords else {
+              contextWordCount >= minimumContextWords else {
             if isWordCompletionEligible(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
                 return .allow(.wordCompletion)
             }
@@ -102,6 +122,10 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
 
         if endsInsideWord(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
             return .block(.unfinishedWord)
+        }
+
+        guard contextWordCount >= minimumPhraseContinuationWords else {
+            return .block(.tooLittleContext)
         }
 
         return .allow(.phraseContinuation)
@@ -125,6 +149,7 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             .lowercased()
 
         guard normalized.count >= minimumWordCompletionCharacters,
+              normalized.count <= maximumWordCompletionCharacters,
               normalized.allSatisfy({ $0.isLetter }) else {
             return false
         }
@@ -153,6 +178,47 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             && normalized.allSatisfy { $0.isLetter }
     }
 
+    private func looksSensitive(textBeforeCursor: String, textAfterCursor: String) -> Bool {
+        let currentLine = currentLineContext(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor)
+        let normalizedLine = currentLine
+            .lowercased()
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+
+        if Self.sensitiveLineHints.contains(where: { normalizedLine.contains($0) }) {
+            return true
+        }
+
+        if currentLine.range(
+            of: #"\b(sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|xox[baprs]-[A-Za-z0-9-]{12,}|AKIA[0-9A-Z]{12,})\b"#,
+            options: .regularExpression
+        ) != nil {
+            return true
+        }
+
+        if currentLine.range(
+            of: #"\b(?:\d[ -]*?){13,19}\b"#,
+            options: .regularExpression
+        ) != nil {
+            return true
+        }
+
+        return false
+    }
+
+    private func currentLineContext(textBeforeCursor: String, textAfterCursor: String) -> String {
+        let before = textBeforeCursor.split(
+            omittingEmptySubsequences: false,
+            whereSeparator: \.isNewline
+        ).last.map(String.init) ?? ""
+        let after = textAfterCursor.split(
+            omittingEmptySubsequences: false,
+            whereSeparator: \.isNewline
+        ).first.map(String.init) ?? ""
+
+        return before + after
+    }
+
     private static let commonCompleteWords: Set<String> = [
         "a", "an", "and", "are", "as", "at",
         "be", "but", "by",
@@ -165,5 +231,13 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         "so",
         "the", "then", "thing", "this", "to",
         "want", "we", "yes", "you"
+    ]
+
+    private static let sensitiveLineHints = [
+        "api key", "apikey", "access token", "auth token", "bearer token",
+        "client secret", "private key", "secret key", "password", "passcode",
+        "recovery code", "seed phrase", "social security", "ssn", "card number",
+        "credit card", "debit card", "security code", "cvv", "cvc", "expiry",
+        "routing number", "account number"
     ]
 }

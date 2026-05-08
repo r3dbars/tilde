@@ -123,7 +123,7 @@ struct RuntimePolicyTests {
             )
         )
 
-        #expect(missing.actionTitle == "Open Model Folder")
+        #expect(missing.actionTitle == "Install / Repair Model")
         #expect(missing.isActionEnabled)
         #expect(missing.message.contains("Model missing"))
         #expect(warming.actionTitle == "Warming...")
@@ -262,6 +262,7 @@ struct RuntimePolicyTests {
         )
 
         #expect(benchmark.averageLatencyMilliseconds == 45)
+        #expect(benchmark.p95LatencyMilliseconds == 50)
         #expect(benchmark.passesAutocompleteTarget())
     }
 
@@ -275,6 +276,22 @@ struct RuntimePolicyTests {
             ]
         )
 
+        #expect(!benchmark.passesAutocompleteTarget())
+    }
+
+    @Test("Benchmark fails when p95 latency is too slow")
+    func benchmarkFailsWhenP95IsTooSlow() {
+        let benchmark = CompletionRuntimeBenchmark(
+            candidate: .mlx,
+            samples: [
+                CompletionLatencySample(candidate: .mlx, milliseconds: 10, tokenCount: 1),
+                CompletionLatencySample(candidate: .mlx, milliseconds: 10, tokenCount: 1),
+                CompletionLatencySample(candidate: .mlx, milliseconds: 90, tokenCount: 1)
+            ]
+        )
+
+        #expect(benchmark.averageLatencyMilliseconds == 36)
+        #expect(benchmark.p95LatencyMilliseconds == 90)
         #expect(!benchmark.passesAutocompleteTarget())
     }
 }

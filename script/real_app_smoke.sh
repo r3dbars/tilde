@@ -27,6 +27,9 @@ notes run only prints the surface picker and does not record proof.
 Chrome defaults to the textarea fixture. Use --fixture chat-like to prove
 Tab/full-accept do not submit a chat-style composer. Use --fixture all to run
 every local Chrome browser/editor fixture with one app build.
+
+--skip-build reuses an already-running app, but it still requires that process
+to come from this checkout's dist/AutocompleteLab.app bundle.
 EOF
 }
 
@@ -109,6 +112,9 @@ fi
 
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
+DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.autocomplete-lab}"
+LAB_APP_NAME="AutocompleteLab"
+LAB_APP_BINARY="$ROOT_DIR/dist/AutocompleteLab.app/Contents/MacOS/AutocompleteLab"
 declare -a SMOKE_TMP_DIRS=()
 
 cleanup_smoke_tmp_dirs() {
@@ -272,6 +278,41 @@ manual_gate_reason() {
       ;;
     *)
       echo "it focuses user content"
+      ;;
+  esac
+}
+
+accept_all_shortcut() {
+  local configured="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-}"
+  if [[ -z "$configured" ]]; then
+    configured="$(defaults read "$DEFAULTS_DOMAIN" AcceptAllShortcut 2>/dev/null || true)"
+  fi
+
+  case "$configured" in
+    optionTab)
+      printf 'optionTab\n'
+      ;;
+    backtick|"")
+      printf 'backtick\n'
+      ;;
+    *)
+      echo "Unknown accept-all shortcut '$configured'; expected backtick or optionTab." >&2
+      exit 2
+      ;;
+  esac
+}
+
+press_accept_all_shortcut() {
+  case "$(accept_all_shortcut)" in
+    optionTab)
+      osascript <<'APPLESCRIPT'
+tell application "System Events"
+  key code 48 using option down
+end tell
+APPLESCRIPT
+      ;;
+    backtick)
+      press_key_code 50
       ;;
   esac
 }
@@ -680,18 +721,38 @@ describe_plan() {
       echo "Safety: pass --manual-gate to continue. Use only a disposable vault note."
       ;;
     codex|claude-code|claude)
-      echo "Plan: manual-gated prompt smoke. The script prints the checklist and validates after you run it."
-      echo "Safety: pass --manual-gate to continue."
+      echo "Plan: manual-gated prompt smoke. The script validates one-word Tab accept without submit after you run it."
+      echo "Safety: pass --manual-gate to continue. Do not press Enter; full accept waits for separate full-accept no-submit proof."
       ;;
   esac
 }
 
 build_if_needed() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
+    if ! is_current_checkout_app_running; then
+      echo "--skip-build requires this checkout's app to already be running." >&2
+      echo "Expected: $LAB_APP_BINARY" >&2
+      echo "Run ./script/build_and_run.sh --verify first, or omit --skip-build." >&2
+      exit 1
+    fi
     return 0
   fi
 
   ./script/build_and_run.sh --verify
+}
+
+is_current_checkout_app_running() {
+  local pid command
+
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    if [[ "$command" == "$LAB_APP_BINARY"* ]]; then
+      return 0
+    fi
+  done < <(pgrep -x "$LAB_APP_NAME" 2>/dev/null || true)
+
+  return 1
 }
 
 run_manual_gated() {
@@ -751,12 +812,22 @@ APPLESCRIPT
     "action=acceptNextWord" \
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit first verified insertion"
+  local full_start_line full_accept_key
+  full_accept_key="$(accept_all_shortcut)"
   assert_frontmost_app "TextEdit" "TextEdit"
   focus_textedit_smoke_editor
-  press_key_code 50
+  full_start_line="$(line_count "$LOG_PATH")"
+  press_accept_all_shortcut
+  wait_for_log_fields "$full_start_line" "TextEdit full acceptance" 12 \
+    "keyboard-action" \
+    "app=com.apple.TextEdit" \
+    "key=$full_accept_key" \
+    "action=acceptAllVisible" \
+    "handled=true"
 
   sleep 1
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
+    AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
     AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/manual_smoke_session.sh textedit --check
 }
@@ -820,9 +891,18 @@ APPLESCRIPT
   if [[ "$fixture" == "chat-like" ]]; then
     assert_chrome_chat_fixture_not_submitted "Tab acceptance"
   fi
+  local full_start_line full_accept_key
+  full_accept_key="$(accept_all_shortcut)"
   focus_chrome_smoke_editor
   assert_frontmost_app "Google Chrome" "Chrome $fixture"
-  press_key_code 50
+  full_start_line="$(line_count "$LOG_PATH")"
+  press_accept_all_shortcut
+  wait_for_log_fields "$full_start_line" "Chrome $fixture full acceptance" 12 \
+    "keyboard-action" \
+    "app=com.google.Chrome" \
+    "key=$full_accept_key" \
+    "action=acceptAllVisible" \
+    "handled=true"
 
   if [[ "$fixture" == "chat-like" ]]; then
     assert_chrome_chat_fixture_not_submitted "full acceptance"
@@ -830,6 +910,7 @@ APPLESCRIPT
 
   sleep 1
   AUTOCOMPLETE_LAB_CHROME_FIXTURE="$fixture" \
+  AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
     AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/manual_smoke_session.sh chrome --check

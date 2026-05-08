@@ -27,8 +27,9 @@ app, focused-text AX reads now run through a serial off-main reader,
 raw/screenshot debug capture now expires from Settings, lab/debug
 vocabulary was removed from the global word list, Chrome chat-like no-submit
 now has screenshot-backed proof, prompt-app full accept is disabled until
-no-submit proof exists, app-specific slow AX reads cool down without blocking
-typing, app support status is visible in Settings and the menu, Diagnostics
+separate full-accept no-submit proof exists, app-specific slow AX reads cool
+down without blocking typing, TextEdit now has a live typing soak where event
+tap p95 stayed at 35us, app support status is visible in Settings and the menu, Diagnostics
 separates key-capture health from AX-poll health, and Settings now reads more
 like a Mac utility.
 
@@ -52,9 +53,9 @@ unsure. Wrong-place text is worse than no suggestion.
 
 | Category | Weight | Current | Target | Why |
 | --- | ---: | ---: | ---: | --- |
-| Typing must feel untouched | 15 | 91 | 100 | Event tap is fast, performance checks use a fresh bounded window, slow poll summaries throttle polling, AX insertion no longer has fixed sleeps, focused-text AX reads now run through the serial off-main reader, repeated slow app-specific AX reads cool down suggestions for only that app, and the checker/UI separate hard key latency from off-main AX warnings. Live long-form typing proof in the worst apps is still needed. |
+| Typing must feel untouched | 15 | 93 | 100 | Live TextEdit soak proves event tap p95 max 35us, p99 max 95us, max 161us over 600 samples with zero slow markers and zero tap disable events. A 10-minute endurance soak command now exists and is self-tested. Slow AX polling is off the hot key path but still warned in the same run, with p95 max 59ms and max 209ms, so worst-app AX proof remains open. |
 | Visual placement and caret alignment | 18 | 64 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, and Chrome chat-like now has proof. Notes, Obsidian, Claude Code, and Claude desktop are still the blocker. |
-| Acceptance safety | 10 | 90 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, and prompt-app full accept is disabled until no-submit proof exists. Prompt-app one-word no-submit proof is still incomplete. |
+| Acceptance safety | 10 | 90 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Prompt-app one-word no-submit proof is still incomplete. |
 | Cross-app reliability | 10 | 70 | 100 | The proof matrix now has 8 screenshot rows and the app exposes green/yellow/diagnostics-only/unsupported status. Many real apps are still yellow or pending screenshot proof. |
 | Native macOS visual feel | 8 | 80 | 100 | Settings moved toward native sections, checkboxes, clearer privacy/app controls, support status, "why hidden" copy, and calmer menu copy. Diagnostics and onboarding still need polish. |
 | Privacy and permissions trust | 9 | 93 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, and raw/screenshot debug capture now expires when enabled from the app UI. Stronger plain-language warnings remain open. |
@@ -62,7 +63,7 @@ unsure. Wrong-place text is worse than no suggestion.
 | Failure restraint | 8 | 86 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, stale geometry suppresses display, event-tap disablement fails closed, prompt full accept requires proof, and unsupported apps now explain their stance. Low-confidence inline mode still needs stricter real-app gating. |
 | User control | 6 | 88 | 100 | Settings now exposes pause, app blocking, support status, privacy diagnostics, temporary raw/screenshot capture, local log deletion, shortcut state, and why the last suggestion was hidden. Per-app modes remain open. |
 | Onboarding and setup | 4 | 73 | 100 | Settings is clearer, but first-run permission flow and model install/repair are still not one calm native flow. |
-| Evidence and QA loop | 4 | 96 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
+| Evidence and QA loop | 4 | 98 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
 
 Weighted score: 82/100.
 
@@ -86,7 +87,7 @@ Weighted score: 82/100.
 
 ## Category 1: Typing Must Feel Untouched
 
-Current score: 91/100.
+Current score: 93/100.
 
 Native target: the user cannot tell the app is running unless a suggestion is
 visible.
@@ -109,6 +110,9 @@ visible.
 - [x] Typing performance checks treat event-tap latency as the hard guard and report off-main AX poll slowness separately.
 - [x] Slow app-specific AX calls should disable suggestions temporarily for that app.
 - [x] Diagnostics should distinguish event-tap latency from AX polling latency in the UI.
+- [x] Live TextEdit soak proves the event-tap key path stays in microseconds while typing.
+- [x] A 10-minute disposable TextEdit endurance soak command exists and is self-tested.
+- [ ] Focused-text AX polling should stay below the warning threshold during long active typing so diagnostics do not show 200ms-class off-main reads.
 
 ### Acceptance Bar
 
@@ -378,7 +382,7 @@ Native target: setup feels like a normal Mac utility, not a developer tool.
 
 ## Category 11: Evidence And QA Loop
 
-Current score: 96/100.
+Current score: 98/100.
 
 Native target: every claim has proof.
 
@@ -393,6 +397,9 @@ Native target: every claim has proof.
 - [x] Trace eval now verifies required screenshot files exist and are non-empty.
 - [x] App-target settings state tests exist.
 - [x] App proof matrix separates product confidence from proof confidence.
+- [x] All requested score targets are executable with `script/check_score_targets.sh`.
+- [x] The requested 10-pass score loop exists as `script/scorecard_goal_loop.sh --iterations 10`.
+- [x] The 10-minute typing endurance command is covered by a dry-run self-test.
 - [x] Beta readiness fails when proof rows are missing.
 - [ ] All pending screenshot rows need real proof.
 - [x] Performance proof defaults to a fresh bounded log slice.
@@ -419,7 +426,7 @@ Native target: every claim has proof.
 - [x] Add adaptive poll backoff after slow p95 or overlapping-poll summaries.
 - [x] Add slow-poll suppression after repeated spikes.
 - [x] Make performance check use fresh log windows by default.
-- [ ] Add a 10-minute typing soak script.
+- [x] Add a 10-minute typing soak script.
 
 ### Pass 3: Make App Stances Honest
 

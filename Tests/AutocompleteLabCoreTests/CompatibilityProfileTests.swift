@@ -9,14 +9,19 @@ struct CompatibilityProfileTests {
         let store = CompatibilityProfileStore.mvp
 
         #expect(store.profile(for: "com.apple.TextEdit")?.renderMode == .inlineAdjacent)
+        #expect(store.profile(for: "com.apple.TextEdit")?.appFamily == .nativeAppKit)
         #expect(store.profile(for: "com.apple.TextEdit")?.supportLevel == .green)
+        #expect(store.profile(for: "com.apple.TextEdit")?.supportsObserverUpdates == true)
         #expect(store.profile(for: "com.apple.TextEdit")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.apple.TextEdit")?.fallbackInsertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.apple.Notes")?.insertionMode == .keyEvents)
+        #expect(store.profile(for: "com.apple.Notes")?.appFamily == .swiftUIAppKit)
         #expect(store.profile(for: "com.apple.Notes")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.apple.Notes")?.fallbackInsertionMode == .disabled)
         #expect(store.profile(for: "com.apple.Notes")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "md.obsidian")?.renderMode == .floatingMirror)
+        #expect(store.profile(for: "md.obsidian")?.appFamily == .electron)
+        #expect(store.profile(for: "md.obsidian")?.anchorLadder == [.caret])
         #expect(store.profile(for: "md.obsidian")?.supportLevel == .yellow)
         #expect(store.profile(for: "md.obsidian")?.insertionMode == .axThenKeyEvents)
         #expect(store.profile(for: "md.obsidian")?.fallbackInsertionMode == .keyEvents)
@@ -24,6 +29,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "md.obsidian")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "md.obsidian")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.apple.mail")?.displayName == "Mail")
+        #expect(store.profile(for: "com.apple.mail")?.anchorLadder == [.none])
         #expect(store.profile(for: "com.apple.mail")?.supportLevel == .diagnosticsOnly)
         #expect(store.profile(for: "com.apple.mail")?.renderMode == .disabled)
         #expect(store.profile(for: "com.apple.mail")?.insertionMode == .disabled)
@@ -32,12 +38,16 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.mail")?.allowsDescendantTextFallback == true)
         #expect(store.profile(for: "com.apple.mail")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.google.Chrome")?.displayName == "Chrome")
+        #expect(store.profile(for: "com.google.Chrome")?.appFamily == .chromium)
+        #expect(store.profile(for: "com.google.Chrome")?.anchorLadder == [.caret, .field])
         #expect(store.profile(for: "com.google.Chrome")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.google.Chrome")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .keyEvents)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.openai.codex")?.displayName == "Codex")
+        #expect(store.profile(for: "com.openai.codex")?.appFamily == .customCanvas)
+        #expect(store.profile(for: "com.openai.codex")?.allowsFieldAnchor == false)
         #expect(store.profile(for: "com.openai.codex")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.openai.codex")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "com.openai.codex")?.fallbackRenderMode == .floatingMirror)
@@ -68,6 +78,10 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportsOneWordAcceptance == true)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportsFullAcceptance == false)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.allowsDetachedSuggestions == false)
+        #expect(store.profile(for: "com.apple.Safari")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.tinyspeck.slackmacgap")?.appFamily == .electron)
+        #expect(store.profiles["com.microsoft.VSCode"]?.anchorLadder == [.none])
+        #expect(store.profiles["com.todesktop.230313mzl4w4u92"]?.renderMode == .disabled)
     }
 
     @Test("Denylisted apps are never allowed")
@@ -76,6 +90,42 @@ struct CompatibilityProfileTests {
 
         #expect(!store.allows(bundleIdentifier: "com.apple.Terminal"))
         #expect(!store.allows(bundleIdentifier: "com.1password.1password"))
+        #expect(!store.allows(bundleIdentifier: "com.apple.Passwords"))
+    }
+
+    @Test("Raw-control developer apps are denylisted by default")
+    func rawControlDeveloperAppsAreDenylisted() {
+        let store = CompatibilityProfileStore.mvp
+        let highRiskBundleIdentifiers = [
+            "com.apple.dt.Xcode",
+            "com.microsoft.VSCode",
+            "com.microsoft.VSCodeInsiders",
+            "com.visualstudio.code.oss",
+            "com.todesktop.230313mzl4w4u92",
+            "com.exafunction.windsurf",
+            "com.jetbrains.intellij",
+            "com.jetbrains.AppCode",
+            "com.jetbrains.CLion",
+            "com.jetbrains.PyCharm",
+            "com.jetbrains.WebStorm",
+            "com.jetbrains.RubyMine",
+            "com.jetbrains.goland",
+            "com.jetbrains.datagrip",
+            "com.jetbrains.phpstorm",
+            "com.jetbrains.rider",
+            "com.jetbrains.DataSpell",
+            "com.jetbrains.aqua",
+            "com.jetbrains.gateway",
+            "dev.warp.Warp",
+            "com.mitchellh.ghostty",
+            "net.kovidgoyal.kitty",
+            "org.alacritty"
+        ]
+
+        for bundleIdentifier in highRiskBundleIdentifiers {
+            #expect(store.supportStatus(for: bundleIdentifier) == .denylisted)
+            #expect(!store.allows(bundleIdentifier: bundleIdentifier))
+        }
     }
 
     @Test("Unknown apps are not globally enabled during the MVP")
@@ -136,10 +186,13 @@ struct CompatibilityProfileTests {
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
 
         #expect(profile.debugSummary.contains("primary render=inlineAdjacent"))
+        #expect(profile.debugSummary.contains("support=yellow"))
+        #expect(profile.debugSummary.contains("family=chromium"))
         #expect(profile.debugSummary.contains("insert=keyEvents"))
         #expect(profile.debugSummary.contains("fallback render=floatingMirror"))
         #expect(profile.debugSummary.contains("insert=axValueReplacement"))
         #expect(profile.debugSummary.contains("field=accessibilityElement"))
+        #expect(profile.debugSummary.contains("anchors=caret>field"))
     }
 
     @Test("Insertion mode plans try primary then safe fallback")
@@ -177,6 +230,15 @@ struct CompatibilityProfileTests {
         #expect(claudeCode.canPresentSuggestions == true)
         #expect(claude.supportsOneWordAcceptance == true)
         #expect(claude.supportsFullAcceptance == false)
+
+        for promptProfile in [codex, claudeCode, claude] {
+            #expect(promptProfile.supportReason.contains("one-word no-submit proof"))
+            #expect(promptProfile.notes.contains("Requires one-word no-submit proof"))
+            #expect(promptProfile.notes.contains("separate full-accept no-submit proof"))
+            #expect(promptProfile.supportsOneWordAcceptance == true)
+            #expect(promptProfile.supportsFullAcceptance == false)
+            #expect(promptProfile.allowsDetachedSuggestions == false)
+        }
     }
 
     @Test("Insertion mode plans can skip failed primary modes")
