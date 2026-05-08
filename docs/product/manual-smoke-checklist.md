@@ -13,6 +13,8 @@ release/beta work. The status command also lists the current scorecard rows
 that are still below 10/10. In strict mode it also runs the screenshot evidence
 gate, so stale screenshot rows, unreferenced screenshot files, and below-target
 visual rows without a clear `Pending` label block the pass.
+It only counts manual smoke rows that include the current Git commit or current
+release archive checksum in the trace slice.
 
 For the full remaining manual beta proof sequence, run:
 
@@ -44,12 +46,28 @@ manual proof pass.
   should have screenshot proof. If a visual row is still below target, label it
   `Pending` plainly instead of letting a stale screenshot look finished.
 
+## Anchor Source Rows
+
+These rows keep the fallback ladder honest. A real app pass can close more than
+one row only when the diagnostics slice shows that exact anchor source.
+
+| Anchor source | Smoke path | Required signal | Current blocker |
+| --- | --- | --- | --- |
+| `caret` | TextEdit smoke | `placementAnchorSource=caret`, `placementConfidenceBand=high`, and verified insertion | None for native proof; still needs more native app variants. |
+| `synthetic-caret` | Chrome fixtures, Obsidian, Codex, and prompt-app passes | `placementAnchorSource=synthetic-caret`, medium or better confidence, and verified insertion | Real editor/prompt apps still need current screenshot-backed proof. |
+| `line` | TextEdit wrapped-line smoke after line metadata lands | `placementAnchorSource=line` with line rect inside field/window | Blocked until `AXInsertionPointLineNumber` or equivalent line bounds are captured. |
+| `field` | App-specific diagnostic pass where caret is missing but field bounds are valid | `placementAnchorSource=field`, usable fallback quality, and no detached whole-editor drift | Only valid for profiles that explicitly allow field anchors. |
+| `window` | Explicit diagnostics-only invocation | `placementAnchorSource=window` and no automatic Tab capture | Not a normal typing surface; keep as diagnostics only. |
+| `off` | Unsupported app, sensitive field, or no-Accessibility smoke | no visible suggestion, no handled accept key, and a blocked decision | Needs the no-Accessibility proof path below for the permission case. |
+
 ## TextEdit
 
 Recorder:
 
 ```bash
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-multiline
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-wrapped
 ```
 
 - Type `Can we`.
@@ -57,6 +75,7 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit
 - Press Tab and expect `Can we make`.
 - Press the key above Tab and expect the rest of the visible suggestion.
 - Confirm `insert-verification result=verified`.
+- Run the multiline and wrapped-line variants before treating TextEdit as fully current.
 
 ## Notes
 
@@ -108,6 +127,27 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture al
 - Press Tab and expect `Can we make` without focus leaving the editor.
 - Confirm verification succeeds.
 - Each fixture records its own proof label.
+
+## No Accessibility Permission
+
+This cannot be safely automated because macOS TCC permission changes affect the
+developer machine. Use the helper as a manual-gated proof path:
+
+```bash
+script/no_accessibility_smoke.sh --print
+```
+
+After disabling AutocompleteLab in System Settings and relaunching it, run:
+
+```bash
+AUTOCOMPLETE_LAB_LOG_START_LINE=<mark> script/no_accessibility_smoke.sh --check
+```
+
+- Expect `launch accessibility=false`.
+- Expect a status line with `accessibility=AX missing`.
+- Expect `Blocked: Accessibility permission missing`.
+- Confirm no `suggestion-presented` line appears in the slice.
+- Confirm no accept key is handled in the slice.
 
 ## Codex
 

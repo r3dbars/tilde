@@ -4,7 +4,7 @@ set -euo pipefail
 MODE="${1:-run}"
 APP_NAME="AutocompleteLab"
 BUNDLE_ID="bar.r3d.autocomplete-lab"
-MIN_SYSTEM_VERSION="26.0"
+MIN_SYSTEM_VERSION="14.0"
 BUILD_CONFIGURATION="${AUTOCOMPLETE_LAB_BUILD_CONFIGURATION:-debug}"
 APP_VERSION="${AUTOCOMPLETE_LAB_VERSION:-0.1.0}"
 APP_BUILD="${AUTOCOMPLETE_LAB_BUILD:-$(git rev-list --count HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
@@ -19,10 +19,48 @@ APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 APP_ICON="$APP_RESOURCES/AppIcon.icns"
 MLX_METALLIB="$ROOT_DIR/.build/mlx-metal/default.metallib"
+APP_NAME_MATCH="[${APP_NAME:0:1}]${APP_NAME:1}"
+APP_PROCESS_PATTERN="/${APP_NAME}.app/Contents/MacOS/${APP_NAME_MATCH}"
+CURRENT_APP_PROCESS_PATTERN="$DIST_DIR/${APP_NAME}.app/Contents/MacOS/${APP_NAME_MATCH}"
 
 cd "$ROOT_DIR"
 
-pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+kill_running_app_instances() {
+  local pid
+
+  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    kill "$pid" >/dev/null 2>&1 || true
+  done < <(pgrep -f "$APP_PROCESS_PATTERN" || true)
+
+  for _ in {1..20}; do
+    if ! pgrep -f "$APP_PROCESS_PATTERN" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for existing $APP_NAME instances to exit." >&2
+  pgrep -fl "$APP_PROCESS_PATTERN" >&2 || true
+  exit 1
+}
+
+wait_for_current_app_instance() {
+  for _ in {1..20}; do
+    if pgrep -fl "$CURRENT_APP_PROCESS_PATTERN" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "$APP_NAME did not launch from the current bundle:" >&2
+  echo "$APP_BINARY" >&2
+  pgrep -fl "$APP_PROCESS_PATTERN" >&2 || true
+  exit 1
+}
+
+kill_running_app_instances
 
 find_signing_identity() {
   if [[ -n "${SIGN_IDENTITY:-}" ]]; then

@@ -8,6 +8,19 @@ the manual smoke status is refreshed from the current build.
 For screenshot-backed app-by-app grades and gaps, use
 [App Proof Matrix](app-proof-matrix.md).
 
+## Update Map
+
+When code lands, update these surfaces in the same PR:
+
+| Change | Required docs/scripts |
+| --- | --- |
+| New or changed real-app support | `docs/product/compatibility-matrix.md`, `docs/product/app-proof-matrix.md`, `docs/product/manual-smoke-checklist.md`, and `script/real_app_smoke.sh` if the path is repeatable. |
+| New manual proof | append `docs/product/manual-smoke-runs.md`, update scorecard visual rows, then run `script/manual_smoke_status.sh --strict`. |
+| Placement screenshot proof | add a PNG under `docs/product/visual-placement-screenshots/`, link it from the scorecard, then run `script/check_visual_placement_evidence.sh`. |
+| Anchor ladder behavior | update the anchor-source rows in `manual-smoke-checklist.md` and keep `caret-locked-research-queue.md` checked only for implemented behavior. |
+| Compatibility learning or nudges | update `docs/product/eval-and-tracing.md` and `script/compatibility_self_healing_report.py`. |
+| Permission or unsupported-app behavior | update `manual-smoke-checklist.md`; use `script/no_accessibility_smoke.sh` for the no-AX case. |
+
 | App | Status | Render | Insert | Proof |
 | --- | --- | --- | --- | --- |
 | TextEdit | supported | inline, mirror fallback | AX selected text, value fallback | recorded manual smoke pass |
@@ -43,3 +56,14 @@ Run `./script/check_visual_placement_evidence.sh --require-all` when every row
 in the visual placement audit should have screenshot-backed proof. Keep any
 below-target row explicitly marked `Pending` until the proof is strong enough to
 raise it.
+
+## Anchor Source Proof
+
+| Source | Current support stance | Proof path |
+| --- | --- | --- |
+| `caret` | Supported when AX caret geometry is trusted. | TextEdit rows; more native app variants still need current proof. |
+| `synthetic-caret` | Supported for profiled browser, editor, and prompt surfaces when the synthetic estimate is stable. | Chrome fixtures are strongest; Obsidian, Codex, Claude Code, and Claude desktop still need current real-app proof. |
+| `line` | Pending. | Add proof only after line-number or line-bounds capture lands. |
+| `field` | Diagnostics or explicit profile fallback only. | Requires a profile that allows field anchors and a trace showing no whole-editor drift. |
+| `window` | Diagnostics only. | Do not treat window anchoring as normal typing support. |
+| `none`/off | Supported safety fallback. | Unsupported-app, sensitive-field, detached-suppression, and no-Accessibility checks. |

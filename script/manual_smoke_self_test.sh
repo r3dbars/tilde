@@ -17,6 +17,8 @@ REPORT_PATH="$TMP_DIR/manual-smoke-runs.md"
 SCORECARD_PATH="$TMP_DIR/deep-dive-scorecard.md"
 FAILURE_OUTPUT="$TMP_DIR/failure-output.txt"
 
+export AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF="commit:selftest"
+
 write_passing_log() {
   local bundle_id="$1"
   local render_mode="$2"
@@ -58,6 +60,23 @@ write_one_word_log() {
 2026-04-26T08:00:01Z keyboard-action action=acceptNextWord app=$bundle_id handled=true key=tab reason=accepted
 2026-04-26T08:00:01Z insert app=$bundle_id success=true mode=keyEvents
 2026-04-26T08:00:02Z insert-verification app=$bundle_id result=verified acceptedChars=5 previousBeforeChars=6 currentBeforeChars=11
+EOF
+}
+
+write_recovered_runtime_log() {
+  local bundle_id="$1"
+  local render_mode="$2"
+
+  cat >"$LOG_PATH" <<EOF
+2026-04-26T07:59:59Z suggestion-blocked app=$bundle_id reason=runtime-not-ready
+2026-04-26T08:00:00Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=caret placementConfidenceBand=high hasCaretRect=true
+2026-04-26T08:00:01Z keyboard-action action=acceptNextWord app=$bundle_id handled=true key=tab reason=accepted
+2026-04-26T08:00:01Z insert app=$bundle_id success=true mode=axSelectedText
+2026-04-26T08:00:02Z insert-verification app=$bundle_id result=verified acceptedChars=5 previousBeforeChars=6 currentBeforeChars=11
+2026-04-26T08:00:03Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=caret placementConfidenceBand=high hasCaretRect=true
+2026-04-26T08:00:04Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=backtick reason=accepted
+2026-04-26T08:00:04Z insert app=$bundle_id success=true mode=axSelectedText
+2026-04-26T08:00:05Z insert-verification app=$bundle_id result=verified acceptedChars=12 previousBeforeChars=11 currentBeforeChars=23
 EOF
 }
 
@@ -128,7 +147,7 @@ run_passing_case() {
   fi
 
   if ! grep -F " | lines 1+ in \`$TRACE_PATH\` |" "$REPORT_PATH" >/dev/null; then
-    if ! grep -F " | lines 1+ in \`$TRACE_PATH\`; visual \`not-claimed\` |" "$REPORT_PATH" >/dev/null; then
+    if ! grep -F " | lines 1+ in \`$TRACE_PATH\`; visual \`not-claimed\`; build \`commit:selftest\` |" "$REPORT_PATH" >/dev/null; then
       echo "manual smoke self-test did not record the successful $display_name trace slice" >&2
       exit 1
     fi
@@ -184,13 +203,15 @@ run_strict_visual_case() {
     exit 1
   fi
 
-  if ! grep -F " | lines 1+ in \`$TRACE_PATH\`; visual \`strict-complete\` |" "$REPORT_PATH" >/dev/null; then
+  if ! grep -F " | lines 1+ in \`$TRACE_PATH\`; visual \`strict-complete\`; build \`commit:selftest\` |" "$REPORT_PATH" >/dev/null; then
     echo "manual smoke self-test did not record the successful $proof_label strict visual trace slice" >&2
     exit 1
   fi
 }
 
 run_passing_case textedit TextEdit com.apple.TextEdit 'inlineAdjacent|floatingMirror' inlineAdjacent
+run_passing_case textedit-multiline TextEdit com.apple.TextEdit 'inlineAdjacent|floatingMirror' inlineAdjacent multiline
+run_passing_case textedit-wrapped TextEdit com.apple.TextEdit 'inlineAdjacent|floatingMirror' inlineAdjacent wrapped-line
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-title
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-body
 run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' floatingMirror notes-checklist
@@ -201,6 +222,21 @@ run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror'
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent monaco-like
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent prosemirror-like
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent chat-like
+
+write_recovered_runtime_log "com.apple.TextEdit" "inlineAdjacent"
+write_passing_trace "com.apple.TextEdit"
+RECOVERED_RUNTIME_REPORT="$TMP_DIR/recovered-runtime-manual-smoke-runs.md"
+AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$RECOVERED_RUNTIME_REPORT" \
+  script/manual_smoke_session.sh textedit --check >/dev/null
+
+if ! grep -F "| TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1+ in \`" "$RECOVERED_RUNTIME_REPORT" >/dev/null; then
+  echo "manual smoke self-test did not allow recovered runtime readiness noise" >&2
+  exit 1
+fi
 
 write_option_tab_passing_log "com.apple.TextEdit" "inlineAdjacent"
 write_passing_trace "com.apple.TextEdit"
@@ -386,7 +422,7 @@ if ! grep -F "Insertion proof status: $REPORT_PATH" "$STATUS_OUTPUT" >/dev/null;
   exit 1
 fi
 
-for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome chat-like no-submit" Codex "Claude Code" "Claude desktop"; do
+for app_name in TextEdit "TextEdit multiline" "TextEdit wrapped line" "Notes title" "Notes body" "Notes checklist" "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome chat-like no-submit" Codex "Claude Code" "Claude desktop"; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
     exit 1
@@ -463,6 +499,21 @@ EOF
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   AUTOCOMPLETE_LAB_SCORECARD="$COMPLETE_SCORECARD_PATH" \
   script/manual_smoke_status.sh --require-all >/dev/null
+
+STALE_REPORT="$TMP_DIR/stale-manual-smoke-runs.md"
+sed -E 's/; build `[^`]+`//g' "$REPORT_PATH" >"$STALE_REPORT"
+
+if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$STALE_REPORT" \
+  AUTOCOMPLETE_LAB_SCORECARD="$COMPLETE_SCORECARD_PATH" \
+  script/manual_smoke_status.sh --require-all >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected strict status to fail on stale build proof" >&2
+  exit 1
+fi
+
+if ! grep -F 'stale pass (needs current commit/archive proof' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not explain stale manual smoke proof" >&2
+  exit 1
+fi
 
 BELOW_TARGET_SCORECARD_PATH="$TMP_DIR/deep-dive-scorecard-below-target.md"
 cat >"$BELOW_TARGET_SCORECARD_PATH" <<'EOF'

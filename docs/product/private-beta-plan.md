@@ -37,6 +37,10 @@ app. If the model is missing or invalid, testers should use Settings
 `Install Model` or `Repair Model`; if that in-app setup fails, stop the session
 instead of giving testers shell commands.
 
+The tester install path is inside Settings. If the model is missing, use
+`Install Local Model`; if the folder is incomplete, use `Repair Local Model`.
+Do not ask testers to run shell or Python commands.
+
 ## Test Shape
 
 - 4 users.
@@ -161,7 +165,7 @@ Run the trace checker before trusting the session:
 
 ```bash
 ./script/check_trace_eval.sh
-./script/model_latency_report.py --latest
+./script/model_latency_report.py --default-model-proof
 ```
 
 Fix the top repeated trust miss before inviting another tester.
