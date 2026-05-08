@@ -101,13 +101,15 @@ The script also has guarded public-demo lanes for `codemirror-official`,
 `monaco-official`, and `prosemirror-official`. Those lanes are for production
 editor proof only after they pass with bounded screenshot-backed traces. They
 fail closed before typing unless Chrome is frontmost and the expected official
-demo URL is the active tab. The Chrome setup text path also requires a focused
-editable web text target through Accessibility, sends setup text to the Chrome
-process rather than as global setup keystrokes, and verifies that the focused
-editor value changed before continuing. Real-app smoke runs take a single-run
-lock and scan for other active smoke scripts so two proof processes cannot type
-at the same time, even if an older worktree process did not share the current
-lock state.
+demo URL is the active tab. Official demo lanes also fail fast if Chrome's
+View > Developer > Allow JavaScript from Apple Events setting is off, because
+the script cannot safely focus or verify those public editors without it. The
+Chrome setup text path also requires a focused editable web text target through
+Accessibility, sends setup text to the Chrome process rather than as global
+setup keystrokes, and verifies that the focused editor value changed before
+continuing. Real-app smoke runs take a single-run lock and scan for other
+active smoke scripts so two proof processes cannot type at the same time, even
+if an older worktree process did not share the current lock state.
 
 Run the score target loop when working toward the product scorecards:
 

@@ -769,12 +769,14 @@ these are true.
    into the wrong app. These lanes are implementation-ready but still score as
    pending until bounded screenshot-backed official-demo traces pass.
 73. Done: harden Chrome proof typing further after live proof exposed stale
-   worktree smoke processes and global setup-keystroke focus changes. Non-dry
-   real-app smoke now scans for other active smoke scripts before acquiring the
-   lock, requires a focused editable web text AX target before Chrome setup
-   text, sends that setup text to the Chrome process, and verifies the focused
-   editor value changed before waiting for app logs. This improves proof safety
-   but does not raise Chrome scores until official-demo traces pass.
+   worktree smoke processes, disabled Chrome JavaScript-from-Apple-Events
+   preflight, and global setup-keystroke focus changes. Non-dry real-app smoke
+   now scans for other active smoke scripts before acquiring the lock, fails
+   official-demo lanes fast when Chrome cannot run Apple Event JavaScript,
+   requires a focused editable web text AX target before Chrome setup text,
+   sends that setup text to the Chrome process, and verifies the focused editor
+   value changed before waiting for app logs. This improves proof safety but
+   does not raise Chrome scores until official-demo traces pass.
 
 ## Goal Status
 
