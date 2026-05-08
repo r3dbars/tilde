@@ -176,6 +176,10 @@ public struct FocusedTextPollingBackoffPolicy: Equatable, Sendable {
         )
     }
 
+    public func shouldProcessCurrentAXReadBeforeThrottle(hasContext: Bool) -> Bool {
+        hasContext
+    }
+
     private func recommendation(
         reason: FocusedTextPollingThrottleReason,
         pauseMilliseconds: Int

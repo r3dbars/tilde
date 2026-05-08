@@ -36,6 +36,7 @@ This is not yet a 97/100 real human dogfood score. It means the prompt, OCR cont
 - Output cleaning now suppresses the same OCR chrome class even if the model still returns it.
 - Prompt style bumped to `screen-aware-continuation-v5` with an explicit "never output visible window titles / tab labels / menu labels / OCR chrome" rule.
 - Focused text polling now waits through a short in-flight grace window before counting overlapping polls, so slow AX reads in Codex do not churn the typing loop while the user is trying to write.
+- Slow focused-text reads that still return a valid context now feed the suggestion pipeline instead of being discarded before the model can help.
 
 ## Latest Heartbeat Pass
 
@@ -68,6 +69,15 @@ Time: 2026-05-08T23:14:23Z
 - Fix: add a 450 ms in-flight skip grace window before recording overlapping poll skips, while keeping normal fast polling unchanged when no read is in flight.
 - Added `FocusedTextPollingBackoffPolicyTests` coverage for the in-flight grace window.
 - Focused Swift test pass: `FocusedTextPollingBackoffPolicyTests`, `FocusedTextPollGatePolicyTests`, `VisiblePageContextTests`, `CompletionOutputCleanerTests`, and `MagicWritingOCRPromptEvalTests` all passed.
+
+## Latest Slow-Read Salvage Pass
+
+Time: 2026-05-08T23:17:29Z
+
+- Fresh heartbeat diagnostics showed new Codex slow AX reads at 397 ms and 175 ms after the overlap fix.
+- Root cause: those reads returned `hasContext=true`, but the app applied the slow-read throttle before processing the current snapshot, so a useful typing update could be thrown away right when the user wanted an aggressive suggestion.
+- Fix: a slow AX read now pauses the next poll but still processes the current focused-text context when it came back safely.
+- Added focused policy coverage for the "slow read with context still processes current snapshot" behavior.
 
 ## 100 Test Situations
 
