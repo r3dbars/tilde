@@ -400,7 +400,7 @@ struct SettingsSuggestionAggressivenessState: Equatable {
         case .normal:
             return "Shows a little sooner with longer suggestions."
         case .eager:
-            return "Shows sooner when safe, while keeping sensitive-field and high-risk blocks."
+            return "Predicts partial words sooner and starts phrase help after short pauses."
         }
     }
 

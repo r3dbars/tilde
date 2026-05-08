@@ -22,13 +22,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let browserHostedSurfacePolicy = BrowserHostedSurfacePolicy()
     private let suggestionControlPolicy = SuggestionControlPolicy()
     private let suggestionPauseSchedulePolicy = SuggestionPauseSchedulePolicy()
-    private let activationPolicy = CompletionActivationPolicy()
+    private let suggestionAggressivenessPolicy = SuggestionAggressivenessPolicy()
     private let fieldClassifier = AXFieldClassifier()
     private let textContextRepairPolicy = TextContextRepairPolicy()
     private let tracePrivacySecretStore = TracePrivacySecretStore()
-    private var triggerPolicy: SuggestionTriggerPolicy {
-        suggestionAggressiveness.triggerPolicy
-    }
     private let suggestionCadenceResetPolicy = SuggestionCadenceResetPolicy()
     private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
     private var completionLengthConfiguration: CompletionLengthConfiguration {
@@ -1194,7 +1191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let activationDecision = activationPolicy.decision(
+        let activationDecision = activationPolicy(for: profile).decision(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             isSecure: context.isSecure,
@@ -1383,7 +1380,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldKind: fieldClassification.kind,
             currentLineStructure: currentLineStructure
         ))
-        let triggerDecision = triggerPolicy.decision(
+        let triggerDecision = triggerPolicy(for: profile).decision(
             previousTextBeforeCursor: lastRequestedTextBeforeCursor,
             currentTextBeforeCursor: context.textBeforeCursor,
             lineStartBehavior: SuggestionLineStartBehavior.behavior(
@@ -3763,7 +3760,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: fieldIdentity,
             fieldClassification: fieldClassification,
             acceptedTextStyleSketch: acceptedTextStyleSketch,
-            maxVisibleWords: completionLengthConfiguration.maxVisibleWords,
+            maxVisibleWords: maxVisibleWords(for: requestMode, profile: profile),
             requestMode: requestMode,
             suggestionAggressiveness: suggestionAggressiveness
         ))
@@ -6552,6 +6549,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func makePrefixFamilyCooldownPolicy() -> PrefixFamilyCooldownPolicy {
         PrefixFamilyCooldownPolicy(traceFingerprintSecret: tracePrivacySecretStore.secret())
+    }
+
+    private func effectiveSuggestionPace(for profile: CompatibilityProfile) -> SuggestionPace {
+        suggestionAggressivenessPolicy.pace(
+            userPace: suggestionAggressiveness.pace,
+            supportStatus: .supported(profile)
+        )
+    }
+
+    private func activationPolicy(for profile: CompatibilityProfile) -> CompletionActivationPolicy {
+        CompletionActivationPolicy(pace: effectiveSuggestionPace(for: profile))
+    }
+
+    private func triggerPolicy(for profile: CompatibilityProfile) -> SuggestionTriggerPolicy {
+        SuggestionTriggerPolicy(pace: effectiveSuggestionPace(for: profile))
+    }
+
+    private func maxVisibleWords(
+        for requestMode: CompletionRequestMode,
+        profile: CompatibilityProfile
+    ) -> Int {
+        effectiveSuggestionPace(for: profile).maxVisibleWords(
+            defaultMaxVisibleWords: completionLengthConfiguration.maxVisibleWords,
+            requestMode: requestMode
+        )
     }
 
     private func setAcceptAllShortcut(_ shortcut: AcceptAllShortcut) {

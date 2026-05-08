@@ -37,6 +37,8 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
     public let pauseDelayMilliseconds: Int
     public let largeTextChangeCharacterThreshold: Int
     public let largeTextChangeDelayMilliseconds: Int
+    public let minimumWordCompletionCharacters: Int
+    public let allowsPlainLineStartWordCompletion: Bool
 
     public init(
         charactersBeforePauseRequest: Int = 4,
@@ -48,7 +50,9 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         sentenceBoundaryDelayMilliseconds: Int = 360,
         pauseDelayMilliseconds: Int = 180,
         largeTextChangeCharacterThreshold: Int = 24,
-        largeTextChangeDelayMilliseconds: Int = 250
+        largeTextChangeDelayMilliseconds: Int = 250,
+        minimumWordCompletionCharacters: Int = 3,
+        allowsPlainLineStartWordCompletion: Bool = false
     ) {
         self.charactersBeforePauseRequest = max(1, charactersBeforePauseRequest)
         self.wordCompletionDelayMilliseconds = wordCompletionDelayMilliseconds.clamped(to: 50...140)
@@ -60,6 +64,49 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         self.pauseDelayMilliseconds = pauseDelayMilliseconds.clamped(to: 80...240)
         self.largeTextChangeCharacterThreshold = max(1, largeTextChangeCharacterThreshold)
         self.largeTextChangeDelayMilliseconds = max(self.pauseDelayMilliseconds, largeTextChangeDelayMilliseconds)
+        self.minimumWordCompletionCharacters = max(1, minimumWordCompletionCharacters)
+        self.allowsPlainLineStartWordCompletion = allowsPlainLineStartWordCompletion
+    }
+
+    public init(pace: SuggestionPace) {
+        switch pace {
+        case .quiet:
+            self.init(
+                charactersBeforePauseRequest: 6,
+                wordCompletionDelayMilliseconds: 140,
+                wordBoundaryDelayMilliseconds: 240,
+                softPunctuationDelayMilliseconds: 240,
+                structuralPunctuationDelayMilliseconds: 240,
+                closingPunctuationDelayMilliseconds: 220,
+                sentenceBoundaryDelayMilliseconds: 450,
+                pauseDelayMilliseconds: 240,
+                largeTextChangeDelayMilliseconds: 320
+            )
+        case .normal:
+            self.init(
+                charactersBeforePauseRequest: 1,
+                wordCompletionDelayMilliseconds: 70,
+                wordBoundaryDelayMilliseconds: 100,
+                softPunctuationDelayMilliseconds: 140,
+                structuralPunctuationDelayMilliseconds: 140,
+                closingPunctuationDelayMilliseconds: 140,
+                sentenceBoundaryDelayMilliseconds: 260,
+                pauseDelayMilliseconds: 100
+            )
+        case .eager:
+            self.init(
+                charactersBeforePauseRequest: 1,
+                wordCompletionDelayMilliseconds: 0,
+                wordBoundaryDelayMilliseconds: 0,
+                softPunctuationDelayMilliseconds: 140,
+                structuralPunctuationDelayMilliseconds: 140,
+                closingPunctuationDelayMilliseconds: 140,
+                sentenceBoundaryDelayMilliseconds: 240,
+                pauseDelayMilliseconds: 15,
+                minimumWordCompletionCharacters: 2,
+                allowsPlainLineStartWordCompletion: true
+            )
+        }
     }
 
     public func shouldRequestSuggestion(
@@ -141,7 +188,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
 
     private func shouldRequestWordCompletion(previousTextBeforeCursor: String, currentTextBeforeCursor: String) -> Bool {
         guard let currentFragment = trailingWordFragment(in: currentTextBeforeCursor),
-              currentFragment.count >= 3,
+              currentFragment.count >= minimumWordCompletionCharacters,
               currentFragment.allSatisfy({ $0.isLetter }) else {
             return false
         }
@@ -217,7 +264,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
 
         switch behavior {
         case .plain:
-            return true
+            return !allowsPlainLineStartWordCompletion || !hasLineStartWordCompletionFragment(in: currentLine)
         case .listItem, .email:
             return !hasLineStartWordCompletionFragment(in: currentLine)
         }
@@ -278,7 +325,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         let normalized = fragment
             .trimmingCharacters(in: .punctuationCharacters)
 
-        return normalized.count >= 3
+        return normalized.count >= minimumWordCompletionCharacters
             && normalized.allSatisfy { $0.isLetter }
     }
 

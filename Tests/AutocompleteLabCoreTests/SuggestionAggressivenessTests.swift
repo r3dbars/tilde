@@ -32,8 +32,8 @@ struct SuggestionAggressivenessTests {
         #expect(display.threshold(for: .sentenceContinuation) == 1.45)
     }
 
-    @Test("eager keeps safety gates but lowers display thresholds")
-    func eagerKeepsSafetyGatesButLowersDisplayThresholds() {
+    @Test("proactive keeps safety gates but predicts faster")
+    func proactiveKeepsSafetyGatesButPredictsFaster() {
         let trigger = SuggestionAggressiveness.eager.triggerPolicy
         let display = SuggestionAggressiveness.eager.displayScorePolicy
 
@@ -41,7 +41,9 @@ struct SuggestionAggressivenessTests {
         #expect(trigger.wordCompletionDelayMilliseconds == 50)
         #expect(trigger.wordBoundaryDelayMilliseconds == 80)
         #expect(trigger.pauseDelayMilliseconds == 80)
-        #expect(trigger.sentenceBoundaryDelayMilliseconds == 280)
+        #expect(trigger.sentenceBoundaryDelayMilliseconds == 240)
+        #expect(trigger.minimumWordCompletionCharacters == 2)
+        #expect(trigger.allowsPlainLineStartWordCompletion)
         #expect(display.threshold(for: .wordCompletion) == 0.50)
         #expect(display.threshold(for: .phraseContinuation) == 0.85)
         #expect(display.threshold(for: .sentenceContinuation) == 1.05)
@@ -57,5 +59,26 @@ struct SuggestionAggressivenessTests {
         #expect(SuggestionAggressiveness.normal.next == .eager)
         #expect(SuggestionAggressiveness.eager.next == .quiet)
         #expect(SuggestionAggressiveness.eager.traceMetadata["suggestionAggressiveness"] == "eager")
+        #expect(SuggestionAggressiveness.eager.traceMetadata["suggestionAggressivenessDisplayName"] == "Proactive")
+    }
+
+    @Test("proactive caps phrase help to a short continuation")
+    func proactiveCapsPhraseHelpToShortContinuation() {
+        #expect(SuggestionPace.eager.maxVisibleWords(
+            defaultMaxVisibleWords: 6,
+            requestMode: .phraseContinuation
+        ) == 4)
+        #expect(SuggestionPace.eager.maxVisibleWords(
+            defaultMaxVisibleWords: 3,
+            requestMode: .phraseContinuation
+        ) == 3)
+        #expect(SuggestionPace.eager.maxVisibleWords(
+            defaultMaxVisibleWords: 6,
+            requestMode: .wordCompletion
+        ) == 6)
+        #expect(SuggestionPace.normal.maxVisibleWords(
+            defaultMaxVisibleWords: 6,
+            requestMode: .phraseContinuation
+        ) == 6)
     }
 }
