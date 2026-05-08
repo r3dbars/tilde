@@ -13,7 +13,7 @@ The research says this app earns trust only when it can prove an accepted sugges
 
 This repo is already much stronger than a blind prototype. It has an explicit app profile store, denylisted high-risk apps, secure-field detection, selected-text blocking, prompt-app fingerprinting, acceptance snapshots, insertion verification, trace events, proof manifests, and many tests.
 
-The strict read is still not beta-safe for insertion safety because proof is stale or missing for several real app surfaces. The implementation is safer after the current hardening pass: prompt apps are diagnostics-only, generic unhinted browser web areas fail closed, accept-time snapshots include a target fingerprint, post-write verification checks target scope, and clipboard insertion is hard-disabled. The remaining gap is mostly real current-build proof plus a few deeper transaction guarantees.
+The strict read is still not beta-safe for insertion safety because proof is stale or missing for several real app surfaces. The implementation is safer after the current hardening pass: prompt apps are diagnostics-only, generic unhinted browser web areas fail closed, accept-time snapshots include a target fingerprint with window identity, post-write verification checks target scope, and clipboard insertion is hard-disabled. The remaining gap is mostly real current-build proof plus a few deeper transaction guarantees.
 
 ## Product Standard
 
@@ -60,7 +60,7 @@ The app has a serious trust-first shape:
 The latest hardening pass fixed several material gaps:
 
 - Prompt apps (`com.openai.codex`, `com.anthropic.claude-code`, `com.anthropic.claudefordesktop`) are diagnostics-only until same-slice one-word no-submit proof exists.
-- Accept-time snapshots now carry `FocusedTargetFingerprint` with role, subrole, element/window/caret bounds, normalized element fingerprint, and hashed surrounding-text revision.
+- Accept-time snapshots now carry `FocusedTargetFingerprint` with role, subrole, AX window identity, element/window/caret bounds, normalized element fingerprint, and hashed surrounding-text revision.
 - Post-write verification now compares a post-insertion target scope instead of relying only on `FocusedFieldIdentity`.
 - Generic `AXWebArea` surfaces without a compose hint now classify as `unprovenSurface` and suppress suggestions.
 - Clipboard insertion fallback is hard-disabled in `InsertionEngine`, no default compatibility profile uses clipboard fallback acceptance, and beta readiness has a clipboard fallback gate.
@@ -68,7 +68,7 @@ The latest hardening pass fixed several material gaps:
 The remaining gaps are material but narrower:
 
 - Current-build manual/visual proof is still missing for prompt apps and stale or partial for some Chrome proof surfaces.
-- The acceptance fingerprint still does not include a stable OS window ID or explicit monotonic field revision from the target app.
+- The acceptance fingerprint still does not include an explicit monotonic field revision from the target app.
 - There is no exact-once insertion transaction token or undo-as-one-edit proof per surface.
 - Existing older scorecards still contain non-100 scores until real proof catches up.
 
@@ -76,19 +76,19 @@ The remaining gaps are material but narrower:
 
 Starting score: 67/100
 
-Current score after implementation pass: 86/100
+Current score after implementation pass: 87/100
 
-Overall score: 86/100
+Overall score: 87/100
 
 ## Score Breakdown
 
 ### Target lock and stale-suggestion prevention
 
 - Weight: 25
-- Current score: 22/25
-- Why this score: Strong pre-accept snapshot checks exist, accept-time target fingerprints now cover role/subrole, normalized element fingerprint, element/window/caret bounds, and hashed surrounding-text revision, and post-write verification now checks target scope. The remaining gap is stable OS window identity, a monotonic target revision, and current proof.
-- Evidence found in repo: `SuggestionAcceptanceGuard`, `SuggestionAcceptanceSnapshot.targetFingerprint`, `FocusedTargetFingerprint`, `FocusedTextRevision`, `FocusedFieldIdentity`, `AppDelegate.currentSuggestionAcceptanceDecision()`, `AppDelegate.scheduleInsertionVerification()`, `AppDelegate.recordInsertionVerificationFailure()`, `FocusedFieldIdentityPolicyTests`, `SuggestionAcceptanceGuardTests`.
-- Missing evidence: Stable window ID, monotonic field revision, exact current proof slices, and live proof that focus/caret/window mismatch is always blocked before accept.
+- Current score: 23/25
+- Why this score: Strong pre-accept snapshot checks exist, accept-time target fingerprints now cover role/subrole, AX window identity, normalized element fingerprint, element/window/caret bounds, and hashed surrounding-text revision, and post-write verification now checks target scope. The remaining gap is a target-provided monotonic revision and current proof.
+- Evidence found in repo: `SuggestionAcceptanceGuard`, `SuggestionAcceptanceSnapshot.targetFingerprint`, `FocusedTargetFingerprint`, `FocusedTextRevision`, `FocusedTextContext.windowIdentifier`, `AccessibilityClient.containingWindowIdentifier()`, `FocusedFieldIdentity`, `AppDelegate.currentSuggestionAcceptanceDecision()`, `AppDelegate.scheduleInsertionVerification()`, `AppDelegate.recordInsertionVerificationFailure()`, `FocusedFieldIdentityPolicyTests`, `SuggestionAcceptanceGuardTests`.
+- Missing evidence: Monotonic field revision, exact current proof slices, and live proof that focus/caret/window mismatch is always blocked before accept.
 - What would make it 100/100: Every suggestion carries and rechecks a complete target fingerprint before and after insertion, with current proof artifacts.
 
 ### Sensitive-context blocking
@@ -115,7 +115,7 @@ Overall score: 86/100
 - Current score: 12/15
 - Why this score: The verifier catches many bad deltas, checks after-cursor drift during live verification, records missing-context/target-mismatch failures, and now compares a post-insertion target fingerprint scope. It is still not a full exact-once transaction.
 - Evidence found in repo: `InsertionEngine`, `InsertionVerification`, `InsertionRetryPolicy`, `AppDelegate.scheduleInsertionVerification`, `AppDelegate.recordInsertionVerificationFailure`, `FocusedTargetFingerprint.postInsertionScope`, `InsertionVerificationTests`.
-- Missing evidence: Explicit exact-once idempotence token, stable OS-level window identity, and undo-as-one-edit proof per surface.
+- Missing evidence: Explicit exact-once idempotence token, target-provided monotonic revision, and undo-as-one-edit proof per surface.
 - What would make it 100/100: Every insertion attempt produces a verified success or a structured failure with target, delta, caret, duplicate, and focus evidence.
 
 ### Clipboard and event-tap hygiene
@@ -184,7 +184,7 @@ Completed in this pass:
 - Blocked/unhandled consumed accept keys are dropped instead of replayed into the target app.
 - Live insertion verification now carries `previousTextAfterCursor`.
 - Missing-context and target-mismatch verification paths now record `insertionFailed` trace evidence.
-- Accept-time target fingerprints now include role/subrole, element/window/caret bounds, normalized element fingerprint, and hashed surrounding-text revision.
+- Accept-time target fingerprints now include role/subrole, AX window identity, element/window/caret bounds, normalized element fingerprint, and hashed surrounding-text revision.
 - Post-write verification now checks a post-insertion target scope.
 - Clipboard insertion fallback is hard-disabled and beta readiness gates it.
 - Generic browser `AXWebArea` fields without a compose hint now suppress as unproven surfaces.
@@ -233,7 +233,7 @@ Current blockers from live proof scripts:
 - Proof required: Full Swift test plus smoke test.
 - Risk level: High.
 - Expected score impact: +6 to +10.
-- Status: Implemented for role/subrole, normalized element fingerprint, element/window/caret bounds, and hashed surrounding-text revision. Still missing stable OS window ID and target-provided monotonic revision.
+- Status: Implemented for role/subrole, AX window identity, normalized element fingerprint, element/window/caret bounds, and hashed surrounding-text revision. Still missing target-provided monotonic revision.
 
 ### 5. Separate Chrome surface policy
 
@@ -270,11 +270,11 @@ Keep tightening insertion safety until the only remaining 100/100 blockers are r
 - Generic browser web areas without compose hints suppress as unproven.
 - Targeted tests pass.
 - Full `swift test` passes, or any failure is confirmed out of scope and documented.
-- Remaining work requires manual proof in real apps, stable OS window identity, monotonic target revision, or exact-once/undo proof.
+- Remaining work requires manual proof in real apps, target-provided monotonic revision, or exact-once/undo proof.
 
 ## Remaining Gaps
 
-- Stable OS window identity and target-provided monotonic revision are not implemented yet.
+- AX window identity is captured, but target-provided monotonic revision is not implemented yet.
 - Chrome still needs production proof beyond local fixtures.
 - Exact-once insertion transaction and undo-as-one-edit proof are still missing.
 - Manual real-app proof is still needed for prompt/chat apps if support is ever restored.

@@ -86,9 +86,13 @@ struct SuggestionAcceptanceGuardTests {
                 caretRect: RoundedFocusedRect(x: 120, y: 52, width: 1, height: 20)
             )
         )
+        let changedWindowIdentifier = snapshot(
+            targetFingerprint: targetFingerprint(windowIdentifier: 43)
+        )
 
         #expect(guardPolicy.decision(shown: shown, current: movedCaret) == .block(.targetFingerprintChanged))
         #expect(guardPolicy.decision(shown: shown, current: movedWindow) == .block(.targetFingerprintChanged))
+        #expect(guardPolicy.decision(shown: shown, current: changedWindowIdentifier) == .block(.targetFingerprintChanged))
     }
 
     @Test("Advanced target fingerprints keep target lock while allowing natural caret movement")
@@ -161,6 +165,7 @@ struct SuggestionAcceptanceGuardTests {
     private static func targetFingerprint(
         role: String? = "AXTextArea",
         subrole: String? = nil,
+        windowIdentifier: Int? = 42,
         elementRect: RoundedFocusedRect? = RoundedFocusedRect(x: 20, y: 40, width: 300, height: 44),
         windowRect: RoundedFocusedRect? = RoundedFocusedRect(x: 0, y: 0, width: 800, height: 600),
         caretRect: RoundedFocusedRect? = RoundedFocusedRect(x: 120, y: 52, width: 1, height: 20),
@@ -176,6 +181,7 @@ struct SuggestionAcceptanceGuardTests {
                 placeholder: "Message",
                 windowTitle: "Window"
             ),
+            windowIdentifier: windowIdentifier,
             elementBounds: elementRect,
             windowBounds: windowRect,
             caretBounds: caretRect,
@@ -189,6 +195,7 @@ struct SuggestionAcceptanceGuardTests {
     private func targetFingerprint(
         role: String? = "AXTextArea",
         subrole: String? = nil,
+        windowIdentifier: Int? = 42,
         elementRect: RoundedFocusedRect? = RoundedFocusedRect(x: 20, y: 40, width: 300, height: 44),
         windowRect: RoundedFocusedRect? = RoundedFocusedRect(x: 0, y: 0, width: 800, height: 600),
         caretRect: RoundedFocusedRect? = RoundedFocusedRect(x: 120, y: 52, width: 1, height: 20),
@@ -198,6 +205,7 @@ struct SuggestionAcceptanceGuardTests {
         Self.targetFingerprint(
             role: role,
             subrole: subrole,
+            windowIdentifier: windowIdentifier,
             elementRect: elementRect,
             windowRect: windowRect,
             caretRect: caretRect,

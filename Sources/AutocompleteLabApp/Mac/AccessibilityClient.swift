@@ -21,6 +21,7 @@ struct FocusedTextContext: Equatable, Sendable {
     let caretRect: CGRect?
     let elementRect: CGRect?
     let windowRect: CGRect?
+    let windowIdentifier: Int?
     let textLineRect: CGRect?
     let textStyle: FocusedTextStyle?
     let isSecure: Bool
@@ -57,6 +58,7 @@ struct FocusedTextDiagnostics: Equatable, Sendable {
     let caretRect: CGRect?
     let elementRect: CGRect?
     let windowRect: CGRect?
+    let windowIdentifier: Int?
     let textLineRect: CGRect?
     let capabilities: FocusedTextCapabilities
     let attributeDump: FocusedElementAttributeDump
@@ -73,6 +75,7 @@ struct FocusedTextDiagnostics: Equatable, Sendable {
         Caret rect: \(caretRect.map(String.init(describing:)) ?? "missing")
         Element rect: \(elementRect.map(String.init(describing:)) ?? "missing")
         Window rect: \(windowRect.map(String.init(describing:)) ?? "missing")
+        Window identifier: \(windowIdentifier.map(String.init) ?? "missing")
         Text line rect: \(textLineRect.map(String.init(describing:)) ?? "missing")
         Capabilities:
           value: \(capabilities.canReadValue)
@@ -228,6 +231,7 @@ final class AccessibilityClient: @unchecked Sendable {
             AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
         }
         let elementRect = elementBounds(for: focusedElement)
+        let windowIdentifier = containingWindowIdentifier(for: focusedElement, processIdentifier: app.processIdentifier)
         let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
         let textLineRect = selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(
@@ -271,6 +275,7 @@ final class AccessibilityClient: @unchecked Sendable {
             caretRect: caretRect,
             elementRect: elementRect,
             windowRect: windowRect,
+            windowIdentifier: windowIdentifier,
             textLineRect: textLineRect,
             textStyle: textStyle,
             isSecure: isSecure,
@@ -299,6 +304,7 @@ final class AccessibilityClient: @unchecked Sendable {
             caretRect: nil,
             elementRect: elementBounds(for: element),
             windowRect: containingWindowBounds(for: element, processIdentifier: processIdentifier),
+            windowIdentifier: containingWindowIdentifier(for: element, processIdentifier: processIdentifier),
             textLineRect: nil,
             textStyle: nil,
             isSecure: true,
@@ -450,6 +456,7 @@ final class AccessibilityClient: @unchecked Sendable {
             AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
         }
         let elementRect = elementBounds(for: focusedElement)
+        let windowIdentifier = containingWindowIdentifier(for: focusedElement, processIdentifier: app.processIdentifier)
         let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
         let textLineRect = selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(
@@ -489,6 +496,7 @@ final class AccessibilityClient: @unchecked Sendable {
             caretRect: caretRect,
             elementRect: elementRect,
             windowRect: windowRect,
+            windowIdentifier: windowIdentifier,
             textLineRect: textLineRect,
             capabilities: capabilities,
             attributeDump: attributeDump
@@ -831,8 +839,21 @@ final class AccessibilityClient: @unchecked Sendable {
     }
 
     private func containingWindowBounds(for element: AXUIElement, processIdentifier: pid_t) -> CGRect? {
+        guard let window = containingWindowElement(for: element, processIdentifier: processIdentifier) else {
+            return nil
+        }
+
+        return elementBounds(for: window)
+    }
+
+    private func containingWindowIdentifier(for element: AXUIElement, processIdentifier: pid_t) -> Int? {
+        containingWindowElement(for: element, processIdentifier: processIdentifier)
+            .map { Int(CFHash($0)) }
+    }
+
+    private func containingWindowElement(for element: AXUIElement, processIdentifier: pid_t) -> AXUIElement? {
         if let windowValue = copyAttribute(element, attribute: kAXWindowAttribute) {
-            return elementBounds(for: (windowValue as! AXUIElement))
+            return (windowValue as! AXUIElement)
         }
 
         let appElement = AXUIElementCreateApplication(processIdentifier)
@@ -842,7 +863,7 @@ final class AccessibilityClient: @unchecked Sendable {
             return nil
         }
 
-        return elementBounds(for: (windowValue as! AXUIElement))
+        return (windowValue as! AXUIElement)
     }
 
     private func focusedTextStyle(in element: AXUIElement, textLength: Int, range: CFRange) -> FocusedTextStyle? {

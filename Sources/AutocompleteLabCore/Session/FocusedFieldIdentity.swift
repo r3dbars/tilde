@@ -123,6 +123,7 @@ public struct FocusedTargetFingerprint: Equatable, Hashable, Sendable {
     public let role: String?
     public let subrole: String?
     public let elementFingerprint: FocusedElementFingerprint
+    public let windowIdentifier: Int?
     public let elementBounds: RoundedFocusedRect?
     public let windowBounds: RoundedFocusedRect?
     public let caretBounds: RoundedFocusedRect?
@@ -132,6 +133,7 @@ public struct FocusedTargetFingerprint: Equatable, Hashable, Sendable {
         role: String?,
         subrole: String?,
         elementFingerprint: FocusedElementFingerprint,
+        windowIdentifier: Int?,
         elementBounds: RoundedFocusedRect?,
         windowBounds: RoundedFocusedRect?,
         caretBounds: RoundedFocusedRect?,
@@ -140,6 +142,7 @@ public struct FocusedTargetFingerprint: Equatable, Hashable, Sendable {
         self.role = Self.normalized(role)
         self.subrole = Self.normalized(subrole)
         self.elementFingerprint = Self.normalized(elementFingerprint)
+        self.windowIdentifier = windowIdentifier
         self.elementBounds = elementBounds
         self.windowBounds = windowBounds
         self.caretBounds = caretBounds
@@ -150,6 +153,7 @@ public struct FocusedTargetFingerprint: Equatable, Hashable, Sendable {
         role: String?,
         subrole: String?,
         elementFingerprint: FocusedElementFingerprint,
+        windowIdentifier: Int?,
         elementRect: CGRect?,
         windowRect: CGRect?,
         caretRect: CGRect?,
@@ -160,6 +164,7 @@ public struct FocusedTargetFingerprint: Equatable, Hashable, Sendable {
             role: role,
             subrole: subrole,
             elementFingerprint: elementFingerprint,
+            windowIdentifier: windowIdentifier,
             elementBounds: elementRect.map(RoundedFocusedRect.init),
             windowBounds: windowRect.map(RoundedFocusedRect.init),
             caretBounds: caretRect.map(RoundedFocusedRect.init),
@@ -174,6 +179,7 @@ public struct FocusedTargetFingerprint: Equatable, Hashable, Sendable {
         guard role == current.role,
               subrole == current.subrole,
               elementFingerprint == current.elementFingerprint,
+              windowIdentifier == current.windowIdentifier,
               elementBounds == current.elementBounds,
               windowBounds == current.windowBounds else {
             return false
@@ -196,6 +202,7 @@ public struct FocusedTargetFingerprint: Equatable, Hashable, Sendable {
             role: role,
             subrole: subrole,
             elementFingerprint: elementFingerprint,
+            windowIdentifier: windowIdentifier,
             elementBounds: elementBounds,
             windowBounds: windowBounds,
             caretBounds: nil,
@@ -211,6 +218,7 @@ public struct FocusedTargetFingerprint: Equatable, Hashable, Sendable {
             role: role,
             subrole: subrole,
             elementFingerprint: elementFingerprint,
+            windowIdentifier: windowIdentifier,
             elementBounds: elementBounds,
             windowBounds: windowBounds,
             caretBounds: nil,
