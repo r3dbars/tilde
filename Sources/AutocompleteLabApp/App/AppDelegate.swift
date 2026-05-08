@@ -3675,20 +3675,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         learningAdjustment: CompatibilityLearningAdjustment
     ) -> PlacementTrustPolicy {
-        let hasTrustedVisualAdjustment = learningAdjustment.profile?.hasTrustedVisualAdjustment == true
-        let isGreenProfile = profile.supportLevel == .green
-        let hasDetachedMirrorFallback = profile.allowsDetachedSuggestions
-            && profile.fallbackRenderMode == .floatingMirror
-        let strictVisualProofSyntheticCaretEnabled =
-            (RawAutocompleteTraceLog.shared.screenshotTracingEnabled || learningAdjustment.shouldCaptureScreenshot)
-            && profile.allowsStrictVisualProofSyntheticCaretPlacement
-
-        return PlacementTrustPolicy(
-            allowsLowConfidencePlacement: isGreenProfile || hasTrustedVisualAdjustment || hasDetachedMirrorFallback,
-            allowsSyntheticCaretPlacement: isGreenProfile
-                || hasTrustedVisualAdjustment
-                || profile.allowsSyntheticCaretPlacement
-                || strictVisualProofSyntheticCaretEnabled
+        profile.placementTrustPolicy(
+            input: CompatibilityPlacementTrustInput(
+                hasTrustedVisualAdjustment: learningAdjustment.profile?.hasTrustedVisualAdjustment == true,
+                screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled,
+                shouldCaptureScreenshot: learningAdjustment.shouldCaptureScreenshot
+            )
         )
     }
 

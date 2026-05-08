@@ -167,6 +167,40 @@ public struct CompatibilityProfile: Equatable, Sendable {
 
         return "support=\(supportLevel.rawValue); family=\(appFamily.rawValue); primary render=\(renderMode.rawValue), insert=\(insertionMode.rawValue); fallback render=\(fallbackRender), insert=\(fallbackInsertion); field=\(fieldIdentityMode.rawValue); anchors=\(anchors)"
     }
+
+    public func placementTrustPolicy(
+        input: CompatibilityPlacementTrustInput = CompatibilityPlacementTrustInput()
+    ) -> PlacementTrustPolicy {
+        let hasTrustedVisualAdjustment = input.hasTrustedVisualAdjustment
+        let isGreenProfile = supportLevel == .green
+        let strictVisualProofSyntheticCaretEnabled =
+            (input.screenshotTracingEnabled || input.shouldCaptureScreenshot)
+            && allowsStrictVisualProofSyntheticCaretPlacement
+
+        return PlacementTrustPolicy(
+            allowsLowConfidencePlacement: isGreenProfile || hasTrustedVisualAdjustment,
+            allowsSyntheticCaretPlacement: isGreenProfile
+                || hasTrustedVisualAdjustment
+                || allowsSyntheticCaretPlacement
+                || strictVisualProofSyntheticCaretEnabled
+        )
+    }
+}
+
+public struct CompatibilityPlacementTrustInput: Equatable, Sendable {
+    public let hasTrustedVisualAdjustment: Bool
+    public let screenshotTracingEnabled: Bool
+    public let shouldCaptureScreenshot: Bool
+
+    public init(
+        hasTrustedVisualAdjustment: Bool = false,
+        screenshotTracingEnabled: Bool = false,
+        shouldCaptureScreenshot: Bool = false
+    ) {
+        self.hasTrustedVisualAdjustment = hasTrustedVisualAdjustment
+        self.screenshotTracingEnabled = screenshotTracingEnabled
+        self.shouldCaptureScreenshot = shouldCaptureScreenshot
+    }
 }
 
 public struct CompatibilityProfileStore: Equatable, Sendable {
