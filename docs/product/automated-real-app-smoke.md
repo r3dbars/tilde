@@ -87,10 +87,12 @@ an isolated temp-profile Chrome process with `--force-renderer-accessibility`
 and kills only that captured process during cleanup. That proves Autocomplete
 Lab works when Chrome exposes real editor AX, but it is still weaker than
 default-Chrome production-site proof. The `--chrome-accessibility default` lane
-now preflights normal Chrome and fails before typing when macOS Accessibility
-does not expose page `AXWebArea` or `AXTextArea` content. The chat-like fixture
-is not a real Codex or Claude proof; it is a local no-submit guardrail that must
-pass before trusting prompt app smoke results.
+now records distinct `monaco-real-default` and `prosemirror-real-default` proof
+rows when normal Chrome exposes enough editor AX for strict screenshot-backed
+acceptance. The remaining Chrome editor gap is caret-quality placement and
+production editor variants. The chat-like fixture is not a real Codex or Claude
+proof; it is a local no-submit guardrail that must pass before trusting prompt
+app smoke results.
 
 Run the score target loop when working toward the product scorecards:
 
