@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionAcceptanceGuard = SuggestionAcceptanceGuard()
     private let acceptanceSafetyPolicy = AcceptanceSafetyPolicy()
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
+    private let suggestionReplacementVisibilityPolicy = SuggestionReplacementVisibilityPolicy()
     private let suggestionPresentationTracePayloadBuilder = SuggestionPresentationTracePayloadBuilder()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private lazy var suggestionOrchestrator = SuggestionOrchestrator(
@@ -4320,7 +4321,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             proposedScore: displayScoreTrace.score.finalScore
         )
         let replacementMetadata = replacementDecision.metadata
-        guard replacementDecision.shouldPresent else {
+        let replacementVisibilityAction = suggestionReplacementVisibilityPolicy.action(
+            for: replacementDecision,
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+        )
+        guard replacementVisibilityAction == .presentProposed else {
             let reason = replacementDecision.reason?.rawValue ?? "replacement-gate"
             setSuggestionDecision("Kept current suggestion: \(reason)")
             RawAutocompleteTraceLog.shared.record(
@@ -4357,23 +4362,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(displayScoreMetadata) { current, _ in current }
                 .merging(replacementMetadata) { current, _ in current }
             )
-            let placementMetadata = traceGeometryMetadata(context: context, renderMode: placement.renderMode)
-                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                .merging(learningAdjustment.metadata) { current, _ in current }
-                .merging(placement.metadata) { current, _ in current }
-                .merging(candidateSelectionMetadata) { current, _ in current }
-                .merging(displayScoreMetadata) { current, _ in current }
-                .merging(replacementMetadata) { current, _ in current }
-            recordPlacementUncertainty(
-                suggestionID: suggestionID,
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity,
-                requestMode: request.mode,
-                context: context,
-                reason: reason,
-                metadata: placementMetadata
-            )
-            hideSuggestion(reason: reason)
+
+            switch replacementVisibilityAction {
+            case .presentProposed:
+                break
+            case .keepCurrentVisible:
+                showFieldStatusIndicator(.shown, context: context)
+                repositionVisibleSuggestion(context: context, profile: profile)
+                updateKeyboardEventTapSnapshot()
+            case .hide:
+                hideSuggestion(reason: reason)
+            }
             return
         }
 
