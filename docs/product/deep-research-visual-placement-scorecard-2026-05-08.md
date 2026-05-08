@@ -67,7 +67,9 @@ monitors; this pass added both. The remaining weak spots are manual proof and
 deeper invalidation: strict proof still fails for Codex same-slice no-submit
 proof, Claude Code terminal-host proof, and some partial browser/editor
 manifest gates, and the app still lacks full window/scroll/display revision
-tokens.
+tokens. A later hardening pass also made stable-bounds field identity
+deterministic instead of process-random, which makes replay and trace evidence
+more comparable across lab app launches.
 
 ## Score
 
