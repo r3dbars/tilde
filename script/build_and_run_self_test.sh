@@ -22,11 +22,11 @@ reject_contains() {
   fi
 }
 
-require_contains "kill_running_app_instances()"
+require_contains "stop_running_apps()"
 require_contains "open_app()"
-require_contains "is_target_app_running()"
-require_contains "kill_running_app_instances"
-reject_contains "stop_running_apps"
-reject_contains "quarantine_stale_app_bundles"
+require_contains "current_bundle_is_running()"
+require_contains "quarantine_stale_app_bundles"
+reject_contains "kill_running_app_instances"
+reject_contains "is_target_app_running"
 
 echo "Build and run self-test passed."

@@ -285,7 +285,7 @@ else
 fi
 
 open_app() {
-  kill_running_app_instances
+  stop_running_apps
 
   if [[ "${AUTOCOMPLETE_LAB_TRACE:-}" =~ ^(0|false|no|off)$ ]]; then
     launchctl setenv AUTOCOMPLETE_LAB_TRACE "$AUTOCOMPLETE_LAB_TRACE"
