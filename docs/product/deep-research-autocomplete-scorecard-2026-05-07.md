@@ -206,10 +206,10 @@ Pass 1 shipped these improvements:
   engine replacement after model runtime reload behind a focused app-level test
   suite. Trace-safe app-model candidate metadata now lives there too, next to
   fast-word candidate metadata, and display-score construction, streaming
-  partial pacing state, replacement gating, placement planning, and
-  prefix-family cooldown display pressure now live behind the same boundary.
-  AppDelegate still owns final presentation side effects, insertion, screenshot
-  capture, and placement result recording.
+  partial pacing state, replacement gating, placement planning, placement
+  suppression/fallback metadata, and prefix-family cooldown display pressure now
+  live behind the same boundary. AppDelegate still owns final presentation side
+  effects, insertion, screenshot capture, and trace recording.
 - Slow focused-text AX reads that return no focused text context now start a
   short app-specific cooldown immediately instead of requiring a repeated slow
   read, so failing editors back off sooner without touching the key path.
@@ -307,7 +307,7 @@ Baseline scorecard from the initial audit:
 | Mode profiles and cross-app safety | 10 | 78 | 7.8 | Strong app profiles, a user-visible per-app mirror override, a proof-only terminal-host Claude Code adapter, and copy-only fallback stance for non-sensitive diagnostics-only or untrusted-placement cases now exist, but behavior modes are not first-class for every email, notes, bullets, docs, code, forms, search, and AI chat surface. |
 | Learning, annoyance, accepted-and-kept loop | 12 | 67 | 8.0 | Accepted-kept learning now affects both affinity and utility, and user-selected quiet/normal/eager aggressiveness can tune eagerness without clearing learning; the loop still needs fresh real-app threshold proof. |
 | Metrics, replay, and proof gates | 5 | 88 | 4.4 | Trace/report scripts are strong, Settings can start per-app screenshot proof from the current app, fresh bounded real-app slices now pass a replay smoke profile, and deterministic fast-word selection now has trace-safe candidate metadata; full replay proof still needs all scenario signals in one current pass. |
-| Architecture and tests | 2 | 99 | 2.0 | Good policy/test structure, app-proof command execution is behind a small coordinator, and request construction/session-cache/request-ticket/candidate-metadata/display-score/streaming/replacement/prefix-cooldown/placement/field-delivery/failure-visibility/fast-word suggestion orchestration is now behind `SuggestionOrchestrator`; AppDelegate still owns final presentation side effects, insertion, screenshot capture, and placement result recording. |
+| Architecture and tests | 2 | 99 | 2.0 | Good policy/test structure, app-proof command execution is behind a small coordinator, and request construction/session-cache/request-ticket/candidate-metadata/display-score/streaming/replacement/prefix-cooldown/placement/placement-fallback/field-delivery/failure-visibility/fast-word suggestion orchestration is now behind `SuggestionOrchestrator`; AppDelegate still owns final presentation side effects, insertion, screenshot capture, and trace recording. |
 
 Weighted total: **80.9/100**, rounded to **81/100**.
 
@@ -703,6 +703,9 @@ these are true.
 57. Done: move placement-health planning and Chrome synthetic-caret proof gating
    into `SuggestionOrchestrator`, leaving AppDelegate to execute panel display,
    screenshots, and trace recording.
+58. Done: move placement suppression fallback metadata into
+   `SuggestionOrchestrator`, so low-confidence placement branches emit copy-only
+   fallback state outside AppDelegate.
 
 ## Goal Status
 

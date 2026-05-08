@@ -566,6 +566,30 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Placement suppression exposes command fallback metadata")
+    func placementSuppressionExposesCommandFallbackMetadata() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+        let plan = PlacementHealthPlan.suppress(PlacementHealthSuppression(
+            requestedRenderMode: .inlineAdjacent,
+            reason: .lowConfidencePlacement
+        ))
+
+        let resolution = orchestrator.placementSuppressionResolution(
+            for: plan,
+            requestedRenderMode: .inlineAdjacent,
+            profile: chrome,
+            fieldKind: .multilineCompose
+        )
+
+        #expect(resolution.suppression.reason == .lowConfidencePlacement)
+        #expect(resolution.commandFallbackDecision.availability == .copyOnly)
+        #expect(resolution.metadata["commandFallback"] == "copy-only")
+        #expect(resolution.metadata["commandFallbackReason"] == "untrusted-placement")
+        #expect(resolution.fallbackSuffix == "; copy-only fallback available")
+    }
+
+    @MainActor
     @Test("Suggestion calls delegate to the configured engine")
     func suggestionDelegatesToEngine() async throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())

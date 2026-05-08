@@ -253,6 +253,40 @@ final class SuggestionOrchestrator {
         )
     }
 
+    nonisolated func placementSuppressionResolution(
+        for placementPlan: PlacementHealthPlan,
+        requestedRenderMode: SuggestionRenderMode,
+        profile: CompatibilityProfile,
+        fieldKind: AXFieldKind
+    ) -> PlacementSuppressionResolution {
+        let suppression: PlacementHealthSuppression
+        if case let .suppress(value) = placementPlan {
+            suppression = value
+        } else {
+            suppression = PlacementHealthSuppression(
+                requestedRenderMode: requestedRenderMode,
+                reason: .missingAnchor
+            )
+        }
+        let commandFallbackDecision = CommandFallbackPolicy().decision(
+            supportStatus: .supported(profile),
+            isEnabled: true,
+            fieldKind: fieldKind,
+            allowsLowConfidencePlacement: suppression.reason == .lowConfidencePlacement ? false : nil
+        )
+        let commandFallbackMetadata = [
+            "commandFallback": commandFallbackDecision.availability.rawValue,
+            "commandFallbackReason": commandFallbackDecision.reason.rawValue
+        ]
+
+        return PlacementSuppressionResolution(
+            suppression: suppression,
+            commandFallbackDecision: commandFallbackDecision,
+            metadata: commandFallbackMetadata,
+            fallbackSuffix: commandFallbackDecision.canCopyOnly ? "; copy-only fallback available" : ""
+        )
+    }
+
     nonisolated private func placementTrustPolicy(
         profile: CompatibilityProfile,
         context: FocusedTextContext,
@@ -641,6 +675,13 @@ struct SuggestionOrchestration: Sendable {
 struct SuggestionDisplayScoreDecision: Sendable {
     let decision: DisplayScoreDecision
     let metadata: [String: String]
+}
+
+struct PlacementSuppressionResolution {
+    let suppression: PlacementHealthSuppression
+    let commandFallbackDecision: CommandFallbackDecision
+    let metadata: [String: String]
+    let fallbackSuffix: String
 }
 
 struct SuggestionRequestInput: Sendable {
