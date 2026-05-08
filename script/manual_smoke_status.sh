@@ -53,6 +53,10 @@ declare -a APPS=(
   "Chrome editor-like|Chrome|com.google.Chrome|full|editor-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=editor-like script/manual_smoke_session.sh chrome --visual"
   "Chrome Monaco-like|Chrome|com.google.Chrome|full|monaco-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=monaco-like script/manual_smoke_session.sh chrome --visual"
   "Chrome ProseMirror-like|Chrome|com.google.Chrome|full|prosemirror-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=prosemirror-like script/manual_smoke_session.sh chrome --visual"
+  "Chrome real Monaco|Chrome|com.google.Chrome|full|monaco-real|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-real"
+  "Chrome real ProseMirror|Chrome|com.google.Chrome|full|prosemirror-real|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-real"
+  "Chrome real Monaco default AX|Chrome|com.google.Chrome|full|monaco-real-default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-real --chrome-accessibility default"
+  "Chrome real ProseMirror default AX|Chrome|com.google.Chrome|full|prosemirror-real-default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-real --chrome-accessibility default"
   "Chrome chat-like no-submit|Chrome|com.google.Chrome|full|chat-like|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture chat-like"
   "Codex|Codex|com.openai.codex|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
   "Claude Code|Claude Code|com.anthropic.claude-code|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
@@ -311,6 +315,14 @@ for app_entry in "${APPS[@]}"; do
   proof_label="${rest%%|*}"
   rest="${rest#*|}"
   run_hint="${rest:-script/manual_smoke_session.sh $report_name}"
+
+  if [[ "$proof_mode" == "blocked" ]]; then
+    echo "- $display_name: pending ($run_hint)"
+    missing=$((missing + 1))
+    pending_apps+=("$display_name - $run_hint")
+    continue
+  fi
+
   required_verified_regex='[2-9][0-9]*'
   pass_suffix=""
   if [[ "$proof_mode" == "one-word" ]]; then
@@ -343,7 +355,11 @@ for app_entry in "${APPS[@]}"; do
     missing=$((missing + 1))
     pending_apps+=("$display_name - $run_hint")
   else
-    echo "- $display_name: pending (run $run_hint)"
+    if [[ "$run_hint" == terminal-host* ]]; then
+      echo "- $display_name: pending ($run_hint)"
+    else
+      echo "- $display_name: pending (run $run_hint)"
+    fi
     missing=$((missing + 1))
     pending_apps+=("$display_name - $run_hint")
   fi

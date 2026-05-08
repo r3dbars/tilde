@@ -406,6 +406,59 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.annoyanceScore > 0)
     }
 
+    @Test("summarizes non-annoyance rates and visible lifetimes")
+    func summarizesNonAnnoyanceRatesAndVisibleLifetimes() {
+        let events = [
+            event(.suggestionPresented, suggestionID: "one", timestamp: "2026-05-08T10:00:00Z"),
+            event(
+                .suggestionHidden,
+                suggestionID: "one",
+                timestamp: "2026-05-08T10:00:01Z",
+                outcome: "ignored",
+                reason: "escape",
+                metadata: ["lifetimeMs": "900", "hideLatencyMs": "12"]
+            ),
+            event(.suggestionPresented, suggestionID: "two", timestamp: "2026-05-08T10:01:00Z"),
+            event(.suggestionTypedOver, suggestionID: "two", timestamp: "2026-05-08T10:01:02Z"),
+            event(.suggestionPresented, suggestionID: "three", timestamp: "2026-05-08T10:02:00Z"),
+            event(
+                .suggestionHidden,
+                suggestionID: "three",
+                timestamp: "2026-05-08T10:02:01Z",
+                reason: "stale-after-keydown",
+                metadata: ["hideLatencyMs": "31"]
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "three-b",
+                timestamp: "2026-05-08T10:02:01Z",
+                reason: "hidden",
+                metadata: ["hideLatencyMs": "4"]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "four",
+                timestamp: "2026-05-08T10:02:02Z",
+                reason: "wrong-app-or-field-before-accept",
+                metadata: ["focusMismatch": "true"]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.activeWritingMinutes == 3)
+        #expect(summary.shownPerActiveMinute == 1)
+        #expect(summary.explicitDismissalCount == 1)
+        #expect(summary.explicitDismissalsPerShown == 1.0 / 3.0)
+        #expect(summary.typedOverRate == 1.0 / 3.0)
+        #expect(summary.staleOrWrongContextCount == 2)
+        #expect(summary.staleOrWrongContextRate == 2.0 / 3.0)
+        #expect(summary.p50VisibleLifetimeMilliseconds == 900)
+        #expect(summary.p95VisibleLifetimeMilliseconds == 900)
+        #expect(summary.p50HideLatencyMilliseconds == 12)
+        #expect(summary.p95HideLatencyMilliseconds == 31)
+    }
+
     @Test("summarizes field-kind slices")
     func summarizesFieldKindSlices() {
         let events = [

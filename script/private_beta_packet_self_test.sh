@@ -54,4 +54,16 @@ reject_contains "$MODEL_TEMPLATE" "./script/check_model_asset.py"
 reject_contains "$MODEL_TEMPLATE" "Developer fallback"
 reject_contains "$MODEL_TEMPLATE" "operator fixes"
 
+SCRIPT_TEXT="$(sed -n '1,260p' script/private_beta_packet.sh)"
+
+for expected_doc in \
+  "PRIVACY-BETA.md" \
+  "KNOWN-LIMITATIONS.md" \
+  "UNINSTALL-DELETE-DATA.md" \
+  "DIAGNOSTIC-EXPORT.md" \
+  "RELEASE-NOTES.md" \
+  ".github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml"; do
+  require_contains "$SCRIPT_TEXT" "$expected_doc"
+done
+
 echo "Private beta packet self-test passed."

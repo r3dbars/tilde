@@ -55,4 +55,20 @@ struct CompletionRequestTests {
         #expect(metadata["currentLineContentWords"] == "2")
         #expect(!metadata.values.joined(separator: " ").contains("Follow"))
     }
+
+    @Test("Trace metadata includes document title shape only")
+    func traceMetadataIncludesDocumentTitleShapeOnly() {
+        let request = CompletionRequest(
+            textBeforeCursor: "Can we keep",
+            documentTitleShape: DocumentTitleShape.from(windowTitle: "Launch Plan.md *")
+        )
+        let metadata = request.behaviorProfileTraceMetadata
+
+        #expect(metadata["documentTitleWordCount"] == "3")
+        #expect(metadata["documentTitleLengthBucket"] == "short")
+        #expect(metadata["documentTitleExtension"] == "md")
+        #expect(metadata["documentTitleHasUnsavedMarker"] == "true")
+        #expect(!metadata.values.joined(separator: " ").contains("Launch"))
+        #expect(!metadata.values.joined(separator: " ").contains("Plan"))
+    }
 }

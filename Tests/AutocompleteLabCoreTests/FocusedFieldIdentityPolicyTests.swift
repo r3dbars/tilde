@@ -85,6 +85,18 @@ struct FocusedFieldIdentityPolicyTests {
         #expect(first == second)
     }
 
+    @Test("Stable bounds mode uses a deterministic privacy-safe identifier")
+    func stableBoundsModeUsesDeterministicIdentifier() {
+        let identity = policy.identity(
+            bundleIdentifier: "com.openai.codex",
+            processIdentifier: 12,
+            mode: .stableBounds,
+            input: input()
+        )
+
+        #expect(identity.elementIdentifier == 8_002_093_380_379_354_256)
+    }
+
     @Test("Focused text snapshots compare by field and surrounding text")
     func snapshotsCompareByFieldAndText() {
         let identity = FocusedFieldIdentity(

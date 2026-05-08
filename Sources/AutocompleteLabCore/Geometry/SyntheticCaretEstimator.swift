@@ -14,6 +14,7 @@ public enum SyntheticCaretEstimator {
         baselineLiftFactor: CGFloat = 0.85,
         inlineGap: CGFloat = 8,
         inlineVerticalDropFactor: CGFloat = 0.85,
+        centerSingleLineWhenTall: Bool = false,
         widthOfText: (String) -> CGFloat
     ) -> CGRect? {
         guard elementRect.width > 80, elementRect.height > 20 else {
@@ -34,11 +35,18 @@ public enum SyntheticCaretEstimator {
         let lineIndex = max(0, visualLines.count - 1)
         let currentLineWidth = min(widthOfText(currentLine), maxLineWidth)
         let caretHeight = max(lineHeight, 16)
-        let preferredY = elementRect.minY
-            + verticalPadding
-            - (lineHeight * baselineLiftFactor)
-            + (lineHeight * inlineVerticalDropFactor)
-            + (CGFloat(lineIndex) * lineHeight)
+        let preferredY: CGFloat
+        if centerSingleLineWhenTall,
+           visualLines.count == 1,
+           elementRect.height >= lineHeight * 2 {
+            preferredY = elementRect.midY - (caretHeight / 2)
+        } else {
+            preferredY = elementRect.minY
+                + verticalPadding
+                - (lineHeight * baselineLiftFactor)
+                + (lineHeight * inlineVerticalDropFactor)
+                + (CGFloat(lineIndex) * lineHeight)
+        }
         let y = clampedCaretY(
             preferredY,
             caretHeight: caretHeight,

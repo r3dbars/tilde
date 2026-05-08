@@ -6,9 +6,14 @@ final class SuggestionPanelController {
     private let panel: NSPanel
     private let backdropView: NSVisualEffectView
     private let ghostTextView: GhostTextView
+    private let visualStyle = SuggestionPanelVisualStyle.native
     private var lastText: String?
     private var lastFrame: CGRect?
     private var lastRenderMode: SuggestionRenderMode?
+
+    var isVisible: Bool {
+        panel.isVisible
+    }
 
     init() {
         backdropView = NSVisualEffectView(frame: .zero)
@@ -35,12 +40,12 @@ final class SuggestionPanelController {
         container.layer?.backgroundColor = NSColor.clear.cgColor
 
         backdropView.translatesAutoresizingMaskIntoConstraints = false
-        backdropView.material = .popover
+        backdropView.material = visualStyle.mirrorMaterial
         backdropView.blendingMode = .behindWindow
         backdropView.state = .active
         backdropView.isHidden = true
         backdropView.wantsLayer = true
-        backdropView.layer?.cornerRadius = 7
+        backdropView.layer?.cornerRadius = visualStyle.mirrorCornerRadius
         backdropView.layer?.masksToBounds = true
         ghostTextView.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(backdropView)
@@ -71,10 +76,7 @@ final class SuggestionPanelController {
     ) -> CGRect? {
         let fontSize = defaultFontSize(anchorRect: anchorRect, renderMode: renderMode)
         let font = style?.font ?? NSFont.systemFont(ofSize: fontSize, weight: .regular)
-        let color = GhostTextColorPolicy.color(
-            matching: style?.foregroundColor,
-            renderMode: renderMode
-        )
+        let color = visualStyle.textColor(for: renderMode)
 
         let textInsets = Self.textInsets(for: renderMode)
         let textPadding = CGSize(
@@ -203,22 +205,31 @@ final class SuggestionPanelController {
         panel.orderOut(nil)
     }
 
-    private func screen(containing accessibilityRect: CGRect) -> NSScreen? {
-        let screenHeight = Self.accessibilityScreenHeight()
-        let candidates = NSScreen.screens.compactMap { screen -> (screen: NSScreen, area: CGFloat)? in
-            let probeRect = AccessibilityCoordinateConverter.appKitProbeRect(
-                fromAccessibilityRect: accessibilityRect,
-                screenHeight: screenHeight
-            )
-            let intersection = screen.frame.intersection(probeRect)
-            guard !intersection.isNull, intersection.width > 0, intersection.height > 0 else {
-                return nil
-            }
-
-            return (screen, intersection.width * intersection.height)
+    func nativeAppearanceSnapshotPNGData(appearanceName: NSAppearance.Name) -> Data? {
+        guard let appearance = NSAppearance(named: appearanceName) else {
+            return nil
         }
 
-        return candidates.max { $0.area < $1.area }?.screen
+        let view = SuggestionOverlayAppearancePreviewView(
+            frame: NSRect(x: 0, y: 0, width: 520, height: 112),
+            appearance: appearance,
+            visualStyle: visualStyle
+        )
+        return view.pngData()
+    }
+
+    private func screen(containing accessibilityRect: CGRect) -> NSScreen? {
+        let screenHeight = Self.accessibilityScreenHeight()
+        let screens = NSScreen.screens
+        guard let bestFrame = AccessibilityCoordinateConverter.bestScreenFrame(
+            containingAccessibilityRect: accessibilityRect,
+            screenFrames: screens.map(\.frame),
+            screenHeight: screenHeight
+        ) else {
+            return nil
+        }
+
+        return screens.first { $0.frame == bestFrame }
     }
 
     private static func accessibilityScreenHeight() -> CGFloat {
@@ -311,6 +322,97 @@ enum GhostTextColorPolicy {
         return (0.2126 * rgbColor.redComponent)
             + (0.7152 * rgbColor.greenComponent)
             + (0.0722 * rgbColor.blueComponent)
+    }
+}
+
+private final class SuggestionOverlayAppearancePreviewView: NSView {
+    private let previewAppearance: NSAppearance
+    private let visualStyle: SuggestionPanelVisualStyle
+
+    init(
+        frame: NSRect,
+        appearance: NSAppearance,
+        visualStyle: SuggestionPanelVisualStyle
+    ) {
+        previewAppearance = appearance
+        self.visualStyle = visualStyle
+        super.init(frame: frame)
+        self.appearance = appearance
+        wantsLayer = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    func pngData() -> Data? {
+        layoutSubtreeIfNeeded()
+        guard let bitmap = bitmapImageRepForCachingDisplay(in: bounds) else {
+            return nil
+        }
+
+        cacheDisplay(in: bounds, to: bitmap)
+        return bitmap.representation(using: .png, properties: [:])
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        previewAppearance.performAsCurrentDrawingAppearance {
+            NSColor.textBackgroundColor.setFill()
+            bounds.fill()
+
+            drawInlinePreview()
+            drawMirrorPreview()
+        }
+    }
+
+    private func drawInlinePreview() {
+        let font = NSFont.systemFont(ofSize: 18)
+        let typedText = "Draft a short update"
+        let typedOrigin = NSPoint(x: 24, y: 24)
+        let typedAttributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.labelColor
+        ]
+        typedText.draw(at: typedOrigin, withAttributes: typedAttributes)
+
+        let typedSize = typedText.size(withAttributes: typedAttributes)
+        let cursorRect = NSRect(x: typedOrigin.x + typedSize.width + 3, y: 22, width: 1.5, height: 25)
+        NSColor.labelColor.setFill()
+        cursorRect.fill()
+
+        let ghostOrigin = NSPoint(x: cursorRect.maxX + 4, y: typedOrigin.y)
+        " for tomorrow".draw(
+            at: ghostOrigin,
+            withAttributes: [
+                .font: font,
+                .foregroundColor: visualStyle.textColor(for: .inlineAdjacent)
+            ]
+        )
+    }
+
+    private func drawMirrorPreview() {
+        let mirrorRect = NSRect(x: 24, y: 64, width: 184, height: 34)
+        let mirrorPath = NSBezierPath(
+            roundedRect: mirrorRect,
+            xRadius: visualStyle.mirrorCornerRadius,
+            yRadius: visualStyle.mirrorCornerRadius
+        )
+        NSColor.controlBackgroundColor.withAlphaComponent(0.92).setFill()
+        mirrorPath.fill()
+        NSColor.separatorColor.setStroke()
+        mirrorPath.lineWidth = 1
+        mirrorPath.stroke()
+
+        "finish the thought".draw(
+            at: NSPoint(x: mirrorRect.minX + 10, y: mirrorRect.minY + 8),
+            withAttributes: [
+                .font: NSFont.systemFont(ofSize: 15),
+                .foregroundColor: visualStyle.textColor(for: .floatingMirror)
+            ]
+        )
     }
 }
 

@@ -63,10 +63,10 @@ struct AcceptedTextSafetyPolicyTests {
             displayName: "Prompt Safe",
             supportLevel: .yellow,
             supportReason: "Synthetic prompt-safe profile.",
-            safetyOwnerNote: "Owner: Synthetic prompt-safe profile because tests need a one-word-only insertion path.",
             renderMode: .floatingMirror,
             insertionMode: .axValueReplacement,
             supportsFullAcceptance: false,
+            promptAppSafetyMode: .wordOnly,
             notes: "Test profile."
         )
         let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
@@ -88,5 +88,51 @@ struct AcceptedTextSafetyPolicyTests {
             policy.decision(acceptedText: " make", profile: codex)
                 == .blocked(reason: "profile-insertion-disabled")
         )
+    }
+
+    @Test("Prompt-safe profiles block command-like one-word accepts")
+    func promptSafeProfilesBlockCommandLikeOneWordAccepts() throws {
+        let promptSafe = CompatibilityProfile(
+            bundleIdentifier: "com.example.PromptSafe",
+            displayName: "Prompt Safe",
+            supportLevel: .yellow,
+            supportReason: "Synthetic prompt-safe profile.",
+            renderMode: .floatingMirror,
+            insertionMode: .axValueReplacement,
+            supportsFullAcceptance: false,
+            promptAppSafetyMode: .wordOnly,
+            notes: "Test profile."
+        )
+        let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+
+        #expect(
+            policy.decision(acceptedText: " /review", profile: promptSafe)
+                == .blocked(reason: "accepted-text-prompt-command-prefix")
+        )
+        #expect(
+            policy.decision(acceptedText: " @file", profile: promptSafe)
+                == .blocked(reason: "accepted-text-prompt-command-prefix")
+        )
+        #expect(
+            policy.decision(acceptedText: " --force", profile: promptSafe)
+                == .blocked(reason: "accepted-text-prompt-command-prefix")
+        )
+        #expect(
+            policy.decision(acceptedText: " curl", profile: promptSafe)
+                == .blocked(reason: "accepted-text-prompt-action-word")
+        )
+        #expect(
+            policy.decision(acceptedText: " deploy", profile: promptSafe)
+                == .blocked(reason: "accepted-text-prompt-action-word")
+        )
+        #expect(
+            policy.decision(acceptedText: " keep|send", profile: promptSafe)
+                == .blocked(reason: "accepted-text-prompt-shell-metacharacter")
+        )
+        #expect(
+            policy.decision(acceptedText: " word\u{200B}", profile: promptSafe)
+                == .blocked(reason: "accepted-text-hidden-control-character")
+        )
+        #expect(policy.decision(acceptedText: " /review", profile: textEdit) == .allowed)
     }
 }

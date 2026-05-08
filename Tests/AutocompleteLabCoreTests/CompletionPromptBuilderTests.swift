@@ -33,6 +33,8 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("testing, using, building, debugging"))
         #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
         #expect(prompt.system.contains("integrate it seamlessly"))
+        #expect(prompt.system.contains("boost productivity"))
+        #expect(prompt.system.contains("streamline the workflow"))
     }
 
     @Test("Prompt includes aggregate kept style sketch")
@@ -53,6 +55,37 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("avg 2.60 words"))
         #expect(prompt.system.contains("usually terminal punctuation"))
         #expect(!prompt.system.contains("make this simpler"))
+    }
+
+    @Test("Prompt includes trace safe document title shape")
+    func promptIncludesTraceSafeDocumentTitleShape() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Can we keep this",
+            documentTitleShape: DocumentTitleShape.from(windowTitle: "Launch Plan.md *")
+        ))
+
+        #expect(prompt.system.contains("Document/window title shape"))
+        #expect(prompt.system.contains("file extension md"))
+        #expect(prompt.system.contains("unsaved marker present"))
+        #expect(prompt.system.contains("weak genre context"))
+        #expect(!prompt.system.contains("Launch"))
+        #expect(!prompt.system.contains("Plan"))
+    }
+
+    @Test("Word prompt includes trace safe document title shape")
+    func wordPromptIncludesTraceSafeDocumentTitleShape() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Lau",
+            documentTitleShape: DocumentTitleShape.from(windowTitle: "Launch Plan.md *"),
+            mode: .wordCompletion
+        ))
+
+        #expect(prompt.system.contains("Document/window title shape"))
+        #expect(prompt.system.contains("file extension md"))
+        #expect(!prompt.system.contains("Launch"))
+        #expect(!prompt.system.contains("Plan"))
     }
 
     @Test("Prompt includes trace safe partial word shape")
