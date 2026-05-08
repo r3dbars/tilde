@@ -2437,10 +2437,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "restoredTextLength": String(restoredText.count)
             ]
         )
+        clearAcceptanceSurvivalForAcceptedInsertionUndo(undo)
         clearPendingAcceptedInsertionUndo(reason: "undone")
         setSuggestionDecision("Accepted insertion undone")
         scheduleKeyboardEventTapStopIfIdle()
         return true
+    }
+
+    private func clearAcceptanceSurvivalForAcceptedInsertionUndo(_ undo: AcceptedInsertionUndo) {
+        acceptanceSurvivalTasks[undo.acceptanceID]?.cancel()
+        acceptanceSurvivalTasks[undo.acceptanceID] = nil
+
+        Task { @MainActor [weak self] in
+            guard let self,
+                  let tracker = await self.acceptanceSurvivalChecker.finishTracking(
+                      acceptanceID: undo.acceptanceID
+                  ) else {
+                return
+            }
+
+            RawAutocompleteTraceLog.shared.record(
+                type: .acceptanceRetentionCleared,
+                suggestionID: tracker.suggestionID,
+                appBundleIdentifier: tracker.appBundleIdentifier,
+                fieldIdentity: tracker.fieldIdentity.traceDescription,
+                requestMode: tracker.requestMode,
+                outcome: "undone",
+                reason: "accepted-insertion-undone",
+                metadata: [
+                    "acceptanceID": tracker.acceptanceID,
+                    "acceptMode": tracker.acceptMode,
+                    "fieldKind": tracker.fieldKind.rawValue,
+                    "fieldKindReason": tracker.fieldKindReason,
+                    "behaviorProfile": tracker.behaviorProfileID.rawValue,
+                    "acceptedChars": String(tracker.acceptedText.count),
+                    "restoredTextLength": String(undo.textBeforeCursor.count + undo.textAfterCursor.count)
+                ]
+            )
+        }
     }
 
     private func insertionVerificationBaseline(

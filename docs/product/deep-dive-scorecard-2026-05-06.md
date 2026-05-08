@@ -376,6 +376,11 @@ should stay lower until those rows are closed.
   suggestion and rejects full-accept or field-send finalization signals before
   it records Codex, Claude Code terminal-host, or Claude desktop as a prompt
   no-submit pass.
+- App-level Command-Z undo now clears acceptance-survival tracking and records
+  `acceptanceRetentionCleared` with `accepted-insertion-undone`, so deliberate
+  undo is not treated as accidental accepted-then-deleted. The TextEdit smoke
+  lane asserts this log event, but the latest live rerun timed out before the
+  first suggestion and still does not close the per-app undo proof row.
 - Codex prompt proof now also requires explicit confirmation that the disposable
   prompt contains `AUTOCOMPLETE_LAB_CODEX_PROOF`; unmarked Codex proof slices
   fail before they can be recorded.
