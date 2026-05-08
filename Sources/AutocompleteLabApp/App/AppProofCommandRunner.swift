@@ -61,6 +61,7 @@ struct AppProofCommandPlan: Equatable {
                     "chrome",
                     "--fixture",
                     "all",
+                    "--include-default-real-editor-proof",
                     "--skip-build"
                 ],
                 environmentOverrides: proofEnvironment

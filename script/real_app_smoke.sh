@@ -14,13 +14,14 @@ CHROME_FIXTURE="${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-textarea}"
 CHROME_FIXTURE_WAS_SET=0
 CHROME_ACCESSIBILITY_MODE="${AUTOCOMPLETE_LAB_CHROME_ACCESSIBILITY_MODE:-forced}"
 CHROME_ACCESSIBILITY_MODE_WAS_SET=0
+CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF=0
 TEMP_ENABLE_ENV_KEY="AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
 TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED=0
 TEMP_ENABLE_LAUNCHCTL_PREVIOUS=""
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|chat-like|all>] [--chrome-accessibility <forced|default>]
+Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|chat-like|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof]
 
 Runs a real app smoke pass where it is safe to automate. Notes, Obsidian,
 Codex, Claude Code, and Claude desktop are manual-gated so this script never
@@ -38,7 +39,8 @@ isolated Chrome process with renderer accessibility forced. Use
 --chrome-accessibility default to run those real editor fixtures in the normal
 frontmost Chrome window as an experimental default-AX exposure proof. Use
 --fixture all to run every local Chrome browser/editor fixture with one app
-build.
+build. Add --include-default-real-editor-proof with --fixture all to rerun real
+Monaco and ProseMirror in default Chrome AX mode after the forced lane.
 EOF
 }
 
@@ -79,6 +81,9 @@ while (($#)); do
     --chrome-accessibility=*)
       CHROME_ACCESSIBILITY_MODE="${1#--chrome-accessibility=}"
       CHROME_ACCESSIBILITY_MODE_WAS_SET=1
+      ;;
+    --include-default-real-editor-proof)
+      CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF=1
       ;;
     -h|--help)
       usage
@@ -156,6 +161,24 @@ fi
 
 if [[ "$APP" != "chrome" && "$CHROME_ACCESSIBILITY_MODE_WAS_SET" == "1" ]]; then
   echo "--chrome-accessibility is only supported for the Chrome smoke pass." >&2
+  usage >&2
+  exit 2
+fi
+
+if [[ "$APP" != "chrome" && "$CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF" == "1" ]]; then
+  echo "--include-default-real-editor-proof is only supported for the Chrome smoke pass." >&2
+  usage >&2
+  exit 2
+fi
+
+if [[ "$CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF" == "1" && "$CHROME_FIXTURE" != "all" ]]; then
+  echo "--include-default-real-editor-proof requires --fixture all." >&2
+  usage >&2
+  exit 2
+fi
+
+if [[ "$CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF" == "1" && "$CHROME_ACCESSIBILITY_MODE" != "forced" ]]; then
+  echo "--include-default-real-editor-proof starts from the forced Chrome accessibility lane." >&2
   usage >&2
   exit 2
 fi
@@ -1926,6 +1949,9 @@ describe_plan() {
       esac
       if [[ "$CHROME_FIXTURE" == "all" ]]; then
         echo "Plan: build/relaunch AutocompleteLab, then run disposable Chrome textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, real Monaco, real ProseMirror, and chat-like no-submit local fixtures."
+        if [[ "$CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF" == "1" ]]; then
+          echo "Plan add-on: rerun real Monaco and real ProseMirror in default Chrome AX mode after the forced renderer lane."
+        fi
       else
         echo "Plan: build/relaunch AutocompleteLab, open a disposable Chrome $CHROME_FIXTURE fixture, type a test fragment, then validate logs and traces."
       fi
@@ -2237,6 +2263,13 @@ run_chrome() {
     run_chrome_fixture monaco-real
     run_chrome_fixture prosemirror-real
     run_chrome_fixture chat-like
+    if [[ "$CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF" == "1" ]]; then
+      local original_chrome_accessibility_mode="$CHROME_ACCESSIBILITY_MODE"
+      CHROME_ACCESSIBILITY_MODE="default"
+      run_chrome_fixture monaco-real
+      run_chrome_fixture prosemirror-real
+      CHROME_ACCESSIBILITY_MODE="$original_chrome_accessibility_mode"
+    fi
   else
     run_chrome_fixture "$CHROME_FIXTURE"
   fi

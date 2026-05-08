@@ -93,6 +93,12 @@ if ! grep -F "textarea, contenteditable, editor-like, Monaco-like, ProseMirror-l
   exit 1
 fi
 
+script/real_app_smoke.sh chrome --fixture all --include-default-real-editor-proof --dry-run >"$TMP_DIR/chrome-all-default-addon.txt"
+if ! grep -F "rerun real Monaco and real ProseMirror in default Chrome AX mode after the forced renderer lane" "$TMP_DIR/chrome-all-default-addon.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Chrome default AX add-on plan" >&2
+  exit 1
+fi
+
 script/real_app_smoke.sh chrome --fixture=contenteditable --dry-run >"$TMP_DIR/chrome-contenteditable-equals.txt"
 if ! grep -F "Chrome fixture: contenteditable" "$TMP_DIR/chrome-contenteditable-equals.txt" >/dev/null; then
   echo "real app smoke self-test did not parse --fixture=contenteditable" >&2
@@ -136,6 +142,21 @@ fi
 
 if script/real_app_smoke.sh chrome --chrome-accessibility >/dev/null 2>&1; then
   echo "real app smoke self-test expected missing Chrome accessibility values to fail" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh chrome --fixture monaco-real --include-default-real-editor-proof --dry-run >/dev/null 2>&1; then
+  echo "real app smoke self-test expected default real-editor add-on without all fixtures to fail" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh chrome --fixture all --chrome-accessibility default --include-default-real-editor-proof --dry-run >/dev/null 2>&1; then
+  echo "real app smoke self-test expected default real-editor add-on from default accessibility mode to fail" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh textedit --include-default-real-editor-proof --dry-run >/dev/null 2>&1; then
+  echo "real app smoke self-test expected Chrome default real-editor add-on outside Chrome to fail" >&2
   exit 1
 fi
 

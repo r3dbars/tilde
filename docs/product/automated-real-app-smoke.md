@@ -86,11 +86,14 @@ right proof lane for real editor engines. For these two lanes the script launche
 an isolated temp-profile Chrome process with `--force-renderer-accessibility`
 and kills only that captured process during cleanup. That proves Autocomplete
 Lab works when Chrome exposes real editor AX, but it is still weaker than
-default-Chrome production-site proof. The `--chrome-accessibility default` lane
-now records distinct `monaco-real-default` and `prosemirror-real-default` proof
-rows when normal Chrome exposes enough editor AX for strict screenshot-backed
-acceptance and proof-gated inline synthetic-caret placement. The remaining
-Chrome editor gap is production editor variants. The chat-like fixture is not a real Codex or Claude
+default-Chrome production-site proof. The Settings Chrome proof runner now calls
+`--fixture all --include-default-real-editor-proof`, so the same one-click proof
+also reruns real Monaco and real ProseMirror under normal Chrome AX exposure.
+The `--chrome-accessibility default` lane records distinct `monaco-real-default`
+and `prosemirror-real-default` proof rows when normal Chrome exposes enough
+editor AX for strict screenshot-backed acceptance and proof-gated inline
+synthetic-caret placement. The remaining Chrome editor gap is production editor
+variants. The chat-like fixture is not a real Codex or Claude
 proof; it is a local no-submit guardrail that must pass before trusting prompt
 app smoke results.
 
