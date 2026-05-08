@@ -58,6 +58,9 @@ evidence exists in the repo.
 - Prompt-app full accept needs its own separate full-accept no-submit proof.
 - Prompt-app proof must be one trace-level accept only and must not contain
   full-accept or field-send finalization signals.
+- Every compatibility profile must have a `profileCoverage` row in
+  `docs/product/proof-manifest.json` with an owner and safety note, including
+  diagnostics-only or blocked profiles.
 - Private apps must use disposable text only.
 - A pending screenshot means the app is not screenshot-backed, even if insertion
   worked before.
