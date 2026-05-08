@@ -12,6 +12,10 @@ if ! grep -F "Real app smoke: textedit" "$TMP_DIR/textedit.txt" >/dev/null; then
   echo "real app smoke self-test did not print the TextEdit dry-run plan" >&2
   exit 1
 fi
+if ! grep -F "Proof mode bundle(s): com.apple.TextEdit" "$TMP_DIR/textedit.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the TextEdit proof mode bundle" >&2
+  exit 1
+fi
 
 if ! grep -F "temporarily enables TextEdit only for this proof pass" "$TMP_DIR/textedit.txt" >/dev/null; then
   echo "real app smoke self-test did not explain temporary TextEdit enablement" >&2
@@ -21,6 +25,10 @@ fi
 script/real_app_smoke.sh chrome --dry-run >"$TMP_DIR/chrome.txt"
 if ! grep -F "disposable Chrome textarea fixture" "$TMP_DIR/chrome.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome dry-run plan" >&2
+  exit 1
+fi
+if ! grep -F "Proof mode bundle(s): com.google.Chrome" "$TMP_DIR/chrome.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Chrome proof mode bundle" >&2
   exit 1
 fi
 
@@ -175,10 +183,18 @@ if ! grep -F "one-word Tab accept without submit" "$TMP_DIR/codex.txt" >/dev/nul
   echo "real app smoke self-test did not explain the Codex one-word no-submit proof" >&2
   exit 1
 fi
+if ! grep -F "Proof mode bundle(s): com.openai.codex" "$TMP_DIR/codex.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Codex proof mode bundle" >&2
+  exit 1
+fi
 
 script/real_app_smoke.sh claude-code --dry-run >"$TMP_DIR/claude-code.txt"
 if ! grep -F "one-word Tab accept without submit" "$TMP_DIR/claude-code.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the Claude Code one-word no-submit proof" >&2
+  exit 1
+fi
+if ! grep -F "Proof mode bundle(s): com.anthropic.claude-code" "$TMP_DIR/claude-code.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Claude Code proof mode bundle" >&2
   exit 1
 fi
 if ! grep -F "terminal-host Claude Code proof" "$TMP_DIR/claude-code.txt" >/dev/null; then
