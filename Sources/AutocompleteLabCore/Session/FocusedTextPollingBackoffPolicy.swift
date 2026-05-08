@@ -38,6 +38,7 @@ public struct FocusedTextPollingBackoffPolicy: Equatable, Sendable {
     public let slowPollP95Milliseconds: Int
     public let overlappingPollCount: Int
     public let minimumThrottleMilliseconds: Int
+    public let inFlightSkipGraceMilliseconds: Int
 
     public init(
         repeatPauseWindowMilliseconds: Int = 350,
@@ -46,7 +47,8 @@ public struct FocusedTextPollingBackoffPolicy: Equatable, Sendable {
         staleSnapshotMilliseconds: Int = 450,
         slowPollP95Milliseconds: Int = 80,
         overlappingPollCount: Int = 2,
-        minimumThrottleMilliseconds: Int = 120
+        minimumThrottleMilliseconds: Int = 120,
+        inFlightSkipGraceMilliseconds: Int = 450
     ) {
         self.repeatPauseWindowMilliseconds = max(0, repeatPauseWindowMilliseconds)
         self.repeatPauseStepMilliseconds = max(0, repeatPauseStepMilliseconds)
@@ -55,6 +57,7 @@ public struct FocusedTextPollingBackoffPolicy: Equatable, Sendable {
         self.slowPollP95Milliseconds = max(0, slowPollP95Milliseconds)
         self.overlappingPollCount = max(1, overlappingPollCount)
         self.minimumThrottleMilliseconds = max(0, minimumThrottleMilliseconds)
+        self.inFlightSkipGraceMilliseconds = max(0, inFlightSkipGraceMilliseconds)
     }
 
     public func pauseDurationMilliseconds(
@@ -98,6 +101,15 @@ public struct FocusedTextPollingBackoffPolicy: Equatable, Sendable {
         }
 
         return ageMilliseconds >= staleSnapshotMilliseconds
+    }
+
+    public func shouldRecordInFlightSkip(lastPollAttemptAt: Date?, now: Date) -> Bool {
+        guard let lastPollAttemptAt else {
+            return true
+        }
+
+        let elapsedMilliseconds = Int((now.timeIntervalSince(lastPollAttemptAt) * 1000).rounded())
+        return elapsedMilliseconds < 0 || elapsedMilliseconds >= inFlightSkipGraceMilliseconds
     }
 
     public func throttleRecommendation(

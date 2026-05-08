@@ -35,6 +35,7 @@ This is not yet a 97/100 real human dogfood score. It means the prompt, OCR cont
 - OCR prompt context now removes obvious app/window chrome such as `Untitled 13`, `New chat Search Plugins`, `Ep quadrant`, and font controls before sending visible text to the model.
 - Output cleaning now suppresses the same OCR chrome class even if the model still returns it.
 - Prompt style bumped to `screen-aware-continuation-v5` with an explicit "never output visible window titles / tab labels / menu labels / OCR chrome" rule.
+- Focused text polling now waits through a short in-flight grace window before counting overlapping polls, so slow AX reads in Codex do not churn the typing loop while the user is trying to write.
 
 ## Latest Heartbeat Pass
 
@@ -57,6 +58,16 @@ Time: 2026-05-08T22:27:24Z
 - Fix: strip obvious OCR chrome from `VisiblePageContext`, including embedded one-line OCR fragments, reject visible UI chrome and prompt-format echoes in `CompletionOutputCleaner`, and add a v5 prompt rule against outputting window titles, document titles, tab labels, menu labels, sidebar labels, font controls, app navigation, or OCR chrome.
 - Added focused tests for the live failure: OCR context strips `Untitled 13` / `New chat Search Plugins` / `Helvetica Regular`, and output cleaning suppresses those suggestions while still allowing normal prose.
 - Focused Swift test pass: `CompletionOutputCleanerTests`, `VisiblePageContextTests`, `CompletionPromptBuilderTests`, and `MagicWritingOCRPromptEvalTests` all passed.
+
+## Latest Latency Fix Pass
+
+Time: 2026-05-08T23:14:23Z
+
+- Heartbeat diagnostics repeatedly showed Codex slow AX reads around 120-395 ms with `focused-text-poll-skipped` and `overlapping-polls` while the app was otherwise idle and healthy.
+- Root cause: the poll loop counted in-flight skips as soon as the normal cadence elapsed, even if the active AX read was only moderately slow and still likely to finish.
+- Fix: add a 450 ms in-flight skip grace window before recording overlapping poll skips, while keeping normal fast polling unchanged when no read is in flight.
+- Added `FocusedTextPollingBackoffPolicyTests` coverage for the in-flight grace window.
+- Focused Swift test pass: `FocusedTextPollingBackoffPolicyTests`, `FocusedTextPollGatePolicyTests`, `VisiblePageContextTests`, `CompletionOutputCleanerTests`, and `MagicWritingOCRPromptEvalTests` all passed.
 
 ## 100 Test Situations
 
