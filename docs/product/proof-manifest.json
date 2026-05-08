@@ -239,7 +239,7 @@
       "surface": "Chrome text fields/editor/chat-like surfaces",
       "status": "partial",
       "owner": "browser editor adapter lane",
-      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures are proven, but production-site variance and default Chrome AX exposure remain open."
+      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures are proven, but production-site variance and default Chrome AX exposure remain open. Hosted Google Docs, Notion, Slack, and Discord are blocked by surface policy until real proof exists."
     },
     {
       "bundle": "com.openai.codex",
