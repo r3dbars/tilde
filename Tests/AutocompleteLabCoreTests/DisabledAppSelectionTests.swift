@@ -77,6 +77,48 @@ struct DisabledAppSelectionTests {
         #expect(!selection.contains("com.apple.Passwords"))
     }
 
+    @Test("Startup selection defaults suggestion capable apps off on fresh install")
+    func startupSelectionDefaultsSuggestionCapableAppsOffOnFreshInstall() {
+        let selection = DisabledAppSelection(
+            startupPersistedBundleIdentifiers: nil,
+            profileStore: .mvp
+        )
+
+        #expect(selection.contains("com.apple.TextEdit"))
+        #expect(selection.contains("com.apple.Notes"))
+        #expect(selection.contains("md.obsidian"))
+        #expect(selection.contains("com.google.Chrome"))
+        #expect(!selection.contains("com.apple.mail"))
+        #expect(!selection.contains("com.openai.atlas"))
+    }
+
+    @Test("Startup selection preserves explicit persisted app choices")
+    func startupSelectionPreservesExplicitPersistedAppChoices() {
+        let selection = DisabledAppSelection(
+            startupPersistedBundleIdentifiers: ["com.apple.TextEdit"],
+            profileStore: .mvp
+        )
+
+        #expect(selection.contains("com.apple.TextEdit"))
+        #expect(!selection.contains("com.apple.Notes"))
+        #expect(!selection.contains("md.obsidian"))
+        #expect(!selection.contains("com.google.Chrome"))
+    }
+
+    @Test("Startup selection can temporarily enable proof target apps")
+    func startupSelectionCanTemporarilyEnableProofTargetApps() {
+        let selection = DisabledAppSelection(
+            startupPersistedBundleIdentifiers: nil,
+            profileStore: .mvp,
+            temporarilyEnabledBundleIdentifiers: "com.apple.TextEdit, md.obsidian"
+        )
+
+        #expect(!selection.contains("com.apple.TextEdit"))
+        #expect(selection.contains("com.apple.Notes"))
+        #expect(!selection.contains("md.obsidian"))
+        #expect(selection.contains("com.google.Chrome"))
+    }
+
     @Test("Temporary enable override removes target apps from disabled set")
     func temporaryEnableOverrideRemovesTargetAppsFromDisabledSet() {
         var selection = DisabledAppSelection(

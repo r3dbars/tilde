@@ -8,7 +8,7 @@ This is intentionally separate from Transcripted. The goal is to learn fast with
 
 Transcripted helps people get thoughts out.
 
-This app explores the next step: helping people keep typing everywhere without opening a prompt box.
+This app explores the next step: helping people keep typing in a few proven writing apps without opening a prompt box.
 
 The magic feeling we are testing:
 
@@ -24,15 +24,15 @@ The magic feeling we are testing:
 - `Esc` dismisses
 - local-only by default
 - default model target: Qwen3.5 4B on Apple Silicon / 16 GB
-- starts with a small app allowlist
+- starts with suggestions paused and suggestion-capable apps blocked until explicitly enabled
 
 Target apps for the first pass:
 
 - TextEdit
-- Notes
-- Obsidian
-- Chrome text fields
-- Codex and Claude Code prompt fields
+- Notes title, body, and checklist surfaces
+- Obsidian disposable notes
+- Chrome local text fields and local editor fixtures
+- Codex, Claude Code, and Claude prompt fields only after no-submit proof
 
 Mail is diagnostics-only until compose insertion is proven safe.
 
@@ -46,9 +46,9 @@ Users should never need to start a model server. The model runtime is owned by t
 
 Current lab build:
 
-- defaults to a bundled local-runtime helper
-- tries LiteRT-LM Gemma 4 E2B first
-- falls back to mock suggestions if the runtime is missing or too broken
+- uses the app-owned MLX runtime when the Qwen3.5 4B asset is ready
+- keeps suggestions off while the model is missing, warming, invalid, or failed
+- treats mock fallback as development-only and not beta-ready
 - exposes privacy/runtime toggles from the menu bar
 - keeps typed text local
 

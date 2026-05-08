@@ -4578,6 +4578,10 @@ private extension AppDelegate {
         "DisabledBundleIdentifiers"
     }
 
+    static var temporarilyEnabledBundleIdentifiersEnvironmentKey: String {
+        "AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
+    }
+
     static var suggestionsPausedDefaultsKey: String {
         "SuggestionsPaused"
     }
@@ -4611,9 +4615,19 @@ private extension AppDelegate {
     }
 
     func loadDisabledApps() {
-        let persisted = UserDefaults.standard.stringArray(forKey: Self.disabledAppsDefaultsKey) ?? []
+        let persisted: [String]?
+        if UserDefaults.standard.object(forKey: Self.disabledAppsDefaultsKey) == nil {
+            persisted = nil
+        } else {
+            persisted = UserDefaults.standard.stringArray(forKey: Self.disabledAppsDefaultsKey) ?? []
+        }
+
         disabledBundleIdentifiers = DisabledAppSelection(
-            persistedBundleIdentifiers: persisted
+            startupPersistedBundleIdentifiers: persisted,
+            profileStore: profileStore,
+            temporarilyEnabledBundleIdentifiers: ProcessInfo.processInfo.environment[
+                Self.temporarilyEnabledBundleIdentifiersEnvironmentKey
+            ]
         ).bundleIdentifiers
     }
 
