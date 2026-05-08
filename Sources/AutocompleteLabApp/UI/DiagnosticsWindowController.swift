@@ -235,6 +235,30 @@ final class DiagnosticsWindowController {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    func nativeAppearanceSnapshotPNGData(appearanceName: NSAppearance.Name) -> Data? {
+        guard let contentView = window.contentView,
+              let appearance = NSAppearance(named: appearanceName) else {
+            return nil
+        }
+
+        let previousAppearance = window.appearance
+        window.appearance = appearance
+        defer {
+            window.appearance = previousAppearance
+        }
+
+        contentView.needsLayout = true
+        contentView.layoutSubtreeIfNeeded()
+        let bounds = contentView.bounds
+        guard !bounds.isEmpty,
+              let bitmap = contentView.bitmapImageRepForCachingDisplay(in: bounds) else {
+            return nil
+        }
+
+        contentView.cacheDisplay(in: bounds, to: bitmap)
+        return bitmap.representation(using: .png, properties: [:])
+    }
+
     private func traceSummaryText(
         _ summary: AutocompleteTraceSummary,
         tracePath: String,
