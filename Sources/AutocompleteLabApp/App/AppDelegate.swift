@@ -2722,10 +2722,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 behaviorProfileID: behaviorProfile.id
             )
         )
+        let fieldIdentityDescription = fieldIdentity.traceDescription
         let request = CompletionRequest(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             appBundleIdentifier: appBundleIdentifier,
+            fieldIdentityDescription: fieldIdentityDescription,
             fieldKind: fieldClassification.kind,
             behaviorProfileID: behaviorProfile.id,
             acceptedTextStyleSketch: acceptedTextStyleSketch,
@@ -2741,7 +2743,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         streamingPresentationStates[suggestionID] = StreamingPresentationState()
         let requestTicket = suggestionRequestGate.issue(request: request)
         let requestStartedAt = Date()
-        let fieldIdentityDescription = fieldIdentity.traceDescription
 
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionRequested,
