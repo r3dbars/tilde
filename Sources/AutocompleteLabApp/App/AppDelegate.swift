@@ -38,7 +38,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modelRuntimeBundle.runtime
     }
     private lazy var engine: any CompletionEngine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
-    private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
+    private lazy var insertionEngine = InsertionEngine(
+        accessibilityClient: accessibilityClient,
+        clipboardFallbackEnabled: true
+    )
     private let keyboardCapturePolicy = KeyboardCapturePolicy()
     private let keyboardEventTapIdleStopPolicy = KeyboardEventTapIdleStopPolicy()
     private let insertionVerification = InsertionVerification()
