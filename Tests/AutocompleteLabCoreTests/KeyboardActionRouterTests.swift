@@ -51,6 +51,15 @@ struct KeyboardActionRouterTests {
         #expect(KeyboardAction.undoAcceptedInsertion.diagnosticName == "undoAcceptedInsertion")
     }
 
+    @Test("Only acceptance actions insert suggestion text")
+    func onlyAcceptanceActionsInsertSuggestionText() {
+        #expect(KeyboardAction.acceptNextWord.insertsSuggestionText)
+        #expect(KeyboardAction.acceptAllVisible.insertsSuggestionText)
+        #expect(!KeyboardAction.dismiss.insertsSuggestionText)
+        #expect(!KeyboardAction.passThrough.insertsSuggestionText)
+        #expect(!KeyboardAction.undoAcceptedInsertion.insertsSuggestionText)
+    }
+
     @Test("Keys pass through when no suggestion is visible")
     func keysPassThroughWithoutVisibleSuggestion() {
         let router = KeyboardActionRouter()
