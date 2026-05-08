@@ -33,22 +33,21 @@ evidence exists in the repo.
 | Browser editor fixtures | B+ | [chrome-editor-like.png](visual-placement-screenshots/chrome-editor-like.png), [chrome-monaco-like.png](visual-placement-screenshots/chrome-monaco-like.png), [chrome-prosemirror-like.png](visual-placement-screenshots/chrome-prosemirror-like.png) | 2 verified accepts per fixture in the manual smoke log | Good proof for CodeMirror-like, Monaco-like, and ProseMirror-like shapes inside Chrome. Obsidian now has its own real CodeMirror row. | Needs real Monaco and real ProseMirror screenshots beyond local fixtures. |
 | Chrome chat-like composer | A- | [chrome-chat-like.png](visual-placement-screenshots/chrome-chat-like.png) | 2 verified accepts with strict visual trace evidence; local submit counter stayed at zero | The local no-submit fixture is now screenshot-backed and proves Tab/full accept do not submit the disposable composer. | Still needs real prompt/chat app no-submit proof before broad enablement. |
 | Codex | B- | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Prior verified accepts exist in the manual smoke log, but the current gate is one-word no-submit proof | Real dogfood screenshot exists, and insertion has passed separately. The current profile is mirror-first until same-slice no-submit proof exists, and full accept is disabled until separate full-accept no-submit proof exists. | Needs one strict visual trace slice that proves screenshot, one-word accept, and no prompt submit together. |
-| Obsidian | C+ | Pending | 2 verified accepts exist; detached whole-editor anchors are also suppressed | The profile can work, but this is not screenshot-backed on the current renderer. | Needs a disposable vault note screenshot with same-slice accepts. |
-| Apple Notes title | C | Pending title screenshot | Older generic Notes proof exists, but it is historical only. | The title field is its own proof target because it behaves differently from the body and checklist. The current profile is mirror-first until title/body/checklist proof exists. | Needs `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`. |
-| Apple Notes body | C | Pending body screenshot | Older generic Notes proof exists, but it is historical only. | The body field is its own proof target and must not borrow the title/checklist result. The current profile is mirror-first until title/body/checklist proof exists. | Needs `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate`. |
-| Apple Notes checklist | C | Pending checklist screenshot | Older generic Notes proof exists, but it is historical only. | Checklist rows are their own proof target because insertion and caret behavior can differ. The current profile is mirror-first until title/body/checklist proof exists. | Needs `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`. |
+| Obsidian | A- | [obsidian.png](visual-placement-screenshots/obsidian.png) | Bounded strict visual smoke at 2026-05-07T21:15:51Z with 2 verified accepts and current proof fingerprints | Disposable-note proof is screenshot-backed. Detached whole-editor anchors are also suppressed. | More vault, theme, and editor-layout variants. |
+| Apple Notes title | A- | [notes-title.png](visual-placement-screenshots/notes-title.png) | Bounded strict visual smoke at 2026-05-07T21:24:14Z with 2 verified accepts and current proof fingerprints | Title-field proof is now separate and screenshot-backed. | More note-window sizes and title/body transition variants. |
+| Apple Notes body | A- | [notes-body.png](visual-placement-screenshots/notes-body.png) | Bounded strict visual smoke at 2026-05-07T23:33:48Z with 2 verified accepts and current proof fingerprints | Body-field proof is now separate and screenshot-backed. | More multiline and rich-text body variants. |
+| Apple Notes checklist | A- | [notes-checklist.png](visual-placement-screenshots/notes-checklist.png) | Bounded strict visual smoke at 2026-05-08T00:21:33Z with 2 verified accepts and current proof fingerprints | Checklist-row proof is now separate and screenshot-backed. | More nested checklist and mixed-format variants. |
 | Claude Code | D | Pending | Pending | Profile exists and is mirror-first, but there is no safe live prompt proof yet. | Needs a manual-gated pass that proves Tab accepts without submitting. |
 | Claude desktop | B- | Pending fresh screenshot | Prior verified accepts exist in the manual smoke log, but the current gate is one-word no-submit proof | Prior manual proof passed, but it is not current screenshot-backed proof. The current profile is mirror-first, and full accept is disabled until separate full-accept no-submit proof exists. | Needs a current screenshot-backed one-word prompt pass without submitting. |
 
 ## Required Next Proof
 
 1. Run `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate` and keep one trace slice that proves visual placement plus one-word accept without submit.
-2. Run Obsidian against a disposable vault note only.
-3. Run Notes as three explicit surface commands: `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`, `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate`, and `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`.
-4. Run Claude Code with a harmless prompt fragment and no Enter key.
-5. Refresh Claude desktop with screenshot tracing and one-word accept without submit.
-6. Replace browser-editor fixture confidence with at least one real CodeMirror, Monaco, and ProseMirror proof pass.
-7. Run `script/no_accessibility_smoke.sh --check` after manually disabling
+2. Run Claude Code with a harmless prompt fragment and no Enter key.
+3. Refresh Claude desktop with screenshot tracing and one-word accept without submit.
+4. Replace browser-editor fixture confidence with at least one real CodeMirror, Monaco, and ProseMirror proof pass.
+5. Add extra Obsidian and Notes variants beyond the first strict proof rows.
+6. Run `script/no_accessibility_smoke.sh --check` after manually disabling
    Accessibility so the off state has a permission-specific proof path.
 
 ## Proof Rules

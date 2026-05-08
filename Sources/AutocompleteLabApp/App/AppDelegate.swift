@@ -189,6 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastFocusedTextPollStartedAt: Date?
     private let focusedTextPollTickInterval: TimeInterval = 0.033
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
+    private let acceptedInsertionUndoWindowSeconds: TimeInterval = 8
     private let postTypingPollPauseMilliseconds = 220
     private let postInsertionPollPauseMilliseconds = 220
     private let slowFocusedTextPollLatencyMilliseconds = 80
@@ -197,6 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionsPaused = false
     private var suggestionPace = SuggestionPace.normal
     private var keyboardShortcutConfiguration = KeyboardShortcutConfiguration.default
+    private var pendingAcceptedInsertionUndoUntil: Date?
     private func activationPolicy(for profile: CompatibilityProfile) -> CompletionActivationPolicy {
         CompletionActivationPolicy(
             pace: suggestionAggressivenessPolicy.pace(
@@ -1559,6 +1561,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             supportsOneWordAcceptance: currentProfile?.supportsOneWordAcceptance == true,
             supportsFullAcceptance: currentProfile?.supportsFullAcceptance == true,
             isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+            hasPendingAcceptedInsertionUndo: hasPendingAcceptedInsertionUndo(),
             acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut
         )
     }
@@ -1591,12 +1594,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyboardEventTapStopTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(idleStopDelayMilliseconds))
             guard !Task.isCancelled,
-                  let self,
-                  !self.suggestionSession.hasVisibleSuggestion else {
+                  let self else {
                 return
             }
 
-            self.stopKeyboardEventTapNow(reason: "idle")
+            let shouldStop = KeyboardEventTapIdleStopPolicy().shouldStopKeyboardCapture(
+                hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion,
+                isSuggestionPanelVisible: self.suggestionSession.hasVisibleSuggestion,
+                hasPendingAcceptedInsertionUndo: self.hasPendingAcceptedInsertionUndo()
+            )
+            if shouldStop {
+                self.stopKeyboardEventTapNow(reason: "idle")
+            } else {
+                self.scheduleKeyboardEventTapStopIfIdle()
+            }
         }
     }
 
@@ -1619,6 +1630,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func observePassthroughTypingKeyDown() {
+        clearAcceptedInsertionUndoWindow()
         focusedTextPollingPause.pause(
             now: Date(),
             durationMilliseconds: postTypingPollPauseMilliseconds
@@ -1641,6 +1653,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> Bool {
         if didObservePassthroughKeyDown {
             currentSuggestionInvalidatedByUserKeyDown = true
+        }
+
+        let hasPendingUndo = hasPendingAcceptedInsertionUndo()
+        let action = KeyboardActionRouter(shortcutConfiguration: keyboardShortcutConfiguration).action(
+            for: key,
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+            hasPendingAcceptedInsertionUndo: hasPendingUndo
+        )
+
+        if action == .undoAcceptedInsertion {
+            clearAcceptedInsertionUndoWindow()
+            setSuggestionDecision("Undo: host app")
+            recordKeyboardAction(key: key, action: action, handled: false, reason: "native-undo-passthrough")
+            scheduleKeyboardEventTapStopIfIdle()
+            return false
         }
 
         guard suggestionSession.hasVisibleSuggestion else {
@@ -1680,11 +1707,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
 
-        let action = KeyboardActionRouter(shortcutConfiguration: keyboardShortcutConfiguration).action(
-            for: key,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
-        )
-
         switch action {
         case .acceptNextWord:
             guard currentProfile?.supportsOneWordAcceptance == true else {
@@ -1711,6 +1733,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let acceptedText = acceptance.acceptedText
             suggestionSession.commitNextWordAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
+            armAcceptedInsertionUndoWindow()
             advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
             suggestionRepetitionSuppressor.recordAcceptance(
                 acceptedText,
@@ -1754,6 +1777,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let acceptedText = acceptance.acceptedText
             suggestionSession.commitAllVisibleAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
+            armAcceptedInsertionUndoWindow()
             suggestionRepetitionSuppressor.recordAcceptance(
                 acceptedText,
                 mode: currentSuggestionRequestMode,
@@ -1921,6 +1945,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func suppressKey(_ key: AutocompleteKey) {
         suppressKeyUntil[key] = Date().addingTimeInterval(0.25)
+    }
+
+    private func armAcceptedInsertionUndoWindow() {
+        pendingAcceptedInsertionUndoUntil = Date().addingTimeInterval(acceptedInsertionUndoWindowSeconds)
+        updateKeyboardEventTapSnapshot()
+    }
+
+    private func clearAcceptedInsertionUndoWindow() {
+        pendingAcceptedInsertionUndoUntil = nil
+        updateKeyboardEventTapSnapshot()
+    }
+
+    private func hasPendingAcceptedInsertionUndo(now: Date = Date()) -> Bool {
+        guard let pendingAcceptedInsertionUndoUntil else {
+            return false
+        }
+
+        if pendingAcceptedInsertionUndoUntil > now {
+            return true
+        }
+
+        self.pendingAcceptedInsertionUndoUntil = nil
+        return false
     }
 
     private func insertionVerificationBaseline() -> InsertionVerificationBaseline? {
