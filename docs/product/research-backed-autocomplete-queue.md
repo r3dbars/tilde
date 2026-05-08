@@ -74,6 +74,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Keep screenshot traces per-app opt-in and clearly marked.
 - [x] Add retention controls for trace logs and screenshots.
 - [x] Add a "delete all local traces" proof test.
+- [x] Delete compatibility-learning artifacts when local privacy logs are deleted.
 
 ## P0 - Field Targeting
 
@@ -87,6 +88,8 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Add tests for secure/search/url/form/singleline/multiline classification.
 - [x] Add an override path for safe singleline compose fields.
 - [x] Add a "why blocked" line for field classifier suppressions.
+- [x] Make stable-bounds field identities deterministic across process launches.
+- [x] Suppress unknown field kinds unless a compatibility profile explicitly opts in.
 
 ## P0 - Insertion, Tab, And Focus Trust
 
@@ -101,6 +104,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Detect when Tab moved focus instead of inserting accepted text.
 - [x] Detect when Tab inserted a literal tab or changed selection unexpectedly.
 - [x] Emit `tab-conflict` and quiet that field/app.
+- [x] Treat post-accept app, field, or focused-text verification mismatches as `insertionFailed` instead of silently ignoring them.
 - [x] Add focus-stealing detection and trace event support.
 - [x] Add rollback attempt metadata for failed inserts.
 - [x] Add per-app insertion mode reliability stats.

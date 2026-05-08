@@ -37,7 +37,12 @@ focused-text AX reads that return no focused text context now cool down that app
 immediately by default, which keeps failing editors from being polled twice
 before the app backs away. A single slow AX read with context now also starts a
 short focused-text polling throttle and drops that returned context instead of
-turning a stale read into a visible suggestion.
+turning a stale read into a visible suggestion. The latest trust pass also makes
+post-accept verification fail closed when the frontmost app, focused text
+context, or field identity no longer matches the accepted suggestion baseline;
+those cases now trace as `insertionFailed`, count as wrong-insertion annoyance,
+and suppress the original field when the profile is configured to quiet failed
+insertions.
 
 It is not a 10/10 yet. The biggest remaining gap is still recorder-grade visual
 placement in real prompt apps and production-editor variants, especially Codex,
@@ -101,6 +106,16 @@ should stay lower until those rows are closed.
 
 ## Latest Proof
 
+- 2026-05-08 continuation hardening pass: post-accept verification now fails
+  closed when the frontmost app, focused text context, or focused field no
+  longer matches the accepted suggestion baseline; these cases trace as
+  insertion failures and quiet the original field when configured.
+- 2026-05-08 stable identity and unknown-field pass: stable-bounds field
+  identity now uses deterministic hashing, and profiles reject unknown AX field
+  kinds unless they explicitly opt in.
+- 2026-05-08 local deletion pass: Settings deletion now removes compatibility
+  learning artifacts along with raw/redacted traces, screenshots, and
+  diagnostics.
 - Suggestion orchestrator refactor pass: `swift test --filter
   SuggestionOrchestratorTests` passed 18 focused app tests after moving active
   request ownership, rich request construction, request-ticket gating,

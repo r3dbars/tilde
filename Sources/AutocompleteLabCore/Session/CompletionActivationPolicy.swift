@@ -136,7 +136,8 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         isSecure: Bool,
         selectedTextLength: Int = 0,
         isFieldSuppressed: Bool,
-        fieldKind: AXFieldKind = .multilineCompose
+        fieldKind: AXFieldKind = .multilineCompose,
+        allowsUnknownFieldKind: Bool = false
     ) -> Bool {
         decision(
             textBeforeCursor: textBeforeCursor,
@@ -144,7 +145,8 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             isSecure: isSecure,
             selectedTextLength: selectedTextLength,
             isFieldSuppressed: isFieldSuppressed,
-            fieldKind: fieldKind
+            fieldKind: fieldKind,
+            allowsUnknownFieldKind: allowsUnknownFieldKind
         ).canSuggest
     }
 
@@ -154,7 +156,8 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         isSecure: Bool,
         selectedTextLength: Int = 0,
         isFieldSuppressed: Bool,
-        fieldKind: AXFieldKind = .multilineCompose
+        fieldKind: AXFieldKind = .multilineCompose,
+        allowsUnknownFieldKind: Bool = false
     ) -> CompletionActivationDecision {
         if isSecure || fieldKind == .secure {
             return .block(.secureField)
@@ -168,7 +171,11 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             return .block(.suppressedField)
         }
 
-        if fieldKind.suppressesSuggestionsByDefault {
+        if fieldKind == .unknown {
+            if !allowsUnknownFieldKind {
+                return .block(.blockedFieldKind)
+            }
+        } else if fieldKind.suppressesSuggestionsByDefault {
             return .block(.blockedFieldKind)
         }
 

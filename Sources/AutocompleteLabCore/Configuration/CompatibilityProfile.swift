@@ -93,6 +93,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
     public let supportsObserverUpdates: Bool
     public let supportsOneWordAcceptance: Bool
     public let supportsFullAcceptance: Bool
+    public let allowsUnknownFieldKind: Bool
     public let requiresNoSubmitAcceptanceProof: Bool
     public let suppressesUntilBlurAfterEscape: Bool
     public let suppressesAfterInsertionFailure: Bool
@@ -122,6 +123,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         supportsObserverUpdates: Bool = false,
         supportsOneWordAcceptance: Bool = true,
         supportsFullAcceptance: Bool = true,
+        allowsUnknownFieldKind: Bool = false,
         requiresNoSubmitAcceptanceProof: Bool = false,
         suppressesUntilBlurAfterEscape: Bool = true,
         suppressesAfterInsertionFailure: Bool = true,
@@ -150,6 +152,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         self.supportsObserverUpdates = supportsObserverUpdates
         self.supportsOneWordAcceptance = supportsOneWordAcceptance
         self.supportsFullAcceptance = supportsFullAcceptance
+        self.allowsUnknownFieldKind = allowsUnknownFieldKind
         self.requiresNoSubmitAcceptanceProof = requiresNoSubmitAcceptanceProof
         self.suppressesUntilBlurAfterEscape = suppressesUntilBlurAfterEscape
         self.suppressesAfterInsertionFailure = suppressesAfterInsertionFailure

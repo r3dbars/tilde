@@ -91,9 +91,20 @@ final class SuggestionPanelController {
             width: max(ceil(textSize.width + textPadding.width), minimumSize.width),
             height: max(ceil(textSize.height + textPadding.height), minimumSize.height)
         )
-        let screen = screen(containing: anchorRect) ?? NSScreen.main
-        let screenFrame = screen?.frame ?? .zero
         let screenHeight = Self.accessibilityScreenHeight()
+        guard let screen = screen(containing: anchorRect, screenHeight: screenHeight) else {
+            hide()
+            DiagnosticsLog.shared.record(
+                "suggestion-panel-frame-suppressed",
+                metadata: [
+                    "reason": "anchor-outside-active-display",
+                    "renderMode": renderMode.rawValue,
+                    "anchor": compactFrameDescription(anchorRect)
+                ]
+            )
+            return nil
+        }
+        let screenFrame = screen.frame
         let appKitAnchorRect = AccessibilityCoordinateConverter.appKitRect(
             fromAccessibilityRect: anchorRect,
             screenHeight: screenHeight
@@ -218,18 +229,17 @@ final class SuggestionPanelController {
         return view.pngData()
     }
 
-    private func screen(containing accessibilityRect: CGRect) -> NSScreen? {
-        let screenHeight = Self.accessibilityScreenHeight()
+    private func screen(containing accessibilityRect: CGRect, screenHeight: CGFloat) -> NSScreen? {
         let screens = NSScreen.screens
-        guard let bestFrame = AccessibilityCoordinateConverter.bestScreenFrame(
+        guard let index = SuggestionDisplaySelectionPolicy.selectedScreenIndex(
             containingAccessibilityRect: accessibilityRect,
             screenFrames: screens.map(\.frame),
-            screenHeight: screenHeight
-        ) else {
+            accessibilityScreenHeight: screenHeight
+        ), screens.indices.contains(index) else {
             return nil
         }
 
-        return screens.first { $0.frame == bestFrame }
+        return screens[index]
     }
 
     private static func accessibilityScreenHeight() -> CGFloat {

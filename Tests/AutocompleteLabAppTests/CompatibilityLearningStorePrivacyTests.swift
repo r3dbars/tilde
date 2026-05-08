@@ -69,6 +69,28 @@ struct CompatibilityLearningStorePrivacyTests {
 
         #expect(store.profile(for: bundleIdentifier)?.screenshotTracingEnabled == false)
     }
+
+    @Test("Delete all clears compatibility learning artifacts")
+    func deleteAllClearsCompatibilityLearningArtifacts() {
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CompatibilityLearningStorePrivacyTests-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: temporaryFolder)
+        }
+
+        let store = CompatibilityLearningStore(
+            fileURL: temporaryFolder.appendingPathComponent("compatibility-learning.json")
+        )
+        let bundleIdentifier = "com.example.editor"
+
+        store.setScreenshotTracing(true, for: bundleIdentifier)
+        store.setRenderModeOverride(.floatingMirror, for: bundleIdentifier)
+        #expect(store.profile(for: bundleIdentifier) != nil)
+
+        store.deleteAll()
+
+        #expect(store.profile(for: bundleIdentifier) == nil)
+    }
 }
 
 private final class StoreTestClock {
