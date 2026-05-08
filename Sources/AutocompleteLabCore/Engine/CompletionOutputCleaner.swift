@@ -51,8 +51,30 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return suggestions
     }
 
+    public func cleanBestCandidate(
+        _ rawOutput: String,
+        after textBeforeCursor: String?,
+        mode: CompletionRequestMode,
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
+        limit: Int = 3,
+        ranker: CompletionCandidateRanker = CompletionCandidateRanker()
+    ) -> CompletionCandidateSelection {
+        let candidates = cleanCandidates(
+            rawOutput,
+            after: textBeforeCursor,
+            mode: mode,
+            limit: limit
+        )
+        return ranker.selection(
+            candidates,
+            mode: mode,
+            textBeforeCursor: textBeforeCursor,
+            behaviorProfileID: behaviorProfileID
+        )
+    }
+
     public func clean(_ rawOutput: String, after textBeforeCursor: String?, mode: CompletionRequestMode) -> CompletionSuggestion? {
-        let withoutThinking = rawOutput
+        let withoutThinkingMarkup = rawOutput
             .replacingOccurrences(
                 of: #"<think>[\s\S]*?</think>"#,
                 with: "",
@@ -64,6 +86,13 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
                 options: [.regularExpression, .caseInsensitive]
             )
             .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if mode.isContinuation,
+           startsNewMarkdownStructure(withoutThinkingMarkup) {
+            return nil
+        }
+
+        let withoutThinking = withoutThinkingMarkup
             .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
 
         guard !withoutThinking.isEmpty else {
@@ -80,6 +109,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         guard !singleLine.isEmpty else {
+            return nil
+        }
+
+        if mode.isContinuation,
+           startsNewMarkdownStructure(singleLine) {
             return nil
         }
 
@@ -110,6 +144,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         guard !looksLikeUnsafePromptAction(withoutPromptEchoLabel) else {
+            return nil
+        }
+
+        if mode.isContinuation,
+           startsSecondSentence(withoutPromptEchoLabel) {
             return nil
         }
 
@@ -230,25 +269,37 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
         return normalized.hasPrefix("okay, let's see")
             || normalized.hasPrefix("let's see")
+            || normalized.hasPrefix("let's ")
+            || normalized.hasPrefix("lets ")
             || normalized.hasPrefix("as an ai")
             || normalized.hasPrefix("happy to")
             || normalized.hasPrefix("here's")
             || normalized.hasPrefix("here is")
+            || normalized.hasPrefix("i'd be happy to")
+            || normalized.hasPrefix("i’d be happy to")
+            || normalized.hasPrefix("i would be happy to")
             || normalized.hasPrefix("i can help")
             || normalized.hasPrefix("i can't")
             || normalized.hasPrefix("i cannot")
             || normalized.hasPrefix("i can’t")
             || normalized.hasPrefix("i'm here")
             || normalized.hasPrefix("i am here")
+            || normalized.hasPrefix("in conclusion")
+            || normalized.hasPrefix("in summary")
+            || normalized.hasPrefix("it is important to note")
+            || normalized.hasPrefix("it's important to note")
             || normalized.hasPrefix("it sounds like")
             || normalized.hasPrefix("no problem")
+            || normalized.hasPrefix("overall,")
             || normalized.hasPrefix("the user ")
             || normalized.hasPrefix("the user is ")
+            || normalized.hasPrefix("the best way is")
             || normalized.hasPrefix("user is ")
             || normalized.hasPrefix("would you like")
             || normalized.hasPrefix("you can ")
             || normalized.hasPrefix("you could ")
             || normalized.hasPrefix("you might ")
+            || normalized.hasPrefix("you should ")
             || normalized.hasPrefix("assistant:")
             || normalized.hasPrefix("system:")
     }
@@ -294,6 +345,9 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         return normalized.hasPrefix("that makes a lot of sense")
+            || normalized.hasPrefix("that said,")
+            || normalized.hasPrefix("for example,")
+            || normalized.hasPrefix("on the other hand,")
             || normalized.hasPrefix("i would like to")
             || normalized.hasPrefix("i will do that")
             || normalized.hasPrefix("i'll do that")
@@ -322,6 +376,22 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("run this command")
             || normalized.hasPrefix("execute this command")
             || normalized.hasPrefix("execute the command")
+    }
+
+    private func startsNewMarkdownStructure(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix("#")
+            || trimmed.hasPrefix(">")
+            || trimmed.hasPrefix("```")
+            || trimmed.hasPrefix("~~~")
+            || trimmed.hasPrefix("- ")
+            || trimmed.hasPrefix("* ")
+            || trimmed.hasPrefix("+ ")
+            || trimmed.range(of: #"^\d+[\.\)]\s+"#, options: .regularExpression) != nil
+    }
+
+    private func startsSecondSentence(_ text: String) -> Bool {
+        text.range(of: #"[.!?]\s+\S"#, options: .regularExpression) != nil
     }
 
     private func looksLikeAssistantResponseToPrompt(_ text: String, after textBeforeCursor: String) -> Bool {
