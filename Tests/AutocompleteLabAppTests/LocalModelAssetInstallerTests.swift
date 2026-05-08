@@ -44,8 +44,38 @@ struct LocalModelAssetInstallerTests {
                 == "The model download address is invalid: bad repo."
         )
         #expect(
+            LocalModelAssetInstallerError.insufficientDiskSpace(
+                requiredBytes: 5_000_000_000,
+                availableBytes: 2_000_000_000
+            ).errorDescription
+                == "Not enough free space for the local model. Free about 3 GB and try again."
+        )
+        #expect(
             LocalModelAssetInstallerError.invalidAfterInstall("missing config.json").errorDescription
                 == "The downloaded model files still look incomplete: missing config.json."
         )
+    }
+
+    @Test("Preflight blocks installs before network when disk space is too low")
+    func preflightBlocksInstallsBeforeNetworkWhenDiskSpaceIsTooLow() {
+        let policy = LocalModelInstallPreflightPolicy(overheadMultiplier: 1.25)
+
+        #expect(throws: LocalModelAssetInstallerError.insufficientDiskSpace(
+            requiredBytes: 5_000_000_000,
+            availableBytes: 4_999_999_999
+        )) {
+            try policy.validate(
+                availableBytes: 4_999_999_999,
+                expectedMinimumBytes: 4_000_000_000
+            )
+        }
+    }
+
+    @Test("Preflight allows unknown or sufficient disk space")
+    func preflightAllowsUnknownOrSufficientDiskSpace() throws {
+        let policy = LocalModelInstallPreflightPolicy(overheadMultiplier: 1.25)
+
+        try policy.validate(availableBytes: nil, expectedMinimumBytes: 4_000_000_000)
+        try policy.validate(availableBytes: 5_000_000_000, expectedMinimumBytes: 4_000_000_000)
     }
 }
