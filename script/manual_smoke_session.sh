@@ -122,6 +122,7 @@ SESSION_NAME=""
 REPORT_APP_NAME=""
 EXPECTED_RENDER=""
 REQUIRES_FULL_ACCEPT=1
+PROMPT_NO_SUBMIT_PROFILE=0
 MIN_VERIFIED_ACCEPTS=2
 STEPS=""
 
@@ -194,24 +195,27 @@ case "$APP" in
     DISPLAY_NAME="Codex"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     REQUIRES_FULL_ACCEPT=0
+    PROMPT_NO_SUBMIT_PROFILE=1
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Visually confirm the text stayed in the composer, no user message bubble appeared, and no assistant response started.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   claude-code)
     BUNDLE_ID="com.anthropic.claude-code"
     DISPLAY_NAME="Claude Code"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     REQUIRES_FULL_ACCEPT=0
+    PROMPT_NO_SUBMIT_PROFILE=1
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Claude Code prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS=$'- Focus the Claude Code prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Visually confirm the text stayed in the composer, no user message bubble appeared, and no assistant response started.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   claude)
     BUNDLE_ID="com.anthropic.claudefordesktop"
     DISPLAY_NAME="Claude"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     REQUIRES_FULL_ACCEPT=0
+    PROMPT_NO_SUBMIT_PROFILE=1
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Claude prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS=$'- Focus the Claude prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Visually confirm the text stayed in the composer, no user message bubble appeared, and no assistant response started.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   *)
     usage >&2
@@ -508,6 +512,39 @@ fi
 reject_pattern "insert-verification-final-failure .*app=$BUNDLE_ID" "unrecovered insertion verification failure"
 reject_pattern "field-suppressed .*app=$BUNDLE_ID" "field suppression"
 reject_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=(insert-verification-failed|missing-anchor|runtime-not-ready)" "blocking failure"
+
+if (( PROMPT_NO_SUBMIT_PROFILE == 1 )); then
+  if [[ ! -f "$TRACE_PATH" ]]; then
+    echo "missing $SESSION_NAME trace coverage: prompt no-submit proof" >&2
+    echo "trace: $TRACE_PATH" >&2
+    print_failure_summary
+    exit 1
+  fi
+
+  TRACE_SCAN_LINES="$(
+    tail -n +"$((TRACE_START_LINE + 1))" "$TRACE_PATH" 2>/dev/null |
+      grep -F "\"appBundleIdentifier\":\"$BUNDLE_ID\"" || true
+  )"
+  TRACE_ACCEPTED_COUNT="$(
+    grep -F '"type":"suggestionAccepted"' <<<"$TRACE_SCAN_LINES" |
+      wc -l |
+      tr -d ' '
+  )"
+
+  if (( TRACE_ACCEPTED_COUNT != 1 )); then
+    echo "failed $SESSION_NAME prompt no-submit proof: expected exactly one trace-level suggestionAccepted event, saw $TRACE_ACCEPTED_COUNT" >&2
+    echo "trace: $TRACE_PATH" >&2
+    print_failure_summary
+    exit 1
+  fi
+
+  if grep -E '"acceptMode":"acceptAllVisible"|"checkpoint":"fieldSend"|"reason":"field-send-finalized"' <<<"$TRACE_SCAN_LINES" >/dev/null; then
+    echo "failed $SESSION_NAME prompt no-submit proof: trace slice contains full-accept or field-send signal" >&2
+    echo "trace: $TRACE_PATH" >&2
+    print_failure_summary
+    exit 1
+  fi
+fi
 
 TRACE_EVAL_OUTPUT="$(mktemp)"
 trap 'rm -f "$TRACE_EVAL_OUTPUT"' EXIT

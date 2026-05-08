@@ -77,6 +77,11 @@ Apple-native checklist is all 100/100, the app proof matrix is all A, and the
 strict proof manifest has bounded current-fingerprint trace slices for every
 claimed surface.
 
+Prompt-app proof is intentionally stricter than normal app proof. The recorder
+requires exactly one trace-level accept for Codex, Claude Code, and Claude
+desktop, rejects full-accept or field-send finalization signals, and still
+depends on the human visual check that the prompt stayed unsent.
+
 Run the long typing endurance command when working the "typing must feel
 untouched" score:
 

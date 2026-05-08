@@ -209,6 +209,9 @@ evidence-backed score should stay lower until those rows are closed.
 - `./script/check_visual_placement_evidence_self_test.sh`: passed, including missing, empty, invalid, too-small, unreferenced, and pending strict screenshot failure cases.
 - `./script/check_visual_placement_evidence.sh`: passed with twelve verified visual-placement screenshots and reports two pending screenshot audits.
 - `./script/check_visual_placement_evidence.sh --require-all`: fails honestly on the two pending screenshot audits.
+- `./script/manual_smoke_self_test.sh`: passed after prompt-app no-submit
+  proof started requiring exactly one trace-level accept and rejecting
+  trace-level full-accept or field-send finalization signals.
 - `swift test --filter CompatibilityLearningTests`: passed, covering trusted manual visual offsets and untrusted stale-offset rejection.
 - `swift test --filter 'PlacementHealthTests|CompatibilityLearningTests|VisualPlacementGeometryCorrectionPolicyTests'`: passed after synthetic caret confidence and visual-offset trust hardening.
 - `./script/check_trace_eval_self_test.sh`: passed, including strict visual-evidence guardrails for screenshot path, anchor rect, rendered panel rect, capture rect, and placement confidence.
@@ -342,6 +345,9 @@ evidence-backed score should stay lower until those rows are closed.
   no-submit proof and keep full accept disabled until separate full-accept
   no-submit proof exists. Prompt completions now reject unsafe submit/run
   actions.
+- Prompt-app smoke proof now requires exactly one trace-level accepted
+  suggestion and rejects full-accept or field-send finalization signals before
+  it records Codex, Claude Code, or Claude desktop as a prompt no-submit pass.
 - Output cleaning suppresses more assistant-y starts and rejects unrelated
   whole-word completions in word-completion mode.
 - Chrome chat-like no-submit proof now uses a tab-title submit counter so the

@@ -80,7 +80,7 @@ write_one_word_trace() {
 
   cat >"$TRACE_PATH" <<EOF
 {"type":"suggestionPresented","suggestionID":"one-word","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"anchorSource":"caret","anchorQuality":"trusted","anchorReason":"caretBoundsTrusted","anchorCanPresent":"true","anchorRect":"10,20,0,18","hasCaretRect":"true","hasTextLineRect":"true","hasElementRect":"true","hasWindowRect":"true","placementConfidenceBand":"high"}}
-{"type":"suggestionAccepted","suggestionID":"one-word","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","acceptedText":"make"}
+{"type":"suggestionAccepted","suggestionID":"one-word","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","acceptedText":"make","metadata":{"acceptMode":"acceptNextWord"}}
 {"type":"insertionVerified","suggestionID":"one-word","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","acceptedText":"make"}
 EOF
 }
@@ -232,6 +232,29 @@ fi
 
 if ! grep -F 'full accept handled before separate no-submit proof' "$FAILURE_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not reject Claude Code full accept proof" >&2
+  exit 1
+fi
+
+write_one_word_log "com.openai.codex" "inlineAdjacent"
+cat >"$TRACE_PATH" <<'EOF'
+{"type":"suggestionPresented","suggestionID":"codex-field-send","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"anchorSource":"caret","anchorQuality":"trusted","anchorReason":"caretBoundsTrusted","anchorCanPresent":"true","anchorRect":"10,20,0,18","hasCaretRect":"true","hasTextLineRect":"true","hasElementRect":"true","hasWindowRect":"true","placementConfidenceBand":"high"}}
+{"type":"suggestionAccepted","suggestionID":"codex-field-send","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","acceptedText":"make","metadata":{"acceptMode":"acceptNextWord"}}
+{"type":"insertionVerified","suggestionID":"codex-field-send","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","acceptedText":"make"}
+{"type":"acceptedTextEdited","suggestionID":"codex-field-send","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","acceptedText":"make","reason":"field-send-finalized","metadata":{"checkpoint":"fieldSend"}}
+EOF
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh codex --check >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected Codex field-send proof to fail" >&2
+  exit 1
+fi
+
+if ! grep -F 'trace slice contains full-accept or field-send signal' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not reject Codex field-send proof" >&2
   exit 1
 fi
 
