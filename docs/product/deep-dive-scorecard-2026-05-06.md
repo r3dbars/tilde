@@ -50,7 +50,7 @@ should stay lower until those rows are closed.
 
 | Area | Rating | Why |
 | --- | ---: | --- |
-| Normal typing passthrough | 9.9/10 | Fresh TextEdit endurance proof passed exact 1,200-, 4,800-, and 12,000-character runs with no tap-disable events and zero focused-poll skips. Normal typing correctly keeps keyboard capture idle until a suggestion is visible. The latest full 10-minute run stayed under strict AX thresholds with focused-poll p95 max 57ms and max 87ms, but it still reported 4 under-threshold slow markers. Recent text-change polling now backs off during active typing while visible suggestions keep the fast active cadence, so the next proof target is a fresh long-document run with zero AX warning noise. |
+| Normal typing passthrough | 9.9/10 | Fresh TextEdit endurance proof passed exact 1,200-, 4,800-, and 12,000-character runs with no tap-disable events and zero focused-poll skips. Normal typing correctly keeps keyboard capture idle until a suggestion is visible. The latest full 10-minute run stayed under strict AX thresholds with focused-poll p95 max 57ms and max 87ms, but it still reported 4 under-threshold slow markers. Recent text-change polling now backs off during active typing while visible suggestions keep the fast active cadence; the fresh 2026-05-08 1-minute strict run verified exact 1,200-character TextEdit text with focused-poll p95 max 11ms, max 37ms, zero slow markers, and zero skips. The next proof target is a fresh long-document run with zero AX warning noise. |
 | Keyboard capture safety | 9.8/10 | Capture starts only after a suggestion panel frame is actually usable, passes ordinary typing through, blocks selected-text replacement, fails closed if macOS disables the tap, and replays accept keys when focus moves to a protected field. |
 | Acceptance reliability | 9.6/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, Apple Notes title/body/checklist, and Claude desktop verify accept paths. Prompt-app full accept is intentionally disabled until separate full-accept no-submit proof exists. Selected text is blocked before suggestions/acceptance, AX insertion is faster, full accept now has a trace-safe exact-visible-text proof, and Tab accept is traced as a visible-prefix accept. Claude Code now has a proof-only terminal-host adapter that routes one-word key-event insertion through the virtual Claude Code profile, but Codex and Claude Code still need same-slice one-word no-submit proof before they can score as complete. |
 | Visual caret alignment | 9.65/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, Apple Notes title/body/checklist, a disposable Codex prompt, and Claude desktop now have screenshot-backed proof. Stale line rects are dropped, vertical clipping is enforced, too-narrow inline space suppresses display instead of showing a sliver, async suggestions refresh current geometry before display, and low-confidence mirror fallback is now suppressed for untrusted yellow profiles instead of showing detached element/window ghosts. Claude desktop's current one-line composer proof is same-baseline with screenshot detector offset near zero. Codex still needs same-slice accept/no-submit proof, Claude Code now has a terminal-host lane but still needs screenshot proof, and more prompt/editor layouts remain open. |
@@ -158,6 +158,11 @@ should stay lower until those rows are closed.
   slow markers, and zero focused-poll skips. Event-tap samples are no longer
   required for this normal-typing soak because keyboard capture intentionally
   starts only while a suggestion is visible.
+- `script/typing_performance_endurance_soak.sh --minutes 1 --strict-ax --require-ax-samples 5`:
+  passed again on 2026-05-08 after active-typing cadence backoff and unique
+  TextEdit file targeting. It verified exact 1,200-character TextEdit text,
+  event-tap p95 51us, p99 99us, focused-poll p95 max 11ms, focused-poll max
+  37ms, zero focused-poll slow markers, and zero focused-poll skips.
 - `./script/typing_performance_endurance_soak.sh --minutes 4 --strict-ax --require-ax-samples 5`:
   passed with exact 4,800-character TextEdit verification through the prior
   4,000-character drift point, focused-poll p95 max 38ms, focused-poll max
@@ -167,9 +172,9 @@ should stay lower until those rows are closed.
   verification, no tap-disable events, focused-poll p95 max 57ms,
   focused-poll max 87ms, 4 under-threshold slow markers, and zero focused-poll
   skips after the fast word-completion context reuse pass.
-- Latest harness hardening now creates the disposable TextEdit target through
-  UI automation instead of fragile TextEdit document AppleEvents, captures via
-  clipboard while restoring the previous clipboard, refocuses the target window
+- Latest harness hardening now creates the disposable TextEdit target as a
+  unique temporary `.txt` file and opens that exact filename through TextEdit,
+  captures via clipboard while restoring the previous clipboard, refocuses the target window
   before each 250-character segment, and uses bounded AX string-range reads
   around the caret so long TextEdit documents do not require full-value AX reads
   on the hot path.
