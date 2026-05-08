@@ -49,8 +49,7 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         qos: .utility
     )
     private let lock = NSLock()
-    private let minimumRefreshInterval: TimeInterval = 3
-    private let maximumCacheAge: TimeInterval = 20
+    private let refreshPolicy = VisiblePageContextRefreshPolicy()
     private let maximumCaptureSize = CGSize(width: 1_600, height: 1_100)
     private var cacheEntry: CacheEntry?
     private var inFlightKey: CacheKey?
@@ -71,7 +70,7 @@ final class VisiblePageContextProvider: @unchecked Sendable {
 
         guard let cacheEntry,
               cacheEntry.key == key,
-              now.timeIntervalSince(cacheEntry.capturedAt) <= maximumCacheAge else {
+              now.timeIntervalSince(cacheEntry.capturedAt) <= refreshPolicy.maximumCacheAge else {
             return nil
         }
 
@@ -82,6 +81,7 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         for focusedContext: FocusedTextContext,
         app: RunningApplicationInfo,
         enabled: Bool,
+        allowsFreshCacheRefresh: Bool = false,
         now: Date = Date()
     ) {
         guard enabled else {
@@ -100,7 +100,11 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         }
 
         let key = cacheKey(for: focusedContext, appBundleIdentifier: app.bundleIdentifier)
-        guard reserveRefreshIfNeeded(key: key, now: now) else {
+        guard reserveRefreshIfNeeded(
+            key: key,
+            allowsFreshCacheRefresh: allowsFreshCacheRefresh,
+            now: now
+        ) else {
             return
         }
 
@@ -121,22 +125,25 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         lock.unlock()
     }
 
-    private func reserveRefreshIfNeeded(key: CacheKey, now: Date) -> Bool {
+    private func reserveRefreshIfNeeded(
+        key: CacheKey,
+        allowsFreshCacheRefresh: Bool,
+        now: Date
+    ) -> Bool {
         lock.lock()
         defer { lock.unlock() }
 
-        if inFlightKey == key {
-            return false
+        let matchingCacheAge = cacheEntry.flatMap { entry -> TimeInterval? in
+            entry.key == key ? now.timeIntervalSince(entry.capturedAt) : nil
         }
+        let lastAttemptAge = lastAttemptAt.map { now.timeIntervalSince($0) }
 
-        if let cacheEntry,
-           cacheEntry.key == key,
-           now.timeIntervalSince(cacheEntry.capturedAt) < minimumRefreshInterval {
-            return false
-        }
-
-        if let lastAttemptAt,
-           now.timeIntervalSince(lastAttemptAt) < minimumRefreshInterval {
+        guard refreshPolicy.shouldRefresh(
+            inFlightMatchesKey: inFlightKey == key,
+            matchingCacheAge: matchingCacheAge,
+            lastAttemptAge: lastAttemptAge,
+            allowsFreshCacheRefresh: allowsFreshCacheRefresh
+        ) else {
             return false
         }
 
