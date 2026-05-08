@@ -215,27 +215,8 @@ if ! grep -F "| TextEdit | \`com.apple.TextEdit\` | \`option-tab\` | 2 | \`inlin
 fi
 
 run_one_word_case codex Codex Codex com.openai.codex 'inlineAdjacent|floatingMirror' inlineAdjacent
-run_one_word_case claude-code "Claude Code" "Claude Code" com.anthropic.claude-code 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_one_word_case claude "Claude desktop" Claude com.anthropic.claudefordesktop 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_strict_visual_case notes-title notes-title
-
-write_passing_log "com.anthropic.claude-code" "inlineAdjacent"
-write_passing_trace "com.anthropic.claude-code"
-
-if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
-  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
-  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
-  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
-  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
-  script/manual_smoke_session.sh claude-code --check >"$FAILURE_OUTPUT" 2>&1; then
-  echo "manual smoke self-test expected Claude Code full accept proof to fail" >&2
-  exit 1
-fi
-
-if ! grep -F 'full accept handled before separate no-submit proof' "$FAILURE_OUTPUT" >/dev/null; then
-  echo "manual smoke self-test did not reject Claude Code full accept proof" >&2
-  exit 1
-fi
 
 write_one_word_log "com.openai.codex" "inlineAdjacent"
 cat >"$TRACE_PATH" <<'EOF'
@@ -387,19 +368,24 @@ if ! grep -F "Insertion proof status: $REPORT_PATH" "$STATUS_OUTPUT" >/dev/null;
   exit 1
 fi
 
-for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome real Monaco" "Chrome real ProseMirror" "Chrome chat-like no-submit" Codex "Claude Code" "Claude desktop"; do
+for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome real Monaco" "Chrome real ProseMirror" "Chrome chat-like no-submit" Codex "Claude desktop"; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
     exit 1
   fi
 done
 
-for app_name in Codex "Claude Code" "Claude desktop"; do
+for app_name in Codex "Claude desktop"; do
   if ! grep -F -- "- $app_name: passed (one-word no-submit profile)" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not keep $app_name on one-word proof" >&2
     exit 1
   fi
 done
+
+if ! grep -F -- "- Claude Code: pending (terminal-host adapter required; direct com.anthropic.claude-code proof is diagnostics-only)" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not keep Claude Code blocked on terminal-host proof" >&2
+  exit 1
+fi
 
 if ! grep -F -- "- Obsidian: passed" "$STATUS_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not report full Obsidian proof as passed" >&2
@@ -461,9 +447,17 @@ cat >"$COMPLETE_SCORECARD_PATH" <<'EOF'
 | Codex | 10/10 | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Prompt screenshot exists. | Done. |
 EOF
 
-AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
   AUTOCOMPLETE_LAB_SCORECARD="$COMPLETE_SCORECARD_PATH" \
-  script/manual_smoke_status.sh --require-all >/dev/null
+  script/manual_smoke_status.sh --require-all >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected --require-all to fail while Claude Code terminal-host proof is pending" >&2
+  exit 1
+fi
+
+if ! grep -F "Claude Code - terminal-host adapter required" "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not explain the Claude Code terminal-host proof gap" >&2
+  exit 1
+fi
 
 BELOW_TARGET_SCORECARD_PATH="$TMP_DIR/deep-dive-scorecard-below-target.md"
 cat >"$BELOW_TARGET_SCORECARD_PATH" <<'EOF'

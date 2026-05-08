@@ -55,7 +55,7 @@ declare -a APPS=(
   "Chrome real ProseMirror|Chrome|com.google.Chrome|full|prosemirror-real|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-real"
   "Chrome chat-like no-submit|Chrome|com.google.Chrome|full|chat-like|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture chat-like"
   "Codex|Codex|com.openai.codex|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
-  "Claude Code|Claude Code|com.anthropic.claude-code|one-word|default|terminal-host adapter required; direct com.anthropic.claude-code proof is diagnostics-only"
+  "Claude Code|Claude Code|com.anthropic.claude-code|blocked|default|terminal-host adapter required; direct com.anthropic.claude-code proof is diagnostics-only"
   "Claude desktop|Claude|com.anthropic.claudefordesktop|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
 )
 
@@ -226,6 +226,14 @@ for app_entry in "${APPS[@]}"; do
   proof_label="${rest%%|*}"
   rest="${rest#*|}"
   run_hint="${rest:-script/manual_smoke_session.sh $report_name}"
+
+  if [[ "$proof_mode" == "blocked" ]]; then
+    echo "- $display_name: pending ($run_hint)"
+    missing=$((missing + 1))
+    pending_apps+=("$display_name - $run_hint")
+    continue
+  fi
+
   required_verified_regex='[2-9][0-9]*'
   pass_suffix=""
   if [[ "$proof_mode" == "one-word" ]]; then
