@@ -287,6 +287,10 @@ struct CompatibilityProfileTests {
         #expect(InsertionModePlan.modes(for: claudeCode) == [])
         #expect(InsertionModePlan.modes(for: claude) == [])
         #expect(InsertionModePlan.modes(for: mail) == [])
+
+        for profile in CompatibilityProfileStore.mvp.profiles.values {
+            #expect(!InsertionModePlan.modes(for: profile).contains(.clipboardFallbackOptIn))
+        }
     }
 
     @Test("Unproven real app profiles fail closed on risky affordances")
