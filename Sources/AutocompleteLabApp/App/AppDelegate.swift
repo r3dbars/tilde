@@ -871,6 +871,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        if result.context == nil {
+            recordMissingFocusedContextDiagnostics(app: result.app, profile: profile)
+        }
+
         guard let rawContext = result.context, !rawContext.isSecure else {
             clearFocusedFieldState()
             currentProfile = profile
@@ -883,6 +887,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rawContext,
             frontmostApp: result.app,
             profile: profile
+        )
+    }
+
+    private func recordMissingFocusedContextDiagnostics(
+        app: RunningApplicationInfo,
+        profile: CompatibilityProfile
+    ) {
+        guard let diagnostics = accessibilityClient.focusedTextDiagnostics(
+            for: app,
+            allowDescendantTextFallback: profile.allowsDescendantTextFallback
+        ) else {
+            DiagnosticsLog.shared.record(
+                "focused-text-context-missing",
+                metadata: [
+                    "app": app.bundleIdentifier,
+                    "diagnostics": "unavailable"
+                ]
+            )
+            return
+        }
+
+        let searchable = diagnostics.fingerprint.searchableText
+        DiagnosticsLog.shared.record(
+            "focused-text-context-missing",
+            metadata: [
+                "app": app.bundleIdentifier,
+                "role": diagnostics.role ?? "none",
+                "subrole": diagnostics.subrole ?? "none",
+                "selectedRange": diagnostics.selectedRangeDescription,
+                "isSecure": String(diagnostics.isSecure),
+                "beforeChars": String(diagnostics.textBeforeCursorLength),
+                "afterChars": String(diagnostics.textAfterCursorLength),
+                "hasCaretRect": String(diagnostics.caretRect != nil),
+                "hasElementRect": String(diagnostics.elementRect != nil),
+                "hasWindowRect": String(diagnostics.windowRect != nil),
+                "canReadValue": String(diagnostics.capabilities.canReadValue),
+                "canReadRange": String(diagnostics.capabilities.canReadSelectedTextRange),
+                "canReadBounds": String(diagnostics.capabilities.canReadBoundsForRange),
+                "canSetSelectedText": String(diagnostics.capabilities.canSetSelectedText),
+                "chromeSmokeHint": String(searchable.contains("autocomplete lab chrome")
+                    && searchable.contains("smoke")),
+                "monacoHint": String(searchable.contains("monaco")),
+                "prosemirrorHint": String(searchable.contains("prosemirror")),
+                "attributeNames": diagnostics.attributeDump.attributes
+                    .map(\.name)
+                    .joined(separator: ",")
+            ]
         )
     }
 

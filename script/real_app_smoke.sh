@@ -671,6 +671,88 @@ chrome_fixture_uses_isolated_accessibility_chrome() {
   esac
 }
 
+chrome_fixture_uses_default_real_editor_accessibility() {
+  if [[ "$CHROME_ACCESSIBILITY_MODE" != "default" ]]; then
+    return 1
+  fi
+
+  case "$1" in
+    monaco-real|prosemirror-real)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+chrome_default_accessibility_exposes_web_content() {
+  osascript -l JavaScript <<'JXA' 2>/dev/null
+const se = Application('System Events');
+const chrome = se.processes.byName('Google Chrome');
+
+function safe(fn) {
+  try {
+    return fn();
+  } catch (error) {
+    return '';
+  }
+}
+
+function hasWebContent(element, depth) {
+  if (depth > 12) return false;
+  const role = safe(() => element.role());
+  if (role === 'AXWebArea' || role === 'AXTextArea') {
+    return true;
+  }
+
+  let children = [];
+  try {
+    children = element.uiElements();
+  } catch (error) {}
+
+  for (const child of children) {
+    if (hasWebContent(child, depth + 1)) return true;
+  }
+  return false;
+}
+
+let exposed = false;
+try {
+  chrome.frontmost = true;
+  delay(0.2);
+  const windows = chrome.windows();
+  for (const window of windows) {
+    if (hasWebContent(window, 0)) {
+      exposed = true;
+      break;
+    }
+  }
+} catch (error) {}
+
+exposed ? 'true' : 'false';
+JXA
+}
+
+require_default_chrome_web_accessibility() {
+  local fixture="$1"
+
+  if ! chrome_fixture_uses_default_real_editor_accessibility "$fixture"; then
+    return 0
+  fi
+
+  local exposed
+  exposed="$(chrome_default_accessibility_exposes_web_content | tr -d '[:space:]')"
+  if [[ "$exposed" == "true" ]]; then
+    return 0
+  fi
+
+  echo "Default Chrome did not expose page editor content through macOS Accessibility." >&2
+  echo "The active window is ready, but the AX tree contains only browser chrome, not AXWebArea/AXTextArea content." >&2
+  echo "Use --chrome-accessibility forced for the isolated proof lane, or enable Chrome renderer accessibility before claiming default-Chrome editor proof." >&2
+  exit 1
+}
+
 chrome_smoke_proof_label() {
   local fixture="$1"
 
@@ -2042,6 +2124,7 @@ APPLESCRIPT
   fi
   wait_for_chrome_smoke_ready "$fixture" 20 "$chrome_pid"
   focus_chrome_smoke_editor "$fixture" "$chrome_pid"
+  require_default_chrome_web_accessibility "$fixture"
 
   osascript <<'APPLESCRIPT'
 tell application "System Events"

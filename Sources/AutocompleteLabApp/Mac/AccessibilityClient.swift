@@ -48,6 +48,7 @@ struct FocusedTextDiagnostics: Equatable, Sendable {
     let localizedAppName: String?
     let role: String?
     let subrole: String?
+    let fingerprint: FocusedElementFingerprint
     let isSecure: Bool
     let textBeforeCursorLength: Int
     let textAfterCursorLength: Int
@@ -64,6 +65,7 @@ struct FocusedTextDiagnostics: Equatable, Sendable {
         App: \(localizedAppName ?? "Unknown") (\(bundleIdentifier ?? "unknown bundle"))
         Role: \(role ?? "unknown")
         Subrole: \(subrole ?? "none")
+        Window title: \(fingerprint.windowTitle.map { DiagnosticValueRedactor.stringSummary(length: $0.count) } ?? "missing")
         Secure: \(isSecure)
         Selected range: \(selectedRangeDescription)
         Text before cursor: \(textBeforeCursorLength) chars
@@ -185,7 +187,10 @@ final class AccessibilityClient: @unchecked Sendable {
         for app: RunningApplicationInfo,
         allowDescendantTextFallback: Bool = false
     ) -> FocusedTextContext? {
-        guard let focusedElement = focusedElement(for: app.processIdentifier) else {
+        guard let focusedElement = focusedElement(
+            for: app,
+            allowWindowDescendantFallback: allowDescendantTextFallback
+        ) else {
             return nil
         }
 
@@ -307,7 +312,15 @@ final class AccessibilityClient: @unchecked Sendable {
 
     func insertText(_ text: String) -> Bool {
         guard let app = NSWorkspace.shared.frontmostApplication,
-              let focusedElement = focusedElement(for: app.processIdentifier) else {
+              let bundleIdentifier = app.bundleIdentifier,
+              let focusedElement = focusedElement(
+                  for: RunningApplicationInfo(
+                      bundleIdentifier: bundleIdentifier,
+                      localizedName: app.localizedName ?? bundleIdentifier,
+                      processIdentifier: app.processIdentifier
+                  ),
+                  allowWindowDescendantFallback: false
+              ) else {
             return false
         }
 
@@ -332,7 +345,15 @@ final class AccessibilityClient: @unchecked Sendable {
 
     func replaceSelectedTextBySettingValue(_ text: String) -> Bool {
         guard let app = NSWorkspace.shared.frontmostApplication,
-              let focusedElement = focusedElement(for: app.processIdentifier),
+              let bundleIdentifier = app.bundleIdentifier,
+              let focusedElement = focusedElement(
+                  for: RunningApplicationInfo(
+                      bundleIdentifier: bundleIdentifier,
+                      localizedName: app.localizedName ?? bundleIdentifier,
+                      processIdentifier: app.processIdentifier
+                  ),
+                  allowWindowDescendantFallback: false
+              ),
               let textBeforeInsert = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String,
               let selectedRange = selectedTextRange(in: focusedElement),
               let replacement = SelectedTextRangeReplacer.replacingSelectedRange(
@@ -436,7 +457,10 @@ final class AccessibilityClient: @unchecked Sendable {
         for app: RunningApplicationInfo,
         allowDescendantTextFallback: Bool = false
     ) -> FocusedTextDiagnostics? {
-        guard let focusedElement = focusedElement(for: app.processIdentifier) else {
+        guard let focusedElement = focusedElement(
+            for: app,
+            allowWindowDescendantFallback: allowDescendantTextFallback
+        ) else {
             return nil
         }
 
@@ -491,6 +515,7 @@ final class AccessibilityClient: @unchecked Sendable {
             localizedAppName: app.localizedName,
             role: role,
             subrole: subrole,
+            fingerprint: fingerprint,
             isSecure: isSensitiveTextElement(
                 focusedElement,
                 role: role,
@@ -517,6 +542,61 @@ final class AccessibilityClient: @unchecked Sendable {
         }
 
         return (focusedElementValue as! AXUIElement)
+    }
+
+    private func focusedElement(
+        for app: RunningApplicationInfo,
+        allowWindowDescendantFallback: Bool
+    ) -> AXUIElement? {
+        if let focusedElement = focusedElement(for: app.processIdentifier) {
+            return focusedElement
+        }
+
+        guard allowWindowDescendantFallback,
+              app.bundleIdentifier == "com.google.Chrome",
+              let focusedWindow = focusedWindow(for: app.processIdentifier),
+              let windowTitle = copyAttribute(focusedWindow, attribute: kAXTitleAttribute) as? String,
+              descendantTextFallbackPolicy.allowsFallback(
+                  bundleIdentifier: app.bundleIdentifier,
+                  role: "AXWebArea",
+                  directText: nil,
+                  windowTitle: windowTitle
+              ) else {
+            return nil
+        }
+
+        return firstEditableDescendant(in: focusedWindow)
+    }
+
+    private func focusedWindow(for processIdentifier: pid_t) -> AXUIElement? {
+        let appElement = AXUIElementCreateApplication(processIdentifier)
+        configureMessagingTimeout(for: appElement)
+        guard let windowValue = copyAttribute(appElement, attribute: kAXFocusedWindowAttribute) else {
+            return nil
+        }
+
+        return (windowValue as! AXUIElement)
+    }
+
+    private func firstEditableDescendant(in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
+        guard depth < 8 else {
+            return nil
+        }
+
+        configureMessagingTimeout(for: element)
+        let role = copyAttribute(element, attribute: kAXRoleAttribute) as? String
+        if ["AXTextArea", "AXTextField", "AXWebArea"].contains(role ?? "") {
+            return element
+        }
+
+        let children = copyAttribute(element, attribute: kAXChildrenAttribute) as? [AXUIElement] ?? []
+        for child in children {
+            if let match = firstEditableDescendant(in: child, depth: depth + 1) {
+                return match
+            }
+        }
+
+        return nil
     }
 
     private func copyAttribute(_ element: AXUIElement, attribute: String) -> CFTypeRef? {
