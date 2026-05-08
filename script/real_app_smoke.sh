@@ -537,6 +537,52 @@ APPLESCRIPT
   exit 1
 }
 
+set_textedit_document_text() {
+  local document_path="$1"
+  local document_text="$2"
+
+  AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_PATH="$document_path" \
+    AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_TEXT="$document_text" \
+    osascript >/dev/null <<'APPLESCRIPT'
+set expectedPath to (system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_PATH")
+set desiredText to (system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_TEXT")
+tell application "TextEdit"
+  repeat with currentDocument in documents
+    try
+      if (path of currentDocument) is expectedPath then
+        set text of currentDocument to desiredText
+        return
+      end if
+    end try
+  end repeat
+end tell
+error "TextEdit smoke document not found"
+APPLESCRIPT
+}
+
+append_textedit_document_text() {
+  local document_path="$1"
+  local text_suffix="$2"
+
+  AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_PATH="$document_path" \
+    AUTOCOMPLETE_LAB_TEXTEDIT_TEXT_SUFFIX="$text_suffix" \
+    osascript >/dev/null <<'APPLESCRIPT'
+set expectedPath to (system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_PATH")
+set textSuffix to (system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_TEXT_SUFFIX")
+tell application "TextEdit"
+  repeat with currentDocument in documents
+    try
+      if (path of currentDocument) is expectedPath then
+        set text of currentDocument to (((text of currentDocument) as string) & textSuffix)
+        return
+      end if
+    end try
+  end repeat
+end tell
+error "TextEdit smoke document not found"
+APPLESCRIPT
+}
+
 wait_for_chrome_tab_title_contains() {
   local expected_text="$1"
   local label="$2"
@@ -1028,28 +1074,28 @@ APPLESCRIPT
   case "$TEXTEDIT_SESSION_APP" in
     textedit-multiline)
       expected_text="Can we make this feel "
-      typing_start_line="$(line_count "$LOG_PATH")"
       focus_textedit_document_path "$tmp_file"
-      paste_text_preserving_clipboard $'Autocomplete smoke\nCan we make this feel '
+      typing_start_line="$(line_count "$LOG_PATH")"
+      set_textedit_document_text "$tmp_file" $'Autocomplete smoke\nCan we make this feel '
+      wait_for_textedit_document_path_contains "$tmp_file" "$expected_text" "scripted TextEdit text"
+      press_key_code 124 command
       ;;
     textedit-wrapped)
       expected_text="Can we make this feel "
-      osascript <<'APPLESCRIPT'
-tell application "TextEdit" to activate
-delay 0.4
+      osascript >/dev/null <<'APPLESCRIPT'
 tell application "TextEdit"
+  activate
   try
     set bounds of front window to {80, 80, 500, 520}
   end try
-  set text of front document to "This is a disposable autocomplete smoke paragraph that should wrap before the caret. "
 end tell
 APPLESCRIPT
+      set_textedit_document_text "$tmp_file" "This is a disposable autocomplete smoke paragraph that should wrap before the caret. Can we make this feel "
       wait_for_textedit_document_path_contains "$tmp_file" "This is a disposable autocomplete smoke paragraph" "scripted TextEdit wrapped setup"
       sleep 1
       typing_start_line="$(line_count "$LOG_PATH")"
       focus_textedit_document_path "$tmp_file"
       press_key_code 124 command
-      paste_text_preserving_clipboard "Can we make this feel "
       ;;
     *)
       expected_text="Can we make this feel "
@@ -1075,13 +1121,12 @@ APPLESCRIPT
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit first verified insertion"
   local full_start_line full_accept_key second_start_line
   full_accept_key="$(accept_all_shortcut)"
+  focus_textedit_document_path "$tmp_file"
   second_start_line="$(line_count "$LOG_PATH")"
-
-  osascript <<'APPLESCRIPT'
-tell application "System Events"
-  keystroke " and stays inst"
-end tell
-APPLESCRIPT
+  append_textedit_document_text "$tmp_file" " and stays inst"
+  focus_textedit_document_path "$tmp_file"
+  press_key_code 124 command
+  wait_for_textedit_document_path_contains "$tmp_file" " and stays inst" "scripted TextEdit second fragment"
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.TextEdit" "TextEdit second"
