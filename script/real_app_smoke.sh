@@ -18,6 +18,9 @@ CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF=0
 TEMP_ENABLE_ENV_KEY="AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
 TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED=0
 TEMP_ENABLE_LAUNCHCTL_PREVIOUS=""
+PROOF_MODE_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS"
+PROOF_MODE_LAUNCHCTL_WAS_PREPARED=0
+PROOF_MODE_LAUNCHCTL_PREVIOUS=""
 
 usage() {
   cat <<'EOF'
@@ -216,6 +219,14 @@ cleanup_smoke() {
       launchctl setenv "$TEMP_ENABLE_ENV_KEY" "$TEMP_ENABLE_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
     else
       launchctl unsetenv "$TEMP_ENABLE_ENV_KEY" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if [[ "$PROOF_MODE_LAUNCHCTL_WAS_PREPARED" == "1" ]]; then
+    if [[ -n "$PROOF_MODE_LAUNCHCTL_PREVIOUS" ]]; then
+      launchctl setenv "$PROOF_MODE_ENV_KEY" "$PROOF_MODE_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
+    else
+      launchctl unsetenv "$PROOF_MODE_ENV_KEY" >/dev/null 2>&1 || true
     fi
   fi
 }
@@ -494,13 +505,20 @@ prepare_temporary_app_enablement() {
     TEMP_ENABLE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$TEMP_ENABLE_ENV_KEY" 2>/dev/null || true)"
     TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED=1
   fi
+  if [[ "$PROOF_MODE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_MODE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_MODE_ENV_KEY" 2>/dev/null || true)"
+    PROOF_MODE_LAUNCHCTL_WAS_PREPARED=1
+  fi
 
   export AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS="$bundle_ids"
+  export AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS="$bundle_ids"
   launchctl setenv "$TEMP_ENABLE_ENV_KEY" "$bundle_ids" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_MODE_ENV_KEY" "$bundle_ids" >/dev/null 2>&1 || true
   echo "Temporary app enablement for smoke: $bundle_ids"
+  echo "Temporary proof mode for smoke: $bundle_ids"
 
   if [[ "$SKIP_BUILD" == "1" ]]; then
-    echo "Note: --skip-build uses the already-running app, so temporary enablement only applies if the app was launched with this environment." >&2
+    echo "Note: --skip-build uses the already-running app, so temporary enablement/proof mode only applies if the app was launched with this environment." >&2
   fi
 }
 
@@ -1929,9 +1947,12 @@ HTML
 }
 
 describe_plan() {
+  local proof_bundle_ids
+  proof_bundle_ids="$(smoke_target_bundle_ids | paste -sd, -)"
   echo "Real app smoke: $APP"
   echo "Diagnostics log: $LOG_PATH"
   echo "Trace log: $TRACE_PATH"
+  echo "Proof mode bundle(s): $proof_bundle_ids"
   case "$APP" in
     textedit)
       echo "Plan: build/relaunch AutocompleteLab, open a disposable TextEdit file, type a test fragment, then validate logs and traces."
