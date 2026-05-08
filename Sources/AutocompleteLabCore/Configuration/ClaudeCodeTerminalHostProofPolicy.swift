@@ -67,6 +67,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             allowsWindowAnchor: false,
             supportsOneWordAcceptance: true,
             supportsFullAcceptance: false,
+            requiresNoSubmitAcceptanceProof: true,
             suppressesAfterInsertionFailure: true,
             allowsDetachedSuggestions: false,
             allowsSyntheticCaretPlacement: true,

@@ -82,6 +82,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
     public let supportsObserverUpdates: Bool
     public let supportsOneWordAcceptance: Bool
     public let supportsFullAcceptance: Bool
+    public let requiresNoSubmitAcceptanceProof: Bool
     public let suppressesUntilBlurAfterEscape: Bool
     public let suppressesAfterInsertionFailure: Bool
     public let allowsDescendantTextFallback: Bool
@@ -109,6 +110,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         supportsObserverUpdates: Bool = false,
         supportsOneWordAcceptance: Bool = true,
         supportsFullAcceptance: Bool = true,
+        requiresNoSubmitAcceptanceProof: Bool = false,
         suppressesUntilBlurAfterEscape: Bool = true,
         suppressesAfterInsertionFailure: Bool = true,
         allowsDescendantTextFallback: Bool = false,
@@ -135,6 +137,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         self.supportsObserverUpdates = supportsObserverUpdates
         self.supportsOneWordAcceptance = supportsOneWordAcceptance
         self.supportsFullAcceptance = supportsFullAcceptance
+        self.requiresNoSubmitAcceptanceProof = requiresNoSubmitAcceptanceProof
         self.suppressesUntilBlurAfterEscape = suppressesUntilBlurAfterEscape
         self.suppressesAfterInsertionFailure = suppressesAfterInsertionFailure
         self.allowsDescendantTextFallback = allowsDescendantTextFallback
@@ -350,6 +353,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             allowsFieldAnchor: false,
             allowsWindowAnchor: false,
             supportsFullAcceptance: false,
+            requiresNoSubmitAcceptanceProof: true,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
             notes: "Dogfood target. Prefer caret-bound inline suggestions and AX value replacement in the prompt editor. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
@@ -391,6 +395,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             allowsFieldAnchor: false,
             allowsWindowAnchor: false,
             supportsFullAcceptance: false,
+            requiresNoSubmitAcceptanceProof: true,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
             notes: "Dogfood target for Claude desktop. Prefer prompt-bound inline suggestions when the composer exposes bounds; otherwise use mirror placement without showing detached whole-window suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."

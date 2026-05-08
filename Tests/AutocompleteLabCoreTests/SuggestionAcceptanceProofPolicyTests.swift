@@ -100,3 +100,128 @@ struct SuggestionAcceptanceProofPolicyTests {
         return proof
     }
 }
+
+@Suite("Acceptance safety policy")
+struct AcceptanceSafetyPolicyTests {
+    private let policy = AcceptanceSafetyPolicy()
+
+    @Test("No-submit profiles allow one visible word")
+    func noSubmitProfilesAllowOneVisibleWord() {
+        let decision = policy.decision(
+            action: .acceptNextWord,
+            acceptedText: " keep",
+            visibleText: " keep it small",
+            profile: noSubmitProfile()
+        )
+
+        #expect(decision == .allowed)
+    }
+
+    @Test("No-submit profiles block full visible accept")
+    func noSubmitProfilesBlockFullVisibleAccept() {
+        let decision = policy.decision(
+            action: .acceptAllVisible,
+            acceptedText: " keep it small",
+            visibleText: " keep it small",
+            profile: noSubmitProfile()
+        )
+
+        #expect(decision == .blocked(.noSubmitProfileDisallowsFullAcceptance))
+    }
+
+    @Test("No-submit profiles block multiword accepted text")
+    func noSubmitProfilesBlockMultiwordAcceptedText() {
+        let decision = policy.decision(
+            action: .acceptNextWord,
+            acceptedText: " keep going",
+            visibleText: " keep going",
+            profile: noSubmitProfile()
+        )
+
+        #expect(decision == .blocked(.noSubmitProfileRequiresSingleWord))
+    }
+
+    @Test("Acceptance safety blocks control text")
+    func acceptanceSafetyBlocksControlText() {
+        #expect(policy.decision(
+            action: .acceptNextWord,
+            acceptedText: " keep\n",
+            visibleText: " keep\n",
+            profile: standardProfile()
+        ) == .blocked(.acceptedTextContainsNewline))
+
+        #expect(policy.decision(
+            action: .acceptNextWord,
+            acceptedText: " keep\t",
+            visibleText: " keep\t",
+            profile: standardProfile()
+        ) == .blocked(.acceptedTextContainsTab))
+    }
+
+    @Test("Acceptance safety requires accepted text to be visible")
+    func acceptanceSafetyRequiresAcceptedTextToBeVisible() {
+        let decision = policy.decision(
+            action: .acceptNextWord,
+            acceptedText: " ship",
+            visibleText: " keep it small",
+            profile: standardProfile()
+        )
+
+        #expect(decision == .blocked(.acceptedTextNotVisible))
+    }
+
+    @Test("Profile support flags block unsupported acceptance actions")
+    func profileSupportFlagsBlockUnsupportedAcceptanceActions() {
+        #expect(policy.decision(
+            action: .acceptNextWord,
+            acceptedText: " keep",
+            visibleText: " keep",
+            profile: standardProfile(supportsOneWordAcceptance: false)
+        ) == .blocked(.profileDisallowsOneWordAcceptance))
+
+        #expect(policy.decision(
+            action: .acceptAllVisible,
+            acceptedText: " keep",
+            visibleText: " keep",
+            profile: standardProfile(supportsFullAcceptance: false)
+        ) == .blocked(.profileDisallowsFullAcceptance))
+    }
+
+    @Test("Standard profiles allow full visible accept")
+    func standardProfilesAllowFullVisibleAccept() {
+        let decision = policy.decision(
+            action: .acceptAllVisible,
+            acceptedText: " keep it small",
+            visibleText: " keep it small",
+            profile: standardProfile()
+        )
+
+        #expect(decision == .allowed)
+    }
+
+    private func noSubmitProfile() -> CompatibilityProfile {
+        standardProfile(
+            supportsFullAcceptance: false,
+            requiresNoSubmitAcceptanceProof: true
+        )
+    }
+
+    private func standardProfile(
+        supportsOneWordAcceptance: Bool = true,
+        supportsFullAcceptance: Bool = true,
+        requiresNoSubmitAcceptanceProof: Bool = false
+    ) -> CompatibilityProfile {
+        CompatibilityProfile(
+            bundleIdentifier: "com.example.Editor",
+            displayName: "Editor",
+            supportLevel: .yellow,
+            supportReason: "Test profile.",
+            renderMode: .inlineAdjacent,
+            insertionMode: .keyEvents,
+            supportsOneWordAcceptance: supportsOneWordAcceptance,
+            supportsFullAcceptance: supportsFullAcceptance,
+            requiresNoSubmitAcceptanceProof: requiresNoSubmitAcceptanceProof,
+            notes: "Test profile."
+        )
+    }
+}

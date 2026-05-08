@@ -43,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let insertionRetryPolicy = InsertionRetryPolicy()
     private let insertionVerificationTimingPolicy = InsertionVerificationTimingPolicy()
     private let suggestionAcceptanceProofPolicy = SuggestionAcceptanceProofPolicy()
+    private let acceptanceSafetyPolicy = AcceptanceSafetyPolicy()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private lazy var suggestionOrchestrator = SuggestionOrchestrator(
         engine: engine,
@@ -4371,7 +4372,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         var metadata = [
             "acceptanceID": acceptanceID,
-            "acceptMode": action.diagnosticName
+            "acceptMode": action.diagnosticName,
+            "acceptanceSafety": "passed",
+            "requiresNoSubmitAcceptanceProof": String(
+                currentProfile?.requiresNoSubmitAcceptanceProof == true
+            )
         ]
         if let fieldClassification = currentSuggestionFieldClassification {
             metadata.merge(fieldClassification.traceMetadata) { current, _ in current }
@@ -4397,6 +4402,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         acceptedText: String
     ) -> SuggestionAcceptanceProof? {
         let visibleText = currentSuggestionDisplayedText ?? suggestionSession.visibleSuggestion?.visibleText
+        guard let profile = currentProfile else {
+            recordAcceptanceSafetyBlocked(
+                action: action,
+                acceptedText: acceptedText,
+                visibleText: visibleText,
+                reason: "missing-profile"
+            )
+            return nil
+        }
+
+        switch acceptanceSafetyPolicy.decision(
+            action: action,
+            acceptedText: acceptedText,
+            visibleText: visibleText,
+            profile: profile
+        ) {
+        case .allowed:
+            break
+        case let .blocked(reason):
+            recordAcceptanceSafetyBlocked(
+                action: action,
+                acceptedText: acceptedText,
+                visibleText: visibleText,
+                reason: reason.rawValue
+            )
+            return nil
+        }
+
         let decision = suggestionAcceptanceProofPolicy.decision(
             action: action,
             acceptedText: acceptedText,
@@ -4433,6 +4466,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion(reason: "acceptance-proof-failed", metadata: metadata)
             return nil
         }
+    }
+
+    private func recordAcceptanceSafetyBlocked(
+        action: KeyboardAction,
+        acceptedText: String,
+        visibleText: String?,
+        reason: String
+    ) {
+        let metadata = [
+            "reason": "acceptance-safety-blocked",
+            "acceptanceSafety": "blocked",
+            "acceptanceSafetyReason": reason,
+            "acceptMode": action.diagnosticName,
+            "acceptedChars": String(acceptedText.count),
+            "visibleChars": String(visibleText?.count ?? 0)
+        ]
+        DiagnosticsLog.shared.record("acceptance-safety-blocked", metadata: metadata)
+        if let suggestionID = currentSuggestionID {
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: suggestionID,
+                appBundleIdentifier: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? "",
+                fieldIdentity: currentSuggestionFieldIdentity?.traceDescription
+                    ?? currentFieldIdentity?.traceDescription
+                    ?? "",
+                requestMode: currentSuggestionRequestMode?.rawValue ?? "",
+                reason: "acceptance-safety-blocked",
+                metadata: metadata
+            )
+        }
+        setSuggestionDecision("Blocked: acceptance safety failed")
+        hideSuggestion(reason: "acceptance-safety-blocked", metadata: metadata)
     }
 
     private func refreshVisibleSuggestion() {

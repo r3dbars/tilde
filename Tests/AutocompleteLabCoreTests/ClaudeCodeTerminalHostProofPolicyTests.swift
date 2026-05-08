@@ -84,6 +84,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(profile.canPresentSuggestions)
         #expect(profile.supportsOneWordAcceptance)
         #expect(!profile.supportsFullAcceptance)
+        #expect(profile.requiresNoSubmitAcceptanceProof)
         #expect(profile.insertionMode == .keyEvents)
         #expect(profile.anchorLadder == [.caret])
         #expect(!profile.allowsDetachedSuggestions)
