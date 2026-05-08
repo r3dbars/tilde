@@ -3336,7 +3336,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let displayScoreDecision = displayScorePolicy.decision(
+        let prefixEagernessAdjustment = prefixFamilyCooldownPolicy.eagernessAdjustment(
+            for: PrefixFamilyCooldownInput(
+                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+                fieldIdentifier: fieldIdentity.traceDescription,
+                requestMode: request.mode,
+                textBeforeCursor: request.textBeforeCursor
+            )
+        )
+        let displayScoreDecision = displayScorePolicy
+            .adjustingThresholds(by: prefixEagernessAdjustment.thresholdAdjustment)
+            .decision(
             for: displayScore(
                 suggestion: suggestion,
                 request: request,
@@ -3350,6 +3360,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let displayScoreTrace = displayScoreDecision.trace
         let displayScoreMetadata = displayScoreDecision.metadata
+            .merging(prefixEagernessAdjustment.metadata) { current, _ in current }
         guard displayScoreDecision.shouldDisplay else {
             let reason = displayScoreMetadata["displayScoreSuppressionReason"] ?? "display-score"
             setSuggestionDecision("Blocked: display score \(reason)")

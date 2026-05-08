@@ -229,6 +229,23 @@ public struct DisplayScorePolicy: Equatable, Sendable {
         }
     }
 
+    public func adjustingThresholds(by adjustment: Double) -> DisplayScorePolicy {
+        let safeAdjustment = max(0, adjustment)
+        guard safeAdjustment > 0 else {
+            return self
+        }
+
+        return DisplayScorePolicy(
+            wordCompletionThreshold: wordCompletionThreshold + safeAdjustment,
+            phraseContinuationThreshold: phraseContinuationThreshold + safeAdjustment,
+            sentenceContinuationThreshold: sentenceContinuationThreshold + safeAdjustment,
+            highRiskThreshold: highRiskThreshold,
+            highRepetitionThreshold: highRepetitionThreshold,
+            highInstabilityThreshold: highInstabilityThreshold,
+            minimumAcceptedAndKeptSamples: minimumAcceptedAndKeptSamples
+        )
+    }
+
     public func decision(
         for score: DisplayScore,
         mode: CompletionRequestMode,
