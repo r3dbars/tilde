@@ -28,10 +28,62 @@ public enum CompletionActivationBlockReason: String, Equatable, Sendable {
     case suppressedField
     case blockedFieldKind
     case sensitiveContent
+    case markdownCodeContext
     case selectedText
+    case terminalSentenceBoundary
     case tooLittleContext
     case middleOfLine
     case unfinishedWord
+}
+
+public enum SuggestionPace: String, CaseIterable, Codable, Equatable, Sendable {
+    case quiet
+    case normal
+    case eager
+
+    public init(persistedRawValue: String?) {
+        self = persistedRawValue.flatMap(Self.init(rawValue:)) ?? .normal
+    }
+
+    public var displayName: String {
+        switch self {
+        case .quiet:
+            "Quiet"
+        case .normal:
+            "Normal"
+        case .eager:
+            "Eager"
+        }
+    }
+
+    public var detailText: String {
+        switch self {
+        case .quiet:
+            "Quiet waits for more context before phrase suggestions."
+        case .normal:
+            "Normal balances short completions with restraint."
+        case .eager:
+            "Eager starts phrase suggestions sooner in allowed apps."
+        }
+    }
+}
+
+public struct SuggestionAggressivenessPolicy: Equatable, Sendable {
+    public init() {}
+
+    public func pace(
+        userPace: SuggestionPace,
+        supportStatus: CompatibilitySupportStatus
+    ) -> SuggestionPace {
+        switch supportStatus.supportLevel {
+        case .green:
+            return userPace
+        case .yellow:
+            return userPace == .eager ? .normal : userPace
+        case .diagnosticsOnly, .unsupported:
+            return .quiet
+        }
+    }
 }
 
 public struct CompletionActivationPolicy: Equatable, Sendable {
@@ -55,13 +107,36 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         self.maximumWordCompletionCharacters = max(self.minimumWordCompletionCharacters, maximumWordCompletionCharacters)
     }
 
+    public init(pace: SuggestionPace) {
+        switch pace {
+        case .quiet:
+            self.init(
+                minimumContextCharacters: 6,
+                minimumContextWords: 3,
+                minimumPhraseContinuationWords: 6,
+                minimumWordCompletionCharacters: 3,
+                maximumWordCompletionCharacters: 4
+            )
+        case .normal:
+            self.init()
+        case .eager:
+            self.init(
+                minimumContextCharacters: 2,
+                minimumContextWords: 2,
+                minimumPhraseContinuationWords: 3,
+                minimumWordCompletionCharacters: 2,
+                maximumWordCompletionCharacters: 5
+            )
+        }
+    }
+
     public func canSuggest(
         textBeforeCursor: String,
         textAfterCursor: String,
         isSecure: Bool,
         selectedTextLength: Int = 0,
         isFieldSuppressed: Bool,
-        fieldKind: AXFieldKind = .unknown
+        fieldKind: AXFieldKind = .multilineCompose
     ) -> Bool {
         decision(
             textBeforeCursor: textBeforeCursor,
@@ -79,7 +154,7 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         isSecure: Bool,
         selectedTextLength: Int = 0,
         isFieldSuppressed: Bool,
-        fieldKind: AXFieldKind = .unknown
+        fieldKind: AXFieldKind = .multilineCompose
     ) -> CompletionActivationDecision {
         if isSecure || fieldKind == .secure {
             return .block(.secureField)
@@ -101,7 +176,15 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             return .block(.sensitiveContent)
         }
 
+        if isInMarkdownCodeContext(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
+            return .block(.markdownCodeContext)
+        }
+
         let trimmedContext = textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines)
+        if endsAtTerminalSentenceBoundary(trimmedContext) {
+            return .block(.terminalSentenceBoundary)
+        }
+
         let contextWordCount = trimmedContext.split(whereSeparator: { $0.isWhitespace }).count
         guard trimmedContext.count >= minimumContextCharacters,
               contextWordCount >= minimumContextWords else {
@@ -128,17 +211,11 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             return .block(.tooLittleContext)
         }
 
-        if endsAtSentenceBoundary(textBeforeCursor: textBeforeCursor) {
-            return .allow(.sentenceContinuation)
-        }
-
         return .allow(.phraseContinuation)
     }
 
-    private func endsAtSentenceBoundary(textBeforeCursor: String) -> Bool {
-        guard let last = textBeforeCursor
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .last else {
+    private func endsAtTerminalSentenceBoundary(_ trimmedContext: String) -> Bool {
+        guard let last = trimmedContext.last else {
             return false
         }
 
@@ -231,6 +308,42 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         ).first.map(String.init) ?? ""
 
         return before + after
+    }
+
+    private func isInMarkdownCodeContext(textBeforeCursor: String, textAfterCursor: String) -> Bool {
+        isInsideFencedCodeBlock(textBeforeCursor)
+            || isInsideInlineCodeSpan(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor)
+    }
+
+    private func isInsideFencedCodeBlock(_ textBeforeCursor: String) -> Bool {
+        let lines = textBeforeCursor.split(
+            omittingEmptySubsequences: false,
+            whereSeparator: \.isNewline
+        )
+        let fenceCount = lines.reduce(0) { count, line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            return count + ((trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~")) ? 1 : 0)
+        }
+
+        return fenceCount % 2 == 1
+    }
+
+    private func isInsideInlineCodeSpan(textBeforeCursor: String, textAfterCursor: String) -> Bool {
+        let line = currentLineContext(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor)
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.hasPrefix("```"), !trimmed.hasPrefix("~~~") else {
+            return true
+        }
+
+        let before = textBeforeCursor.split(
+            omittingEmptySubsequences: false,
+            whereSeparator: \.isNewline
+        ).last.map(String.init) ?? ""
+        let backtickCount = before.reduce(0) { count, character in
+            count + (character == "`" ? 1 : 0)
+        }
+
+        return backtickCount % 2 == 1
     }
 
     private static let commonCompleteWords: Set<String> = [

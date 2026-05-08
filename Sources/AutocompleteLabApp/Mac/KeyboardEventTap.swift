@@ -11,6 +11,7 @@ final class KeyboardEventTap: @unchecked Sendable {
     private let passthroughKeyDownObserver: PassthroughKeyDownObserver?
     private let disabledObserver: DisabledObserver?
     private let keyMapper = AutocompleteKeyMapper()
+    private let consumptionPolicy = KeyboardEventTapConsumptionPolicy()
     private let lifecycleLock = NSLock()
     private let snapshotLock = NSLock()
     private let passthroughLock = NSLock()
@@ -375,8 +376,14 @@ final class KeyboardEventTap: @unchecked Sendable {
         snapshotLock.lock()
         let snapshot = self.snapshot
 
-        let canHandleUndo = key == .commandZ && snapshot.hasPendingAcceptedInsertionUndo
-        guard snapshot.hasVisibleSuggestion || canHandleUndo,
+        if key == .commandZ,
+           snapshot.hasPendingAcceptedInsertionUndo,
+           !snapshot.isInvalidatedByUserTyping {
+            snapshotLock.unlock()
+            return true
+        }
+
+        guard snapshot.hasVisibleSuggestion,
               !snapshot.isInvalidatedByUserTyping else {
             suppressKeyUntilNanos.removeAll(keepingCapacity: true)
             snapshotLock.unlock()
@@ -391,21 +398,15 @@ final class KeyboardEventTap: @unchecked Sendable {
         }
         suppressKeyUntilNanos[key] = nil
 
-        let shouldConsume: Bool
-        switch key {
-        case .tab:
-            shouldConsume = snapshot.supportsOneWordAcceptance
-        case .backtick:
-            shouldConsume = snapshot.supportsFullAcceptance && snapshot.acceptAllShortcut == .backtick
-        case .commandZ:
-            shouldConsume = snapshot.hasPendingAcceptedInsertionUndo
-        case .escape:
-            shouldConsume = true
-        case .optionTab:
-            shouldConsume = snapshot.supportsFullAcceptance && snapshot.acceptAllShortcut == .optionTab
-        case .other:
-            shouldConsume = false
-        }
+        let shouldConsume = consumptionPolicy.shouldConsume(KeyboardEventTapConsumptionInput(
+            key: key,
+            hasVisibleSuggestion: snapshot.hasVisibleSuggestion,
+            supportsOneWordAcceptance: snapshot.supportsOneWordAcceptance,
+            supportsFullAcceptance: snapshot.supportsFullAcceptance,
+            isInvalidatedByUserTyping: snapshot.isInvalidatedByUserTyping,
+            hasPendingAcceptedInsertionUndo: snapshot.hasPendingAcceptedInsertionUndo,
+            acceptAllShortcut: snapshot.acceptAllShortcut
+        ))
 
         if shouldConsume, !isAutorepeat {
             suppressKeyUntilNanos[key] = nowNanos + keySuppressDurationNanos
@@ -620,20 +621,24 @@ private func keyboardEventTapCallback(
     return eventTap.handle(type: type, event: event)
 }
 
+func autocompletePhysicalKey(forMacVirtualKeyCode keyCode: Int64) -> AutocompletePhysicalKey {
+    switch keyCode {
+    case 6:
+        .z
+    case 48:
+        .tab
+    case 50:
+        .backtick
+    case 53:
+        .escape
+    default:
+        .other
+    }
+}
+
 private extension AutocompletePhysicalKey {
     init(keyCode: Int64) {
-        switch keyCode {
-        case 48:
-            self = .tab
-        case 50:
-            self = .backtick
-        case 6:
-            self = .z
-        case 53:
-            self = .escape
-        default:
-            self = .other
-        }
+        self = autocompletePhysicalKey(forMacVirtualKeyCode: keyCode)
     }
 }
 

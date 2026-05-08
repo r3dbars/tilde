@@ -1,6 +1,58 @@
 import AppKit
 import AutocompleteLabCore
 
+struct DiagnosticsInspectorState: Equatable {
+    let appTrusted: Bool
+    let appEnabled: Bool
+    let compatibilityStatus: CompatibilitySupportStatus
+    let lastSuggestionDecision: String
+    let runtimeReport: RuntimeReadinessReport
+    let runtimeTargetSummary: String
+    let tracePath: String
+    let tracingPaused: Bool
+    let screenshotTracingEnabled: Bool
+    let compatibilityLearningPath: String
+    let compatibilityLearningProfile: CompatibilityLearningProfile?
+
+    var summaryText: String {
+        """
+        Current state:
+          Accessibility: \(appTrusted ? "allowed" : "needed")
+          Suggestions: \(lastSuggestionDecision)
+          App: \(compatibilityStatus.userFacingSummary), \(appEnabled ? "allowed" : "blocked")
+          Mode: \(Self.modeText(for: compatibilityStatus))
+          Local model: \(runtimeReport.summary)
+          Runtime target: \(runtimeTargetSummary)
+          Next action: \(runtimeReport.action.displayName)
+          Traces: \(tracingPaused ? "paused" : "recording")
+          Screenshots: \(screenshotTracingEnabled ? "on" : "off")
+          Trace file: \(tracePath)
+          Learning file: \(compatibilityLearningPath)
+          Learned adapter: \(compatibilityLearningProfile?.debugSummary ?? "none")
+        """
+    }
+
+    private static func modeText(for status: CompatibilitySupportStatus) -> String {
+        guard case let .supported(profile) = status else {
+            return "off"
+        }
+
+        if profile.supportLevel == .yellow,
+           profile.fallbackRenderMode == .floatingMirror {
+            return "mirror"
+        }
+
+        switch profile.renderMode {
+        case .inlineAdjacent:
+            return "inline"
+        case .floatingMirror:
+            return "mirror"
+        case .disabled:
+            return "off"
+        }
+    }
+}
+
 @MainActor
 final class DiagnosticsWindowController {
     private let window: NSWindow
@@ -492,6 +544,145 @@ struct DiagnosticsOverviewState: Equatable {
 
     private static func percent(_ value: Double) -> String {
         String(format: "%.0f%%", value * 100)
+    }
+}
+
+struct DiagnosticsPlacementEvidence {
+    let rows: [Row]
+
+    init(events: [AutocompleteTraceEvent]) {
+        rows = events.suffix(16).compactMap(Row.init(event:))
+    }
+
+    var summaryText: String {
+        guard !rows.isEmpty else {
+            return "Placement confidence: none yet"
+        }
+
+        return """
+        Placement confidence:
+        \(rows.map(\.description).joined(separator: "\n"))
+        """
+    }
+
+    struct Row: Equatable {
+        let timestamp: String
+        let type: String
+        let app: String
+        let mode: String
+        let confidence: String
+        let score: String
+        let anchor: String
+        let health: String
+        let action: String
+        let screenshot: String
+        let shownChars: Int
+        let acceptedChars: Int
+
+        init?(event: AutocompleteTraceEvent) {
+            guard event.metadata["placementConfidenceBand"] != nil
+                || event.metadata["placementConfidenceScore"] != nil
+                || event.metadata["placementHealthReason"] != nil
+                || event.metadata["placementEffectiveRenderMode"] != nil
+                || event.metadata["effectiveRenderMode"] != nil else {
+                return nil
+            }
+
+            timestamp = event.timestamp
+            type = event.type.rawValue
+            app = event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
+            mode = Self.modeText(event)
+            confidence = event.metadata["placementConfidenceBand"] ?? "unknown"
+            score = event.metadata["placementConfidenceScore"] ?? "n/a"
+            anchor = event.metadata["placementAnchorSource"] ?? "unknown"
+            health = event.metadata["placementHealthReason"] ?? (event.reason.isEmpty ? "n/a" : event.reason)
+            action = event.metadata["placementSelfHealingAction"] ?? "none"
+            screenshot = event.screenshotPath.isEmpty ? "none" : "captured"
+            shownChars = DiagnosticsTraceHistory.textLength(
+                event,
+                text: event.displayedText,
+                metadataKeys: ["visibleChars", "displayedTextChars"]
+            )
+            acceptedChars = DiagnosticsTraceHistory.textLength(
+                event,
+                text: event.acceptedText,
+                metadataKeys: ["acceptedTextChars"]
+            )
+        }
+
+        var description: String {
+            "  \(timestamp) \(type) app=\(app) mode=\(mode) confidence=\(confidence) score=\(score) anchor=\(anchor) health=\(health) action=\(action) screenshot=\(screenshot) shownChars=\(shownChars) acceptedChars=\(acceptedChars)"
+        }
+
+        private static func modeText(_ event: AutocompleteTraceEvent) -> String {
+            let requested = event.metadata["placementRequestedRenderMode"]
+            let effective = event.metadata["placementEffectiveRenderMode"]
+                ?? event.metadata["effectiveRenderMode"]
+                ?? (event.requestMode.isEmpty ? nil : event.requestMode)
+                ?? "unknown"
+
+            guard let requested, requested != effective else {
+                return effective
+            }
+
+            return "\(requested)->\(effective)"
+        }
+    }
+}
+
+struct DiagnosticsTraceHistory {
+    let events: [AutocompleteTraceEvent]
+
+    init(events: [AutocompleteTraceEvent]) {
+        self.events = Array(events.suffix(16))
+    }
+
+    var summaryText: String {
+        guard !events.isEmpty else {
+            return "Recent trace events: none yet"
+        }
+
+        return """
+        Recent trace events:
+        \(events.map(Self.rowText).joined(separator: "\n"))
+        """
+    }
+
+    static func rowText(_ event: AutocompleteTraceEvent) -> String {
+        let shownChars = textLength(
+            event,
+            text: event.displayedText,
+            metadataKeys: ["visibleChars", "displayedTextChars"]
+        )
+        let acceptedChars = textLength(
+            event,
+            text: event.acceptedText,
+            metadataKeys: ["acceptedTextChars"]
+        )
+        let confidence = event.metadata["placementConfidenceBand"] ?? "n/a"
+        let renderMode = event.metadata["placementEffectiveRenderMode"]
+            ?? event.metadata["effectiveRenderMode"]
+            ?? "n/a"
+
+        return "  \(event.timestamp) \(event.type.rawValue) mode=\(event.requestMode) app=\(event.appBundleIdentifier) shownChars=\(shownChars) acceptedChars=\(acceptedChars) confidence=\(confidence) render=\(renderMode) reason=\(event.reason) latency=\(latency(event.latencyMilliseconds))"
+    }
+
+    static func textLength(
+        _ event: AutocompleteTraceEvent,
+        text: String,
+        metadataKeys: [String]
+    ) -> Int {
+        for key in metadataKeys {
+            if let value = event.metadata[key], let length = Int(value) {
+                return length
+            }
+        }
+
+        return text.count
+    }
+
+    private static func latency(_ value: Int?) -> String {
+        value.map { "\($0)ms" } ?? "n/a"
     }
 }
 

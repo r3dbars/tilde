@@ -425,6 +425,12 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         }
     }
 
+    func exportRedactedSurvivalReport(limit: Int = 2_000) -> URL? {
+        queue.sync { [folderURL] in
+            LocalReportExporter(folderURL: folderURL).exportRedactedSurvivalReport(limit: limit)
+        }
+    }
+
     private static func htmlReport(
         summary: AutocompleteTraceSummary,
         events: [AutocompleteTraceEvent]

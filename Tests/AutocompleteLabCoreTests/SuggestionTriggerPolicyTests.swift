@@ -140,15 +140,23 @@ struct SuggestionTriggerPolicyTests {
         ) == .request(delayMilliseconds: 90))
     }
 
-    @Test("Sentence boundaries use stricter sentence delay")
-    func sentenceBoundariesUseStricterSentenceDelay() {
+    @Test("Sentence boundaries stay quiet by default")
+    func sentenceBoundariesStayQuietByDefault() {
         let policy = SuggestionTriggerPolicy(sentenceBoundaryDelayMilliseconds: 500)
 
         #expect(policy.sentenceBoundaryDelayMilliseconds == 450)
         #expect(policy.decision(
             previousTextBeforeCursor: "I think this works",
             currentTextBeforeCursor: "I think this works."
-        ) == .request(delayMilliseconds: 450))
+        ) == .skip)
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works",
+            currentTextBeforeCursor: "I think this works?"
+        ) == .skip)
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works",
+            currentTextBeforeCursor: "I think this works!"
+        ) == .skip)
     }
 
     @Test("Line and paragraph starts wait for two content words")

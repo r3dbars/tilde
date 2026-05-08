@@ -14,6 +14,10 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Suppress more answer-like model outputs such as `Here's`, `You can`, `As an AI`, and `I'd suggest`.
 - [x] Extract Codex synthetic caret math into a pure tested core helper.
 - [x] Add tests for bounds validation, polling cadence, paste/delete triggering, answer-like output cleanup, and synthetic caret geometry.
+- [x] Keep overlapping-poll backoff from hiding an already visible suggestion.
+- [x] Make the TextEdit recorder focus the disposable smoke document before typing or accepting.
+- [x] Harden TextEdit real-app proof setup against stale smoke/autosave documents and transient suggestions while scripted typing is still landing.
+- [x] Ensure typing soak cleanup stops its AppleScript child and closes disposable soak documents so later proof runs are not contaminated.
 
 ## P0: Trust And Safety
 
@@ -53,43 +57,43 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P0: AX Geometry Validation
 
-- [ ] Capture `AXVisibleCharacterRange`.
-- [ ] Capture `AXInsertionPointLineNumber`.
+- [x] Capture `AXVisibleCharacterRange`.
+- [x] Capture `AXInsertionPointLineNumber`.
 - [x] Capture supported AX attributes and parameterized attributes as a compact capability snapshot.
-- [ ] Record AX errors by attribute without raw text.
-- [ ] Record AX timeout/cannot-complete errors.
+- [x] Record AX errors by attribute without raw text.
+- [x] Record AX timeout/cannot-complete errors.
 - [x] Validate caret rect against element rect.
 - [x] Validate caret rect against window rect.
 - [x] Validate caret rect against current screen frame after coordinate conversion.
 - [x] Validate text line rect against element/window rect.
-- [ ] Reject jumps that move too far from the previous caret while text did not change.
-- [ ] Reject stale caret rects after scroll or focus churn.
-- [ ] Add a short geometry history per field.
+- [x] Reject jumps that move too far from the previous caret while text did not change.
+- [x] Reject stale caret rects after scroll or focus churn.
+- [x] Add a short geometry history per field.
 - [x] Add reason codes: zeroHeight, nonfinite, outsideElement, outsideWindow, offScreen, stale, jumpedTooFar, missingBounds.
 - [x] Add tests for zero-width caret rects.
 - [x] Add tests for browser zero-height caret rects.
 - [x] Add tests for outside-field and outside-window rects.
-- [ ] Add tests for stale geometry rejection.
-- [ ] Add tests for wrapped line rect validation.
-- [ ] Add tests for visible range mismatch.
+- [x] Add tests for stale geometry rejection.
+- [x] Add tests for wrapped line rect validation.
+- [x] Add tests for visible range mismatch.
 
 ## P0: Observer-First Updates
 
-- [ ] Add `AccessibilityObserver` in `Sources/AutocompleteLabApp/Mac`.
-- [ ] Create one `AXObserver` per tracked PID.
-- [ ] Register for focused UI element changes.
-- [ ] Register for selected text changes where the app supports it.
-- [ ] Register for value changes where the app supports it.
-- [ ] Register for focused window changes.
-- [ ] Register for window moved/resized changes.
-- [ ] Reclassify from scratch on focus changes.
-- [ ] Re-read geometry on selection/value/window changes.
+- [x] Add `AccessibilityObserver` in `Sources/AutocompleteLabApp/Mac`.
+- [x] Create one `AXObserver` per tracked PID.
+- [x] Register for focused UI element changes.
+- [x] Register for selected text changes where the app supports it.
+- [x] Register for value changes where the app supports it.
+- [x] Register for focused window changes.
+- [x] Register for window moved/resized changes.
+- [x] Reclassify from scratch on focus changes.
+- [x] Re-read geometry on selection/value/window changes.
 - [x] Keep bounded polling as a recovery layer.
 - [x] Use active polling only while a suggestion is visible.
-- [ ] Use watch polling for flaky apps only.
-- [ ] Add trace metadata for update source: observer, activePoll, watchPoll, idlePoll, manualRefresh.
-- [ ] Add diagnostics for observer registration failures.
-- [ ] Add tests for pure observer event routing if the AX wrapper can be abstracted.
+- [x] Use watch polling for flaky apps only.
+- [x] Add trace metadata for update source: observer, activePoll, watchPoll, idlePoll, manualRefresh.
+- [x] Add diagnostics for observer registration failures.
+- [x] Add tests for pure observer event routing if the AX wrapper can be abstracted.
 
 ## P0: Insertion Safety
 
@@ -106,8 +110,8 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Keep clipboard fallback opt-in only.
 - [x] Never use clipboard fallback for sensitive profiles.
 - [x] Add insertion failure trace buckets by app and mode.
-- [ ] Add tests for Notes-style AX no-op success.
-- [ ] Add tests for Chrome-style value replacement.
+- [x] Add tests for Notes-style AX no-op success.
+- [x] Add tests for Chrome-style value replacement.
 - [x] Add tests for retry exhaustion.
 
 ## P0: Suggestion Quality
@@ -139,7 +143,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Add Slack diagnostics profile.
 - [x] Add VS Code diagnostics profile.
 - [x] Add Cursor diagnostics profile.
-- [ ] Add Atlas diagnostics profile once focused AX is reliable.
+- [x] Add Atlas diagnostics-only profile that keeps suggestions off until browser-field privacy and no-submit proof exist.
 - [x] Keep Mail compose diagnostics-only.
 - [x] Add explicit unsupported records for high-risk apps.
 - [x] Add tests for profile defaults.
@@ -147,17 +151,17 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P1: Panel And Window Polish
 
-- [ ] Trace panel level.
-- [ ] Trace screen id or screen frame.
-- [ ] Trace converted anchor rect and final AppKit frame.
-- [ ] Add multi-display tests for conversion math.
-- [ ] Test display left of primary.
-- [ ] Test display above primary.
-- [ ] Test Retina and non-Retina frame conversion.
-- [ ] Hide immediately on app blur.
-- [ ] Hide immediately when anchor quality downgrades to invalid.
-- [ ] Hide immediately when secure/sensitive state appears.
-- [ ] Keep click-through in suggesting mode.
+- [x] Trace panel level.
+- [x] Trace screen id or screen frame.
+- [x] Trace converted anchor rect and final AppKit frame.
+- [x] Add multi-display tests for conversion math.
+- [x] Test display left of primary.
+- [x] Test display above primary.
+- [x] Test Retina and non-Retina frame conversion.
+- [x] Hide immediately on app blur.
+- [x] Hide immediately when anchor quality downgrades to invalid.
+- [x] Hide immediately when secure/sensitive state appears.
+- [x] Keep click-through in suggesting mode.
 - [ ] Add an explicit interactive picker mode only if the user asks for it.
 - [ ] Test fullscreen apps.
 - [ ] Test Spaces changes.
@@ -165,39 +169,43 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [ ] Test menu bar focus changes.
 - [ ] Test window dragging while suggestion is visible.
 
+Manual proof blocker evidence: `./script/manual_smoke_status.sh --strict` still fails these as live UI proof gaps. The panel has automated coverage for level, screen/frame tracing, multi-display conversion, click-through mode, and full-screen/all-spaces collection behavior, but fullscreen, Spaces, Stage Manager, menu bar focus, and window dragging still need real macOS passes. Interactive picker mode remains held until explicitly requested.
+
 ## P1: Runtime And First Run
 
-- [ ] Make first-run model install a real in-app action.
-- [ ] Add "Install local model" to settings when the model folder is missing.
+- [x] Make first-run model install a real in-app action.
+- [x] Add "Install local model" to settings when the model folder is missing.
 - [ ] Add "Retry model load" after install or repair.
 - [x] Show clear missing/repair/ready states in plain language.
 - [x] Update runtime docs to Qwen3.5 4B as the default.
 - [x] Remove stale Gemma default copy from README and research docs.
-- [x] State the macOS 26 requirement clearly in beta docs.
-- [ ] Decide whether macOS target can be lowered.
+- [x] Lower and document the macOS target decision: macOS 14 or newer on Apple Silicon.
+- [x] Decide whether macOS target can be lowered.
 - [x] Bundle or install the model in an app-owned path.
 - [x] Never require Ollama, llama.cpp, or a user-started server.
 - [x] Add a beta gate that fails if the app is running mock fallback.
-- [ ] Add latency proof for current default model.
+- [x] Add latency proof for current default model.
 
 ## P1: Manual QA And Proof
 
 - [ ] Refresh Codex dogfood manual smoke proof.
-- [ ] Require manual smoke proof from the current commit or current archive.
-- [ ] Add smoke rows for anchor source: caret, line, field, window, off.
+- [x] Require manual smoke proof from the current commit or current archive.
+- [x] Add smoke rows for anchor source: caret, line, field, window, off.
 - [x] Add "wrong app insertion" as a hard fail.
 - [x] Add "Tab stolen with no visible suggestion" as a hard fail.
 - [x] Add "Esc does not calm the field" as a hard fail.
 - [x] Add "suggestion shown over sensitive field" as a hard fail.
 - [x] Add "detached bubble over whole editor" as a hard fail unless explicitly allowed.
-- [ ] Add TextEdit multiline/wrapped-line smoke.
-- [ ] Add Notes rich-text smoke.
-- [ ] Add Chrome textarea smoke.
-- [ ] Add Chrome contenteditable smoke.
-- [ ] Add Obsidian CodeMirror smoke.
-- [ ] Add Codex prompt smoke.
+- [x] Add TextEdit multiline/wrapped-line smoke.
+- [x] Add Notes rich-text smoke.
+- [x] Add Chrome textarea smoke.
+- [x] Add Chrome contenteditable smoke.
+- [x] Add Obsidian CodeMirror smoke.
+- [x] Add Codex prompt smoke.
 - [x] Add unsupported-app smoke.
-- [ ] Add no-Accessibility-permission smoke.
+- [x] Add no-Accessibility-permission smoke.
+
+Manual proof blocker evidence: `./script/manual_smoke_status.sh --strict` now reports current TextEdit default/multiline/wrapped proof and current Chrome textarea/contenteditable/editor-like/Monaco-like/ProseMirror-like/chat-like proof. It still fails honestly on the manual-gated surfaces: Notes title/body/checklist, Obsidian fresh visual proof, Codex one-word no-submit proof, Claude Code, and Claude desktop. Do not raise support grades for those apps until fresh recorder rows exist in `docs/product/manual-smoke-runs.md`.
 
 ## P1: Trace Analysis
 
@@ -217,24 +225,41 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P1: AppDelegate Refactor
 
-- [ ] Extract presentation policy out of `AppDelegate`.
+- [x] Extract presentation policy out of `AppDelegate`.
 - [ ] Extract observer coordination out of `AppDelegate`.
 - [x] Extract insertion verification scheduling out of `AppDelegate`.
-- [ ] Extract trace screenshot capture out of `AppDelegate`.
-- [ ] Extract compatibility learning actions out of `AppDelegate`.
+- [x] Extract trace screenshot capture out of `AppDelegate`.
+- [x] Extract compatibility learning actions out of `AppDelegate`.
+- [x] Extract runtime lifecycle out of `AppDelegate`.
+- [x] Extract local privacy controls out of `AppDelegate`.
+- [x] Extract suggestion diagnostics out of `AppDelegate`.
+- [x] Extract visible suggestion panel placement out of `AppDelegate`.
+- [x] Extract visible suggestion session state out of `AppDelegate`.
+- [x] Extract visible suggestion outcome policy out of `AppDelegate`.
+- [x] Extract insertion verification coordination out of `AppDelegate`.
+- [x] Extract completion request lifecycle out of `AppDelegate`.
+- [x] Extract visible suggestion keyboard acceptance decisions out of `AppDelegate`.
+- [x] Extract focused text poll lifecycle out of `AppDelegate`.
+- [x] Extract focused text suggestion planning out of `AppDelegate`.
+- [x] Extract focused text AX health coordination out of `AppDelegate`.
+- [x] Extract visible suggestion acceptance coordination out of `AppDelegate`.
+- [x] Extract fast word-completion request planning out of `AppDelegate`.
+- [x] Extract focused text polling telemetry and throttle bookkeeping out of `AppDelegate`.
 - [ ] Keep `AppDelegate` mostly as wiring.
-- [ ] Add unit tests for each extracted policy.
+- [x] Add unit tests for each extracted policy.
+
+Blocker evidence: `AppDelegate` is still 3,104 lines after extracting presentation, observer coordination, insertion verification scheduling/coordination, trace screenshot capture, compatibility learning actions, status menu state, runtime lifecycle, local privacy controls, suggestion diagnostics, visible suggestion panel placement, visible suggestion session state, visible suggestion outcome policy, completion request lifecycle, visible suggestion keyboard acceptance decisions, focused text poll lifecycle, focused text suggestion planning, focused text AX health coordination, visible suggestion acceptance coordination, fast word-completion request planning, and focused text polling telemetry. The remaining heavy owners are focused text side effects and model request orchestration.
 
 ## P2: Self-Healing Compatibility
 
 - [x] Turn manual nudges into adapter recommendations.
-- [ ] Add confidence thresholds for "learning should become code".
+- [x] Add confidence thresholds for "learning should become code".
 - [x] Add a local report that lists apps with repeated visual nudges.
 - [x] Add a local report that lists apps with repeated detached suppression.
-- [ ] Add fixture-based visual calibration tests.
-- [ ] Explore ScreenCaptureKit for local screenshot capture.
-- [ ] Explore Vision-based caret/suggestion alignment only as a dogfood tool.
-- [ ] Never run visual calibration without explicit local opt-in.
+- [x] Add fixture-based visual calibration tests.
+- [x] Explore ScreenCaptureKit for local screenshot capture.
+- [x] Explore Vision-based caret/suggestion alignment only as a dogfood tool.
+- [x] Never run visual calibration without explicit local opt-in.
 
 ## P2: Packaging And Beta
 

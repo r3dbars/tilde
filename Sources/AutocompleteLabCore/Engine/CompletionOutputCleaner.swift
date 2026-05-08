@@ -51,6 +51,28 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return suggestions
     }
 
+    public func cleanBestCandidate(
+        _ rawOutput: String,
+        after textBeforeCursor: String?,
+        mode: CompletionRequestMode,
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
+        limit: Int = 3,
+        ranker: CompletionCandidateRanker = CompletionCandidateRanker()
+    ) -> CompletionCandidateSelection {
+        let candidates = cleanCandidates(
+            rawOutput,
+            after: textBeforeCursor,
+            mode: mode,
+            limit: limit
+        )
+        return ranker.selection(
+            candidates,
+            mode: mode,
+            textBeforeCursor: textBeforeCursor,
+            behaviorProfileID: behaviorProfileID
+        )
+    }
+
     public func clean(_ rawOutput: String, after textBeforeCursor: String?, mode: CompletionRequestMode) -> CompletionSuggestion? {
         let withoutThinking = rawOutput
             .replacingOccurrences(

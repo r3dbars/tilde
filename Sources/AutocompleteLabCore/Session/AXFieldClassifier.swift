@@ -7,13 +7,14 @@ public enum AXFieldKind: String, Codable, Equatable, Sendable, CaseIterable {
     case form
     case secure
     case url
+    case unprovenSurface
     case unknown
 
     public var suppressesSuggestionsByDefault: Bool {
         switch self {
-        case .search, .form, .secure, .url:
+        case .search, .form, .secure, .url, .unprovenSurface, .unknown:
             true
-        case .multilineCompose, .singlelineCompose, .unknown:
+        case .multilineCompose, .singlelineCompose:
             false
         }
     }
@@ -120,6 +121,10 @@ public struct AXFieldClassifier: Equatable, Sendable {
 
         if let match = firstMatch(input, needles: Self.formNeedles) {
             return AXFieldClassification(kind: .form, reason: "formHint:\(match)")
+        }
+
+        if let match = firstMatch(input, needles: Self.unprovenSurfaceNeedles) {
+            return AXFieldClassification(kind: .unprovenSurface, reason: "unprovenSurface:\(match)")
         }
 
         if hasRole(input, "AXTextArea") {
@@ -237,5 +242,13 @@ public struct AXFieldClassifier: Equatable, Sendable {
         "draft",
         "compose",
         "write"
+    ]
+
+    private static let unprovenSurfaceNeedles: [String] = [
+        "docs.google",
+        "google docs",
+        "notion",
+        "slack",
+        "discord"
     ]
 }

@@ -9,7 +9,7 @@ public struct FocusPollingCadencePolicy: Equatable, Sendable {
     public let untrustedIntervalSeconds: TimeInterval
 
     public init(
-        activeSuggestionIntervalSeconds: TimeInterval = 0.033,
+        activeSuggestionIntervalSeconds: TimeInterval = 0.05,
         supportedTypingWatchIntervalSeconds: TimeInterval = 0.12,
         recentTextChangeIntervalSeconds: TimeInterval = 0.20,
         recentTextChangeWindowSeconds: TimeInterval = 0.75,
@@ -58,5 +58,30 @@ public struct FocusPollingCadencePolicy: Equatable, Sendable {
 
         let age = now.timeIntervalSince(lastTextChangeAt)
         return age >= 0 && age <= recentTextChangeWindowSeconds
+    }
+
+    public func shouldPoll(
+        now: Date,
+        lastPollAt: Date?,
+        isTrustedForAccessibility: Bool,
+        hasSupportedProfile: Bool,
+        hasVisibleSuggestion: Bool,
+        hasRecentTextChange: Bool = false
+    ) -> Bool {
+        guard let lastPollAt else {
+            return true
+        }
+
+        let elapsed = now.timeIntervalSince(lastPollAt)
+        guard elapsed >= 0 else {
+            return true
+        }
+
+        return elapsed >= interval(
+            isTrustedForAccessibility: isTrustedForAccessibility,
+            hasSupportedProfile: hasSupportedProfile,
+            hasVisibleSuggestion: hasVisibleSuggestion,
+            hasRecentTextChange: hasRecentTextChange
+        )
     }
 }

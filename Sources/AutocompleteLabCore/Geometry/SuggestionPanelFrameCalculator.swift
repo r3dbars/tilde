@@ -2,6 +2,8 @@ import CoreGraphics
 import Foundation
 
 public enum SuggestionPanelFrameCalculator {
+    public static let minimumUsefulInlineWordWidth: CGFloat = 40
+
     public static func shouldRefreshPresentation(
         previousText: String?,
         previousFrame: CGRect?,
@@ -25,7 +27,7 @@ public enum SuggestionPanelFrameCalculator {
 
     public static func isUsableInlineGhostFrame(
         _ frame: CGRect,
-        minimumVisibleWidth: CGFloat = 40
+        minimumVisibleWidth: CGFloat = minimumUsefulInlineWordWidth
     ) -> Bool {
         frame.minX.isFinite
             && frame.minY.isFinite
@@ -39,14 +41,29 @@ public enum SuggestionPanelFrameCalculator {
     }
 
     public static func inlineGhostFrame(
+        appBundleIdentifier: String? = nil,
         caretRect: CGRect,
         textLineRect: CGRect? = nil,
+        boundaryFrame: CGRect? = nil,
         textSize: CGSize,
         screenFrame: CGRect,
         clippingFrame: CGRect? = nil,
         minimumWidth: CGFloat = 40,
         maximumWidth: CGFloat = 420
     ) -> CGRect {
+        if appBundleIdentifier != nil || boundaryFrame != nil {
+            return inlineGhostPlacement(
+                appBundleIdentifier: appBundleIdentifier,
+                caretRect: caretRect,
+                textLineRect: textLineRect,
+                boundaryFrame: boundaryFrame ?? clippingFrame,
+                textSize: textSize,
+                screenFrame: screenFrame,
+                minimumWidth: minimumWidth,
+                maximumWidth: maximumWidth
+            ).frame
+        }
+
         let lineRect = textLineRect ?? caretRect
         let height = max(lineRect.height, textSize.height)
         let horizontalBounds = horizontalBounds(screenFrame: screenFrame, clippingFrame: clippingFrame)
@@ -76,6 +93,30 @@ public enum SuggestionPanelFrameCalculator {
             ),
             width: width,
             height: height
+        )
+    }
+
+    public static func inlineGhostPlacement(
+        appBundleIdentifier: String? = nil,
+        caretRect: CGRect,
+        textLineRect: CGRect? = nil,
+        boundaryFrame: CGRect? = nil,
+        textSize: CGSize,
+        screenFrame: CGRect,
+        minimumWidth: CGFloat = 40,
+        maximumWidth: CGFloat = 420
+    ) -> InlineGhostPlacementDecision {
+        InlineGhostPlacementResolver.resolve(
+            InlineGhostPlacementRequest(
+                appBundleIdentifier: appBundleIdentifier,
+                caretRect: caretRect,
+                textLineRect: textLineRect,
+                boundaryFrame: boundaryFrame,
+                textSize: textSize,
+                screenFrame: screenFrame,
+                minimumWidth: minimumWidth,
+                maximumWidth: maximumWidth
+            )
         )
     }
 
