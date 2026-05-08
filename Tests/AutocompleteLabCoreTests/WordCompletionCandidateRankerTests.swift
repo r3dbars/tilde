@@ -12,6 +12,22 @@ struct WordCompletionCandidateRankerTests {
         #expect(suggestion?.visibleText == "tation")
     }
 
+    @Test("Preserves typed casing for suffixes")
+    func preservesTypedCasingForSuffixes() {
+        let ranker = WordCompletionCandidateRanker(staticWords: ["dictation", "document"])
+
+        #expect(ranker.suggestion(for: "I use Dic")?.visibleText == "tation")
+        #expect(ranker.suggestion(for: "Open DOC")?.visibleText == "UMENT")
+    }
+
+    @Test("Preserves useful recent word casing without shouting lowercase fragments")
+    func preservesUsefulRecentWordCasing() {
+        let ranker = WordCompletionCandidateRanker(staticWords: [])
+
+        #expect(ranker.suggestion(for: "Use Open", recentWords: ["OpenAIModel"])?.visibleText == "AIModel")
+        #expect(ranker.suggestion(for: "use open", recentWords: ["OpenAIModel"])?.visibleText == "aimodel")
+    }
+
     @Test("uses recent words before static words")
     func usesRecentWords() {
         let ranker = WordCompletionCandidateRanker(staticWords: ["document"])

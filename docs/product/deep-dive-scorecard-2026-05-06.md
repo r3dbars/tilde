@@ -352,6 +352,9 @@ evidence-backed score should stay lower until those rows are closed.
   whole-word completions in word-completion mode. It also rejects
   recommendation, rewrite, and next-action candidates so a separate product
   behavior cannot masquerade as inline autocomplete.
+- Word completion keeps suffix-only behavior while preserving typed casing, so
+  uppercase fragments complete with uppercase suffixes and mixed-case recent
+  words can keep their useful casing.
 - Chrome chat-like no-submit proof now uses a tab-title submit counter so the
   smoke test works even when Chrome JavaScript execution from Apple Events is
   disabled.
