@@ -82,10 +82,10 @@ struct AcceptedTextSafetyPolicyTests {
 
     @Test("Disabled profiles block insertion")
     func disabledProfilesBlockInsertion() throws {
-        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
+        let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
 
         #expect(
-            policy.decision(acceptedText: " make", profile: codex)
+            policy.decision(acceptedText: " make", profile: mail)
                 == .blocked(reason: "profile-insertion-disabled")
         )
     }
