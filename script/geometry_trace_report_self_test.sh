@@ -10,6 +10,7 @@ trap 'rm -f "$TRACE_FILE" "$BAD_TRACE_FILE" "$REPORT_FILE" "$BAD_REPORT_FILE"' E
 cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionPresented","suggestionID":"caret","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"anchorSource":"caret","anchorQuality":"trusted","anchorReason":"caretBoundsTrusted","anchorCanPresent":"true","anchorRect":"10,20,0,18","hasCaretRect":"true","hasTextLineRect":"true","hasElementRect":"true","hasWindowRect":"true"}}
 {"type":"suggestionPresented","suggestionID":"line","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","latencyMilliseconds":100,"metadata":{"anchorSource":"line","anchorQuality":"usableFallback","anchorReason":"lineBoundsFallback","anchorCanPresent":"true","anchorRect":"20,30,140,18","hasCaretRect":"false","hasTextLineRect":"true","hasElementRect":"true","hasWindowRect":"true"}}
+{"type":"suggestionPresented","suggestionID":"synthetic","appBundleIdentifier":"com.google.Chrome","requestMode":"wordCompletion","latencyMilliseconds":80,"metadata":{"placementAnchorSource":"synthetic-caret","placementConfidenceBand":"medium","placementHealthReason":"healthy","anchorRect":"30,40,0,18","hasCaretRect":"true","hasTextLineRect":"true","hasElementRect":"true","hasWindowRect":"true"}}
 {"type":"suggestionSuppressed","suggestionID":"blocked","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","reason":"detached-suggestion-disabled","metadata":{"anchorSource":"none","anchorQuality":"invalid","anchorReason":"detachedAnchorDisallowed","anchorCanPresent":"false","anchorRect":"none","hasCaretRect":"false","hasTextLineRect":"false","hasElementRect":"true","hasWindowRect":"true"}}
 JSONL
 
@@ -21,7 +22,9 @@ for expected in \
   "Anchor sources" \
   "md.obsidian" \
   "caret=1" \
+  "synthetic-caret=1" \
   "line=1" \
+  "healthy=1" \
   "detachedAnchorDisallowed=1"; do
   if ! grep -F "$expected" "$REPORT_FILE" >/dev/null; then
     echo "geometry report self-test missing: $expected" >&2

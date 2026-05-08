@@ -67,6 +67,9 @@ public struct AutocompleteBehaviorProfile: Equatable, Sendable {
             "behaviorProfileMaxVisibleWords": String(maxVisibleWords),
             "behaviorProfileMaxGeneratedTokens": String(maxGeneratedTokens),
             "behaviorProfileSuppressedByDefault": String(suppressionDefaults.suppressesSuggestionsByDefault),
+            "behaviorProfileSuppressesFreshParagraphStart": String(suppressionDefaults.suppressesFreshParagraphStart),
+            "behaviorProfileSuppressesBlankLine": String(suppressionDefaults.suppressesBlankLine),
+            "behaviorProfileSuppressesQuestions": String(suppressionDefaults.suppressesQuestions),
             "behaviorProfileFullAccept": String(suppressionDefaults.allowsFullAccept),
             "behaviorProfileSubmitLikeCompletions": String(suppressionDefaults.allowsSubmitLikeCompletions)
         ]

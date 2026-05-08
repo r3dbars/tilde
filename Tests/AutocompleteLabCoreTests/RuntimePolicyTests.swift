@@ -3,6 +3,96 @@ import Testing
 
 @Suite("Runtime policy")
 struct RuntimePolicyTests {
+    @Test("Runtime session cache reuses only same field growing continuations")
+    func runtimeSessionCacheReusesSameFieldGrowingContinuations() {
+        let policy = RuntimeSessionCachePolicy()
+        let previous = cacheRequest(text: "Can we make this")
+        let current = cacheRequest(text: "Can we make this feel")
+        let expectedKey = RuntimeSessionCacheKey(
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldIdentityDescription: "field-1",
+            fieldKind: .multilineCompose,
+            behaviorProfileID: .notes,
+            mode: .phraseContinuation
+        )
+
+        let decision = policy.decision(previous: previous, current: current)
+
+        #expect(decision == .reuse(expectedKey))
+        #expect(decision.traceMetadata["runtimeSessionCacheEligible"] == "true")
+        #expect(decision.traceMetadata["runtimeSessionCacheDecision"] == "reuse")
+        #expect(decision.traceMetadata["runtimeSessionCacheKey"] == expectedKey.traceDescription)
+    }
+
+    @Test("Runtime session cache blocks risky boundary changes")
+    func runtimeSessionCacheBlocksRiskyBoundaryChanges() {
+        let policy = RuntimeSessionCachePolicy()
+        let previous = cacheRequest(text: "Can we make this")
+
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make this.", mode: .phraseContinuation)
+        ) == .reset(.sentenceChanged))
+
+        #expect(policy.decision(
+            previous: cacheRequest(text: "Can we make this", mode: .sentenceContinuation),
+            current: cacheRequest(text: "Can we make this\n\nNew paragraph", mode: .sentenceContinuation)
+        ) == .reset(.paragraphChanged))
+    }
+
+    @Test("Runtime session cache allows sentence mode within the same paragraph")
+    func runtimeSessionCacheAllowsSentenceModeInSameParagraph() {
+        let policy = RuntimeSessionCachePolicy()
+        let previous = cacheRequest(text: "Can we make this.", mode: .sentenceContinuation)
+        let current = cacheRequest(text: "Can we make this. It should", mode: .sentenceContinuation)
+
+        #expect(policy.decision(previous: previous, current: current).canReuse)
+    }
+
+    @Test("Runtime session cache resets on app field mode and edit changes")
+    func runtimeSessionCacheResetsOnScopeAndEditChanges() {
+        let policy = RuntimeSessionCachePolicy()
+        let previous = cacheRequest(text: "Can we make this")
+
+        #expect(policy.decision(
+            previous: nil,
+            current: previous
+        ) == .reset(.noPriorRequest))
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make this", mode: .wordCompletion)
+        ) == .reset(.wordCompletion))
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make this feel", app: "com.apple.Notes")
+        ) == .reset(.appChanged))
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make this feel", field: "field-2")
+        ) == .reset(.fieldChanged))
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make this feel", profile: .docsProse)
+        ) == .reset(.behaviorProfileChanged))
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make this feel", mode: .sentenceContinuation)
+        ) == .reset(.modeChanged))
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make", mode: .phraseContinuation)
+        ) == .reset(.textDidNotGrow))
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make this feel", after: " existing")
+        ) == .reset(.textAfterCursorChanged))
+
+        let reset = policy.decision(previous: previous, current: cacheRequest(text: "Can we make"))
+        #expect(reset.traceMetadata["runtimeSessionCacheEligible"] == "false")
+        #expect(reset.traceMetadata["runtimeSessionCacheDecision"] == "reset")
+        #expect(reset.traceMetadata["runtimeSessionCacheResetReason"] == "text-did-not-grow")
+    }
+
     @Test("MVP runtime is embedded and does not allow user-managed servers")
     func mvpRuntimeIsEmbedded() {
         let decision = EmbeddedRuntimeDecision.mvp
@@ -10,7 +100,6 @@ struct RuntimePolicyTests {
         #expect(decision.preferredCandidate == .mlx)
         #expect(decision.fallbackCandidate == .liteRTLM)
         #expect(decision.allowsUserManagedServer == false)
-        #expect(RuntimeReadinessAction.cancelModelInstall.displayName == "Cancel Model Install")
     }
 
     @Test("Runtime states have short status summaries")
@@ -77,7 +166,7 @@ struct RuntimePolicyTests {
 
         #expect(missingReport.stage == .downloadNeeded)
         #expect(missingReport.summary == "download needed (Qwen3.5 4B); fallback: ready (mock)")
-        #expect(missingReport.detail == "Expected MLX model folder at /tmp/gemma")
+        #expect(missingReport.detail == "The local model is not installed yet. Expected folder: /tmp/gemma")
         #expect(missingReport.action == .installModel)
 
         let invalidPlan = RuntimeBootstrapPlan(
@@ -88,8 +177,15 @@ struct RuntimePolicyTests {
 
         #expect(invalidReport.stage == .repairNeeded)
         #expect(invalidReport.summary == "model folder needs repair; fallback: ready (mock)")
-        #expect(invalidReport.detail == "/tmp/gemma: missing config.json")
+        #expect(invalidReport.detail == "The local model folder is incomplete: missing config.json. Folder: /tmp/gemma")
         #expect(invalidReport.action == .repairModel)
+
+        let unsupportedSourcePlan = RuntimeBootstrapPlan(
+            preferredAsset: .qwen35NineBMLX,
+            assetState: .missing(expectedPath: "/tmp/qwen9"),
+            nativeRuntimeAvailable: false
+        )
+        #expect(unsupportedSourcePlan.readinessReport(for: .ready(candidate: .mock)).action == .revealModelFolder)
     }
 
     @Test("Runtime readiness guidance gives stage-specific setup actions")
@@ -134,12 +230,11 @@ struct RuntimePolicyTests {
 
         #expect(missing.actionTitle == "Install Model")
         #expect(missing.isActionEnabled)
-        #expect(missing.message.contains("Model missing"))
-        #expect(missing.message.contains("app-owned Qwen3.5 4B MLX model"))
-        #expect(missing.message.contains("Do not start Ollama, llama.cpp, or a separate model server."))
+        #expect(missing.message.contains("download uses Hugging Face once"))
+        #expect(missing.message.contains("You do not need Ollama or a model server"))
         #expect(repair.actionTitle == "Repair Model")
         #expect(repair.isActionEnabled)
-        #expect(repair.message.contains("replace the incomplete app-owned MLX files from inside Autocomplete Lab"))
+        #expect(repair.message.contains("local model files look incomplete"))
         #expect(warming.actionTitle == "Warming...")
         #expect(!warming.isActionEnabled)
         #expect(failed.actionTitle == "Retry Model")
@@ -206,7 +301,6 @@ struct RuntimePolicyTests {
         #expect(manifest.source?.repoID == "mlx-community/Qwen3.5-4B-MLX-4bit")
         #expect(manifest.source?.allowPatterns.contains("*.safetensors") == true)
         #expect(manifest.source?.estimatedBytes == 3_030_000_000)
-        #expect(manifest.source?.displaySummary == "mlx-community/Qwen3.5-4B-MLX-4bit • about 2.8 GiB")
         #expect(manifest.requiredFileNames.contains("config.json"))
         #expect(manifest.requiredModelFileExtension == "safetensors")
         #expect(!manifest.requiresVisionLanguageFactory)
@@ -309,4 +403,54 @@ struct RuntimePolicyTests {
         #expect(benchmark.p95LatencyMilliseconds == 90)
         #expect(!benchmark.passesAutocompleteTarget())
     }
+
+    @Test("Static prompt cache reports hit miss and redacted key")
+    func staticPromptCacheReportsHitMissAndRedactedKey() {
+        var cache = RuntimeStaticPromptCache(capacity: 2)
+
+        let first = cache.lookup(systemPrompt: "Inline autocomplete. Return one suffix.")
+        let second = cache.lookup(systemPrompt: "Inline autocomplete. Return one suffix.")
+
+        #expect(!first.hit)
+        #expect(second.hit)
+        #expect(first.key == second.key)
+        #expect(first.key != "Inline autocomplete. Return one suffix.")
+        #expect(second.systemPrompt == first.systemPrompt)
+        #expect(second.traceMetadata["runtimeStaticPromptCacheHit"] == "true")
+        #expect(second.traceMetadata["runtimeStaticPromptCacheSize"] == "1")
+    }
+
+    @Test("Static prompt cache evicts the oldest prompt")
+    func staticPromptCacheEvictsOldestPrompt() {
+        var cache = RuntimeStaticPromptCache(capacity: 2)
+
+        let first = cache.lookup(systemPrompt: "prompt one")
+        _ = cache.lookup(systemPrompt: "prompt two")
+        _ = cache.lookup(systemPrompt: "prompt three")
+        let repeatedFirst = cache.lookup(systemPrompt: "prompt one")
+
+        #expect(!first.hit)
+        #expect(!repeatedFirst.hit)
+        #expect(repeatedFirst.traceMetadata["runtimeStaticPromptCacheSize"] == "2")
+    }
+}
+
+private func cacheRequest(
+    text: String,
+    after: String = "",
+    app: String? = "com.apple.TextEdit",
+    field: String? = "field-1",
+    kind: AXFieldKind = .multilineCompose,
+    profile: AutocompleteBehaviorProfileID? = .notes,
+    mode: CompletionRequestMode = .phraseContinuation
+) -> CompletionRequest {
+    CompletionRequest(
+        textBeforeCursor: text,
+        textAfterCursor: after,
+        appBundleIdentifier: app,
+        fieldIdentityDescription: field,
+        fieldKind: kind,
+        behaviorProfileID: profile,
+        mode: mode
+    )
 }

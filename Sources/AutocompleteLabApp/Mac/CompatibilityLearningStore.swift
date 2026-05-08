@@ -48,20 +48,13 @@ final class CompatibilityLearningStore: @unchecked Sendable {
     }
 
     func recordObservation(for bundleIdentifier: String, reason: String) {
-        update(bundleIdentifier: bundleIdentifier, reason: reason) { profile in
-            profile.observations += 1
-            profile.confidence = min(1, profile.confidence + 0.05)
-        }
-    }
-
-    func setRenderModeOverride(_ mode: SuggestionRenderMode?, for bundleIdentifier: String) {
         update(
             bundleIdentifier: bundleIdentifier,
-            reason: mode == .floatingMirror ? "mirror-mode-forced" : "profile-mode-restored"
+            reason: reason,
+            preserveTrustedVisualReason: true
         ) { profile in
-            profile.renderModeOverride = mode
             profile.observations += 1
-            profile.confidence = min(1, max(profile.confidence, 0.25))
+            profile.confidence = min(1, profile.confidence + 0.05)
         }
     }
 
@@ -81,6 +74,23 @@ final class CompatibilityLearningStore: @unchecked Sendable {
         }
     }
 
+    func updateOffset(
+        x: Double,
+        y: Double,
+        for bundleIdentifier: String,
+        reason: String,
+        visualTrustContext: CompatibilityLearningVisualTrustContext? = nil,
+        confidence: Double? = nil
+    ) {
+        update(bundleIdentifier: bundleIdentifier, reason: reason) { profile in
+            profile.xOffset = x
+            profile.yOffset = y
+            profile.applyVisualTrustContext(visualTrustContext)
+            profile.observations += 1
+            profile.confidence = min(1, max(profile.confidence, confidence ?? 0.25))
+        }
+    }
+
     func nudgeOffset(
         dx: Double,
         dy: Double,
@@ -91,6 +101,32 @@ final class CompatibilityLearningStore: @unchecked Sendable {
             profile.xOffset += dx
             profile.yOffset += dy
             profile.visualScope = visualScope
+            profile.observations += 1
+            profile.confidence = min(1, max(profile.confidence, 0.35))
+        }
+    }
+
+    func nudgeOffset(
+        dx: Double,
+        dy: Double,
+        for bundleIdentifier: String,
+        visualTrustContext: CompatibilityLearningVisualTrustContext? = nil
+    ) {
+        update(bundleIdentifier: bundleIdentifier, reason: "manual-visual-nudge") { profile in
+            profile.xOffset += dx
+            profile.yOffset += dy
+            profile.applyVisualTrustContext(visualTrustContext)
+            profile.observations += 1
+            profile.confidence = min(1, max(profile.confidence, 0.35))
+        }
+    }
+
+    func setRenderModeOverride(_ renderMode: SuggestionRenderMode?, for bundleIdentifier: String) {
+        update(
+            bundleIdentifier: bundleIdentifier,
+            reason: renderMode == nil ? "profile-mode-restored" : "mirror-mode-forced"
+        ) { profile in
+            profile.renderModeOverride = renderMode
             profile.observations += 1
             profile.confidence = min(1, max(profile.confidence, 0.35))
         }
@@ -194,6 +230,7 @@ final class CompatibilityLearningStore: @unchecked Sendable {
     private func update(
         bundleIdentifier: String,
         reason: String,
+        preserveTrustedVisualReason: Bool = false,
         mutate: (inout CompatibilityLearningProfile) -> Void
     ) {
         queue.sync { [fileURL, encoder, decoder] in
@@ -207,7 +244,9 @@ final class CompatibilityLearningStore: @unchecked Sendable {
 
             var profile = profiles[bundleIdentifier] ?? CompatibilityLearningProfile(bundleIdentifier: bundleIdentifier)
             mutate(&profile)
-            profile.lastReason = reason
+            if !(preserveTrustedVisualReason && profile.hasTrustedVisualAdjustment) {
+                profile.lastReason = reason
+            }
             profile.updatedAt = ISO8601DateFormatter().string(from: now())
             profiles[bundleIdentifier] = profile
 
@@ -259,5 +298,13 @@ final class CompatibilityLearningStore: @unchecked Sendable {
         }
 
         return expiresAt > now()
+    }
+}
+
+private extension CompatibilityLearningProfile {
+    mutating func applyVisualTrustContext(_ context: CompatibilityLearningVisualTrustContext?) {
+        visualAppVersion = context?.appVersion
+        visualScreenFingerprint = context?.screenFingerprint
+        visualFieldShapeFingerprint = context?.fieldShapeFingerprint
     }
 }
