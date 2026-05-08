@@ -321,9 +321,10 @@ evidence-backed score should stay lower until those rows are closed.
 
 ## Remaining Gaps
 
-1. Run recorder-grade screenshot-backed audits for Obsidian, Claude desktop,
-   and Claude Code with disposable text only. Run Notes as three explicit
-   surface commands: `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`,
+1. Run recorder-grade screenshot-backed audits for Obsidian, Notes title/body/checklist,
+   Claude desktop, and Claude Code with disposable text only. Run Notes as
+   three explicit surface commands:
+   `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`,
    `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate`,
    and `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`.
    Codex has visual proof now, but still needs one-word accept/no-submit proof
