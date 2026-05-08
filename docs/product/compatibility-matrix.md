@@ -11,14 +11,14 @@ For screenshot-backed app-by-app grades and gaps, use
 | App | Status | Render | Insert | Proof |
 | --- | --- | --- | --- | --- |
 | TextEdit | supported | inline, mirror fallback | AX selected text, value fallback | recorded manual smoke pass |
-| Notes | supported | inline, mirror fallback | key events only | requires title, body, and checklist proof labels |
+| Notes | supported | caret-bound mirror only, no detached fallback | key events only | requires title, body, and checklist proof labels |
 | Obsidian | supported | synthetic caret mirror, no detached fallback | AX then key events, key fallback | recorded CodeMirror smoke pass with two verified accepts; detached whole-editor anchors stay suppressed |
 | Chrome | supported for local text fields and local editor fixtures | synthetic inline, mirror fallback | key events, AX value fallback | repeatable textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture commands with screenshot-backed proof labels |
-| Codex | dogfood target | synthetic inline caret, no detached fallback | AX value replacement, key fallback | prior manual pass is stale for this gate; current one-word no-submit proof pending |
-| Claude Code | dogfood target | synthetic inline caret, no detached fallback | key events, AX fallback | pending manual smoke pass |
-| Claude desktop | dogfood target | synthetic inline caret, no detached fallback | AX value replacement | prior manual pass is stale for this gate; current one-word no-submit proof pending |
+| Codex | dogfood target | caret-bound mirror only, no detached fallback | AX value replacement, key fallback | prior manual pass is stale for this gate; current one-word no-submit proof pending |
+| Claude Code | dogfood target | caret-bound mirror only, no detached fallback | key events, AX fallback | pending manual smoke pass |
+| Claude desktop | dogfood target | caret-bound mirror only, no detached fallback | AX value replacement | prior manual pass is stale for this gate; current one-word no-submit proof pending |
 | Mail | diagnostics only | disabled | disabled | blocked until safe compose adapter exists |
-| Atlas | unsupported | disabled | disabled | blocked until focused AX element is reliable |
+| Atlas | diagnostics only | disabled | disabled | blocked because browser fields and prompt chats can contain private text; no no-submit proof exists |
 
 Run:
 

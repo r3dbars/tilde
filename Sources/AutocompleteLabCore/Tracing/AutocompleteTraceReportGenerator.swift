@@ -151,6 +151,13 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
           <h2>RAM-only retention proof</h2>
           <p>Accepted text is kept only for checkpoint comparison. The durable proof is the redacted <code>acceptanceRetentionCleared</code> event with counts and fingerprints, not raw text.</p>
           <ul>\(sortedCountList(summary.acceptanceRetentionClearedByReason))</ul>
+          <h2>Privacy checklist</h2>
+          <ul>
+            <li>This report is generated locally from the default redacted trace.</li>
+            <li>Typed text, accepted text, screenshots, screenshot paths, document names, URLs, recipients, and subject lines are not included.</li>
+            <li>Share only this redacted report for normal beta feedback.</li>
+            <li>Use raw debug exports only for explicit local debugging sessions.</li>
+          </ul>
           <h2>Accepted-and-kept survival slices</h2>
           <h3>By app</h3><ul>\(sortedRateList(summary.acceptedAndKeptRateByApp))</ul>
           <h3>By field kind</h3><ul>\(sortedRateList(summary.acceptedAndKeptRateByFieldKind))</ul>

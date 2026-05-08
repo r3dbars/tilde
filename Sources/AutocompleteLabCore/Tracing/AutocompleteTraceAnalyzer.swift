@@ -1816,7 +1816,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     private func searchOrFormLeakageCount(in events: [AutocompleteTraceEvent]) -> Int {
         events.filter { event in
             event.type == .suggestionPresented
-                && ["search", "form", "url", "secure"].contains(event.metadata["fieldKind"] ?? "")
+                && ["search", "form", "url", "secure", "unprovenSurface"].contains(event.metadata["fieldKind"] ?? "")
         }.count
     }
 
@@ -1922,7 +1922,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 }
 
             case .suggestionPresented:
-                if ["search", "form", "url", "secure"].contains(event.metadata["fieldKind"] ?? "") {
+                if ["search", "form", "url", "secure", "unprovenSurface"].contains(event.metadata["fieldKind"] ?? "") {
                     increment("searchOrFormLeakage")
                 }
 

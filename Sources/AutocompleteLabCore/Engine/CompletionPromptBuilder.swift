@@ -57,8 +57,9 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let base = """
         Inline autocomplete.
         Return only the next \(maxVisibleWords) words or fewer.
+        Return only the suffix after the Before cursor text.
         Prefer boring connective tissue, names, repeated local terms, closers, and the next few words the user was already likely to type.
-        \(sentenceGuidance) Do not answer, explain, greet, quote, reason, or restart.
+        \(sentenceGuidance) Do not answer, explain, greet, quote, reason, repeat the Before cursor text, or restart.
         Do not brainstorm, rewrite, introduce a new topic, or complete the user's whole thought.
         """
 

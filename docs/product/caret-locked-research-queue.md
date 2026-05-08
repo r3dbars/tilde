@@ -139,7 +139,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 - [x] Add Slack diagnostics profile.
 - [x] Add VS Code diagnostics profile.
 - [x] Add Cursor diagnostics profile.
-- [ ] Add Atlas diagnostics profile once focused AX is reliable.
+- [x] Add Atlas diagnostics-only profile that keeps suggestions off until browser-field privacy and no-submit proof exist.
 - [x] Keep Mail compose diagnostics-only.
 - [x] Add explicit unsupported records for high-risk apps.
 - [x] Add tests for profile defaults.
@@ -167,8 +167,8 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P1: Runtime And First Run
 
-- [ ] Make first-run model install a real in-app action.
-- [ ] Add "Install local model" to settings when the model folder is missing.
+- [x] Make first-run model install a real in-app action.
+- [x] Add "Install local model" to settings when the model folder is missing.
 - [ ] Add "Retry model load" after install or repair.
 - [x] Show clear missing/repair/ready states in plain language.
 - [x] Update runtime docs to Qwen3.5 4B as the default.
@@ -217,7 +217,7 @@ The core lesson is simple: AX should be the first path, not the only path. The a
 
 ## P1: AppDelegate Refactor
 
-- [ ] Extract presentation policy out of `AppDelegate`.
+- [x] Extract presentation policy out of `AppDelegate`.
 - [ ] Extract observer coordination out of `AppDelegate`.
 - [x] Extract insertion verification scheduling out of `AppDelegate`.
 - [ ] Extract trace screenshot capture out of `AppDelegate`.

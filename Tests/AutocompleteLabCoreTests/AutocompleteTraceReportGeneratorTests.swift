@@ -51,6 +51,8 @@ struct AutocompleteTraceReportGeneratorTests {
         #expect(html.contains("Autocomplete Lab Redacted Trace Report"))
         #expect(html.contains("Do-not-ship blockers"))
         #expect(html.contains("RAM-only retention proof"))
+        #expect(html.contains("Privacy checklist"))
+        #expect(html.contains("Share only this redacted report for normal beta feedback."))
         #expect(html.contains("Accepted-and-kept survival slices"))
         #expect(html.contains("Visual calibration, no screenshots"))
         #expect(html.contains("thirty-second-retention-expiry"))

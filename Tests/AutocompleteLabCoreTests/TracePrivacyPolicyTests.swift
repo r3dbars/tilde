@@ -24,6 +24,10 @@ struct TracePrivacyPolicyTests {
         #expect(safe.metadata["textBeforeCursorChars"] == "18")
         #expect(safe.metadata["rawOutputChars"] == "19")
         #expect(safe.metadata["hasCaretRect"] == "true")
+        #expect(safe.metadata["acceptanceSource"] == "visiblePrefix")
+        #expect(safe.metadata["visibleBeforeAcceptChars"] == "15")
+        #expect(safe.metadata["remainingVisibleAfterAcceptChars"] == "12")
+        #expect(safe.metadata["acceptanceMatchesVisiblePrefix"] == "true")
     }
 
     @Test("Environment opt-in keeps raw text")
@@ -160,7 +164,11 @@ struct TracePrivacyPolicyTests {
             screenshotPath: "/tmp/private-screen.png",
             metadata: [
                 "typedSuffix": "private next",
-                "hasCaretRect": "true"
+                "hasCaretRect": "true",
+                "acceptanceSource": "visiblePrefix",
+                "visibleBeforeAcceptChars": "15",
+                "remainingVisibleAfterAcceptChars": "12",
+                "acceptanceMatchesVisiblePrefix": "true"
             ]
         )
     }

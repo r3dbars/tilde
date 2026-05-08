@@ -147,14 +147,20 @@ run_one_word_case() {
   write_one_word_trace "$bundle_id"
 
   AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
-    AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
-    AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
-    AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
-    AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
-    script/manual_smoke_session.sh "$app" --check >/dev/null
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_PROMPT_NO_SUBMIT_CONFIRMED=1 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh "$app" --check >/dev/null
 
   if ! grep -F "| $report_name | \`$bundle_id\` | \`default\` | 1 | \`$expected_render\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
     echo "manual smoke self-test did not record one-word no-submit proof for $status_name" >&2
+    exit 1
+  fi
+
+  if ! grep -F "| $report_name | \`$bundle_id\` | \`default\` | 1 | \`$expected_render\` | lines 1+ in \`" "$REPORT_PATH" | grep -F "prompt no-submit confirmed" >/dev/null; then
+    echo "manual smoke self-test did not record no-submit confirmation for $status_name" >&2
     exit 1
   fi
 }
@@ -216,6 +222,24 @@ run_one_word_case codex Codex Codex com.openai.codex 'inlineAdjacent|floatingMir
 run_one_word_case claude-code "Claude Code" "Claude Code" com.anthropic.claude-code 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_one_word_case claude "Claude desktop" Claude com.anthropic.claudefordesktop 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_strict_visual_case notes-title notes-title
+
+write_one_word_log "com.openai.codex" "inlineAdjacent"
+write_one_word_trace "com.openai.codex"
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh codex --check >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected Codex proof without no-submit confirmation to fail" >&2
+  exit 1
+fi
+
+if ! grep -F 'missing Codex no-submit confirmation' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not explain missing Codex no-submit confirmation" >&2
+  exit 1
+fi
 
 write_passing_log "com.anthropic.claude-code" "inlineAdjacent"
 write_passing_trace "com.anthropic.claude-code"

@@ -386,6 +386,7 @@ struct AutocompleteTraceAnalyzerTests {
                 ]
             ),
             event(.suggestionPresented, suggestionID: "four", metadata: ["fieldKind": "search"]),
+            event(.suggestionPresented, suggestionID: "four-b", metadata: ["fieldKind": "unprovenSurface"]),
             event(.suggestionSuppressed, suggestionID: "five", reason: "repeated-miss"),
             event(.insertionFailed, suggestionID: "six", reason: "insert-verification-failed"),
             event(.appDisabled, suggestionID: "seven", reason: "manual"),
@@ -397,7 +398,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.annoyanceSignalCounts["rapidEscDismissal"] == 1)
         #expect(summary.annoyanceSignalCounts["typedOverWithinOneSecond"] == 1)
         #expect(summary.annoyanceSignalCounts["acceptedThenDeleted"] == 1)
-        #expect(summary.annoyanceSignalCounts["searchOrFormLeakage"] == 1)
+        #expect(summary.annoyanceSignalCounts["searchOrFormLeakage"] == 2)
         #expect(summary.annoyanceSignalCounts["repeatedRejection"] == 1)
         #expect(summary.annoyanceSignalCounts["wrongInsertion"] == 1)
         #expect(summary.annoyanceSignalCounts["appDisable"] == 1)
