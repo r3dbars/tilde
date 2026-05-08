@@ -31,6 +31,7 @@ let package = Package(
             name: "AutocompleteLabCore",
             exclude: [
                 "AGENTS.md",
+                "Compatibility/AGENTS.md",
                 "Configuration/AGENTS.md",
                 "Engine/AGENTS.md",
                 "Experiments/AGENTS.md",
