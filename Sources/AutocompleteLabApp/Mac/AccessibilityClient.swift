@@ -91,21 +91,33 @@ struct FocusedTextReadOptions: Equatable, Sendable {
     static let syntheticTextAreaFastPath = FocusedTextReadOptions(
         preferDirectTextSnapshot: true,
         skipParameterizedTextGeometry: true,
-        skipAttributedText: true
+        skipAttributedText: true,
+        useMinimalFingerprint: true,
+        skipWindowLookup: true,
+        assumedCanSetSelectedText: true
     )
 
     let preferDirectTextSnapshot: Bool
     let skipParameterizedTextGeometry: Bool
     let skipAttributedText: Bool
+    let useMinimalFingerprint: Bool
+    let skipWindowLookup: Bool
+    let assumedCanSetSelectedText: Bool?
 
     init(
         preferDirectTextSnapshot: Bool = false,
         skipParameterizedTextGeometry: Bool = false,
-        skipAttributedText: Bool = false
+        skipAttributedText: Bool = false,
+        useMinimalFingerprint: Bool = false,
+        skipWindowLookup: Bool = false,
+        assumedCanSetSelectedText: Bool? = nil
     ) {
         self.preferDirectTextSnapshot = preferDirectTextSnapshot
         self.skipParameterizedTextGeometry = skipParameterizedTextGeometry
         self.skipAttributedText = skipAttributedText
+        self.useMinimalFingerprint = useMinimalFingerprint
+        self.skipWindowLookup = skipWindowLookup
+        self.assumedCanSetSelectedText = assumedCanSetSelectedText
     }
 }
 
@@ -268,10 +280,12 @@ final class AccessibilityClient: @unchecked Sendable {
 
         let role = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
         let subrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
-        let fingerprint = focusedElementFingerprint(
-            for: focusedElement,
-            processIdentifier: app.processIdentifier
-        )
+        let fingerprint = options.useMinimalFingerprint
+            ? FocusedElementFingerprint()
+            : focusedElementFingerprint(
+                for: focusedElement,
+                processIdentifier: app.processIdentifier
+            )
         let isSecure = isSensitiveTextElement(
             focusedElement,
             role: role,
@@ -304,8 +318,12 @@ final class AccessibilityClient: @unchecked Sendable {
         }
 
         let elementRect = elementBounds(for: focusedElement)
-        let windowIdentifier = containingWindowIdentifier(for: focusedElement, processIdentifier: app.processIdentifier)
-        let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
+        let windowIdentifier = options.skipWindowLookup
+            ? nil
+            : containingWindowIdentifier(for: focusedElement, processIdentifier: app.processIdentifier)
+        let windowRect = options.skipWindowLookup
+            ? nil
+            : containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
         let selectedTextLength = max(0, selectedRange?.length ?? 0)
         let caretRect = options.skipParameterizedTextGeometry ? nil : selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(
@@ -336,7 +354,8 @@ final class AccessibilityClient: @unchecked Sendable {
             textStyle: textStyle,
             canReadValue: textSnapshot.canReadValue,
             canReadBoundsForRange: options.skipParameterizedTextGeometry ? false : nil,
-            canReadAttributedText: options.skipAttributedText ? false : nil
+            canReadAttributedText: options.skipAttributedText ? false : nil,
+            canSetSelectedText: options.assumedCanSetSelectedText
         )
 
         return FocusedTextContext(
@@ -1260,14 +1279,15 @@ final class AccessibilityClient: @unchecked Sendable {
         textStyle: FocusedTextStyle?,
         canReadValue: Bool? = nil,
         canReadBoundsForRange: Bool? = nil,
-        canReadAttributedText: Bool? = nil
+        canReadAttributedText: Bool? = nil,
+        canSetSelectedText: Bool? = nil
     ) -> FocusedTextCapabilities {
         FocusedTextCapabilities(
             canReadValue: canReadValue ?? (copyAttribute(element, attribute: kAXValueAttribute) is String),
             canReadSelectedTextRange: selectedRange != nil,
             canReadBoundsForRange: canReadBoundsForRange ?? (caretRect != nil),
             canReadAttributedText: canReadAttributedText ?? (textStyle != nil),
-            canSetSelectedText: canSetAttribute(element, attribute: kAXSelectedTextAttribute)
+            canSetSelectedText: canSetSelectedText ?? canSetAttribute(element, attribute: kAXSelectedTextAttribute)
         )
     }
 

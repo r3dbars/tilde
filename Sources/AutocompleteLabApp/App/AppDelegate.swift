@@ -1961,6 +1961,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for bundleIdentifier: String,
         context: FocusedTextContext
     ) -> PromptTextAreaMatch {
+        if bundleIdentifier == "com.openai.codex",
+           context.role == "AXTextArea",
+           context.selectedTextLength == 0,
+           context.elementRect != nil,
+           !context.isSecure {
+            return PromptTextAreaMatch(canSuggest: true, reason: "codex-textarea-fast-path")
+        }
+
         let decision = promptEditorPolicy.decision(
             bundleIdentifier: bundleIdentifier,
             role: context.role,

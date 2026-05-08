@@ -38,6 +38,7 @@ This is not yet a 97/100 real human dogfood score. It means the prompt, OCR cont
 - Focused text polling now waits through a short in-flight grace window before counting overlapping polls, so slow AX reads in Codex do not churn the typing loop while the user is trying to write.
 - Slow focused-text reads that still return a valid context now feed the suggestion pipeline instead of being discarded before the model can help.
 - Codex dogfood typing now uses a focused-text fast path: direct text snapshot plus synthetic text-area caret, skipping expensive AX range geometry and attributed text reads during the polling loop.
+- Codex polling now also skips window lookup, attribute fingerprint reads, and settable checks in the hot loop; acceptance still verifies through the normal insertion path.
 
 ## Latest Heartbeat Pass
 
@@ -90,6 +91,16 @@ Time: 2026-05-08T23:22:29Z
 - TextEdit, Notes, Obsidian, and other targets stay on the standard focused-text read path.
 - Added `SerialFocusedTextAXReaderTests` coverage for option propagation and for Codex selecting the synthetic text-area fast path.
 - Verification: full Swift suite passed with 973 tests, the app relaunched on `qwen3-0.6b`, and the fresh post-relaunch typing-performance gate reported focused-text poll p95 3 ms, max 25 ms, zero slow markers, and zero skipped polls.
+
+## Latest Codex Minimal-Read Pass
+
+Time: 2026-05-08T23:27:29Z
+
+- The next heartbeat window still caught focused-text poll max 150 ms and p95 90 ms in Codex, so the first fast-read pass was not enough.
+- Root cause: even after skipping range geometry, Codex polling still read window data, attribute fingerprints, and settable capability metadata that are not needed before synthetic caret placement.
+- Fix: extend the Codex-only fast path to skip window lookup, skip attribute fingerprint reads, and avoid the settable check during polling. Codex prompt matching now accepts the known `AXTextArea` composer shape without needing those slower window attributes.
+- Safety note: this only affects polling/read shape for `com.openai.codex`; insertion and acceptance still use the normal verification path, and other apps stay on the standard read path.
+- Verification: full Swift suite passed with 973 tests, the app relaunched on `qwen3-0.6b`, and a fresh 20-second typing-performance gate reported focused-text poll p95 2 ms, max 30 ms, zero slow markers, and zero skipped polls.
 
 ## 100 Test Situations
 
