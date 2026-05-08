@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import Testing
 import AutocompleteLabCore
 @testable import AutocompleteLabApp
@@ -29,6 +30,99 @@ struct SuggestionOrchestratorTests {
         #expect(orchestration.ticket.request == request)
         #expect(orchestrator.currentRequest == request)
         #expect(orchestrator.allows(orchestration.ticket))
+    }
+
+    @MainActor
+    @Test("Rich input builds request profile metadata and style sketch")
+    func richInputBuildsRequestProfileMetadataAndStyleSketch() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        var styleStore = AcceptedTextStyleMemoryStore()
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: "com.example.editor",
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let context = makeContext(
+            textBeforeCursor: "- Can we",
+            textAfterCursor: "?",
+            windowTitle: "Plan.md"
+        )
+        let styleKey = orchestrator.acceptedTextStyleKey(
+            appBundleIdentifier: "com.example.editor",
+            fieldKind: classification.kind,
+            textBeforeCursor: context.textBeforeCursor
+        )
+        let sketch = styleStore.recordKeptText(" finish this.", key: styleKey)
+
+        let orchestration = orchestrator.beginRequest(SuggestionRequestInput(
+            context: context,
+            appBundleIdentifier: "com.example.editor",
+            fieldIdentity: field,
+            fieldClassification: classification,
+            acceptedTextStyleSketch: sketch,
+            maxVisibleWords: 7,
+            requestMode: .phraseContinuation,
+            suggestionAggressiveness: .quiet
+        ))
+
+        #expect(styleKey.behaviorProfile == AutocompleteBehaviorProfileID.bullets.rawValue)
+        #expect(orchestration.request.textBeforeCursor == "- Can we")
+        #expect(orchestration.request.textAfterCursor == "?")
+        #expect(orchestration.request.appBundleIdentifier == "com.example.editor")
+        #expect(orchestration.request.fieldIdentityDescription == field.traceDescription)
+        #expect(orchestration.request.fieldKind == .multilineCompose)
+        #expect(orchestration.request.behaviorProfileID == .bullets)
+        #expect(orchestration.request.acceptedTextStyleSketch == sketch)
+        #expect(orchestration.request.documentTitleShape?.fileExtension == "md")
+        #expect(orchestration.request.maxVisibleWords == 7)
+        #expect(orchestration.request.mode == .phraseContinuation)
+        #expect(orchestration.fieldIdentityDescription == field.traceDescription)
+        #expect(orchestration.requestMetadata["behaviorProfile"] == "bullets")
+        #expect(orchestration.requestMetadata["fieldKind"] == "multilineCompose")
+        #expect(orchestration.requestMetadata["fieldKindReason"] == "test-compose")
+        #expect(orchestration.requestMetadata["suggestionAggressiveness"] == "quiet")
+        #expect(orchestration.requestMetadata["runtimeSessionCacheDecision"] == "reset")
+        #expect(orchestration.requestMetadata["runtimeSessionCacheResetReason"] == "no-prior-request")
+        #expect(orchestrator.allows(orchestration.ticket))
+    }
+
+    @MainActor
+    @Test("Rich input records runtime session cache reuse metadata")
+    func richInputRecordsRuntimeSessionCacheReuseMetadata() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: "com.example.editor",
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+
+        _ = orchestrator.beginRequest(SuggestionRequestInput(
+            context: makeContext(textBeforeCursor: "The plan", textAfterCursor: ""),
+            appBundleIdentifier: "com.example.editor",
+            fieldIdentity: field,
+            fieldClassification: classification,
+            acceptedTextStyleSketch: nil,
+            maxVisibleWords: 5,
+            requestMode: .phraseContinuation,
+            suggestionAggressiveness: .normal
+        ))
+        let second = orchestrator.beginRequest(SuggestionRequestInput(
+            context: makeContext(textBeforeCursor: "The plan is", textAfterCursor: ""),
+            appBundleIdentifier: "com.example.editor",
+            fieldIdentity: field,
+            fieldClassification: classification,
+            acceptedTextStyleSketch: nil,
+            maxVisibleWords: 5,
+            requestMode: .phraseContinuation,
+            suggestionAggressiveness: .normal
+        ))
+
+        #expect(second.runtimeSessionCacheDecision.canReuse)
+        #expect(second.requestMetadata["runtimeSessionCacheEligible"] == "true")
+        #expect(second.requestMetadata["runtimeSessionCacheDecision"] == "reuse")
+        #expect(second.requestMetadata["runtimeSessionCacheKey"]?.contains(field.traceDescription) == true)
     }
 
     @MainActor
@@ -169,4 +263,34 @@ private struct FixedCompletionEngine: CompletionEngine {
     func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
         CompletionSuggestion(text: text, maxVisibleWords: request.maxVisibleWords)
     }
+}
+
+private func makeContext(
+    textBeforeCursor: String,
+    textAfterCursor: String,
+    windowTitle: String? = nil
+) -> FocusedTextContext {
+    FocusedTextContext(
+        elementIdentifier: 7,
+        role: "AXTextArea",
+        subrole: nil,
+        fingerprint: FocusedElementFingerprint(windowTitle: windowTitle),
+        textBeforeCursor: textBeforeCursor,
+        textAfterCursor: textAfterCursor,
+        selectedTextLength: 0,
+        caretRect: CGRect(x: 10, y: 10, width: 1, height: 18),
+        elementRect: CGRect(x: 0, y: 0, width: 400, height: 200),
+        windowRect: CGRect(x: 0, y: 0, width: 500, height: 300),
+        textLineRect: CGRect(x: 10, y: 10, width: 120, height: 18),
+        textStyle: nil,
+        isSecure: false,
+        caretIsSynthetic: false,
+        capabilities: FocusedTextCapabilities(
+            canReadValue: true,
+            canReadSelectedTextRange: true,
+            canReadBoundsForRange: true,
+            canReadAttributedText: false,
+            canSetSelectedText: true
+        )
+    )
 }

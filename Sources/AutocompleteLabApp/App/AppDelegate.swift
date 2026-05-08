@@ -3123,43 +3123,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) {
         lastRequestedTextBeforeCursor = context.textBeforeCursor
 
-        let suggestionID = UUID().uuidString
-        let behaviorProfile = AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
+        let acceptedTextStyleKey = suggestionOrchestrator.acceptedTextStyleKey(
             appBundleIdentifier: appBundleIdentifier,
             fieldKind: fieldClassification.kind,
-            currentLineStructure: CurrentLineStructure.from(textBeforeCursor: context.textBeforeCursor)
-        ))
+            textBeforeCursor: context.textBeforeCursor
+        )
         let acceptedTextStyleSketch = acceptedTextStyleMemory.sketch(
-            for: AcceptedTextStyleMemoryKey(
-                appBundleIdentifier: appBundleIdentifier,
-                fieldKind: fieldClassification.kind,
-                behaviorProfileID: behaviorProfile.id
-            )
+            for: acceptedTextStyleKey
         )
-        let fieldIdentityDescription = fieldIdentity.traceDescription
-        let request = CompletionRequest(
-            textBeforeCursor: context.textBeforeCursor,
-            textAfterCursor: context.textAfterCursor,
+        let orchestration = suggestionOrchestrator.beginRequest(SuggestionRequestInput(
+            context: context,
             appBundleIdentifier: appBundleIdentifier,
-            fieldIdentityDescription: fieldIdentityDescription,
-            fieldKind: fieldClassification.kind,
-            behaviorProfileID: behaviorProfile.id,
+            fieldIdentity: fieldIdentity,
+            fieldClassification: fieldClassification,
             acceptedTextStyleSketch: acceptedTextStyleSketch,
-            documentTitleShape: DocumentTitleShape.from(windowTitle: context.fingerprint.windowTitle),
             maxVisibleWords: completionLengthConfiguration.maxVisibleWords,
-            mode: requestMode,
-            suggestionID: suggestionID
-        )
-        let runtimeSessionCacheDecision = RuntimeSessionCachePolicy().decision(
-            previous: suggestionOrchestrator.currentRequest,
-            current: request
-        )
-        let requestMetadata = traceRequestMetadata(
-            request: request,
-            fieldClassification: fieldClassification
-        )
-        .merging(runtimeSessionCacheDecision.traceMetadata) { current, _ in current }
-        let orchestration = suggestionOrchestrator.beginRequest(request)
+            requestMode: requestMode,
+            suggestionAggressiveness: suggestionAggressiveness
+        ))
+        let request = orchestration.request
+        let suggestionID = orchestration.suggestionID
+        let fieldIdentityDescription = orchestration.fieldIdentityDescription
+        let requestMetadata = orchestration.requestMetadata
         streamingPresentationStates[suggestionID] = StreamingPresentationState()
         let requestTicket = orchestration.ticket
         let requestStartedAt = orchestration.startedAt
