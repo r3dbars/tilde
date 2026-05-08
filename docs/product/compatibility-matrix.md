@@ -16,7 +16,7 @@ For screenshot-backed app-by-app grades and gaps, use
 | Chrome | supported for local text fields and local editor fixtures | synthetic inline, mirror fallback | key events, AX value fallback | repeatable textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture commands with screenshot-backed proof labels |
 | Codex | dogfood target | synthetic inline caret, no detached fallback | AX value replacement, key fallback | prior manual pass is stale for this gate; current one-word no-submit proof pending |
 | Claude Code | dogfood target | synthetic inline caret, no detached fallback | key events, AX fallback | pending manual smoke pass |
-| Claude desktop | dogfood target | synthetic inline caret, no detached fallback | AX value replacement | current screenshot-backed one-word no-submit proof recorded; placement polish still pending |
+| Claude desktop | dogfood target | synthetic inline caret, no detached fallback | AX value replacement | current same-baseline screenshot-backed one-word no-submit proof recorded; more prompt layouts pending |
 | Mail | diagnostics only | disabled | disabled | blocked until safe compose adapter exists |
 | Atlas | unsupported | disabled | disabled | blocked until focused AX element is reliable |
 

@@ -38,14 +38,14 @@ evidence exists in the repo.
 | Apple Notes body | A- | [notes-body.png](visual-placement-screenshots/notes-body.png) | Bounded strict visual smoke at 2026-05-07T23:33:48Z with 2 verified accepts and current proof fingerprints | Body proof is now separate from generic Notes evidence. The ghost is inline after the body caret, Option-Tab full accept verifies, and suffix retention no longer misclassifies `dictation` as deleted. | More body lengths and undo variants. |
 | Apple Notes checklist | A- | [notes-checklist.png](visual-placement-screenshots/notes-checklist.png) | Bounded strict visual smoke at 2026-05-08T00:21:33Z with 2 verified accepts and current proof fingerprints | Checklist proof is now separate from generic Notes evidence. The screenshot shows a native Notes checklist circle on the same row as the typed smoke text and ghost text. | More checklist lengths, checked items, and undo variants. |
 | Claude Code | D | Pending | Pending | Profile exists, but there is no safe live prompt proof yet. | Needs a manual-gated pass that proves Tab accepts without submitting. |
-| Claude desktop | B+ | [claude-desktop.png](visual-placement-screenshots/claude-desktop.png) | Bounded strict visual smoke at 2026-05-08T03:34:37Z with exactly 1 verified one-word accept and no prompt submit signal | Real Claude desktop now proves screenshot-backed synthetic-caret placement, Tab one-word accept, and no submit in one trace slice. Full accept is still disabled until separate full-accept no-submit proof exists. | Placement is functional but sits high above the typed baseline; needs prompt layout variants and baseline-level polish before A. |
+| Claude desktop | A- | [claude-desktop.png](visual-placement-screenshots/claude-desktop.png) | Bounded strict visual smoke at 2026-05-08T03:49:56Z with exactly 1 verified one-word accept and no prompt submit signal | Real Claude desktop now proves same-baseline screenshot-backed synthetic-caret placement, Tab one-word accept, and no submit in one trace slice. The screenshot detector reported `dx=0.2`, `dy=-0.4` after centered-composer tuning. Full accept is still disabled until separate full-accept no-submit proof exists. | Needs more prompt layout variants before A. |
 
 ## Required Next Proof
 
 1. Run `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate` and keep one trace slice that proves visual placement plus one-word accept without submit.
 2. Expand Obsidian coverage across vault themes, panes, and long notes.
 3. Run Claude Code with a harmless prompt fragment and no Enter key.
-4. Improve Claude desktop synthetic-caret placement from functional proof to baseline-level polish across prompt layouts.
+4. Expand Claude desktop same-baseline proof across prompt layouts.
 5. Improve real Chrome editor placement from forced-accessibility mirror fallback to default-Chrome AX exposure with caret-quality placement.
 
 ## Proof Rules
