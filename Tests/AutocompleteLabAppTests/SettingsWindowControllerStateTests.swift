@@ -262,7 +262,7 @@ struct SettingsWindowControllerStateTests {
         #expect(needed.statusText == "Accessibility permission: needed")
         #expect(
             needed.detailText
-                == "Allow Accessibility so Autocomplete Lab can read the active text field, find the cursor, and insert accepted suggestions. Text stays on this Mac."
+                == "Allow Accessibility in System Settings so Autocomplete Lab can see the focused text field, find the cursor, and insert text only when you accept. Text stays on this Mac."
         )
 
         let allowed = SettingsPermissionState(isTrusted: true)
@@ -270,7 +270,7 @@ struct SettingsWindowControllerStateTests {
         #expect(allowed.statusText == "Accessibility permission: allowed")
         #expect(
             allowed.detailText
-                == "Autocomplete Lab can read the active text field and insert accepted suggestions. Text stays on this Mac."
+                == "Autocomplete Lab can see the focused text field, place suggestions at the cursor, and insert text only when you accept. Text stays on this Mac."
         )
     }
 
@@ -302,7 +302,7 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(
             privacy.screenRecordingPermissionText
-                == "Screen Recording: only used for placement screenshots while this debug switch is on."
+                == "Screen Recording: used only while screenshot proof is on to capture local placement screenshots."
         )
         #expect(privacy.pathText == "Logs: /tmp/diagnostics.log | Traces: /tmp/traces.jsonl")
 
@@ -326,6 +326,21 @@ struct SettingsWindowControllerStateTests {
                 == "Sharing: use Export Privacy Bundle; do not share debug traces or screenshots."
         )
         #expect(paused.screenRecordingPermissionText == nil)
+
+        let temporaryScreenshots = SettingsPrivacyState(
+            tracingPaused: false,
+            rawContentTracingEnabled: false,
+            rawContentTracingExpiresAt: nil,
+            screenshotTracingEnabled: true,
+            screenshotTracingExpiresAt: Date(timeIntervalSince1970: 2_000),
+            diagnosticsPath: "/tmp/diagnostics.log",
+            tracePath: "/tmp/traces.jsonl"
+        )
+
+        #expect(
+            temporaryScreenshots.screenRecordingPermissionText
+                == "Screen Recording: used only for temporary local placement screenshots."
+        )
 
         let shareSafe = SettingsPrivacyState(
             tracingPaused: false,
@@ -360,7 +375,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(
             missingPermission.text
-                == "Allow Accessibility so the app can read the active text field, find the cursor, and insert only what you accept. Text stays on this Mac."
+                == "Allow Accessibility in System Settings so suggestions can appear at the cursor and insert only when you accept. Text stays on this Mac."
         )
 
         let paused = SettingsOnboardingState(
