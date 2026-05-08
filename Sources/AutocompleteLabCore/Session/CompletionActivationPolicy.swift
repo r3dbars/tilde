@@ -45,7 +45,7 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         minimumContextCharacters: Int = 3,
         minimumContextWords: Int = 2,
         minimumPhraseContinuationWords: Int = 4,
-        minimumWordCompletionCharacters: Int = 2,
+        minimumWordCompletionCharacters: Int = 3,
         maximumWordCompletionCharacters: Int = 4
     ) {
         self.minimumContextCharacters = max(1, minimumContextCharacters)
@@ -188,7 +188,7 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             .trimmingCharacters(in: .punctuationCharacters)
             .lowercased()
 
-        return normalized.count >= minimumWordCompletionCharacters
+        return normalized.count >= 2
             && normalized.allSatisfy { $0.isLetter }
     }
 

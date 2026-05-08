@@ -286,11 +286,23 @@ struct CompletionActivationPolicyTests {
         let policy = CompletionActivationPolicy()
 
         #expect(policy.decision(
-            textBeforeCursor: "First na",
+            textBeforeCursor: "First nam",
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: false
         ) == .allow(.wordCompletion))
+    }
+
+    @Test("Blocks two-letter word completion")
+    func blocksTwoLetterWordCompletion() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "First na",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .block(.unfinishedWord))
     }
 
     @Test("Allows checklist completions after constrained item text")

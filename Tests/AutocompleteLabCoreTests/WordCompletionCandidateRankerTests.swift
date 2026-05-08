@@ -37,25 +37,27 @@ struct WordCompletionCandidateRankerTests {
         #expect(suggestion?.visibleText == "umentary")
     }
 
-    @Test("Suppresses ambiguous two-letter static fragments unless recent")
-    func suppressesAmbiguousTwoLetterStaticFragmentsUnlessRecent() {
+    @Test("Suppresses ambiguous two-letter static and recent fragments")
+    func suppressesAmbiguousTwoLetterStaticAndRecentFragments() {
         let ranker = WordCompletionCandidateRanker(staticWords: ["there", "their", "thing"])
 
         #expect(ranker.suggestion(for: "I saw th") == nil)
-        #expect(ranker.suggestion(for: "I saw th", recentWords: ["therefore"])?.visibleText == "erefore")
+        #expect(ranker.suggestion(for: "I saw th", recentWords: ["therefore"]) == nil)
+        #expect(ranker.suggestion(for: "I saw the", recentWords: ["therefore"])?.visibleText == "refore")
     }
 
     @Test("common fragments complete without waiting for the model")
     func commonFragmentsComplete() {
         let ranker = WordCompletionCandidateRanker()
 
-        #expect(ranker.suggestion(for: "Hey wh")?.visibleText == "at")
-        #expect(ranker.suggestion(for: "Can we ma")?.visibleText == "ke")
-        #expect(ranker.suggestion(for: "This sh")?.visibleText == "ould")
-        #expect(ranker.suggestion(for: "he")?.visibleText == "llo")
-        #expect(ranker.suggestion(for: "It seems to be de")?.visibleText == "cent")
-        #expect(ranker.suggestion(for: "I wa")?.visibleText == "nt")
-        #expect(ranker.suggestion(for: "hey tr")?.visibleText == "ying")
+        #expect(ranker.suggestion(for: "Hey wh") == nil)
+        #expect(ranker.suggestion(for: "Hey whi")?.visibleText == "ch")
+        #expect(ranker.suggestion(for: "Can we mea")?.visibleText == "ning")
+        #expect(ranker.suggestion(for: "This sho")?.visibleText == "uld")
+        #expect(ranker.suggestion(for: "hel")?.visibleText == "lo")
+        #expect(ranker.suggestion(for: "It seems to be dec")?.visibleText == "ent")
+        #expect(ranker.suggestion(for: "I wri")?.visibleText == "ting")
+        #expect(ranker.suggestion(for: "hey tryin")?.visibleText == "g")
     }
 
     @Test("suppresses low value static suffixes")
@@ -97,6 +99,7 @@ struct WordCompletionCandidateRankerTests {
         let ranker = WordCompletionCandidateRanker(staticWords: [])
 
         #expect(ranker.suggestion(for: "th", recentWords: ["this"]) == nil)
+        #expect(ranker.suggestion(for: "he", recentWords: ["hello"]) == nil)
         #expect(ranker.suggestion(for: "It is worki", recentWords: ["working"]) == nil)
         #expect(ranker.suggestion(for: "It is workin", recentWords: ["working"])?.visibleText == "g")
     }
