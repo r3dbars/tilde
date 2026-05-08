@@ -3708,7 +3708,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             utility: displayUtility(
                 mode: request.mode,
                 visibleWordCount: visibleWordCount,
-                visibleCharacterCount: visibleCharacterCount
+                visibleCharacterCount: visibleCharacterCount,
+                acceptedAndKeptSignal: acceptedAndKeptSignal
             ),
             styleFit: displayStyleFit(
                 fieldKind: requestFieldKind,
@@ -3738,42 +3739,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 latencyMilliseconds: latencyMilliseconds
             ),
             acceptedAndKeptProbability: acceptedAndKeptSignal.probability,
-            acceptedAndKeptSampleCount: acceptedAndKeptSignal.sampleCount
+            acceptedAndKeptSampleCount: acceptedAndKeptSignal.sampleCount,
+            acceptedAndKeptUtilityAdjustment: acceptedAndKeptSignal.utilityAdjustment
         )
     }
 
     private func displayUtility(
         mode: CompletionRequestMode,
         visibleWordCount: Int,
-        visibleCharacterCount: Int
+        visibleCharacterCount: Int,
+        acceptedAndKeptSignal: AcceptedAndKeptLearningSignal
     ) -> Double {
+        let base: Double
         switch mode {
         case .wordCompletion:
             if visibleCharacterCount <= 12 {
-                return 0.85
+                base = 0.85
+            } else {
+                base = 0.65
             }
-            return 0.65
         case .sentenceContinuation:
             switch visibleWordCount {
             case 3...5:
-                return 0.64
+                base = 0.64
             case 2, 6:
-                return 0.52
+                base = 0.52
             default:
-                return 0.38
+                base = 0.38
             }
         case .phraseContinuation:
             switch visibleWordCount {
             case 2...4:
-                return 0.70
+                base = 0.70
             case 5...7:
-                return 0.58
+                base = 0.58
             case 1:
-                return 0.48
+                base = 0.48
             default:
-                return 0.40
+                base = 0.40
             }
         }
+
+        return displayComponent(base + acceptedAndKeptSignal.utilityAdjustment)
     }
 
     private func displayStyleFit(
