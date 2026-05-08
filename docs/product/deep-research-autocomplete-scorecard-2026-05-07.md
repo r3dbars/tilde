@@ -727,6 +727,9 @@ these are true.
    even when the accepted prefix appears to land, and missing or changed
    verification targets record `insertionFailed` trace evidence instead of
    returning quietly.
+66. Done: add a clipboard fallback policy so pasteboard insertion remains
+   blocked unless the debug runtime flag is enabled and the specific
+   compatibility profile explicitly opts into clipboard fallback.
 
 ## Goal Status
 

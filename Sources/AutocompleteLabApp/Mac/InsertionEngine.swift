@@ -11,6 +11,7 @@ struct InsertionResult: Equatable {
 final class InsertionEngine {
     private let accessibilityClient: AccessibilityClient
     private let clipboardFallbackEnabled: Bool
+    private let clipboardFallbackPolicy = ClipboardFallbackPolicy()
 
     init(
         accessibilityClient: AccessibilityClient,
@@ -100,11 +101,15 @@ final class InsertionEngine {
     }
 
     private func clipboardFallback(_ text: String, profile: CompatibilityProfile) -> InsertionResult {
-        guard clipboardFallbackEnabled, !profile.isSensitive else {
+        let fallbackDecision = clipboardFallbackPolicy.decision(
+            profile: profile,
+            runtimeEnabled: clipboardFallbackEnabled
+        )
+        guard fallbackDecision == .allowed else {
             return InsertionResult(
                 succeeded: false,
                 mode: .clipboardFallbackOptIn,
-                message: "AX insertion failed and clipboard fallback is disabled."
+                message: fallbackDecision.message
             )
         }
 
