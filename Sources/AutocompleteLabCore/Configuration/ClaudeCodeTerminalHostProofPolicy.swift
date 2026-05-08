@@ -128,6 +128,38 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         return beforeLine + afterLine
     }
 
+    public static func proofInputText(
+        textBeforeCursor: String,
+        textAfterCursor: String
+    ) -> String? {
+        sanitizedProofInputLine(
+            focusedInputLine(
+                textBeforeCursor: textBeforeCursor,
+                textAfterCursor: textAfterCursor
+            )
+        )
+    }
+
+    public static func sanitizedProofInputLine(_ line: String) -> String? {
+        var text = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if text.hasPrefix("❯") {
+            text.removeFirst()
+            text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        text = text
+            .replacingOccurrences(of: proofMarker, with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !text.isEmpty,
+              !looksLikePlaceholderPrompt(text) else {
+            return nil
+        }
+
+        return text
+    }
+
     private static func looksLikeShellPrompt(_ line: String, windowTitle: String) -> Bool {
         let shellPrefixes = ["$", "%", "#", "❯", "➜"]
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -147,5 +179,11 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         }
 
         return false
+    }
+
+    private static func looksLikePlaceholderPrompt(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix("Try \"")
+            || trimmed.hasPrefix("Try '")
     }
 }

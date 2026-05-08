@@ -167,4 +167,32 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             )
         ) == .eligible)
     }
+
+    @Test("Terminal-host proof input strips prompt glyph and marker")
+    func terminalHostProofInputStripsPromptGlyphAndMarker() {
+        let input = ClaudeCodeTerminalHostProofPolicy.proofInputText(
+            textBeforeCursor: "Welcome\n❯ AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF Can we make",
+            textAfterCursor: " this    \nOld output"
+        )
+
+        #expect(input == "Can we make this")
+    }
+
+    @Test("Terminal-host proof input accepts title-marker typed line")
+    func terminalHostProofInputAcceptsTitleMarkerTypedLine() {
+        let input = ClaudeCodeTerminalHostProofPolicy.sanitizedProofInputLine(
+            "❯ Can we make this"
+        )
+
+        #expect(input == "Can we make this")
+    }
+
+    @Test("Terminal-host proof input ignores Claude placeholder line")
+    func terminalHostProofInputIgnoresClaudePlaceholderLine() {
+        let input = ClaudeCodeTerminalHostProofPolicy.sanitizedProofInputLine(
+            "❯ Try \"fix lint errors\""
+        )
+
+        #expect(input == nil)
+    }
 }

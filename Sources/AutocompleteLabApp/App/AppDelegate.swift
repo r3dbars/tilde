@@ -185,6 +185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastStatusLine: String?
     private var lastSuggestionDecision = "Starting"
     private var lastSyntheticCaretDiagnosticSignature: String?
+    private var lastClaudeCodeTerminalProofInputSignature: String?
     private var lastTextContextRepairDiagnosticSignature: String?
     private var lastEligibleTargetApp: RunningApplicationInfo?
     private var lastObservedSettingsApp: RunningApplicationInfo?
@@ -1681,7 +1682,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             previousTextBeforeCursor: previousSnapshot?.textBeforeCursor,
             previousTextAfterCursor: previousSnapshot?.textAfterCursor
         ))
-        let context = repair.wasRepaired
+        var context = repair.wasRepaired
             ? contextReplacingText(
                 context,
                 textBeforeCursor: repair.textBeforeCursor,
@@ -1692,12 +1693,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recordTextContextRepairIfNeeded(repair, context: context, profile: profile)
         }
 
-        guard supportsSyntheticTextAreaCaret(for: app.bundleIdentifier),
+        if let proofInputText = claudeCodeTerminalHostProofInputText(
+            app: app,
+            context: context,
+            profile: profile
+        ) {
+            context = contextReplacingText(
+                context,
+                textBeforeCursor: proofInputText,
+                textAfterCursor: ""
+            )
+            recordClaudeCodeTerminalHostProofInputRepair(
+                context: context,
+                hostBundleIdentifier: app.bundleIdentifier,
+                profile: profile
+            )
+        }
+
+        let syntheticCaretBundleIdentifier = syntheticTextAreaCaretBundleIdentifier(
+            for: app,
+            profile: profile
+        )
+        guard supportsSyntheticTextAreaCaret(for: app, profile: profile),
               promptTextAreaMatch(for: app.bundleIdentifier, context: context).canSuggest,
               context.caretRect == nil,
               let syntheticCaret = syntheticTextAreaCaretRect(
                 for: context,
-                bundleIdentifier: app.bundleIdentifier
+                bundleIdentifier: syntheticCaretBundleIdentifier
               ) else {
             return context
         }
@@ -1755,10 +1777,86 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func supportsSyntheticTextAreaCaret(for bundleIdentifier: String) -> Bool {
-        PromptEditorFingerprintPolicy.dogfoodBundleIdentifiers.contains(bundleIdentifier)
-            || bundleIdentifier == "md.obsidian"
-            || bundleIdentifier == "com.google.Chrome"
+    private func claudeCodeTerminalHostProofInputText(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) -> String? {
+        guard isClaudeCodeTerminalHostProof(
+            profile: profile,
+            hostBundleIdentifier: app.bundleIdentifier
+        ),
+              claudeCodeTerminalHostProofBlockReason(
+                app: app,
+                context: context,
+                profile: profile
+              ) == nil else {
+            return nil
+        }
+
+        return ClaudeCodeTerminalHostProofPolicy.proofInputText(
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor
+        )
+    }
+
+    private func recordClaudeCodeTerminalHostProofInputRepair(
+        context: FocusedTextContext,
+        hostBundleIdentifier: String,
+        profile: CompatibilityProfile
+    ) {
+        let signature = [
+            hostBundleIdentifier,
+            String(context.elementIdentifier),
+            String(context.textBeforeCursor.count),
+            String(context.textAfterCursor.count)
+        ].joined(separator: "|")
+
+        guard signature != lastClaudeCodeTerminalProofInputSignature else {
+            return
+        }
+
+        lastClaudeCodeTerminalProofInputSignature = signature
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-input",
+            metadata: [
+                "app": profile.bundleIdentifier,
+                "host": hostBundleIdentifier,
+                "source": "focused-input-line",
+                "beforeChars": String(context.textBeforeCursor.count),
+                "afterChars": String(context.textAfterCursor.count)
+            ]
+        )
+    }
+
+    private func supportsSyntheticTextAreaCaret(
+        for app: RunningApplicationInfo,
+        profile: CompatibilityProfile
+    ) -> Bool {
+        if isClaudeCodeTerminalHostProof(
+            profile: profile,
+            hostBundleIdentifier: app.bundleIdentifier
+        ) {
+            return true
+        }
+
+        return PromptEditorFingerprintPolicy.dogfoodBundleIdentifiers.contains(app.bundleIdentifier)
+            || app.bundleIdentifier == "md.obsidian"
+            || app.bundleIdentifier == "com.google.Chrome"
+    }
+
+    private func syntheticTextAreaCaretBundleIdentifier(
+        for app: RunningApplicationInfo,
+        profile: CompatibilityProfile
+    ) -> String {
+        if isClaudeCodeTerminalHostProof(
+            profile: profile,
+            hostBundleIdentifier: app.bundleIdentifier
+        ) {
+            return profile.bundleIdentifier
+        }
+
+        return app.bundleIdentifier
     }
 
     private struct PromptTextAreaMatch {
@@ -1827,6 +1925,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 verticalPadding: 4,
                 inlineGap: 2,
                 centerSingleLineWhenTall: true
+            )
+        }
+
+        if bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier {
+            return SyntheticTextAreaTuning(
+                font: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular),
+                horizontalPadding: 18,
+                verticalPadding: 4,
+                inlineGap: 8,
+                centerSingleLineWhenTall: false
             )
         }
 
