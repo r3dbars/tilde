@@ -34,9 +34,10 @@ down without blocking typing, slow no-context AX reads cool down immediately,
 single slow AX reads with context now throttle polling and drop the stale read,
 Claude Code now has a proof-only terminal-host adapter gated by explicit proof
 mode, marker checks, current input-line extraction, and shell-prompt rejection,
-TextEdit now has a full 10-minute live typing soak with exact 12,000-character
-verification, no focused-poll skips, and normal key capture staying idle unless
-a suggestion is visible, app support status is visible in Settings and the menu, Diagnostics
+TextEdit now has a clean 10-minute live typing soak with exact
+12,000-character verification, no focused-poll skips, no slow poll markers, and
+normal key capture staying idle unless a suggestion is visible, app support
+status is visible in Settings and the menu, Diagnostics
 separates key-capture health from AX-poll health, placement confidence is
 visible without suggestion text, placement uncertainty hides stale ghosts and
 feeds quiet mode, active quiet mode is visible in Diagnostics, Settings now
@@ -69,7 +70,7 @@ fail quietly when it is unsure. Wrong-place text is worse than no suggestion.
 
 | Category | Weight | Current | Target | Why |
 | --- | ---: | ---: | ---: | --- |
-| Typing must feel untouched | 15 | 98 | 100 | The strict TextEdit endurance harness now creates and captures the disposable target through a unique temp file, restores the clipboard, waits for long-document selection/copy to settle, and refocuses before each segment. Fresh live proof passed exact 1,200-, 2,400-, 4,800-, and 12,000-character TextEdit runs. After the active-typing cadence change, fresh 2026-05-08 strict runs verified exact 1,200-, 2,400-, and 4,800-character text; the 4-minute pass had event-tap p95 65us, focused-poll p95 max 22ms, focused-poll max 58ms, zero slow markers, and zero skips. Normal typing no longer requires event-tap samples because keyboard capture intentionally starts only while a suggestion is visible, and recent text-change polling now backs off while the user is actively typing. The last gap to 100 is fresh 10-minute proof with zero AX warning noise or proof that any remaining markers are user-invisible on real hardware. |
+| Typing must feel untouched | 15 | 100 | 100 | The strict TextEdit endurance harness now creates and captures the disposable target through a unique temp file, restores the clipboard, waits for long-document selection/copy to settle, and refocuses before each segment. Fresh live proof passed exact 1,200-, 2,400-, 4,800-, and 12,000-character TextEdit runs. After the active-typing cadence change, the fresh 2026-05-08 10-minute strict run verified exact 12,000-character TextEdit text, event-tap p95 78us, event-tap p99/max 82us, focused-poll p95 max 35ms, focused-poll max 57ms, zero slow markers, zero focused-poll skips, and zero tap disables. Normal typing no longer requires event-tap samples because keyboard capture intentionally starts only while a suggestion is visible, and recent text-change polling now backs off while the user is actively typing. |
 | Visual placement and caret alignment | 18 | 80 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, inline mode now hides when less than one useful word fits after the caret, screenshot-derived correction is wired behind explicit per-app screenshot tracing, learned visual offsets now expire when target app version, screen, or field shape changes, low-confidence mirror fallback is now suppressed for untrusted yellow profiles, Chrome chat-like, Obsidian, Notes title/body/checklist, and Claude desktop now have proof, and Diagnostics exposes placement confidence without suggestion text. Claude desktop's current one-line composer proof is same-baseline with detector offset near zero. Codex same-slice accept/no-submit proof, live Claude Code terminal-host screenshot proof, and more prompt/editor layouts are still blockers. |
 | Acceptance safety | 10 | 94 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, Esc dismissal is trace-marked as inserting zero suggestion text, full accept is blocked unless accepted text exactly matches the visible suggestion, Tab accept is traced as a visible-prefix accept, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, Claude desktop proved one-word Tab accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Claude Code now has a proof-only terminal-host adapter that blocks unsupported hosts, missing proof mode, missing marker, shell prompts, and multiline command buffers. Codex and Claude Code one-word no-submit proof are still incomplete. |
 | Cross-app reliability | 10 | 87 | 100 | The proof matrix now has 15 screenshot artifacts, Notes title/body/checklist are all split out, real Monaco/ProseMirror pass under isolated renderer-accessibility Chrome, Claude desktop has same-baseline real prompt no-submit proof, Claude Code has a proof-only terminal-host lane, every compatibility profile has owner/safety coverage in the proof manifest, and the app exposes green/yellow/diagnostics-only/unsupported status plus explicit copy-only fallback stance for non-sensitive diagnostics-only or untrusted-placement cases. Chrome-hosted Google Docs, Notion, Slack, and Discord are now blocked by surface policy until real proof exists. Codex, Claude Code terminal-host proof, default-Chrome editor AX exposure, and more production editor variants are still pending proof. |
@@ -103,7 +104,7 @@ Weighted score: 93/100.
 
 ## Category 1: Typing Must Feel Untouched
 
-Current score: 98/100.
+Current score: 100/100.
 
 Native target: the user cannot tell the app is running unless a suggestion is
 visible.
@@ -132,7 +133,7 @@ visible.
 - [x] A 10-minute disposable TextEdit endurance soak command exists, is self-tested, and has a current live exact-text pass.
 - [x] Zero missed or swallowed keys in the latest 10-minute TextEdit typing session.
 - [x] Recent text-change polling backs off during active typing while visible suggestions keep the fast active cadence.
-- [ ] Focused-text AX polling should stay below the warning threshold during long active typing so diagnostics do not show 200ms-class off-main reads.
+- [x] Focused-text AX polling should stay below the warning threshold during long active typing so diagnostics do not show 200ms-class off-main reads.
 
 ### Acceptance Bar
 

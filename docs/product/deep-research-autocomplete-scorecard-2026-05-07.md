@@ -32,22 +32,15 @@ It is not yet magical by the research bar. The biggest remaining misses are:
   explicit unsupported-surface decision until production proof exists.
 - Acceptance traces now prove whether the inserted text exactly matched the
   visible suggestion or was a deliberate next-word visible-prefix accept.
-- Normal typing proof now includes exact 1,200-, 4,800-, and 12,000-character
-  strict TextEdit endurance passes, and the current harness revalidates named
-  TextEdit focus in shorter CGEvent batches with bounded cleanup. The latest
-  10-minute proof passed with zero missed text, zero tap disables, zero focused
-  poll skips, focused-poll p95 max 57ms, focused-poll max 87ms, and 4
-  under-threshold slow markers. The current build now backs off focused-text
-  polling after observed text changes while keeping the fast cadence for visible
-  suggestions; a fresh 2026-05-08 1-minute strict run verified exact
-  1,200-character TextEdit text with focused-poll p95 max 11ms, max 37ms, zero
-  slow markers, and zero skips. A fresh 2-minute strict run also verified exact
-  2,400-character text with focused-poll p95 max 27ms, max 50ms, zero slow
-  markers, and zero skips after long-document copy settling was hardened. A
-  fresh 4-minute strict run verified exact 4,800-character text with
-  focused-poll p95 max 22ms, max 58ms, zero slow markers, and zero skips. A
-  fresh 10-minute endurance run still needs to prove the marker count falls to
-  zero.
+- Normal typing proof now includes exact 1,200-, 2,400-, 4,800-, and
+  12,000-character strict TextEdit endurance passes, and the current harness
+  revalidates named TextEdit focus in shorter CGEvent batches with bounded
+  cleanup. The current build backs off focused-text polling after observed text
+  changes while keeping the fast cadence for visible suggestions. The fresh
+  2026-05-08 10-minute strict run verified exact 12,000-character TextEdit
+  text, event-tap p95 78us, event-tap p99/max 82us, focused-poll p95 max 35ms,
+  focused-poll max 57ms, zero focused-poll slow markers, zero focused-poll
+  skips, and zero tap disables.
 
 The repo's existing Apple-native visual-feel score is **95/100**. This score is lower
 because it grades against the research definition of "magical autocomplete,"
@@ -128,10 +121,10 @@ Pass 1 shipped these improvements:
   TextEdit document verification, temporary TextEdit enablement, temporary
   pause-state restore, AX warmup flushing, bounded cleanup, and a CGEvent
   Unicode typing driver that verifies the target TextEdit window before each
-  segmented Swift typing batch. Current strict proof has verified 1,200, 4,800,
-  and 12,000 exact TextEdit characters; the latest 10-minute pass had no missed
-  text, no tap disables, zero focused-poll skips, focused-poll p95 max 57ms,
-  focused-poll max 87ms, and 4 under-threshold slow markers.
+  segmented Swift typing batch. Current strict proof has verified 1,200, 2,400,
+  4,800, and 12,000 exact TextEdit characters; the latest 10-minute pass had no
+  missed text, no tap disables, zero focused-poll skips, focused-poll p95 max
+  35ms, focused-poll max 57ms, and zero focused-poll slow markers.
 - Inline placement now suppresses when less than one useful word can fit after
   the caret, so near-edge fields hide instead of showing clipped slivers.
 - Diagnostics export now creates a redacted privacy bundle with a manifest,
