@@ -338,10 +338,10 @@ struct SettingsPrivacyState: Equatable {
 
     var sharingStatusText: String {
         if rawContentTracingEnabled || screenshotTracingEnabled {
-            return "Sharing: use Export Privacy Bundle; do not share debug traces or screenshots."
+            return "Data leaving Mac: none automatically. Share only the redacted Privacy Bundle, not debug traces or screenshots."
         }
 
-        return "Sharing: Export Privacy Bundle excludes raw text, prompts, accepted text, and screenshots."
+        return "Data leaving Mac: none automatically. Model install downloads once; Privacy Bundle excludes raw text, prompts, accepted text, and screenshots."
     }
 
     var learningStatusText: String {

@@ -312,7 +312,7 @@ struct SettingsWindowControllerStateTests {
         #expect(privacy.contentStatusText == "Raw text capture: off")
         #expect(
             privacy.sharingStatusText
-                == "Sharing: use Export Privacy Bundle; do not share debug traces or screenshots."
+                == "Data leaving Mac: none automatically. Share only the redacted Privacy Bundle, not debug traces or screenshots."
         )
         #expect(
             privacy.learningStatusText
@@ -341,7 +341,7 @@ struct SettingsWindowControllerStateTests {
         #expect(paused.contentStatusText == "Raw text capture: on temporarily")
         #expect(
             paused.sharingStatusText
-                == "Sharing: use Export Privacy Bundle; do not share debug traces or screenshots."
+                == "Data leaving Mac: none automatically. Share only the redacted Privacy Bundle, not debug traces or screenshots."
         )
         #expect(paused.screenRecordingPermissionText == nil)
 
@@ -372,7 +372,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(
             shareSafe.sharingStatusText
-                == "Sharing: Export Privacy Bundle excludes raw text, prompts, accepted text, and screenshots."
+                == "Data leaving Mac: none automatically. Model install downloads once; Privacy Bundle excludes raw text, prompts, accepted text, and screenshots."
         )
     }
 

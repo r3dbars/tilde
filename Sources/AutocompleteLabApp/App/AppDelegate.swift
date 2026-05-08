@@ -16,10 +16,12 @@ struct MenuBarStatusItemConfiguration: Equatable {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let accessibilityClient = AccessibilityClient()
+    private let startupOnboardingPolicy = StartupOnboardingPolicy()
     private let profileStore = CompatibilityProfileStore.mvp
     private let promptEditorPolicy = PromptEditorFingerprintPolicy()
     private let browserHostedSurfacePolicy = BrowserHostedSurfacePolicy()
     private let suggestionControlPolicy = SuggestionControlPolicy()
+    private let suggestionPauseSchedulePolicy = SuggestionPauseSchedulePolicy()
     private let activationPolicy = CompletionActivationPolicy()
     private let fieldClassifier = AXFieldClassifier()
     private let textContextRepairPolicy = TextContextRepairPolicy()
@@ -157,6 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
     private var acceptanceSurvivalTasks: [String: Task<Void, Never>] = [:]
     private var runtimeWarmTask: Task<Void, Never>?
+    private var pauseExpirationTask: Task<Void, Never>?
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private var isFocusedTextPollInFlight = false
     private var latestFocusedTextReadRequestID: UInt64?
@@ -198,6 +201,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var focusedTextPollingPause = FocusedTextPollingPause()
     private var lastFocusedTextPollAttemptAt: Date?
     private var suggestionsPaused = false
+    private var suggestionsPausedUntil: Date?
     private var appEnablementSetupCompleted = true
     private var keyboardShortcutConfiguration = KeyboardShortcutConfiguration.default
     private var suggestionAggressiveness = SuggestionAggressiveness.normal
@@ -215,7 +219,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureStatusItem()
         DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
-        accessibilityClient.requestPermissionIfNeeded()
+        if startupOnboardingPolicy.shouldRequestAccessibilityPromptOnLaunch(
+            isTrusted: accessibilityClient.isTrusted
+        ) {
+            accessibilityClient.requestPermissionIfNeeded()
+        }
         warmModelRuntime()
         if shouldShowSettingsForCurrentReadiness {
             showSettings()
@@ -227,6 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         DiagnosticsLog.shared.record("terminate")
         debounceTask?.cancel()
+        pauseExpirationTask?.cancel()
         keyboardEventTapStopTask?.cancel()
         insertionVerificationTask?.cancel()
         acceptedInsertionUndoExpirationTask?.cancel()
@@ -298,6 +307,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let statusMenu = NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: "")
         let runtimeMenu = NSMenuItem(title: "Model: starting", action: nil, keyEquivalent: "")
         let pauseItem = NSMenuItem(title: pauseSuggestionsTitle, action: #selector(togglePauseSuggestions), keyEquivalent: "p")
+        let pause15Item = NSMenuItem(title: "Pause for 15 Minutes", action: #selector(pauseSuggestionsFor15Minutes), keyEquivalent: "")
+        let pause1HourItem = NSMenuItem(title: "Pause for 1 Hour", action: #selector(pauseSuggestionsFor1Hour), keyEquivalent: "")
         let silenceFieldItem = NSMenuItem(
             title: "Silence This Field",
             action: #selector(silenceCurrentField),
@@ -312,6 +323,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(runtimeMenu)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(pauseItem)
+        menu.addItem(pause15Item)
+        menu.addItem(pause1HourItem)
         menu.addItem(silenceFieldItem)
         menu.addItem(toggleItem)
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
@@ -617,24 +630,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var shouldShowSettingsForCurrentReadiness: Bool {
-        if !accessibilityClient.isTrusted {
-            return true
-        }
-
-        switch runtimeReadinessReport.stage {
-        case .downloadNeeded, .repairNeeded, .runtimeUnavailable, .failed:
-            return true
-        case .warming, .ready:
-            return !appEnablementSetupCompleted
-        }
+        startupOnboardingPolicy.shouldShowSettingsOnLaunch(
+            isTrusted: accessibilityClient.isTrusted,
+            runtimeStage: runtimeReadinessReport.stage,
+            appEnablementSetupCompleted: appEnablementSetupCompleted
+        )
     }
 
     private var pauseSuggestionsTitle: String {
         suggestionControlState.toggleTitle
     }
 
+    private var pauseStatusTitle: String {
+        guard let suggestionsPausedUntil,
+              suggestionsPausedUntil > Date() else {
+            return "Paused"
+        }
+
+        let time = DateFormatter.localizedString(
+            from: suggestionsPausedUntil,
+            dateStyle: .none,
+            timeStyle: .short
+        )
+        return "Paused until \(time)"
+    }
+
     private var suggestionControlState: SuggestionControlState {
-        suggestionControlPolicy.state(isPaused: suggestionsPaused)
+        expireTimedPauseIfNeeded(now: Date())
+        return suggestionControlPolicy.state(isPaused: suggestionsPaused)
     }
 
     private func pollFocusedTextIfIdle() {
@@ -4874,7 +4897,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if suggestionsPaused {
-            return "Paused"
+            return pauseStatusTitle
         }
 
         guard let app else {
@@ -6064,6 +6087,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func togglePauseSuggestions() {
         let transition = suggestionControlPolicy.toggle(suggestionControlState)
         suggestionsPaused = transition.nextState.isPaused
+        suggestionsPausedUntil = nil
+        pauseExpirationTask?.cancel()
+        pauseExpirationTask = nil
 
         setSuggestionDecision(transition.decisionText)
 
@@ -6110,6 +6136,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
+    private func pauseSuggestionsFor15Minutes() {
+        pauseSuggestions(for: 15 * 60, label: "15 minutes")
+    }
+
+    @objc
+    private func pauseSuggestionsFor1Hour() {
+        pauseSuggestions(for: 60 * 60, label: "1 hour")
+    }
+
+    private func pauseSuggestions(for durationSeconds: TimeInterval, label: String) {
+        let state = suggestionPauseSchedulePolicy.timedPause(
+            now: Date(),
+            durationSeconds: durationSeconds
+        )
+        suggestionsPaused = state.isPaused
+        suggestionsPausedUntil = state.pausedUntil
+        setSuggestionDecision("Paused for \(label)")
+        clearFocusedFieldState(hideReason: "timed-pause")
+        stopKeyboardEventTapNow(reason: "timed-pause")
+        persistPauseState()
+        schedulePauseExpiration()
+        DiagnosticsLog.shared.record(
+            "suggestions-control",
+            metadata: [
+                "paused": String(suggestionsPaused),
+                "durationSeconds": String(Int(durationSeconds)),
+                "pausedUntil": suggestionsPausedUntil.map { ISO8601DateFormatter().string(from: $0) } ?? ""
+            ]
+        )
+        let frontmostApp = targetAppForControls()
+        updateStatusMenu(
+            app: frontmostApp,
+            profile: frontmostApp.flatMap { profileStore.profile(for: $0.bundleIdentifier) },
+            appEnabled: frontmostApp.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
+        )
+    }
+
+    @objc
     private func quit() {
         NSApp.terminate(nil)
     }
@@ -6122,6 +6186,10 @@ private extension AppDelegate {
 
     static var suggestionsPausedDefaultsKey: String {
         "SuggestionsPaused"
+    }
+
+    static var suggestionsPausedUntilDefaultsKey: String {
+        "SuggestionsPausedUntil"
     }
 
     static var appEnablementSetupCompletedDefaultsKey: String {
@@ -6153,14 +6221,70 @@ private extension AppDelegate {
     }
 
     func loadPauseState() {
-        suggestionsPaused = UserDefaults.standard.bool(forKey: Self.suggestionsPausedDefaultsKey)
+        let defaults = UserDefaults.standard
+        let pausedUntilValue = defaults.double(forKey: Self.suggestionsPausedUntilDefaultsKey)
+        let pausedUntil = pausedUntilValue > 0 ? Date(timeIntervalSince1970: pausedUntilValue) : nil
+        let state = suggestionPauseSchedulePolicy.normalizedState(
+            isPaused: defaults.bool(forKey: Self.suggestionsPausedDefaultsKey),
+            pausedUntil: pausedUntil,
+            now: Date()
+        )
+        suggestionsPaused = state.isPaused
+        suggestionsPausedUntil = state.pausedUntil
+        persistPauseState()
+        schedulePauseExpiration()
     }
 
     func persistPauseState() {
-        UserDefaults.standard.set(
-            suggestionsPaused,
-            forKey: Self.suggestionsPausedDefaultsKey
+        let defaults = UserDefaults.standard
+        defaults.set(suggestionsPaused, forKey: Self.suggestionsPausedDefaultsKey)
+        if let suggestionsPausedUntil {
+            defaults.set(
+                suggestionsPausedUntil.timeIntervalSince1970,
+                forKey: Self.suggestionsPausedUntilDefaultsKey
+            )
+        } else {
+            defaults.removeObject(forKey: Self.suggestionsPausedUntilDefaultsKey)
+        }
+    }
+
+    func expireTimedPauseIfNeeded(now: Date) {
+        let state = suggestionPauseSchedulePolicy.normalizedState(
+            isPaused: suggestionsPaused,
+            pausedUntil: suggestionsPausedUntil,
+            now: now
         )
+        guard state.isPaused != suggestionsPaused || state.pausedUntil != suggestionsPausedUntil else {
+            return
+        }
+
+        suggestionsPaused = state.isPaused
+        suggestionsPausedUntil = state.pausedUntil
+        persistPauseState()
+        if !suggestionsPaused {
+            pauseExpirationTask?.cancel()
+            pauseExpirationTask = nil
+            setSuggestionDecision("Ready: timed pause ended")
+            refreshRuntimeChrome()
+        }
+    }
+
+    func schedulePauseExpiration() {
+        pauseExpirationTask?.cancel()
+        pauseExpirationTask = nil
+
+        guard suggestionsPaused,
+              let suggestionsPausedUntil else {
+            return
+        }
+
+        let delay = max(0, suggestionsPausedUntil.timeIntervalSinceNow)
+        pauseExpirationTask = Task { [weak self, suggestionsPausedUntil] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            await MainActor.run {
+                self?.expireTimedPauseIfNeeded(now: suggestionsPausedUntil)
+            }
+        }
     }
 
     func loadDisabledApps() {
