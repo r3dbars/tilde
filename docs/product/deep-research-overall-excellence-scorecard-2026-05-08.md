@@ -12,7 +12,7 @@
 
 The research says this app wins only if it is boringly trustworthy: fast enough to stay out of the user's way, quiet when uncertain, explicit about every insert, local-first by default, and honest about which apps are actually proven.
 
-The repo has serious safety architecture: focused-field identity checks, selected-text blocking, secure-field suppression, redacted tracing, default-off app selection, local model readiness gates, and real smoke/proof scripts. The current score is still capped because strict manual proof is stale or inconsistent across docs, slow suggestions can still be shown, accepted-then-deleted tracing is not fully wired, prompt-app no-submit proof is incomplete, and there is no current network-egress proof for local-only mode.
+The repo has serious safety architecture: focused-field identity checks, selected-text blocking, secure-field suppression, redacted tracing, default-off app selection, local model readiness gates, and real smoke/proof scripts. The current score is still capped because strict manual proof is stale or inconsistent across docs, prompt-app no-submit proof is incomplete, no current network-egress proof exists for local-only mode, and the newly wired accepted-survival runtime path still needs fresh real-app trace proof.
 
 ## Product Standard
 
@@ -53,14 +53,17 @@ This is a strong lab prototype, not a beta-ready product. The core safety model 
 
 The main weakness is proof quality, not just code. `docs/product/proof-manifest.json` claims some complete surfaces, while `script/manual_smoke_status.sh --strict` and `script/check_proof_manifest.sh --strict` still treat proof as incomplete for this commit. So completed-looking docs cannot be scored as completed proof.
 
-The highest automatable product gap found in this pass was slow display. Before this loop, `CompletionConfidencePolicy` penalized suggestions above 500 ms and 1000 ms, but a high-quality suggestion could still remain displayable at 900-1000 ms. This pass changed the display gate so suggestions over the 750 ms first-visible budget become low confidence and are suppressed.
+The first automatable product gap found in this pass was slow display. Before the first loop, `CompletionConfidencePolicy` penalized suggestions above 500 ms and 1000 ms, but a high-quality suggestion could still remain displayable at 900-1000 ms. That loop changed the display gate so suggestions over the 750 ms first-visible budget become low confidence and are suppressed.
+
+The next automatable gap was accepted-survival proof. Before the continuation loop, the app recorded acceptance and insertion verification, but did not start the RAM-only `AcceptanceSurvivalChecker`, schedule 2s/10s/30s checks, emit live `acceptedTextEdited`, or emit `acceptanceRetentionCleared`. This loop wired that path after verified insertion and added privacy-shaped metadata tests.
 
 ## Score
 
-Overall score: 74/100
+Overall score: 75/100
 
 Starting score before this implementation loop: 73/100.
-Ending score after this implementation loop: 74/100.
+Score after first implementation loop: 74/100.
+Ending score after continuation loop: 75/100.
 
 Release gate status: blocked. `Insertion safety`, `Privacy/trust`, and `Non-annoyance` must all be at least 80/100 with current proof before beta.
 
@@ -69,17 +72,17 @@ Release gate status: blocked. `Insertion safety`, `Privacy/trust`, and `Non-anno
 | Category | Weight | Current score | Weighted |
 | --- | ---: | ---: | ---: |
 | Insertion safety | 18 | 81 | 14.58 |
-| Privacy and trust | 16 | 82 | 13.12 |
-| Non-annoyance | 14 | 74 | 10.36 |
+| Privacy and trust | 16 | 84 | 13.44 |
+| Non-annoyance | 14 | 76 | 10.64 |
 | Latency | 12 | 69 | 8.28 |
-| Suggestion relevance | 10 | 66 | 6.60 |
+| Suggestion relevance | 10 | 67 | 6.70 |
 | App compatibility | 10 | 71 | 7.10 |
 | Visual placement | 8 | 74 | 5.92 |
 | User control | 6 | 78 | 4.68 |
-| Recoverability | 4 | 62 | 2.48 |
+| Recoverability | 4 | 68 | 2.72 |
 | Local model/runtime readiness | 2 | 64 | 1.28 |
 
-Weighted total: 74.40, rounded to 74/100.
+Weighted total: 75.34, rounded to 75/100.
 
 ### Insertion Safety
 
@@ -93,19 +96,19 @@ Weighted total: 74.40, rounded to 74/100.
 ### Privacy And Trust
 
 - Weight: 16
-- Current score: 82/100
-- Why this score: Local-first defaults, redacted traces, raw/screenshot opt-in, pause, per-app disable, and delete traces are present. Network-egress proof is missing.
-- Evidence found in repo: `docs/product/privacy-and-controls.md`, `Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift`, `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift`, `Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift`, `Tests/AutocompleteLabAppTests/RawTracePrivacyExpiryTests.swift`, `script/delete_local_traces.sh`.
-- Missing evidence: Packet-capture or network assertion showing no unexpected egress in local-only mode, and a current onboarding proof that a new user can explain the privacy model.
+- Current score: 84/100
+- Why this score: Local-first defaults, redacted traces, raw/screenshot opt-in, pause, per-app disable, delete traces, RAM-only accepted-survival retention, and a source-level local-only network surface check are present. Runtime packet-capture proof is still missing.
+- Evidence found in repo: `docs/product/privacy-and-controls.md`, `Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift`, `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalTraceMetadata.swift`, `Sources/AutocompleteLabCore/Tracing/TracePrivacyFingerprint.swift`, `Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift`, `Tests/AutocompleteLabAppTests/RawTracePrivacyExpiryTests.swift`, `Tests/AutocompleteLabAppTests/RawTraceReportExportTests.swift`, `Tests/AutocompleteLabAppTests/AcceptanceSurvivalCheckerTests.swift`, `script/delete_local_traces.sh`, `script/check_local_only_network_surface.sh`, `script/check_local_only_network_surface_self_test.sh`.
+- Missing evidence: Packet-capture or network assertion showing no unexpected egress in a running local-only typing session, and a current onboarding proof that a new user can explain the privacy model.
 - What would make it 100/100: Local-only egress tests, clear in-product privacy status, current redacted export proof, and opt-in debug flows that expire and are easy to revoke.
 
 ### Non-Annoyance
 
 - Weight: 14
-- Current score: 74/100
-- Why this score: Burst suppression, cooldowns, confidence gating, display scoring, typed-over handling, and slow-display suppression exist. The score is still capped because long-session annoyance proof and accepted-then-deleted runtime tracing are incomplete.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Session/TypingBurstPolicy.swift`, `Sources/AutocompleteLabCore/Session/DisplayScorePolicy.swift`, `Sources/AutocompleteLabCore/Session/CompletionConfidencePolicy.swift`, `Sources/AutocompleteLabCore/Session/PrefixFamilyCooldownPolicy.swift`, `Tests/AutocompleteLabCoreTests/TypingBurstPolicyTests.swift`, `Tests/AutocompleteLabCoreTests/DisplayScorePolicyTests.swift`.
-- Missing evidence: Long-session annoyance proof, current show-rate/dismiss-rate/resurfacing metrics, and proof that accepted-then-deleted signals suppress future similar suggestions.
+- Current score: 76/100
+- Why this score: Burst suppression, cooldowns, confidence gating, display scoring, typed-over handling, slow-display suppression, and accepted-then-deleted runtime signaling exist. The score is still capped because long-session annoyance proof and real trace-based suppression proof are incomplete.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Session/TypingBurstPolicy.swift`, `Sources/AutocompleteLabCore/Session/DisplayScorePolicy.swift`, `Sources/AutocompleteLabCore/Session/CompletionConfidencePolicy.swift`, `Sources/AutocompleteLabCore/Session/PrefixFamilyCooldownPolicy.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalChecker.swift`, `Tests/AutocompleteLabCoreTests/TypingBurstPolicyTests.swift`, `Tests/AutocompleteLabCoreTests/DisplayScorePolicyTests.swift`, `Tests/AutocompleteLabAppTests/AcceptanceSurvivalCheckerTests.swift`.
+- Missing evidence: Long-session annoyance proof, current show-rate/dismiss-rate/resurfacing metrics, and fresh real-app proof that accepted-then-deleted signals suppress future similar suggestions.
 - What would make it 100/100: Low show density in real sessions, no immediate resurfacing after dismiss, no mid-word phrase spam, late suggestions hidden, and accepted-then-deleted signals wired into future suppression.
 
 ### Latency
@@ -120,9 +123,9 @@ Weighted total: 74.40, rounded to 74/100.
 ### Suggestion Relevance
 
 - Weight: 10
-- Current score: 66/100
-- Why this score: Output cleaning, ranking, request modes, and accepted-and-kept concepts exist, but fresh model proof and post-accept edit-distance proof are incomplete.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Engine/CompletionOutputCleaner.swift`, `Sources/AutocompleteLabCore/Engine/CompletionCandidateRanker.swift`, `Sources/AutocompleteLabCore/Session/AcceptedAndKeptLearning.swift`, `Tests/AutocompleteLabCoreTests/CompletionQualityEvalTests.swift`, `script/check_quality_eval.sh`.
+- Current score: 67/100
+- Why this score: Output cleaning, ranking, request modes, and accepted-and-kept concepts exist, and the app now emits accepted-survival checkpoints for future replay. Fresh model proof and real post-accept edit-distance proof are still incomplete.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Engine/CompletionOutputCleaner.swift`, `Sources/AutocompleteLabCore/Engine/CompletionCandidateRanker.swift`, `Sources/AutocompleteLabCore/Session/AcceptedAndKeptLearning.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalChecker.swift`, `Tests/AutocompleteLabCoreTests/CompletionQualityEvalTests.swift`, `Tests/AutocompleteLabAppTests/AcceptanceSurvivalCheckerTests.swift`, `script/check_quality_eval.sh`.
 - Missing evidence: Fresh replay slices showing accepted-and-kept improvement, partial accept rate, early undo/delete rate, post-accept edit distance, and style match.
 - What would make it 100/100: Suggestions are short, locally relevant, style-compatible, accepted often, and rarely edited away after acceptance.
 
@@ -156,10 +159,10 @@ Weighted total: 74.40, rounded to 74/100.
 ### Recoverability
 
 - Weight: 4
-- Current score: 62/100
-- Why this score: Verification and app-level restore paths exist, but single-step undo and accepted-then-deleted survival behavior are not proven in live editors.
-- Evidence found in repo: `Sources/AutocompleteLabApp/App/InsertionVerificationScheduler.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalChecker.swift`, `Sources/AutocompleteLabCore/Session/InsertionVerification.swift`, `Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift`, `Tests/AutocompleteLabCoreTests/AcceptanceSurvivalClassifierTests.swift`.
-- Missing evidence: Real-app undo/redo loops, crash/restart recovery, and live 2s/10s/30s accepted-and-kept wiring.
+- Current score: 68/100
+- Why this score: Verification, app-level restore paths, RAM-only accepted-survival checks, retention-cleared traces, and 2s/10s/30s runtime scheduling now exist. Single-step undo and fresh live-editor proof remain incomplete.
+- Evidence found in repo: `Sources/AutocompleteLabApp/App/InsertionVerificationScheduler.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalChecker.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalTraceMetadata.swift`, `Sources/AutocompleteLabCore/Session/InsertionVerification.swift`, `Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift`, `Tests/AutocompleteLabCoreTests/AcceptanceSurvivalClassifierTests.swift`, `Tests/AutocompleteLabAppTests/AcceptanceSurvivalCheckerTests.swift`.
+- Missing evidence: Real-app undo/redo loops, crash/restart recovery, field-send finalization, and fresh live 2s/10s/30s accepted-and-kept trace slices.
 - What would make it 100/100: Every accepted insertion is one clean undo unit with rollback or explicit failure handling when verification mismatches.
 
 ### Local Model/Runtime Readiness
@@ -240,25 +243,27 @@ The app is shippable and deeply trusted: every supported surface has current pro
 - Proof required: Strict proof scripts should fail only on real pending manual gaps, not stale doc disagreement.
 - Risk level: Medium because docs can overclaim if updated carelessly.
 - Expected score impact: +2 to +4 overall if proof claims become coherent.
-- Result: `script/check_proof_manifest.sh` now passes. Strict proof and score-target gates still fail because prompt-app/manual proof and target-score gaps remain.
+- Result: `script/check_proof_manifest.sh` now passes. `script/check_visual_placement_evidence.sh` now passes in non-strict mode and strict visual gaps were reduced to the real manual proof blockers: Codex same-slice no-submit, Claude Code screenshot proof, and Claude desktop screenshot proof. `script/check_score_targets.sh` now includes this overall-excellence scorecard so it cannot be ignored. Strict proof and score-target gates still fail because prompt-app/manual proof and target-score gaps remain.
 
-### 3. Wire Accepted-Then-Deleted Survival Runtime Signals
+### 3. Wire Accepted-Then-Deleted Survival Runtime Signals - Completed In Continuation Loop
 
 - Objective: Make post-accept delete/edit outcomes affect learning and suppression.
-- Files likely involved: `Sources/AutocompleteLabApp/App/AcceptanceSurvivalChecker.swift`, `Sources/AutocompleteLabApp/App/AppDelegate.swift`, `Sources/AutocompleteLabCore/Session/AcceptedAndKeptLearning.swift`.
-- Tests to add/update: Acceptance survival scheduling and trace events at 2s, 10s, 30s, blur.
-- Proof required: Trace slice with accepted, edited/deleted, and suppression follow-up.
+- Files involved: `Sources/AutocompleteLabApp/App/AcceptanceSurvivalChecker.swift`, `Sources/AutocompleteLabApp/App/AppDelegate.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalTraceMetadata.swift`, `Sources/AutocompleteLabCore/Text/DiagnosticsMetadataRedactor.swift`.
+- Tests added/updated: `Tests/AutocompleteLabAppTests/AcceptanceSurvivalCheckerTests.swift`, `Tests/AutocompleteLabCoreTests/DiagnosticValueRedactorTests.swift`.
+- Proof required: Fresh trace slice with accepted, 2s/10s/30s `acceptedTextEdited`, `acceptanceRetentionCleared`, and suppression follow-up.
 - Risk level: Medium.
-- Expected score impact: +3 to +5 overall.
+- Expected score impact: +1 overall now, with more available after real-app proof.
+- Result: Verified insertions now start RAM-only accepted-survival tracking. The app schedules 2s, 10s, and 30s checks, finalizes on blur, records redacted `acceptedTextEdited` and `acceptanceRetentionCleared` events, adds current proof metadata to emitted trace events, uses `acceptanceID` to separate partial accepts, and records accepted-then-deleted annoyance only after survival proof instead of treating every verified insert as accepted-and-kept.
 
-### 4. Add Local-Only Network Egress Proof
+### 4. Add Local-Only Network Egress Proof - Partially Completed In Continuation Loop
 
 - Objective: Prove local-only mode does not unexpectedly talk to the network while typing.
-- Files likely involved: `script/`, `docs/product/privacy-and-controls.md`, maybe a new QA helper.
-- Tests to add/update: Script self-test with fixture logs and a manual packet-capture runbook.
+- Files involved: `script/check_local_only_network_surface.sh`, `script/check_local_only_network_surface_self_test.sh`.
+- Tests added/updated: Source-audit self-test with safe allowed references and an unsafe `URLSession` fixture.
 - Proof required: Current local-only run with host visibility or packet-capture artifact.
 - Risk level: Medium because macOS network observation can be environment-specific.
-- Expected score impact: +2 to +4 overall.
+- Expected score impact: +0 overall now because it is a source audit, with +2 to +4 available after runtime packet proof.
+- Result: Added a guard that fails if app/core source adds network APIs outside the explicit user-triggered model install path, MLX local import, or static model license URLs.
 
 ### 5. Complete Prompt-App No-Submit Proof
 
@@ -271,7 +276,7 @@ The app is shippable and deeply trusted: every supported surface has current pro
 
 ## Codex Execution Goal
 
-Implemented in this pass: make late suggestions fail closed before display, and reconcile the non-strict proof manifest screenshot references for existing Obsidian and Notes proof.
+Implemented in this pass: make late suggestions fail closed before display, reconcile the non-strict proof manifest screenshot references for existing Obsidian and Notes proof, and wire RAM-only accepted-survival runtime checks after verified insertion.
 
 ## Stop Conditions
 
@@ -287,7 +292,7 @@ This goal is complete when:
 
 ## Remaining Gaps
 
-- Manual proof is still required for prompt no-submit behavior, no-Accessibility behavior, multi-display placement, and current app-specific visual slices.
+- Manual proof is still required for prompt no-submit behavior, no-Accessibility behavior, multi-display placement, current app-specific visual slices, and real accepted-survival traces.
 - Network-egress proof cannot be fully claimed without a real local-only observation run.
 - Runtime readiness cannot be fully claimed without current default-model latency proof on target hardware.
 - Strict proof gates currently fail and need either fresh proof or doc reconciliation.
