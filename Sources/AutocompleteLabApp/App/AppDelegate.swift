@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let insertionVerification = InsertionVerification()
     private let insertionRetryPolicy = InsertionRetryPolicy()
     private let insertionVerificationTimingPolicy = InsertionVerificationTimingPolicy()
+    private let suggestionAcceptanceProofPolicy = SuggestionAcceptanceProofPolicy()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
@@ -2069,8 +2070,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 acceptedAt: acceptedAt,
                 acceptMode: action.diagnosticName
             )
-            guard let acceptedText = suggestionSession.nextWordAcceptance(),
-                  insertAcceptedText(acceptedText) else {
+            guard let acceptedText = suggestionSession.nextWordAcceptance() else {
+                recordKeyboardAction(key: key, action: action, handled: false, reason: "missing-accepted-text")
+                return false
+            }
+            guard let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText) else {
+                recordKeyboardAction(key: key, action: action, handled: false, reason: "acceptance-proof-failed")
+                return false
+            }
+            guard insertAcceptedText(acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return false
             }
@@ -2088,7 +2096,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 mode: currentSuggestionRequestMode,
                 scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
             )
-            recordRawAcceptance(action: action, acceptedText: acceptedText, acceptanceID: acceptanceID)
+            recordRawAcceptance(
+                action: action,
+                acceptedText: acceptedText,
+                acceptanceID: acceptanceID,
+                acceptanceProof: acceptanceProof
+            )
             recordAnnoyanceSignal(
                 .accepted,
                 context: currentAnnoyanceContext(),
@@ -2115,8 +2128,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 acceptedAt: acceptedAt,
                 acceptMode: action.diagnosticName
             )
-            guard let acceptedText = suggestionSession.allVisibleAcceptance(),
-                  insertAcceptedText(acceptedText) else {
+            guard let acceptedText = suggestionSession.allVisibleAcceptance() else {
+                recordKeyboardAction(key: key, action: action, handled: false, reason: "missing-accepted-text")
+                return false
+            }
+            guard let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText) else {
+                recordKeyboardAction(key: key, action: action, handled: false, reason: "acceptance-proof-failed")
+                return false
+            }
+            guard insertAcceptedText(acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return false
             }
@@ -2133,7 +2153,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 mode: currentSuggestionRequestMode,
                 scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
             )
-            recordRawAcceptance(action: action, acceptedText: acceptedText, acceptanceID: acceptanceID)
+            recordRawAcceptance(
+                action: action,
+                acceptedText: acceptedText,
+                acceptanceID: acceptanceID,
+                acceptanceProof: acceptanceProof
+            )
             recordAnnoyanceSignal(
                 .accepted,
                 context: currentAnnoyanceContext(),
@@ -4369,7 +4394,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func recordRawAcceptance(
         action: KeyboardAction,
         acceptedText: String,
-        acceptanceID: String
+        acceptanceID: String,
+        acceptanceProof: SuggestionAcceptanceProof
     ) {
         guard let appBundleIdentifier = currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier else {
             return
@@ -4382,6 +4408,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let fieldClassification = currentSuggestionFieldClassification {
             metadata.merge(fieldClassification.traceMetadata) { current, _ in current }
         }
+        metadata.merge(acceptanceProof.traceMetadata) { current, _ in current }
 
         RawAutocompleteTraceLog.shared.recordAcceptance(
             action: action.diagnosticName,
@@ -4395,6 +4422,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requestMode: currentSuggestionRequestMode?.rawValue ?? "",
             metadata: metadata
         )
+    }
+
+    private func suggestionAcceptanceProof(
+        action: KeyboardAction,
+        acceptedText: String
+    ) -> SuggestionAcceptanceProof? {
+        let visibleText = currentSuggestionDisplayedText ?? suggestionSession.visibleSuggestion?.visibleText
+        let decision = suggestionAcceptanceProofPolicy.decision(
+            action: action,
+            acceptedText: acceptedText,
+            visibleText: visibleText
+        )
+
+        switch decision {
+        case let .allowed(proof):
+            return proof
+        case let .blocked(reason):
+            let metadata = [
+                "reason": "acceptance-proof-failed",
+                "acceptanceProof": "failed",
+                "acceptanceProofReason": reason.rawValue,
+                "acceptMode": action.diagnosticName,
+                "acceptedChars": String(acceptedText.count),
+                "visibleChars": String(visibleText?.count ?? 0)
+            ]
+            DiagnosticsLog.shared.record("acceptance-proof-failed", metadata: metadata)
+            if let suggestionID = currentSuggestionID {
+                RawAutocompleteTraceLog.shared.record(
+                    type: .suggestionSuppressed,
+                    suggestionID: suggestionID,
+                    appBundleIdentifier: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? "",
+                    fieldIdentity: currentSuggestionFieldIdentity?.traceDescription
+                        ?? currentFieldIdentity?.traceDescription
+                        ?? "",
+                    requestMode: currentSuggestionRequestMode?.rawValue ?? "",
+                    reason: "acceptance-proof-failed",
+                    metadata: metadata
+                )
+            }
+            setSuggestionDecision("Blocked: acceptance proof failed")
+            hideSuggestion(reason: "acceptance-proof-failed", metadata: metadata)
+            return nil
+        }
     }
 
     private func refreshVisibleSuggestion() {

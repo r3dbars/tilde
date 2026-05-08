@@ -24,6 +24,8 @@ focused field before showing, keyboard capture fails closed when macOS disables
 the event tap, AX value replacement removed fixed hot-path sleeps, fast word
 completion honors repeated-miss suppression, recent-word memory is scoped per
 app, focused-text AX reads now run through a serial off-main reader,
+acceptance now carries trace-safe proof that full accept exactly matches the
+visible suggestion and Tab accepts only the visible next-word prefix,
 raw/screenshot debug capture now expires from Settings, lab/debug
 vocabulary was removed from the global word list, Chrome chat-like no-submit
 and Notes checklist now have screenshot-backed proof, prompt-app full accept is disabled until
@@ -68,7 +70,7 @@ fail quietly when it is unsure. Wrong-place text is worse than no suggestion.
 | --- | ---: | ---: | ---: | --- |
 | Typing must feel untouched | 15 | 98 | 100 | The strict TextEdit endurance harness now creates and captures the disposable target through UI automation, restores the clipboard, and refocuses before each segment. Fresh live proof passed exact 1,200-, 4,800-, and 12,000-character TextEdit runs. The latest full 10-minute pass had no tap disables, focused-poll p95 max 57ms, focused-poll max 87ms, 4 under-threshold slow markers, and zero focused-poll skips after fast word-completion stopped doing a duplicate AX read. Normal typing no longer requires event-tap samples because keyboard capture intentionally starts only while a suggestion is visible. The last gap to 100 is reducing long-document focused-poll slow markers to zero or proving they are visually/user-invisible under real hardware typing. |
 | Visual placement and caret alignment | 18 | 80 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, inline mode now hides when less than one useful word fits after the caret, screenshot-derived correction is wired behind explicit per-app screenshot tracing, learned visual offsets now expire when target app version, screen, or field shape changes, low-confidence mirror fallback is now suppressed for untrusted yellow profiles, Chrome chat-like, Obsidian, Notes title/body/checklist, and Claude desktop now have proof, and Diagnostics exposes placement confidence without suggestion text. Claude desktop's current one-line composer proof is same-baseline with detector offset near zero. Codex same-slice accept/no-submit proof, live Claude Code terminal-host screenshot proof, and more prompt/editor layouts are still blockers. |
-| Acceptance safety | 10 | 93 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, Esc dismissal is trace-marked as inserting zero suggestion text, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, Claude desktop proved one-word Tab accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Claude Code now has a proof-only terminal-host adapter that blocks unsupported hosts, missing proof mode, missing marker, shell prompts, and multiline command buffers. Codex and Claude Code one-word no-submit proof are still incomplete. |
+| Acceptance safety | 10 | 94 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, Esc dismissal is trace-marked as inserting zero suggestion text, full accept is blocked unless accepted text exactly matches the visible suggestion, Tab accept is traced as a visible-prefix accept, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, Claude desktop proved one-word Tab accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Claude Code now has a proof-only terminal-host adapter that blocks unsupported hosts, missing proof mode, missing marker, shell prompts, and multiline command buffers. Codex and Claude Code one-word no-submit proof are still incomplete. |
 | Cross-app reliability | 10 | 87 | 100 | The proof matrix now has 15 screenshot artifacts, Notes title/body/checklist are all split out, real Monaco/ProseMirror pass under isolated renderer-accessibility Chrome, Claude desktop has same-baseline real prompt no-submit proof, Claude Code has a proof-only terminal-host lane, every compatibility profile has owner/safety coverage in the proof manifest, and the app exposes green/yellow/diagnostics-only/unsupported status plus explicit copy-only fallback stance for non-sensitive diagnostics-only or untrusted-placement cases. Chrome-hosted Google Docs, Notion, Slack, and Discord are now blocked by surface policy until real proof exists. Codex, Claude Code terminal-host proof, default-Chrome editor AX exposure, and more production editor variants are still pending proof. |
 | Native macOS visual feel | 8 | 81 | 100 | Settings moved toward native sections, checkboxes, clearer privacy/app controls, support status, copy-only fallback status, "why hidden" copy, and calmer menu copy. Diagnostics and onboarding still need polish. |
 | Privacy and permissions trust | 9 | 100 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, raw/screenshot debug capture expires from the app UI, Settings shows share-safe privacy status, Diagnostics exports a redacted privacy bundle with a manifest/checklist, and the beta packet explicitly forbids raw traces, screenshots, prompts, typed text, and accepted text by default. |
@@ -219,7 +221,7 @@ cheap, even if the model output is good.
 
 ## Category 3: Acceptance Safety
 
-Current score: 93/100.
+Current score: 94/100.
 
 Native target: accepting a suggestion feels as safe as accepting a system
 autocomplete suggestion.
@@ -244,7 +246,7 @@ autocomplete suggestion.
 - [x] Esc must always dismiss without changing text.
 - [ ] Undo after accept must behave like normal typed text in each supported app.
 - [x] Full accept should be disabled by default in any app without proof.
-- [ ] The visible suggestion must exactly match the accepted text.
+- [x] Full visible accept must exactly match the visible suggestion, and Tab next-word accept must be traced as a visible-prefix accept.
 
 ## Category 4: Cross-App Reliability
 
