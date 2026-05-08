@@ -279,10 +279,10 @@ struct SettingsPermissionState: Equatable {
 
     var detailText: String {
         if isTrusted {
-            return "Autocomplete Lab can read the active text field and insert accepted suggestions. Text stays on this Mac."
+            return "Autocomplete Lab can see the focused text field, place suggestions at the cursor, and insert text only when you accept. Text stays on this Mac."
         }
 
-        return "Allow Accessibility so Autocomplete Lab can read the active text field, find the cursor, and insert accepted suggestions. Text stays on this Mac."
+        return "Allow Accessibility in System Settings so Autocomplete Lab can see the focused text field, find the cursor, and insert text only when you accept. Text stays on this Mac."
     }
 }
 
@@ -332,10 +332,10 @@ struct SettingsPrivacyState: Equatable {
         }
 
         if screenshotTracingExpiresAt == nil {
-            return "Screen Recording: only used for placement screenshots while this debug switch is on."
+            return "Screen Recording: used only while screenshot proof is on to capture local placement screenshots."
         }
 
-        return "Screen Recording: only used for temporary placement screenshots."
+        return "Screen Recording: used only for temporary local placement screenshots."
     }
 
     var pathText: String {
@@ -389,7 +389,7 @@ struct SettingsOnboardingState: Equatable {
 
     var text: String {
         if !isTrusted {
-            return "Allow Accessibility so the app can read the active text field, find the cursor, and insert only what you accept. Text stays on this Mac."
+            return "Allow Accessibility in System Settings so suggestions can appear at the cursor and insert only when you accept. Text stays on this Mac."
         }
 
         if suggestionsPaused {
