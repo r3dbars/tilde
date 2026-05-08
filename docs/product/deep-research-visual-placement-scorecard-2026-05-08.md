@@ -385,4 +385,5 @@ Verification:
 - `./script/check_proof_manifest.sh` passed in report mode.
 - `./script/check_visual_placement_evidence.sh --strict` still fails for Codex stale same-slice no-submit proof and Claude Code missing screenshot proof.
 - `./script/check_proof_manifest.sh --strict` still fails for partial Chrome text fields, browser editor fixtures, Chrome chat-like composer, Codex, and pending Claude Code.
-- `./script/check_score_targets.sh` still fails with 66 expected target misses.
+- `./script/check_score_targets.sh` still fails with 69 expected target and
+  strict proof-gate misses.
