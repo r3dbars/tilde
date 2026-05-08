@@ -98,19 +98,22 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
     public let minimumPhraseContinuationWords: Int
     public let minimumWordCompletionCharacters: Int
     public let maximumWordCompletionCharacters: Int
+    public let allowsTerminalSentenceBoundary: Bool
 
     public init(
         minimumContextCharacters: Int = 3,
         minimumContextWords: Int = 2,
         minimumPhraseContinuationWords: Int = 4,
         minimumWordCompletionCharacters: Int = 3,
-        maximumWordCompletionCharacters: Int = 4
+        maximumWordCompletionCharacters: Int = 4,
+        allowsTerminalSentenceBoundary: Bool = false
     ) {
         self.minimumContextCharacters = max(1, minimumContextCharacters)
         self.minimumContextWords = max(1, minimumContextWords)
         self.minimumPhraseContinuationWords = max(self.minimumContextWords, minimumPhraseContinuationWords)
         self.minimumWordCompletionCharacters = max(1, minimumWordCompletionCharacters)
         self.maximumWordCompletionCharacters = max(self.minimumWordCompletionCharacters, maximumWordCompletionCharacters)
+        self.allowsTerminalSentenceBoundary = allowsTerminalSentenceBoundary
     }
 
     public init(pace: SuggestionPace) {
@@ -121,7 +124,8 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
                 minimumContextWords: 3,
                 minimumPhraseContinuationWords: 6,
                 minimumWordCompletionCharacters: 3,
-                maximumWordCompletionCharacters: 4
+                maximumWordCompletionCharacters: 4,
+                allowsTerminalSentenceBoundary: false
             )
         case .normal:
             self.init(
@@ -129,15 +133,17 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
                 minimumContextWords: 2,
                 minimumPhraseContinuationWords: 3,
                 minimumWordCompletionCharacters: 2,
-                maximumWordCompletionCharacters: 5
+                maximumWordCompletionCharacters: 5,
+                allowsTerminalSentenceBoundary: false
             )
         case .eager:
             self.init(
                 minimumContextCharacters: 1,
                 minimumContextWords: 1,
-                minimumPhraseContinuationWords: 2,
+                minimumPhraseContinuationWords: 1,
                 minimumWordCompletionCharacters: 2,
-                maximumWordCompletionCharacters: 16
+                maximumWordCompletionCharacters: 16,
+                allowsTerminalSentenceBoundary: true
             )
         }
     }
@@ -200,7 +206,7 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         }
 
         let trimmedContext = textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines)
-        if endsAtTerminalSentenceBoundary(trimmedContext) {
+        if !allowsTerminalSentenceBoundary, endsAtTerminalSentenceBoundary(trimmedContext) {
             return .block(.terminalSentenceBoundary)
         }
 

@@ -114,12 +114,12 @@ struct SuggestionTriggerPolicyTests {
             pauseDelayMilliseconds: 15
         )
 
-        #expect(policy.wordCompletionDelayMilliseconds == 50)
-        #expect(policy.wordBoundaryDelayMilliseconds == 80)
-        #expect(policy.pauseDelayMilliseconds == 80)
-        #expect(policy.decision(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I think ") == .request(delayMilliseconds: 80))
-        #expect(policy.decision(previousTextBeforeCursor: "I think this wor", currentTextBeforeCursor: "I think this work") == .request(delayMilliseconds: 50))
-        #expect(policy.decision(previousTextBeforeCursor: "I think ", currentTextBeforeCursor: "I think x") == .request(delayMilliseconds: 80))
+        #expect(policy.wordCompletionDelayMilliseconds == 20)
+        #expect(policy.wordBoundaryDelayMilliseconds == 40)
+        #expect(policy.pauseDelayMilliseconds == 40)
+        #expect(policy.decision(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I think ") == .request(delayMilliseconds: 40))
+        #expect(policy.decision(previousTextBeforeCursor: "I think this wor", currentTextBeforeCursor: "I think this work") == .request(delayMilliseconds: 20))
+        #expect(policy.decision(previousTextBeforeCursor: "I think ", currentTextBeforeCursor: "I think x") == .request(delayMilliseconds: 40))
     }
 
     @Test("Word fragments need three alphabetic characters")
@@ -147,7 +147,7 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(
             previousTextBeforeCursor: "U",
             currentTextBeforeCursor: "Um"
-        ) == .request(delayMilliseconds: 50))
+        ) == .request(delayMilliseconds: 20))
     }
 
     @Test("Proactive pace asks for phrase help after a short word-boundary pause")
@@ -157,7 +157,27 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(
             previousTextBeforeCursor: "I feel",
             currentTextBeforeCursor: "I feel "
-        ) == .request(delayMilliseconds: 80))
+        ) == .request(delayMilliseconds: 40))
+    }
+
+    @Test("Proactive pace asks after a single starter word")
+    func proactivePaceAsksAfterSingleStarterWord() {
+        let policy = SuggestionTriggerPolicy(pace: .eager)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "Um",
+            currentTextBeforeCursor: "Um "
+        ) == .request(delayMilliseconds: 40))
+    }
+
+    @Test("Proactive pace asks after sentence boundaries")
+    func proactivePaceAsksAfterSentenceBoundaries() {
+        let policy = SuggestionTriggerPolicy(pace: .eager)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works",
+            currentTextBeforeCursor: "I think this works."
+        ) == .request(delayMilliseconds: 120))
     }
 
     @Test("Sentence boundaries stay quiet by default")

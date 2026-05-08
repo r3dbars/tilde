@@ -68,9 +68,9 @@ public enum SuggestionAggressiveness: String, Codable, Equatable, Sendable, Case
             )
         case .eager:
             return DisplayScorePolicy(
-                wordCompletionThreshold: 0.50,
-                phraseContinuationThreshold: 0.85,
-                sentenceContinuationThreshold: 1.05
+                wordCompletionThreshold: 0.40,
+                phraseContinuationThreshold: 0.65,
+                sentenceContinuationThreshold: 0.85
             )
         }
     }
