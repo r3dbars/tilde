@@ -339,6 +339,89 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Prefix cooldown and display threshold adjustment are orchestrated")
+    func prefixCooldownAndDisplayThresholdAdjustmentAreOrchestrated() throws {
+        let now = Date(timeIntervalSince1970: 100)
+        let orchestrator = SuggestionOrchestrator(
+            engine: EchoCompletionEngine(),
+            prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy(
+                typedOverCooldownMilliseconds: 1_000,
+                repeatedTypedOverCooldownMilliseconds: 1_000,
+                typedOverEagernessThreshold: 1,
+                typedOverEagernessHalfLifeSeconds: 600,
+                traceFingerprintSecret: Data("unit-test-secret".utf8)
+            )
+        )
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let input = PrefixFamilyCooldownInput(
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldIdentifier: field.traceDescription,
+            requestMode: .phraseContinuation,
+            textBeforeCursor: "Can we"
+        )
+
+        #expect(orchestrator.prefixCooldownDecision(for: input, now: now).canRequest)
+        let cooldown = try #require(orchestrator.recordPrefixFamilyCooldown(.typedOver, input: input, now: now))
+        #expect(cooldown.reason == .typedOver)
+        #expect(cooldown.durationMilliseconds == 1_000)
+
+        guard case let .coolingDown(activeCooldown) = orchestrator.prefixCooldownDecision(for: input, now: now) else {
+            Issue.record("Expected prefix family cooldown after recording typed-over")
+            return
+        }
+        #expect(activeCooldown.reason == .typedOver)
+
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "Can we",
+            textAfterCursor: "",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4,
+            mode: .phraseContinuation,
+            suggestionID: "score-prefix"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let display = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " make this easier", maxVisibleWords: 4),
+            request: request,
+            context: makeContext(textBeforeCursor: "Can we", textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 400,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy(),
+            now: now
+        )
+
+        #expect(display.decision.shouldDisplay)
+        #expect(display.metadata["prefixEagernessApplied"] == "true")
+        #expect(display.metadata["prefixEagernessThresholdAdjustment"] == "0.18")
+        #expect(display.metadata["displayScoreThreshold"] == "1.18")
+
+        orchestrator.resetPrefixFamilyCooldownPolicy(
+            PrefixFamilyCooldownPolicy(traceFingerprintSecret: Data("unit-test-secret".utf8))
+        )
+        #expect(orchestrator.prefixCooldownDecision(for: input, now: now).canRequest)
+    }
+
+    @MainActor
     @Test("Suggestion calls delegate to the configured engine")
     func suggestionDelegatesToEngine() async throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())

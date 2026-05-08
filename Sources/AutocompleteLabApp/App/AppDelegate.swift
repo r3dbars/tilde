@@ -46,7 +46,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private lazy var suggestionOrchestrator = SuggestionOrchestrator(
         engine: engine,
-        wordCompletionRanker: wordCompletionRanker
+        wordCompletionRanker: wordCompletionRanker,
+        prefixFamilyCooldownPolicy: makePrefixFamilyCooldownPolicy()
     )
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
@@ -164,7 +165,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var focusedTextPollSkipStats = FocusedTextPollSkipStats()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
-    private lazy var prefixFamilyCooldownPolicy = makePrefixFamilyCooldownPolicy()
     private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
     private var currentSuggestionID: String?
     private var currentSuggestionAppBundleIdentifier: String?
@@ -1204,7 +1204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = recordPrefixFamilyCooldown(.deletion, input: prefixCooldownInput)
         }
 
-        switch prefixFamilyCooldownPolicy.decision(for: prefixCooldownInput) {
+        switch suggestionOrchestrator.prefixCooldownDecision(for: prefixCooldownInput) {
         case .allowed:
             break
         case let .coolingDown(cooldown):
@@ -3607,14 +3607,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let prefixEagernessAdjustment = prefixFamilyCooldownPolicy.eagernessAdjustment(
-            for: PrefixFamilyCooldownInput(
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentifier: fieldIdentity.traceDescription,
-                requestMode: request.mode,
-                textBeforeCursor: request.textBeforeCursor
-            )
-        )
         let displayFieldClassification = fieldClassification(for: context)
         let acceptedAndKeptSignal = acceptedAndKeptSignal(
             request: request,
@@ -3626,26 +3618,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mode: request.mode,
             scope: request.appBundleIdentifier ?? profile.bundleIdentifier
         )
-        let displayScoreDecision = displayScorePolicy
-            .adjustingThresholds(by: prefixEagernessAdjustment.thresholdAdjustment)
-            .decision(
-            for: suggestionOrchestrator.displayScore(
-                suggestion: suggestion,
-                request: request,
-                context: context,
-                fieldClassification: displayFieldClassification,
-                profile: profile,
-                triggerReason: triggerReason,
-                latencyMilliseconds: latencyMilliseconds,
-                acceptedAndKeptSignal: acceptedAndKeptSignal,
-                isRepeatedMiss: isRepeatedMiss
-            ),
-            mode: request.mode,
-            behaviorProfileID: request.behaviorProfile.id
+        let orchestratedDisplayDecision = suggestionOrchestrator.displayScoreDecision(
+            suggestion: suggestion,
+            request: request,
+            context: context,
+            fieldClassification: displayFieldClassification,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            triggerReason: triggerReason,
+            latencyMilliseconds: latencyMilliseconds,
+            acceptedAndKeptSignal: acceptedAndKeptSignal,
+            isRepeatedMiss: isRepeatedMiss,
+            displayScorePolicy: displayScorePolicy
         )
+        let displayScoreDecision = orchestratedDisplayDecision.decision
+        let displayScoreMetadata = orchestratedDisplayDecision.metadata
         let displayScoreTrace = displayScoreDecision.trace
-        let displayScoreMetadata = displayScoreDecision.metadata
-            .merging(prefixEagernessAdjustment.metadata) { current, _ in current }
         guard displayScoreDecision.shouldDisplay else {
             let reason = displayScoreMetadata["displayScoreSuppressionReason"] ?? "display-score"
             setSuggestionDecision("Blocked: display score \(reason)")
@@ -5040,7 +5028,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ reason: PrefixFamilyCooldownReason,
         input: PrefixFamilyCooldownInput
     ) -> [String: String] {
-        guard let cooldown = prefixFamilyCooldownPolicy.record(reason, input: input) else {
+        guard let cooldown = suggestionOrchestrator.recordPrefixFamilyCooldown(reason, input: input) else {
             return [:]
         }
 
@@ -5534,7 +5522,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
         recentWordMemory = ScopedRecentWordMemory()
         suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
-        prefixFamilyCooldownPolicy = makePrefixFamilyCooldownPolicy()
+        suggestionOrchestrator.resetPrefixFamilyCooldownPolicy(makePrefixFamilyCooldownPolicy())
         UserDefaults.standard.removeObject(forKey: Self.acceptedAndKeptLearningDefaultsKey)
         UserDefaults.standard.removeObject(forKey: Self.acceptedTextStyleMemoryDefaultsKey)
         DiagnosticsLog.shared.record(
