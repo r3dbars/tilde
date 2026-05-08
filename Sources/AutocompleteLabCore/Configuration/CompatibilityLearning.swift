@@ -2,7 +2,16 @@ import CoreGraphics
 import Foundation
 
 public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
+    public static let currentSchemaVersion = 2
+    public static let unscopedSurfaceIdentifier = "unscoped-legacy"
+    public static let unscopedVersionRangeDescription = "legacy-unproven"
+
+    public var schemaVersion: Int
     public let bundleIdentifier: String
+    public var surfaceIdentifier: String
+    public var versionRangeDescription: String
+    public var preferredPath: CompatibilityPreferredPath
+    public var hardCaps: [CompatibilityHardCap]
     public var xOffset: CGFloat
     public var yOffset: CGFloat
     public var visualAppVersion: String?
@@ -18,6 +27,11 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
 
     public init(
         bundleIdentifier: String,
+        schemaVersion: Int = Self.currentSchemaVersion,
+        surfaceIdentifier: String = Self.unscopedSurfaceIdentifier,
+        versionRangeDescription: String = Self.unscopedVersionRangeDescription,
+        preferredPath: CompatibilityPreferredPath = .blocked,
+        hardCaps: [CompatibilityHardCap] = [.diagnosticsOnly],
         xOffset: CGFloat = 0,
         yOffset: CGFloat = 0,
         visualAppVersion: String? = nil,
@@ -31,7 +45,12 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         lastReason: String = "",
         updatedAt: String = ""
     ) {
+        self.schemaVersion = schemaVersion
         self.bundleIdentifier = bundleIdentifier
+        self.surfaceIdentifier = surfaceIdentifier
+        self.versionRangeDescription = versionRangeDescription
+        self.preferredPath = preferredPath
+        self.hardCaps = hardCaps
         self.xOffset = xOffset
         self.yOffset = yOffset
         self.visualAppVersion = visualAppVersion
@@ -46,12 +65,119 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         self.updatedAt = updatedAt
     }
 
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case bundleIdentifier
+        case surfaceIdentifier
+        case versionRangeDescription
+        case preferredPath
+        case hardCaps
+        case xOffset
+        case yOffset
+        case visualAppVersion
+        case visualScreenFingerprint
+        case visualFieldShapeFingerprint
+        case renderModeOverride
+        case screenshotTracingEnabled
+        case screenshotTracingExpiresAt
+        case observations
+        case confidence
+        case lastReason
+        case updatedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        bundleIdentifier = try container.decode(String.self, forKey: .bundleIdentifier)
+        surfaceIdentifier = try container.decodeIfPresent(String.self, forKey: .surfaceIdentifier)
+            ?? Self.unscopedSurfaceIdentifier
+        versionRangeDescription = try container.decodeIfPresent(String.self, forKey: .versionRangeDescription)
+            ?? Self.unscopedVersionRangeDescription
+        preferredPath = try container.decodeIfPresent(CompatibilityPreferredPath.self, forKey: .preferredPath)
+            ?? .blocked
+        hardCaps = try container.decodeIfPresent([CompatibilityHardCap].self, forKey: .hardCaps)
+            ?? [.diagnosticsOnly]
+        xOffset = try container.decodeIfPresent(CGFloat.self, forKey: .xOffset) ?? 0
+        yOffset = try container.decodeIfPresent(CGFloat.self, forKey: .yOffset) ?? 0
+        visualAppVersion = try container.decodeIfPresent(String.self, forKey: .visualAppVersion)
+        visualScreenFingerprint = try container.decodeIfPresent(String.self, forKey: .visualScreenFingerprint)
+        visualFieldShapeFingerprint = try container.decodeIfPresent(String.self, forKey: .visualFieldShapeFingerprint)
+        renderModeOverride = try container.decodeIfPresent(SuggestionRenderMode.self, forKey: .renderModeOverride)
+        screenshotTracingEnabled = try container.decodeIfPresent(Bool.self, forKey: .screenshotTracingEnabled) ?? false
+        screenshotTracingExpiresAt = try container.decodeIfPresent(String.self, forKey: .screenshotTracingExpiresAt)
+        observations = try container.decodeIfPresent(Int.self, forKey: .observations) ?? 0
+        confidence = try container.decodeIfPresent(Double.self, forKey: .confidence) ?? 0
+        lastReason = try container.decodeIfPresent(String.self, forKey: .lastReason) ?? ""
+        updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt) ?? ""
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(bundleIdentifier, forKey: .bundleIdentifier)
+        try container.encode(surfaceIdentifier, forKey: .surfaceIdentifier)
+        try container.encode(versionRangeDescription, forKey: .versionRangeDescription)
+        try container.encode(preferredPath, forKey: .preferredPath)
+        try container.encode(hardCaps, forKey: .hardCaps)
+        try container.encode(xOffset, forKey: .xOffset)
+        try container.encode(yOffset, forKey: .yOffset)
+        try container.encodeIfPresent(visualAppVersion, forKey: .visualAppVersion)
+        try container.encodeIfPresent(visualScreenFingerprint, forKey: .visualScreenFingerprint)
+        try container.encodeIfPresent(visualFieldShapeFingerprint, forKey: .visualFieldShapeFingerprint)
+        try container.encodeIfPresent(renderModeOverride, forKey: .renderModeOverride)
+        try container.encode(screenshotTracingEnabled, forKey: .screenshotTracingEnabled)
+        try container.encodeIfPresent(screenshotTracingExpiresAt, forKey: .screenshotTracingExpiresAt)
+        try container.encode(observations, forKey: .observations)
+        try container.encode(confidence, forKey: .confidence)
+        try container.encode(lastReason, forKey: .lastReason)
+        try container.encode(updatedAt, forKey: .updatedAt)
+    }
+
     public var hasVisualAdjustment: Bool {
         abs(xOffset) > 0.01 || abs(yOffset) > 0.01
     }
 
     public var hasTrustedVisualAdjustment: Bool {
         hasTrustedVisualAdjustment(in: nil)
+    }
+
+    public var compatibilityScopeIsCurrent: Bool {
+        schemaVersion >= Self.currentSchemaVersion
+            && surfaceIdentifier != Self.unscopedSurfaceIdentifier
+            && versionRangeDescription != Self.unscopedVersionRangeDescription
+    }
+
+    public var profileIdentifier: String {
+        "\(bundleIdentifier)::\(surfaceIdentifier)::\(preferredPath.rawValue)"
+    }
+
+    public var scopeMetadata: [String: String] {
+        [
+            "learningCompatibilityProfileID": profileIdentifier,
+            "learningCompatibilitySchemaVersion": String(schemaVersion),
+            "learningCompatibilitySurface": surfaceIdentifier,
+            "learningCompatibilityVersionRange": versionRangeDescription,
+            "learningCompatibilityPreferredPath": preferredPath.rawValue,
+            "learningCompatibilityHardCaps": hardCaps.map(\.rawValue).joined(separator: ",")
+        ]
+    }
+
+    public mutating func applyCompatibilityScope(from profile: CompatibilityProfile?) {
+        schemaVersion = Self.currentSchemaVersion
+
+        guard let profile else {
+            surfaceIdentifier = "user-created-unproven"
+            versionRangeDescription = "unproven-current-local"
+            preferredPath = .blocked
+            hardCaps = [.diagnosticsOnly, .unknownCustomEditorDetectOnly]
+            return
+        }
+
+        surfaceIdentifier = profile.surfaceIdentifier
+        versionRangeDescription = profile.versionRangeDescription
+        preferredPath = profile.preferredPath
+        hardCaps = profile.hardCaps
     }
 
     public func hasTrustedVisualAdjustment(
@@ -75,7 +201,7 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
 
     public var debugSummary: String {
         let render = renderModeOverride?.rawValue ?? "profile"
-        return "offset=(\(Self.format(xOffset)), \(Self.format(yOffset))), render=\(render), screenshots=\(screenshotTracingEnabled), observations=\(observations), confidence=\(Self.format(confidence))"
+        return "profile=\(profileIdentifier), offset=(\(Self.format(xOffset)), \(Self.format(yOffset))), render=\(render), screenshots=\(screenshotTracingEnabled), observations=\(observations), confidence=\(Self.format(confidence))"
     }
 
     private static func format(_ value: CGFloat) -> String {
@@ -173,7 +299,7 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
             ]
         }
 
-        return [
+        var metadata = [
             "learningApplied": String(profile.hasVisualAdjustment || profile.renderModeOverride != nil),
             "learningRenderMode": effectiveRenderMode.rawValue,
             "learningXOffset": String(format: "%.1f", Double(profile.xOffset)),
@@ -183,6 +309,8 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
             "learningObservations": String(profile.observations),
             "learningScreenshotTracing": String(profile.screenshotTracingEnabled)
         ]
+        metadata.merge(profile.scopeMetadata) { current, _ in current }
+        return metadata
     }
 
     public func adjusted(_ rect: CGRect?) -> CGRect? {

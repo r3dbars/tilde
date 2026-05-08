@@ -125,6 +125,26 @@ struct CompletionActivationPolicyTests {
         ) == .block(.selectedText))
     }
 
+    @Test("Blocks active marked text composition")
+    func blocksActiveMarkedTextComposition() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(!policy.canSuggest(
+            textBeforeCursor: "I am composing kana",
+            textAfterCursor: "",
+            isSecure: false,
+            hasMarkedText: true,
+            isFieldSuppressed: false
+        ))
+        #expect(policy.decision(
+            textBeforeCursor: "I am composing kana",
+            textAfterCursor: "",
+            isSecure: false,
+            hasMarkedText: true,
+            isFieldSuppressed: false
+        ) == .block(.compositionActive))
+    }
+
     @Test("Blocks token, payment, and API key looking fields")
     func blocksTokenPaymentAndAPIKeyLookingFields() {
         let policy = CompletionActivationPolicy()

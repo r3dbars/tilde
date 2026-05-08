@@ -165,7 +165,8 @@ private func focusedTextContext(textBeforeCursor: String) -> FocusedTextContext 
             canReadSelectedTextRange: true,
             canReadBoundsForRange: false,
             canReadAttributedText: false,
-            canSetSelectedText: true
+            canSetSelectedText: true,
+            hasMarkedText: false
         )
     )
 }

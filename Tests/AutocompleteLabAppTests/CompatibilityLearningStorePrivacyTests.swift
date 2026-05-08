@@ -102,6 +102,74 @@ struct CompatibilityLearningStorePrivacyTests {
         )
     }
 
+    @Test("Learning updates persist compatibility profile scope")
+    func learningUpdatesPersistCompatibilityProfileScope() {
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CompatibilityLearningStorePrivacyTests-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: temporaryFolder)
+        }
+
+        let store = CompatibilityLearningStore(
+            fileURL: temporaryFolder.appendingPathComponent("compatibility-learning.json")
+        )
+        let bundleIdentifier = "com.openai.codex"
+
+        store.setRenderModeOverride(.floatingMirror, for: bundleIdentifier)
+
+        let profile = store.profile(for: bundleIdentifier)
+        #expect(profile?.schemaVersion == CompatibilityLearningProfile.currentSchemaVersion)
+        #expect(profile?.surfaceIdentifier == "prompt-composer")
+        #expect(profile?.versionRangeDescription == "current-proof-only")
+        #expect(profile?.preferredPath == .accessibility)
+        #expect(profile?.hardCaps == [.noSubmitProofRequired])
+        #expect(
+            store.engine()
+                .adjustment(for: bundleIdentifier, profileRenderMode: .inlineAdjacent)
+                .metadata["learningCompatibilityProfileID"]
+                == "com.openai.codex::prompt-composer::accessibility"
+        )
+    }
+
+    @Test("Legacy learning profiles are upgraded with profile scope on read")
+    func legacyLearningProfilesAreUpgradedWithProfileScopeOnRead() throws {
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CompatibilityLearningStorePrivacyTests-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: temporaryFolder)
+        }
+
+        let fileURL = temporaryFolder.appendingPathComponent("compatibility-learning.json")
+        try FileManager.default.createDirectory(at: temporaryFolder, withIntermediateDirectories: true)
+        let bundleIdentifier = "md.obsidian"
+        let legacyJSON = """
+        {
+          "\(bundleIdentifier)": {
+            "bundleIdentifier": "\(bundleIdentifier)",
+            "xOffset": 2,
+            "yOffset": -3,
+            "observations": 2,
+            "confidence": 0.5,
+            "lastReason": "manual-visual-nudge",
+            "updatedAt": "2026-05-08T00:00:00Z"
+          }
+        }
+        """
+        try legacyJSON.data(using: .utf8)!.write(to: fileURL)
+
+        let store = CompatibilityLearningStore(fileURL: fileURL)
+        let profile = store.profile(for: bundleIdentifier)
+
+        #expect(profile?.schemaVersion == CompatibilityLearningProfile.currentSchemaVersion)
+        #expect(profile?.surfaceIdentifier == "codemirror-fallback")
+        #expect(profile?.preferredPath == .accessibilityFallback)
+        #expect(profile?.hardCaps == [
+            .caretSelectionProofRequired,
+            .structureProofRequired,
+            .unknownCustomEditorDetectOnly
+        ])
+    }
+
     @Test("Screenshot visual corrections persist scoped trust context")
     func screenshotVisualCorrectionsPersistScopedTrustContext() {
         let temporaryFolder = FileManager.default.temporaryDirectory

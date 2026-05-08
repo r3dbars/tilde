@@ -20,7 +20,7 @@ public enum FocusedFieldIdentityMode: String, Equatable, Sendable {
     case stableBounds
 }
 
-public enum CompatibilityPreferredPath: String, Equatable, Sendable {
+public enum CompatibilityPreferredPath: String, Codable, Equatable, Sendable {
     case accessibility
     case accessibilityFallback = "accessibility-fallback"
     case browserExtension = "browser-extension"
@@ -30,7 +30,7 @@ public enum CompatibilityPreferredPath: String, Equatable, Sendable {
     case blocked
 }
 
-public enum CompatibilityHardCap: String, Equatable, Sendable {
+public enum CompatibilityHardCap: String, Codable, Equatable, Sendable {
     case caretSelectionProofRequired = "caret-selection-proof-required"
     case undoProofRequired = "undo-proof-required"
     case structureProofRequired = "structure-proof-required"

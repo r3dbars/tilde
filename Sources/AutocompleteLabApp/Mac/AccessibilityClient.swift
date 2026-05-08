@@ -33,13 +33,14 @@ struct FocusedTextCapabilities: Equatable, Sendable {
     let canReadBoundsForRange: Bool
     let canReadAttributedText: Bool
     let canSetSelectedText: Bool
+    let hasMarkedText: Bool
 
     var supportsInlineSuggestions: Bool {
-        canReadValue && canReadSelectedTextRange && canReadBoundsForRange
+        canReadValue && canReadSelectedTextRange && canReadBoundsForRange && !hasMarkedText
     }
 
     var supportsAXInsertion: Bool {
-        canSetSelectedText
+        canSetSelectedText && !hasMarkedText
     }
 }
 
@@ -220,6 +221,8 @@ final class AccessibilityClient: @unchecked Sendable {
         }
 
         let selectedRange = selectedTextRange(in: focusedElement)
+        let markedTextRange = markedTextRange(in: focusedElement)
+        let hasMarkedText = (markedTextRange?.length ?? 0) > 0
         guard let textSnapshot = editableTextSnapshot(
             in: focusedElement,
             role: role,
@@ -256,7 +259,8 @@ final class AccessibilityClient: @unchecked Sendable {
             selectedRange: selectedRange,
             caretRect: caretRect,
             textStyle: textStyle,
-            canReadValue: textSnapshot.canReadValue
+            canReadValue: textSnapshot.canReadValue,
+            hasMarkedText: hasMarkedText
         )
 
         return FocusedTextContext(
@@ -305,7 +309,8 @@ final class AccessibilityClient: @unchecked Sendable {
                 canReadSelectedTextRange: false,
                 canReadBoundsForRange: false,
                 canReadAttributedText: false,
-                canSetSelectedText: false
+                canSetSelectedText: false,
+                hasMarkedText: false
             )
         )
     }
@@ -962,6 +967,19 @@ final class AccessibilityClient: @unchecked Sendable {
         return range
     }
 
+    private func markedTextRange(in element: AXUIElement) -> CFRange? {
+        guard let rangeValue = copyAttribute(element, attribute: "AXMarkedTextRange") else {
+            return nil
+        }
+
+        var range = CFRange()
+        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else {
+            return nil
+        }
+
+        return range
+    }
+
     private func caretBounds(for element: AXUIElement, range: CFRange) -> CGRect? {
         let caretRange = CFRange(location: range.location, length: 0)
         return bounds(for: element, range: caretRange)
@@ -1099,14 +1117,16 @@ final class AccessibilityClient: @unchecked Sendable {
         selectedRange: CFRange?,
         caretRect: CGRect?,
         textStyle: FocusedTextStyle?,
-        canReadValue: Bool? = nil
+        canReadValue: Bool? = nil,
+        hasMarkedText: Bool = false
     ) -> FocusedTextCapabilities {
         FocusedTextCapabilities(
             canReadValue: canReadValue ?? (copyAttribute(element, attribute: kAXValueAttribute) is String),
             canReadSelectedTextRange: selectedRange != nil,
             canReadBoundsForRange: caretRect != nil,
             canReadAttributedText: textStyle != nil,
-            canSetSelectedText: canSetAttribute(element, attribute: kAXSelectedTextAttribute)
+            canSetSelectedText: canSetAttribute(element, attribute: kAXSelectedTextAttribute),
+            hasMarkedText: hasMarkedText
         )
     }
 

@@ -10,6 +10,7 @@ final class CompatibilityLearningStore: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "app.transcripted.autocomplete.compatibility-learning")
     private let fileURL: URL
+    private let profileStore: CompatibilityProfileStore
     private let screenshotTracingDuration: TimeInterval
     private let now: () -> Date
     private let encoder = JSONEncoder()
@@ -17,10 +18,12 @@ final class CompatibilityLearningStore: @unchecked Sendable {
 
     init(
         fileURL: URL,
+        profileStore: CompatibilityProfileStore = .mvp,
         screenshotTracingDuration: TimeInterval = 60 * 60,
         now: @escaping () -> Date = Date.init
     ) {
         self.fileURL = fileURL
+        self.profileStore = profileStore
         self.screenshotTracingDuration = screenshotTracingDuration
         self.now = now
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -174,13 +177,13 @@ final class CompatibilityLearningStore: @unchecked Sendable {
     }
 
     private func profiles() -> [String: CompatibilityLearningProfile] {
-        queue.sync { [fileURL, encoder, decoder] in
+        queue.sync { [fileURL, encoder, decoder, profileStore] in
             guard let data = try? Data(contentsOf: fileURL),
                   let profiles = try? decoder.decode([String: CompatibilityLearningProfile].self, from: data) else {
                 return [:]
             }
 
-            let sanitized = sanitizeScreenshotTracing(in: profiles)
+            let sanitized = sanitizeProfiles(profiles, profileStore: profileStore)
             if sanitized != profiles {
                 do {
                     try encoder.encode(sanitized).write(to: fileURL, options: .atomic)
@@ -202,7 +205,7 @@ final class CompatibilityLearningStore: @unchecked Sendable {
         preserveTrustedVisualReason: Bool = false,
         mutate: (inout CompatibilityLearningProfile) -> Void
     ) {
-        queue.sync { [fileURL, encoder, decoder] in
+        queue.sync { [fileURL, encoder, decoder, profileStore] in
             var profiles: [String: CompatibilityLearningProfile]
             if let data = try? Data(contentsOf: fileURL),
                let decoded = try? decoder.decode([String: CompatibilityLearningProfile].self, from: data) {
@@ -213,6 +216,7 @@ final class CompatibilityLearningStore: @unchecked Sendable {
 
             var profile = profiles[bundleIdentifier] ?? CompatibilityLearningProfile(bundleIdentifier: bundleIdentifier)
             mutate(&profile)
+            profile.applyCompatibilityScope(from: profileStore.profile(for: bundleIdentifier))
             if !(preserveTrustedVisualReason && profile.hasTrustedVisualAdjustment) {
                 profile.lastReason = reason
             }
@@ -234,8 +238,9 @@ final class CompatibilityLearningStore: @unchecked Sendable {
         }
     }
 
-    private func sanitizeScreenshotTracing(
-        in profiles: [String: CompatibilityLearningProfile]
+    private func sanitizeProfiles(
+        _ profiles: [String: CompatibilityLearningProfile],
+        profileStore: CompatibilityProfileStore
     ) -> [String: CompatibilityLearningProfile] {
         var sanitized = profiles
         for bundleIdentifier in sanitized.keys {
@@ -243,11 +248,18 @@ final class CompatibilityLearningStore: @unchecked Sendable {
                 continue
             }
 
+            let knownProfile = profileStore.profile(for: bundleIdentifier)
+            if knownProfile != nil || !profile.compatibilityScopeIsCurrent {
+                profile.applyCompatibilityScope(from: knownProfile)
+            }
+
             if screenshotTracingIsActive(profile) {
+                sanitized[bundleIdentifier] = profile
                 continue
             }
 
             guard profile.screenshotTracingEnabled || profile.screenshotTracingExpiresAt != nil else {
+                sanitized[bundleIdentifier] = profile
                 continue
             }
 

@@ -26,7 +26,9 @@ leans on bundle-level profiles in places where the research wants profile-level
 surface/path/version proof. This pass tightened browser hosted-surface blocking
 for action-bearing web apps, made fast word completions use the final stale
 context refresh before display, and added first-class surface/path/hard-cap
-metadata to compatibility profiles.
+metadata to compatibility profiles. This follow-up also persists that scope on
+learned compatibility profiles and blocks suggestions while marked-text
+composition is active.
 
 ## Product Standard
 
@@ -77,7 +79,7 @@ fixture proof, not a general system-wide inserter.
 
 Starting score before this pass: 72/100
 
-Overall score after this pass: 78/100
+Overall score after this pass: 80/100
 
 This is a strict compatibility score. It is not a general app-quality score.
 Several individual surfaces score much higher, but hard gates prevent a broad
@@ -88,22 +90,25 @@ compatibility claim.
 ### Surface identification
 
 - Weight: 15
-- Current score: 14/15
+- Current score: 15/15
 - Why this score: The repo has explicit app profiles, AX field classification,
   browser hosted-surface blocking, prompt fingerprints, and proof-manifest
   coverage. This pass added action-bearing browser hosted surfaces such as
   Gmail, ChatGPT, Claude web, Codex web, and Telegram web, plus trace-safe
   profile metadata for surface ID, version range, preferred path, and hard caps.
+  This follow-up also persists that scope on learned/user-created compatibility
+  profiles and upgrades legacy learned profiles on read.
 - Evidence found in repo:
   - `CompatibilityProfileStore.mvp` in `Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift`
   - `AXFieldClassifier` in `Sources/AutocompleteLabCore/Session/AXFieldClassifier.swift`
   - `BrowserHostedSurfacePolicy` in `Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift`
   - `PromptEditorFingerprintPolicy` in `Sources/AutocompleteLabCore/Configuration/PromptEditorFingerprintPolicy.swift`
+  - `CompatibilityLearningProfile` in `Sources/AutocompleteLabCore/Configuration/CompatibilityLearning.swift`
+  - `CompatibilityLearningStore` in `Sources/AutocompleteLabApp/Mac/CompatibilityLearningStore.swift`
   - `docs/product/proof-manifest.json`
-- Missing evidence: First-class profile metadata now exists for app-owned MVP
-  profiles, but learned or user-created profiles are not persisted with full
-  surface/path/version proof yet. Browser support is still mostly Chrome bundle
-  plus fingerprint heuristics.
+- Missing evidence: Browser support is still mostly Chrome bundle plus
+  fingerprint heuristics. Production browser-site proof is scored in later
+  categories rather than treated as broad compatibility.
 - What would make it 100/100: Versioned compatibility profiles for every proven
   app/surface/path with hard caps, last-verified dates, and proof links.
 
@@ -203,16 +208,20 @@ compatibility claim.
 ### IME, composition, accessibility, performance
 
 - Weight: 5
-- Current score: 4/5
-- Why this score: Accessibility reads are throttled, latency is measured, and
-  typing endurance proof is strong. IME/composition evidence is still thin.
+- Current score: 5/5
+- Why this score: Accessibility reads are throttled, latency is measured,
+  typing endurance proof is strong, and marked-text composition now suppresses
+  suggestions before display or insertion.
 - Evidence found in repo:
   - `FocusedTextAXHealthPolicy`
   - `FocusedTextPollingBackoffPolicy`
   - `FocusedTextPollLatencyStats`
   - `KeyboardEventTapIdleStopPolicy`
+  - `CompletionActivationPolicy`
+  - `FocusedTextCapabilities.hasMarkedText`
   - `script/typing_performance_endurance_soak.sh`
-- Missing evidence: Dedicated IME/composition proof across supported surfaces.
+- Missing evidence: Real IME/dead-key manual proof across supported surfaces is
+  still useful, but the app now has an automated fail-closed composition gate.
 - What would make it 100/100: IME/dead-key/composition proof plus current
   performance proof on each supported profile.
 
@@ -333,10 +342,28 @@ diagnostics-only by policy, not by accident.
   - Full Swift tests, proof manifest checks.
 - Risk level: Medium
 - Expected score impact: +3 surface identification.
-- Status: Initial app-owned metadata is done in this pass; persisted learned
-  or user-created versioned profiles are still future work.
+- Status: App-owned metadata and learned compatibility profile scope are done.
+  Legacy learned profiles upgrade on read. Last-verified/proof-link metadata is
+  still future work.
 
-### 4. Codex same-slice one-word no-submit proof
+### 4. IME/composition fail-closed gate
+
+- Objective: Suppress suggestions while AX reports active marked text so the
+  app does not interrupt IME/dead-key composition.
+- Files likely involved:
+  - `Sources/AutocompleteLabCore/Session/CompletionActivationPolicy.swift`
+  - `Sources/AutocompleteLabApp/Mac/AccessibilityClient.swift`
+  - `Sources/AutocompleteLabApp/App/AppDelegate.swift`
+- Tests to add/update:
+  - `CompletionActivationPolicyTests`
+  - App-target compile path through `SuggestionOrchestratorTests`
+- Proof required:
+  - Focused Swift tests and future manual IME proof.
+- Risk level: Low
+- Expected score impact: +1 IME/composition safety.
+- Status: Done in this follow-up.
+
+### 5. Codex same-slice one-word no-submit proof
 
 - Objective: Record one bounded Codex proof slice with screenshot, one-word Tab
   accept, and no submit.
@@ -351,7 +378,7 @@ diagnostics-only by policy, not by accident.
 - Risk level: Medium
 - Expected score impact: +3 no-submit and visual proof.
 
-### 5. Claude Code terminal-host proof
+### 6. Claude Code terminal-host proof
 
 - Objective: Prove terminal-hosted Claude Code one-word accept without shell or
   agent submit.
@@ -388,6 +415,7 @@ This goal is complete when:
 - Codex still needs current same-slice screenshot plus one-word no-submit proof.
 - Claude Code still needs terminal-host manual proof.
 - Chrome production editor/chat surfaces need real site proof before broadening.
-- Versioned compatibility profiles are not yet first-class.
-- IME/composition and undo/redo matrix proof remains incomplete.
+- Learned compatibility profiles now carry versioned scope; last-verified and
+  proof-link metadata is still not stored directly on learned profiles.
+- IME/dead-key and undo/redo matrix proof remains incomplete.
 - A full app-level non-AX harness would make trust flow testing much stronger.

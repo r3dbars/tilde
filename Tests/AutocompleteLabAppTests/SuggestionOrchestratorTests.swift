@@ -701,7 +701,8 @@ private func makeContext(
             canReadSelectedTextRange: true,
             canReadBoundsForRange: true,
             canReadAttributedText: false,
-            canSetSelectedText: true
+            canSetSelectedText: true,
+            hasMarkedText: false
         )
     )
 }

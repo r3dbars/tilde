@@ -254,4 +254,39 @@ struct CompatibilityLearningTests {
         #expect(!adjustment.shouldCaptureScreenshot)
         #expect(adjustment.metadata["learningApplied"] == "false")
     }
+
+    @Test("Learning profile stores app compatibility scope")
+    func storesAppCompatibilityScope() {
+        var profile = CompatibilityLearningProfile(bundleIdentifier: "com.google.Chrome")
+        profile.applyCompatibilityScope(from: CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+
+        let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+        let adjustment = engine.adjustment(
+            for: "com.google.Chrome",
+            profileRenderMode: .inlineAdjacent
+        )
+
+        #expect(profile.schemaVersion == CompatibilityLearningProfile.currentSchemaVersion)
+        #expect(profile.surfaceIdentifier == "local-textarea-contenteditable-editor-fixtures")
+        #expect(profile.preferredPath == .accessibilityFallback)
+        #expect(profile.hardCaps == [.productionSurfaceProofRequired, .noSubmitProofRequired])
+        #expect(
+            adjustment.metadata["learningCompatibilityProfileID"]
+                == "com.google.Chrome::local-textarea-contenteditable-editor-fixtures::accessibility-fallback"
+        )
+        #expect(
+            adjustment.metadata["learningCompatibilityHardCaps"]
+                == "production-surface-proof-required,no-submit-proof-required"
+        )
+    }
+
+    @Test("Unproven learning scope stays blocked")
+    func unprovenLearningScopeStaysBlocked() {
+        var profile = CompatibilityLearningProfile(bundleIdentifier: "com.example.unknown")
+        profile.applyCompatibilityScope(from: nil)
+
+        #expect(profile.surfaceIdentifier == "user-created-unproven")
+        #expect(profile.preferredPath == .blocked)
+        #expect(profile.hardCaps == [.diagnosticsOnly, .unknownCustomEditorDetectOnly])
+    }
 }

@@ -1150,6 +1150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textAfterCursor: context.textAfterCursor,
             isSecure: context.isSecure,
             selectedTextLength: context.selectedTextLength,
+            hasMarkedText: context.capabilities.hasMarkedText,
             isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
             fieldKind: fieldClassification.kind
         )
@@ -1173,6 +1174,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textAfterCursor: context.textAfterCursor,
                 reason: activationDecision.blockReasonDescription,
                 metadata: fieldClassification.traceMetadata
+                    .merging([
+                        "compositionActive": String(context.capabilities.hasMarkedText)
+                    ]) { current, _ in current }
             )
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
@@ -1180,7 +1184,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 profile: profile,
                 fieldIdentity: fieldIdentity,
                 metadata: [
-                    "reason": activationDecision.blockReasonDescription
+                    "reason": activationDecision.blockReasonDescription,
+                    "compositionActive": String(context.capabilities.hasMarkedText)
                 ]
                 .merging(fieldClassification.traceMetadata) { current, _ in current }
             )
@@ -1667,7 +1672,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             canReadSelectedTextRange: context.capabilities.canReadSelectedTextRange,
             canReadBoundsForRange: true,
             canReadAttributedText: context.capabilities.canReadAttributedText,
-            canSetSelectedText: context.capabilities.canSetSelectedText
+            canSetSelectedText: context.capabilities.canSetSelectedText,
+            hasMarkedText: context.capabilities.hasMarkedText
         )
 
         recordSyntheticCaretIfNeeded(syntheticCaret, context: context, profile: profile)
