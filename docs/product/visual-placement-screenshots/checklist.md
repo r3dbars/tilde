@@ -39,9 +39,10 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manua
   note and treat detached-suggestion suppression as safety evidence, not a full
   placement pass.
 - Chrome real editor fixtures: `monaco-real` and `prosemirror-real` install
-  pinned npm packages into a temp folder. Do not add screenshots unless Chrome
-  exposes a focused editable AX context and the run verifies insertion in the
-  same bounded trace slice.
+  pinned npm packages into a temp folder and use an isolated Chrome process with
+  renderer accessibility forced. Only add screenshots from a bounded strict
+  trace slice that verifies insertion. Keep the score below target until default
+  Chrome AX exposure and caret-quality placement are proven.
 - Codex, Claude desktop, and Claude Code: automation must not submit prompts.
   Use harmless local text, validate one-word Tab accept only, then press Esc or
   clear the prompt manually. Backtick/full accept needs separate full-accept

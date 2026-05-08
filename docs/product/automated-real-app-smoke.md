@@ -50,7 +50,7 @@ What this proves:
   manual recorder or by setting `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1`
 - Chrome works in plain textareas, contenteditable fields, editor-like nested
   contenteditables, Monaco-like editors, ProseMirror-like editors, pinned
-  upstream Monaco/ProseMirror fixtures when Chrome exposes web-editor AX focus,
+  upstream Monaco/ProseMirror fixtures in isolated renderer-accessibility Chrome,
   and a chat-style composer fixture that fails if Tab/full-accept submits the form
 
 Notes, Obsidian, Codex, Claude desktop, and Claude Code checks are manual-gated.
@@ -67,10 +67,13 @@ ProseMirror-like fixtures copy the DOM shape and focus behavior those editors
 usually expose, but they do not load the real upstream libraries. The
 `monaco-real` and `prosemirror-real` fixtures install pinned npm packages into a
 temporary folder during the run and never commit `node_modules`. They are the
-right proof lane for real editor engines, but they still depend on Chrome
-exposing the focused web editor through macOS Accessibility. The chat-like
-fixture is not a real Codex or Claude proof; it is a local no-submit guardrail
-that must pass before trusting prompt app smoke results.
+right proof lane for real editor engines. For these two lanes the script launches
+an isolated temp-profile Chrome process with `--force-renderer-accessibility`
+and kills only that captured process during cleanup. That proves Autocomplete
+Lab works when Chrome exposes real editor AX, but it is still weaker than
+default-Chrome production-site proof. The chat-like fixture is not a real Codex
+or Claude proof; it is a local no-submit guardrail that must pass before trusting
+prompt app smoke results.
 
 Run the score target loop when working toward the product scorecards:
 

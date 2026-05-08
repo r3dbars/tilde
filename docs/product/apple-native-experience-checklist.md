@@ -64,14 +64,14 @@ unsure. Wrong-place text is worse than no suggestion.
 | Typing must feel untouched | 15 | 98 | 100 | The strict TextEdit endurance harness now creates and captures the disposable target through UI automation, restores the clipboard, and refocuses before each segment. Fresh live proof passed exact 1,200-, 4,800-, and 12,000-character TextEdit runs. The latest full 10-minute pass had no tap disables, focused-poll p95 max 57ms, focused-poll max 87ms, 4 under-threshold slow markers, and zero focused-poll skips after fast word-completion stopped doing a duplicate AX read. Normal typing no longer requires event-tap samples because keyboard capture intentionally starts only while a suggestion is visible. The last gap to 100 is reducing long-document focused-poll slow markers to zero or proving they are visually/user-invisible under real hardware typing. |
 | Visual placement and caret alignment | 18 | 74 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, inline mode now hides when less than one useful word fits after the caret, screenshot-derived correction is wired behind explicit per-app screenshot tracing, learned visual offsets now expire when target app version, screen, or field shape changes, Chrome chat-like, Obsidian, and Notes title/body/checklist now have proof, and Diagnostics exposes placement confidence without suggestion text. Codex same-slice accept/no-submit proof plus Claude Code and Claude desktop are still blockers. |
 | Acceptance safety | 10 | 90 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Prompt-app one-word no-submit proof is still incomplete. |
-| Cross-app reliability | 10 | 78 | 100 | The proof matrix now has 12 screenshot artifacts, Notes title/body/checklist are all split out, and the app exposes green/yellow/diagnostics-only/unsupported status. Prompt apps and more real production editors are still pending proof. |
+| Cross-app reliability | 10 | 80 | 100 | The proof matrix now has 14 screenshot artifacts, Notes title/body/checklist are all split out, real Monaco/ProseMirror pass under isolated renderer-accessibility Chrome, and the app exposes green/yellow/diagnostics-only/unsupported status. Prompt apps, default-Chrome editor AX exposure, and more production editor variants are still pending proof. |
 | Native macOS visual feel | 8 | 80 | 100 | Settings moved toward native sections, checkboxes, clearer privacy/app controls, support status, "why hidden" copy, and calmer menu copy. Diagnostics and onboarding still need polish. |
 | Privacy and permissions trust | 9 | 100 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, raw/screenshot debug capture expires from the app UI, Settings shows share-safe privacy status, Diagnostics exports a redacted privacy bundle with a manifest/checklist, and the beta packet explicitly forbids raw traces, screenshots, prompts, typed text, and accepted text by default. |
 | Suggestion quality | 8 | 87 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, learned word completion is app-scoped, dogfood prompts are stricter, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
 | Failure restraint | 8 | 91 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, slow no-context AX reads cool down immediately, single slow AX reads with context now throttle and drop stale results, stale geometry suppresses display, too-narrow inline placement suppresses instead of showing a sliver, event-tap disablement fails closed, prompt full accept requires proof, placement uncertainty now hides stale ghosts and feeds field quiet mode, active quiet mode is visible in Diagnostics, and unsupported apps explain their stance. Real-app proof remains open. |
 | User control | 6 | 100 | 100 | Settings and the menu now expose pause, current-field silence, app blocking, support status, per-app render mode, force-mirror override, an app-proof starter, privacy diagnostics, temporary raw/screenshot capture, local log deletion, direct accept-all shortcut editing, and why the last suggestion was hidden. |
 | Onboarding and setup | 4 | 96 | 100 | Settings explains Accessibility in one short paragraph, only mentions Screen Recording when screenshot capture is on, starts fresh installs with suggestion-capable apps off, points first success at enabling TextEdit, and installs or repairs the local model in-app with plain no-model-server recovery copy, progress, cancellation, failure retry, validation, and runtime warmup. A guided post-enable proof pass remains open. |
-| Evidence and QA loop | 4 | 99 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command with exact TextEdit text checks, Notes text-context repair, and 12 screenshot artifacts. Prompt-app screenshot and same-slice no-submit proof is still missing. |
+| Evidence and QA loop | 4 | 99 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command with exact TextEdit text checks, Notes text-context repair, and 14 screenshot artifacts including real Monaco/ProseMirror. Prompt-app screenshot and same-slice no-submit proof is still missing. |
 
 Weighted score: 88/100.
 
@@ -200,8 +200,8 @@ cheap, even if the model output is good.
 | Chrome textarea | 88 | 100 | Live screenshot, wrap, Tab, full accept. |
 | Chrome contenteditable | 86 | 100 | Live screenshot, rich text, Tab, full accept. |
 | Chrome editor-like | 84 | 100 | Real CodeMirror or Obsidian proof. |
-| Chrome Monaco-like | 78 | 100 | `monaco-real` fixture lane now exists; still needs Chrome focused editable AX context, screenshot, Tab, and full accept proof. |
-| Chrome ProseMirror-like | 84 | 100 | `prosemirror-real` fixture lane now exists and receives typing; latest local run exposed no focused editable AX context to the app, so screenshot/accept proof remains open. |
+| Chrome Monaco-like | 86 | 100 | `monaco-real` now has forced-renderer-accessibility Chrome proof with screenshot, Tab, and full accept. Still needs default Chrome AX exposure and caret-quality placement. |
+| Chrome ProseMirror-like | 88 | 100 | `prosemirror-real` now has forced-renderer-accessibility Chrome proof with screenshot, Tab, and full accept. Still needs default Chrome AX exposure and caret-quality placement. |
 | Chrome chat-like | 80 | 100 | Local screenshot-backed no-submit accept proof exists; real chat apps still need proof. |
 | Codex | 74 | 100 | Prompt screenshot plus one-word no-submit proof in same slice. |
 | Claude Code | 35 | 100 | Safe prompt proof with one-word accept. |
@@ -241,7 +241,7 @@ autocomplete suggestion.
 
 ## Category 4: Cross-App Reliability
 
-Current score: 78/100.
+Current score: 80/100.
 
 Native target: every app has a named stance: green, yellow, diagnostics-only,
 or unsupported.
@@ -253,6 +253,7 @@ or unsupported.
 - [x] Mail is diagnostics-only.
 - [x] Atlas is unsupported.
 - [x] Chrome local fixtures cover major browser editor shapes.
+- [x] Real Monaco and ProseMirror have isolated renderer-accessibility Chrome proof.
 - [x] A dedicated app proof matrix now separates screenshot proof, accept proof, and evidence gaps.
 - [ ] Every profile needs an owner note explaining why it is safe.
 - [ ] Every profile needs a screenshot evidence row.

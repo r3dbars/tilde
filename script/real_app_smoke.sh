@@ -29,9 +29,9 @@ notes run only prints the surface picker and does not record proof.
 
 Chrome defaults to the textarea fixture. Use --fixture chat-like to prove
 Tab/full-accept do not submit a chat-style composer. Use --fixture monaco-real
-or --fixture prosemirror-real for pinned upstream editor-engine fixtures. Use
---fixture all to run every local Chrome browser/editor fixture with one app
-build.
+or --fixture prosemirror-real for pinned upstream editor-engine fixtures in an
+isolated Chrome process with renderer accessibility forced. Use --fixture all
+to run every local Chrome browser/editor fixture with one app build.
 EOF
 }
 
@@ -116,6 +116,7 @@ LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
 DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.autocomplete-lab}"
 declare -a SMOKE_TMP_DIRS=()
+declare -a SMOKE_CHROME_PIDS=()
 CHROME_FIXTURE_ASSET_URL=""
 CHROME_FIXTURE_SCRIPT_URL=""
 
@@ -125,7 +126,18 @@ cleanup_smoke_tmp_dirs() {
   fi
 }
 
+cleanup_smoke_chrome_pids() {
+  if ((${#SMOKE_CHROME_PIDS[@]})); then
+    local pid
+    for pid in "${SMOKE_CHROME_PIDS[@]}"; do
+      kill "$pid" >/dev/null 2>&1 || true
+      wait "$pid" >/dev/null 2>&1 || true
+    done
+  fi
+}
+
 cleanup_smoke() {
+  cleanup_smoke_chrome_pids
   cleanup_smoke_tmp_dirs
 
   if [[ "$TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED" == "1" ]]; then
@@ -261,6 +273,42 @@ assert_frontmost_app() {
   frontmost="$(osascript -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
   if [[ "$frontmost" != "$expected" ]]; then
     echo "$label lost focus before accept. Expected frontmost app '$expected', got '${frontmost:-unknown}'." >&2
+    exit 1
+  fi
+}
+
+frontmost_process_id() {
+  swift - <<'SWIFT'
+import AppKit
+print(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1)
+SWIFT
+}
+
+wait_for_frontmost_process_id() {
+  local expected_pid="$1"
+  local timeout_seconds="${2:-5}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    local frontmost_pid
+    frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
+    if [[ "$frontmost_pid" == "$expected_pid" ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for Chrome process $expected_pid to become frontmost." >&2
+  exit 1
+}
+
+assert_frontmost_process_id() {
+  local expected_pid="$1"
+  local label="$2"
+  local frontmost_pid
+  frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
+  if [[ "$frontmost_pid" != "$expected_pid" ]]; then
+    echo "$label lost focus before accept. Expected frontmost pid '$expected_pid', got '${frontmost_pid:-unknown}'." >&2
     exit 1
   fi
 }
@@ -494,6 +542,7 @@ JAVASCRIPT
 wait_for_chrome_smoke_ready() {
   local fixture="$1"
   local timeout_seconds="${2:-20}"
+  local chrome_pid="${3:-}"
   local deadline=$((SECONDS + timeout_seconds))
 
   case "$fixture" in
@@ -506,7 +555,10 @@ wait_for_chrome_smoke_ready() {
 
   while ((SECONDS <= deadline)); do
     local tab_title
-    tab_title="$(osascript <<'APPLESCRIPT' 2>/dev/null || true
+    if [[ -n "$chrome_pid" ]]; then
+      tab_title="$(chrome_window_title_for_pid "$chrome_pid" 2>/dev/null || true)"
+    else
+      tab_title="$(osascript <<'APPLESCRIPT' 2>/dev/null || true
 tell application "Google Chrome"
   try
     return title of active tab of front window
@@ -516,6 +568,7 @@ tell application "Google Chrome"
 end tell
 APPLESCRIPT
 )"
+    fi
     if [[ "$tab_title" == *"[ready=1]"* ]]; then
       return 0
     fi
@@ -524,6 +577,155 @@ APPLESCRIPT
 
   echo "Timed out waiting for Chrome $fixture fixture readiness." >&2
   exit 1
+}
+
+chrome_fixture_uses_isolated_accessibility_chrome() {
+  case "$1" in
+    monaco-real|prosemirror-real)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+chrome_window_title_for_pid() {
+  local chrome_pid="$1"
+
+  swift - "$chrome_pid" <<'SWIFT'
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 2,
+      let rawPID = Int32(CommandLine.arguments[1]) else {
+    exit(2)
+}
+let pid = pid_t(rawPID)
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+
+    return value
+}
+
+let appElement = AXUIElementCreateApplication(pid)
+AXUIElementSetMessagingTimeout(appElement, 0.5)
+
+if let window = copyAttribute(appElement, kAXFocusedWindowAttribute) {
+    let windowElement = window as! AXUIElement
+    if let title = copyAttribute(windowElement, kAXTitleAttribute) as? String {
+        print(title)
+        exit(0)
+    }
+}
+
+exit(1)
+SWIFT
+}
+
+launch_isolated_chrome_fixture() {
+  local chrome_url="$1"
+  local tmp_dir="$2"
+  local profile_dir="$tmp_dir/chrome-profile"
+  local chrome_binary="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+  if [[ ! -x "$chrome_binary" ]]; then
+    echo "Google Chrome binary is missing: $chrome_binary" >&2
+    exit 1
+  fi
+
+  "$chrome_binary" \
+    --user-data-dir="$profile_dir" \
+    --force-renderer-accessibility \
+    --no-first-run \
+    --no-default-browser-check \
+    --disable-default-apps \
+    --disable-sync \
+    --new-window "$chrome_url" >/dev/null 2>&1 &
+
+  local chrome_pid="$!"
+  SMOKE_CHROME_PIDS+=("$chrome_pid")
+  printf '%s\n' "$chrome_pid"
+}
+
+focus_chrome_process_window() {
+  local chrome_pid="$1"
+  local click_x_offset="$2"
+  local click_y_offset="$3"
+
+  swift - "$chrome_pid" "$click_x_offset" "$click_y_offset" <<'SWIFT'
+import AppKit
+import ApplicationServices
+import CoreGraphics
+import Foundation
+
+guard CommandLine.arguments.count == 4,
+      let rawPID = Int32(CommandLine.arguments[1]),
+      let clickXOffset = Double(CommandLine.arguments[2]),
+      let clickYOffset = Double(CommandLine.arguments[3]) else {
+    exit(2)
+}
+let pid = pid_t(rawPID)
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+
+    return value
+}
+
+func bounds(for element: AXUIElement) -> CGRect? {
+    guard let positionValue = copyAttribute(element, kAXPositionAttribute),
+          let sizeValue = copyAttribute(element, kAXSizeAttribute) else {
+        return nil
+    }
+
+    var position = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+          AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else {
+        return nil
+    }
+
+    return CGRect(origin: position, size: size)
+}
+
+if let app = NSRunningApplication(processIdentifier: pid) {
+    app.activate(options: [.activateAllWindows])
+}
+
+Thread.sleep(forTimeInterval: 0.35)
+
+let appElement = AXUIElementCreateApplication(pid)
+AXUIElementSetMessagingTimeout(appElement, 0.5)
+
+guard let windowValue = copyAttribute(appElement, kAXFocusedWindowAttribute),
+      let windowBounds = bounds(for: windowValue as! AXUIElement),
+      let source = CGEventSource(stateID: .hidSystemState) else {
+    exit(1)
+}
+
+let point = CGPoint(x: windowBounds.minX + clickXOffset, y: windowBounds.minY + clickYOffset)
+for eventType in [CGEventType.leftMouseDown, .leftMouseUp] {
+    guard let event = CGEvent(
+        mouseEventSource: source,
+        mouseType: eventType,
+        mouseCursorPosition: point,
+        mouseButton: .left
+    ) else {
+        exit(1)
+    }
+    event.post(tap: .cghidEventTap)
+}
+SWIFT
 }
 
 chrome_fixture_click_offsets() {
@@ -541,8 +743,14 @@ chrome_fixture_click_offsets() {
 
 focus_chrome_smoke_editor() {
   local fixture="${1:-$CHROME_FIXTURE}"
+  local chrome_pid="${2:-}"
   local click_x_offset click_y_offset
   read -r click_x_offset click_y_offset < <(chrome_fixture_click_offsets "$fixture")
+
+  if [[ -n "$chrome_pid" ]]; then
+    focus_chrome_process_window "$chrome_pid" "$click_x_offset" "$click_y_offset"
+    return 0
+  fi
 
   osascript >/dev/null <<APPLESCRIPT
 tell application "Google Chrome"
@@ -770,6 +978,12 @@ require(["vs/editor/editor.main"], function () {
     fontFamily: "Menlo, Monaco, Consolas, monospace",
     lineNumbers: "on",
     minimap: { enabled: false },
+    quickSuggestions: false,
+    suggestOnTriggerCharacters: false,
+    acceptSuggestionOnCommitCharacter: false,
+    acceptSuggestionOnEnter: "off",
+    tabCompletion: "off",
+    wordBasedSuggestions: "off",
     scrollBeyondLastLine: false,
     wordWrap: "on",
     accessibilitySupport: "on",
@@ -1139,10 +1353,16 @@ run_chrome_fixture() {
   local chrome_url="file://$html_file"
   local click_x_offset click_y_offset
   read -r click_x_offset click_y_offset < <(chrome_fixture_click_offsets "$fixture")
+  local chrome_pid=""
 
   echo "Running Chrome fixture: $fixture"
 
-  osascript >/dev/null <<APPLESCRIPT
+  if chrome_fixture_uses_isolated_accessibility_chrome "$fixture"; then
+    chrome_pid="$(launch_isolated_chrome_fixture "$chrome_url" "$tmp_dir")"
+    sleep 2.2
+    focus_chrome_smoke_editor "$fixture" "$chrome_pid"
+  else
+    osascript >/dev/null <<APPLESCRIPT
 tell application "Google Chrome"
   activate
   if not (exists window 1) then make new window
@@ -1163,10 +1383,15 @@ tell application "System Events"
   end tell
 end tell
 APPLESCRIPT
+  fi
 
-  wait_for_frontmost_app "Google Chrome" 5
-  wait_for_chrome_smoke_ready "$fixture"
-  focus_chrome_smoke_editor "$fixture"
+  if [[ -n "$chrome_pid" ]]; then
+    wait_for_frontmost_process_id "$chrome_pid" 5
+  else
+    wait_for_frontmost_app "Google Chrome" 5
+  fi
+  wait_for_chrome_smoke_ready "$fixture" 20 "$chrome_pid"
+  focus_chrome_smoke_editor "$fixture" "$chrome_pid"
 
   osascript <<'APPLESCRIPT'
 tell application "System Events"
@@ -1176,8 +1401,14 @@ APPLESCRIPT
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.google.Chrome" "Chrome $fixture"
-  focus_chrome_smoke_editor "$fixture"
-  assert_frontmost_app "Google Chrome" "Chrome $fixture"
+  if [[ -z "$chrome_pid" ]]; then
+    focus_chrome_smoke_editor "$fixture"
+  fi
+  if [[ -n "$chrome_pid" ]]; then
+    assert_frontmost_process_id "$chrome_pid" "Chrome $fixture"
+  else
+    assert_frontmost_app "Google Chrome" "Chrome $fixture"
+  fi
   press_key_code 48
   wait_for_log_fields "$start_line" "Chrome $fixture Tab acceptance" 12 \
     "keyboard-action" \
@@ -1201,8 +1432,14 @@ APPLESCRIPT
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.google.Chrome" "Chrome $fixture second"
-  focus_chrome_smoke_editor "$fixture"
-  assert_frontmost_app "Google Chrome" "Chrome $fixture"
+  if [[ -z "$chrome_pid" ]]; then
+    focus_chrome_smoke_editor "$fixture"
+  fi
+  if [[ -n "$chrome_pid" ]]; then
+    assert_frontmost_process_id "$chrome_pid" "Chrome $fixture"
+  else
+    assert_frontmost_app "Google Chrome" "Chrome $fixture"
+  fi
   full_start_line="$(line_count "$LOG_PATH")"
   press_accept_all_shortcut
   wait_for_log_fields "$full_start_line" "Chrome $fixture full acceptance" 12 \
