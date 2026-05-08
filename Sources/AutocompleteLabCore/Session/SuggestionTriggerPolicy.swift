@@ -102,17 +102,17 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         case .eager:
             self.init(
                 charactersBeforePauseRequest: 1,
-                wordCompletionDelayMilliseconds: 20,
-                wordBoundaryDelayMilliseconds: 40,
-                softPunctuationDelayMilliseconds: 90,
-                structuralPunctuationDelayMilliseconds: 90,
-                closingPunctuationDelayMilliseconds: 90,
-                sentenceBoundaryDelayMilliseconds: 120,
-                pauseDelayMilliseconds: 40,
+                wordCompletionDelayMilliseconds: 40,
+                wordBoundaryDelayMilliseconds: 70,
+                softPunctuationDelayMilliseconds: 120,
+                structuralPunctuationDelayMilliseconds: 120,
+                closingPunctuationDelayMilliseconds: 120,
+                sentenceBoundaryDelayMilliseconds: 200,
+                pauseDelayMilliseconds: 70,
                 minimumWordCompletionCharacters: 2,
                 allowsPlainLineStartWordCompletion: true,
-                allowsPlainLineStartPhraseContinuation: true,
-                allowsSentenceBoundaryRequest: true
+                allowsPlainLineStartPhraseContinuation: false,
+                allowsSentenceBoundaryRequest: false
             )
         }
     }

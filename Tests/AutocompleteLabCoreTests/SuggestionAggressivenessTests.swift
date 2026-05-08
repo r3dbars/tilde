@@ -32,24 +32,49 @@ struct SuggestionAggressivenessTests {
         #expect(display.threshold(for: .sentenceContinuation) == 1.45)
     }
 
-    @Test("proactive keeps safety gates but predicts faster")
+    @Test("legacy proactive keeps safety gates but predicts faster")
     func proactiveKeepsSafetyGatesButPredictsFaster() {
         let trigger = SuggestionAggressiveness.eager.triggerPolicy
         let display = SuggestionAggressiveness.eager.displayScorePolicy
 
         #expect(trigger.charactersBeforePauseRequest == 1)
-        #expect(trigger.wordCompletionDelayMilliseconds == 20)
-        #expect(trigger.wordBoundaryDelayMilliseconds == 40)
-        #expect(trigger.pauseDelayMilliseconds == 40)
-        #expect(trigger.sentenceBoundaryDelayMilliseconds == 120)
+        #expect(trigger.wordCompletionDelayMilliseconds == 40)
+        #expect(trigger.wordBoundaryDelayMilliseconds == 70)
+        #expect(trigger.pauseDelayMilliseconds == 70)
+        #expect(trigger.sentenceBoundaryDelayMilliseconds == 200)
         #expect(trigger.minimumWordCompletionCharacters == 2)
         #expect(trigger.allowsPlainLineStartWordCompletion)
-        #expect(trigger.allowsPlainLineStartPhraseContinuation)
-        #expect(trigger.allowsSentenceBoundaryRequest)
+        #expect(!trigger.allowsPlainLineStartPhraseContinuation)
+        #expect(!trigger.allowsSentenceBoundaryRequest)
         #expect(display.threshold(for: .wordCompletion) == 0.40)
         #expect(display.threshold(for: .phraseContinuation) == 0.65)
         #expect(display.threshold(for: .sentenceContinuation) == 0.85)
         #expect(display.highRiskThreshold == DisplayScorePolicy().highRiskThreshold)
+    }
+
+    @Test("tuning levels expose more aggressive controls")
+    func tuningLevelsExposeMoreAggressiveControls() {
+        let proactive = SuggestionTuning(aggressivenessLevel: 3, maxVisibleWords: 8)
+        let veryProactive = SuggestionTuning(aggressivenessLevel: 4, maxVisibleWords: 8)
+        let max = SuggestionTuning(aggressivenessLevel: 5, maxVisibleWords: 99)
+
+        #expect(proactive.displayScorePolicy.threshold(for: .phraseContinuation) == 0.75)
+        #expect(veryProactive.displayScorePolicy.threshold(for: .phraseContinuation) == 0.65)
+        #expect(max.displayScorePolicy.threshold(for: .phraseContinuation) == 0.55)
+        #expect(max.maxVisibleWords == 8)
+
+        let veryProactiveTrigger = veryProactive.triggerPolicy(supportPace: .eager)
+        #expect(veryProactiveTrigger.wordCompletionDelayMilliseconds == 20)
+        #expect(veryProactiveTrigger.wordBoundaryDelayMilliseconds == 40)
+        #expect(veryProactiveTrigger.sentenceBoundaryDelayMilliseconds == 120)
+        #expect(veryProactiveTrigger.allowsPlainLineStartPhraseContinuation)
+        #expect(veryProactiveTrigger.allowsSentenceBoundaryRequest)
+
+        let maxTrigger = max.triggerPolicy(supportPace: .eager)
+        #expect(maxTrigger.softPunctuationDelayMilliseconds == 60)
+        #expect(maxTrigger.sentenceBoundaryDelayMilliseconds == 80)
+        #expect(max.traceMetadata["suggestionAggressivenessLevel"] == "5")
+        #expect(max.traceMetadata["suggestionMaxVisibleWords"] == "8")
     }
 
     @Test("parsing and cycling are stable")
@@ -64,12 +89,12 @@ struct SuggestionAggressivenessTests {
         #expect(SuggestionAggressiveness.eager.traceMetadata["suggestionAggressivenessDisplayName"] == "Proactive")
     }
 
-    @Test("proactive caps phrase help to a short continuation")
-    func proactiveCapsPhraseHelpToShortContinuation() {
+    @Test("pace leaves visible word count to tuning")
+    func paceLeavesVisibleWordCountToTuning() {
         #expect(SuggestionPace.eager.maxVisibleWords(
             defaultMaxVisibleWords: 6,
             requestMode: .phraseContinuation
-        ) == 4)
+        ) == 6)
         #expect(SuggestionPace.eager.maxVisibleWords(
             defaultMaxVisibleWords: 3,
             requestMode: .phraseContinuation

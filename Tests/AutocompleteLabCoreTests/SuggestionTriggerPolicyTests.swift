@@ -147,7 +147,7 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(
             previousTextBeforeCursor: "U",
             currentTextBeforeCursor: "Um"
-        ) == .request(delayMilliseconds: 20))
+        ) == .request(delayMilliseconds: 40))
     }
 
     @Test("Proactive pace asks for phrase help after a short word-boundary pause")
@@ -157,12 +157,12 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(
             previousTextBeforeCursor: "I feel",
             currentTextBeforeCursor: "I feel "
-        ) == .request(delayMilliseconds: 40))
+        ) == .request(delayMilliseconds: 70))
     }
 
-    @Test("Proactive pace asks after a single starter word")
-    func proactivePaceAsksAfterSingleStarterWord() {
-        let policy = SuggestionTriggerPolicy(pace: .eager)
+    @Test("Very proactive tuning asks after a single starter word")
+    func veryProactiveTuningAsksAfterSingleStarterWord() {
+        let policy = SuggestionTuning(aggressivenessLevel: 4).triggerPolicy(supportPace: .eager)
 
         #expect(policy.decision(
             previousTextBeforeCursor: "Um",
@@ -170,9 +170,9 @@ struct SuggestionTriggerPolicyTests {
         ) == .request(delayMilliseconds: 40))
     }
 
-    @Test("Proactive pace asks after sentence boundaries")
-    func proactivePaceAsksAfterSentenceBoundaries() {
-        let policy = SuggestionTriggerPolicy(pace: .eager)
+    @Test("Very proactive tuning asks after sentence boundaries")
+    func veryProactiveTuningAsksAfterSentenceBoundaries() {
+        let policy = SuggestionTuning(aggressivenessLevel: 4).triggerPolicy(supportPace: .eager)
 
         #expect(policy.decision(
             previousTextBeforeCursor: "I think this works",

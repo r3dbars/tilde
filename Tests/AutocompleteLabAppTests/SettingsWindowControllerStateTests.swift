@@ -492,21 +492,24 @@ struct SettingsWindowControllerStateTests {
         #expect(optionTab.cycleButtonTitle == "Use Backtick")
     }
 
-    @Test("Suggestion aggressiveness copy supports quiet normal and proactive")
-    func suggestionAggressivenessCopySupportsQuietNormalAndProactive() {
+    @Test("Suggestion tuning copy supports sliders")
+    func suggestionTuningCopySupportsSliders() {
         let quiet = SettingsSuggestionAggressivenessState(aggressiveness: .quiet)
-        let normal = SettingsSuggestionAggressivenessState(aggressiveness: .normal)
-        let eager = SettingsSuggestionAggressivenessState(aggressiveness: .eager)
+        let normal = SettingsSuggestionAggressivenessState(tuning: SuggestionTuning(aggressivenessLevel: 2, maxVisibleWords: 4))
+        let max = SettingsSuggestionAggressivenessState(tuning: SuggestionTuning(aggressivenessLevel: 5, maxVisibleWords: 8))
 
-        #expect(quiet.statusText == "Aggressiveness: Quiet")
+        #expect(quiet.statusText == "Aggressiveness: 1/5 - Quiet")
         #expect(quiet.detailText == "Waits longer and needs stronger scores before showing.")
-        #expect(quiet.cycleButtonTitle == "Use Normal")
-        #expect(normal.statusText == "Aggressiveness: Normal")
-        #expect(normal.detailText == "Shows a little sooner with longer suggestions.")
-        #expect(normal.cycleButtonTitle == "Use Proactive")
-        #expect(eager.statusText == "Aggressiveness: Proactive")
-        #expect(eager.detailText == "Predicts partial words sooner and starts phrase help after short pauses.")
-        #expect(eager.cycleButtonTitle == "Use Quiet")
+        #expect(quiet.maxWordsText == "Words shown: 8")
+        #expect(normal.statusText == "Aggressiveness: 2/5 - Normal")
+        #expect(normal.detailText == "Shows a little sooner with balanced filtering.")
+        #expect(normal.maxWordsText == "Words shown: 4")
+        #expect(normal.maxWordsDetailText == "Caps visible phrase suggestions at 4 words.")
+        #expect(max.statusText == "Aggressiveness: 5/5 - Max")
+        #expect(max.detailText == "Shows as soon as the safety checks allow.")
+        #expect(max.maxWordsText == "Words shown: 8")
+        #expect(max.aggressivenessSliderValue == 5)
+        #expect(max.maxWordsSliderValue == 8)
     }
 
     @MainActor
@@ -533,7 +536,8 @@ struct SettingsWindowControllerStateTests {
             clearLearningData: {},
             cycleAcceptAllShortcut: {},
             setAcceptAllShortcut: { _ in },
-            cycleSuggestionAggressiveness: {}
+            setSuggestionAggressivenessLevel: { _ in },
+            setSuggestionMaxVisibleWords: { _ in }
         )
 
         controller.refresh(
@@ -572,7 +576,7 @@ struct SettingsWindowControllerStateTests {
                 tracePath: "/tmp/traces.jsonl"
             ),
             keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .backtick),
-            suggestionAggressiveness: SettingsSuggestionAggressivenessState(aggressiveness: .normal),
+            suggestionAggressiveness: SettingsSuggestionAggressivenessState(tuning: SuggestionTuning()),
             lastSuggestionDecision: "Shown"
         )
 

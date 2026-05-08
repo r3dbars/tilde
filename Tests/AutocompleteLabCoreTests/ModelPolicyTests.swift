@@ -11,7 +11,7 @@ struct ModelPolicyTests {
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)
         #expect(policy.maxGeneratedTokens == 14)
-        #expect(policy.maxVisibleWords == 7)
+        #expect(policy.maxVisibleWords == 8)
         #expect(policy.maxVisibleWords >= CompletionModelPolicy.minimumVisibleWords)
         #expect(policy.maxVisibleWords <= CompletionModelPolicy.maximumVisibleWords)
     }
@@ -40,7 +40,7 @@ struct ModelPolicyTests {
         )
 
         #expect(tiny.maxVisibleWords == 1)
-        #expect(huge.maxVisibleWords == 7)
+        #expect(huge.maxVisibleWords == 8)
     }
 
     @Test("Model policy accepts autocomplete-sized visible output")
@@ -53,7 +53,8 @@ struct ModelPolicyTests {
         #expect(policy.allowsVisibleWordCount(5))
         #expect(policy.allowsVisibleWordCount(6))
         #expect(policy.allowsVisibleWordCount(7))
-        #expect(!policy.allowsVisibleWordCount(8))
+        #expect(policy.allowsVisibleWordCount(8))
+        #expect(!policy.allowsVisibleWordCount(9))
     }
 
     @Test("Request modes cap generated tokens by autocomplete role")
@@ -74,15 +75,15 @@ struct ModelPolicyTests {
             "AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS": "99"
         ])
 
-        #expect(defaultConfiguration.maxVisibleWords == 7)
+        #expect(defaultConfiguration.maxVisibleWords == 8)
         #expect(defaultConfiguration.maxGeneratedTokens == 14)
-        #expect(defaultConfiguration.displaySummary == "7 words / 14 tokens")
+        #expect(defaultConfiguration.displaySummary == "8 words / 14 tokens")
         #expect(short.maxVisibleWords == 3)
         #expect(short.maxGeneratedTokens == 9)
         #expect(short.displaySummary == "3 words / 9 tokens")
-        #expect(long.maxVisibleWords == 7)
+        #expect(long.maxVisibleWords == 8)
         #expect(long.maxGeneratedTokens == 16)
-        #expect(long.displaySummary == "7 words / 16 tokens")
+        #expect(long.displaySummary == "8 words / 16 tokens")
     }
 
     @Test("Experiment arms set default completion lengths")
@@ -102,8 +103,8 @@ struct ModelPolicyTests {
         #expect(oneWord.maxVisibleWords == 1)
         #expect(oneWord.maxGeneratedTokens == 4)
         #expect(threeWord.experimentArm == .length3Word)
-        #expect(threeWord.maxVisibleWords == 6)
-        #expect(threeWord.maxGeneratedTokens == 12)
+        #expect(threeWord.maxVisibleWords == 8)
+        #expect(threeWord.maxGeneratedTokens == 14)
         #expect(overridden.experimentArm == .length1Word)
         #expect(overridden.maxVisibleWords == 3)
         #expect(overridden.maxGeneratedTokens == 9)

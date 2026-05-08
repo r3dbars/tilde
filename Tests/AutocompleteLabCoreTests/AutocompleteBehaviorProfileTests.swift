@@ -23,7 +23,7 @@ struct AutocompleteBehaviorProfileTests {
         let profile = AutocompleteBehaviorProfile.profile(.email)
         let guidance = profile.promptGuidance.joined(separator: " ")
 
-        #expect(profile.maxVisibleWords == 7)
+        #expect(profile.maxVisibleWords == 8)
         #expect(profile.maxGeneratedTokens == 14)
         #expect(guidance.contains("Do not invent commitments"))
         #expect(guidance.contains("names"))
@@ -56,16 +56,16 @@ struct AutocompleteBehaviorProfileTests {
         #expect(guidance.contains("blocks"))
     }
 
-    @Test("AI chat profile is tiny and no-submit")
-    func aiChatProfileIsTinyAndNoSubmit() {
+    @Test("AI chat profile is slider-capable and no-submit")
+    func aiChatProfileIsSliderCapableAndNoSubmit() {
         let profile = AutocompleteBehaviorProfile.profile(.aiChat)
         let guidance = profile.promptGuidance.joined(separator: " ")
 
-        #expect(profile.maxVisibleWords == 1)
-        #expect(profile.maxGeneratedTokens == 4)
+        #expect(profile.maxVisibleWords == 8)
+        #expect(profile.maxGeneratedTokens == 12)
         #expect(!profile.suppressionDefaults.allowsFullAccept)
         #expect(!profile.suppressionDefaults.allowsSubmitLikeCompletions)
-        #expect(guidance.contains("one word"))
+        #expect(guidance.contains("tiny unless the user explicitly raises the visible word limit"))
         #expect(guidance.contains("Never suggest sending"))
         #expect(guidance.contains("pressing Enter or Return"))
         #expect(guidance.contains("slash commands"))
@@ -159,7 +159,7 @@ struct AutocompleteBehaviorProfileTests {
 
         #expect(metadata == [
             "behaviorProfile": "email",
-            "behaviorProfileMaxVisibleWords": "7",
+            "behaviorProfileMaxVisibleWords": "8",
             "behaviorProfileMaxGeneratedTokens": "14",
             "behaviorProfileSuppressedByDefault": "false",
             "behaviorProfileSuppressesFreshParagraphStart": "true",

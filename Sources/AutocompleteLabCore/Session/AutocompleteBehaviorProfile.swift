@@ -94,7 +94,7 @@ public struct AutocompleteBehaviorProfile: Equatable, Sendable {
         case .email:
             return AutocompleteBehaviorProfile(
                 id: .email,
-                maxVisibleWords: 7,
+                maxVisibleWords: 8,
                 maxGeneratedTokens: 14,
                 suppressionDefaults: AutocompleteBehaviorSuppressionDefaults(
                     suppressesFreshParagraphStart: true,
@@ -108,7 +108,7 @@ public struct AutocompleteBehaviorProfile: Equatable, Sendable {
         case .notes:
             return AutocompleteBehaviorProfile(
                 id: .notes,
-                maxVisibleWords: 7,
+                maxVisibleWords: 8,
                 maxGeneratedTokens: 14,
                 suppressionDefaults: AutocompleteBehaviorSuppressionDefaults(
                     suppressesBlankLine: true
@@ -134,7 +134,7 @@ public struct AutocompleteBehaviorProfile: Equatable, Sendable {
         case .docsProse:
             return AutocompleteBehaviorProfile(
                 id: .docsProse,
-                maxVisibleWords: 7,
+                maxVisibleWords: 8,
                 maxGeneratedTokens: 14,
                 suppressionDefaults: AutocompleteBehaviorSuppressionDefaults(
                     suppressesFreshParagraphStart: true,
@@ -148,7 +148,7 @@ public struct AutocompleteBehaviorProfile: Equatable, Sendable {
         case .bullets:
             return AutocompleteBehaviorProfile(
                 id: .bullets,
-                maxVisibleWords: 7,
+                maxVisibleWords: 8,
                 maxGeneratedTokens: 14,
                 suppressionDefaults: AutocompleteBehaviorSuppressionDefaults(),
                 promptGuidance: [
@@ -191,14 +191,14 @@ public struct AutocompleteBehaviorProfile: Equatable, Sendable {
         case .aiChat:
             return AutocompleteBehaviorProfile(
                 id: .aiChat,
-                maxVisibleWords: 1,
-                maxGeneratedTokens: 4,
+                maxVisibleWords: 8,
+                maxGeneratedTokens: 12,
                 suppressionDefaults: AutocompleteBehaviorSuppressionDefaults(
                     suppressesQuestions: true,
                     allowsFullAccept: false
                 ),
                 promptGuidance: [
-                    "Keep prompt-app continuations tiny: one word when possible.",
+                    "Keep prompt-app continuations tiny unless the user explicitly raises the visible word limit.",
                     "Never suggest sending, submitting, pressing Enter or Return, running a command, approval text, slash commands, @ references, bang commands, shell text, or answering the prompt."
                 ]
             )

@@ -437,6 +437,7 @@ struct CompletionActivationPolicyTests {
         let quiet = CompletionActivationPolicy(pace: .quiet)
         let normal = CompletionActivationPolicy(pace: .normal)
         let eager = CompletionActivationPolicy(pace: .eager)
+        let veryProactive = SuggestionTuning(aggressivenessLevel: 4).activationPolicy(supportPace: .eager)
 
         #expect(quiet.decision(
             textBeforeCursor: "I think this through ",
@@ -466,7 +467,7 @@ struct CompletionActivationPolicyTests {
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
         ) == .allow(.phraseContinuation))
-        #expect(eager.decision(
+        #expect(veryProactive.decision(
             textBeforeCursor: "Um ",
             textAfterCursor: "",
             isSecure: false,
@@ -474,6 +475,13 @@ struct CompletionActivationPolicyTests {
             fieldKind: .multilineCompose
         ) == .allow(.phraseContinuation))
         #expect(eager.decision(
+            textBeforeCursor: "I think this works. ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.terminalSentenceBoundary))
+        #expect(veryProactive.decision(
             textBeforeCursor: "I think this works. ",
             textAfterCursor: "",
             isSecure: false,

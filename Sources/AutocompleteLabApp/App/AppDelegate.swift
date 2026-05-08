@@ -54,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private var displayScorePolicy: DisplayScorePolicy {
-        suggestionAggressiveness.displayScorePolicy
+        suggestionTuning.displayScorePolicy
     }
     private var acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
     private var acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
@@ -125,8 +125,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setAcceptAllShortcut: { [weak self] shortcut in
             self?.setAcceptAllShortcut(shortcut)
         },
-        cycleSuggestionAggressiveness: { [weak self] in
-            self?.cycleSuggestionAggressiveness()
+        setSuggestionAggressivenessLevel: { [weak self] level in
+            self?.setSuggestionAggressivenessLevel(level)
+        },
+        setSuggestionMaxVisibleWords: { [weak self] words in
+            self?.setSuggestionMaxVisibleWords(words)
         }
     )
 
@@ -207,7 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionsPausedUntil: Date?
     private var appEnablementSetupCompleted = true
     private var keyboardShortcutConfiguration = KeyboardShortcutConfiguration.default
-    private var suggestionAggressiveness = SuggestionAggressiveness.normal
+    private var suggestionTuning = SuggestionTuning()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ProcessInfo.processInfo.disableAutomaticTermination("AutocompleteLab runs as a persistent menu bar agent.")
@@ -215,7 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadPauseState()
         loadDisabledApps()
         loadKeyboardShortcutConfiguration()
-        loadSuggestionAggressiveness()
+        loadSuggestionTuning()
         loadAcceptedAndKeptLearning()
         loadAcceptedTextStyleMemory()
         loadProofModeOverrides()
@@ -627,11 +630,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var settingsSuggestionAggressivenessState: SettingsSuggestionAggressivenessState {
-        SettingsSuggestionAggressivenessState(aggressiveness: suggestionAggressiveness)
+        SettingsSuggestionAggressivenessState(tuning: suggestionTuning)
     }
 
     private var runtimeTargetSummary: String {
-        "\(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(completionLengthConfiguration.displaySummary) • \(suggestionAggressiveness.displayName.lowercased())"
+        "\(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(completionLengthConfiguration.displaySummary) • \(suggestionTuning.displayName.lowercased()) • showing up to \(suggestionTuning.maxVisibleWords)"
     }
 
     private var shouldShowSettingsForCurrentReadiness: Bool {
@@ -3762,7 +3765,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             acceptedTextStyleSketch: acceptedTextStyleSketch,
             maxVisibleWords: maxVisibleWords(for: requestMode, profile: profile),
             requestMode: requestMode,
-            suggestionAggressiveness: suggestionAggressiveness
+            suggestionTuning: suggestionTuning
         ))
         let request = orchestration.request
         let suggestionID = orchestration.suggestionID
@@ -4666,7 +4669,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> [String: String] {
         request.behaviorProfileTraceMetadata
             .merging(fieldClassification.traceMetadata) { current, _ in current }
-            .merging(suggestionAggressiveness.traceMetadata) { current, _ in current }
+            .merging(suggestionTuning.traceMetadata) { current, _ in current }
     }
 
     private func acceptedAndKeptSignal(
@@ -6553,17 +6556,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func effectiveSuggestionPace(for profile: CompatibilityProfile) -> SuggestionPace {
         suggestionAggressivenessPolicy.pace(
-            userPace: suggestionAggressiveness.pace,
+            userPace: suggestionTuning.pace,
             supportStatus: .supported(profile)
         )
     }
 
     private func activationPolicy(for profile: CompatibilityProfile) -> CompletionActivationPolicy {
-        CompletionActivationPolicy(pace: effectiveSuggestionPace(for: profile))
+        suggestionTuning.activationPolicy(supportPace: effectiveSuggestionPace(for: profile))
     }
 
     private func triggerPolicy(for profile: CompatibilityProfile) -> SuggestionTriggerPolicy {
-        SuggestionTriggerPolicy(pace: effectiveSuggestionPace(for: profile))
+        suggestionTuning.triggerPolicy(supportPace: effectiveSuggestionPace(for: profile))
     }
 
     private func maxVisibleWords(
@@ -6571,7 +6574,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile
     ) -> Int {
         effectiveSuggestionPace(for: profile).maxVisibleWords(
-            defaultMaxVisibleWords: completionLengthConfiguration.maxVisibleWords,
+            defaultMaxVisibleWords: min(
+                completionLengthConfiguration.maxVisibleWords,
+                suggestionTuning.maxVisibleWords
+            ),
             requestMode: requestMode
         )
     }
@@ -6590,23 +6596,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func cycleSuggestionAggressiveness() {
-        suggestionAggressiveness = suggestionAggressiveness.next
-        persistSuggestionAggressiveness()
-        lastRequestedTextBeforeCursor = nil
-        invalidatePendingSuggestionRequest()
-        if suggestionSession.hasVisibleSuggestion {
-            hideSuggestion(reason: "aggressiveness-changed")
+    private func setSuggestionAggressivenessLevel(_ level: Int) {
+        let next = SuggestionTuning(
+            aggressivenessLevel: level,
+            maxVisibleWords: suggestionTuning.maxVisibleWords
+        )
+        guard next != suggestionTuning else {
+            refreshRuntimeChrome()
+            return
         }
-        setSuggestionDecision("Ready: \(suggestionAggressiveness.displayName.lowercased()) suggestions")
+
+        suggestionTuning = next
+        persistSuggestionTuning()
+        applySuggestionTuningChange(reason: "aggressiveness-changed")
         DiagnosticsLog.shared.record(
-            "suggestion-aggressiveness-control",
+            "suggestion-tuning-control",
             metadata: [
                 "surface": "settings",
-                "suggestionAggressiveness": suggestionAggressiveness.rawValue
+                "suggestionAggressivenessLevel": String(suggestionTuning.aggressivenessLevel),
+                "suggestionAggressiveness": suggestionTuning.legacyAggressiveness.rawValue,
+                "suggestionMaxVisibleWords": String(suggestionTuning.maxVisibleWords)
             ]
         )
         refreshRuntimeChrome()
+    }
+
+    private func setSuggestionMaxVisibleWords(_ words: Int) {
+        let next = SuggestionTuning(
+            aggressivenessLevel: suggestionTuning.aggressivenessLevel,
+            maxVisibleWords: words
+        )
+        guard next != suggestionTuning else {
+            refreshRuntimeChrome()
+            return
+        }
+
+        suggestionTuning = next
+        persistSuggestionTuning()
+        applySuggestionTuningChange(reason: "max-visible-words-changed")
+        DiagnosticsLog.shared.record(
+            "suggestion-tuning-control",
+            metadata: [
+                "surface": "settings",
+                "suggestionAggressivenessLevel": String(suggestionTuning.aggressivenessLevel),
+                "suggestionAggressiveness": suggestionTuning.legacyAggressiveness.rawValue,
+                "suggestionMaxVisibleWords": String(suggestionTuning.maxVisibleWords)
+            ]
+        )
+        refreshRuntimeChrome()
+    }
+
+    private func applySuggestionTuningChange(reason: String) {
+        lastRequestedTextBeforeCursor = nil
+        invalidatePendingSuggestionRequest()
+        if suggestionSession.hasVisibleSuggestion {
+            hideSuggestion(reason: reason)
+        }
+        setSuggestionDecision("Ready: \(suggestionTuning.displayName.lowercased()) suggestions")
     }
 
     private func toggleScreenshotTracing(for bundleIdentifier: String) {
@@ -7222,6 +7268,14 @@ private extension AppDelegate {
         "SuggestionAggressiveness"
     }
 
+    static var suggestionAggressivenessLevelDefaultsKey: String {
+        "SuggestionAggressivenessLevel"
+    }
+
+    static var suggestionMaxVisibleWordsDefaultsKey: String {
+        "SuggestionMaxVisibleWords"
+    }
+
     static var temporarilyEnabledBundleIDsEnvironmentKey: String {
         "AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
     }
@@ -7390,16 +7444,44 @@ private extension AppDelegate {
         )
     }
 
-    func loadSuggestionAggressiveness() {
-        suggestionAggressiveness = SuggestionAggressiveness.parsed(
-            UserDefaults.standard.string(forKey: Self.suggestionAggressivenessDefaultsKey)
+    func loadSuggestionTuning() {
+        let defaults = UserDefaults.standard
+        let level: Int
+        if defaults.object(forKey: Self.suggestionAggressivenessLevelDefaultsKey) != nil {
+            level = defaults.integer(forKey: Self.suggestionAggressivenessLevelDefaultsKey)
+        } else {
+            level = SuggestionAggressiveness
+                .parsed(defaults.string(forKey: Self.suggestionAggressivenessDefaultsKey))
+                .defaultTuningLevel
+        }
+
+        let maxVisibleWords: Int
+        if defaults.object(forKey: Self.suggestionMaxVisibleWordsDefaultsKey) != nil {
+            maxVisibleWords = defaults.integer(forKey: Self.suggestionMaxVisibleWordsDefaultsKey)
+        } else {
+            maxVisibleWords = CompletionModelPolicy.mvp.maxVisibleWords
+        }
+
+        suggestionTuning = SuggestionTuning(
+            aggressivenessLevel: level,
+            maxVisibleWords: maxVisibleWords
         )
+        persistSuggestionTuning()
     }
 
-    func persistSuggestionAggressiveness() {
-        UserDefaults.standard.set(
-            suggestionAggressiveness.rawValue,
+    func persistSuggestionTuning() {
+        let defaults = UserDefaults.standard
+        defaults.set(
+            suggestionTuning.legacyAggressiveness.rawValue,
             forKey: Self.suggestionAggressivenessDefaultsKey
+        )
+        defaults.set(
+            suggestionTuning.aggressivenessLevel,
+            forKey: Self.suggestionAggressivenessLevelDefaultsKey
+        )
+        defaults.set(
+            suggestionTuning.maxVisibleWords,
+            forKey: Self.suggestionMaxVisibleWordsDefaultsKey
         )
     }
 

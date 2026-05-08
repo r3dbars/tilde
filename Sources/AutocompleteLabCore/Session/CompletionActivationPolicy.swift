@@ -68,11 +68,7 @@ public enum SuggestionPace: String, CaseIterable, Codable, Equatable, Sendable {
     }
 
     public func maxVisibleWords(defaultMaxVisibleWords: Int, requestMode: CompletionRequestMode) -> Int {
-        guard self == .eager, requestMode.isContinuation else {
-            return defaultMaxVisibleWords
-        }
-
-        return min(defaultMaxVisibleWords, 4)
+        defaultMaxVisibleWords
     }
 }
 
@@ -140,10 +136,10 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             self.init(
                 minimumContextCharacters: 1,
                 minimumContextWords: 1,
-                minimumPhraseContinuationWords: 1,
+                minimumPhraseContinuationWords: 2,
                 minimumWordCompletionCharacters: 2,
                 maximumWordCompletionCharacters: 16,
-                allowsTerminalSentenceBoundary: true
+                allowsTerminalSentenceBoundary: false
             )
         }
     }
