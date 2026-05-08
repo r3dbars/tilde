@@ -145,7 +145,12 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
             <div class="metric"><b>\(percent(summary.insertionVerificationSuccessRate))</b>verified inserts</div>
             <div class="metric"><b>\(percent(summary.caretGeometryFailureRate))</b>caret failure rate</div>
             <div class="metric"><b>\(String(format: "%.2f", summary.annoyanceScore))</b>annoyance score</div>
+            <div class="metric"><b>\(String(format: "%.2f", summary.shownPerActiveMinute))</b>shown / active min</div>
+            <div class="metric"><b>\(percent(summary.explicitDismissalsPerShown))</b>Esc / shown</div>
+            <div class="metric"><b>\(percent(summary.typedOverRate))</b>typed-over rate</div>
+            <div class="metric"><b>\(percent(summary.staleOrWrongContextRate))</b>stale/wrong-context</div>
             <div class="metric"><b>\(summary.p95LatencyMilliseconds.map { "\($0)ms" } ?? "n/a")</b>first-visible p95</div>
+            <div class="metric"><b>\(summary.p95VisibleLifetimeMilliseconds.map { "\($0)ms" } ?? "n/a")</b>visible lifetime p95</div>
             <div class="metric"><b>\(summary.doNotShipCounters.values.reduce(0, +))</b>do-not-ship</div>
           </div>
           <h2>RAM-only retention proof</h2>
