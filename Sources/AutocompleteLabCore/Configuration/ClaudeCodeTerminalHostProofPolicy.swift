@@ -130,6 +130,10 @@ public enum ClaudeCodeTerminalHostProofPolicy {
     private static func looksLikeShellPrompt(_ line: String) -> Bool {
         let shellPrefixes = ["$", "%", "#", "❯", "➜"]
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("❯"),
+           trimmed.localizedCaseInsensitiveContains(proofMarker) {
+            return false
+        }
 
         for prefix in shellPrefixes where trimmed.hasPrefix(prefix) {
             let remainder = trimmed.dropFirst(prefix.count)
