@@ -130,34 +130,39 @@ public enum ClaudeCodeTerminalHostProofPolicy {
 
     public static func proofInputText(
         textBeforeCursor: String,
-        textAfterCursor: String
+        textAfterCursor _: String
     ) -> String? {
-        sanitizedProofInputLine(
-            focusedInputLine(
-                textBeforeCursor: textBeforeCursor,
-                textAfterCursor: textAfterCursor
-            )
-        )
+        let beforeLine = textBeforeCursor
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .last
+            .map(String.init) ?? ""
+        return sanitizedProofInputLine(beforeLine)
     }
 
     public static func sanitizedProofInputLine(_ line: String) -> String? {
-        var text = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        var text = line.trimmingCharacters(in: .newlines)
+        text = text.trimmingLeadingWhitespace()
 
         if text.hasPrefix("❯") {
             text.removeFirst()
-            text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            text = text.trimmingLeadingWhitespace()
         }
 
         text = text
             .replacingOccurrences(of: proofMarker, with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingLeadingWhitespace()
 
-        guard !text.isEmpty,
-              !looksLikePlaceholderPrompt(text) else {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty,
+              !looksLikePlaceholderPrompt(trimmedText) else {
             return nil
         }
 
-        return text
+        if text.last?.isWhitespace == true {
+            return trimmedText + " "
+        }
+
+        return trimmedText
     }
 
     private static func looksLikeShellPrompt(_ line: String, windowTitle: String) -> Bool {
@@ -185,5 +190,11 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.hasPrefix("Try \"")
             || trimmed.hasPrefix("Try '")
+    }
+}
+
+private extension String {
+    func trimmingLeadingWhitespace() -> String {
+        String(drop { $0.isWhitespace && !$0.isNewline })
     }
 }
