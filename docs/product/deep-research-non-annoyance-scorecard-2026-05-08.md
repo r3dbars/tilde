@@ -59,6 +59,7 @@ This loop improves live non-annoyance behavior and proof:
 - Accepted insertion now opens a short native Cmd-Z passthrough window, so immediate undo is tracked and replayed to the host app instead of being marked unavailable.
 - Older proof docs now reference tracked Obsidian and Notes title/body/checklist screenshots, so normal proof checks reflect the current evidence.
 - `hideSuggestion` now records `hideLatencyMs`, and analyzer/report/script output exposes hide-latency p50/p95.
+- The macOS event-tap keycode bridge now maps Z, so Cmd-Z can actually reach the accepted-insertion undo route.
 
 ## Score
 
@@ -106,8 +107,8 @@ Overall score: 87/100.
 
 - Weight: 15
 - Current score: 14/15
-- Why this score: Local-first defaults, redacted traces, screenshot/raw text opt-ins, secure-field blocking, pause/disable/delete controls, assistant-voice filters, and a native Cmd-Z passthrough window are strong. The main gaps are real-app undo proof and current prompt-app proof.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Tracing/AutocompleteTraceEvent.swift`, `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift`, `Sources/AutocompleteLabCore/Session/AcceptedTextSafetyPolicy.swift`, `Sources/AutocompleteLabCore/Engine/CompletionOutputCleaner.swift`, `docs/product/privacy-and-controls.md`.
+- Why this score: Local-first defaults, redacted traces, screenshot/raw text opt-ins, secure-field blocking, pause/disable/delete controls, assistant-voice filters, a native Cmd-Z passthrough window, and a tested macOS Z keycode bridge are strong. The main gaps are real-app undo proof and current prompt-app proof.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Tracing/AutocompleteTraceEvent.swift`, `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift`, `Sources/AutocompleteLabApp/Mac/KeyboardEventTap.swift`, `Sources/AutocompleteLabCore/Session/AcceptedTextSafetyPolicy.swift`, `Sources/AutocompleteLabCore/Engine/CompletionOutputCleaner.swift`, `Tests/AutocompleteLabAppTests/KeyboardEventTapKeyCodeTests.swift`, `docs/product/privacy-and-controls.md`.
 - Missing evidence: Fresh accepted-text undo proof, human review for voice drift, and no-submit proof in prompt/chat apps.
 - What would make it 100/100: Every accept is safely reversible, no assistant voice appears in human review, and privacy behavior is obvious in UI and trace artifacts.
 
@@ -197,6 +198,7 @@ Forgettably good. The app appears only when useful, hides before it becomes anno
 - Proof required: Accepted text can be reversed without corrupting nearby text.
 - Risk level: High.
 - Expected score impact: +3.
+- Status: Code path and macOS keycode bridge are covered by tests; real-app proof is still pending.
 
 ## Codex Execution Goal
 
@@ -219,5 +221,5 @@ This goal is complete when:
 - Codex, Claude Code, and Claude desktop need current same-slice prompt no-submit proof.
 - Hide latency is now instrumented as hide request-to-panel-hide time, but still needs real-app invalidation proof under the 50ms p95 target.
 - Prefix cooldown is now wired, but there is not yet a real-app trace run proving user-perceived annoyance improvement.
-- Accepted insertion undo now has a native passthrough path, but still needs real-app proof.
+- Accepted insertion undo now has a native passthrough path and keycode bridge test, but still needs real-app proof.
 - Human voice/style review and pause/resume baseline are still missing.
