@@ -58,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let screenshotTraceCapturePolicy = ScreenshotTraceCapturePolicy()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
     private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
+    private let focusedTextPollDiagnosticsPolicy = FocusedTextPollDiagnosticsPolicy.typingDiagnostics
     private let focusedTextAXHealthSuggestionVisibilityPolicy = FocusedTextAXHealthSuggestionVisibilityPolicy()
     private let focusedTextPollingThrottleSuggestionVisibilityPolicy =
         FocusedTextPollingThrottleSuggestionVisibilityPolicy()
@@ -193,7 +194,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 220
     private let postInsertionPollPauseMilliseconds = 220
-    private let slowFocusedTextPollLatencyMilliseconds = 80
     private var focusedTextPollingPause = FocusedTextPollingPause()
     private var lastFocusedTextPollAttemptAt: Date?
     private var suggestionsPaused = false
@@ -834,8 +834,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if result.queueDelayMilliseconds >= slowFocusedTextPollLatencyMilliseconds
-            || result.readDurationMilliseconds >= slowFocusedTextPollLatencyMilliseconds {
+        if focusedTextPollDiagnosticsPolicy.shouldRecordSlowAXReadMarker(
+            queueDelayMilliseconds: result.queueDelayMilliseconds,
+            readDurationMilliseconds: result.readDurationMilliseconds
+        ) {
             DiagnosticsLog.shared.record(
                 "focused-text-ax-read-slow",
                 metadata: [
@@ -1454,7 +1456,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func recordFocusedTextPollLatency(_ durationMilliseconds: Int) {
-        if durationMilliseconds >= slowFocusedTextPollLatencyMilliseconds {
+        if focusedTextPollDiagnosticsPolicy.shouldRecordSlowPollMarker(
+            durationMilliseconds: durationMilliseconds
+        ) {
             DiagnosticsLog.shared.record(
                 "focused-text-poll-latency-slow",
                 metadata: [
