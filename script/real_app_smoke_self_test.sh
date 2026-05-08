@@ -58,6 +58,22 @@ if ! grep -F "disposable Chrome monaco-real fixture" "$TMP_DIR/chrome-monaco-rea
   echo "real app smoke self-test did not print the real Chrome Monaco dry-run plan" >&2
   exit 1
 fi
+if ! grep -F "Chrome accessibility: forced renderer accessibility for real editor fixtures" "$TMP_DIR/chrome-monaco-real.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the forced Chrome accessibility mode" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh chrome --fixture monaco-real --chrome-accessibility default --dry-run >"$TMP_DIR/chrome-monaco-real-default.txt"
+if ! grep -F "Chrome accessibility: default Chrome accessibility exposure; experimental proof lane, weaker than forced renderer mode" "$TMP_DIR/chrome-monaco-real-default.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the default Chrome accessibility proof lane" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh chrome --fixture=prosemirror-real --chrome-accessibility=default --dry-run >"$TMP_DIR/chrome-prosemirror-real-default.txt"
+if ! grep -F "Chrome fixture: prosemirror-real" "$TMP_DIR/chrome-prosemirror-real-default.txt" >/dev/null; then
+  echo "real app smoke self-test did not parse --chrome-accessibility=default with --fixture=prosemirror-real" >&2
+  exit 1
+fi
 
 script/real_app_smoke.sh chrome --fixture prosemirror-real --dry-run >"$TMP_DIR/chrome-prosemirror-real.txt"
 if ! grep -F "disposable Chrome prosemirror-real fixture" "$TMP_DIR/chrome-prosemirror-real.txt" >/dev/null; then
@@ -113,8 +129,23 @@ if script/real_app_smoke.sh chrome --fixture >/dev/null 2>&1; then
   exit 1
 fi
 
+if script/real_app_smoke.sh chrome --chrome-accessibility unknown --dry-run >/dev/null 2>&1; then
+  echo "real app smoke self-test expected unknown Chrome accessibility modes to fail" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh chrome --chrome-accessibility >/dev/null 2>&1; then
+  echo "real app smoke self-test expected missing Chrome accessibility values to fail" >&2
+  exit 1
+fi
+
 if script/real_app_smoke.sh textedit --fixture contenteditable --dry-run >/dev/null 2>&1; then
   echo "real app smoke self-test expected non-Chrome fixtures to fail" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh textedit --chrome-accessibility default --dry-run >/dev/null 2>&1; then
+  echo "real app smoke self-test expected non-Chrome accessibility modes to fail" >&2
   exit 1
 fi
 
