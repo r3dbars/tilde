@@ -113,6 +113,8 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
 - Type a harmless local test fragment like `Can we make this`.
 - Confirm a suggestion appears near the prompt or in a stable mirror position.
 - Press Tab and expect the next word/suffix to insert without submitting.
+- Confirm the text stayed in the composer, no user message bubble appeared, and
+  no assistant response started.
 - Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
 
@@ -128,6 +130,8 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manua
 - Type a harmless local test fragment like `Can we make this`.
 - Confirm a suggestion appears near the prompt or in a stable mirror position.
 - Press Tab and expect the next word/suffix to insert without submitting.
+- Confirm the text stayed in the composer, no user message bubble appeared, and
+  no assistant response started.
 - Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
 
@@ -143,6 +147,8 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gat
 - Type a harmless local test fragment like `Can we make this`.
 - Confirm a suggestion appears near the prompt or in a stable mirror position.
 - Press Tab and expect the next word/suffix to insert without submitting.
+- Confirm the text stayed in the composer, no user message bubble appeared, and
+  no assistant response started.
 - Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
 

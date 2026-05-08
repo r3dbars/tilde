@@ -54,6 +54,8 @@ evidence exists in the repo.
 - Accept proof must show verified insertion, not just a visible suggestion.
 - Prompt apps must prove one-word accept without submit before they can graduate.
 - Prompt-app full accept needs its own separate full-accept no-submit proof.
+- Prompt-app proof must be one trace-level accept only and must not contain
+  full-accept or field-send finalization signals.
 - Private apps must use disposable text only.
 - A pending screenshot means the app is not screenshot-backed, even if insertion
   worked before.
