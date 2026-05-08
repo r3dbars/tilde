@@ -22,6 +22,7 @@ write_manual_smoke() {
 | --- | --- | --- | --- | ---: | --- | --- | --- |
 | 2026-05-07T12:00:00Z | TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 10+ | lines 20-25 in \`$trace_path\`; visual \`strict-complete\` |
 | 2026-05-07T12:05:00Z | Codex | \`com.openai.codex\` | \`default\` | 1 | \`inlineAdjacent\` | lines 30+ | lines 40-44 in \`$trace_path\`; visual \`strict-complete\` |
+| 2026-05-07T12:10:00Z | Chrome | \`com.google.Chrome\` | \`chat-like\` | 1 | \`inlineAdjacent\` | lines 50+ | lines 60-64 in \`$trace_path\`; visual \`strict-complete\` |
 MARKDOWN
 }
 
@@ -54,6 +55,44 @@ write_trace() {
 JSONL
 }
 
+write_codex_prompt_trace() {
+  local path="$1"
+  local accept_mode="${2:-acceptNextWord}"
+  local outcome="${3:-acceptNextWord}"
+  local checkpoint="${4:-10s}"
+  local reason="${5:-10s}"
+  : >"$path"
+  for _ in $(seq 1 39); do
+    printf '{"type":"renderModeChanged","appBundleIdentifier":"com.example.other","metadata":{}}\n' >>"$path"
+  done
+
+  cat >>"$path" <<JSONL
+{"type":"suggestionRequested","appBundleIdentifier":"com.openai.codex","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"suggestionPresented","appBundleIdentifier":"com.openai.codex","screenshotPath":"docs/product/visual-placement-screenshots/codex-inline.png","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"suggestionAccepted","appBundleIdentifier":"com.openai.codex","outcome":"$outcome","metadata":{"acceptMode":"$accept_mode","traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"insertionVerified","appBundleIdentifier":"com.openai.codex","outcome":"verified","metadata":{"acceptMode":"$accept_mode","traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"acceptedTextEdited","appBundleIdentifier":"com.openai.codex","outcome":"exactKept","reason":"$reason","metadata":{"acceptMode":"$accept_mode","checkpoint":"$checkpoint","traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+JSONL
+}
+
+write_chrome_chat_trace() {
+  local path="$1"
+  local checkpoint="${2:-10s}"
+  local reason="${3:-10s}"
+  : >"$path"
+  for _ in $(seq 1 59); do
+    printf '{"type":"renderModeChanged","appBundleIdentifier":"com.example.other","metadata":{}}\n' >>"$path"
+  done
+
+  cat >>"$path" <<JSONL
+{"type":"suggestionRequested","appBundleIdentifier":"com.google.Chrome","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"suggestionPresented","appBundleIdentifier":"com.google.Chrome","screenshotPath":"docs/product/visual-placement-screenshots/chrome-chat-like.png","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"suggestionAccepted","appBundleIdentifier":"com.google.Chrome","outcome":"acceptAllVisible","metadata":{"acceptMode":"acceptAllVisible","acceptedVisibleScope":"fullVisible","traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"insertionVerified","appBundleIdentifier":"com.google.Chrome","outcome":"verified","metadata":{"acceptMode":"acceptAllVisible","traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"acceptedTextEdited","appBundleIdentifier":"com.google.Chrome","outcome":"exactKept","reason":"$reason","metadata":{"acceptMode":"acceptAllVisible","checkpoint":"$checkpoint","traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+JSONL
+}
+
 write_stale_trace() {
   local path="$1"
   : >"$path"
@@ -82,6 +121,7 @@ write_scorecard() {
 | --- | ---: | --- | --- | --- |
 | TextEdit | 10/10 | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Good. | Done. |
 | Codex | 10/10 | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Good. | Done. |
+| Chrome chat-like composer | 10/10 | [chrome-chat-like.png](visual-placement-screenshots/chrome-chat-like.png) | Good. | Done. |
 | Missing | 10/10 | [missing-proof.png](visual-placement-screenshots/missing-proof.png) | Missing. | Done. |
 MARKDOWN
 }
@@ -226,10 +266,16 @@ JSON
 MANUAL_SMOKE="$TMP_DIR/manual-smoke-runs.md"
 UNBOUNDED_MANUAL_SMOKE="$TMP_DIR/manual-smoke-runs-unbounded.md"
 TRACE_FILE="$TMP_DIR/traces.jsonl"
+CODEX_PROMPT_TRACE_FILE="$TMP_DIR/codex-prompt-traces.jsonl"
+CODEX_FULL_ACCEPT_TRACE_FILE="$TMP_DIR/codex-full-accept-traces.jsonl"
+CHROME_CHAT_SUBMIT_TRACE_FILE="$TMP_DIR/chrome-chat-submit-traces.jsonl"
 STALE_TRACE_FILE="$TMP_DIR/stale-traces.jsonl"
 SCORECARD="$TMP_DIR/scorecard.md"
 APP_PROOF_MATRIX="$TMP_DIR/app-proof-matrix.md"
 PASS_MANIFEST="$TMP_DIR/pass.json"
+PROMPT_PASS_MANIFEST="$TMP_DIR/prompt-pass.json"
+PROMPT_FULL_ACCEPT_MANIFEST="$TMP_DIR/prompt-full-accept.json"
+CHROME_CHAT_SUBMIT_MANIFEST="$TMP_DIR/chrome-chat-submit.json"
 PARTIAL_MANIFEST="$TMP_DIR/partial.json"
 PENDING_MANIFEST="$TMP_DIR/pending.json"
 A_MINUS_COMPLETE_MANIFEST="$TMP_DIR/a-minus-complete.json"
@@ -241,12 +287,18 @@ PROFILE_MANIFEST="$TMP_DIR/profile-pass.json"
 MISSING_PROFILE_MANIFEST="$TMP_DIR/profile-missing.json"
 
 write_trace "$TRACE_FILE"
+write_codex_prompt_trace "$CODEX_PROMPT_TRACE_FILE" acceptNextWord acceptNextWord 10s 10s
+write_codex_prompt_trace "$CODEX_FULL_ACCEPT_TRACE_FILE" acceptAllVisible acceptAllVisible 10s 10s
+write_chrome_chat_trace "$CHROME_CHAT_SUBMIT_TRACE_FILE" fieldSend field-send-finalized
 write_stale_trace "$STALE_TRACE_FILE"
 write_manual_smoke "$MANUAL_SMOKE" "$TRACE_FILE"
 write_unbounded_manual_smoke "$UNBOUNDED_MANUAL_SMOKE" "$TRACE_FILE"
 write_scorecard "$SCORECARD"
 write_app_proof_matrix "$APP_PROOF_MATRIX"
 write_manifest "$PASS_MANIFEST" complete "docs/product/visual-placement-screenshots/textedit-inline.png"
+write_manifest "$PROMPT_PASS_MANIFEST" complete "docs/product/visual-placement-screenshots/codex-inline.png" "$TRACE_PROOF_VERSION" "Codex" "com.openai.codex" "default" 1
+write_manifest "$PROMPT_FULL_ACCEPT_MANIFEST" complete "docs/product/visual-placement-screenshots/codex-inline.png" "$TRACE_PROOF_VERSION" "Codex" "com.openai.codex" "default" 1
+write_manifest "$CHROME_CHAT_SUBMIT_MANIFEST" complete "docs/product/visual-placement-screenshots/chrome-chat-like.png" "$TRACE_PROOF_VERSION" "Chrome" "com.google.Chrome" "chat-like" 1 "Chrome chat-like composer"
 write_manifest "$PARTIAL_MANIFEST" partial "docs/product/visual-placement-screenshots/textedit-inline.png"
 write_manifest "$PENDING_MANIFEST" pending "docs/product/visual-placement-screenshots/textedit-inline.png"
 write_manifest "$A_MINUS_COMPLETE_MANIFEST" complete "docs/product/visual-placement-screenshots/textedit-inline.png" "$TRACE_PROOF_VERSION" "TextEdit" "com.apple.TextEdit" "default" 2 "Obsidian"
@@ -284,6 +336,64 @@ if ! grep -F "Verified trace slices: 1" "$TMP_DIR/pass-trace.out" >/dev/null; th
   cat "$TMP_DIR/pass-trace.out" >&2
   exit 1
 fi
+
+write_manual_smoke "$MANUAL_SMOKE" "$CODEX_PROMPT_TRACE_FILE"
+
+script/check_proof_manifest.sh \
+  --manifest "$PROMPT_PASS_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --app-proof-matrix "$APP_PROOF_MATRIX" \
+  --skip-profile-coverage \
+  --strict >"$TMP_DIR/prompt-pass.out"
+
+if ! grep -F "Proof manifest verified." "$TMP_DIR/prompt-pass.out" >/dev/null; then
+  echo "proof manifest self-test did not verify one-word prompt no-submit proof" >&2
+  cat "$TMP_DIR/prompt-pass.out" >&2
+  exit 1
+fi
+
+write_manual_smoke "$MANUAL_SMOKE" "$CODEX_FULL_ACCEPT_TRACE_FILE"
+
+if script/check_proof_manifest.sh \
+  --manifest "$PROMPT_FULL_ACCEPT_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --app-proof-matrix "$APP_PROOF_MATRIX" \
+  --skip-profile-coverage \
+  --strict >"$TMP_DIR/prompt-full-accept.out" 2>&1; then
+  echo "proof manifest self-test expected prompt full accept proof to fail" >&2
+  cat "$TMP_DIR/prompt-full-accept.out" >&2
+  exit 1
+fi
+
+if ! grep -F "no-submit-only prompt proof contains full accept" "$TMP_DIR/prompt-full-accept.out" >/dev/null; then
+  echo "proof manifest self-test did not explain prompt full accept proof" >&2
+  cat "$TMP_DIR/prompt-full-accept.out" >&2
+  exit 1
+fi
+
+write_manual_smoke "$MANUAL_SMOKE" "$CHROME_CHAT_SUBMIT_TRACE_FILE"
+
+if script/check_proof_manifest.sh \
+  --manifest "$CHROME_CHAT_SUBMIT_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --app-proof-matrix "$APP_PROOF_MATRIX" \
+  --skip-profile-coverage \
+  --strict >"$TMP_DIR/chrome-chat-submit.out" 2>&1; then
+  echo "proof manifest self-test expected Chrome chat submit proof to fail" >&2
+  cat "$TMP_DIR/chrome-chat-submit.out" >&2
+  exit 1
+fi
+
+if ! grep -F "prompt no-submit trace contains submit-like signal" "$TMP_DIR/chrome-chat-submit.out" >/dev/null; then
+  echo "proof manifest self-test did not explain Chrome chat submit proof" >&2
+  cat "$TMP_DIR/chrome-chat-submit.out" >&2
+  exit 1
+fi
+
+write_manual_smoke "$MANUAL_SMOKE" "$TRACE_FILE"
 
 if script/check_proof_manifest.sh \
   --manifest "$A_MINUS_COMPLETE_MANIFEST" \
