@@ -1,6 +1,38 @@
 import AppKit
 import AutocompleteLabCore
 
+struct DiagnosticsInspectorState: Equatable {
+    let appTrusted: Bool
+    let appEnabled: Bool
+    let compatibilityStatus: CompatibilitySupportStatus
+    let lastSuggestionDecision: String
+    let runtimeReport: RuntimeReadinessReport
+    let runtimeTargetSummary: String
+    let tracePath: String
+    let tracingPaused: Bool
+    let screenshotTracingEnabled: Bool
+    let compatibilityLearningPath: String
+    let compatibilityLearningProfile: CompatibilityLearningProfile?
+
+    var summaryText: String {
+        """
+        Current state:
+          Accessibility: \(appTrusted ? "allowed" : "needed")
+          Suggestions: \(lastSuggestionDecision)
+          App: \(compatibilityStatus.userFacingSummary), \(appEnabled ? "allowed" : "blocked")
+          Mode: \(compatibilityStatus.interactionMode.displayName)
+          Local model: \(runtimeReport.summary)
+          Runtime target: \(runtimeTargetSummary)
+          Next action: \(runtimeReport.action.displayName)
+          Traces: \(tracingPaused ? "paused" : "recording")
+          Screenshots: \(screenshotTracingEnabled ? "on" : "off")
+          Trace file: \(tracePath)
+          Learning file: \(compatibilityLearningPath)
+          Learned adapter: \(compatibilityLearningProfile?.debugSummary ?? "none")
+        """
+    }
+}
+
 @MainActor
 final class DiagnosticsWindowController {
     private let window: NSWindow
@@ -144,20 +176,20 @@ final class DiagnosticsWindowController {
 
         var sections: [String] = []
 
-        sections.append("Accessibility: \(appTrusted ? "on" : "needed")")
-        sections.append("Suggestion: \(lastSuggestionDecision)")
-        sections.append(
-            """
-            Local model: \(runtimeReport.summary)
-              target: \(runtimeTargetSummary)
-              stage: \(runtimeReport.stage.rawValue)
-              action: \(runtimeReport.action.displayName)
-              detail: \(runtimeReport.detail ?? "none")
-            """
-        )
+        sections.append(DiagnosticsInspectorState(
+            appTrusted: appTrusted,
+            appEnabled: appEnabled,
+            compatibilityStatus: compatibilityStatus,
+            lastSuggestionDecision: lastSuggestionDecision,
+            runtimeReport: runtimeReport,
+            runtimeTargetSummary: runtimeTargetSummary,
+            tracePath: tracePath,
+            tracingPaused: tracingPaused,
+            screenshotTracingEnabled: screenshotTracingEnabled,
+            compatibilityLearningPath: compatibilityLearningPath,
+            compatibilityLearningProfile: compatibilityLearningProfile
+        ).summaryText)
         sections.append("Model folder: \(modelDirectoryPath)")
-        sections.append("Compatibility: \(compatibilityStatus.summary)")
-        sections.append("App enabled: \(appEnabled)")
         sections.append(traceSummaryText(
             traceSummary,
             tracePath: tracePath,
@@ -184,6 +216,7 @@ final class DiagnosticsWindowController {
         sections.append(countBucketsText(title: "Actionable suppressed by app", buckets: traceSummary.actionableSuppressedByApp))
         sections.append(countBucketsText(title: "Actionable suppressed by mode", buckets: traceSummary.actionableSuppressedByMode))
         sections.append(topMissesText(traceSummary.topMisses))
+        sections.append(DiagnosticsPlacementEvidence(events: recentTraceEvents).summaryText)
 
         if let profile {
             sections.append(
@@ -201,6 +234,7 @@ final class DiagnosticsWindowController {
                   suppress after failed insert: \(profile.suppressesAfterInsertionFailure)
                   sensitive: \(profile.isSensitive)
                   debug summary: \(profile.debugSummary)
+                  safety owner: \(profile.safetyOwnerNote)
                   notes: \(profile.notes)
                 """
             )
@@ -296,16 +330,7 @@ final class DiagnosticsWindowController {
     }
 
     private func recentTraceText(_ events: [AutocompleteTraceEvent]) -> String {
-        guard !events.isEmpty else {
-            return "Recent trace events: none yet"
-        }
-
-        return """
-        Recent trace events:
-        \(events.suffix(16).map {
-            "  \($0.timestamp) \($0.type.rawValue) mode=\($0.requestMode) app=\($0.appBundleIdentifier) shown=\($0.displayedText) accepted=\($0.acceptedText) reason=\($0.reason) latency=\(Self.latency($0.latencyMilliseconds))"
-        }.joined(separator: "\n"))
-        """
+        DiagnosticsTraceHistory(events: events).summaryText
     }
 
     private func recentDiagnosticsText(_ events: [String]) -> String {
@@ -369,329 +394,142 @@ final class DiagnosticsWindowController {
     }
 }
 
-struct PlacementDiagnostics: Equatable {
-    let summary: AutocompleteTraceSummary
-    let recentEvents: [AutocompleteTraceEvent]
+struct DiagnosticsPlacementEvidence {
+    let rows: [Row]
 
-    var text: String {
-        [
-            headlineText,
-            latestPlacementText,
-            countBucketsText(title: "Recent confidence bands", buckets: confidenceBandCounts),
-            countBucketsText(title: "Placement self-healing actions", buckets: selfHealingActionCounts),
-            countBucketsText(title: "Render mode transitions", buckets: renderModeTransitionCounts),
-            nestedCountBucketsText(title: "Anchor quality by app", buckets: summary.anchorQualityByApp),
-            failureRatesText(
-                title: "Caret failures by app",
-                counts: summary.caretGeometryFailuresByApp,
-                rates: summary.caretGeometryFailureRateByApp
-            ),
-            failureRatesText(
-                title: "Caret failures by render mode",
-                counts: summary.caretGeometryFailuresByRenderMode,
-                rates: summary.caretGeometryFailureRateByRenderMode
-            )
-        ].joined(separator: "\n")
+    init(events: [AutocompleteTraceEvent]) {
+        rows = events.suffix(16).compactMap(Row.init(event:))
     }
 
-    private var headlineText: String {
-        "Placement diagnostics: caret failures \(summary.caretGeometryFailureCount) (\(Self.percent(summary.caretGeometryFailureRate))), recent placement events \(recentPlacementEvents.count)"
-    }
-
-    private var latestPlacementText: String {
-        guard let event = latestEvent(containingAny: [
-            "placementConfidenceScore",
-            "placementConfidenceBand",
-            "placementAnchorSource",
-            "placementRequestedRenderMode",
-            "placementEffectiveRenderMode",
-            "placementSelfHealingAction"
-        ]) else {
-            return "Current placement: no recent placement metadata"
+    var summaryText: String {
+        guard !rows.isEmpty else {
+            return "Placement confidence: none yet"
         }
 
-        let score = event.metadata["placementConfidenceScore"] ?? "unknown"
-        let band = event.metadata["placementConfidenceBand"] ?? "unknown"
-        let anchor = event.metadata["placementAnchorSource"] ?? "unknown"
-        let requestedRenderMode = event.metadata["placementRequestedRenderMode"]
-            ?? event.metadata["requestedRenderMode"]
-            ?? "unknown"
-        let effectiveRenderMode = event.metadata["placementEffectiveRenderMode"]
-            ?? event.metadata["effectiveRenderMode"]
-            ?? "unknown"
-        let selfHealingApplied = event.metadata["placementSelfHealingApplied"] ?? "unknown"
-        let selfHealingAction = event.metadata["placementSelfHealingAction"] ?? "unknown"
-        let eventReason = event.reason.trimmingCharacters(in: .whitespacesAndNewlines)
-        let reason = event.metadata["placementHealthReason"] ?? (eventReason.isEmpty ? "none" : eventReason)
-
-        return "Current placement: confidence=\(score) (\(band)), anchor=\(anchor), render=\(requestedRenderMode)->\(effectiveRenderMode), selfHealing=\(selfHealingApplied)/\(selfHealingAction), clipping=\(clippingDescription(for: event)), screenshot=\(screenshotDescription(for: event)), reason=\(reason)"
+        return """
+        Placement confidence:
+        \(rows.map(\.description).joined(separator: "\n"))
+        """
     }
 
-    private var recentPlacementEvents: [AutocompleteTraceEvent] {
-        recentEvents.filter { event in
-            event.metadata.keys.contains { $0.hasPrefix("placement") }
-        }
-    }
+    struct Row: Equatable {
+        let timestamp: String
+        let type: String
+        let app: String
+        let mode: String
+        let confidence: String
+        let score: String
+        let anchor: String
+        let health: String
+        let action: String
+        let screenshot: String
+        let shownChars: Int
+        let acceptedChars: Int
 
-    private var confidenceBandCounts: [String: Int] {
-        counts(for: recentPlacementEvents.compactMap { $0.metadata["placementConfidenceBand"] })
-    }
-
-    private var selfHealingActionCounts: [String: Int] {
-        counts(for: recentPlacementEvents.compactMap { $0.metadata["placementSelfHealingAction"] })
-    }
-
-    private var renderModeTransitionCounts: [String: Int] {
-        counts(for: recentPlacementEvents.compactMap { event in
-            guard let requested = event.metadata["placementRequestedRenderMode"],
-                  let effective = event.metadata["placementEffectiveRenderMode"] else {
+        init?(event: AutocompleteTraceEvent) {
+            guard event.metadata["placementConfidenceBand"] != nil
+                || event.metadata["placementConfidenceScore"] != nil
+                || event.metadata["placementHealthReason"] != nil
+                || event.metadata["placementEffectiveRenderMode"] != nil
+                || event.metadata["effectiveRenderMode"] != nil else {
                 return nil
             }
 
-            return "\(requested)->\(effective)"
-        })
-    }
-
-    private func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
-        recentEvents.reversed().first { event in
-            !keys.isDisjoint(with: Set(event.metadata.keys))
-        }
-    }
-
-    private func clippingDescription(for event: AutocompleteTraceEvent) -> String {
-        if let clipped = event.metadata["placementClipped"] {
-            return clipped
-        }
-
-        guard let clippingRect = event.metadata["clippingRect"] else {
-            return "unknown"
-        }
-
-        return clippingRect == "none" ? "missing" : "available"
-    }
-
-    private func screenshotDescription(for event: AutocompleteTraceEvent) -> String {
-        if let screenshotCaptured = event.metadata["screenshotCaptured"] {
-            return screenshotCaptured
+            timestamp = event.timestamp
+            type = event.type.rawValue
+            app = event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
+            mode = Self.modeText(event)
+            confidence = event.metadata["placementConfidenceBand"] ?? "unknown"
+            score = event.metadata["placementConfidenceScore"] ?? "n/a"
+            anchor = event.metadata["placementAnchorSource"] ?? "unknown"
+            health = event.metadata["placementHealthReason"] ?? (event.reason.isEmpty ? "n/a" : event.reason)
+            action = event.metadata["placementSelfHealingAction"] ?? "none"
+            screenshot = event.screenshotPath.isEmpty ? "none" : "captured"
+            shownChars = DiagnosticsTraceHistory.textLength(
+                event,
+                text: event.displayedText,
+                metadataKeys: ["visibleChars", "displayedTextChars"]
+            )
+            acceptedChars = DiagnosticsTraceHistory.textLength(
+                event,
+                text: event.acceptedText,
+                metadataKeys: ["acceptedTextChars"]
+            )
         }
 
-        return event.screenshotPath.isEmpty ? "false" : "true"
-    }
-
-    private func countBucketsText(title: String, buckets: [String: Int]) -> String {
-        guard !buckets.isEmpty else {
-            return "\(title): none yet"
+        var description: String {
+            "  \(timestamp) \(type) app=\(app) mode=\(mode) confidence=\(confidence) score=\(score) anchor=\(anchor) health=\(health) action=\(action) screenshot=\(screenshot) shownChars=\(shownChars) acceptedChars=\(acceptedChars)"
         }
 
-        return """
-        \(title):
-        \(buckets.sorted { lhs, rhs in
-            if lhs.value == rhs.value {
-                return lhs.key < rhs.key
+        private static func modeText(_ event: AutocompleteTraceEvent) -> String {
+            let requested = event.metadata["placementRequestedRenderMode"]
+            let effective = event.metadata["placementEffectiveRenderMode"]
+                ?? event.metadata["effectiveRenderMode"]
+                ?? (event.requestMode.isEmpty ? nil : event.requestMode)
+                ?? "unknown"
+
+            guard let requested, requested != effective else {
+                return effective
             }
 
-            return lhs.value > rhs.value
-        }.map { key, value in
-            "  \(key): \(value)"
-        }.joined(separator: "\n"))
-        """
-    }
-
-    private func nestedCountBucketsText(title: String, buckets: [String: [String: Int]]) -> String {
-        guard !buckets.isEmpty else {
-            return "\(title): none yet"
+            return "\(requested)->\(effective)"
         }
-
-        return """
-        \(title):
-        \(buckets.sorted { $0.key < $1.key }.map { app, counts in
-            let countText = counts
-                .sorted { lhs, rhs in
-                    if lhs.value == rhs.value {
-                        return lhs.key < rhs.key
-                    }
-
-                    return lhs.value > rhs.value
-                }
-                .map { "\($0.key)=\($0.value)" }
-                .joined(separator: ", ")
-            return "  \(app): \(countText)"
-        }.joined(separator: "\n"))
-        """
-    }
-
-    private func failureRatesText(title: String, counts: [String: Int], rates: [String: Double]) -> String {
-        let keys = Set(counts.keys).union(rates.keys)
-        guard !keys.isEmpty else {
-            return "\(title): none yet"
-        }
-
-        return """
-        \(title):
-        \(keys.sorted().map { key in
-            let count = counts[key] ?? 0
-            let rate = rates[key] ?? 0
-            return "  \(key): \(count) (\(Self.percent(rate)))"
-        }.joined(separator: "\n"))
-        """
-    }
-
-    private func counts(for values: [String]) -> [String: Int] {
-        values.reduce(into: [:]) { result, value in
-            result[value, default: 0] += 1
-        }
-    }
-
-    private static func percent(_ value: Double) -> String {
-        "\(Int((value * 100).rounded()))%"
     }
 }
 
-struct SuggestionLearningDiagnostics: Equatable {
-    let summary: AutocompleteTraceSummary
-    let recentEvents: [AutocompleteTraceEvent]
+struct DiagnosticsTraceHistory {
+    let events: [AutocompleteTraceEvent]
 
-    var text: String {
-        [
-            headlineText,
-            acceptedAndKeptText(title: "Accepted-kept by app", buckets: summary.acceptedAndKeptRateByApp),
-            acceptedAndKeptText(title: "Accepted-kept by mode", buckets: summary.acceptedAndKeptRateByRequestMode),
-            countBucketsText(title: "Annoyance signals", buckets: summary.annoyanceSignalCounts),
-            recentQuietModeText,
-            recentDisplayAffinityText,
-            recentRepeatedMissText,
-            recentPrefixCooldownText,
-            recentStyleSketchText
-        ].joined(separator: "\n")
+    init(events: [AutocompleteTraceEvent]) {
+        self.events = Array(events.suffix(16))
     }
 
-    private var headlineText: String {
-        "Learning diagnostics: accepted-kept \(summary.acceptedAndKeptCount) (\(Self.percent(summary.acceptedAndKeptRateAccepted)) of accepted, \(Self.percent(summary.acceptedAndKeptRateShown)) of shown), typed-over \(summary.typedOverCount), ignored \(summary.ignoredCount), annoyance \(Self.score(summary.annoyanceScore))"
-    }
-
-    private var recentDisplayAffinityText: String {
-        guard let event = latestEvent(containingAny: [
-            "displayScoreAcceptedAndKeptProbability",
-            "displayScoreAcceptedAndKeptSamples"
-        ]) else {
-            return "Current display affinity: no recent accepted-kept gate metadata"
-        }
-
-        let probability = event.metadata["displayScoreAcceptedAndKeptProbability"] ?? "unknown"
-        let samples = event.metadata["displayScoreAcceptedAndKeptSamples"] ?? "0"
-        let threshold = event.metadata["displayScoreAcceptedAndKeptThreshold"] ?? "n/a"
-        return "Current display affinity: probability=\(probability), samples=\(samples), threshold=\(threshold)"
-    }
-
-    private var recentQuietModeText: String {
-        guard let event = latestEvent(containingAny: [
-            "quietMode",
-            "quietReason",
-            "quietScore",
-            "annoyanceSignal"
-        ]) else {
-            return "Quiet mode: no recent quiet-mode metadata"
-        }
-
-        let mode = event.metadata["quietMode"] ?? "unknown"
-        let signal = event.metadata["annoyanceSignal"] ?? "unknown"
-        let reason = event.metadata["quietReason"] ?? event.metadata["annoyanceReason"] ?? "unknown"
-        let score = event.metadata["quietScore"] ?? event.metadata["annoyanceFieldScore"] ?? "unknown"
-        let until = event.metadata["quietUntil"].map { ", until=\($0)" } ?? ""
-        return "Quiet mode: scope=\(mode), signal=\(signal), reason=\(reason), score=\(score)\(until)"
-    }
-
-    private var recentRepeatedMissText: String {
-        guard let event = latestEvent(containingAny: [
-            "repetitionMissTotal",
-            "repetitionMissSuppressed"
-        ]) else {
-            return "Repeated miss state: no recent miss-score metadata"
-        }
-
-        let kind = event.metadata["repetitionMissKind"] ?? "miss"
-        let total = event.metadata["repetitionMissTotal"] ?? "unknown"
-        let threshold = event.metadata["repetitionMissThreshold"] ?? "unknown"
-        let suppressed = event.metadata["repetitionMissSuppressed"] ?? "false"
-        let lifetime = event.metadata["repetitionMissLifetimeMs"].map { ", lifetime=\($0)ms" } ?? ""
-        return "Repeated miss state: kind=\(kind), score=\(total)/\(threshold), suppressed=\(suppressed)\(lifetime)"
-    }
-
-    private var recentPrefixCooldownText: String {
-        guard let event = latestEvent(containingAny: [
-            "prefixCooldownReason",
-            "prefixCooldownDurationMilliseconds"
-        ]) else {
-            return "Prefix cooldown: no recent cooldown metadata"
-        }
-
-        let reason = event.metadata["prefixCooldownReason"] ?? "unknown"
-        let duration = event.metadata["prefixCooldownDurationMilliseconds"] ?? "unknown"
-        let tokens = event.metadata["prefixFamilyTokenCount"] ?? "unknown"
-        let escalated = event.metadata["prefixCooldownEscalated"] ?? "false"
-        return "Prefix cooldown: reason=\(reason), duration=\(duration)ms, familyTokens=\(tokens), escalated=\(escalated)"
-    }
-
-    private var recentStyleSketchText: String {
-        guard let event = latestEvent(containingAny: [
-            "styleSketchSamples",
-            "styleSketchAverageWords"
-        ]) else {
-            return "Style sketch: no recent aggregate style metadata"
-        }
-
-        let samples = event.metadata["styleSketchSamples"] ?? "0"
-        let averageWords = event.metadata["styleSketchAverageWords"] ?? "unknown"
-        let punctuation = event.metadata["styleSketchTerminalPunctuationRate"] ?? "unknown"
-        let lowercase = event.metadata["styleSketchLowercaseStartRate"] ?? "unknown"
-        let questions = event.metadata["styleSketchQuestionEndingRate"] ?? "unknown"
-        return "Style sketch: samples=\(samples), avgWords=\(averageWords), terminalPunctuation=\(punctuation), lowercaseStarts=\(lowercase), questionEndings=\(questions)"
-    }
-
-    private func acceptedAndKeptText(title: String, buckets: [String: Double]) -> String {
-        guard !buckets.isEmpty else {
-            return "\(title): none yet"
+    var summaryText: String {
+        guard !events.isEmpty else {
+            return "Recent trace events: none yet"
         }
 
         return """
-        \(title):
-        \(buckets.sorted { $0.key < $1.key }.map { key, value in
-            "  \(key): \(Self.percent(value))"
-        }.joined(separator: "\n"))
+        Recent trace events:
+        \(events.map(Self.rowText).joined(separator: "\n"))
         """
     }
 
-    private func countBucketsText(title: String, buckets: [String: Int]) -> String {
-        guard !buckets.isEmpty else {
-            return "\(title): none yet"
-        }
+    static func rowText(_ event: AutocompleteTraceEvent) -> String {
+        let shownChars = textLength(
+            event,
+            text: event.displayedText,
+            metadataKeys: ["visibleChars", "displayedTextChars"]
+        )
+        let acceptedChars = textLength(
+            event,
+            text: event.acceptedText,
+            metadataKeys: ["acceptedTextChars"]
+        )
+        let confidence = event.metadata["placementConfidenceBand"] ?? "n/a"
+        let renderMode = event.metadata["placementEffectiveRenderMode"]
+            ?? event.metadata["effectiveRenderMode"]
+            ?? "n/a"
 
-        return """
-        \(title):
-        \(buckets.sorted { lhs, rhs in
-            if lhs.value == rhs.value {
-                return lhs.key < rhs.key
+        return "  \(event.timestamp) \(event.type.rawValue) mode=\(event.requestMode) app=\(event.appBundleIdentifier) shownChars=\(shownChars) acceptedChars=\(acceptedChars) confidence=\(confidence) render=\(renderMode) reason=\(event.reason) latency=\(latency(event.latencyMilliseconds))"
+    }
+
+    static func textLength(
+        _ event: AutocompleteTraceEvent,
+        text: String,
+        metadataKeys: [String]
+    ) -> Int {
+        for key in metadataKeys {
+            if let value = event.metadata[key], let length = Int(value) {
+                return length
             }
-
-            return lhs.value > rhs.value
-        }.map { key, value in
-            "  \(key): \(value)"
-        }.joined(separator: "\n"))
-        """
-    }
-
-    private func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
-        recentEvents.reversed().first { event in
-            !keys.isDisjoint(with: Set(event.metadata.keys))
         }
+
+        return text.count
     }
 
-    private static func percent(_ value: Double) -> String {
-        "\(Int((value * 100).rounded()))%"
-    }
-
-    private static func score(_ value: Double) -> String {
-        String(format: "%.2f", value)
+    private static func latency(_ value: Int?) -> String {
+        value.map { "\($0)ms" } ?? "n/a"
     }
 }
 

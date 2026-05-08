@@ -34,6 +34,56 @@ public enum CompletionActivationBlockReason: String, Equatable, Sendable {
     case unfinishedWord
 }
 
+public enum SuggestionPace: String, CaseIterable, Codable, Equatable, Sendable {
+    case quiet
+    case normal
+    case eager
+
+    public init(persistedRawValue: String?) {
+        self = persistedRawValue.flatMap(Self.init(rawValue:)) ?? .normal
+    }
+
+    public var displayName: String {
+        switch self {
+        case .quiet:
+            "Quiet"
+        case .normal:
+            "Normal"
+        case .eager:
+            "Eager"
+        }
+    }
+
+    public var detailText: String {
+        switch self {
+        case .quiet:
+            "Quiet waits for more context before phrase suggestions."
+        case .normal:
+            "Normal balances short completions with restraint."
+        case .eager:
+            "Eager starts phrase suggestions sooner in allowed apps."
+        }
+    }
+}
+
+public struct SuggestionAggressivenessPolicy: Equatable, Sendable {
+    public init() {}
+
+    public func pace(
+        userPace: SuggestionPace,
+        supportStatus: CompatibilitySupportStatus
+    ) -> SuggestionPace {
+        switch supportStatus.supportLevel {
+        case .green:
+            return userPace
+        case .yellow:
+            return userPace == .eager ? .normal : userPace
+        case .diagnosticsOnly, .unsupported:
+            return .quiet
+        }
+    }
+}
+
 public struct CompletionActivationPolicy: Equatable, Sendable {
     public let minimumContextCharacters: Int
     public let minimumContextWords: Int
@@ -53,6 +103,29 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         self.minimumPhraseContinuationWords = max(self.minimumContextWords, minimumPhraseContinuationWords)
         self.minimumWordCompletionCharacters = max(1, minimumWordCompletionCharacters)
         self.maximumWordCompletionCharacters = max(self.minimumWordCompletionCharacters, maximumWordCompletionCharacters)
+    }
+
+    public init(pace: SuggestionPace) {
+        switch pace {
+        case .quiet:
+            self.init(
+                minimumContextCharacters: 6,
+                minimumContextWords: 3,
+                minimumPhraseContinuationWords: 6,
+                minimumWordCompletionCharacters: 3,
+                maximumWordCompletionCharacters: 4
+            )
+        case .normal:
+            self.init()
+        case .eager:
+            self.init(
+                minimumContextCharacters: 2,
+                minimumContextWords: 2,
+                minimumPhraseContinuationWords: 3,
+                minimumWordCompletionCharacters: 2,
+                maximumWordCompletionCharacters: 5
+            )
+        }
     }
 
     public func canSuggest(

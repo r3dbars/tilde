@@ -15,21 +15,12 @@ KEY_DELAY_US="${AUTOCOMPLETE_LAB_SOAK_KEY_DELAY_US:-3000}"
 MIN_EVENT_TAP_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_EVENT_TAP_SAMPLES:-100}"
 MIN_AX_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_AX_SAMPLES:-0}"
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
-SEGMENT_CHARS="${AUTOCOMPLETE_LAB_SOAK_SEGMENT_CHARS:-250}"
 DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.autocomplete-lab}"
-PAUSE_DEFAULTS_KEY="SuggestionsPaused"
-PAUSE_DEFAULTS_WAS_PREPARED=0
-PAUSE_DEFAULTS_PREVIOUS_EXISTS=0
-PAUSE_DEFAULTS_PREVIOUS=""
-SOAK_EXPECTED_TEXT_FILE=""
-SOAK_ACTUAL_TEXT_FILE=""
-SOAK_TARGET_TEXT_FILE=""
-SOAK_TARGET_DOCUMENT_NAME=""
-SOAK_TYPING_START_LINE=""
-TEMP_ENABLE_ENV_KEY="AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
-TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED=0
-TEMP_ENABLE_LAUNCHCTL_PREVIOUS=""
+TEXTEDIT_BUNDLE_ID="com.apple.TextEdit"
+PRIMER_TEXT="Can we make this feel "
 declare -a SOAK_TMP_DIRS=()
+declare -a ORIGINAL_DISABLED_APPS=()
+TEXTEDIT_DISABLED_FOR_SOAK=0
 
 usage() {
   cat <<'EOF'
@@ -42,8 +33,8 @@ EOF
 }
 
 cleanup_soak() {
-  if [[ -n "$SOAK_TARGET_DOCUMENT_NAME" ]]; then
-    close_textedit_document "$SOAK_TARGET_DOCUMENT_NAME" >/dev/null 2>&1 || true
+  if ((TEXTEDIT_DISABLED_FOR_SOAK == 1)); then
+    restore_disabled_apps
   fi
 
   if ((${#SOAK_TMP_DIRS[@]})); then
@@ -414,6 +405,90 @@ generate_soak_text() {
   printf '%s%s' "$(printf '%s' "${text:0:1}" | tr '[:lower:]' '[:upper:]')" "${text:1}"
 }
 
+current_disabled_apps() {
+  { defaults read "$DEFAULTS_DOMAIN" DisabledBundleIdentifiers 2>/dev/null || true; } |
+    sed -n -E 's/^[[:space:]]*"?([A-Za-z0-9._-]+)"?,?$/\1/p'
+}
+
+write_disabled_apps() {
+  if (($# == 0)); then
+    defaults delete "$DEFAULTS_DOMAIN" DisabledBundleIdentifiers >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  defaults write "$DEFAULTS_DOMAIN" DisabledBundleIdentifiers -array "$@"
+}
+
+capture_original_disabled_apps() {
+  ORIGINAL_DISABLED_APPS=()
+  local bundle_identifier
+  while IFS= read -r bundle_identifier; do
+    [[ -n "$bundle_identifier" ]] || continue
+    ORIGINAL_DISABLED_APPS+=("$bundle_identifier")
+  done < <(current_disabled_apps)
+}
+
+textedit_is_disabled() {
+  if ((${#ORIGINAL_DISABLED_APPS[@]} == 0)); then
+    return 1
+  fi
+
+  local bundle_identifier
+  for bundle_identifier in "${ORIGINAL_DISABLED_APPS[@]}"; do
+    if [[ "$bundle_identifier" == "$TEXTEDIT_BUNDLE_ID" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+restore_disabled_apps() {
+  if ((${#ORIGINAL_DISABLED_APPS[@]} == 0)); then
+    write_disabled_apps
+  else
+    write_disabled_apps "${ORIGINAL_DISABLED_APPS[@]}"
+  fi
+}
+
+prepare_textedit_enablement() {
+  capture_original_disabled_apps
+
+  if ! textedit_is_disabled; then
+    echo "TextEdit enablement: already allowed"
+    return 0
+  fi
+
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    echo "TextEdit is disabled in $DEFAULTS_DOMAIN, and --skip-build cannot refresh the running app state." >&2
+    echo "Run without --skip-build so the soak can temporarily allow TextEdit before launching Autocomplete Lab." >&2
+    exit 1
+  fi
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "TextEdit enablement: would temporarily allow TextEdit before relaunch"
+    return 0
+  fi
+
+  local filtered=()
+  local bundle_identifier
+  if ((${#ORIGINAL_DISABLED_APPS[@]} > 0)); then
+    for bundle_identifier in "${ORIGINAL_DISABLED_APPS[@]}"; do
+      if [[ "$bundle_identifier" != "$TEXTEDIT_BUNDLE_ID" ]]; then
+        filtered+=("$bundle_identifier")
+      fi
+    done
+  fi
+
+  if ((${#filtered[@]} == 0)); then
+    write_disabled_apps
+  else
+    write_disabled_apps "${filtered[@]}"
+  fi
+  TEXTEDIT_DISABLED_FOR_SOAK=1
+  echo "TextEdit enablement: temporarily allowed TextEdit for this soak"
+}
+
 latest_runtime_is_ready() {
   local latest_runtime_line
   latest_runtime_line="$(grep -E " runtime .*readinessStage=" "$LOG_PATH" 2>/dev/null | tail -n 1 || true)"
@@ -441,6 +516,58 @@ wait_for_runtime_ready() {
   echo "Timed out waiting for AutocompleteLab runtime readiness." >&2
   echo "Log: $LOG_PATH" >&2
   tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+  exit 1
+}
+
+wait_for_log_pattern() {
+  local start_line="$1"
+  local pattern="$2"
+  local label="$3"
+  local timeout_seconds="${4:-12}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    if tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -E "$pattern" >/dev/null; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for $label." >&2
+  echo "Pattern: $pattern" >&2
+  echo "Log: $LOG_PATH" >&2
+  tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+  exit 1
+}
+
+front_textedit_document_text() {
+  osascript <<'APPLESCRIPT'
+tell application "TextEdit"
+  if (count of documents) = 0 then return ""
+  return text of document 1
+end tell
+APPLESCRIPT
+}
+
+verify_textedit_primer_reached_document() {
+  local expected="$1"
+  local actual frontmost
+
+  actual="$(front_textedit_document_text 2>/dev/null || true)"
+  if [[ "$actual" == *"$expected"* ]]; then
+    return 0
+  fi
+
+  frontmost="$(
+    osascript -e 'tell application "System Events" to name of first application process whose frontmost is true' \
+      2>/dev/null || true
+  )"
+
+  echo "TextEdit primer keyboard input did not reach the disposable document." >&2
+  echo "Frontmost app: ${frontmost:-unknown}" >&2
+  echo "Expected primer chars: ${#expected}" >&2
+  echo "Observed document chars: ${#actual}" >&2
+  echo "This runner cannot collect event-tap proof until keyboard automation can type into TextEdit." >&2
   exit 1
 }
 
@@ -500,20 +627,16 @@ describe_plan() {
   echo "Safe typing performance soak"
   echo "Target app: disposable TextEdit .txt file"
   echo "Diagnostics log: $LOG_PATH"
-  echo "Safety: temporarily enables TextEdit only for this proof pass"
-  echo "Safety: temporarily resumes suggestions and restores the previous pause state"
+  echo "Defaults domain: $DEFAULTS_DOMAIN"
   if [[ "$SKIP_BUILD" == "1" ]]; then
     echo "Build: skipped; using an already-running app"
   else
     echo "Build: ./script/build_and_run.sh --verify"
   fi
   echo "Synthetic text: $TARGET_CHARS generated chars from a built-in neutral fixture"
-  echo "Typed text proof: exact named TextEdit document match required"
-  echo "Typing driver: CGEvent Unicode key events after target-window focus"
-  echo "Typing batches: up to $SEGMENT_CHARS chars per Swift process"
-  echo "AX warmup: waits for a focused-text poll summary before typing"
-  echo "Typing: $CHUNK_SIZE-char chunks with ${DELAY_MS}ms delay and ${KEY_DELAY_US}us key spacing"
-  echo "Typing duration budget: $(computed_typing_budget_seconds)s"
+  echo "Typing: $CHUNK_SIZE-char chunks with ${DELAY_MS}ms delay"
+  echo "Primer: require a TextEdit suggestion before long typing"
+  echo "AppleScript timeout: $(computed_applescript_timeout_seconds)s"
   echo "Event tap proof: require at least $MIN_EVENT_TAP_SAMPLES samples"
   if is_truthy "$STRICT_AX"; then
     echo "AX warnings: strict; slow or skipped focused-text polling fails the soak"
@@ -524,7 +647,8 @@ describe_plan() {
 }
 
 type_textedit_fixture() {
-  local tmp_dir text_file actual_file target_file
+  local start_line="$1"
+  local tmp_dir text_file target_file delay timeout_seconds
   tmp_dir="$(make_tmp_dir)"
   text_file="$tmp_dir/autocomplete-lab-typing-soak-input.txt"
   actual_file="$tmp_dir/autocomplete-lab-typing-soak-actual.txt"
@@ -535,15 +659,54 @@ type_textedit_fixture() {
   SOAK_TARGET_DOCUMENT_NAME="$(basename "$target_file")"
   generate_soak_text "$TARGET_CHARS" >"$text_file"
   : >"$target_file"
-  prepare_textedit_document "$SOAK_TARGET_TEXT_FILE"
-  focus_textedit_document "$SOAK_TARGET_DOCUMENT_NAME"
+
+  close_textedit_soak_documents
+  open -a TextEdit "$target_file"
   sleep 1
-  wait_for_focused_text_poll_summary_after_line "$(line_count "$LOG_PATH")" 15
-  SOAK_TYPING_START_LINE="$(line_count "$LOG_PATH")"
-  type_text_with_cgevents "$text_file"
-  sleep 2
-  capture_typed_text "$SOAK_ACTUAL_TEXT_FILE" "$SOAK_TARGET_DOCUMENT_NAME"
-  verify_typed_text "$SOAK_EXPECTED_TEXT_FILE" "$SOAK_ACTUAL_TEXT_FILE"
+
+  osascript <<APPLESCRIPT
+with timeout of 20 seconds
+  tell application "TextEdit" to activate
+  delay 0.4
+  tell application "System Events"
+    tell process "TextEdit"
+      set frontmost to true
+    end tell
+    keystroke "a" using command down
+    key code 51
+    keystroke "$PRIMER_TEXT"
+  end tell
+end timeout
+APPLESCRIPT
+
+  sleep 0.2
+  verify_textedit_primer_reached_document "$PRIMER_TEXT"
+
+  wait_for_log_pattern \
+    "$start_line" \
+    "suggestion-presented .*app=com.apple.TextEdit" \
+    "TextEdit suggestion primer" \
+    12
+
+  osascript <<APPLESCRIPT
+set soakText to read POSIX file "$text_file" as «class utf8»
+set soakChunkSize to $CHUNK_SIZE
+set soakDelay to $delay
+
+with timeout of $timeout_seconds seconds
+  tell application "System Events"
+    repeat with chunkStart from 1 to (length of soakText) by soakChunkSize
+      set chunkEnd to chunkStart + soakChunkSize - 1
+      if chunkEnd > (length of soakText) then set chunkEnd to (length of soakText)
+      keystroke (text chunkStart thru chunkEnd of soakText)
+      if soakDelay > 0 then delay soakDelay
+    end repeat
+  end tell
+end timeout
+APPLESCRIPT
+  SOAK_OSASCRIPT_PID=$!
+  wait "$SOAK_OSASCRIPT_PID"
+  SOAK_OSASCRIPT_PID=""
 }
 
 run_checker() {
@@ -688,6 +851,7 @@ if ((CHUNK_SIZE > 80)); then
 fi
 
 describe_plan
+prepare_textedit_enablement
 
 if [[ "$DRY_RUN" == "1" ]]; then
   exit 0
@@ -699,7 +863,8 @@ prepare_temporary_suggestions_resume
 build_if_needed
 wait_for_runtime_ready "$runtime_start_line" "$SKIP_BUILD"
 
-type_textedit_fixture
+start_line="$(line_count "$LOG_PATH")"
+type_textedit_fixture "$start_line"
 sleep 1
 run_checker "${SOAK_TYPING_START_LINE:-$(line_count "$LOG_PATH")}"
 

@@ -31,11 +31,29 @@ script/download_mlx_model.py --model qwen35-4b
 That helper is for local development and packaging prep. It should not be part
 of tester onboarding.
 
+In the app, Settings now owns the install path. When the model folder is
+missing, use `Install Local Model`. When the folder is incomplete, use `Repair
+Local Model`. The app rechecks the asset and retries the MLX runtime after the
+download completes.
+
 Sources:
 
 - [MLX Swift LM GitHub](https://github.com/ml-explore/mlx-swift-lm)
 - [MLX Swift LM package](https://github.com/ml-explore/mlx-swift-lm/blob/main/Package.swift)
 - [Qwen3.5 4B MLX model](https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit)
+
+## macOS Target
+
+Lower the runtime target to macOS 14.
+
+Evidence: the current app code does not use macOS 26-only APIs, and the pinned
+`mlx-swift-lm` dependency declares macOS 14 as its minimum. Keep Apple Silicon
+as the hardware target because MLX/Metal is the runtime path.
+
+Build settings:
+
+- `Package.swift`: `.macOS(.v14)`
+- app bundle `LSMinimumSystemVersion`: `14.0`
 
 ## Other Local Trial Models
 
@@ -91,7 +109,7 @@ Sources:
 - app-owned runtime
 - no user-managed server
 - Qwen3.5 4B 4-bit preferred beta asset
-- macOS 26 on Apple Silicon for the private beta
+- macOS 14 or newer on Apple Silicon for the private beta
 - Apple Silicon with 16 GB RAM first target
 - reasoning off
 - 9 generated tokens by default
@@ -101,3 +119,4 @@ Sources:
 - average latency under 700ms as a private beta target
 - stretch latency under 300ms after warmup
 - no beta if runtime falls back to mock output
+- default latency proof: `./script/model_latency_report.py --default-model-proof`

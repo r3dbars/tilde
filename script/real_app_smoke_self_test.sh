@@ -7,14 +7,27 @@ cd "$ROOT_DIR"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+script/real_app_smoke.sh textedit --help >"$TMP_DIR/help.txt"
+if ! grep -F "requires that process" "$TMP_DIR/help.txt" >/dev/null; then
+  echo "real app smoke help must explain --skip-build checkout verification" >&2
+  exit 1
+fi
+
 script/real_app_smoke.sh textedit --dry-run >"$TMP_DIR/textedit.txt"
 if ! grep -F "Real app smoke: textedit" "$TMP_DIR/textedit.txt" >/dev/null; then
   echo "real app smoke self-test did not print the TextEdit dry-run plan" >&2
   exit 1
 fi
 
-if ! grep -F "temporarily enables TextEdit only for this proof pass" "$TMP_DIR/textedit.txt" >/dev/null; then
-  echo "real app smoke self-test did not explain temporary TextEdit enablement" >&2
+script/real_app_smoke.sh textedit-multiline --dry-run >"$TMP_DIR/textedit-multiline.txt"
+if ! grep -F "two-line test fragment" "$TMP_DIR/textedit-multiline.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the TextEdit multiline dry-run plan" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh textedit-wrapped --dry-run >"$TMP_DIR/textedit-wrapped.txt"
+if ! grep -F "wrapped-line test fragment" "$TMP_DIR/textedit-wrapped.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the TextEdit wrapped-line dry-run plan" >&2
   exit 1
 fi
 

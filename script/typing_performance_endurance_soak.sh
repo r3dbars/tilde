@@ -137,7 +137,7 @@ if ((DELAY_MS < 10)); then
   exit 2
 fi
 
-TARGET_CHARS="$((MINUTES * 60 * 1000 / DELAY_MS * CHUNK_SIZE))"
+TARGET_CHARS="$((MINUTES * 60 * 1000 / (DELAY_MS + 80) * CHUNK_SIZE))"
 if ((TARGET_CHARS < 100)); then
   TARGET_CHARS=100
 fi

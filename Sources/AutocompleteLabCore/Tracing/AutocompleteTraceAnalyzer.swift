@@ -188,6 +188,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let tabAcceptShare: Double
     public let fullAcceptShare: Double
     public let duplicateTextCount: Int
+    public let doNotShipCounters: [String: Int]
     public let appDisableCount: Int
     public let caretGeometryFailureCount: Int
     public let caretGeometryFailureRate: Double
@@ -271,6 +272,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         tabAcceptShare: Double = 0,
         fullAcceptShare: Double = 0,
         duplicateTextCount: Int = 0,
+        doNotShipCounters: [String: Int] = [:],
         appDisableCount: Int = 0,
         caretGeometryFailureCount: Int = 0,
         caretGeometryFailureRate: Double = 0,
@@ -353,6 +355,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.tabAcceptShare = tabAcceptShare
         self.fullAcceptShare = fullAcceptShare
         self.duplicateTextCount = duplicateTextCount
+        self.doNotShipCounters = doNotShipCounters
         self.appDisableCount = appDisableCount
         self.caretGeometryFailureCount = caretGeometryFailureCount
         self.caretGeometryFailureRate = caretGeometryFailureRate
@@ -501,6 +504,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             tabAcceptShare: accepted.isEmpty ? 0 : Double(accepted.filter(isTabAccept).count) / Double(accepted.count),
             fullAcceptShare: accepted.isEmpty ? 0 : Double(accepted.filter(isFullAccept).count) / Double(accepted.count),
             duplicateTextCount: insertionFailures.filter(isDuplicateTextEvent).count,
+            doNotShipCounters: doNotShipCounters(from: events),
             appDisableCount: events.filter { $0.type == .appDisabled }.count,
             caretGeometryFailureCount: caretGeometryFailures.count,
             caretGeometryFailureRate: rate(
@@ -1737,6 +1741,10 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
     private func severeFailureCount(in events: [AutocompleteTraceEvent]) -> Int {
         events.filter { event in
+            if event.metadata["severe"] == "true" {
+                return true
+            }
+
             if event.type == .insertionFailed || event.type == .appDisabled {
                 return true
             }
@@ -1748,6 +1756,52 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             return event.metadata["focusStealing"] == "true"
                 || event.metadata["tabConflict"] == "true"
         }.count
+    }
+
+    private func doNotShipCounters(from events: [AutocompleteTraceEvent]) -> [String: Int] {
+        var counters: [String: Int] = [:]
+
+        func increment(_ key: String) {
+            counters[key, default: 0] += 1
+        }
+
+        for event in events {
+            if event.type == .insertionFailed {
+                increment("insertion-failed")
+            }
+
+            if event.type == .suggestionSuppressed,
+               event.reason == "wrong-app-or-field-before-accept" {
+                increment("wrong-app-or-field-before-accept")
+            }
+
+            if event.type == .suggestionPresented,
+               ["secure", "password"].contains(event.metadata["fieldKind"] ?? "") {
+                increment("secure-field-suggestion")
+            }
+
+            if event.type == .suggestionPresented,
+               event.metadata["supportState"] == "unsupported" {
+                increment("unsupported-app-presentation")
+            }
+
+            if event.type == .suggestionPresented,
+               event.metadata["effectiveRenderMode"] == "floatingMirror",
+               event.metadata["hasCaretRect"] == "false" {
+                increment("detached-suggestion-shown")
+            }
+
+            if event.metadata["mockRuntimeFallback"] == "true" {
+                increment("mock-runtime-fallback")
+            }
+
+            if event.metadata["doNotShip"] == "true",
+               !(event.type == .suggestionSuppressed && event.reason == "wrong-app-or-field-before-accept") {
+                increment(event.reason.isEmpty ? "do-not-ship" : event.reason)
+            }
+        }
+
+        return counters
     }
 
     private func tabConflictCount(in events: [AutocompleteTraceEvent]) -> Int {
@@ -1769,7 +1823,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     private func searchOrFormLeakageCount(in events: [AutocompleteTraceEvent]) -> Int {
         events.filter { event in
             event.type == .suggestionPresented
-                && ["search", "form", "url", "secure"].contains(event.metadata["fieldKind"] ?? "")
+                && ["search", "form", "url", "secure", "unprovenSurface"].contains(event.metadata["fieldKind"] ?? "")
         }.count
     }
 
@@ -1875,7 +1929,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 }
 
             case .suggestionPresented:
-                if ["search", "form", "url", "secure"].contains(event.metadata["fieldKind"] ?? "") {
+                if ["search", "form", "url", "secure", "unprovenSurface"].contains(event.metadata["fieldKind"] ?? "") {
                     increment("searchOrFormLeakage")
                 }
 
@@ -1888,7 +1942,11 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                     increment("tabConflict")
                 }
 
-            case .appPaused, .fieldPaused:
+                if event.metadata["focusMismatch"] == "true" {
+                    increment("focusMismatch")
+                }
+
+            case .appPaused:
                 increment("manualPause")
 
             case .appDisabled:

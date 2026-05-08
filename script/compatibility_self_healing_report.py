@@ -12,6 +12,7 @@ DEFAULT_LEARNING_PATH = (
     / "Library/Application Support/AutocompleteLab/compatibility-learning.json"
 )
 NUDGE_STEP_PIXELS = 2.0
+CODE_PROMOTION_REASONS = {"manual-visual-nudge", "screenshot-visual-correction"}
 
 
 def read_json(path):
@@ -111,6 +112,24 @@ def visual_nudge_candidates(profiles, minimum_steps):
     )
 
 
+def code_promotion_candidates(
+    profiles,
+    minimum_steps,
+    minimum_observations,
+    minimum_confidence,
+):
+    candidates = []
+    for item in visual_nudge_candidates(profiles, minimum_steps):
+        if item["observations"] < minimum_observations:
+            continue
+        if item["confidence"] < minimum_confidence:
+            continue
+        if item["lastReason"] not in CODE_PROMOTION_REASONS:
+            continue
+        candidates.append(item)
+    return candidates
+
+
 def detached_suppression_candidates(events, minimum_count):
     by_app = defaultdict(list)
     for event in events:
@@ -187,6 +206,40 @@ def render_text(report):
         [
             "",
             (
+                "Adapter promotion candidates "
+                f"(>= {report['minimumCodePromotionObservations']} observations, "
+                f">= {report['minimumCodePromotionConfidence']:.2f} confidence, "
+                "trusted visual reason):"
+            ),
+        ]
+    )
+
+    if report["codePromotionCandidates"]:
+        for item in report["codePromotionCandidates"]:
+            lines.extend(
+                [
+                    (
+                        f"  {item['bundleIdentifier']}: "
+                        f"offset=({item['xOffset']:.1f},{item['yOffset']:.1f}), "
+                        f"approxNudges={item['approxNudgeSteps']}, "
+                        f"observations={item['observations']}, "
+                        f"confidence={item['confidence']:.2f}, "
+                        f"lastReason={item['lastReason']}"
+                    ),
+                    (
+                        "    recommendation: convert to a checked-in app/profile "
+                        "calibration only after current-commit screenshot smoke "
+                        "passes for that app."
+                    ),
+                ]
+            )
+    else:
+        lines.append("  none")
+
+    lines.extend(
+        [
+            "",
+            (
                 "Repeated detached suppression "
                 f"(>= {report['minimumDetachedSuppressions']} events):"
             ),
@@ -239,6 +292,14 @@ def build_report(args):
             profiles,
             args.min_nudge_steps,
         ),
+        "minimumCodePromotionObservations": args.min_code_observations,
+        "minimumCodePromotionConfidence": args.min_code_confidence,
+        "codePromotionCandidates": code_promotion_candidates(
+            profiles,
+            args.min_nudge_steps,
+            args.min_code_observations,
+            args.min_code_confidence,
+        ),
         "detachedSuppressionCandidates": detached_suppression_candidates(
             events,
             args.min_detached_suppressions,
@@ -285,6 +346,18 @@ def parse_args():
         type=int,
         default=2,
         help="Minimum detached suppression events per app to report.",
+    )
+    parser.add_argument(
+        "--min-code-observations",
+        type=int,
+        default=5,
+        help="Minimum learning observations before recommending checked-in code.",
+    )
+    parser.add_argument(
+        "--min-code-confidence",
+        type=float,
+        default=0.75,
+        help="Minimum learning confidence before recommending checked-in code.",
     )
     parser.add_argument(
         "--json",

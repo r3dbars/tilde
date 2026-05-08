@@ -257,6 +257,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         appBundleIdentifier: String,
         acceptedText: String,
         remainingVisibleText: String?,
+        displayedText: String = "",
         suggestionID: String = "",
         fieldIdentity: String = "",
         requestMode: String = "",
@@ -272,6 +273,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             appBundleIdentifier: appBundleIdentifier,
             fieldIdentity: fieldIdentity,
             requestMode: requestMode,
+            displayedText: displayedText,
             acceptedText: acceptedText,
             remainingVisibleText: remainingVisibleText ?? "",
             outcome: action,
@@ -395,17 +397,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
 
     func recentEvents(limit: Int) -> [AutocompleteTraceEvent] {
         queue.sync { [logURL, decoder] in
-            guard limit > 0,
-                  let contents = try? String(contentsOf: logURL, encoding: .utf8) else {
-                return []
-            }
-
-            return contents
-                .split(separator: "\n", omittingEmptySubsequences: true)
-                .suffix(limit)
-                .compactMap { line in
-                    try? decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
-                }
+            Self.events(from: logURL, limit: limit, decoder: decoder)
         }
     }
 
@@ -420,9 +412,66 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     }
 
     func exportHTMLReport(limit: Int = 2_000) -> URL? {
-        queue.sync { [folderURL] in
-            LocalReportExporter(folderURL: folderURL).exportHTMLReport(limit: limit)
+        queue.sync { [folderURL, decoder] in
+            let events = Self.events(
+                from: folderURL.appendingPathComponent("traces.jsonl"),
+                limit: limit,
+                decoder: decoder
+            )
+            guard !events.isEmpty else {
+                return nil
+            }
+
+            let html = AutocompleteTraceReportGenerator().htmlReport(for: events)
+            let reportURL = folderURL.appendingPathComponent("trace-report.html")
+
+            do {
+                try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+                try html.write(to: reportURL, atomically: true, encoding: .utf8)
+                return reportURL
+            } catch {
+                return nil
+            }
         }
+    }
+
+    func exportRedactedSurvivalReport(limit: Int = 2_000) -> URL? {
+        queue.sync { [folderURL, decoder, encoder] in
+            let events = Self.events(
+                from: folderURL.appendingPathComponent("traces.jsonl"),
+                limit: limit,
+                decoder: decoder
+            )
+            let reportURL = folderURL.appendingPathComponent("survival-report.json")
+
+            do {
+                try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+                let data = try AutocompleteTraceReportGenerator()
+                    .redactedSurvivalJSONData(for: events, encoder: encoder)
+                try data.write(to: reportURL, options: .atomic)
+                return reportURL
+            } catch {
+                return nil
+            }
+        }
+    }
+
+    private static func events(
+        from logURL: URL,
+        limit: Int,
+        decoder: JSONDecoder
+    ) -> [AutocompleteTraceEvent] {
+        guard limit > 0,
+              let contents = try? String(contentsOf: logURL, encoding: .utf8) else {
+            return []
+        }
+
+        return contents
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .suffix(limit)
+            .compactMap { line in
+                try? decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))
+            }
     }
 
     private static func htmlReport(
@@ -500,6 +549,13 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         <body>
           <h1>Autocomplete Lab Trace Report</h1>
           <p>Generated locally. Nothing was uploaded.</p>
+          <h2>Privacy checklist</h2>
+          <ul>
+            <li>This report is local and is not uploaded by Autocomplete Lab.</li>
+            <li>Review it before sharing. If raw text or screenshots were enabled, event rows may include private writing or local screenshot links.</li>
+            <li>For normal beta feedback, prefer the redacted local report export.</li>
+            <li>Delete local logs when the debugging session is done.</li>
+          </ul>
           <div class="grid">
             <div class="metric"><b>\(summary.totalEvents)</b>events</div>
             <div class="metric"><b>\(summary.presentedCount)</b>shown</div>
