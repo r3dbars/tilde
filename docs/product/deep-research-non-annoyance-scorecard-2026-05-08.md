@@ -5,7 +5,7 @@
 - Deep Research topic: Non-Annoyance Rubric for System-Wide Autocomplete
 - Repo: `transcripted-autocomplete-lab`
 - Date: 2026-05-08
-- Commit inspected: `771f14dee37a4c8a44d89f1059f8a2aec9ca4e40`
+- Commit inspected: `608d48243289` plus the archive-backed TextEdit smoke proof recorded in this loop.
 
 ## Executive Summary
 
@@ -60,10 +60,12 @@ This loop improves live non-annoyance behavior and proof:
 - Older proof docs now reference tracked Obsidian and Notes title/body/checklist screenshots, so normal proof checks reflect the current evidence.
 - `hideSuggestion` now records `hideLatencyMs`, and analyzer/report/script output exposes hide-latency p50/p95.
 - The macOS event-tap keycode bridge now maps Z, so Cmd-Z can actually reach the accepted-insertion undo route.
+- `real_app_smoke.sh` can now temporarily enable the target app without changing persisted app settings, and `build_and_run.sh` launches the app with that proof environment while avoiding stale worktree bundles.
+- TextEdit default now has a current archive-backed strict visual smoke row with two verified accepts in `docs/product/manual-smoke-runs.md`.
 
 ## Score
 
-Overall score: 87/100.
+Overall score: 88/100.
 
 ## Score Breakdown
 
@@ -97,10 +99,10 @@ Overall score: 87/100.
 ### Usefulness
 
 - Weight: 15
-- Current score: 11/15
-- Why this score: The app filters assistant-y output, bounds word/phrase behavior, ranks candidates, tracks accepted-and-kept, and now reports typed-over rate. It lacks enough current real-app trace evidence to prove healthy accept and typed-over rates.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Engine/CompletionOutputCleaner.swift`, `Sources/AutocompleteLabCore/Engine/CompletionCandidateRanker.swift`, `Sources/AutocompleteLabCore/Engine/WordCompletionCandidateRanker.swift`, `Sources/AutocompleteLabCore/Tracing/AutocompleteTraceAnalyzer.swift`, `Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift`.
-- Missing evidence: Current accepted-and-kept rates by app, human voice/style ratings, and enough live misses to tune without raw text persistence.
+- Current score: 12/15
+- Why this score: The app filters assistant-y output, bounds word/phrase behavior, ranks candidates, tracks accepted-and-kept, reports typed-over rate, and now has a fresh TextEdit default smoke row with two verified accepts on the current archive. It still lacks enough current real-app trace evidence across supported surfaces to prove healthy accept and typed-over rates.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Engine/CompletionOutputCleaner.swift`, `Sources/AutocompleteLabCore/Engine/CompletionCandidateRanker.swift`, `Sources/AutocompleteLabCore/Engine/WordCompletionCandidateRanker.swift`, `Sources/AutocompleteLabCore/Tracing/AutocompleteTraceAnalyzer.swift`, `Tests/AutocompleteLabCoreTests/AutocompleteTraceAnalyzerTests.swift`, `docs/product/manual-smoke-runs.md`, `script/real_app_smoke.sh`.
+- Missing evidence: Current accepted-and-kept rates by app, TextEdit multiline/wrapped proof, current Chrome/Notes/Obsidian archive-backed proof, human voice/style ratings, and enough live misses to tune without raw text persistence.
 - What would make it 100/100: Healthy accept rate without higher frequency, low typed-over rate, and user-rated suggestions that feel self-authored.
 
 ### Trust and voice
@@ -175,11 +177,12 @@ Forgettably good. The app appears only when useful, hides before it becomes anno
 ### 3. Refresh strict proof manifest and visual evidence docs
 
 - Objective: Make proof scripts pass or fail only on real current gaps.
-- Files likely involved: `docs/product/proof-manifest.json`, `docs/product/app-proof-matrix.md`, `docs/product/deep-dive-scorecard-2026-05-06.md`.
-- Tests to add/update: `./script/check_proof_manifest.sh`, `./script/check_visual_placement_evidence.sh`.
+- Files likely involved: `docs/product/proof-manifest.json`, `docs/product/app-proof-matrix.md`, `docs/product/deep-dive-scorecard-2026-05-06.md`, `docs/product/manual-smoke-runs.md`, `script/build_and_run.sh`, `script/real_app_smoke.sh`.
+- Tests to add/update: `./script/check_proof_manifest.sh`, `./script/check_visual_placement_evidence.sh`, `./script/manual_smoke_status.sh --strict`.
 - Proof required: Scripts pass for complete rows and fail for pending rows only.
 - Risk level: Low.
 - Expected score impact: +3.
+- Status: Partially completed in this loop. Normal proof scripts pass; strict status now counts the current TextEdit default pass and still blocks stale/pending surfaces.
 
 ### 4. Prompt-app no-submit proof
 
@@ -218,6 +221,8 @@ This goal is complete when:
 
 - `check_proof_manifest.sh` passes in normal mode; strict mode still cannot pass until partial/pending surfaces are complete.
 - `check_visual_placement_evidence.sh` passes in normal mode; strict mode still fails on Codex same-slice proof plus Claude Code/Claude desktop screenshot proof.
+- TextEdit default has current archive-backed strict visual proof with two verified accepts; TextEdit multiline and wrapped-line proof are still pending.
+- Chrome fixtures, Notes title/body/checklist, and Obsidian have prior proof, but strict status marks them stale until they are rerun against the current commit or archive.
 - Codex, Claude Code, and Claude desktop need current same-slice prompt no-submit proof.
 - Hide latency is now instrumented as hide request-to-panel-hide time, but still needs real-app invalidation proof under the 50ms p95 target.
 - Prefix cooldown is now wired, but there is not yet a real-app trace run proving user-perceived annoyance improvement.
