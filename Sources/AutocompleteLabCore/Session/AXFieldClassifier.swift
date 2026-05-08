@@ -12,9 +12,9 @@ public enum AXFieldKind: String, Codable, Equatable, Sendable, CaseIterable {
 
     public var suppressesSuggestionsByDefault: Bool {
         switch self {
-        case .search, .form, .secure, .url, .unprovenSurface:
+        case .search, .form, .secure, .url, .unprovenSurface, .unknown:
             true
-        case .multilineCompose, .singlelineCompose, .unknown:
+        case .multilineCompose, .singlelineCompose:
             false
         }
     }

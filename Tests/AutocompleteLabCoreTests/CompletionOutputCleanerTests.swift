@@ -32,10 +32,17 @@ struct CompletionOutputCleanerTests {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
         #expect(cleaner.clean("Okay, let's see. The user is trying to") == nil)
+        #expect(cleaner.clean("Let's walk through this step by step") == nil)
         #expect(cleaner.clean("The user is trying to write a sentence") == nil)
         #expect(cleaner.clean("As an AI, I can help with that") == nil)
+        #expect(cleaner.clean("I'd be happy to help with that") == nil)
         #expect(cleaner.clean("Here is a possible continuation") == nil)
+        #expect(cleaner.clean("In conclusion, this is ready") == nil)
+        #expect(cleaner.clean("Overall, this looks good") == nil)
+        #expect(cleaner.clean("It is important to note this") == nil)
+        #expect(cleaner.clean("The best way is to start over") == nil)
         #expect(cleaner.clean("It sounds like you want to keep going") == nil)
+        #expect(cleaner.clean("You should check the logs") == nil)
         #expect(cleaner.clean("You could try another option") == nil)
     }
 
@@ -57,6 +64,9 @@ struct CompletionOutputCleanerTests {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
         #expect(cleaner.clean("That makes a lot of sense I would") == nil)
+        #expect(cleaner.clean("That said, we should keep going") == nil)
+        #expect(cleaner.clean("For example, we can do this") == nil)
+        #expect(cleaner.clean("On the other hand, this may work") == nil)
         #expect(cleaner.clean("I would like to help with that") == nil)
         #expect(cleaner.clean("I will do that now.") == nil)
         #expect(cleaner.clean("Let me know when it's done.") == nil)
@@ -103,6 +113,18 @@ struct CompletionOutputCleanerTests {
         let suggestion = cleaner.clean("ship this today\nbecause here is why")
 
         #expect(suggestion?.visibleText == " ship this today")
+    }
+
+    @Test("Suppresses second sentences and invented Markdown structures")
+    func suppressesSecondSentencesAndInventedMarkdownStructures() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean(" keep it small. Then add another idea", after: "We should") == nil)
+        #expect(cleaner.clean("- Update docs", after: "- Add retry logic for") == nil)
+        #expect(cleaner.clean("1. Update docs", after: "Plan:") == nil)
+        #expect(cleaner.clean("## Next section", after: "Plan:") == nil)
+        #expect(cleaner.clean("```swift", after: "Plan:") == nil)
+        #expect(cleaner.clean(" API failures", after: "- Add retry logic for")?.visibleText == " API failures")
     }
 
     @Test("Cleans numbered multiline candidates")
@@ -157,6 +179,24 @@ struct CompletionOutputCleanerTests {
         )
 
         #expect(suggestions.isEmpty)
+    }
+
+    @Test("Selects the best cleaned candidate with ranking metadata")
+    func selectsBestCleanedCandidateWithRankingMetadata() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+        let selection = cleaner.cleanBestCandidate(
+            """
+            1. scheduling a meeting tomorrow
+            2. checking the draft first
+            """,
+            after: "Thanks for sending this over. I will start by",
+            mode: .phraseContinuation,
+            behaviorProfileID: .email
+        )
+
+        #expect(selection.suggestion?.visibleText == " checking the draft first")
+        #expect(selection.traceMetadata["candidateCount"] == "2")
+        #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
     }
 
     @Test("Strips echoed prompt labels")
