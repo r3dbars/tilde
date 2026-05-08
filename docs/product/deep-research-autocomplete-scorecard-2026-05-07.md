@@ -706,6 +706,9 @@ these are true.
 58. Done: move placement suppression fallback metadata into
    `SuggestionOrchestrator`, so low-confidence placement branches emit copy-only
    fallback state outside AppDelegate.
+59. Done: extend the Settings Chrome proof command to run the forced
+   all-fixtures lane plus default-AX real Monaco and real ProseMirror add-on
+   lanes, so one-click Chrome proof now exercises the Chrome editor proof rows.
 
 ## Goal Status
 

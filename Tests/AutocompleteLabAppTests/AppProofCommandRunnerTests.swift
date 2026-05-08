@@ -41,11 +41,23 @@ struct AppProofCommandRunnerTests {
         #expect(plan.proofName == "Chrome")
         #expect(AppProofCommandPlan.supportsAutomaticPlan(for: "com.google.Chrome"))
         #expect(plan.executableURL.path == "/usr/bin/env")
-        #expect(plan.arguments == ["bash", "script/real_app_smoke.sh", "chrome", "--fixture", "all", "--skip-build"])
+        #expect(plan.arguments == [
+            "bash",
+            "script/real_app_smoke.sh",
+            "chrome",
+            "--fixture",
+            "all",
+            "--include-default-real-editor-proof",
+            "--skip-build"
+        ])
         #expect(plan.environmentOverrides["AUTOCOMPLETE_LAB_SCREENSHOT_TRACE"] == "1")
         #expect(plan.environmentOverrides["AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD"] == "1")
         #expect(plan.logURL.lastPathComponent == "app-proof-chrome.log")
-        #expect(plan.commandText.contains("script/real_app_smoke.sh chrome --fixture all --skip-build"))
+        #expect(
+            plan.commandText.contains(
+                "script/real_app_smoke.sh chrome --fixture all --include-default-real-editor-proof --skip-build"
+            )
+        )
     }
 
     @Test("Prompt apps do not get automatic proof commands")
