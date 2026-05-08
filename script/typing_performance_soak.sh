@@ -291,8 +291,9 @@ on run argv
         click text area 1 of scroll area 1 of window targetName
       end if
       keystroke "a" using {command down}
-      delay 0.1
+      delay 0.8
       keystroke "c" using {command down}
+      delay 0.8
     end tell
   end tell
 end run
