@@ -47,4 +47,13 @@ public struct KeyboardEventTapConsumptionPolicy: Equatable, Sendable {
             return false
         }
     }
+
+    public func shouldReplayUnhandledConsumedKey(_ key: AutocompleteKey) -> Bool {
+        switch key {
+        case .tab, .backtick, .optionTab, .escape:
+            false
+        case .commandZ, .other:
+            true
+        }
+    }
 }
