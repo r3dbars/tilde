@@ -8,13 +8,16 @@ final class SuggestionOrchestrator {
     private let failureVisibilityPolicy = CompletionFailureVisibilityPolicy()
     private var requestGate = SuggestionRequestGate()
     private var currentRequestStorage: CompletionRequest?
+    private var prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy
 
     init(
         engine: any CompletionEngine,
-        wordCompletionRanker: WordCompletionCandidateRanker = WordCompletionCandidateRanker()
+        wordCompletionRanker: WordCompletionCandidateRanker = WordCompletionCandidateRanker(),
+        prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy = PrefixFamilyCooldownPolicy()
     ) {
         self.engineBox = CompletionEngineBox(engine: engine)
         self.wordCompletionRanker = wordCompletionRanker
+        self.prefixFamilyCooldownPolicy = prefixFamilyCooldownPolicy
     }
 
     var currentRequest: CompletionRequest? {
@@ -168,6 +171,25 @@ final class SuggestionOrchestrator {
         engineBox.update(engine)
     }
 
+    func prefixCooldownDecision(
+        for input: PrefixFamilyCooldownInput,
+        now: Date = Date()
+    ) -> PrefixFamilyCooldownDecision {
+        prefixFamilyCooldownPolicy.decision(for: input, now: now)
+    }
+
+    func recordPrefixFamilyCooldown(
+        _ reason: PrefixFamilyCooldownReason,
+        input: PrefixFamilyCooldownInput,
+        now: Date = Date()
+    ) -> PrefixFamilyCooldown? {
+        prefixFamilyCooldownPolicy.record(reason, input: input, now: now)
+    }
+
+    func resetPrefixFamilyCooldownPolicy(_ policy: PrefixFamilyCooldownPolicy) {
+        prefixFamilyCooldownPolicy = policy
+    }
+
     nonisolated func fastWordSuggestion(
         for textBeforeCursor: String,
         recentWords: [String]
@@ -247,6 +269,54 @@ final class SuggestionOrchestrator {
             acceptedAndKeptProbability: acceptedAndKeptSignal.probability,
             acceptedAndKeptSampleCount: acceptedAndKeptSignal.sampleCount,
             acceptedAndKeptUtilityAdjustment: acceptedAndKeptSignal.utilityAdjustment
+        )
+    }
+
+    func displayScoreDecision(
+        suggestion: CompletionSuggestion,
+        request: CompletionRequest,
+        context: FocusedTextContext,
+        fieldClassification: AXFieldClassification,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        triggerReason: String,
+        latencyMilliseconds: Int,
+        acceptedAndKeptSignal: AcceptedAndKeptLearningSignal,
+        isRepeatedMiss: Bool,
+        displayScorePolicy: DisplayScorePolicy,
+        now: Date = Date()
+    ) -> SuggestionDisplayScoreDecision {
+        let prefixEagernessAdjustment = prefixFamilyCooldownPolicy.eagernessAdjustment(
+            for: PrefixFamilyCooldownInput(
+                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+                fieldIdentifier: fieldIdentity.traceDescription,
+                requestMode: request.mode,
+                textBeforeCursor: request.textBeforeCursor
+            ),
+            now: now
+        )
+        let score = displayScore(
+            suggestion: suggestion,
+            request: request,
+            context: context,
+            fieldClassification: fieldClassification,
+            profile: profile,
+            triggerReason: triggerReason,
+            latencyMilliseconds: latencyMilliseconds,
+            acceptedAndKeptSignal: acceptedAndKeptSignal,
+            isRepeatedMiss: isRepeatedMiss
+        )
+        let decision = displayScorePolicy
+            .adjustingThresholds(by: prefixEagernessAdjustment.thresholdAdjustment)
+            .decision(
+                for: score,
+                mode: request.mode,
+                behaviorProfileID: request.behaviorProfile.id
+            )
+        return SuggestionDisplayScoreDecision(
+            decision: decision,
+            metadata: decision.metadata
+                .merging(prefixEagernessAdjustment.metadata) { current, _ in current }
         )
     }
 
@@ -438,6 +508,11 @@ struct SuggestionOrchestration: Sendable {
     let fieldIdentityDescription: String
     let requestMetadata: [String: String]
     let runtimeSessionCacheDecision: RuntimeSessionCacheDecision
+}
+
+struct SuggestionDisplayScoreDecision: Sendable {
+    let decision: DisplayScoreDecision
+    let metadata: [String: String]
 }
 
 struct SuggestionRequestInput: Sendable {
