@@ -5797,6 +5797,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             self.refreshRuntimeChrome()
         }
+        if let endReason = outcome.proofModeEndReasonAfterStartAttempt {
+            endAppProofMode(for: app.bundleIdentifier, reason: endReason)
+        }
 
         switch outcome {
         case .unsupported:
