@@ -422,6 +422,49 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Replacement decision uses visible age and score margin")
+    func replacementDecisionUsesVisibleAgeAndScoreMargin() {
+        let now = Date(timeIntervalSince1970: 10)
+        let currentPresentedAt = now.addingTimeInterval(-0.2)
+        let orchestrator = SuggestionOrchestrator(
+            engine: EchoCompletionEngine(),
+            suggestionReplacementPolicy: SuggestionReplacementPolicy(
+                minimumFreshLifetimeMilliseconds: 1_200,
+                staleLifetimeMilliseconds: 2_000,
+                minimumScoreMargin: 0.35
+            )
+        )
+
+        let blocked = orchestrator.replacementDecision(
+            currentVisibleText: " make this easier",
+            proposedVisibleText: " make this quieter",
+            currentSuggestionID: "current",
+            proposedSuggestionID: "proposed",
+            currentPresentedAt: currentPresentedAt,
+            currentScore: 1.00,
+            proposedScore: 1.10,
+            now: now
+        )
+        #expect(!blocked.shouldPresent)
+        #expect(blocked.reason == .freshVisibleSuggestion)
+        #expect(blocked.currentAgeMilliseconds == 199 || blocked.currentAgeMilliseconds == 200)
+
+        let allowed = orchestrator.replacementDecision(
+            currentVisibleText: " make this easier",
+            proposedVisibleText: " make this much better",
+            currentSuggestionID: "current",
+            proposedSuggestionID: "proposed",
+            currentPresentedAt: currentPresentedAt,
+            currentScore: 1.00,
+            proposedScore: 1.50,
+            now: now
+        )
+        #expect(allowed.shouldPresent)
+        #expect(allowed.reason == nil)
+        #expect(allowed.metadata["replacementScoreMargin"] == "0.50")
+    }
+
+    @MainActor
     @Test("Suggestion calls delegate to the configured engine")
     func suggestionDelegatesToEngine() async throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())

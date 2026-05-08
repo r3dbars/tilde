@@ -51,7 +51,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
-    private let suggestionReplacementPolicy = SuggestionReplacementPolicy()
     private var displayScorePolicy: DisplayScorePolicy {
         suggestionAggressiveness.displayScorePolicy
     }
@@ -3673,15 +3672,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let currentSuggestionAgeMilliseconds = currentSuggestionPresentedAt.map {
-            max(0, Int(Date().timeIntervalSince($0) * 1_000))
-        }
-        let replacementDecision = suggestionReplacementPolicy.decision(
+        let replacementDecision = suggestionOrchestrator.replacementDecision(
             currentVisibleText: suggestionSession.visibleSuggestion?.visibleText,
             proposedVisibleText: suggestion.visibleText,
             currentSuggestionID: currentSuggestionID,
             proposedSuggestionID: suggestionID,
-            currentAgeMilliseconds: currentSuggestionAgeMilliseconds,
+            currentPresentedAt: currentSuggestionPresentedAt,
             currentScore: currentSuggestionDisplayScoreFinal,
             proposedScore: displayScoreTrace.score.finalScore
         )

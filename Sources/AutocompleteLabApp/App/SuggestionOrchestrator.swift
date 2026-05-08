@@ -6,6 +6,7 @@ final class SuggestionOrchestrator {
     private let engineBox: CompletionEngineBox
     private let wordCompletionRanker: WordCompletionCandidateRanker
     private let failureVisibilityPolicy = CompletionFailureVisibilityPolicy()
+    private let suggestionReplacementPolicy: SuggestionReplacementPolicy
     private var requestGate = SuggestionRequestGate()
     private var currentRequestStorage: CompletionRequest?
     private var prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy
@@ -13,10 +14,12 @@ final class SuggestionOrchestrator {
     init(
         engine: any CompletionEngine,
         wordCompletionRanker: WordCompletionCandidateRanker = WordCompletionCandidateRanker(),
+        suggestionReplacementPolicy: SuggestionReplacementPolicy = SuggestionReplacementPolicy(),
         prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy = PrefixFamilyCooldownPolicy()
     ) {
         self.engineBox = CompletionEngineBox(engine: engine)
         self.wordCompletionRanker = wordCompletionRanker
+        self.suggestionReplacementPolicy = suggestionReplacementPolicy
         self.prefixFamilyCooldownPolicy = prefixFamilyCooldownPolicy
     }
 
@@ -188,6 +191,30 @@ final class SuggestionOrchestrator {
 
     func resetPrefixFamilyCooldownPolicy(_ policy: PrefixFamilyCooldownPolicy) {
         prefixFamilyCooldownPolicy = policy
+    }
+
+    func replacementDecision(
+        currentVisibleText: String?,
+        proposedVisibleText: String,
+        currentSuggestionID: String?,
+        proposedSuggestionID: String,
+        currentPresentedAt: Date?,
+        currentScore: Double?,
+        proposedScore: Double,
+        now: Date = Date()
+    ) -> SuggestionReplacementDecision {
+        let currentAgeMilliseconds = currentPresentedAt.map {
+            max(0, Int(now.timeIntervalSince($0) * 1_000))
+        }
+        return suggestionReplacementPolicy.decision(
+            currentVisibleText: currentVisibleText,
+            proposedVisibleText: proposedVisibleText,
+            currentSuggestionID: currentSuggestionID,
+            proposedSuggestionID: proposedSuggestionID,
+            currentAgeMilliseconds: currentAgeMilliseconds,
+            currentScore: currentScore,
+            proposedScore: proposedScore
+        )
     }
 
     nonisolated func fastWordSuggestion(
