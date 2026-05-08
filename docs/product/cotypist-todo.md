@@ -2,7 +2,18 @@
 
 This is the working list for making the lab feel like a real Mac autocomplete app.
 
+The deeper research-backed queue now lives in `docs/product/research-backed-autocomplete-queue.md`.
+Research-backed caret-locking work now lives in
+`docs/product/caret-locked-research-queue.md`.
+
 ## Now
+
+- [x] Harden the current goal-pass trust gates.
+  - [x] Block accept if app, process, focused field, selection, or text snapshot changed after a suggestion was shown.
+  - [x] Trace accept-key focus mismatches as `wrong-app-or-field-before-accept` do-not-ship blockers.
+  - [x] Suppress phrase continuation during fast typing bursts while keeping word completion eligible.
+  - [x] Add explicit low-confidence suppression before display for long, slow, thin-context, generic, or unsupported-profile suggestions.
+  - [x] Cover secure-field, unsupported-app, and screenshot/raw-text privacy edges in tests.
 
 - [x] Verify insertion after every accept.
   - Detect whether the target text actually changed.
@@ -88,6 +99,7 @@ This is the working list for making the lab feel like a real Mac autocomplete ap
   - [x] Chrome text field and local editor fixture one-word and full accept.
   - [ ] Codex one-word no-submit accept; full accept stays disabled until separately proven.
   - [ ] Claude Code one-word no-submit accept; full accept stays disabled until separately proven.
+  - [ ] Claude desktop one-word no-submit accept; full accept stays disabled until separately proven.
 
 - [x] Build the local eval loop.
   - [x] Add local prompt/output tracing for private local tuning.

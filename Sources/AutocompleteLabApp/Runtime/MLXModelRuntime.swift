@@ -156,6 +156,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
         let cleanedSuggestion = cleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode)
         let cleanedAt = Date()
+        let totalMilliseconds = Self.milliseconds(from: startedAt, to: cleanedAt)
         DiagnosticsLog.shared.record(
             "mlx-completion-timing",
             metadata: [
@@ -166,7 +167,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                 "firstChunkMilliseconds": firstChunkMilliseconds.map(String.init) ?? "none",
                 "generationMilliseconds": String(Self.milliseconds(from: sessionBuiltAt, to: generatedAt)),
                 "cleanupMilliseconds": String(Self.milliseconds(from: generatedAt, to: cleanedAt)),
-                "totalMilliseconds": String(Self.milliseconds(from: startedAt, to: cleanedAt)),
+                "totalMilliseconds": String(totalMilliseconds),
                 "maxTokens": String(maxGeneratedTokens(for: request.mode)),
                 "maxVisibleWords": String(lengthConfiguration.maxVisibleWords),
                 "rawChars": String(rawOutput.count),
@@ -178,7 +179,9 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             prompt: prompt,
             rawOutput: rawOutput,
             cleanedSuggestion: cleanedSuggestion,
-            suggestionID: request.suggestionID
+            suggestionID: request.suggestionID,
+            latencyMilliseconds: totalMilliseconds,
+            firstTokenLatencyMilliseconds: firstChunkMilliseconds
         )
 
         return cleanedSuggestion

@@ -33,17 +33,17 @@ write_passing_log() {
 EOF
 }
 
-write_synthetic_passing_log() {
+write_option_tab_passing_log() {
   local bundle_id="$1"
   local render_mode="$2"
 
   cat >"$LOG_PATH" <<EOF
-2026-04-26T08:00:00Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=synthetic-caret placementConfidenceBand=medium hasCaretRect=true
+2026-04-26T08:00:00Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=caret placementConfidenceBand=high hasCaretRect=true
 2026-04-26T08:00:01Z keyboard-action action=acceptNextWord app=$bundle_id handled=true key=tab reason=accepted
 2026-04-26T08:00:01Z insert app=$bundle_id success=true mode=axSelectedText
 2026-04-26T08:00:02Z insert-verification app=$bundle_id result=verified acceptedChars=5 previousBeforeChars=6 currentBeforeChars=11
-2026-04-26T08:00:03Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=synthetic-caret placementConfidenceBand=medium hasCaretRect=true
-2026-04-26T08:00:04Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=backtick reason=accepted
+2026-04-26T08:00:03Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=caret placementConfidenceBand=high hasCaretRect=true
+2026-04-26T08:00:04Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=optionTab reason=accepted
 2026-04-26T08:00:04Z insert app=$bundle_id success=true mode=axSelectedText
 2026-04-26T08:00:05Z insert-verification app=$bundle_id result=verified acceptedChars=12 previousBeforeChars=11 currentBeforeChars=23
 EOF
@@ -65,11 +65,11 @@ write_passing_trace() {
   local bundle_id="$1"
 
   cat >"$TRACE_PATH" <<EOF
-{"type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","latencyMilliseconds":0}
+{"type":"suggestionPresented","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"anchorSource":"caret","anchorQuality":"trusted","anchorReason":"caretBoundsTrusted","anchorCanPresent":"true","anchorRect":"10,20,0,18","hasCaretRect":"true","hasTextLineRect":"true","hasElementRect":"true","hasWindowRect":"true","placementConfidenceBand":"high"}}
 {"type":"suggestionAccepted","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","acceptedText":"make"}
 {"type":"insertionFailed","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","reason":"unchanged"}
 {"type":"insertionVerified","suggestionID":"one","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","acceptedText":"make"}
-{"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","latencyMilliseconds":110}
+{"type":"suggestionPresented","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","latencyMilliseconds":110,"metadata":{"anchorSource":"caret","anchorQuality":"trusted","anchorReason":"caretBoundsTrusted","anchorCanPresent":"true","anchorRect":"10,40,0,18","hasCaretRect":"true","hasTextLineRect":"true","hasElementRect":"true","hasWindowRect":"true","placementConfidenceBand":"high"}}
 {"type":"suggestionAccepted","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","acceptedText":" this work"}
 {"type":"insertionVerified","suggestionID":"two","appBundleIdentifier":"$bundle_id","requestMode":"phraseContinuation","acceptedText":" this work"}
 EOF
@@ -79,7 +79,7 @@ write_one_word_trace() {
   local bundle_id="$1"
 
   cat >"$TRACE_PATH" <<EOF
-{"type":"suggestionPresented","suggestionID":"one-word","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","latencyMilliseconds":0}
+{"type":"suggestionPresented","suggestionID":"one-word","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"anchorSource":"caret","anchorQuality":"trusted","anchorReason":"caretBoundsTrusted","anchorCanPresent":"true","anchorRect":"10,20,0,18","hasCaretRect":"true","hasTextLineRect":"true","hasElementRect":"true","hasWindowRect":"true","placementConfidenceBand":"high"}}
 {"type":"suggestionAccepted","suggestionID":"one-word","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","acceptedText":"make"}
 {"type":"insertionVerified","suggestionID":"one-word","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","acceptedText":"make"}
 EOF
@@ -135,6 +135,30 @@ run_passing_case() {
   fi
 }
 
+run_one_word_case() {
+  local app="$1"
+  local status_name="$2"
+  local report_name="$3"
+  local bundle_id="$4"
+  local expected_render="$5"
+  local observed_render="$6"
+
+  write_one_word_log "$bundle_id" "$observed_render"
+  write_one_word_trace "$bundle_id"
+
+  AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+    AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+    AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+    AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+    AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+    script/manual_smoke_session.sh "$app" --check >/dev/null
+
+  if ! grep -F "| $report_name | \`$bundle_id\` | \`default\` | 1 | \`$expected_render\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
+    echo "manual smoke self-test did not record one-word no-submit proof for $status_name" >&2
+    exit 1
+  fi
+}
+
 run_strict_visual_case() {
   local app="$1"
   local proof_label="$2"
@@ -171,10 +195,45 @@ run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror'
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent monaco-like
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent prosemirror-like
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent chat-like
-run_passing_case codex Codex com.openai.codex 'inlineAdjacent|floatingMirror' inlineAdjacent
-run_passing_case claude-code "Claude Code" com.anthropic.claude-code 'inlineAdjacent|floatingMirror' inlineAdjacent
-run_passing_case claude Claude com.anthropic.claudefordesktop 'inlineAdjacent|floatingMirror' inlineAdjacent
+
+write_option_tab_passing_log "com.apple.TextEdit" "inlineAdjacent"
+write_passing_trace "com.apple.TextEdit"
+AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL=option-tab \
+  AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT=optionTab \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh textedit --check >/dev/null
+
+if ! grep -F "| TextEdit | \`com.apple.TextEdit\` | \`option-tab\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
+  echo "manual smoke self-test did not record the Option-Tab full accept pass" >&2
+  exit 1
+fi
+
+run_one_word_case codex Codex Codex com.openai.codex 'inlineAdjacent|floatingMirror' inlineAdjacent
+run_one_word_case claude-code "Claude Code" "Claude Code" com.anthropic.claude-code 'inlineAdjacent|floatingMirror' inlineAdjacent
+run_one_word_case claude "Claude desktop" Claude com.anthropic.claudefordesktop 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_strict_visual_case notes-title notes-title
+
+write_passing_log "com.anthropic.claude-code" "inlineAdjacent"
+write_passing_trace "com.anthropic.claude-code"
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh claude-code --check >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected Claude Code full accept proof to fail" >&2
+  exit 1
+fi
+
+if ! grep -F 'full accept handled before separate no-submit proof' "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not reject Claude Code full accept proof" >&2
+  exit 1
+fi
 
 script/manual_smoke_session.sh notes --print >"$TMP_DIR/notes-picker.txt"
 if ! grep -F "Manual smoke: Notes surface selector" "$TMP_DIR/notes-picker.txt" >/dev/null; then
@@ -195,36 +254,6 @@ fi
 script/manual_smoke_session.sh notes-title --print >"$TMP_DIR/notes-title-print.txt"
 if ! grep -F "Notes surface: title" "$TMP_DIR/notes-title-print.txt" >/dev/null; then
   echo "manual smoke self-test did not print the Notes title surface label" >&2
-  exit 1
-fi
-
-write_synthetic_passing_log "com.openai.codex" "inlineAdjacent"
-write_passing_trace "com.openai.codex"
-
-AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
-  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
-  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
-  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
-  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
-  script/manual_smoke_session.sh codex --check >/dev/null
-
-if ! grep -F "| Codex | \`com.openai.codex\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
-  echo "manual smoke self-test did not record synthetic-caret Codex proof" >&2
-  exit 1
-fi
-
-write_one_word_log "com.anthropic.claude-code" "inlineAdjacent"
-write_one_word_trace "com.anthropic.claude-code"
-
-AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
-  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
-  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
-  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
-  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
-  script/manual_smoke_session.sh claude-code --check >/dev/null
-
-if ! grep -F "| Claude Code | \`com.anthropic.claude-code\` | \`default\` | 1 | \`inlineAdjacent|floatingMirror\` | lines 1+ in \`" "$REPORT_PATH" >/dev/null; then
-  echo "manual smoke self-test did not record one-word Claude Code proof" >&2
   exit 1
 fi
 
@@ -333,9 +362,16 @@ if ! grep -F "Insertion proof status: $REPORT_PATH" "$STATUS_OUTPUT" >/dev/null;
   exit 1
 fi
 
-for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome chat-like no-submit" Codex "Claude Code"; do
+for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome chat-like no-submit" Codex "Claude Code" "Claude desktop"; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
+    exit 1
+  fi
+done
+
+for app_name in Codex "Claude Code" "Claude desktop"; do
+  if ! grep -F -- "- $app_name: passed (one-word no-submit profile)" "$STATUS_OUTPUT" >/dev/null; then
+    echo "manual smoke self-test did not keep $app_name on one-word proof" >&2
     exit 1
   fi
 done

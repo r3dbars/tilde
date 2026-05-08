@@ -79,6 +79,12 @@ delay_seconds() {
   printf '%d.%03d\n' "$((millis / 1000))" "$((millis % 1000))"
 }
 
+computed_applescript_timeout_seconds() {
+  local chunk_count
+  chunk_count="$(((TARGET_CHARS + CHUNK_SIZE - 1) / CHUNK_SIZE))"
+  echo "$((chunk_count * (DELAY_MS + 80) / 1000 + 180))"
+}
+
 generate_soak_text() {
   local target="$1"
   local text=""
@@ -149,6 +155,7 @@ describe_plan() {
   fi
   echo "Synthetic text: $TARGET_CHARS generated chars from a built-in neutral fixture"
   echo "Typing: $CHUNK_SIZE-char chunks with ${DELAY_MS}ms delay"
+  echo "AppleScript timeout: $(computed_applescript_timeout_seconds)s"
   echo "Event tap proof: require at least $MIN_EVENT_TAP_SAMPLES samples"
   if is_truthy "$STRICT_AX"; then
     echo "AX warnings: strict; slow or skipped focused-text polling fails the soak"
@@ -159,11 +166,12 @@ describe_plan() {
 }
 
 type_textedit_fixture() {
-  local tmp_dir text_file target_file delay
+  local tmp_dir text_file target_file delay timeout_seconds
   tmp_dir="$(make_tmp_dir)"
   text_file="$tmp_dir/autocomplete-lab-typing-soak-input.txt"
   target_file="$tmp_dir/autocomplete-lab-typing-soak.txt"
   delay="$(delay_seconds "$DELAY_MS")"
+  timeout_seconds="$(computed_applescript_timeout_seconds)"
 
   generate_soak_text "$TARGET_CHARS" >"$text_file"
   : >"$target_file"
@@ -176,21 +184,28 @@ set soakText to read POSIX file "$text_file" as «class utf8»
 set soakChunkSize to $CHUNK_SIZE
 set soakDelay to $delay
 
-tell application "TextEdit" to activate
-delay 0.4
-tell application "System Events"
-  tell process "TextEdit"
-    set frontmost to true
+with timeout of 20 seconds
+  tell application "TextEdit" to activate
+  delay 0.4
+  tell application "System Events"
+    tell process "TextEdit"
+      set frontmost to true
+    end tell
+    keystroke "a" using command down
+    key code 51
   end tell
-  keystroke "a" using command down
-  key code 51
-  repeat with chunkStart from 1 to (length of soakText) by soakChunkSize
-    set chunkEnd to chunkStart + soakChunkSize - 1
-    if chunkEnd > (length of soakText) then set chunkEnd to (length of soakText)
-    keystroke (text chunkStart thru chunkEnd of soakText)
-    if soakDelay > 0 then delay soakDelay
-  end repeat
-end tell
+end timeout
+
+with timeout of $timeout_seconds seconds
+  tell application "System Events"
+    repeat with chunkStart from 1 to (length of soakText) by soakChunkSize
+      set chunkEnd to chunkStart + soakChunkSize - 1
+      if chunkEnd > (length of soakText) then set chunkEnd to (length of soakText)
+      keystroke (text chunkStart thru chunkEnd of soakText)
+      if soakDelay > 0 then delay soakDelay
+    end repeat
+  end tell
+end timeout
 APPLESCRIPT
 }
 

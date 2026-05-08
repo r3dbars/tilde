@@ -39,5 +39,6 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manua
   note and treat detached-suggestion suppression as safety evidence, not a full
   placement pass.
 - Codex, Claude desktop, and Claude Code: automation must not submit prompts.
-  Use harmless local text, validate Tab/backtick only where the profile supports
-  it, then press Esc or clear the prompt manually.
+  Use harmless local text, validate one-word Tab accept only, then press Esc or
+  clear the prompt manually. Backtick/full accept needs separate full-accept
+  no-submit proof before prompt profiles can enable it.

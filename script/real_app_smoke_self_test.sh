@@ -7,6 +7,12 @@ cd "$ROOT_DIR"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+script/real_app_smoke.sh textedit --help >"$TMP_DIR/help.txt"
+if ! grep -F "requires that process" "$TMP_DIR/help.txt" >/dev/null; then
+  echo "real app smoke help must explain --skip-build checkout verification" >&2
+  exit 1
+fi
+
 script/real_app_smoke.sh textedit --dry-run >"$TMP_DIR/textedit.txt"
 if ! grep -F "Real app smoke: textedit" "$TMP_DIR/textedit.txt" >/dev/null; then
   echo "real app smoke self-test did not print the TextEdit dry-run plan" >&2
@@ -97,14 +103,20 @@ if script/real_app_smoke.sh textedit --fixture contenteditable --dry-run >/dev/n
 fi
 
 script/real_app_smoke.sh codex --dry-run >"$TMP_DIR/codex.txt"
-if ! grep -F "manual-gated prompt smoke" "$TMP_DIR/codex.txt" >/dev/null; then
-  echo "real app smoke self-test did not explain the Codex manual gate" >&2
+if ! grep -F "one-word Tab accept without submit" "$TMP_DIR/codex.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Codex one-word no-submit proof" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh claude-code --dry-run >"$TMP_DIR/claude-code.txt"
+if ! grep -F "one-word Tab accept without submit" "$TMP_DIR/claude-code.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Claude Code one-word no-submit proof" >&2
   exit 1
 fi
 
 script/real_app_smoke.sh claude --dry-run >"$TMP_DIR/claude.txt"
-if ! grep -F "manual-gated prompt smoke" "$TMP_DIR/claude.txt" >/dev/null; then
-  echo "real app smoke self-test did not explain the Claude manual gate" >&2
+if ! grep -F "full accept waits for separate full-accept no-submit proof" "$TMP_DIR/claude.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Claude full-accept gate" >&2
   exit 1
 fi
 

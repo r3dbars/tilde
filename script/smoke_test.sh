@@ -18,11 +18,14 @@ swift test
 ./script/check_model_asset_self_test.sh
 ./script/manual_smoke_self_test.sh
 ./script/real_app_smoke_self_test.sh
+./script/manual_proof_queue_self_test.sh
+./script/check_score_targets_self_test.sh
 ./script/check_visual_placement_evidence_self_test.sh
 ./script/check_visual_placement_evidence.sh
 ./script/check_trace_eval_self_test.sh
 ./script/check_typing_performance_log_self_test.sh
 ./script/typing_performance_soak_self_test.sh
+./script/typing_performance_endurance_soak_self_test.sh
 ./script/model_latency_report_self_test.sh
 ./script/package_release.sh --check
 ./script/check_model_asset.py
@@ -37,6 +40,6 @@ AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
 
 echo
 echo "Manual app smoke checklist: docs/product/manual-smoke-checklist.md"
-echo "Manual app smoke recorder: script/manual_smoke_session.sh <textedit|notes|obsidian|chrome|codex|claude-code>"
+echo "Manual app smoke recorder: script/manual_smoke_session.sh <textedit|notes|obsidian|chrome|codex|claude-code|claude>"
 echo "Manual app smoke status: script/manual_smoke_status.sh"
 echo "Diagnostics log: $HOME/Library/Logs/AutocompleteLab/diagnostics.log"

@@ -11,6 +11,8 @@ public struct CompletionPrompt: Equatable, Sendable {
 }
 
 public struct CompletionPromptBuilder: Equatable, Sendable {
+    public static let promptStyleIdentifier = "tiny-continuation-v1"
+
     public let maxContextCharacters: Int
     public let maxCurrentParagraphCharacters: Int
     public let maxCurrentSentenceCharacters: Int
@@ -25,7 +27,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         self.maxContextCharacters = max(80, maxContextCharacters)
         self.maxCurrentParagraphCharacters = max(80, maxCurrentParagraphCharacters)
         self.maxCurrentSentenceCharacters = max(80, maxCurrentSentenceCharacters)
-        self.maxVisibleWords = max(1, maxVisibleWords)
+        self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
     }
 
     public func prompt(for request: CompletionRequest) -> CompletionPrompt {
@@ -55,7 +57,9 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let base = """
         Inline autocomplete.
         Return only the next \(maxVisibleWords) words or fewer.
+        Prefer boring connective tissue, names, repeated local terms, closers, and the next few words the user was already likely to type.
         \(sentenceGuidance) Do not answer, explain, greet, quote, reason, or restart.
+        Do not brainstorm, rewrite, introduce a new topic, or complete the user's whole thought.
         """
 
         guard let dogfoodAppName = request.appBundleIdentifier.dogfoodAppName else {

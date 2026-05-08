@@ -10,7 +10,9 @@ struct CompletionPromptBuilderTests {
 
         #expect(prompt.system.contains("next 5 words or fewer"))
         #expect(prompt.system.contains("Inline autocomplete"))
+        #expect(prompt.system.contains("boring connective tissue"))
         #expect(prompt.system.contains("Do not answer, explain"))
+        #expect(prompt.system.contains("Do not brainstorm, rewrite"))
         #expect(prompt.system.contains("reason"))
         #expect(prompt.user.contains("Before cursor:\nI think we should"))
         #expect(prompt.user.hasSuffix("Next words:"))
@@ -132,6 +134,15 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("missing suffix"))
         #expect(prompt.system.contains("No spaces"))
         #expect(prompt.user.hasSuffix("Suffix:"))
+    }
+
+    @Test("Prompt clamps oversized visible word requests")
+    func promptClampsOversizedVisibleWordRequests() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 20)
+        let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
+
+        #expect(builder.maxVisibleWords == 7)
+        #expect(prompt.system.contains("next 7 words or fewer"))
     }
 
     @Test("Prompt trims long context from the left")

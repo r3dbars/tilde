@@ -47,12 +47,30 @@ public struct CompletionRuntimeBenchmark: Equatable, Sendable {
         return total / samples.count
     }
 
+    public var p95LatencyMilliseconds: Int? {
+        percentile(0.95)
+    }
+
     public func passesAutocompleteTarget(_ policy: CompletionModelPolicy = .mvp) -> Bool {
-        guard let averageLatencyMilliseconds else {
+        guard let averageLatencyMilliseconds, let p95LatencyMilliseconds else {
             return false
         }
 
         return averageLatencyMilliseconds <= policy.targetLatencyMilliseconds
+            && p95LatencyMilliseconds <= policy.targetLatencyMilliseconds
+    }
+
+    private func percentile(_ fraction: Double) -> Int? {
+        guard !samples.isEmpty else {
+            return nil
+        }
+
+        let sorted = samples.map(\.milliseconds).sorted()
+        let index = min(
+            sorted.count - 1,
+            Int((Double(sorted.count - 1) * fraction).rounded())
+        )
+        return sorted[index]
     }
 }
 

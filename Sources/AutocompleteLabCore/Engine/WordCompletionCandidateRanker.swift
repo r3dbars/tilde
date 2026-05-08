@@ -93,6 +93,12 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
             return fragment.count >= 6
         }
 
+        if source == .staticDictionary,
+           Self.ambiguousTwoLetterStaticFragments.contains(fragment),
+           competingCandidateCount > 1 {
+            return false
+        }
+
         if suffix.count <= 2,
            fragment.count >= 3,
            competingCandidateCount >= 3 {
@@ -141,6 +147,10 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         "think", "this", "trying", "typing", "understand", "want",
         "what", "when", "where", "which", "while", "window",
         "without", "working", "would", "writing"
+    ]
+
+    private static let ambiguousTwoLetterStaticFragments: Set<String> = [
+        "ap", "co", "in", "re", "th"
     ]
 
     private struct Candidate: Equatable {

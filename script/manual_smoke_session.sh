@@ -13,6 +13,7 @@ LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
 REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-runs.md}"
 PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-default}"
+ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-backtick}"
 
 usage() {
   cat <<'EOF'
@@ -105,6 +106,16 @@ else
   STRICT_VISUAL_EVIDENCE=0
 fi
 
+case "$ACCEPT_ALL_SHORTCUT" in
+  backtick|optionTab)
+    ;;
+  *)
+    echo "unknown accept-all shortcut: $ACCEPT_ALL_SHORTCUT" >&2
+    echo "expected backtick or optionTab" >&2
+    exit 2
+    ;;
+esac
+
 BUNDLE_ID=""
 DISPLAY_NAME=""
 SESSION_NAME=""
@@ -184,7 +195,7 @@ case "$APP" in
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     REQUIRES_FULL_ACCEPT=0
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept is not required until the profile enables it.'
+    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   claude-code)
     BUNDLE_ID="com.anthropic.claude-code"
@@ -192,7 +203,7 @@ case "$APP" in
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     REQUIRES_FULL_ACCEPT=0
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Claude Code prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept is not required until the profile enables it.'
+    STEPS=$'- Focus the Claude Code prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   claude)
     BUNDLE_ID="com.anthropic.claudefordesktop"
@@ -200,7 +211,7 @@ case "$APP" in
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     REQUIRES_FULL_ACCEPT=0
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Claude prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept is not required until the profile enables it.'
+    STEPS=$'- Focus the Claude prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   *)
     usage >&2
@@ -298,7 +309,7 @@ print_failure_summary() {
     echo "- real caret placement: $(count_line_with_fields "suggestion-presented" "app=$BUNDLE_ID" "placementAnchorSource=caret" "placementConfidenceBand=high" "hasCaretRect=true")"
     echo "- synthetic caret placement: $(count_line_with_fields "suggestion-presented" "app=$BUNDLE_ID" "placementAnchorSource=synthetic-caret" "placementConfidenceBand=medium" "hasCaretRect=true")"
     echo "- Tab autocomplete action: $(count_line_with_fields "keyboard-action" "app=$BUNDLE_ID" "key=tab" "action=acceptNextWord" "handled=true")"
-    echo "- full autocomplete action: $(count_line_with_fields "keyboard-action" "app=$BUNDLE_ID" "key=backtick" "action=acceptAllVisible" "handled=true")"
+    echo "- full autocomplete action: $(count_line_with_fields "keyboard-action" "app=$BUNDLE_ID" "key=$ACCEPT_ALL_SHORTCUT" "action=acceptAllVisible" "handled=true")"
     echo "- successful insert: $(count_pattern "insert .*app=$BUNDLE_ID .*success=true")"
     echo "- verified insertions: $(count_pattern "insert-verification .*app=$BUNDLE_ID .*result=verified")"
     echo "- failed verification: $(count_pattern "insert-verification .*app=$BUNDLE_ID .*result=(unchanged|partial|changedUnexpectedly|missing-context)")"
@@ -451,7 +462,15 @@ if [[ "$APP" == "obsidian" || "$APP" == "codex" || "$APP" == "claude-code" || "$
 fi
 require_line_with_fields "Tab handled by autocomplete" "keyboard-action" "app=$BUNDLE_ID" "key=tab" "action=acceptNextWord" "handled=true"
 if [[ "$REQUIRES_FULL_ACCEPT" == "1" ]]; then
-  require_line_with_fields "full accept key handled by autocomplete" "keyboard-action" "app=$BUNDLE_ID" "key=backtick" "action=acceptAllVisible" "handled=true"
+  require_line_with_fields "full accept key handled by autocomplete" "keyboard-action" "app=$BUNDLE_ID" "key=$ACCEPT_ALL_SHORTCUT" "action=acceptAllVisible" "handled=true"
+else
+  FULL_ACCEPT_COUNT="$(count_line_with_fields "keyboard-action" "app=$BUNDLE_ID" "key=$ACCEPT_ALL_SHORTCUT" "action=acceptAllVisible" "handled=true")"
+  if (( FULL_ACCEPT_COUNT > 0 )); then
+    echo "failed $DISPLAY_NAME diagnostics: full accept handled before separate no-submit proof" >&2
+    echo "log: $LOG_PATH" >&2
+    print_failure_summary
+    exit 1
+  fi
 fi
 require_pattern "insert .*app=$BUNDLE_ID .*success=true" "successful insert"
 require_pattern "insert-verification .*app=$BUNDLE_ID .*result=verified" "verified insertion"
@@ -459,6 +478,12 @@ require_pattern "insert-verification .*app=$BUNDLE_ID .*result=verified" "verifi
 VERIFIED_COUNT="$(grep -E "insert-verification .*app=$BUNDLE_ID .*result=verified" <<<"$SCAN_LINES" | wc -l | tr -d ' ')"
 if (( VERIFIED_COUNT < MIN_VERIFIED_ACCEPTS )); then
   echo "expected at least $MIN_VERIFIED_ACCEPTS verified accept(s) for $SESSION_NAME, saw $VERIFIED_COUNT" >&2
+  echo "log: $LOG_PATH" >&2
+  print_failure_summary
+  exit 1
+fi
+if [[ "$REQUIRES_FULL_ACCEPT" != "1" ]] && (( VERIFIED_COUNT != 1 )); then
+  echo "expected exactly one verified one-word accept for $SESSION_NAME, saw $VERIFIED_COUNT" >&2
   echo "log: $LOG_PATH" >&2
   print_failure_summary
   exit 1

@@ -117,6 +117,20 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("ready.", after: "I know you are")?.visibleText == " ready.")
     }
 
+    @Test("Suppresses completions that restart the current sentence")
+    func suppressesCurrentSentenceRestarts() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean(
+            "I want this app to feel smoother",
+            after: "I want this to feel"
+        ) == nil)
+        #expect(cleaner.clean(
+            "I want this to feel smoother",
+            after: "I want this"
+        )?.visibleText == " to feel smoother")
+    }
+
     @Test("Suppresses one word twitch completions")
     func suppressesLowValueOneWordPhraseCompletions() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
