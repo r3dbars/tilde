@@ -17,6 +17,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     private var storedState: LocalRuntimeState
     private var container: ModelContainer?
+    private var staticPromptCache = RuntimeStaticPromptCache()
     private var generation = 0
 
     public init(
@@ -106,11 +107,12 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let startedAt = Date()
         let prompt = promptBuilder.prompt(for: request)
         let promptBuiltAt = Date()
+        let promptCacheLookup = cachedStaticPrompt(systemPrompt: prompt.system)
         let requestCleaner = cleaner(for: request)
         let requestMaxGeneratedTokens = maxGeneratedTokens(for: request)
         let session = ChatSession(
             container,
-            instructions: prompt.system,
+            instructions: promptCacheLookup.systemPrompt,
             generateParameters: GenerateParameters(
                 maxTokens: requestMaxGeneratedTokens,
                 temperature: 0
@@ -175,28 +177,30 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let candidateTopScore = candidateSelection.rankedCandidates.first?.score
         let cleanedAt = Date()
         let totalMilliseconds = Self.milliseconds(from: startedAt, to: cleanedAt)
+        var timingMetadata: [String: String] = [:]
+        timingMetadata["app"] = request.appBundleIdentifier ?? "unknown"
+        timingMetadata["mode"] = request.mode.rawValue
+        timingMetadata["fieldKind"] = request.fieldKind.rawValue
+        timingMetadata["behaviorProfile"] = request.behaviorProfile.id.rawValue
+        timingMetadata["promptMilliseconds"] = String(Self.milliseconds(from: startedAt, to: promptBuiltAt))
+        timingMetadata["sessionMilliseconds"] = String(Self.milliseconds(from: promptBuiltAt, to: sessionBuiltAt))
+        timingMetadata["firstChunkMilliseconds"] = firstChunkMilliseconds.map(String.init) ?? "none"
+        timingMetadata["generationMilliseconds"] = String(Self.milliseconds(from: sessionBuiltAt, to: generatedAt))
+        timingMetadata["cleanupMilliseconds"] = String(Self.milliseconds(from: generatedAt, to: cleanedAt))
+        timingMetadata["totalMilliseconds"] = String(totalMilliseconds)
+        timingMetadata["maxTokens"] = String(requestMaxGeneratedTokens)
+        timingMetadata["maxVisibleWords"] = String(effectiveMaxVisibleWords(for: request))
+        timingMetadata["rawChars"] = String(rawOutput.count)
+        timingMetadata["cleanedCandidateCount"] = String(cleanedCandidates.count)
+        timingMetadata["candidateTopScore"] = Self.formattedCandidateScore(candidateTopScore)
+        timingMetadata["candidateScoreMargin"] = Self.formattedCandidateScore(candidateSelection.scoreMargin)
+        timingMetadata["candidateSuppressionReason"] = candidateSelection.suppressionReason?.rawValue ?? "none"
+        timingMetadata["cleanedChars"] = String(cleanedSuggestion?.visibleText.count ?? 0)
+        timingMetadata.merge(promptCacheLookup.traceMetadata) { current, _ in current }
+
         DiagnosticsLog.shared.record(
             "mlx-completion-timing",
-            metadata: [
-                "app": request.appBundleIdentifier ?? "unknown",
-                "mode": request.mode.rawValue,
-                "fieldKind": request.fieldKind.rawValue,
-                "behaviorProfile": request.behaviorProfile.id.rawValue,
-                "promptMilliseconds": String(Self.milliseconds(from: startedAt, to: promptBuiltAt)),
-                "sessionMilliseconds": String(Self.milliseconds(from: promptBuiltAt, to: sessionBuiltAt)),
-                "firstChunkMilliseconds": firstChunkMilliseconds.map(String.init) ?? "none",
-                "generationMilliseconds": String(Self.milliseconds(from: sessionBuiltAt, to: generatedAt)),
-                "cleanupMilliseconds": String(Self.milliseconds(from: generatedAt, to: cleanedAt)),
-                "totalMilliseconds": String(totalMilliseconds),
-                "maxTokens": String(requestMaxGeneratedTokens),
-                "maxVisibleWords": String(effectiveMaxVisibleWords(for: request)),
-                "rawChars": String(rawOutput.count),
-                "cleanedCandidateCount": String(cleanedCandidates.count),
-                "candidateTopScore": Self.formattedCandidateScore(candidateTopScore),
-                "candidateScoreMargin": Self.formattedCandidateScore(candidateSelection.scoreMargin),
-                "candidateSuppressionReason": candidateSelection.suppressionReason?.rawValue ?? "none",
-                "cleanedChars": String(cleanedSuggestion?.visibleText.count ?? 0)
-            ]
+            metadata: timingMetadata
         )
         RawAutocompleteTraceLog.shared.recordModelResult(
             request: request,
@@ -243,6 +247,12 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         }
 
         return String(format: "%.3f", score)
+    }
+
+    private func cachedStaticPrompt(systemPrompt: String) -> RuntimeStaticPromptCacheLookup {
+        stateQueue.sync {
+            staticPromptCache.lookup(systemPrompt: systemPrompt)
+        }
     }
 
     private func cleaner(for request: CompletionRequest) -> CompletionOutputCleaner {

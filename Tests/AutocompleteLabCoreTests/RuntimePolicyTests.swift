@@ -402,6 +402,36 @@ struct RuntimePolicyTests {
         #expect(benchmark.p95LatencyMilliseconds == 90)
         #expect(!benchmark.passesAutocompleteTarget())
     }
+
+    @Test("Static prompt cache reports hit miss and redacted key")
+    func staticPromptCacheReportsHitMissAndRedactedKey() {
+        var cache = RuntimeStaticPromptCache(capacity: 2)
+
+        let first = cache.lookup(systemPrompt: "Inline autocomplete. Return one suffix.")
+        let second = cache.lookup(systemPrompt: "Inline autocomplete. Return one suffix.")
+
+        #expect(!first.hit)
+        #expect(second.hit)
+        #expect(first.key == second.key)
+        #expect(first.key != "Inline autocomplete. Return one suffix.")
+        #expect(second.systemPrompt == first.systemPrompt)
+        #expect(second.traceMetadata["runtimeStaticPromptCacheHit"] == "true")
+        #expect(second.traceMetadata["runtimeStaticPromptCacheSize"] == "1")
+    }
+
+    @Test("Static prompt cache evicts the oldest prompt")
+    func staticPromptCacheEvictsOldestPrompt() {
+        var cache = RuntimeStaticPromptCache(capacity: 2)
+
+        let first = cache.lookup(systemPrompt: "prompt one")
+        _ = cache.lookup(systemPrompt: "prompt two")
+        _ = cache.lookup(systemPrompt: "prompt three")
+        let repeatedFirst = cache.lookup(systemPrompt: "prompt one")
+
+        #expect(!first.hit)
+        #expect(!repeatedFirst.hit)
+        #expect(repeatedFirst.traceMetadata["runtimeStaticPromptCacheSize"] == "2")
+    }
 }
 
 private func cacheRequest(
