@@ -56,7 +56,7 @@ struct SettingsCurrentAppState: Equatable {
             return "Current app: \(displayName) is \(supportStatus.supportLevel.menuName)"
         }
 
-        return "Current app: \(displayName) is \(supportStatus.supportLevel.menuName) and \(isEnabled ? "on" : "off")"
+        return "Current app: \(displayName) is \(supportStatus.supportLevel.menuName) and \(isEnabled ? "allowed" : "blocked")"
     }
 
     var detailText: String {
@@ -72,7 +72,7 @@ struct SettingsCurrentAppState: Equatable {
             return "\(supportStatus.userFacingReason) Suggestions are on for this app."
         }
 
-        return "\(supportStatus.userFacingReason) Suggestions are off for this app. Turn them on only where you want to test."
+        return "\(supportStatus.userFacingReason) Suggestions are blocked by your app list."
     }
 
     var modeText: String {
@@ -332,18 +332,6 @@ struct SettingsPrivacyState: Equatable {
         return "Raw text capture: \(state); can include what you type"
     }
 
-    var sharingStatusText: String {
-        if rawContentTracingEnabled || screenshotTracingEnabled {
-            return "Sharing: use Export Privacy Bundle; do not share debug traces or screenshots."
-        }
-
-        return "Sharing: Export Privacy Bundle excludes raw text, prompts, accepted text, and screenshots."
-    }
-
-    var learningStatusText: String {
-        "Learning: accepted-kept scores, style sketch, and recent words stay local"
-    }
-
     var screenRecordingPermissionText: String? {
         guard screenshotTracingEnabled else {
             return nil
@@ -526,72 +514,6 @@ struct SettingsRuntimeControlState: Equatable {
     var isActionEnabled: Bool {
         installInProgress || guidance.isActionEnabled
     }
-
-    var acceptAllPickerLabel: String {
-        "Accept all:"
-    }
-}
-
-struct SettingsOnboardingState: Equatable {
-    let isTrusted: Bool
-    let suggestionsPaused: Bool
-    let runtimeGuidance: RuntimeReadinessGuidance
-
-    var text: String {
-        if !isTrusted {
-            return "Allow Accessibility so the app can read the active text field, find the cursor, and insert only what you accept. Text stays on this Mac."
-        }
-
-        if suggestionsPaused {
-            return "Paused. Resume when you want to test suggestions."
-        }
-
-        return runtimeGuidance.message
-    }
-}
-
-struct SettingsFieldControlState: Equatable {
-    let appDisplayName: String?
-    let hasFieldTarget: Bool
-    let isCurrentField: Bool
-    let isSilenced: Bool
-
-    var statusText: String {
-        guard hasFieldTarget else {
-            return "Current field: no writing field selected"
-        }
-
-        let scope = isCurrentField ? "Current field" : "Last field"
-        if isSilenced {
-            return "\(scope): silenced for this session"
-        }
-
-        if let appDisplayName {
-            return "\(scope): active in \(appDisplayName)"
-        }
-
-        return "\(scope): active"
-    }
-
-    var detailText: String {
-        guard hasFieldTarget else {
-            return "Click into a writing field to silence only that field."
-        }
-
-        if isSilenced {
-            return "Suggestions stay off here until you leave this field."
-        }
-
-        return "Silence only this field for the current session; other fields and apps stay available."
-    }
-
-    var buttonTitle: String {
-        isSilenced ? "Field Silenced" : "Silence This Field"
-    }
-
-    var canSilence: Bool {
-        hasFieldTarget && !isSilenced
-    }
 }
 
 @MainActor
@@ -605,7 +527,6 @@ final class SettingsWindowController: NSObject {
     private let runtimeInstallStatusLabel = NSTextField(labelWithString: "")
     private let runtimeTargetLabel = NSTextField(labelWithString: "")
     private let modelDirectoryLabel = NSTextField(labelWithString: "")
-    private let modelInstallStatusLabel = NSTextField(labelWithString: "")
     private let controlLabel = NSTextField(labelWithString: "")
     private let suggestionPaceDetailLabel = NSTextField(labelWithString: "")
     private let suggestionPacePopup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -646,14 +567,10 @@ final class SettingsWindowController: NSObject {
         target: nil,
         action: nil
     )
-    private let forceMirrorModeButton = NSButton(title: "Force Mirror Mode", target: nil, action: nil)
-    private let startAppProofButton = NSButton(title: "Start App Proof", target: nil, action: nil)
     private let enableAllAppsButton = NSButton(title: "Clear Blocked Apps", target: nil, action: nil)
     private let privacyLabel = NSTextField(labelWithString: "")
     private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
     private let rawContentStatusLabel = NSTextField(labelWithString: "")
-    private let privacySharingStatusLabel = NSTextField(labelWithString: "")
-    private let learningStatusLabel = NSTextField(labelWithString: "")
     private let screenRecordingPermissionLabel = NSTextField(labelWithString: "")
     private let openScreenRecordingSettingsButton = NSButton(
         title: "Open Screen Recording Settings",
@@ -678,7 +595,6 @@ final class SettingsWindowController: NSObject {
     )
     private let privacyStatusButton = NSButton(title: "Privacy Status...", target: nil, action: nil)
     private let deleteLocalLogsButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
-    private let clearLearningDataButton = NSButton(title: "Clear Learned Suggestions", target: nil, action: nil)
     private let shortcutLabel = NSTextField(labelWithString: "")
     private let acceptAllShortcutPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
@@ -778,10 +694,7 @@ final class SettingsWindowController: NSObject {
         runtimeInstallStatus: String?,
         runtimeInstallInProgress: Bool,
         modelDirectoryPath: String,
-        modelInstallStatusText: String?,
-        isModelInstallInProgress: Bool,
         currentApp: SettingsCurrentAppState,
-        fieldControl: SettingsFieldControlState,
         privacy: SettingsPrivacyState,
         keyboardShortcuts: SettingsKeyboardShortcutState,
         lastSuggestionDecision: String
@@ -795,10 +708,7 @@ final class SettingsWindowController: NSObject {
             runtimeInstallStatus: runtimeInstallStatus,
             runtimeInstallInProgress: runtimeInstallInProgress,
             modelDirectoryPath: modelDirectoryPath,
-            modelInstallStatusText: modelInstallStatusText,
-            isModelInstallInProgress: isModelInstallInProgress,
             currentApp: currentApp,
-            fieldControl: fieldControl,
             privacy: privacy,
             keyboardShortcuts: keyboardShortcuts,
             lastSuggestionDecision: lastSuggestionDecision
@@ -821,10 +731,7 @@ final class SettingsWindowController: NSObject {
         runtimeInstallStatus: String?,
         runtimeInstallInProgress: Bool,
         modelDirectoryPath: String,
-        modelInstallStatusText: String?,
-        isModelInstallInProgress: Bool,
         currentApp: SettingsCurrentAppState,
-        fieldControl: SettingsFieldControlState,
         privacy: SettingsPrivacyState,
         keyboardShortcuts: SettingsKeyboardShortcutState,
         lastSuggestionDecision: String
@@ -846,10 +753,6 @@ final class SettingsWindowController: NSObject {
         suggestionPacePopup.selectItem(withTitle: suggestionControl.selectedPaceTitle)
         suggestionDecisionLabel.stringValue = "Why: \(lastSuggestionDecision)"
         togglePauseButton.state = suggestionsPaused ? .off : .on
-        fieldControlLabel.stringValue = fieldControl.statusText
-        fieldControlDetailLabel.stringValue = fieldControl.detailText
-        silenceFieldButton.title = fieldControl.buttonTitle
-        silenceFieldButton.isEnabled = fieldControl.canSilence
         runtimeLabel.stringValue = "Local model: \(runtimeReport.summary)"
         runtimeDetailLabel.stringValue = runtimeReport.detail ?? ""
         runtimeDetailLabel.isHidden = runtimeReport.detail == nil
@@ -861,8 +764,6 @@ final class SettingsWindowController: NSObject {
         currentRuntimeAction = runtimeControl.action
         runtimeTargetLabel.stringValue = "Runtime target: \(runtimeTargetSummary)"
         modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
-        modelInstallStatusLabel.stringValue = modelInstallStatusText ?? ""
-        modelInstallStatusLabel.isHidden = modelInstallStatusText == nil
         currentAppLabel.stringValue = currentApp.statusText
         currentAppDetailLabel.stringValue = currentApp.detailText
         currentAppModeLabel.stringValue = currentApp.modeText
@@ -879,17 +780,11 @@ final class SettingsWindowController: NSObject {
         toggleCurrentAppButton.title = currentApp.toggleTitle
         toggleCurrentAppButton.state = currentApp.isEnabled ? .on : .off
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
-        forceMirrorModeButton.title = currentApp.modeButtonTitle
-        forceMirrorModeButton.isEnabled = currentApp.canOverrideMode
-        startAppProofButton.title = currentApp.proofButtonTitle
-        startAppProofButton.isEnabled = currentApp.canStartProof
         disabledAppsLabel.stringValue = currentApp.blockedAppsText
         enableAllAppsButton.isEnabled = currentApp.disabledAppCount > 0
         privacyLabel.stringValue = privacy.statusText
         diagnosticsStatusLabel.stringValue = privacy.diagnosticsStatusText
         rawContentStatusLabel.stringValue = privacy.contentStatusText
-        privacySharingStatusLabel.stringValue = privacy.sharingStatusText
-        learningStatusLabel.stringValue = privacy.learningStatusText
         let screenRecordingText = privacy.screenRecordingPermissionText
         screenRecordingPermissionLabel.stringValue = screenRecordingText ?? ""
         screenRecordingPermissionLabel.isHidden = screenRecordingText == nil
@@ -941,7 +836,6 @@ final class SettingsWindowController: NSObject {
         modelDirectoryLabel.lineBreakMode = .byTruncatingMiddle
         modelDirectoryLabel.maximumNumberOfLines = 1
         modelDirectoryLabel.preferredMaxLayoutWidth = 470
-        configureSecondaryLabel(modelInstallStatusLabel)
         controlLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(suggestionPaceDetailLabel)
         firstRunLabel.font = NSFont.systemFont(ofSize: 12)
@@ -959,8 +853,6 @@ final class SettingsWindowController: NSObject {
         privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(diagnosticsStatusLabel)
         configureSecondaryLabel(rawContentStatusLabel)
-        configureSecondaryLabel(privacySharingStatusLabel)
-        configureSecondaryLabel(learningStatusLabel)
         configureSecondaryLabel(screenRecordingPermissionLabel)
         privacyPathLabel.font = NSFont.systemFont(ofSize: 11)
         privacyPathLabel.textColor = .secondaryLabelColor
@@ -968,8 +860,6 @@ final class SettingsWindowController: NSObject {
         privacyPathLabel.maximumNumberOfLines = 1
         privacyPathLabel.preferredMaxLayoutWidth = 470
         shortcutLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        acceptAllShortcutLabel.font = NSFont.systemFont(ofSize: 12)
-        acceptAllShortcutLabel.textColor = .secondaryLabelColor
 
         let requestButton = NSButton(title: "Allow Accessibility", target: self, action: #selector(requestAccessibility))
         requestButton.bezelStyle = .rounded
@@ -1104,13 +994,11 @@ final class SettingsWindowController: NSObject {
                     privacyLabel,
                     diagnosticsStatusLabel,
                     rawContentStatusLabel,
-                    privacySharingStatusLabel,
                     screenRecordingPermissionLabel,
                     makeButtonRow([openScreenRecordingSettingsButton]),
                     toggleTracingButton,
                     toggleRawTraceButton,
                     toggleScreenshotTraceButton,
-                    learningStatusLabel,
                     privacyPathLabel,
                     makeButtonRow([privacyStatusButton, deleteLocalLogsButton])
                 ]
@@ -1313,15 +1201,5 @@ final class SettingsWindowController: NSObject {
         }
 
         setSuggestionPace(pace)
-    }
-
-    @objc
-    private func selectAcceptAllShortcutControl() {
-        guard let rawValue = acceptAllShortcutPopup.selectedItem?.representedObject as? String,
-              let shortcut = AcceptAllShortcut(rawValue: rawValue) else {
-            return
-        }
-
-        setAcceptAllShortcut(shortcut)
     }
 }

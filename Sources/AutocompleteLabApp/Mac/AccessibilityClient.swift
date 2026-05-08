@@ -390,36 +390,6 @@ final class AccessibilityClient: @unchecked Sendable {
         return textAfterInsert == replacement.text
     }
 
-    func restoreFocusedTextValue(_ text: String, cursorUTF16Offset: Int) -> Bool {
-        guard let app = NSWorkspace.shared.frontmostApplication,
-              let focusedElement = focusedElement(for: app.processIdentifier) else {
-            return false
-        }
-
-        let result = AXUIElementSetAttributeValue(
-            focusedElement,
-            kAXValueAttribute as CFString,
-            text as CFTypeRef
-        )
-
-        guard result == .success else {
-            return false
-        }
-
-        let boundedOffset = min(max(0, cursorUTF16Offset), text.utf16.count)
-        var cursorRange = CFRange(location: boundedOffset, length: 0)
-        if let rangeValue = AXValueCreate(.cfRange, &cursorRange) {
-            _ = AXUIElementSetAttributeValue(
-                focusedElement,
-                kAXSelectedTextRangeAttribute as CFString,
-                rangeValue
-            )
-        }
-
-        let restoredText = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String
-        return restoredText == text
-    }
-
     private func cursorMatches(_ expectedRange: CFRange, in element: AXUIElement) -> Bool {
         guard let currentRange = selectedTextRange(in: element) else {
             return false

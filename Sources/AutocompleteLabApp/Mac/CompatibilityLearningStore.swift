@@ -48,11 +48,7 @@ final class CompatibilityLearningStore: @unchecked Sendable {
     }
 
     func recordObservation(for bundleIdentifier: String, reason: String) {
-        update(
-            bundleIdentifier: bundleIdentifier,
-            reason: reason,
-            preserveTrustedVisualReason: true
-        ) { profile in
+        update(bundleIdentifier: bundleIdentifier, reason: reason) { profile in
             profile.observations += 1
             profile.confidence = min(1, profile.confidence + 0.05)
         }
@@ -65,7 +61,7 @@ final class CompatibilityLearningStore: @unchecked Sendable {
         ) { profile in
             profile.renderModeOverride = mode
             profile.observations += 1
-            profile.confidence = min(1, max(profile.confidence, confidence ?? 0.25))
+            profile.confidence = min(1, max(profile.confidence, 0.25))
         }
     }
 
@@ -198,7 +194,6 @@ final class CompatibilityLearningStore: @unchecked Sendable {
     private func update(
         bundleIdentifier: String,
         reason: String,
-        preserveTrustedVisualReason: Bool = false,
         mutate: (inout CompatibilityLearningProfile) -> Void
     ) {
         queue.sync { [fileURL, encoder, decoder] in
@@ -212,9 +207,7 @@ final class CompatibilityLearningStore: @unchecked Sendable {
 
             var profile = profiles[bundleIdentifier] ?? CompatibilityLearningProfile(bundleIdentifier: bundleIdentifier)
             mutate(&profile)
-            if !(preserveTrustedVisualReason && profile.hasTrustedVisualAdjustment) {
-                profile.lastReason = reason
-            }
+            profile.lastReason = reason
             profile.updatedAt = ISO8601DateFormatter().string(from: now())
             profiles[bundleIdentifier] = profile
 
@@ -266,13 +259,5 @@ final class CompatibilityLearningStore: @unchecked Sendable {
         }
 
         return expiresAt > now()
-    }
-}
-
-private extension CompatibilityLearningProfile {
-    mutating func applyVisualTrustContext(_ context: CompatibilityLearningVisualTrustContext?) {
-        visualAppVersion = context?.appVersion
-        visualScreenFingerprint = context?.screenFingerprint
-        visualFieldShapeFingerprint = context?.fieldShapeFingerprint
     }
 }

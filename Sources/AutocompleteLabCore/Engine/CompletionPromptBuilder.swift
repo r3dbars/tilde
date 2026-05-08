@@ -72,13 +72,26 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let modeGuidance = request.mode == .sentenceContinuation
             ? "Sentence mode: start only the next sentence's first few words. Require higher confidence and return <NO_SUGGESTION> when the next sentence is not obvious."
             : "Phrase mode: continue only the current local thought."
+        let behaviorGuidance = ([
+            "Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens"
+        ] + behaviorProfile.promptGuidance).joined(separator: "\n")
+        let supplementalGuidance = [
+            behaviorGuidance,
+            modeGuidance,
+            styleGuidance,
+            partialWordGuidance,
+            lineStructureGuidance
+        ]
+        .filter { !$0.isEmpty }
+        .joined(separator: "\n")
         let base = """
         Inline autocomplete.
-        Return only the next \(maxVisibleWords) words or fewer.
+        Return only the next \(effectiveMaxVisibleWords) words or fewer.
         Return only the suffix after the Before cursor text.
         Prefer boring connective tissue, names, repeated local terms, closers, and the next few words the user was already likely to type.
         \(sentenceGuidance) Do not answer, explain, greet, quote, reason, repeat the Before cursor text, or restart.
         Do not brainstorm, rewrite, introduce a new topic, or complete the user's whole thought.
+        \(supplementalGuidance)
         """
 
         guard let dogfoodAppName = request.appBundleIdentifier.dogfoodAppName else {

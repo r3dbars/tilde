@@ -376,8 +376,7 @@ final class KeyboardEventTap: @unchecked Sendable {
         snapshotLock.lock()
         let snapshot = self.snapshot
 
-        let canHandleUndo = key == .commandZ && snapshot.hasPendingAcceptedInsertionUndo
-        guard snapshot.hasVisibleSuggestion || canHandleUndo,
+        guard snapshot.hasVisibleSuggestion,
               !snapshot.isInvalidatedByUserTyping else {
             suppressKeyUntilNanos.removeAll(keepingCapacity: true)
             snapshotLock.unlock()
@@ -513,7 +512,6 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
     var supportsOneWordAcceptance: Bool
     var supportsFullAcceptance: Bool
     var isInvalidatedByUserTyping: Bool
-    var hasPendingAcceptedInsertionUndo: Bool
     var acceptAllShortcut: AcceptAllShortcut
 
     init(
@@ -521,14 +519,12 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
         supportsOneWordAcceptance: Bool = false,
         supportsFullAcceptance: Bool = false,
         isInvalidatedByUserTyping: Bool = false,
-        hasPendingAcceptedInsertionUndo: Bool = false,
         acceptAllShortcut: AcceptAllShortcut = .backtick
     ) {
         self.hasVisibleSuggestion = hasVisibleSuggestion
         self.supportsOneWordAcceptance = supportsOneWordAcceptance
         self.supportsFullAcceptance = supportsFullAcceptance
         self.isInvalidatedByUserTyping = isInvalidatedByUserTyping
-        self.hasPendingAcceptedInsertionUndo = hasPendingAcceptedInsertionUndo
         self.acceptAllShortcut = acceptAllShortcut
     }
 }
@@ -621,8 +617,6 @@ private extension AutocompletePhysicalKey {
             self = .tab
         case 50:
             self = .backtick
-        case 6:
-            self = .z
         case 53:
             self = .escape
         default:

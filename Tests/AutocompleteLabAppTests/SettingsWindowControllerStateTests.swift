@@ -16,7 +16,7 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 0
         )
 
-        #expect(allowed.statusText == "Current app: TextEdit is green and on")
+        #expect(allowed.statusText == "Current app: TextEdit is green and allowed")
         #expect(
             allowed.detailText
                 == "Verified inline suggestions and native text insertion. Suggestions are on for this app."
@@ -51,14 +51,14 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 2
         )
 
-        #expect(blocked.statusText == "Current app: Notes is yellow and off")
+        #expect(blocked.statusText == "Current app: Notes is yellow and blocked")
         #expect(
             blocked.detailText
                 == "Rich text can drift; display stays mirror-first and insertion fails closed until each Notes surface is proven. Suggestions are blocked by your app list."
         )
         #expect(blocked.modeText == "Mode: mirror")
         #expect(blocked.acceptanceText == "Acceptance: Tab next word + full accept")
-        #expect(blocked.pathText == "Path: display mirror | insert keys | track focused field")
+        #expect(blocked.pathText == "Path: display mirror | insert AX then keys -> keys | track focused field")
         #expect(
             blocked.safetyText
                 == "Safety: Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Insertion fails closed if the primary method is not verified."
@@ -421,48 +421,6 @@ struct SettingsWindowControllerStateTests {
         #expect(failed.isActionEnabled)
     }
 
-    @Test("Per-app mode copy exposes forced mirror overrides")
-    func perAppModeCopyExposesForcedMirrorOverrides() {
-        let store = CompatibilityProfileStore.mvp
-        let forcedMirror = SettingsCurrentAppState(
-            displayName: "TextEdit",
-            bundleIdentifier: "com.apple.TextEdit",
-            supportStatus: store.supportStatus(for: "com.apple.TextEdit"),
-            isEnabled: true,
-            disabledAppCount: 0,
-            renderModeOverride: .floatingMirror
-        )
-
-        #expect(forcedMirror.modeText == "Mode: mirror forced (profile inline)")
-        #expect(forcedMirror.modeButtonTitle == "Use Profile Mode")
-        #expect(forcedMirror.canOverrideMode)
-        #expect(forcedMirror.proofButtonTitle == "Start App Proof")
-        #expect(forcedMirror.canStartProof)
-
-        let profileMode = SettingsCurrentAppState(
-            displayName: "TextEdit",
-            bundleIdentifier: "com.apple.TextEdit",
-            supportStatus: store.supportStatus(for: "com.apple.TextEdit"),
-            isEnabled: true,
-            disabledAppCount: 0
-        )
-
-        #expect(profileMode.modeButtonTitle == "Force Mirror Mode")
-        #expect(profileMode.canOverrideMode)
-        #expect(profileMode.canStartProof)
-
-        let diagnosticsOnly = SettingsCurrentAppState(
-            displayName: "Mail",
-            bundleIdentifier: "com.apple.mail",
-            supportStatus: store.supportStatus(for: "com.apple.mail"),
-            isEnabled: false,
-            disabledAppCount: 0
-        )
-
-        #expect(!diagnosticsOnly.canOverrideMode)
-        #expect(!diagnosticsOnly.canStartProof)
-    }
-
     @Test("Accessibility permission copy says what the app reads and keeps local")
     func accessibilityPermissionCopySaysWhatTheAppReadsAndKeepsLocal() {
         let needed = SettingsPermissionState(isTrusted: false)
@@ -500,14 +458,6 @@ struct SettingsWindowControllerStateTests {
                 == "Diagnostics: performance + placement traces recording, screenshots on"
         )
         #expect(privacy.contentStatusText == "Raw text capture: off")
-        #expect(
-            privacy.sharingStatusText
-                == "Sharing: use Export Privacy Bundle; do not share debug traces or screenshots."
-        )
-        #expect(
-            privacy.learningStatusText
-                == "Learning: accepted-kept scores, style sketch, and recent words stay local"
-        )
         #expect(
             privacy.screenRecordingPermissionText
                 == "Screen Recording: only captures placement screenshots while this debug switch is on. Normal suggestions do not need it."
