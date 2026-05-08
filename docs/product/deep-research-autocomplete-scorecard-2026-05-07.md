@@ -717,6 +717,9 @@ these are true.
 62. Done: classify event-tap start failures and failed-closed markers as hard
    key-capture failures in Diagnostics and the typing-performance guard while
    keeping AX polling slowness in its separate warning lane.
+63. Done: keep variant-incomplete A- proof rows marked `partial` in the proof
+   manifest, so live smoke proof can be verified without hiding missing variant
+   coverage from strict `--require-all`.
 
 ## Goal Status
 

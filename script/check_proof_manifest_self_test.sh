@@ -215,6 +215,7 @@ TRACE_FILE="$TMP_DIR/traces.jsonl"
 STALE_TRACE_FILE="$TMP_DIR/stale-traces.jsonl"
 SCORECARD="$TMP_DIR/scorecard.md"
 PASS_MANIFEST="$TMP_DIR/pass.json"
+PARTIAL_MANIFEST="$TMP_DIR/partial.json"
 PENDING_MANIFEST="$TMP_DIR/pending.json"
 STALE_MANIFEST="$TMP_DIR/stale.json"
 MISSING_SMOKE_MANIFEST="$TMP_DIR/missing-smoke.json"
@@ -229,6 +230,7 @@ write_manual_smoke "$MANUAL_SMOKE" "$TRACE_FILE"
 write_unbounded_manual_smoke "$UNBOUNDED_MANUAL_SMOKE" "$TRACE_FILE"
 write_scorecard "$SCORECARD"
 write_manifest "$PASS_MANIFEST" complete "docs/product/visual-placement-screenshots/textedit-inline.png"
+write_manifest "$PARTIAL_MANIFEST" partial "docs/product/visual-placement-screenshots/textedit-inline.png"
 write_manifest "$PENDING_MANIFEST" pending "docs/product/visual-placement-screenshots/textedit-inline.png"
 write_manifest "$STALE_MANIFEST" complete "docs/product/visual-placement-screenshots/textedit-inline.png" "old-proof"
 write_manifest "$MISSING_SMOKE_MANIFEST" complete "docs/product/visual-placement-screenshots/codex-inline.png" "$TRACE_PROOF_VERSION" "Codex" "com.openai.codex" "default" 2
@@ -260,6 +262,42 @@ script/check_proof_manifest.sh \
 if ! grep -F "Verified trace slices: 1" "$TMP_DIR/pass-trace.out" >/dev/null; then
   echo "proof manifest self-test did not verify the trace slice" >&2
   cat "$TMP_DIR/pass-trace.out" >&2
+  exit 1
+fi
+
+script/check_proof_manifest.sh \
+  --manifest "$PARTIAL_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --skip-profile-coverage \
+  --verify-trace-slices >"$TMP_DIR/partial-trace.out"
+
+if ! grep -F "Partial proof:" "$TMP_DIR/partial-trace.out" >/dev/null; then
+  echo "proof manifest self-test did not report partial live proof" >&2
+  cat "$TMP_DIR/partial-trace.out" >&2
+  exit 1
+fi
+
+if ! grep -F "Verified trace slices: 1" "$TMP_DIR/partial-trace.out" >/dev/null; then
+  echo "proof manifest self-test did not verify partial live proof trace slices" >&2
+  cat "$TMP_DIR/partial-trace.out" >&2
+  exit 1
+fi
+
+if script/check_proof_manifest.sh \
+  --manifest "$PARTIAL_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --skip-profile-coverage \
+  --strict >"$TMP_DIR/partial-strict.out" 2>&1; then
+  echo "proof manifest self-test expected strict partial proof to fail" >&2
+  cat "$TMP_DIR/partial-strict.out" >&2
+  exit 1
+fi
+
+if ! grep -F "proof is partial, not complete" "$TMP_DIR/partial-strict.out" >/dev/null; then
+  echo "proof manifest self-test did not explain strict partial live proof" >&2
+  cat "$TMP_DIR/partial-strict.out" >&2
   exit 1
 fi
 

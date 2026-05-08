@@ -24,7 +24,8 @@ The target state is now machine-checked:
 
 Current result: the target gate still fails, and that is correct. Every non-A
 row below must stay non-A until the required screenshot-backed and accept-proof
-evidence exists in the repo.
+evidence exists in the repo. The proof manifest also keeps variant-incomplete
+A- rows as `partial`, even when they have a passing live smoke slice.
 
 | Surface | Grade | Screenshot proof | Accept proof | Current read | Evidence gap |
 | --- | --- | --- | --- | --- | --- |

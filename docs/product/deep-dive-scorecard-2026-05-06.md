@@ -124,6 +124,10 @@ should stay lower until those rows are closed.
   passed after event-tap start failures and failed-closed markers started
   counting as hard key-capture failures while AX polling warnings remain in
   their separate suggestion-responsiveness lane.
+- Proof-manifest honesty pass: variant-incomplete A- rows now stay `partial`
+  in `docs/product/proof-manifest.json`, and
+  `./script/check_proof_manifest_self_test.sh` covers partial live proof that
+  verifies trace slices but still fails strict `--require-all`.
 - Five-agent continuation pass: prompt-app safety hardening, strict visual proof
   gates, focused-text AX-health cooldown, Notes/Obsidian proof triage, and
   Apple-native polish ranking all completed on branch

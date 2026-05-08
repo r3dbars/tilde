@@ -107,7 +107,7 @@
     },
     {
       "surface": "Obsidian",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Obsidian",
         "bundle": "md.obsidian",
@@ -118,11 +118,13 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/obsidian.png"
       ],
-      "gaps": []
+      "gaps": [
+        "More vault themes, panes, long notes, and hidden-caret variants are still required before green support."
+      ]
     },
     {
       "surface": "Apple Notes title",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Notes",
         "bundle": "com.apple.Notes",
@@ -133,11 +135,13 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/notes-title.png"
       ],
-      "gaps": []
+      "gaps": [
+        "More title lengths and same-slice notes-title-undo proof are still required."
+      ]
     },
     {
       "surface": "Apple Notes body",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Notes",
         "bundle": "com.apple.Notes",
@@ -148,11 +152,13 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/notes-body.png"
       ],
-      "gaps": []
+      "gaps": [
+        "More body lengths and same-slice notes-body-undo proof are still required."
+      ]
     },
     {
       "surface": "Apple Notes checklist",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Notes",
         "bundle": "com.apple.Notes",
@@ -163,7 +169,9 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/notes-checklist.png"
       ],
-      "gaps": []
+      "gaps": [
+        "Checked items, longer checklist rows, and same-slice notes-checklist-undo proof are still required."
+      ]
     },
     {
       "surface": "Claude Code",
@@ -176,7 +184,7 @@
     },
     {
       "surface": "Claude desktop",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Claude",
         "bundle": "com.anthropic.claudefordesktop",
@@ -188,7 +196,9 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/claude-desktop.png"
       ],
-      "gaps": []
+      "gaps": [
+        "More prompt layouts and separate full-accept no-submit proof are still required before A-level support."
+      ]
     }
   ],
   "profileCoverage": [
