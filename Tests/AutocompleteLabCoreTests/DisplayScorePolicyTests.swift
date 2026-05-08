@@ -124,6 +124,34 @@ struct DisplayScorePolicyTests {
         #expect(sentenceDecision.metadata["displayScoreThreshold"] == "1.20")
     }
 
+    @Test("threshold adjustment makes display policy less eager without weakening safety gates")
+    func thresholdAdjustmentMakesDisplayPolicyLessEagerWithoutWeakeningSafetyGates() {
+        let policy = DisplayScorePolicy()
+        let adjusted = policy.adjustingThresholds(by: 0.30)
+        let score = DisplayScore(
+            utility: 0.70,
+            styleFit: 0.40,
+            contextFit: 0.20,
+            userAffinity: 0.10,
+            risk: 0.05,
+            repetition: 0.05,
+            instability: 0.05
+        )
+
+        let originalDecision = policy.decision(for: score, mode: .phraseContinuation)
+        let adjustedDecision = adjusted.decision(for: score, mode: .phraseContinuation)
+
+        #expect(originalDecision.shouldDisplay)
+        #expect(!adjustedDecision.shouldDisplay)
+        #expect(adjustedDecision.metadata["displayScoreSuppressionReason"] == "below-threshold")
+        #expect(abs(adjusted.threshold(for: .wordCompletion) - 0.90) < 0.0001)
+        #expect(adjusted.threshold(for: .phraseContinuation) == 1.30)
+        #expect(adjusted.threshold(for: .sentenceContinuation) == 1.50)
+        #expect(adjusted.highRiskThreshold == policy.highRiskThreshold)
+        #expect(adjusted.highRepetitionThreshold == policy.highRepetitionThreshold)
+        #expect(adjusted.highInstabilityThreshold == policy.highInstabilityThreshold)
+    }
+
     @Test("low accepted and kept probability suppresses only after enough evidence")
     func lowAcceptedAndKeptProbabilitySuppressesOnlyAfterEnoughEvidence() {
         let policy = DisplayScorePolicy(minimumAcceptedAndKeptSamples: 4)

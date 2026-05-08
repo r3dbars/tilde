@@ -41,6 +41,88 @@ struct PrefixFamilyCooldownPolicyTests {
         #expect(policy.decision(for: input, now: now.addingTimeInterval(32.1)) == .allowed)
     }
 
+    @Test("One typed over miss does not make future suggestions less eager")
+    func oneTypedOverMissDoesNotMakeFutureSuggestionsLessEager() {
+        var policy = PrefixFamilyCooldownPolicy()
+        let now = Date(timeIntervalSince1970: 1_000)
+        let input = input(textBeforeCursor: "I think this works")
+
+        _ = policy.record(.typedOver, input: input, now: now)
+        let adjustment = policy.eagernessAdjustment(for: input, now: now.addingTimeInterval(6))
+
+        #expect(!adjustment.isActive)
+        #expect(adjustment.thresholdAdjustment == 0)
+        #expect(adjustment.metadata["prefixEagernessApplied"] == "false")
+    }
+
+    @Test("Repeated typed over misses make the same prefix family less eager after cooldown")
+    func repeatedTypedOverMissesMakeSamePrefixFamilyLessEagerAfterCooldown() throws {
+        var policy = PrefixFamilyCooldownPolicy()
+        let now = Date(timeIntervalSince1970: 1_000)
+        let input = input(textBeforeCursor: "I think this works")
+
+        _ = policy.record(.typedOver, input: input, now: now)
+        _ = policy.record(.typedOver, input: input, now: now.addingTimeInterval(2))
+
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(32.1)) == .allowed)
+        let adjustment = policy.eagernessAdjustment(for: input, now: now.addingTimeInterval(32.1))
+
+        #expect(adjustment.isActive)
+        #expect(adjustment.thresholdAdjustment > 0.15)
+        #expect(adjustment.repeatedTypedOverThreshold == 1.5)
+        #expect(adjustment.metadata["prefixEagernessApplied"] == "true")
+        #expect(adjustment.metadata["prefixEagernessRepeatedTypedOverThreshold"] == "1.50")
+        #expect(adjustment.metadata["prefixEagernessThresholdAdjustment"] != "0.00")
+    }
+
+    @Test("Repeated typed over eagerness pressure decays")
+    func repeatedTypedOverEagernessPressureDecays() {
+        var policy = PrefixFamilyCooldownPolicy(
+            typedOverCooldownMilliseconds: 0,
+            repeatedTypedOverCooldownMilliseconds: 0,
+            typedOverEagernessHalfLifeSeconds: 5
+        )
+        let now = Date(timeIntervalSince1970: 1_000)
+        let input = input(textBeforeCursor: "I think this works")
+
+        _ = policy.record(.typedOver, input: input, now: now)
+        _ = policy.record(.typedOver, input: input, now: now.addingTimeInterval(1))
+
+        #expect(policy.eagernessAdjustment(for: input, now: now.addingTimeInterval(1.1)).isActive)
+        #expect(!policy.eagernessAdjustment(for: input, now: now.addingTimeInterval(8)).isActive)
+    }
+
+    @Test("Repeated typed over eagerness is scoped by app field mode and prefix family")
+    func repeatedTypedOverEagernessIsScopedByAppFieldModeAndPrefixFamily() {
+        var policy = PrefixFamilyCooldownPolicy(
+            typedOverCooldownMilliseconds: 0,
+            repeatedTypedOverCooldownMilliseconds: 0
+        )
+        let now = Date(timeIntervalSince1970: 1_000)
+        let blocked = input(textBeforeCursor: "I think this works")
+
+        _ = policy.record(.typedOver, input: blocked, now: now)
+        _ = policy.record(.typedOver, input: blocked, now: now.addingTimeInterval(1))
+
+        #expect(policy.eagernessAdjustment(for: blocked, now: now.addingTimeInterval(2)).isActive)
+        #expect(!policy.eagernessAdjustment(
+            for: input(app: "com.apple.Notes", textBeforeCursor: "I think this works"),
+            now: now.addingTimeInterval(2)
+        ).isActive)
+        #expect(!policy.eagernessAdjustment(
+            for: input(field: "field-two", textBeforeCursor: "I think this works"),
+            now: now.addingTimeInterval(2)
+        ).isActive)
+        #expect(!policy.eagernessAdjustment(
+            for: input(mode: .wordCompletion, textBeforeCursor: "I think this works"),
+            now: now.addingTimeInterval(2)
+        ).isActive)
+        #expect(!policy.eagernessAdjustment(
+            for: input(textBeforeCursor: "I think this fails"),
+            now: now.addingTimeInterval(2)
+        ).isActive)
+    }
+
     @Test("Escape starts a fifteen second cooldown")
     func escapeStartsFifteenSecondCooldown() {
         var policy = PrefixFamilyCooldownPolicy()
@@ -119,6 +201,26 @@ struct PrefixFamilyCooldownPolicyTests {
         #expect(cooldown.metadata["prefixFamilyTokenCount"] == "3")
         #expect(cooldown.metadata["prefixCooldownEscalated"] == "false")
         #expect(!cooldown.metadata.values.joined(separator: " ").contains("secret"))
+    }
+
+    @Test("Eagerness metadata is shape only")
+    func eagernessMetadataIsShapeOnly() throws {
+        var policy = PrefixFamilyCooldownPolicy(
+            typedOverCooldownMilliseconds: 0,
+            repeatedTypedOverCooldownMilliseconds: 0
+        )
+        let now = Date(timeIntervalSince1970: 1_000)
+        let sensitive = input(textBeforeCursor: "secret customer name")
+
+        _ = policy.record(.typedOver, input: sensitive, now: now)
+        _ = policy.record(.typedOver, input: sensitive, now: now.addingTimeInterval(1))
+        let adjustment = policy.eagernessAdjustment(for: sensitive, now: now.addingTimeInterval(2))
+
+        #expect(adjustment.metadata["prefixEagernessApplied"] == "true")
+        #expect(adjustment.metadata["prefixEagernessRepeatedTypedOverThreshold"] == "1.50")
+        #expect(adjustment.metadata["prefixFamilyTokenCount"] == "3")
+        #expect(!adjustment.metadata.values.joined(separator: " ").contains("secret"))
+        #expect(!adjustment.metadata.values.joined(separator: " ").contains("customer"))
     }
 
     private func input(

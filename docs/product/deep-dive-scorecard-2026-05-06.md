@@ -390,7 +390,8 @@ should stay lower until those rows are closed.
   scheduling, calls, new names, and dates instead of treating them as harmless
   sentence starters.
 - Repeated typed-over misses now escalate from a short prefix cooldown to a
-  longer quiet period for that same app/field/mode/prefix family.
+  longer quiet period and then raise display thresholds for that same
+  app/field/mode/prefix family after cooldown.
 - Punctuation cadence is now profile-aware at fragile boundaries: email
   greeting commas and short list-label colons wait longer, while coding closing
   brackets stay quiet.
