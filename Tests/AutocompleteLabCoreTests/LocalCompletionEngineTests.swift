@@ -23,7 +23,7 @@ struct LocalCompletionEngineTests {
     @Test("Cleans runtime output and trims repeated typed prefix")
     func cleansAndTrimsRuntimeOutput() async throws {
         let runner = FakeLocalRunner(
-            result: .success("<think>hidden chain</think>and keep moving today\nbecause")
+            result: .success("<think>hidden chain</think>and keep moving forward\nbecause")
         )
         let engine = LocalCompletionEngine(runner: runner)
 
@@ -31,7 +31,30 @@ struct LocalCompletionEngineTests {
             for: CompletionRequest(textBeforeCursor: "Hey and", maxVisibleWords: 4)
         )
 
-        #expect(suggestion?.visibleText == " keep moving today")
+        #expect(suggestion?.visibleText == " keep moving forward")
+    }
+
+    @Test("Ranks cleaned runtime candidates before display")
+    func ranksCleanedRuntimeCandidatesBeforeDisplay() async throws {
+        let runner = FakeLocalRunner(
+            result: .success(
+                """
+                1. scheduling a meeting tomorrow
+                2. checking the draft first
+                """
+            )
+        )
+        let engine = LocalCompletionEngine(runner: runner)
+
+        let suggestion = try await engine.suggestion(
+            for: CompletionRequest(
+                textBeforeCursor: "Thanks for sending this over. I will start by",
+                behaviorProfileID: .email,
+                maxVisibleWords: 8
+            )
+        )
+
+        #expect(suggestion?.visibleText == " checking the draft first")
     }
 
     @Test("Falls back to mock when runtime fails")

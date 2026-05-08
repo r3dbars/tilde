@@ -92,4 +92,19 @@ struct CompletionConfidencePolicyTests {
         #expect(!decision.canDisplay)
         #expect(decision.reasons.contains("unsupported-app-profile"))
     }
+
+    @Test("Blocks otherwise good suggestions after the display latency budget")
+    func blocksSuggestionsAfterDisplayLatencyBudget() {
+        let decision = policy.decision(
+            suggestion: CompletionSuggestion(text: " for the meeting", maxVisibleWords: 4),
+            mode: .phraseContinuation,
+            textBeforeCursor: "Can you send the notes",
+            latencyMilliseconds: 900,
+            supportLevel: .green
+        )
+
+        #expect(!decision.canDisplay)
+        #expect(decision.bucket == .low)
+        #expect(decision.reasons.contains("too-slow-to-display"))
+    }
 }

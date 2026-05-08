@@ -154,7 +154,13 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let generatedAt = Date()
         try Task.checkCancellation()
 
-        let cleanedSuggestion = cleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode)
+        let candidateSelection = cleaner.cleanBestCandidate(
+            rawOutput,
+            after: request.textBeforeCursor,
+            mode: request.mode,
+            behaviorProfileID: request.behaviorProfile.id
+        )
+        let cleanedSuggestion = candidateSelection.suggestion
         let cleanedAt = Date()
         let totalMilliseconds = Self.milliseconds(from: startedAt, to: cleanedAt)
         DiagnosticsLog.shared.record(
@@ -181,7 +187,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             cleanedSuggestion: cleanedSuggestion,
             suggestionID: request.suggestionID,
             latencyMilliseconds: totalMilliseconds,
-            firstTokenLatencyMilliseconds: firstChunkMilliseconds
+            firstTokenLatencyMilliseconds: firstChunkMilliseconds,
+            metadata: candidateSelection.traceMetadata
         )
 
         return cleanedSuggestion

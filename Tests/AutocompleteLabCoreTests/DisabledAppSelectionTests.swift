@@ -77,6 +77,29 @@ struct DisabledAppSelectionTests {
         #expect(!selection.contains("com.apple.Passwords"))
     }
 
+    @Test("Missing persisted defaults use the default off selection")
+    func missingPersistedDefaultsUseDefaultOffSelection() {
+        let selection = DisabledAppSelection(
+            persistedBundleIdentifiers: nil,
+            defaultOffProfileStore: .mvp
+        )
+
+        #expect(selection.contains("com.apple.TextEdit"))
+        #expect(selection.contains("com.apple.Notes"))
+        #expect(!selection.contains("com.apple.mail"))
+    }
+
+    @Test("Persisted defaults stay authoritative")
+    func persistedDefaultsStayAuthoritative() {
+        let selection = DisabledAppSelection(
+            persistedBundleIdentifiers: ["com.apple.TextEdit"],
+            defaultOffProfileStore: .mvp
+        )
+
+        #expect(selection.contains("com.apple.TextEdit"))
+        #expect(!selection.contains("com.apple.Notes"))
+    }
+
     @Test("Temporary enable override removes target apps from disabled set")
     func temporaryEnableOverrideRemovesTargetAppsFromDisabledSet() {
         var selection = DisabledAppSelection(
