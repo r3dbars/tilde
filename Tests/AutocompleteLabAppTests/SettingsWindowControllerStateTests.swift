@@ -5,6 +5,20 @@ import AutocompleteLabCore
 
 @Suite("Settings window control state")
 struct SettingsWindowControllerStateTests {
+    @Test("Settings layout stays native and unframed")
+    func settingsLayoutStaysNativeAndUnframed() {
+        let style = SettingsLayoutStyle.nativeUtility
+
+        #expect(!style.usesFramedCards)
+        #expect(style.sectionSpacing == 14)
+        #expect(style.sectionItemSpacing == 5)
+        #expect(style.contentInsets.top == 24)
+        #expect(style.contentInsets.left == 24)
+        #expect(style.contentInsets.bottom == 24)
+        #expect(style.contentInsets.right == 24)
+        #expect(style.secondaryLabelMaxWidth == 470)
+    }
+
     @Test("Current app copy makes support stance and blocked state clear")
     func currentAppCopyMakesSupportStanceAndBlockedStateClear() {
         let store = CompatibilityProfileStore.mvp

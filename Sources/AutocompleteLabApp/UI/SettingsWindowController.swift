@@ -1,6 +1,22 @@
 import AppKit
 import AutocompleteLabCore
 
+struct SettingsLayoutStyle {
+    let usesFramedCards: Bool
+    let sectionSpacing: CGFloat
+    let sectionItemSpacing: CGFloat
+    let contentInsets: NSEdgeInsets
+    let secondaryLabelMaxWidth: CGFloat
+
+    static let nativeUtility = SettingsLayoutStyle(
+        usesFramedCards: false,
+        sectionSpacing: 14,
+        sectionItemSpacing: 5,
+        contentInsets: NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24),
+        secondaryLabelMaxWidth: 470
+    )
+}
+
 struct SettingsCurrentAppState: Equatable {
     let displayName: String
     let bundleIdentifier: String?
@@ -528,6 +544,7 @@ final class SettingsWindowController: NSObject {
     private let cycleAcceptAllShortcut: () -> Void
     private let setAcceptAllShortcut: (AcceptAllShortcut) -> Void
     private let cycleSuggestionAggressiveness: () -> Void
+    private let layoutStyle = SettingsLayoutStyle.nativeUtility
     private var currentRuntimeAction: RuntimeReadinessAction = .none
     private var currentProofCommandClipboardText: String?
 
@@ -723,7 +740,7 @@ final class SettingsWindowController: NSObject {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 14
+        stack.spacing = layoutStyle.sectionSpacing
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         let title = NSTextField(labelWithString: "Autocomplete Lab")
@@ -916,14 +933,17 @@ final class SettingsWindowController: NSObject {
         contentView.addSubview(stack)
 
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
-            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
-            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 24),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -24)
+            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: layoutStyle.contentInsets.left),
+            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -layoutStyle.contentInsets.right),
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: layoutStyle.contentInsets.top),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -layoutStyle.contentInsets.bottom)
         ])
     }
 
-    private func configureSecondaryLabel(_ label: NSTextField, maxWidth: CGFloat = 470) {
+    private func configureSecondaryLabel(
+        _ label: NSTextField,
+        maxWidth: CGFloat = SettingsLayoutStyle.nativeUtility.secondaryLabelMaxWidth
+    ) {
         label.textColor = .secondaryLabelColor
         label.lineBreakMode = .byWordWrapping
         label.maximumNumberOfLines = 0
@@ -941,7 +961,7 @@ final class SettingsWindowController: NSObject {
         let section = NSStackView(views: arrangedSubviews)
         section.orientation = .vertical
         section.alignment = .leading
-        section.spacing = 5
+        section.spacing = layoutStyle.sectionItemSpacing
         return section
     }
 
