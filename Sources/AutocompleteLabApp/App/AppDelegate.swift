@@ -3862,9 +3862,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         if requestMode == .wordCompletion {
+            let candidateWords = recentWordMemory.words(for: appBundleIdentifier)
+                + (visiblePageContext?.completionCandidateWords ?? [])
             let fastSelection = suggestionOrchestrator.fastWordSelection(
                 for: context.textBeforeCursor,
-                recentWords: recentWordMemory.words(for: appBundleIdentifier)
+                recentWords: candidateWords
             )
             let fastSelectionMetadata = fastSelection.traceMetadata
             if let fastSuggestion = fastSelection.suggestion {

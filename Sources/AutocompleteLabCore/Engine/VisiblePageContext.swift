@@ -56,12 +56,17 @@ public struct VisiblePageContext: Equatable, Sendable {
         return pieces.joined(separator: "\n")
     }
 
+    public var completionCandidateWords: [String] {
+        Self.completionCandidateWords(in: text)
+    }
+
     public var traceMetadata: [String: String] {
         [
             "visiblePageContextSource": source.rawValue,
             "visiblePageContextCaptureScope": captureScope.rawValue,
             "visiblePageContextChars": String(text.count),
-            "visiblePageContextLines": String(text.split(whereSeparator: \.isNewline).count)
+            "visiblePageContextLines": String(text.split(whereSeparator: \.isNewline).count),
+            "visiblePageContextCompletionCandidateWords": String(completionCandidateWords.count)
         ]
     }
 
@@ -177,6 +182,30 @@ public struct VisiblePageContext: Equatable, Sendable {
         return words
             .prefix(maximumPromptTokens)
             .joined(separator: " ")
+    }
+
+    private static func completionCandidateWords(in text: String) -> [String] {
+        var seen = Set<String>()
+        let words = text
+            .split(whereSeparator: { !$0.isLetter })
+            .map(String.init)
+            .filter { word in
+                let normalized = word.lowercased()
+                return word.count >= 4
+                    && word.count <= 48
+                    && !ocrChromeTokens.contains(normalized)
+            }
+            .filter { word in
+                let normalized = word.lowercased()
+                guard !seen.contains(normalized) else {
+                    return false
+                }
+
+                seen.insert(normalized)
+                return true
+            }
+
+        return Array(words.suffix(80))
     }
 
     private static let ocrChromeTokens: Set<String> = [
