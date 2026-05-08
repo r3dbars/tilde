@@ -155,6 +155,14 @@ struct FocusedTextPollingBackoffPolicyTests {
         ))
     }
 
+    @Test("Slow AX read with context still processes the current snapshot")
+    func slowAXReadWithContextStillProcessesCurrentSnapshot() {
+        let policy = FocusedTextPollingBackoffPolicy()
+
+        #expect(policy.shouldProcessCurrentAXReadBeforeThrottle(hasContext: true))
+        #expect(!policy.shouldProcessCurrentAXReadBeforeThrottle(hasContext: false))
+    }
+
     @Test("Fast clean polls do not throttle")
     func fastCleanPollsDoNotThrottle() {
         let policy = FocusedTextPollingBackoffPolicy(slowPollP95Milliseconds: 80)

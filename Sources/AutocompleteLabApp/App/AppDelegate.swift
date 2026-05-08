@@ -912,12 +912,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if applyFocusedTextPollingThrottleIfNeeded(
-            focusedTextPollingBackoffPolicy.throttleRecommendation(
-                queueDelayMilliseconds: result.queueDelayMilliseconds,
-                readDurationMilliseconds: result.readDurationMilliseconds
-            )
-        ) {
+        let axThrottleRecommendation = focusedTextPollingBackoffPolicy.throttleRecommendation(
+            queueDelayMilliseconds: result.queueDelayMilliseconds,
+            readDurationMilliseconds: result.readDurationMilliseconds
+        )
+        let shouldProcessCurrentAXRead = focusedTextPollingBackoffPolicy.shouldProcessCurrentAXReadBeforeThrottle(
+            hasContext: result.context != nil
+        )
+
+        if !shouldProcessCurrentAXRead,
+           applyFocusedTextPollingThrottleIfNeeded(axThrottleRecommendation) {
             setSuggestionDecision("Waiting: AX read")
             return
         }
@@ -943,6 +947,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        pauseFocusedTextPollingAfterProcessingCurrentAXRead(axThrottleRecommendation)
         await processFocusedTextContext(
             rawContext,
             frontmostApp: result.app,
@@ -1708,6 +1713,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         return true
+    }
+
+    private func pauseFocusedTextPollingAfterProcessingCurrentAXRead(
+        _ recommendation: FocusedTextPollingThrottleRecommendation
+    ) {
+        guard recommendation.shouldThrottle,
+              let reason = recommendation.reason,
+              recommendation.pauseMilliseconds > 0 else {
+            return
+        }
+
+        focusedTextPollingPause.pause(
+            now: Date(),
+            durationMilliseconds: recommendation.pauseMilliseconds,
+            policy: focusedTextPollingBackoffPolicy
+        )
+        DiagnosticsLog.shared.record(
+            "focused-text-poll-throttled",
+            metadata: [
+                "reason": reason.rawValue,
+                "pauseMilliseconds": String(recommendation.pauseMilliseconds),
+                "currentRead": "processed"
+            ]
+        )
     }
 
     private func currentSuggestionAgeMilliseconds(now: Date = Date()) -> Int? {
