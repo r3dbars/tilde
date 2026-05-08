@@ -12,8 +12,8 @@ cat >"$LOG_FILE" <<'LOG'
 2026-04-26T18:00:01Z suggestion-presented app=com.openai.codex latencyMilliseconds=220 requestMode=phraseContinuation traceID=first
 2026-04-26T18:05:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit
 2026-04-26T18:05:01Z suggestion-presented app=com.openai.codex latencyMilliseconds=0 requestMode=wordCompletion traceID=word
-2026-04-26T18:05:01Z mlx-warmup-generation app=app.transcripted.autocomplete-lab.runtime-warmup cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=90 generationMilliseconds=140 maxTokens=9 mode=phraseContinuation promptMilliseconds=0 rawChars=12 sessionMilliseconds=0 totalMilliseconds=141
-2026-04-26T18:05:02Z mlx-completion-timing app=com.openai.codex cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=70 generationMilliseconds=100 maxTokens=9 mode=phraseContinuation promptMilliseconds=0 rawChars=12 sessionMilliseconds=0 totalMilliseconds=101
+2026-04-26T18:05:01Z mlx-warmup-generation app=app.transcripted.autocomplete-lab.runtime-warmup cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=90 generationMilliseconds=140 maxTokens=9 mode=phraseContinuation promptMilliseconds=0 rawChars=12 rssMegabytes=512 sessionMilliseconds=0 thermalState=nominal totalMilliseconds=141
+2026-04-26T18:05:02Z mlx-completion-timing app=com.openai.codex cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=70 generationMilliseconds=100 maxTokens=9 mode=phraseContinuation promptMilliseconds=0 rawChars=12 rssMegabytes=520 sessionMilliseconds=0 thermalState=nominal totalMilliseconds=101
 2026-04-26T18:05:02Z suggestion-presented app=com.openai.codex latencyMilliseconds=130 requestMode=phraseContinuation traceID=stream
 2026-04-26T18:05:02Z suggestion-presented app=com.openai.codex latencyMilliseconds=190 requestMode=phraseContinuation traceID=stream
 LOG
@@ -40,6 +40,12 @@ fi
 
 if ! grep -F "warmup" <<<"$REPORT" >/dev/null || ! grep -F "model total: n=1 min=141ms avg=141ms p50=141ms p90=141ms p95=141ms max=141ms" <<<"$REPORT" >/dev/null; then
   echo "latency report self-test did not summarize warmup timing" >&2
+  echo "$REPORT" >&2
+  exit 1
+fi
+
+if ! grep -F "resident memory: n=1 min=512MB avg=512MB p50=512MB p90=512MB p95=512MB max=512MB" <<<"$REPORT" >/dev/null || ! grep -F "thermal states: nominal" <<<"$REPORT" >/dev/null; then
+  echo "latency report self-test did not summarize runtime resources" >&2
   echo "$REPORT" >&2
   exit 1
 fi
@@ -84,7 +90,7 @@ cp "$LOG_FILE" "$PROOF_LOG_FILE"
 cat >>"$PROOF_LOG_FILE" <<'LOG'
 2026-04-26T18:06:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit
 2026-04-26T18:07:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit probe=runtime-latency
-2026-04-26T18:07:01Z mlx-completion-timing app=com.apple.TextEdit cleanedChars=9 cleanupMilliseconds=0 firstChunkMilliseconds=80 generationMilliseconds=120 maxTokens=9 mode=phraseContinuation probe=runtime-latency promptMilliseconds=0 rawChars=8 sessionMilliseconds=0 totalMilliseconds=121
+2026-04-26T18:07:01Z mlx-completion-timing app=com.apple.TextEdit cleanedChars=9 cleanupMilliseconds=0 firstChunkMilliseconds=80 generationMilliseconds=120 maxTokens=9 mode=phraseContinuation probe=runtime-latency promptMilliseconds=0 rawChars=8 rssMegabytes=530 sessionMilliseconds=0 thermalState=nominal totalMilliseconds=121
 2026-04-26T18:07:01Z suggestion-presented app=com.apple.TextEdit latencyMilliseconds=125 probe=runtime-latency requestMode=phraseContinuation traceID=probe
 2026-04-26T18:07:02Z mlx-completion-timing app=com.apple.TextEdit cleanedChars=4 cleanupMilliseconds=0 firstChunkMilliseconds=90 generationMilliseconds=140 maxTokens=4 mode=phraseContinuation promptMilliseconds=0 rawChars=4 sessionMilliseconds=0 totalMilliseconds=141
 LOG

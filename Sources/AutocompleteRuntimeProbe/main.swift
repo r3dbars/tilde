@@ -1,4 +1,5 @@
 import AutocompleteLabCore
+import Darwin
 import Foundation
 import MLXHuggingFace
 import MLXLLM
@@ -87,6 +88,61 @@ struct DiagnosticsLineWriter {
 struct ProbeCompletionResult {
     let suggestion: CompletionSuggestion?
     let latencyMilliseconds: Int
+}
+
+enum RuntimeProbeMetrics {
+    static func metadata() -> [String: String] {
+        var values = [
+            "thermalState": ProcessInfo.processInfo.thermalState.diagnosticsValue
+        ]
+
+        if let rssMegabytes = residentMemoryMegabytes() {
+            values["rssMegabytes"] = String(rssMegabytes)
+        }
+
+        return values
+    }
+
+    private static func residentMemoryMegabytes() -> Int? {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size
+        )
+
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(
+                    mach_task_self_,
+                    task_flavor_t(TASK_VM_INFO),
+                    $0,
+                    &count
+                )
+            }
+        }
+
+        guard result == KERN_SUCCESS else {
+            return nil
+        }
+
+        return Int(info.phys_footprint / 1_048_576)
+    }
+}
+
+extension ProcessInfo.ThermalState {
+    var diagnosticsValue: String {
+        switch self {
+        case .nominal:
+            return "nominal"
+        case .fair:
+            return "fair"
+        case .serious:
+            return "serious"
+        case .critical:
+            return "critical"
+        @unknown default:
+            return "unknown"
+        }
+    }
 }
 
 final class ProbeMLXRuntime {
@@ -196,7 +252,7 @@ final class ProbeMLXRuntime {
                 "rawChars": String(rawOutput.count),
                 "cleanedChars": String(cleanedSuggestion?.visibleText.count ?? 0),
                 "probe": "runtime-latency"
-            ]
+            ].merging(RuntimeProbeMetrics.metadata()) { current, _ in current }
         )
 
         return ProbeCompletionResult(
@@ -295,7 +351,7 @@ do {
             "mockFallbackAllowed": "false",
             "allowsUserManagedServer": "false",
             "probe": "runtime-latency"
-        ]
+        ].merging(RuntimeProbeMetrics.metadata()) { current, _ in current }
     )
     try await runtime.warm()
 

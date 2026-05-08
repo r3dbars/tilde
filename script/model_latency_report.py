@@ -35,17 +35,17 @@ def percentile(values, fraction):
     return ordered[index]
 
 
-def metric_line(label, values):
+def metric_line(label, values, unit="ms"):
     if not values:
         return f"{label}: no samples"
 
     return (
-        f"{label}: n={len(values)} min={min(values)}ms "
-        f"avg={round(statistics.mean(values))}ms "
-        f"p50={percentile(values, 0.50)}ms "
-        f"p90={percentile(values, 0.90)}ms "
-        f"p95={percentile(values, 0.95)}ms "
-        f"max={max(values)}ms"
+        f"{label}: n={len(values)} min={min(values)}{unit} "
+        f"avg={round(statistics.mean(values))}{unit} "
+        f"p50={percentile(values, 0.50)}{unit} "
+        f"p90={percentile(values, 0.90)}{unit} "
+        f"p95={percentile(values, 0.95)}{unit} "
+        f"max={max(values)}{unit}"
     )
 
 
@@ -112,6 +112,8 @@ def parse_launches(lines):
                     "cleanup": int_field(fields, "cleanupMilliseconds"),
                     "total": total,
                     "maxTokens": int_field(fields, "maxTokens"),
+                    "rss": int_field(fields, "rssMegabytes"),
+                    "thermal": field_value(fields, "thermalState"),
                 }
             )
             continue
@@ -139,6 +141,8 @@ def parse_launches(lines):
                     "cleanup": int_field(fields, "cleanupMilliseconds"),
                     "total": total,
                     "maxTokens": int_field(fields, "maxTokens"),
+                    "rss": int_field(fields, "rssMegabytes"),
+                    "thermal": field_value(fields, "thermalState"),
                 }
             )
             continue
@@ -203,6 +207,8 @@ def print_launch(launch):
         first = [item["first"] for item in warmups if item["first"] is not None]
         generation = [item["generation"] for item in warmups]
         total = [item["total"] for item in warmups]
+        rss = [item["rss"] for item in warmups if item["rss"] is not None]
+        thermal_states = sorted({item["thermal"] for item in warmups if item["thermal"] is not None})
         token_budgets = sorted({item["maxTokens"] for item in warmups if item["maxTokens"] is not None})
 
         print("  warmup")
@@ -211,6 +217,9 @@ def print_launch(launch):
         print(f"    {metric_line('first token', first)}")
         print(f"    {metric_line('generation', generation)}")
         print(f"    {metric_line('model total', total)}")
+        print(f"    {metric_line('resident memory', rss, unit='MB')}")
+        if thermal_states:
+            print(f"    thermal states: {', '.join(thermal_states)}")
 
     modes = sorted({item["mode"] for item in timings} | {item["mode"] for item in presented})
     for mode in modes:
@@ -222,6 +231,8 @@ def print_launch(launch):
         generation = [item["generation"] for item in mode_timings]
         cleanup = [item["cleanup"] for item in mode_timings if item["cleanup"] is not None]
         total = [item["total"] for item in mode_timings]
+        rss = [item["rss"] for item in mode_timings if item["rss"] is not None]
+        thermal_states = sorted({item["thermal"] for item in mode_timings if item["thermal"] is not None})
         shown = [item["latency"] for item in mode_presented]
         token_budgets = sorted({item["maxTokens"] for item in mode_timings if item["maxTokens"] is not None})
 
@@ -234,6 +245,9 @@ def print_launch(launch):
         print(f"    {metric_line('generation', generation)}")
         print(f"    {metric_line('cleanup', cleanup)}")
         print(f"    {metric_line('model total', total)}")
+        print(f"    {metric_line('resident memory', rss, unit='MB')}")
+        if thermal_states:
+            print(f"    thermal states: {', '.join(thermal_states)}")
         print(f"    {metric_line('shown latency', shown)}")
 
 

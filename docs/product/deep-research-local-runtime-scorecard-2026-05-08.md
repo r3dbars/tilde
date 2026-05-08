@@ -59,7 +59,7 @@ Overall score: **89/100**
 
 - Weight: 25
 - Current score: 23.5/25
-- Why this score: The app has MLX timing logs, streaming partials, short 3-word/9-token MVP generation caps, stale request tickets, hidden generation warmup before ready state, and passing default-model latency proof. The latest automated Qwen3.5 4B probe produced one warmup generation at 163ms, then five shown phrase samples with p95 137ms and average 125ms.
+- Why this score: The app has MLX timing logs, streaming partials, short 3-word/9-token MVP generation caps, stale request tickets, hidden generation warmup before ready state, and passing default-model latency proof. The latest automated Qwen3.5 4B probe produced one warmup generation at 155ms, then five shown phrase samples with p95 125ms and average 117ms.
 - Evidence found in repo: `Sources/AutocompleteLabCore/Configuration/ModelPolicy.swift`, `Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift`, `Sources/AutocompleteLabCore/Session/SuggestionRequestGate.swift`, `Sources/AutocompleteRuntimeProbe/main.swift`, `script/runtime_latency_probe.sh`, `script/build_mlx_metallib.sh`, `script/model_latency_report.py`, `script/model_latency_report_self_test.sh`
 - Missing evidence: p99 from longer replay; sleep/wake split; manual target-app typing proof that the app UI path matches the probe.
 - What would make it 100/100: Automated replay and live default-model proof show ideal or high-acceptable TTFS on reference 16 GB Macs, with stale suggestions dropped under target.
@@ -76,10 +76,10 @@ Overall score: **89/100**
 ### Memory, Thermal, and Battery Behavior
 
 - Weight: 15
-- Current score: 10/15
-- Why this score: This pass added a policy and app observer for memory warning/critical and thermal fair/serious/critical. Warning/fair suppress work; serious/critical unloads the runtime. There is not yet a real pressure or power trace.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Runtime/RuntimeResourcePressurePolicy.swift`, `Sources/AutocompleteLabApp/App/AppDelegate.swift`, `Tests/AutocompleteLabCoreTests/RuntimeResourcePressurePolicyTests.swift`
-- Missing evidence: Real memory-pressure test, 30-minute battery typing replay, Instruments/xctrace power summary, RSS tracking.
+- Current score: 10.5/15
+- Why this score: This pass added a policy and app observer for memory warning/critical and thermal fair/serious/critical. Warning/fair suppress work; serious/critical unloads the runtime. The runtime probe now records RSS and thermal state; the latest proof saw warmup RSS 3069MB, visible-suggestion RSS p95 3537MB, and thermal state `fair`. This is useful evidence, but not a full pressure or battery trace.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Runtime/RuntimeResourcePressurePolicy.swift`, `Sources/AutocompleteLabApp/App/AppDelegate.swift`, `Sources/AutocompleteRuntimeProbe/main.swift`, `script/model_latency_report.py`, `Tests/AutocompleteLabCoreTests/RuntimeResourcePressurePolicyTests.swift`
+- Missing evidence: Real memory-pressure test, 30-minute battery typing replay, Instruments/xctrace power summary, nominal/pressure transition proof in the app process.
 - What would make it 100/100: Automated pressure checks prove warning drops transient work, critical unloads the model, UI stays responsive, and thermal/power gates pass on reference hardware.
 
 ### Runtime Ownership and Lifecycle
@@ -112,8 +112,8 @@ Overall score: **89/100**
 ### Benchmark Coverage
 
 - Weight: 5
-- Current score: 4.7/5
-- Why this score: There are good self-tests and scripts for latency, trace eval, model assets, app bundle checks, beta readiness, and now a standalone default-runtime latency probe that emits warmup and visible-suggestion diagnostics compatible with the readiness report. The default proof report now selects the latest launch with enough phrase samples instead of being invalidated by a newer empty bootstrap. The scripts still do not cover the full research matrix.
+- Current score: 4.8/5
+- Why this score: There are good self-tests and scripts for latency, trace eval, model assets, app bundle checks, beta readiness, and now a standalone default-runtime latency probe that emits warmup, visible-suggestion, RSS, and thermal diagnostics compatible with the readiness report. The default proof report now selects the latest launch with enough phrase samples instead of being invalidated by a newer empty bootstrap. The scripts still do not cover the full research matrix.
 - Evidence found in repo: `Sources/AutocompleteRuntimeProbe/main.swift`, `script/runtime_latency_probe.sh`, `script/build_mlx_metallib.sh`, `script/model_latency_report.py`, `script/check_trace_eval.sh`, `script/check_model_asset.py`, `script/check_diagnostics_log.sh`, `script/smoke_test.sh`, `script/beta_readiness.sh`
 - Missing evidence: Replay benchmark scripts for cold/warm, model matrix, memory pressure, install repair, power trace, and backend sanity as a release artifact report.
 - What would make it 100/100: CI/release gating records TTFS p50/p95/p99, RSS, CPU/GPU, battery delta, fallback, invalid output, stale output, install failures, and thermal transitions.
@@ -173,7 +173,7 @@ The app owns the runtime in an isolated helper, ships one pinned default model p
 - `./script/check_model_asset_self_test.sh`: passed.
 - `./script/check_test_coverage_manifest.sh`: passed.
 - `./script/check_model_asset.py`: passed for Qwen3.5 4B MLX after repairing the local model folder to pinned revision `32f3e8ecf65426fc3306969496342d504bfa13f3`; report includes metadata fingerprint `sha256:27f35688a1eacdcb59b9767e177cbce42a5545cbfd202a67f61e9f70140c4c41`.
-- `./script/runtime_latency_probe.sh 5`: passed. It built the MLX metallib, recorded the probe bootstrap before warmup, ran one hidden warmup generation at 163ms, produced five Qwen3.5 4B phrase samples, and `./script/model_latency_report.py --default-model-proof` passed with shown p95 137ms and average 125ms.
+- `./script/runtime_latency_probe.sh 5`: passed. It built the MLX metallib, recorded the probe bootstrap before warmup, ran one hidden warmup generation at 155ms, produced five Qwen3.5 4B phrase samples, and `./script/model_latency_report.py --default-model-proof` passed with shown p95 125ms and average 117ms. The report also captured warmup RSS 3069MB, visible-suggestion RSS p95 3537MB, and thermal state `fair`.
 - `./script/model_latency_report.py --default-model-proof`: passed after the report was hardened to select the latest Qwen launch with enough phrase samples and ignore non-probe timing inside a probe launch.
 - `./script/smoke_test.sh`: blocked by visual placement evidence gaps after Swift tests, backend sanity, coverage manifest, quality eval, model asset self-test, manual smoke self-test, real-app smoke self-test, proof manifest self-test, and visual evidence self-test passed.
 - `./script/beta_readiness.sh --check-only`: blocked by 16 stale or pending manual app proof rows, 6 screenshot-backed visual proof gaps plus stale Codex proof, and missing `dist/AutocompleteLab.zip`; backend sanity, model asset, runtime production gate, redacted export, and package prerequisites passed.
