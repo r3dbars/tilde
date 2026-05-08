@@ -272,6 +272,43 @@ acquire_smoke_lock() {
   exit 1
 }
 
+other_smoke_process_lines() {
+  local process_list current_pgid
+  current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ' || true)"
+  if [[ -n "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST:-}" ]]; then
+    process_list="$AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST"
+  else
+    process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
+  fi
+
+  awk -v self="$$" -v selfPGID="$current_pgid" '
+    {
+      pid = $1
+      pgid = $3
+      command = $0
+      sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
+    }
+    pid != self &&
+      (selfPGID == "" || pgid != selfPGID) &&
+      command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?bash|\/usr\/bin\/env[[:space:]]+bash)[[:space:]]+(\.\/)?script\/real_app_smoke\.sh([[:space:]]|$)/ {
+        print
+      }
+  ' <<<"$process_list"
+}
+
+refuse_other_smoke_processes() {
+  local processes
+  processes="$(other_smoke_process_lines || true)"
+  if [[ -z "$processes" ]]; then
+    return 0
+  fi
+
+  echo "Another real app smoke process is already active." >&2
+  echo "Refusing to run concurrently because smoke runs can type into frontmost apps." >&2
+  echo "$processes" >&2
+  exit 1
+}
+
 make_tmp_dir() {
   local tmp_dir
   tmp_dir="$(mktemp -d)"
@@ -1768,6 +1805,229 @@ assert_chrome_expected_tab() {
   fi
 }
 
+assert_chrome_focused_editable_ax() {
+  local fixture="$1"
+  local chrome_pid="$2"
+  local label="$3"
+
+  swift - "$fixture" "${chrome_pid:-0}" "$label" <<'SWIFT'
+import AppKit
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 4,
+      let rawPID = Int32(CommandLine.arguments[2]) else {
+    exit(2)
+}
+
+let fixture = CommandLine.arguments[1]
+let label = CommandLine.arguments[3]
+let pid: pid_t
+if rawPID > 0 {
+    pid = pid_t(rawPID)
+} else if let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier {
+    guard let frontmost = NSWorkspace.shared.frontmostApplication,
+          frontmost.bundleIdentifier == "com.google.Chrome" || frontmost.localizedName == "Google Chrome" else {
+        fputs("Chrome \(fixture) smoke refused to type during \(label): frontmost app is not Google Chrome.\n", stderr)
+        exit(1)
+    }
+    pid = frontmostPID
+} else {
+    fputs("Chrome \(fixture) smoke refused to type during \(label): no frontmost process.\n", stderr)
+    exit(1)
+}
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+
+    return value
+}
+
+func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String {
+    copyAttribute(element, attribute) as? String ?? ""
+}
+
+func hasWebAreaAncestor(_ element: AXUIElement) -> Bool {
+    var current = element
+    for _ in 0..<16 {
+        if stringAttribute(current, kAXRoleAttribute) == "AXWebArea" {
+            return true
+        }
+
+        guard let parentValue = copyAttribute(current, kAXParentAttribute) else {
+            return false
+        }
+        current = parentValue as! AXUIElement
+    }
+
+    return false
+}
+
+let appElement = AXUIElementCreateApplication(pid)
+AXUIElementSetMessagingTimeout(appElement, 0.5)
+
+guard let focusedValue = copyAttribute(appElement, kAXFocusedUIElementAttribute) else {
+    fputs("Chrome \(fixture) smoke refused to type during \(label): Chrome has no focused AX element.\n", stderr)
+    exit(1)
+}
+
+let focusedElement = focusedValue as! AXUIElement
+let role = stringAttribute(focusedElement, kAXRoleAttribute)
+let title = stringAttribute(focusedElement, kAXTitleAttribute)
+let description = stringAttribute(focusedElement, kAXDescriptionAttribute)
+let identifier = stringAttribute(focusedElement, "AXIdentifier")
+let webBacked = hasWebAreaAncestor(focusedElement)
+
+if role == "AXTextArea" {
+    exit(0)
+}
+
+if role == "AXTextField" && webBacked {
+    exit(0)
+}
+
+fputs(
+    "Chrome \(fixture) smoke refused to type during \(label): focused AX element is not a web editable text target (role=\(role.isEmpty ? "unknown" : role), title=\(title.isEmpty ? "none" : title), description=\(description.isEmpty ? "none" : description), identifier=\(identifier.isEmpty ? "none" : identifier), webBacked=\(webBacked)).\n",
+    stderr
+)
+exit(1)
+SWIFT
+}
+
+insert_chrome_smoke_text_with_ax() {
+  local fixture="$1"
+  local chrome_pid="$2"
+  local label="$3"
+  local text="$4"
+
+  swift - "$fixture" "${chrome_pid:-0}" "$label" "$text" <<'SWIFT'
+import AppKit
+import ApplicationServices
+import CoreGraphics
+import Foundation
+
+guard CommandLine.arguments.count == 5,
+      let rawPID = Int32(CommandLine.arguments[2]) else {
+    exit(2)
+}
+
+let fixture = CommandLine.arguments[1]
+let label = CommandLine.arguments[3]
+let text = CommandLine.arguments[4]
+let pid: pid_t
+if rawPID > 0 {
+    pid = pid_t(rawPID)
+} else if let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier {
+    guard let frontmost = NSWorkspace.shared.frontmostApplication,
+          frontmost.bundleIdentifier == "com.google.Chrome" || frontmost.localizedName == "Google Chrome" else {
+        fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): frontmost app is not Google Chrome.\n", stderr)
+        exit(1)
+    }
+    pid = frontmostPID
+} else {
+    fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): no frontmost process.\n", stderr)
+    exit(1)
+}
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+
+    return value
+}
+
+func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String {
+    copyAttribute(element, attribute) as? String ?? ""
+}
+
+func hasWebAreaAncestor(_ element: AXUIElement) -> Bool {
+    var current = element
+    for _ in 0..<16 {
+        if stringAttribute(current, kAXRoleAttribute) == "AXWebArea" {
+            return true
+        }
+
+        guard let parentValue = copyAttribute(current, kAXParentAttribute) else {
+            return false
+        }
+        current = parentValue as! AXUIElement
+    }
+
+    return false
+}
+
+func isEditableWebTarget(_ element: AXUIElement) -> Bool {
+    let role = stringAttribute(element, kAXRoleAttribute)
+    if role == "AXTextArea" {
+        return true
+    }
+
+    return role == "AXTextField" && hasWebAreaAncestor(element)
+}
+
+let appElement = AXUIElementCreateApplication(pid)
+AXUIElementSetMessagingTimeout(appElement, 0.5)
+
+guard let focusedValue = copyAttribute(appElement, kAXFocusedUIElementAttribute) else {
+    fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): Chrome has no focused AX element.\n", stderr)
+    exit(1)
+}
+
+let focusedElement = focusedValue as! AXUIElement
+let role = stringAttribute(focusedElement, kAXRoleAttribute)
+guard isEditableWebTarget(focusedElement) else {
+    fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): focused AX element is not editable web text (role=\(role.isEmpty ? "unknown" : role)).\n", stderr)
+    exit(1)
+}
+
+let initialValue = copyAttribute(focusedElement, kAXValueAttribute) as? String ?? ""
+guard let source = CGEventSource(stateID: .hidSystemState) else {
+    fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): could not create a CGEvent source.\n", stderr)
+    exit(1)
+}
+
+if let app = NSRunningApplication(processIdentifier: pid) {
+    app.activate(options: [.activateAllWindows])
+}
+
+Thread.sleep(forTimeInterval: 0.1)
+
+for codeUnit in text.utf16 {
+    var unit = codeUnit
+    guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+        fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): could not create text events.\n", stderr)
+        exit(1)
+    }
+
+    keyDown.keyboardSetUnicodeString(stringLength: 1, unicodeString: &unit)
+    keyUp.keyboardSetUnicodeString(stringLength: 1, unicodeString: &unit)
+    keyDown.postToPid(pid)
+    keyUp.postToPid(pid)
+    usleep(15_000)
+}
+
+for _ in 0..<30 {
+    let currentValue = copyAttribute(focusedElement, kAXValueAttribute) as? String ?? ""
+    if currentValue.count >= initialValue.count + text.count && currentValue.contains(text) {
+        exit(0)
+    }
+    usleep(100_000)
+}
+
+let finalValue = copyAttribute(focusedElement, kAXValueAttribute) as? String ?? ""
+fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): targeted text events did not update the focused Chrome editor (beforeChars=\(initialValue.count), afterChars=\(finalValue.count)).\n", stderr)
+exit(1)
+SWIFT
+}
+
 assert_chrome_ready_for_input() {
   local fixture="$1"
   local chrome_pid="$2"
@@ -1776,11 +2036,13 @@ assert_chrome_ready_for_input() {
 
   if [[ -n "$chrome_pid" ]]; then
     assert_frontmost_process_id "$chrome_pid" "Chrome $fixture $label"
+    assert_chrome_focused_editable_ax "$fixture" "$chrome_pid" "$label"
     return 0
   fi
 
   assert_frontmost_app "Google Chrome" "Chrome $fixture $label"
   assert_chrome_expected_tab "$fixture" "$expected_url" "$label"
+  assert_chrome_focused_editable_ax "$fixture" "" "$label"
 }
 
 type_chrome_smoke_text() {
@@ -1791,14 +2053,7 @@ type_chrome_smoke_text() {
   local text="$5"
 
   assert_chrome_ready_for_input "$fixture" "$chrome_pid" "$expected_url" "$label"
-  osascript - "$text" <<'APPLESCRIPT'
-on run argv
-  set smokeText to item 1 of argv
-  tell application "System Events"
-    keystroke smokeText
-  end tell
-end run
-APPLESCRIPT
+  insert_chrome_smoke_text_with_ax "$fixture" "$chrome_pid" "$label" "$text"
 }
 
 chrome_fixture_html() {
@@ -2222,6 +2477,8 @@ describe_plan() {
         echo "Plan: build/relaunch AutocompleteLab, open a disposable Chrome $CHROME_FIXTURE fixture, type a test fragment, then validate logs and traces."
       fi
       echo "Safety: the smoke launch temporarily enables Chrome only for this proof pass."
+      echo "Safety: before Chrome typing, the smoke requires Chrome to expose a focused editable web text target through Accessibility."
+      echo "Safety: Chrome setup text is sent to the Chrome process and verified through the focused AX editor, not global keystrokes."
       ;;
     notes)
       local notes_app notes_surface
@@ -2545,6 +2802,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
   exit 0
 fi
 
+refuse_other_smoke_processes
 acquire_smoke_lock
 
 case "$APP" in

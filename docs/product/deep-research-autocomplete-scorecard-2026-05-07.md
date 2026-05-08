@@ -768,6 +768,13 @@ these are true.
    Chrome/frontmost/URL checks so proof attempts fail closed instead of typing
    into the wrong app. These lanes are implementation-ready but still score as
    pending until bounded screenshot-backed official-demo traces pass.
+73. Done: harden Chrome proof typing further after live proof exposed stale
+   worktree smoke processes and global setup-keystroke focus changes. Non-dry
+   real-app smoke now scans for other active smoke scripts before acquiring the
+   lock, requires a focused editable web text AX target before Chrome setup
+   text, sends that setup text to the Chrome process, and verifies the focused
+   editor value changed before waiting for app logs. This improves proof safety
+   but does not raise Chrome scores until official-demo traces pass.
 
 ## Goal Status
 
