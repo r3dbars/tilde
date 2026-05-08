@@ -97,6 +97,13 @@ variants. The chat-like fixture is not a real Codex or Claude
 proof; it is a local no-submit guardrail that must pass before trusting prompt
 app smoke results.
 
+The script also has guarded public-demo lanes for `codemirror-official`,
+`monaco-official`, and `prosemirror-official`. Those lanes are for production
+editor proof only after they pass with bounded screenshot-backed traces. They
+fail closed before typing unless Chrome is frontmost and the expected official
+demo URL is the active tab. Real-app smoke runs also take a single-run lock so
+two proof processes cannot type at the same time.
+
 Run the score target loop when working toward the product scorecards:
 
 ```bash
