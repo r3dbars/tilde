@@ -36,6 +36,9 @@ Run private-content and agent-prompt passes only with a manual gate:
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-undo --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-undo --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-undo --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate
@@ -69,8 +72,10 @@ agent prompt pass. Codex, Claude Code, and Claude desktop require one-word
 no-submit proof before graduation.
 Prompt-app full accept stays disabled until separate full-accept no-submit proof
 exists.
-For Notes, `notes-title`, `notes-body`, and `notes-checklist` are separate
-proof targets. A generic `notes` run is only a picker and does not count.
+For Notes, `notes-title`, `notes-body`, `notes-checklist`, and the matching
+`notes-*-undo` lanes are separate proof targets. A generic `notes` run is only
+a picker and does not count. Undo lanes require `accepted-insertion-undone` in
+the bounded diagnostics slice.
 
 The default Chrome fixtures are local and dependency-free. The Monaco-like and
 ProseMirror-like fixtures copy the DOM shape and focus behavior those editors

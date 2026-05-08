@@ -20,15 +20,16 @@ TEMP_ENABLE_LAUNCHCTL_PREVIOUS=""
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|chat-like|all>] [--chrome-accessibility <forced|default>]
+Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|chat-like|all>] [--chrome-accessibility <forced|default>]
 
 Runs a real app smoke pass where it is safe to automate. Notes, Obsidian,
 Codex, Claude Code, and Claude desktop are manual-gated so this script never
 types into private notes, vaults, terminal prompts, or agent prompts by
 surprise.
 
-Notes proof must use notes-title, notes-body, or notes-checklist. A generic
-notes run only prints the surface picker and does not record proof.
+Notes proof must use notes-title, notes-body, notes-checklist, or their
+notes-*-undo variants. A generic notes run only prints the surface picker and
+does not record proof.
 
 Chrome defaults to the textarea fixture. Use --fixture chat-like to prove
 Tab/full-accept do not submit a chat-style composer. Use --fixture monaco-real
@@ -96,13 +97,25 @@ case "$APP" in
     APP="notes"
     NOTES_SESSION_APP="notes-title"
     ;;
+  notes-title-undo)
+    APP="notes"
+    NOTES_SESSION_APP="notes-title-undo"
+    ;;
   notes-body)
     APP="notes"
     NOTES_SESSION_APP="notes-body"
     ;;
+  notes-body-undo)
+    APP="notes"
+    NOTES_SESSION_APP="notes-body-undo"
+    ;;
   notes-checklist)
     APP="notes"
     NOTES_SESSION_APP="notes-checklist"
+    ;;
+  notes-checklist-undo)
+    APP="notes"
+    NOTES_SESSION_APP="notes-checklist-undo"
     ;;
 esac
 
@@ -510,7 +523,7 @@ notes_session_app() {
   fi
 
   case "${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-}" in
-    notes-title|notes-body|notes-checklist)
+    notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo)
       printf '%s\n' "$AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL"
       return 0
       ;;
@@ -525,6 +538,10 @@ Choose one Notes surface:
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
+Optional undo proof:
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-undo --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-undo --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-undo --manual-gate
 EOF
 }
 
