@@ -31,6 +31,8 @@ struct AppModelRuntimeBundle {
             "promptStyle": CompletionPromptBuilder.promptStyleIdentifier,
             "debounceMilliseconds": String(CompletionModelPolicy.mvp.debounceMilliseconds),
             "nativeRuntimeAvailable": String(bootstrapPlan.nativeRuntimeAvailable),
+            "canAttemptPreferredRuntime": String(bootstrapPlan.canAttemptPreferredRuntime),
+            "mockFallbackAllowed": "false",
             "allowsUserManagedServer": String(bootstrapPlan.decision.allowsUserManagedServer)
         ]
 
@@ -70,14 +72,17 @@ enum AppModelRuntimeFactory {
         )
         let runtime: any ModelRuntime
 
-        if plan.activeCandidate == .mlx {
+        if plan.canAttemptPreferredRuntime {
             runtime = MLXModelRuntime(
                 modelDirectoryURL: modelDirectoryURL,
                 usesVisionLanguageFactory: manifest.requiresVisionLanguageFactory,
                 lengthConfiguration: lengthConfiguration
             )
         } else {
-            runtime = MockModelRuntime(candidate: plan.activeCandidate)
+            runtime = UnavailableModelRuntime(
+                candidate: plan.activeCandidate,
+                reason: plan.fallbackReason ?? "local model runtime is not ready"
+            )
         }
 
         return AppModelRuntimeBundle(

@@ -128,6 +128,7 @@ public protocol ModelRuntime: Sendable {
     var state: LocalRuntimeState { get async }
     func warm() async throws
     func cancel()
+    func unload(reason: String)
     func complete(_ request: CompletionRequest) async throws -> CompletionSuggestion?
     func complete(
         _ request: CompletionRequest,
@@ -136,6 +137,10 @@ public protocol ModelRuntime: Sendable {
 }
 
 public extension ModelRuntime {
+    func unload(reason: String) {
+        cancel()
+    }
+
     func complete(
         _ request: CompletionRequest,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void

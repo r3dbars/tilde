@@ -303,6 +303,7 @@ public struct LocalModelAssetSource: Equatable, Sendable {
 
     public static let qwen35FourBMLX4Bit = LocalModelAssetSource(
         repoID: "mlx-community/Qwen3.5-4B-MLX-4bit",
+        revision: "32f3e8ecf65426fc3306969496342d504bfa13f3",
         allowPatterns: defaultMLXAllowPatterns,
         estimatedBytes: 3_030_000_000,
         licenseURL: "https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit"
@@ -353,15 +354,11 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
     }
 
     public var activeCandidate: CompletionRuntimeCandidate {
-        guard nativeRuntimeAvailable else {
-            return .mock
-        }
-
-        guard assetState.isUsable else {
-            return .mock
-        }
-
         return decision.preferredCandidate
+    }
+
+    public var canAttemptPreferredRuntime: Bool {
+        nativeRuntimeAvailable && assetState.isUsable
     }
 
     public var fallbackReason: String? {
@@ -388,7 +385,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
         case let .missing(expectedPath):
             return RuntimeReadinessReport(
                 stage: .downloadNeeded,
-                summary: fallbackSummary("download needed (\(preferredAsset.model.rawValue))", runtimeState: runtimeState),
+                summary: "download needed (\(preferredAsset.model.rawValue))",
                 detail: "Expected MLX model folder at \(expectedPath)",
                 action: .installModel
             )
@@ -396,7 +393,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
         case let .invalid(path, reason):
             return RuntimeReadinessReport(
                 stage: .repairNeeded,
-                summary: fallbackSummary("model folder needs repair", runtimeState: runtimeState),
+                summary: "model folder needs repair",
                 detail: "\(path): \(reason)",
                 action: .repairModel
             )
@@ -408,7 +405,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
         guard nativeRuntimeAvailable else {
             return RuntimeReadinessReport(
                 stage: .runtimeUnavailable,
-                summary: fallbackSummary("runtime unavailable (\(decision.preferredCandidate.displayName))", runtimeState: runtimeState),
+                summary: "runtime unavailable (\(decision.preferredCandidate.displayName))",
                 detail: "This build is missing its local model engine. A separate model server will not fix it.",
                 action: .none
             )
@@ -449,13 +446,5 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
 
     public func readinessSummary(for runtimeState: LocalRuntimeState) -> String {
         readinessReport(for: runtimeState).summary
-    }
-
-    private func fallbackSummary(_ primary: String, runtimeState: LocalRuntimeState) -> String {
-        guard activeCandidate == .mock else {
-            return primary
-        }
-
-        return "\(primary); fallback: \(runtimeState.statusSummary)"
     }
 }

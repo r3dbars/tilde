@@ -4,15 +4,15 @@ import AutocompleteLabCore
 @MainActor
 final class AppSettings {
     enum RuntimeMode: String, CaseIterable {
-        case gemmaLocalWithMockFallback
-        case mockOnly
+        case localModelOnly
+        case mockOnlyForDevelopment
 
         var menuTitle: String {
             switch self {
-            case .gemmaLocalWithMockFallback:
-                return "Gemma 4 E2B + Mock Fallback"
-            case .mockOnly:
-                return "Mock Suggestions Only"
+            case .localModelOnly:
+                return "Local Model Only"
+            case .mockOnlyForDevelopment:
+                return "Mock Suggestions (Development Only)"
             }
         }
     }
@@ -61,8 +61,8 @@ final class AppSettings {
 
     var runtimeMode: RuntimeMode {
         get {
-            let rawValue = defaults.string(forKey: Key.runtimeMode) ?? RuntimeMode.gemmaLocalWithMockFallback.rawValue
-            return RuntimeMode(rawValue: rawValue) ?? .gemmaLocalWithMockFallback
+            let rawValue = defaults.string(forKey: Key.runtimeMode) ?? RuntimeMode.localModelOnly.rawValue
+            return RuntimeMode(rawValue: rawValue) ?? .localModelOnly
         }
         set { defaults.set(newValue.rawValue, forKey: Key.runtimeMode) }
     }
@@ -122,7 +122,7 @@ final class AppSettings {
             Key.suppressSecureFields: true,
             Key.suppressShortText: true,
             Key.suppressAfterNewline: true,
-            Key.runtimeMode: RuntimeMode.gemmaLocalWithMockFallback.rawValue,
+            Key.runtimeMode: RuntimeMode.localModelOnly.rawValue,
             Key.minimumCharacters: 3
         ])
     }

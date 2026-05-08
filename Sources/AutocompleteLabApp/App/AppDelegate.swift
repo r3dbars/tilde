@@ -1,5 +1,6 @@
 import AppKit
 import AutocompleteLabCore
+import Dispatch
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -144,6 +145,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var insertionVerificationTask: Task<Void, Never>?
     private var runtimeWarmTask: Task<Void, Never>?
     private var modelInstallTask: Task<Void, Never>?
+    private var memoryPressureSource: DispatchSourceMemoryPressure?
     private var modelInstallStatusText: String?
     private var commandContextRequestTask: Task<Void, Never>?
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
@@ -222,6 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastScreenLayoutFingerprint = screenLayoutFingerprint()
         observeWorkspaceActivation()
         observeDisplayGeometryChanges()
+        observeRuntimeResourcePressure()
         startPolling()
     }
 
@@ -235,8 +238,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runtimeWarmTask?.cancel()
         modelInstallTask?.cancel()
         commandContextRequestTask?.cancel()
+        memoryPressureSource?.cancel()
         invalidatePendingSuggestionRequest()
-        modelRuntime.cancel()
+        modelRuntime.unload(reason: "app-terminating")
         pollTimer?.invalidate()
         stopKeyboardEventTapNow(reason: "terminate")
     }
@@ -317,6 +321,86 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+    }
+
+    private func observeRuntimeResourcePressure() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(thermalStateDidChange(_:)),
+            name: ProcessInfo.thermalStateDidChangeNotification,
+            object: nil
+        )
+
+        let source = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .main)
+        source.setEventHandler { [weak self, weak source] in
+            guard let source else {
+                return
+            }
+
+            let event: RuntimeResourcePressureEvent = source.data.contains(.critical)
+                ? .memoryCritical
+                : .memoryWarning
+
+            Task { @MainActor [weak self] in
+                self?.applyRuntimeResourcePressure(event)
+            }
+        }
+        source.resume()
+        memoryPressureSource = source
+    }
+
+    @objc
+    private func thermalStateDidChange(_ notification: Notification) {
+        guard let event = runtimePressureEvent(for: ProcessInfo.processInfo.thermalState) else {
+            return
+        }
+
+        applyRuntimeResourcePressure(event)
+    }
+
+    private func runtimePressureEvent(for thermalState: ProcessInfo.ThermalState) -> RuntimeResourcePressureEvent? {
+        switch thermalState {
+        case .nominal:
+            return nil
+        case .fair:
+            return .thermalFair
+        case .serious:
+            return .thermalSerious
+        case .critical:
+            return .thermalCritical
+        @unknown default:
+            return .thermalSerious
+        }
+    }
+
+    private func applyRuntimeResourcePressure(_ event: RuntimeResourcePressureEvent) {
+        let decision = RuntimeResourcePressurePolicy().decision(for: event)
+        DiagnosticsLog.shared.record(
+            "runtime-resource-pressure",
+            metadata: [
+                "event": event.rawValue,
+                "action": decision.action.rawValue,
+                "reason": decision.reason,
+                "unloadRuntime": String(decision.shouldUnloadRuntime),
+                "suspendSuggestions": String(decision.shouldSuspendSuggestions)
+            ]
+        )
+
+        guard decision.shouldSuspendSuggestions else {
+            return
+        }
+
+        invalidatePendingSuggestionRequest()
+        clearFocusedFieldState(hideReason: decision.reason)
+        setSuggestionDecision("Blocked: \(decision.reason)")
+
+        guard decision.shouldUnloadRuntime else {
+            return
+        }
+
+        runtimeWarmTask?.cancel()
+        modelRuntime.unload(reason: decision.reason)
+        applyRuntimeState(.unavailable(reason: decision.reason))
     }
 
     @objc

@@ -93,6 +93,8 @@ The directory should contain at least:
 - one or more `.safetensors` weight files
 
 The default model repo is `mlx-community/Qwen3.5-4B-MLX-4bit`.
+The beta download path pins that repo to revision
+`32f3e8ecf65426fc3306969496342d504bfa13f3`.
 
 ## Fallback Candidate: LiteRT-LM
 
@@ -114,6 +116,7 @@ Sources:
 - reasoning off
 - 9 generated tokens by default
 - 1-3 visible words by default
+- no mock runtime fallback in app or beta builds; mock output is test-only
 - p95 first-visible latency at or below 750ms for supported status
 - p95 first-visible latency at or below 1000ms for caveated status
 - average latency under 700ms as a private beta target

@@ -7,10 +7,12 @@ from pathlib import Path
 MODELS = {
     "qwen35-4b": {
         "repo_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
+        "revision": "32f3e8ecf65426fc3306969496342d504bfa13f3",
         "target": "Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit",
     },
     "qwen3.5-4b": {
         "repo_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
+        "revision": "32f3e8ecf65426fc3306969496342d504bfa13f3",
         "target": "Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit",
     },
     "qwen35-9b": {
@@ -120,6 +122,7 @@ def main() -> int:
     if args.print_target:
         print(f"alias={args.model}")
         print(f"repo_id={repo_id}")
+        print(f"revision={model.get('revision', 'main')}")
         print(f"target={target}")
         return 0
 
@@ -138,6 +141,7 @@ def main() -> int:
 
     snapshot_download(
         repo_id=repo_id,
+        revision=model.get("revision", "main"),
         local_dir=str(target),
         allow_patterns=ALLOW_PATTERNS,
         token=os.environ.get("HF_TOKEN"),

@@ -46,11 +46,14 @@ Users should never need to start a model server. The model runtime is owned by t
 
 Current lab build:
 
-- defaults to a bundled local-runtime helper
-- tries LiteRT-LM Gemma 4 E2B first
-- falls back to mock suggestions if the runtime is missing or too broken
+- defaults to the app-owned MLX runtime
+- uses Qwen3.5 4B MLX 4-bit as the preferred local model
+- keeps suggestions off if the local model is missing, invalid, warming, or failed
 - exposes privacy/runtime toggles from the menu bar
 - keeps typed text local
+
+Mock suggestions are for development and tests only. They must not appear in a
+private beta build or count as runtime readiness.
 
 ## What We Are Not Building Yet
 

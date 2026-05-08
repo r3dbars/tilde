@@ -22,14 +22,15 @@ struct RuntimePolicyTests {
         #expect(!LocalRuntimeState.unavailable(reason: "not downloaded").isReady)
     }
 
-    @Test("Runtime bootstrap falls back to mock until native MLX and asset are ready")
-    func runtimeBootstrapFallsBackToMockUntilNativeReady() {
+    @Test("Runtime bootstrap never selects mock for app runtime readiness")
+    func runtimeBootstrapNeverSelectsMockForAppRuntimeReadiness() {
         let missingPlan = RuntimeBootstrapPlan(
             assetState: .missing(expectedPath: "/tmp/gemma"),
             nativeRuntimeAvailable: true
         )
 
-        #expect(missingPlan.activeCandidate == .mock)
+        #expect(missingPlan.activeCandidate == .mlx)
+        #expect(!missingPlan.canAttemptPreferredRuntime)
         #expect(missingPlan.fallbackReason == "missing model asset at /tmp/gemma")
 
         let unlinkedPlan = RuntimeBootstrapPlan(
@@ -37,7 +38,8 @@ struct RuntimePolicyTests {
             nativeRuntimeAvailable: false
         )
 
-        #expect(unlinkedPlan.activeCandidate == .mock)
+        #expect(unlinkedPlan.activeCandidate == .mlx)
+        #expect(!unlinkedPlan.canAttemptPreferredRuntime)
         #expect(unlinkedPlan.fallbackReason == "MLX runtime is not linked yet")
 
         let readyPlan = RuntimeBootstrapPlan(
@@ -46,11 +48,12 @@ struct RuntimePolicyTests {
         )
 
         #expect(readyPlan.activeCandidate == .mlx)
+        #expect(readyPlan.canAttemptPreferredRuntime)
         #expect(readyPlan.fallbackReason == nil)
     }
 
-    @Test("Runtime readiness summary explains mock fallback")
-    func runtimeReadinessSummaryExplainsFallback() {
+    @Test("Runtime readiness summary never presents mock fallback as usable")
+    func runtimeReadinessSummaryNeverPresentsMockFallbackAsUsable() {
         let plan = RuntimeBootstrapPlan(
             assetState: .available(path: "/tmp/gemma"),
             nativeRuntimeAvailable: false
@@ -59,7 +62,7 @@ struct RuntimePolicyTests {
         let report = plan.readinessReport(for: .ready(candidate: .mock))
 
         #expect(report.stage == .runtimeUnavailable)
-        #expect(report.summary == "runtime unavailable (MLX); fallback: ready (mock)")
+        #expect(report.summary == "runtime unavailable (MLX)")
         #expect(report.detail == "This build is missing its local model engine. A separate model server will not fix it.")
         #expect(report.action == .none)
         #expect(!report.isReady)
@@ -76,7 +79,7 @@ struct RuntimePolicyTests {
         let missingReport = missingPlan.readinessReport(for: .ready(candidate: .mock))
 
         #expect(missingReport.stage == .downloadNeeded)
-        #expect(missingReport.summary == "download needed (Qwen3.5 4B); fallback: ready (mock)")
+        #expect(missingReport.summary == "download needed (Qwen3.5 4B)")
         #expect(missingReport.detail == "Expected MLX model folder at /tmp/gemma")
         #expect(missingReport.action == .installModel)
 
@@ -87,7 +90,7 @@ struct RuntimePolicyTests {
         let invalidReport = invalidPlan.readinessReport(for: .ready(candidate: .mock))
 
         #expect(invalidReport.stage == .repairNeeded)
-        #expect(invalidReport.summary == "model folder needs repair; fallback: ready (mock)")
+        #expect(invalidReport.summary == "model folder needs repair")
         #expect(invalidReport.detail == "/tmp/gemma: missing config.json")
         #expect(invalidReport.action == .repairModel)
     }
@@ -204,6 +207,7 @@ struct RuntimePolicyTests {
         #expect(manifest.runtimeCandidate == .mlx)
         #expect(manifest.cacheDirectoryName.contains("Qwen35FourB"))
         #expect(manifest.source?.repoID == "mlx-community/Qwen3.5-4B-MLX-4bit")
+        #expect(manifest.source?.revision == "32f3e8ecf65426fc3306969496342d504bfa13f3")
         #expect(manifest.source?.allowPatterns.contains("*.safetensors") == true)
         #expect(manifest.source?.estimatedBytes == 3_030_000_000)
         #expect(manifest.source?.displaySummary == "mlx-community/Qwen3.5-4B-MLX-4bit • about 2.8 GiB")

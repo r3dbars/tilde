@@ -13,6 +13,7 @@ fi
 swift package resolve
 ./script/patch_mlx_swift_lm.sh
 swift test
+./script/check_backend_sanity.sh
 ./script/check_test_coverage_manifest.sh
 ./script/check_quality_eval.sh
 ./script/check_model_asset_self_test.sh

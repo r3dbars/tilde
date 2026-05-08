@@ -52,6 +52,7 @@ run_check() {
 if [[ "$MODE" == "check-only" ]]; then
   failures=0
 
+  run_check "Backend sanity" ./script/check_backend_sanity.sh || failures=$((failures + 1))
   run_check "Model asset" ./script/check_model_asset.py || failures=$((failures + 1))
   run_check "Runtime production gate" env \
     AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
@@ -92,6 +93,7 @@ if [[ "$MODE" == "check-only" ]]; then
 fi
 
 echo "== Model asset =="
+./script/check_backend_sanity.sh
 ./script/check_model_asset.py
 
 echo

@@ -71,6 +71,13 @@ public final class MockModelRuntime: ModelRuntime, @unchecked Sendable {
         }
     }
 
+    public func unload(reason: String) {
+        stateQueue.sync {
+            generation += 1
+            storedState = .unavailable(reason: reason)
+        }
+    }
+
     public func complete(_ request: CompletionRequest) async throws -> CompletionSuggestion? {
         try await complete(request, onPartialSuggestion: { _ in })
     }
