@@ -71,7 +71,7 @@ evidence-backed score should stay lower until those rows are closed.
 | Claude desktop support | 8.4/10 | Prior manual proof exists, but it needs fresh one-word no-submit proof with the new screenshot loop. The current profile is mirror-first, and full accept is disabled until separate full-accept no-submit proof exists. |
 | Output relevance | 8.9/10 | Prompt labels, instruction echoes, assistant filler, unsafe prompt actions, punctuation suffixes, parroting, and more assistant-y prefixes are suppressed before display. Dogfood prompts now avoid loose substring triggers, but default redacted tracing means deeper output-quality audits require explicit raw-content dogfood runs. |
 | Word completion quality | 8.9/10 | Word completion and partial acceptance are useful, bounded, app-scoped, fast completions obey repeated-miss suppression, and unrelated whole-word completions are rejected. It still needs more real-app miss-rate proof before scoring higher. |
-| Non-annoyance | 8.7/10 | Esc, typed-over tracking, repetition suppression, pause control, insertion recovery, app-specific AX cooldowns, and Settings "why hidden" copy help, but visual misses still make the app feel annoying when placement is wrong. |
+| Non-annoyance | 8.8/10 | Esc, typed-over tracking, repetition suppression, pause control, insertion recovery, app-specific AX cooldowns, unknown field-kind suppression, and Settings "why hidden" copy help, but visual misses still make the app feel annoying when placement is wrong. |
 | Privacy | 9.6/10 | Local-first, secure fields suppressed, password/token/API-key-like fingerprints blocked before text reads, diagnostics redact text by default, screenshots are opt-in, recent word memory is app-scoped, raw/global/per-app screenshot debug capture now expires from app UI, Settings has a one-click Privacy Status panel, and exported reports include a privacy checklist. Plain-language permission copy still needs polish. |
 | Onboarding | 8.2/10 | Settings explains runtime readiness, current app state, and local privacy controls more clearly, but model install/repair and first-run permission explanation are still not fully in-app. |
 | User control | 9.2/10 | Pause, current-app enablement, green/yellow/diagnostics-only/unsupported support status, privacy controls, temporary screenshot/raw trace toggles, local log deletion, explicit full-accept shortcut choice, quiet/normal/eager pace, and Settings "why hidden" copy are clearer. Per-app mode visibility and broader shortcut customization are still thin. |
@@ -114,6 +114,11 @@ evidence-backed score should stay lower until those rows are closed.
   stable-bounds field identity with a deterministic FNV-style hash and pinned a
   fixture in `FocusedFieldIdentityPolicyTests`. `swift test --filter
   FocusedFieldIdentityPolicyTests` passed 6 tests.
+- 2026-05-08 unknown-field pass: profiles now default to rejecting unknown AX
+  field kinds at activation time unless a profile explicitly opts in.
+  `CompletionActivationPolicyTests` covers the block/allow split, and
+  `CompatibilityProfileTests` verifies MVP profiles do not opt in. Full
+  `swift test` passed 747 tests.
 - Current 2026-05-07 goal pass: added a pre-accept snapshot guard for app,
   process, focused field, selected text, and before/after cursor text; records
   accept-key focus mismatches as `wrong-app-or-field-before-accept` severe

@@ -88,6 +88,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Add an override path for safe singleline compose fields.
 - [x] Add a "why blocked" line for field classifier suppressions.
 - [x] Make stable-bounds field identities deterministic across process launches.
+- [x] Suppress unknown field kinds unless a compatibility profile explicitly opts in.
 
 ## P0 - Insertion, Tab, And Focus Trust
 
