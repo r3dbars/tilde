@@ -36,6 +36,11 @@ if ! rg -n "mockFallbackAllowed.*false" Sources/AutocompleteLabApp/Runtime/AppMo
   fail "runtime bootstrap diagnostics must state mock fallback is disabled"
 fi
 
+if rg -n "MockCompletionEngine|mockFallback" Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift >/dev/null; then
+  rg -n "MockCompletionEngine|mockFallback" Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift >&2
+  fail "legacy local completion engine must fail closed instead of falling back to mock suggestions"
+fi
+
 if ! rg -n "no mock runtime fallback" docs/research/runtime-options.md >/dev/null; then
   fail "runtime docs must state the no-mock beta rule"
 fi

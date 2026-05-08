@@ -15,8 +15,8 @@ struct LocalCompletionEngineTests {
 
         let configuration = await runner.lastConfiguration
         #expect(configuration?.model == .qwen35FourB)
-        #expect(configuration?.maxGeneratedTokens == 10)
-        #expect(configuration?.maxVisibleWords == 5)
+        #expect(configuration?.maxGeneratedTokens == 9)
+        #expect(configuration?.maxVisibleWords == 3)
         #expect(configuration?.reasoningEnabled == false)
     }
 
@@ -34,20 +34,20 @@ struct LocalCompletionEngineTests {
         #expect(suggestion?.visibleText == " keep moving today")
     }
 
-    @Test("Falls back to mock when runtime fails")
-    func fallsBackToMockWhenRuntimeFails() async throws {
+    @Test("Fails closed when runtime fails")
+    func failsClosedWhenRuntimeFails() async throws {
         let runner = FakeLocalRunner(result: .failure(FakeRuntimeError.failed))
         let engine = LocalCompletionEngine(runner: runner)
 
-        let suggestion = try await engine.suggestion(
-            for: CompletionRequest(textBeforeCursor: "I think", maxVisibleWords: 8)
-        )
-
-        #expect(suggestion?.visibleText == " we should ship this")
+        await #expect(throws: FakeRuntimeError.failed) {
+            _ = try await engine.suggestion(
+                for: CompletionRequest(textBeforeCursor: "I think", maxVisibleWords: 8)
+            )
+        }
     }
 
-    @Test("Falls back to mock when runtime returns empty output")
-    func fallsBackToMockWhenRuntimeReturnsEmptyOutput() async throws {
+    @Test("Suppresses suggestions when runtime returns empty output")
+    func suppressesSuggestionsWhenRuntimeReturnsEmptyOutput() async throws {
         let runner = FakeLocalRunner(result: .success("   "))
         let engine = LocalCompletionEngine(runner: runner)
 
@@ -55,11 +55,11 @@ struct LocalCompletionEngineTests {
             for: CompletionRequest(textBeforeCursor: "can we", maxVisibleWords: 8)
         )
 
-        #expect(suggestion?.visibleText == " make this feel instant")
+        #expect(suggestion == nil)
     }
 
-    @Test("Mock fallback keeps suggestions after a completed unmatched word")
-    func mockFallbackSuggestsAfterTrailingWhitespace() async throws {
+    @Test("Suppresses suggestions after empty output for completed unmatched word")
+    func suppressesEmptyOutputAfterTrailingWhitespace() async throws {
         let runner = FakeLocalRunner(result: .success("   "))
         let engine = LocalCompletionEngine(runner: runner)
 
@@ -67,11 +67,11 @@ struct LocalCompletionEngineTests {
             for: CompletionRequest(textBeforeCursor: "I wrote test ", maxVisibleWords: 8)
         )
 
-        #expect(suggestion?.visibleText == " and keep moving")
+        #expect(suggestion == nil)
     }
 
-    @Test("Falls back to mock when runtime echoes earlier context")
-    func fallsBackToMockWhenRuntimeEchoesEarlierContext() async throws {
+    @Test("Suppresses suggestions when runtime echoes earlier context")
+    func suppressesRuntimeOutputThatEchoesEarlierContext() async throws {
         let runner = FakeLocalRunner(result: .success("Hey. How are"))
         let engine = LocalCompletionEngine(runner: runner)
 
@@ -79,7 +79,7 @@ struct LocalCompletionEngineTests {
             for: CompletionRequest(textBeforeCursor: "Hey. How are we going to do th", maxVisibleWords: 8)
         )
 
-        #expect(suggestion?.visibleText == " and keep moving")
+        #expect(suggestion == nil)
     }
 
     @Test("Keeps cleaned runtime suggestions for unmatched typo fragments")
@@ -94,13 +94,26 @@ struct LocalCompletionEngineTests {
         #expect(suggestion?.visibleText == " Hey that sounds")
     }
 
-    @Test("Factory selects mock when app-owned runtime is missing")
-    func factorySelectsMockForMissingRuntime() {
+    @Test("Factory selects unavailable when app-owned runtime is missing")
+    func factorySelectsUnavailableForMissingRuntime() {
         let factory = CompletionEngineFactory(
             runtimeExecutableURL: URL(fileURLWithPath: "/tmp/autocomplete-lab-missing-runtime")
         )
 
-        #expect(factory.selection() == .mockFallback)
+        #expect(factory.selection() == .unavailable)
+    }
+
+    @Test("Factory suppresses suggestions when app-owned runtime is missing")
+    func factorySuppressesSuggestionsForMissingRuntime() async throws {
+        let factory = CompletionEngineFactory(
+            runtimeExecutableURL: URL(fileURLWithPath: "/tmp/autocomplete-lab-missing-runtime")
+        )
+
+        let suggestion = try await factory.makeEngine().suggestion(
+            for: CompletionRequest(textBeforeCursor: "I think", maxVisibleWords: 8)
+        )
+
+        #expect(suggestion == nil)
     }
 
     @Test("Factory selects local Gemma bridge when app-owned runtime is executable")

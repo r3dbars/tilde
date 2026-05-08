@@ -45,22 +45,22 @@ Starting score before this pass: **72/100**.
 
 The starting app had real MLX runtime code and in-app model setup, but still had production-facing mock fallback wiring in `RuntimeBootstrapPlan` and `AppModelRuntimeFactory`, README copy claiming mock fallback, a macOS package target that disagreed with runtime docs, and no memory/thermal response.
 
-After this pass, runtime bootstrap fails closed instead of selecting `MockModelRuntime`, app diagnostics state `mockFallbackAllowed=false`, the package target matches macOS 14, a backend sanity gate is part of smoke/beta checks, resource pressure now suppresses suggestions and unloads the runtime on serious/critical pressure, and the preferred Qwen3.5 4B model source is pinned.
+After this pass, runtime bootstrap fails closed instead of selecting `MockModelRuntime`, the legacy local engine fails closed instead of returning mock suggestions, app diagnostics state `mockFallbackAllowed=false`, the package target matches macOS 14, a backend sanity gate is part of smoke/beta checks, resource pressure now suppresses suggestions and unloads the runtime on serious/critical pressure, and the preferred Qwen3.5 4B model source is pinned.
 
 The score is still capped because `./script/model_latency_report.py --default-model-proof` has not passed with current Qwen3.5 4B samples, the runtime runs inside the menu bar app process instead of a helper/XPC process, and real battery/thermal/memory-pressure proof is still missing.
 
 ## Score
 
-Overall score: **80/100**
+Overall score: **82/100**
 
 ## Score Breakdown
 
 ### Latency and Responsiveness
 
 - Weight: 25
-- Current score: 18/25
-- Why this score: The app has MLX timing logs, streaming partials, short generation caps, stale request tickets, and a default-model latency proof script. Current live proof is incomplete.
-- Evidence found in repo: `Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift`, `Sources/AutocompleteLabCore/Session/SuggestionRequestGate.swift`, `script/model_latency_report.py`, `script/model_latency_report_self_test.sh`
+- Current score: 19/25
+- Why this score: The app has MLX timing logs, streaming partials, short 3-word/9-token MVP generation caps, stale request tickets, and a default-model latency proof script. Current live proof is incomplete.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Configuration/ModelPolicy.swift`, `Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift`, `Sources/AutocompleteLabCore/Session/SuggestionRequestGate.swift`, `script/model_latency_report.py`, `script/model_latency_report_self_test.sh`
 - Missing evidence: Passing `./script/model_latency_report.py --default-model-proof` with current Qwen3.5 4B samples; p50/p95/p99 from replay; cold/warm/wake split.
 - What would make it 100/100: Automated replay and live default-model proof show ideal or high-acceptable TTFS on reference 16 GB Macs, with stale suggestions dropped under target.
 
@@ -103,9 +103,9 @@ Overall score: **80/100**
 ### Failure Behavior and Observability
 
 - Weight: 10
-- Current score: 8/10
-- Why this score: Missing/invalid/warming/failed runtime states block suggestions. This pass removed mock fallback as app readiness and added backend sanity gating. Generation errors still need richer degraded-state handling.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swift`, `Sources/AutocompleteLabApp/Runtime/UnavailableModelRuntime.swift`, `Tests/AutocompleteLabAppTests/UnavailableModelRuntimeTests.swift`, `script/check_backend_sanity.sh`, `script/beta_readiness.sh`
+- Current score: 9/10
+- Why this score: Missing/invalid/warming/failed runtime states block suggestions. This pass removed mock fallback as app readiness, removed the legacy core mock fallback, and added backend sanity gating. Generation errors still need richer degraded-state handling.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swift`, `Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift`, `Sources/AutocompleteLabApp/Runtime/UnavailableModelRuntime.swift`, `Tests/AutocompleteLabCoreTests/LocalCompletionEngineTests.swift`, `Tests/AutocompleteLabAppTests/UnavailableModelRuntimeTests.swift`, `script/check_backend_sanity.sh`, `script/beta_readiness.sh`
 - Missing evidence: Repeated generation failure backoff, helper crash recovery, fallback-frequency metric from replay, CI gate that rejects mock in beta artifacts.
 - What would make it 100/100: Every failure has a typed reason, no deceptive fallback, repeated failures degrade or suspend, and release checks fail on hidden mock/network/server paths.
 
@@ -161,10 +161,11 @@ The app owns the runtime in an isolated helper, ships one pinned default model p
 
 ## Verification This Pass
 
-- `swift test`: passed, 738 tests.
+- `swift test`: passed, 739 tests.
 - `swift test --filter RuntimePolicyTests`: passed.
 - `swift test --filter RuntimeResourcePressurePolicyTests`: passed.
 - `swift test --filter UnavailableModelRuntimeTests`: passed.
+- `swift test --filter 'CompletionPromptBuilderTests|MockModelRuntimeTests|ModelPolicyTests|LocalCompletionEngineTests'`: passed after MVP default changed to 3 visible words / 9 generated tokens and legacy local engine fallback changed to fail closed.
 - `./script/check_backend_sanity.sh`: passed.
 - `./script/model_latency_report_self_test.sh`: passed.
 - `./script/check_trace_eval_self_test.sh`: passed.
@@ -172,6 +173,7 @@ The app owns the runtime in an isolated helper, ships one pinned default model p
 - `./script/check_test_coverage_manifest.sh`: passed.
 - `./script/check_model_asset.py`: passed for Qwen3.5 4B MLX.
 - `./script/model_latency_report.py --default-model-proof`: blocked, not enough current model timing samples.
+- `./script/smoke_test.sh`: blocked by visual placement evidence gaps after Swift tests, backend sanity, coverage manifest, and self-tests passed.
 - `./script/beta_readiness.sh --check-only`: blocked by stale/manual app proof, visual proof gaps, and missing beta archive; backend sanity, model asset, runtime production gate, redacted export, and package prerequisites passed.
 
 ## Implementation Queue
@@ -202,6 +204,15 @@ The app owns the runtime in an isolated helper, ships one pinned default model p
 - Proof required: `./script/check_backend_sanity.sh`, `swift test`
 - Risk level: Low
 - Expected score impact: +1
+
+### Done In This Pass: Align Runtime Length Defaults and Remove Legacy Mock Fallback
+
+- Objective: Keep beta runtime defaults at 3 visible words / 9 generated tokens and make the legacy local engine fail closed instead of returning mock suggestions.
+- Files likely involved: `ModelPolicy.swift`, `LocalCompletionEngine.swift`, `ModelPolicyTests.swift`, `LocalCompletionEngineTests.swift`, `check_backend_sanity.sh`
+- Tests to add/update: `ModelPolicyTests.swift`, `LocalCompletionEngineTests.swift`
+- Proof required: `swift test --filter ModelPolicyTests`, `swift test --filter LocalCompletionEngineTests`, `./script/check_backend_sanity.sh`
+- Risk level: Medium
+- Expected score impact: +2
 
 ### Next: Generate Fresh Qwen Latency Proof
 

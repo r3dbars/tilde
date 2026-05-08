@@ -104,34 +104,23 @@ public final class ProcessCompletionRuntimeRunner: LocalCompletionRuntimeRunner,
 
 public final class LocalCompletionEngine: CompletionEngine, @unchecked Sendable {
     private let runner: any LocalCompletionRuntimeRunner
-    private let fallback: any CompletionEngine
     private let promptBuilder: CompletionPromptBuilder
     private let configuration: LocalCompletionRuntimeConfiguration
 
     public init(
         runner: any LocalCompletionRuntimeRunner,
-        fallback: any CompletionEngine = MockCompletionEngine(),
         promptBuilder: CompletionPromptBuilder = CompletionPromptBuilder(),
         configuration: LocalCompletionRuntimeConfiguration = LocalCompletionRuntimeConfiguration()
     ) {
         self.runner = runner
-        self.fallback = fallback
         self.promptBuilder = promptBuilder
         self.configuration = configuration
     }
 
     public func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
-        do {
-            let prompt = promptBuilder.prompt(for: request)
-            let rawOutput = try await runner.complete(prompt: prompt, configuration: configuration)
-            if let cleaned = clean(rawOutput, request: request) {
-                return cleaned
-            }
-        } catch {
-            return try await fallback.suggestion(for: request)
-        }
-
-        return try await fallback.suggestion(for: request)
+        let prompt = promptBuilder.prompt(for: request)
+        let rawOutput = try await runner.complete(prompt: prompt, configuration: configuration)
+        return clean(rawOutput, request: request)
     }
 
     private func clean(_ rawOutput: String, request: CompletionRequest) -> CompletionSuggestion? {
@@ -144,9 +133,17 @@ public final class LocalCompletionEngine: CompletionEngine, @unchecked Sendable 
     }
 }
 
+public final class UnavailableCompletionEngine: CompletionEngine, @unchecked Sendable {
+    public init() {}
+
+    public func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
+        nil
+    }
+}
+
 public enum CompletionEngineSelection: Equatable, Sendable {
     case localGemma4E2B
-    case mockFallback
+    case unavailable
 }
 
 public struct CompletionEngineFactory: Sendable {
@@ -161,7 +158,7 @@ public struct CompletionEngineFactory: Sendable {
     public func selection() -> CompletionEngineSelection {
         guard let runtimeExecutableURL,
               FileManager.default.isExecutableFile(atPath: runtimeExecutableURL.path) else {
-            return .mockFallback
+            return .unavailable
         }
 
         return .localGemma4E2B
@@ -170,7 +167,7 @@ public struct CompletionEngineFactory: Sendable {
     public func makeEngine() -> any CompletionEngine {
         guard let runtimeExecutableURL,
               FileManager.default.isExecutableFile(atPath: runtimeExecutableURL.path) else {
-            return MockCompletionEngine()
+            return UnavailableCompletionEngine()
         }
 
         return LocalCompletionEngine(
