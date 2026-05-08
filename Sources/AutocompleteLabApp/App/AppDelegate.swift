@@ -3533,25 +3533,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard case let .present(placement) = placementPlan else {
-            let suppression: PlacementHealthSuppression
-            if case let .suppress(value) = placementPlan {
-                suppression = value
-            } else {
-                suppression = PlacementHealthSuppression(
-                    requestedRenderMode: learningAdjustment.effectiveRenderMode,
-                    reason: .missingAnchor
-                )
-            }
-            let commandFallbackDecision = CommandFallbackPolicy().decision(
-                supportStatus: .supported(profile),
-                isEnabled: true,
-                fieldKind: request.fieldKind,
-                allowsLowConfidencePlacement: suppression.reason == .lowConfidencePlacement ? false : nil
+            let placementSuppression = suggestionOrchestrator.placementSuppressionResolution(
+                for: placementPlan,
+                requestedRenderMode: learningAdjustment.effectiveRenderMode,
+                profile: profile,
+                fieldKind: request.fieldKind
             )
-            let commandFallbackMetadata = [
-                "commandFallback": commandFallbackDecision.availability.rawValue,
-                "commandFallbackReason": commandFallbackDecision.reason.rawValue
-            ]
+            let suppression = placementSuppression.suppression
+            let commandFallbackMetadata = placementSuppression.metadata
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
                 suggestionID: suggestionID,
@@ -3596,8 +3585,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 reason: suppression.reason.rawValue,
                 metadata: placementMetadata
             )
-            let fallbackSuffix = commandFallbackDecision.canCopyOnly ? "; copy-only fallback available" : ""
-            setSuggestionDecision("Blocked: placement \(suppression.reason.rawValue)\(fallbackSuffix)")
+            setSuggestionDecision("Blocked: placement \(suppression.reason.rawValue)\(placementSuppression.fallbackSuffix)")
             hideSuggestion(reason: "placement-\(suppression.reason.rawValue)")
             return
         }
