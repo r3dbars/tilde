@@ -35,18 +35,22 @@ Notes proof must use notes-title, notes-body, notes-checklist, or their
 notes-*-undo variants. A generic notes run only prints the surface picker and
 does not record proof.
 
-Chrome defaults to the textarea fixture. Use --fixture chat-like to prove
-Tab/full-accept do not submit a chat-style composer. Use --fixture monaco-real
-or --fixture prosemirror-real for pinned upstream editor-engine fixtures in an
-isolated Chrome process with renderer accessibility forced. Use
---chrome-accessibility default to run those real editor fixtures in the normal
-frontmost Chrome window as an experimental default-AX exposure proof. Use
+Chrome defaults to the textarea fixture in an isolated Chrome process with
+renderer accessibility forced. Use --fixture chat-like to prove Tab/full-accept
+do not submit a chat-style composer. Use --fixture monaco-real or
+--fixture prosemirror-real for pinned upstream editor-engine fixtures. Use
+--chrome-accessibility default to run local fixtures in the normal frontmost
+Chrome window as an experimental default-AX exposure proof. Use
 --fixture codemirror-official, monaco-official, or prosemirror-official to run
 bounded proof against the public official editor demo pages in normal Chrome.
 Use
 --fixture all to run every local Chrome browser/editor fixture with one app
 build. Add --include-default-real-editor-proof with --fixture all to rerun real
 Monaco and ProseMirror in default Chrome AX mode after the forced lane.
+
+--skip-build reuses the already-running AutocompleteLab app and requires that process
+to have been launched from this checkout with any proof-mode environment needed
+by the smoke pass.
 EOF
 }
 
@@ -933,29 +937,23 @@ chrome_fixture_uses_isolated_accessibility_chrome() {
     return 1
   fi
 
-  case "$1" in
-    monaco-real|prosemirror-real)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+  if chrome_fixture_is_official_demo "$1"; then
+    return 1
+  fi
+
+  return 0
 }
 
-chrome_fixture_uses_default_real_editor_accessibility() {
+chrome_fixture_uses_default_browser_accessibility() {
   if [[ "$CHROME_ACCESSIBILITY_MODE" != "default" ]]; then
     return 1
   fi
 
-  case "$1" in
-    monaco-real|prosemirror-real)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+  if chrome_fixture_is_official_demo "$1"; then
+    return 1
+  fi
+
+  return 0
 }
 
 chrome_default_accessibility_exposes_web_content() {
@@ -1009,7 +1007,7 @@ JXA
 require_default_chrome_web_accessibility() {
   local fixture="$1"
 
-  if ! chrome_fixture_uses_default_real_editor_accessibility "$fixture"; then
+  if ! chrome_fixture_uses_default_browser_accessibility "$fixture"; then
     return 0
   fi
 
@@ -1021,21 +1019,19 @@ require_default_chrome_web_accessibility() {
 
   echo "Default Chrome did not expose page editor content through macOS Accessibility." >&2
   echo "The active window is ready, but the AX tree contains only browser chrome, not AXWebArea/AXTextArea content." >&2
-  echo "Use --chrome-accessibility forced for the isolated proof lane, or enable Chrome renderer accessibility before claiming default-Chrome editor proof." >&2
+  echo "Use --chrome-accessibility forced for the isolated proof lane, or enable Chrome renderer accessibility before claiming default-Chrome browser proof." >&2
   exit 1
 }
 
 chrome_smoke_proof_label() {
   local fixture="$1"
 
-  case "$fixture:$CHROME_ACCESSIBILITY_MODE" in
-    monaco-real:default|prosemirror-real:default)
-      printf '%s-default\n' "$fixture"
-      ;;
-    *)
-      printf '%s\n' "$fixture"
-      ;;
-  esac
+  if [[ "$CHROME_ACCESSIBILITY_MODE" == "default" ]] && ! chrome_fixture_is_official_demo "$fixture"; then
+    printf '%s-default\n' "$fixture"
+    return 0
+  fi
+
+  printf '%s\n' "$fixture"
 }
 
 chrome_window_title_for_pid() {
@@ -2486,10 +2482,10 @@ describe_plan() {
       echo "Chrome fixture: $CHROME_FIXTURE"
       case "$CHROME_ACCESSIBILITY_MODE" in
         forced)
-          echo "Chrome accessibility: forced renderer accessibility for real editor fixtures"
+          echo "Chrome accessibility: isolated Chrome with forced renderer accessibility for local fixtures"
           ;;
         default)
-          echo "Chrome accessibility: default Chrome accessibility exposure; experimental proof lane, weaker than forced renderer mode"
+          echo "Chrome accessibility: default Chrome accessibility exposure; experimental proof lane, weaker than isolated forced renderer mode"
           ;;
       esac
       if [[ "$CHROME_FIXTURE" == "all" ]]; then

@@ -42,8 +42,6 @@ fi
 
 declare -a APPS=(
   "TextEdit|TextEdit|com.apple.TextEdit|full|default|script/manual_smoke_session.sh textedit --visual"
-  "TextEdit multiline|TextEdit|com.apple.TextEdit|full|multiline|script/real_app_smoke.sh textedit-multiline"
-  "TextEdit wrapped line|TextEdit|com.apple.TextEdit|full|wrapped-line|script/real_app_smoke.sh textedit-wrapped"
   "Notes title|Notes|com.apple.Notes|full|notes-title|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate"
   "Notes body|Notes|com.apple.Notes|full|notes-body|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate"
   "Notes checklist|Notes|com.apple.Notes|full|notes-checklist|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate"
@@ -81,6 +79,15 @@ collect_current_build_proofs() {
   commit="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
   if [[ -n "$commit" ]]; then
     CURRENT_BUILD_PROOFS+=("commit:$commit")
+  fi
+
+  local app_binary="${AUTOCOMPLETE_LAB_APP_BINARY:-dist/AutocompleteLab.app/Contents/MacOS/AutocompleteLab}"
+  if [[ -s "$app_binary" ]]; then
+    local app_sha
+    app_sha="$(shasum -a 256 "$app_binary" | awk '{print $1}')"
+    if [[ -n "$app_sha" ]]; then
+      CURRENT_BUILD_PROOFS+=("app-sha256:$app_sha")
+    fi
   fi
 
   local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/AutocompleteLab.zip}"

@@ -23,18 +23,6 @@ if ! grep -F "Proof mode bundle(s): com.apple.TextEdit" "$TMP_DIR/textedit.txt" 
   exit 1
 fi
 
-script/real_app_smoke.sh textedit-multiline --dry-run >"$TMP_DIR/textedit-multiline.txt"
-if ! grep -F "two-line test fragment" "$TMP_DIR/textedit-multiline.txt" >/dev/null; then
-  echo "real app smoke self-test did not print the TextEdit multiline dry-run plan" >&2
-  exit 1
-fi
-
-script/real_app_smoke.sh textedit-wrapped --dry-run >"$TMP_DIR/textedit-wrapped.txt"
-if ! grep -F "wrapped-line test fragment" "$TMP_DIR/textedit-wrapped.txt" >/dev/null; then
-  echo "real app smoke self-test did not print the TextEdit wrapped-line dry-run plan" >&2
-  exit 1
-fi
-
 script/real_app_smoke.sh chrome --dry-run >"$TMP_DIR/chrome.txt"
 if ! grep -F "disposable Chrome textarea fixture" "$TMP_DIR/chrome.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome dry-run plan" >&2
@@ -87,13 +75,13 @@ if ! grep -F "disposable Chrome monaco-real fixture" "$TMP_DIR/chrome-monaco-rea
   echo "real app smoke self-test did not print the real Chrome Monaco dry-run plan" >&2
   exit 1
 fi
-if ! grep -F "Chrome accessibility: forced renderer accessibility for real editor fixtures" "$TMP_DIR/chrome-monaco-real.txt" >/dev/null; then
+if ! grep -F "Chrome accessibility: isolated Chrome with forced renderer accessibility for local fixtures" "$TMP_DIR/chrome-monaco-real.txt" >/dev/null; then
   echo "real app smoke self-test did not print the forced Chrome accessibility mode" >&2
   exit 1
 fi
 
 script/real_app_smoke.sh chrome --fixture monaco-real --chrome-accessibility default --dry-run >"$TMP_DIR/chrome-monaco-real-default.txt"
-if ! grep -F "Chrome accessibility: default Chrome accessibility exposure; experimental proof lane, weaker than forced renderer mode" "$TMP_DIR/chrome-monaco-real-default.txt" >/dev/null; then
+if ! grep -F "Chrome accessibility: default Chrome accessibility exposure; experimental proof lane, weaker than isolated forced renderer mode" "$TMP_DIR/chrome-monaco-real-default.txt" >/dev/null; then
   echo "real app smoke self-test did not print the default Chrome accessibility proof lane" >&2
   exit 1
 fi

@@ -12,6 +12,8 @@ When a trace slice says `visual strict-complete`, strict screenshot evidence was
 required and passed. Rows without that marker are insertion proof only.
 Rows with `lines N+` are historical open-ended proof. New recorder rows should
 use bounded `lines N-M` ranges so strict proof can replay exactly that slice.
+Rows may also include `build` proof such as the source commit and app binary
+SHA so current-build status checks do not treat fresh proof as stale.
 
 | Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
 | --- | --- | --- | --- | ---: | --- | --- | --- |
@@ -161,3 +163,5 @@ use bounded `lines N-M` ranges so strict proof can replay exactly that slice.
 | 2026-05-08T12:46:09Z | Chrome | `com.google.Chrome` | `prosemirror-real-default` | 2 | `inlineAdjacent|floatingMirror` | lines 195420-195463 in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 56360-56373 in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`; visual `strict-complete` |
 | 2026-05-08T17:04:17Z | Claude Code | `com.anthropic.claude-code` | `default` | 1 | `inlineAdjacent|floatingMirror` | lines 200588-200642 in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 56582-56587 in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`; visual `strict-complete` |
 | 2026-05-08T23:45:00Z | TextEdit | `com.apple.TextEdit` | `default` | 2 | `inlineAdjacent|floatingMirror` | lines 215046-215091 in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 59466-59475 in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`; visual `strict-complete` |
+| 2026-05-08T23:54:22Z | Chrome | `com.google.Chrome` | `textarea` | 2 | `inlineAdjacent|floatingMirror` | lines 216787-216850 in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 59482-59503 in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`; visual `strict-complete` |
+| 2026-05-08T23:58:46Z | Chrome | `com.google.Chrome` | `textarea` | 2 | `inlineAdjacent|floatingMirror` | lines 218531-218603 in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 59506-59526 in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`; visual `strict-complete`; build `commit:49e569e20411,app-sha256:fe00ed1333ebd07e8f7f911637494c443387164a5d9b39c2e6ba98b23f16d91f` |
