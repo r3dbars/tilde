@@ -788,6 +788,7 @@ wait_for_chrome_smoke_ready() {
   local deadline=$((SECONDS + timeout_seconds))
 
   if chrome_fixture_is_official_demo "$fixture"; then
+    require_chrome_javascript_from_apple_events "$fixture"
     while ((SECONDS <= deadline)); do
       local ready
       ready="$(chrome_official_demo_ready "$fixture" | tr -d '[:space:]')"
@@ -850,6 +851,31 @@ on run argv
   end tell
 end run
 APPLESCRIPT
+}
+
+require_chrome_javascript_from_apple_events() {
+  local fixture="$1"
+  local result
+
+  result="$(osascript <<'APPLESCRIPT' 2>/dev/null || true
+tell application "Google Chrome"
+  try
+    return execute active tab of front window javascript "String(1 + 1)"
+  on error errMsg
+    return "error: " & errMsg
+  end try
+end tell
+APPLESCRIPT
+)"
+
+  if [[ "$result" == "2" ]]; then
+    return 0
+  fi
+
+  echo "Chrome $fixture official-demo proof requires JavaScript from Apple Events." >&2
+  echo "In Chrome, enable View > Developer > Allow JavaScript from Apple Events, then rerun this smoke lane." >&2
+  echo "Failing closed before typing because the script cannot focus or verify the official demo editor without that permission." >&2
+  exit 1
 }
 
 chrome_official_demo_ready() {
@@ -2473,6 +2499,7 @@ describe_plan() {
         fi
       elif chrome_fixture_is_official_demo "$CHROME_FIXTURE"; then
         echo "Plan: build/relaunch AutocompleteLab, open the public official $CHROME_FIXTURE demo page in Chrome, type a disposable test fragment, then validate logs and traces."
+        echo "Requirement: official Chrome demo lanes need Chrome's View > Developer > Allow JavaScript from Apple Events setting so the script can focus and verify the editor."
       else
         echo "Plan: build/relaunch AutocompleteLab, open a disposable Chrome $CHROME_FIXTURE fixture, type a test fragment, then validate logs and traces."
       fi
