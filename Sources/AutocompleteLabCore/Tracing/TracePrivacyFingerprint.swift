@@ -4,6 +4,32 @@ import Foundation
 public enum TracePrivacyFingerprint {
     public static let version = "hmac-sha256-v1"
 
+    public static func textToken(
+        for text: String,
+        purpose: String,
+        scope: String = "",
+        mode: String = "",
+        secret: Data
+    ) -> String? {
+        guard !secret.isEmpty,
+              let normalizedText = normalizedTokenText(for: text) else {
+            return nil
+        }
+
+        let payload = [
+            version,
+            normalizeContextValue(purpose),
+            normalizeContextValue(mode),
+            normalizeContextValue(scope),
+            normalizedText
+        ].joined(separator: "\u{1F}")
+        return hmacHex(payload, secret: secret)
+    }
+
+    public static func tokenCount(for text: String) -> Int {
+        AcceptanceSurvivalClassifier.looseTokens(in: text).count
+    }
+
     public static func metadata(for text: String, secret: Data) -> [String: String] {
         let tokens = AcceptanceSurvivalClassifier.looseTokens(in: text)
         guard !tokens.isEmpty, !secret.isEmpty else {
@@ -34,6 +60,21 @@ public enum TracePrivacyFingerprint {
         return (0...(tokens.count - 3)).map { index in
             Array(tokens[index..<(index + 3)])
         }
+    }
+
+    private static func normalizedTokenText(for text: String) -> String? {
+        let tokens = AcceptanceSurvivalClassifier.looseTokens(in: text)
+        guard !tokens.isEmpty else {
+            return nil
+        }
+
+        return tokens.joined(separator: " ")
+    }
+
+    private static func normalizeContextValue(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 
     private static func hmacHex(

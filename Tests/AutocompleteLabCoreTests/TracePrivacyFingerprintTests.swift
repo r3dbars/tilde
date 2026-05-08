@@ -30,6 +30,38 @@ struct TracePrivacyFingerprintTests {
         #expect(!json.localizedCaseInsensitiveContains("useful"))
     }
 
+    @Test("Text tokens are stable, scoped, and do not expose raw text")
+    func textTokensAreStableAndScoped() throws {
+        let secret = Data("unit-test-secret".utf8)
+        let token = try #require(TracePrivacyFingerprint.textToken(
+            for: "Make this tiny suggestion useful",
+            purpose: "block",
+            scope: "com.apple.TextEdit",
+            mode: "phraseContinuation",
+            secret: secret
+        ))
+        let same = try #require(TracePrivacyFingerprint.textToken(
+            for: "make this tiny suggestion useful.",
+            purpose: "block",
+            scope: "COM.APPLE.TEXTEDIT",
+            mode: "phraseContinuation",
+            secret: secret
+        ))
+        let differentScope = try #require(TracePrivacyFingerprint.textToken(
+            for: "Make this tiny suggestion useful",
+            purpose: "block",
+            scope: "com.apple.Notes",
+            mode: "phraseContinuation",
+            secret: secret
+        ))
+
+        #expect(token == same)
+        #expect(token != differentScope)
+        #expect(TracePrivacyFingerprint.tokenCount(for: "Make this tiny suggestion useful") == 5)
+        #expect(!token.localizedCaseInsensitiveContains("suggestion"))
+        #expect(!token.localizedCaseInsensitiveContains("useful"))
+    }
+
     @Test("Rotates default trace session ids once per UTC day")
     func rotatesSessionIDsDaily() throws {
         let firstDay = try #require(ISO8601DateFormatter().date(from: "2026-05-07T12:00:00Z"))

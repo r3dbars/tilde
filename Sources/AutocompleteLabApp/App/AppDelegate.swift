@@ -45,8 +45,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let recentWordExtractor = RecentWordExtractor()
     private let typingBurstPolicy = TypingBurstPolicy()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
+    private let tracePrivacySecretStore = TracePrivacySecretStore()
     private let suggestionPanel = SuggestionPanelController()
     private lazy var focusedTextReader = SerialFocusedTextAXReader(accessibilityClient: accessibilityClient)
+    private lazy var suppressedSuggestionFileStore = SuppressedSuggestionFileStore(
+        secret: tracePrivacySecretStore.secret()
+    )
     private let diagnosticsWindow = DiagnosticsWindowController()
     private lazy var settingsWindow = SettingsWindowController(
         requestPermission: { [weak self] in
@@ -125,6 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pauseSuggestionsMenuItem: NSMenuItem?
     private var toggleAppMenuItem: NSMenuItem?
     private var quietFieldMenuItem: NSMenuItem?
+    private var neverSuggestMenuItem: NSMenuItem?
     private var pollTimer: Timer?
     private var keyboardEventTap: KeyboardEventTap?
     private var keyboardEventTapStopTask: Task<Void, Never>?
@@ -252,6 +257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let pauseItem = NSMenuItem(title: pauseSuggestionsTitle, action: #selector(togglePauseSuggestions), keyEquivalent: "p")
         let toggleItem = NSMenuItem(title: "Toggle Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
         let quietFieldItem = NSMenuItem(title: "Quiet Current Field", action: #selector(quietCurrentFieldFromControl), keyEquivalent: "")
+        let neverSuggestItem = NSMenuItem(title: "Never Suggest This Again", action: #selector(neverSuggestCurrentSuggestion), keyEquivalent: "")
         let debugMenuItem = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         let debugMenu = NSMenu()
 
@@ -262,6 +268,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(pauseItem)
         menu.addItem(toggleItem)
         menu.addItem(quietFieldItem)
+        menu.addItem(neverSuggestItem)
         menu.addItem(NSMenuItem(title: "Command Context...", action: #selector(showCommandContextPanel), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
@@ -287,6 +294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pauseSuggestionsMenuItem = pauseItem
         toggleAppMenuItem = toggleItem
         quietFieldMenuItem = quietFieldItem
+        neverSuggestMenuItem = neverSuggestItem
         refreshMenuBarIcon()
         refreshRuntimeChrome()
     }
@@ -2094,6 +2102,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 for: context.textBeforeCursor,
                 recentWords: recentWordMemory.words(for: appBundleIdentifier)
             ) {
+                if let blockedEntry = suppressedSuggestionFileStore.match(
+                    fastSuggestion.visibleText,
+                    mode: request.mode,
+                    scope: appBundleIdentifier
+                ) {
+                    recordDurableSuggestionSuppression(
+                        blockedEntry,
+                        suggestion: fastSuggestion,
+                        suggestionID: suggestionID,
+                        request: request,
+                        context: context,
+                        profile: profile,
+                        fieldIdentityDescription: fieldIdentityDescription,
+                        triggerReason: "fast-word-completion",
+                        latencyMilliseconds: 0,
+                        metadata: [
+                            "renderMode": renderMode.rawValue
+                        ]
+                    )
+                    hideSuggestion()
+                    return
+                }
                 guard !suggestionRepetitionSuppressor.shouldSuppress(
                     fastSuggestion.visibleText,
                     mode: request.mode,
@@ -2188,6 +2218,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             }
 
                             guard !partialSuggestion.isEmpty,
+                                  self.suppressedSuggestionFileStore.match(
+                                      partialSuggestion.visibleText,
+                                      mode: request.mode,
+                                      scope: appBundleIdentifier
+                                  ) == nil,
                                   !self.suggestionRepetitionSuppressor.shouldSuppress(
                                       partialSuggestion.visibleText,
                                       mode: request.mode,
@@ -2302,6 +2337,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         displayedText: suggestion.visibleText,
                         latencyMilliseconds: latencyMilliseconds
                     )
+                    if let blockedEntry = self.suppressedSuggestionFileStore.match(
+                        suggestion.visibleText,
+                        mode: request.mode,
+                        scope: appBundleIdentifier
+                    ) {
+                        self.recordDurableSuggestionSuppression(
+                            blockedEntry,
+                            suggestion: suggestion,
+                            suggestionID: suggestionID,
+                            request: request,
+                            context: context,
+                            profile: profile,
+                            fieldIdentityDescription: fieldIdentityDescription,
+                            triggerReason: "model-result",
+                            latencyMilliseconds: latencyMilliseconds
+                        )
+                        self.hideSuggestion()
+                        return
+                    }
                     guard !self.suggestionRepetitionSuppressor.shouldSuppress(
                         suggestion.visibleText,
                         mode: request.mode,
@@ -2344,6 +2398,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+    }
+
+    private func recordDurableSuggestionSuppression(
+        _ entry: SuppressedSuggestionEntry,
+        suggestion: CompletionSuggestion,
+        suggestionID: String,
+        request: CompletionRequest,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentityDescription: String,
+        triggerReason: String,
+        latencyMilliseconds: Int,
+        metadata: [String: String] = [:]
+    ) {
+        let reason = "blocked-exact-suggestion"
+        let suppressionMetadata = entry.traceMetadata
+            .merging(metadata) { current, _ in current }
+
+        RawAutocompleteTraceLog.shared.record(
+            type: .suggestionSuppressed,
+            suggestionID: suggestionID,
+            appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+            fieldIdentity: fieldIdentityDescription,
+            requestMode: request.mode.rawValue,
+            triggerReason: triggerReason,
+            textBeforeCursor: request.textBeforeCursor,
+            textAfterCursor: request.textAfterCursor,
+            cleanedVisibleText: suggestion.visibleText,
+            displayedText: suggestion.visibleText,
+            latencyMilliseconds: latencyMilliseconds,
+            reason: reason,
+            metadata: suppressionMetadata
+        )
+        recordSuggestionEvent(
+            "suggestion-blocked",
+            context: context,
+            profile: profile,
+            metadata: [
+                "reason": reason,
+                "triggerReason": triggerReason
+            ]
+            .merging(entry.traceMetadata) { current, _ in current }
+        )
+        setSuggestionDecision("Blocked: exact suggestion")
     }
 
     private func presentSuggestion(
@@ -3456,6 +3554,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleAppMenuItem?.title = appControlState?.menuToggleTitle ?? "Toggle Current App"
         toggleAppMenuItem?.isEnabled = appControlState?.canToggle ?? false
         quietFieldMenuItem?.isEnabled = canQuietCurrentField
+        neverSuggestMenuItem?.isEnabled = canNeverSuggestCurrentSuggestion
         if settingsWindow.isShowing {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,
@@ -3564,6 +3663,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentFieldIdentity != nil && currentProfile?.suppressesUntilBlurAfterEscape == true
     }
 
+    private var canNeverSuggestCurrentSuggestion: Bool {
+        guard suggestionSession.hasVisibleSuggestion,
+              currentSuggestionRequestMode != nil,
+              visibleSuggestionBundleIdentifier != nil else {
+            return false
+        }
+
+        let text = currentSuggestionDisplayedText ?? suggestionSession.visibleSuggestion?.visibleText ?? ""
+        return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private func suppressCurrentField(reason: String) {
         guard let currentProfile,
               currentProfile.suppressesUntilBlurAfterEscape,
@@ -3608,6 +3718,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return false
         }
+    }
+
+    @objc
+    private func neverSuggestCurrentSuggestion() {
+        guard canNeverSuggestCurrentSuggestion,
+              let mode = currentSuggestionRequestMode,
+              let appBundleIdentifier = visibleSuggestionBundleIdentifier else {
+            return
+        }
+
+        let displayedText = currentSuggestionDisplayedText ?? suggestionSession.visibleSuggestion?.visibleText ?? ""
+        guard let entry = suppressedSuggestionFileStore.suppressExact(
+            displayedText,
+            mode: mode,
+            scope: appBundleIdentifier,
+            source: "menu"
+        ) else {
+            return
+        }
+
+        let suggestionID = currentSuggestionID ?? UUID().uuidString
+        let fieldIdentityDescription = currentSuggestionFieldIdentity?.traceDescription
+            ?? currentFieldIdentity?.traceDescription
+            ?? ""
+        RawAutocompleteTraceLog.shared.record(
+            type: .suggestionSuppressed,
+            suggestionID: suggestionID,
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentity: fieldIdentityDescription,
+            requestMode: mode.rawValue,
+            triggerReason: "user-control",
+            displayedText: displayedText,
+            reason: "user-blocked-exact-suggestion",
+            metadata: entry.traceMetadata
+        )
+        DiagnosticsLog.shared.record(
+            "suppressed-suggestion-control",
+            metadata: [
+                "app": appBundleIdentifier,
+                "requestMode": mode.rawValue,
+                "source": "menu"
+            ]
+            .merging(entry.traceMetadata) { current, _ in current }
+        )
+
+        hideSuggestion(reason: "never-suggest-exact")
+        setSuggestionDecision("Blocked: exact suggestion")
+
+        let app = targetAppForControls()
+        updateStatusMenu(
+            app: app,
+            profile: app.flatMap { profileStore.profile(for: $0.bundleIdentifier) },
+            appEnabled: app.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
+        )
     }
 
     @objc
@@ -4231,6 +4395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func deleteLocalPrivacyLogs(refreshSettings: Bool = true) {
         RawAutocompleteTraceLog.shared.deleteAll()
         compatibilityLearningStore.disableScreenshotTracing()
+        suppressedSuggestionFileStore.deleteAll()
         DiagnosticsLog.shared.deleteAll()
         DiagnosticsLog.shared.record(
             "local-privacy-logs-deleted",

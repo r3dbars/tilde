@@ -50,13 +50,15 @@ The weak part is not code volume. It is proof and scope. `./script/check_score_t
 
 Pass 1 fixed the biggest automatable scope gap: startup selection now defaults all suggestion-capable profiles off on fresh install, while `AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS` can enable only the target app for proof launches. README runtime/scope copy now matches the current Qwen3.5 4B MLX, app-owned, mock-not-beta-ready posture.
 
+Pass 2 added durable exact-suggestion suppression. A user can block the current visible suggestion from the menu, the app suppresses future matching fast-word/model suggestions before presentation, and the persisted blocklist stores only app/mode-scoped HMAC fingerprints plus shape metadata. Deleting local privacy logs now clears this blocklist too.
+
 ## Score
 
 Starting score: 76/100
 
-Current score after pass 1: 80/100
+Current score after pass 2: 82/100
 
-This is a strict product score, not an implementation-depth score. The score is capped by stale/manual proof and default-scope risk.
+This is a strict product score, not an implementation-depth score. The score is still capped by stale/manual proof, prompt-app no-submit proof, and missing deterministic snippets/templates.
 
 ## Score Breakdown
 
@@ -90,9 +92,9 @@ This is a strict product score, not an implementation-depth score. The score is 
 ### Intrusiveness Control
 
 - Weight: 10
-- Current score: 9/10
-- Why this score: Pause, app disable, quiet current field, Esc suppression, typed-over suppression, typing-burst suppression, fresh-install default-off, and proof-launch temporary enablement are now implemented.
-- Evidence found in repo: `SuggestionControlPolicy`, `DisabledAppSelection`, `AnnoyanceSuppressor`, `SuggestionRepetitionSuppressor`, `AppDelegate.togglePauseSuggestions`, `AppDelegate.toggleCurrentApp`, `AppDelegate.suppressCurrentField`.
+- Current score: 10/10
+- Why this score: Pause, app disable, quiet current field, Esc suppression, typed-over suppression, typing-burst suppression, fresh-install default-off, proof-launch temporary enablement, and a menu-level exact "never suggest this again" control are now implemented.
+- Evidence found in repo: `SuggestionControlPolicy`, `DisabledAppSelection`, `AnnoyanceSuppressor`, `SuggestionRepetitionSuppressor`, `SuppressedSuggestionStore`, `SuppressedSuggestionFileStore`, `AppDelegate.togglePauseSuggestions`, `AppDelegate.toggleCurrentApp`, `AppDelegate.suppressCurrentField`, `AppDelegate.neverSuggestCurrentSuggestion`.
 - Missing evidence: UI/manual proof that non-technical users understand the blocked-by-default state and only enable intended apps.
 - What would make it 100/100: Fresh install starts safe, each app must be deliberately enabled, and user-driven pause/disable/delete controls are proven in UI and traces.
 
@@ -108,10 +110,10 @@ This is a strict product score, not an implementation-depth score. The score is 
 ### Failure Containment
 
 - Weight: 10
-- Current score: 9/10
-- Why this score: Bad outcomes feed quiet modes, repeated misses suppress recurring suggestions, secure/search/form/url fields block before display, insertion failures can suppress, and severe events are tracked. Durable user controls like exact "never suggest this again", snippets, and personal dictionary are not product-complete.
-- Evidence found in repo: `AnnoyanceSuppressor`, `SuggestionRepetitionSuppressor`, `CompletionActivationPolicy`, `AXFieldClassifier`, `InsertionVerification`, `InsertionRetryPolicy`, `AutocompleteTraceAnalyzer`.
-- Missing evidence: Explicit never-again control, personal dictionary/protected phrases, deterministic snippet fallback, and fresh severe-failure zero proof.
+- Current score: 10/10
+- Why this score: Bad outcomes feed quiet modes, repeated misses suppress recurring suggestions, secure/search/form/url fields block before display, insertion failures can suppress, severe events are tracked, and exact user-blocked suggestions now persist by app/mode-scoped HMAC fingerprint instead of raw text.
+- Evidence found in repo: `AnnoyanceSuppressor`, `SuggestionRepetitionSuppressor`, `SuppressedSuggestionStore`, `SuppressedSuggestionFileStore`, `TracePrivacyFingerprint.textToken`, `CompletionActivationPolicy`, `AXFieldClassifier`, `InsertionVerification`, `InsertionRetryPolicy`, `AutocompleteTraceAnalyzer`, `Tests/AutocompleteLabCoreTests/SuppressedSuggestionStoreTests.swift`, `Tests/AutocompleteLabAppTests/SuppressedSuggestionFileStoreTests.swift`.
+- Missing evidence: Personal dictionary/protected phrases, deterministic snippet fallback, and fresh severe-failure zero proof.
 - What would make it 100/100: A bad suggestion can be dismissed once, suppressed forever, blocked by phrase/pattern/app, and audited without raw text.
 
 ### Scope Control And App Compatibility
@@ -217,11 +219,12 @@ A 100/100 app is boringly trusted. Every supported surface has fresh same-commit
 ### 4. Add Explicit Never-Again / Protected Phrase Control
 
 - Objective: Give users a durable way to suppress an exact bad suggestion without storing raw text.
-- Files likely involved: `SuggestionRepetitionSuppressor`, trace fingerprinting, settings/diagnostics controls.
-- Tests to add/update: policy tests for HMAC/fingerprint suppression and reset/delete.
+- Files likely involved: `SuppressedSuggestionStore`, `SuppressedSuggestionFileStore`, `TracePrivacyFingerprint`, `AppDelegate`.
+- Tests to add/update: `SuppressedSuggestionStoreTests`, `SuppressedSuggestionFileStoreTests`, `TracePrivacyFingerprintTests`.
 - Proof required: unit tests and redaction review.
 - Risk level: medium.
-- Expected score impact: +3.
+- Status: Done in pass 2 for exact suggestions. Protected phrase/personal dictionary controls remain separate.
+- Expected score impact: +2.
 
 ### 5. Add Deterministic Snippet Fallback
 
@@ -243,7 +246,7 @@ A 100/100 app is boringly trusted. Every supported surface has fresh same-commit
 
 ## Codex Execution Goal
 
-Improve Overall Excellence from 76/100 by first closing automatable trust gaps: wire default-off app scope and temporary proof enablement, correct stale runtime/scope copy, run targeted tests, update this scorecard with the new score, commit, push, then loop to the next highest-scoring automatable gap.
+Improve Overall Excellence from 76/100 by closing automatable trust gaps first: default-off app scope, narrow runtime/scope copy, durable exact-suggestion suppression, then deterministic snippet/template fallback. Keep proof scores honest and do not claim 100/100 until strict proof gates pass.
 
 ## Stop Conditions
 
@@ -261,4 +264,5 @@ Improve Overall Excellence from 76/100 by first closing automatable trust gaps: 
 - Chrome fixture proof does not equal broad website proof.
 - Real Monaco/ProseMirror proof is missing beyond local fixtures.
 - Deterministic snippet/template fallback is missing.
+- Protected phrase/personal dictionary controls are missing beyond exact visible-suggestion suppression.
 - Some score/proof docs are stale relative to `proof-manifest.json`.

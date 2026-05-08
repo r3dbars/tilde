@@ -594,7 +594,7 @@ final class SettingsWindowController: NSObject {
         action: nil
     )
     private let privacyStatusButton = NSButton(title: "Privacy Status...", target: nil, action: nil)
-    private let deleteLocalLogsButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
+    private let deleteLocalLogsButton = NSButton(title: "Delete Local Data", target: nil, action: nil)
     private let shortcutLabel = NSTextField(labelWithString: "")
     private let acceptAllShortcutPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
