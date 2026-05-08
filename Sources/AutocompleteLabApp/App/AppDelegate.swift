@@ -143,6 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentFieldIdentity: FocusedFieldIdentity?
     private var currentProfile: CompatibilityProfile?
     private var lastTextSnapshot: FocusedTextSnapshot?
+    private var lastFocusedTextChangeAt: Date?
     private var lastRequestedTextBeforeCursor: String?
     private var suppressedFieldIdentities: Set<FocusedFieldIdentity> = []
     private var disabledBundleIdentifiers: Set<String> = []
@@ -450,6 +451,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         lastTextSnapshot = nil
+        lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         invalidatePendingSuggestionRequest()
         suggestionBlockLogGate.reset()
@@ -678,7 +680,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let interval = focusPollingCadencePolicy.interval(
             isTrustedForAccessibility: accessibilityClient.isTrusted,
             hasSupportedProfile: hasSupportedProfile,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+            hasRecentTextChange: focusPollingCadencePolicy.hasRecentTextChange(
+                lastTextChangeAt: lastFocusedTextChangeAt,
+                now: now
+            )
         )
 
         guard let lastFocusedTextPollAttemptAt else {
@@ -1073,6 +1079,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             repositionVisibleSuggestion(context: context, profile: profile)
             return
+        }
+
+        if previousSnapshot != nil {
+            lastFocusedTextChangeAt = Date()
         }
 
         recordTypedOverSuggestionIfNeeded(
@@ -5325,6 +5335,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         currentFieldIdentity = fieldIdentity
         lastTextSnapshot = nil
+        lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         suggestionBlockLogGate.reset()
     }
@@ -5348,6 +5359,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         currentFieldIdentity = nil
         lastTextSnapshot = nil
+        lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         if resetBlockLogGate {
             suggestionBlockLogGate.reset()
@@ -5932,6 +5944,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let suggestionID = currentSuggestionID ?? ""
         setSuggestionDecision("Ready: app mode \(overrideText)")
         lastTextSnapshot = nil
+        lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         invalidatePendingSuggestionRequest()
         if suggestionSession.hasVisibleSuggestion {

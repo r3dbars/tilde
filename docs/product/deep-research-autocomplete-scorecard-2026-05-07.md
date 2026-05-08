@@ -37,7 +37,10 @@ It is not yet magical by the research bar. The biggest remaining misses are:
   TextEdit focus in shorter CGEvent batches with bounded cleanup. The latest
   10-minute proof passed with zero missed text, zero tap disables, zero focused
   poll skips, focused-poll p95 max 57ms, focused-poll max 87ms, and 4
-  under-threshold slow markers.
+  under-threshold slow markers. The current build now backs off focused-text
+  polling after observed text changes while keeping the fast cadence for visible
+  suggestions; a fresh endurance run still needs to prove the marker count falls
+  to zero.
 
 The repo's existing Apple-native visual-feel score is **95/100**. This score is lower
 because it grades against the research definition of "magical autocomplete,"
@@ -190,6 +193,8 @@ Pass 1 shipped these improvements:
 - Single slow focused-text AX reads with context now start a short polling
   throttle and drop that returned context, so a slow read cannot become the
   next visible suggestion while the app is trying to catch up.
+- Recent text-change polling now uses a slower active-typing cadence so normal
+  typing spends less time in off-main AX reads before a suggestion is visible.
 - Chrome smoke now has pinned upstream `monaco-real` and `prosemirror-real`
   fixture lanes in addition to the dependency-free lookalikes. Both real-engine
   lanes now pass with isolated temp-profile Chrome, renderer accessibility
