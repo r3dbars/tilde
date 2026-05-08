@@ -8,10 +8,19 @@ public struct FocusedTextAXHealthSuggestionVisibilityPolicy: Equatable, Sendable
         currentSuggestionBundleIdentifier: String?,
         currentSuggestionFieldIdentity: FocusedFieldIdentity?,
         currentFieldIdentity: FocusedFieldIdentity?,
-        isInvalidatedByUserTyping: Bool
+        isInvalidatedByUserTyping: Bool,
+        currentSuggestionAgeMilliseconds: Int? = nil,
+        maximumPreservedAgeMilliseconds: Int? = nil
     ) -> Bool {
         if isInvalidatedByUserTyping {
             return true
+        }
+
+        if let maximumPreservedAgeMilliseconds {
+            guard let currentSuggestionAgeMilliseconds,
+                  currentSuggestionAgeMilliseconds <= maximumPreservedAgeMilliseconds else {
+                return true
+            }
         }
 
         guard let currentSuggestionBundleIdentifier,

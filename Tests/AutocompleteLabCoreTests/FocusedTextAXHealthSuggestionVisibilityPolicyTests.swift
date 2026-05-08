@@ -32,6 +32,47 @@ struct FocusedTextAXHealthSuggestionVisibilityPolicyTests {
         ))
     }
 
+    @Test("Hides stale visible suggestion during AX cooldown")
+    func hidesStaleVisibleSuggestionDuringCooldown() {
+        let policy = FocusedTextAXHealthSuggestionVisibilityPolicy()
+        let cooldown = focusedTextAXCooldown(bundleIdentifier: "com.apple.Notes")
+
+        #expect(policy.shouldHideVisibleSuggestion(
+            during: cooldown,
+            currentSuggestionBundleIdentifier: "com.apple.Notes",
+            currentSuggestionFieldIdentity: fieldIdentity(1),
+            currentFieldIdentity: fieldIdentity(1),
+            isInvalidatedByUserTyping: false,
+            currentSuggestionAgeMilliseconds: 901,
+            maximumPreservedAgeMilliseconds: 750
+        ))
+
+        #expect(!policy.shouldHideVisibleSuggestion(
+            during: cooldown,
+            currentSuggestionBundleIdentifier: "com.apple.Notes",
+            currentSuggestionFieldIdentity: fieldIdentity(1),
+            currentFieldIdentity: fieldIdentity(1),
+            isInvalidatedByUserTyping: false,
+            currentSuggestionAgeMilliseconds: 240,
+            maximumPreservedAgeMilliseconds: 750
+        ))
+    }
+
+    @Test("Hides visible suggestion with unknown age when freshness is required")
+    func hidesVisibleSuggestionWithUnknownAgeWhenFreshnessRequired() {
+        let policy = FocusedTextAXHealthSuggestionVisibilityPolicy()
+        let cooldown = focusedTextAXCooldown(bundleIdentifier: "com.apple.Notes")
+
+        #expect(policy.shouldHideVisibleSuggestion(
+            during: cooldown,
+            currentSuggestionBundleIdentifier: "com.apple.Notes",
+            currentSuggestionFieldIdentity: fieldIdentity(1),
+            currentFieldIdentity: fieldIdentity(1),
+            isInvalidatedByUserTyping: false,
+            maximumPreservedAgeMilliseconds: 750
+        ))
+    }
+
     @Test("Hides visible suggestion when cooldown app differs")
     func hidesSuggestionForDifferentAppCooldown() {
         let policy = FocusedTextAXHealthSuggestionVisibilityPolicy()

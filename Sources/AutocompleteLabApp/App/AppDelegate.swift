@@ -194,6 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 220
     private let postInsertionPollPauseMilliseconds = 220
+    private let maximumPreservedSuggestionGeometryAgeDuringAXPauseMilliseconds = 750
     private var focusedTextPollingPause = FocusedTextPollingPause()
     private var lastFocusedTextPollAttemptAt: Date?
     private var suggestionsPaused = false
@@ -1497,7 +1498,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
             currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
             currentFieldIdentity: currentFieldIdentity,
-            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown
+            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+            currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
+            maximumPreservedAgeMilliseconds: maximumPreservedSuggestionGeometryAgeDuringAXPauseMilliseconds
         ) {
             hideSuggestion(reason: "focused-text-ax-health-\(cooldown.reason.rawValue)")
             return
@@ -1510,7 +1513,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "app": cooldown.bundleIdentifier,
                 "reason": cooldown.reason.rawValue,
                 "source": source,
-                "remainingMilliseconds": String(cooldown.remainingMilliseconds)
+                "remainingMilliseconds": String(cooldown.remainingMilliseconds),
+                "suggestionAgeMilliseconds": currentSuggestionAgeMilliseconds().map(String.init) ?? "unknown",
+                "maximumPreservedAgeMilliseconds": String(maximumPreservedSuggestionGeometryAgeDuringAXPauseMilliseconds)
             ]
         )
     }
@@ -1590,7 +1595,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
                 currentFieldIdentity: currentFieldIdentity,
                 frontmostBundleIdentifier: frontmostBundleIdentifier,
-                isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown
+                isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+                currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
+                maximumPreservedAgeMilliseconds: maximumPreservedSuggestionGeometryAgeDuringAXPauseMilliseconds
             ) {
                 hideSuggestion(reason: "focused-text-poll-\(reason.rawValue)")
             } else {
@@ -1601,7 +1608,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "app": currentSuggestionAppBundleIdentifier ?? "",
                         "frontmostApp": frontmostBundleIdentifier ?? "",
                         "reason": reason.rawValue,
-                        "pauseMilliseconds": String(recommendation.pauseMilliseconds)
+                        "pauseMilliseconds": String(recommendation.pauseMilliseconds),
+                        "suggestionAgeMilliseconds": currentSuggestionAgeMilliseconds().map(String.init) ?? "unknown",
+                        "maximumPreservedAgeMilliseconds": String(maximumPreservedSuggestionGeometryAgeDuringAXPauseMilliseconds)
                     ]
                 )
             }
@@ -1614,6 +1623,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         return true
+    }
+
+    private func currentSuggestionAgeMilliseconds(now: Date = Date()) -> Int? {
+        guard let currentSuggestionPresentedAt else {
+            return nil
+        }
+
+        return max(0, Int(now.timeIntervalSince(currentSuggestionPresentedAt) * 1000))
     }
 
     private func shouldSuppressDetachedSuggestion(

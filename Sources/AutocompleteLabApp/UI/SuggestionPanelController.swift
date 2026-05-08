@@ -220,20 +220,16 @@ final class SuggestionPanelController {
 
     private func screen(containing accessibilityRect: CGRect) -> NSScreen? {
         let screenHeight = Self.accessibilityScreenHeight()
-        let candidates = NSScreen.screens.compactMap { screen -> (screen: NSScreen, area: CGFloat)? in
-            let probeRect = AccessibilityCoordinateConverter.appKitProbeRect(
-                fromAccessibilityRect: accessibilityRect,
-                screenHeight: screenHeight
-            )
-            let intersection = screen.frame.intersection(probeRect)
-            guard !intersection.isNull, intersection.width > 0, intersection.height > 0 else {
-                return nil
-            }
-
-            return (screen, intersection.width * intersection.height)
+        let screens = NSScreen.screens
+        guard let bestFrame = AccessibilityCoordinateConverter.bestScreenFrame(
+            containingAccessibilityRect: accessibilityRect,
+            screenFrames: screens.map(\.frame),
+            screenHeight: screenHeight
+        ) else {
+            return nil
         }
 
-        return candidates.max { $0.area < $1.area }?.screen
+        return screens.first { $0.frame == bestFrame }
     }
 
     private static func accessibilityScreenHeight() -> CGFloat {
