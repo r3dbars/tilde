@@ -31,6 +31,8 @@ Use this before inviting private beta testers.
 ## Privacy Gate
 
 - [ ] The tester hears the privacy promise in plain language.
+- [ ] `docs/product/onboarding-permission-qa-checklist.md` passes on a clean
+  macOS user account.
 - [ ] Raw debug tracing is off.
 - [ ] Screenshot tracing is off.
 - [ ] The tester knows how to pause tracing.

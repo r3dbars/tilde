@@ -79,6 +79,30 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func terminalHostProofKeepsUnmarkedPromptGlyphBlocked() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code",
+            focusedText: "❯ git status",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.missingProofMarker))
+    }
+
+    @Test("Terminal-host proof accepts Claude Code title marker when AX exposes placeholder line")
+    func terminalHostProofAcceptsClaudeCodeTitleMarkerForPromptGlyph() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF",
+            focusedText: "❯ Try \"fix lint errors\"",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+    }
+
+    @Test("Terminal-host proof rejects prompt glyph when title marker is not Claude Code scoped")
+    func terminalHostProofRejectsPromptGlyphWithUnscopedTitleMarker() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
             windowTitle: "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF",
             focusedText: "❯ git status",
             proofModeEnabled: true

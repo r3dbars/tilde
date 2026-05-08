@@ -6,7 +6,7 @@ public struct RuntimeReadinessGuidance: Equatable, Sendable {
     public init(report: RuntimeReadinessReport) {
         switch report.stage {
         case .downloadNeeded:
-            message = "Install the local model here. You do not need Ollama or a model server. Suggestions stay off until this finishes."
+            message = "Install the local model here. The download uses Hugging Face once; suggestions run locally after install. You do not need Ollama or a model server. Suggestions stay off until this finishes."
             actionTitle = report.action == .installModel ? "Install Model" : "Open Model Folder"
             isActionEnabled = report.action != .none
         case .repairNeeded:

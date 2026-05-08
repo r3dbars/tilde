@@ -104,7 +104,8 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             return .blocked(.multilineCommandDetected)
         }
 
-        if let line = nonEmptyLines.last, looksLikeShellPrompt(line) {
+        if let line = nonEmptyLines.last,
+           looksLikeShellPrompt(line, windowTitle: context.windowTitle) {
             return .blocked(.shellPromptDetected)
         }
 
@@ -127,11 +128,13 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         return beforeLine + afterLine
     }
 
-    private static func looksLikeShellPrompt(_ line: String) -> Bool {
+    private static func looksLikeShellPrompt(_ line: String, windowTitle: String) -> Bool {
         let shellPrefixes = ["$", "%", "#", "❯", "➜"]
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("❯"),
-           trimmed.localizedCaseInsensitiveContains(proofMarker) {
+           (trimmed.localizedCaseInsensitiveContains(proofMarker)
+            || windowTitle.localizedCaseInsensitiveContains("Claude Code")
+            && windowTitle.localizedCaseInsensitiveContains(proofMarker)) {
             return false
         }
 
