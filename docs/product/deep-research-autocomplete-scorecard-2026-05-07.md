@@ -197,6 +197,11 @@ Pass 1 shipped these improvements:
   two verified insertions. This closes the hidden lookalike-only gap, but the
   score stays below target because default Chrome AX exposure and caret-quality
   real-editor placement are still open.
+- Chrome smoke now has an explicit `--chrome-accessibility default` proof lane
+  for the real Monaco/ProseMirror fixtures. The first 2026-05-08 default-Chrome
+  attempts did not present a suggestion because normal Chrome exposed no
+  editable field for those real editor fixtures, so the score stays unchanged
+  and the blocker is now reproducible instead of vague.
 - Replay-first trace proof command: `swift run AutocompleteTraceReplay
   /path/to/traces.jsonl`.
 

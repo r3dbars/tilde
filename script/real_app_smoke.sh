@@ -12,13 +12,15 @@ MANUAL_GATE=0
 SKIP_BUILD="${AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD:-0}"
 CHROME_FIXTURE="${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-textarea}"
 CHROME_FIXTURE_WAS_SET=0
+CHROME_ACCESSIBILITY_MODE="${AUTOCOMPLETE_LAB_CHROME_ACCESSIBILITY_MODE:-forced}"
+CHROME_ACCESSIBILITY_MODE_WAS_SET=0
 TEMP_ENABLE_ENV_KEY="AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
 TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED=0
 TEMP_ENABLE_LAUNCHCTL_PREVIOUS=""
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|chat-like|all>]
+Usage: script/real_app_smoke.sh <textedit|chrome|notes-title|notes-body|notes-checklist|notes|obsidian|codex|claude-code|claude> [--dry-run] [--manual-gate] [--skip-build] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|chat-like|all>] [--chrome-accessibility <forced|default>]
 
 Runs a real app smoke pass where it is safe to automate. Notes, Obsidian,
 Codex, Claude Code, and Claude desktop are manual-gated so this script never
@@ -31,8 +33,11 @@ notes run only prints the surface picker and does not record proof.
 Chrome defaults to the textarea fixture. Use --fixture chat-like to prove
 Tab/full-accept do not submit a chat-style composer. Use --fixture monaco-real
 or --fixture prosemirror-real for pinned upstream editor-engine fixtures in an
-isolated Chrome process with renderer accessibility forced. Use --fixture all
-to run every local Chrome browser/editor fixture with one app build.
+isolated Chrome process with renderer accessibility forced. Use
+--chrome-accessibility default to run those real editor fixtures in the normal
+frontmost Chrome window as an experimental default-AX exposure proof. Use
+--fixture all to run every local Chrome browser/editor fixture with one app
+build.
 EOF
 }
 
@@ -60,6 +65,19 @@ while (($#)); do
     --fixture=*)
       CHROME_FIXTURE="${1#--fixture=}"
       CHROME_FIXTURE_WAS_SET=1
+      ;;
+    --chrome-accessibility)
+      shift
+      if (($# == 0)); then
+        usage >&2
+        exit 2
+      fi
+      CHROME_ACCESSIBILITY_MODE="$1"
+      CHROME_ACCESSIBILITY_MODE_WAS_SET=1
+      ;;
+    --chrome-accessibility=*)
+      CHROME_ACCESSIBILITY_MODE="${1#--chrome-accessibility=}"
+      CHROME_ACCESSIBILITY_MODE_WAS_SET=1
       ;;
     -h|--help)
       usage
@@ -107,8 +125,24 @@ case "$CHROME_FIXTURE" in
     ;;
 esac
 
+case "$CHROME_ACCESSIBILITY_MODE" in
+  forced|default)
+    ;;
+  *)
+    echo "Unknown Chrome accessibility mode: $CHROME_ACCESSIBILITY_MODE" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
 if [[ "$APP" != "chrome" && "$CHROME_FIXTURE_WAS_SET" == "1" ]]; then
   echo "--fixture is only supported for the Chrome smoke pass." >&2
+  usage >&2
+  exit 2
+fi
+
+if [[ "$APP" != "chrome" && "$CHROME_ACCESSIBILITY_MODE_WAS_SET" == "1" ]]; then
+  echo "--chrome-accessibility is only supported for the Chrome smoke pass." >&2
   usage >&2
   exit 2
 fi
@@ -623,12 +657,29 @@ APPLESCRIPT
 }
 
 chrome_fixture_uses_isolated_accessibility_chrome() {
+  if [[ "$CHROME_ACCESSIBILITY_MODE" != "forced" ]]; then
+    return 1
+  fi
+
   case "$1" in
     monaco-real|prosemirror-real)
       return 0
       ;;
     *)
       return 1
+      ;;
+  esac
+}
+
+chrome_smoke_proof_label() {
+  local fixture="$1"
+
+  case "$fixture:$CHROME_ACCESSIBILITY_MODE" in
+    monaco-real:default|prosemirror-real:default)
+      printf '%s-default\n' "$fixture"
+      ;;
+    *)
+      printf '%s\n' "$fixture"
       ;;
   esac
 }
@@ -1766,6 +1817,14 @@ describe_plan() {
       ;;
     chrome)
       echo "Chrome fixture: $CHROME_FIXTURE"
+      case "$CHROME_ACCESSIBILITY_MODE" in
+        forced)
+          echo "Chrome accessibility: forced renderer accessibility for real editor fixtures"
+          ;;
+        default)
+          echo "Chrome accessibility: default Chrome accessibility exposure; experimental proof lane, weaker than forced renderer mode"
+          ;;
+      esac
       if [[ "$CHROME_FIXTURE" == "all" ]]; then
         echo "Plan: build/relaunch AutocompleteLab, then run disposable Chrome textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, real Monaco, real ProseMirror, and chat-like no-submit local fixtures."
       else
@@ -2045,7 +2104,11 @@ APPLESCRIPT
   fi
 
   sleep 1
+  local proof_label
+  proof_label="$(chrome_smoke_proof_label "$fixture")"
   AUTOCOMPLETE_LAB_CHROME_FIXTURE="$fixture" \
+  AUTOCOMPLETE_LAB_CHROME_ACCESSIBILITY_MODE="$CHROME_ACCESSIBILITY_MODE" \
+  AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL="$proof_label" \
   AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
     AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \

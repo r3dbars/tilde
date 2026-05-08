@@ -22,10 +22,14 @@ final class DiagnosticsWindowController {
         textView = NSTextView(frame: .zero)
         textView.isEditable = false
         textView.isSelectable = true
-        textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.font = NSFont.systemFont(ofSize: 12)
         textView.textColor = .textColor
         textView.backgroundColor = .textBackgroundColor
         textView.drawsBackground = true
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.lineFragmentPadding = 0
         textView.textContainerInset = NSSize(width: 12, height: 12)
 
         refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
@@ -37,7 +41,7 @@ final class DiagnosticsWindowController {
 
         let scrollView = NSScrollView(frame: .zero)
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
+        scrollView.hasHorizontalScroller = false
         scrollView.borderType = .bezelBorder
         scrollView.documentView = textView
 
@@ -144,11 +148,21 @@ final class DiagnosticsWindowController {
 
         var sections: [String] = []
 
-        sections.append("Accessibility: \(appTrusted ? "on" : "needed")")
-        sections.append("Suggestion: \(lastSuggestionDecision)")
+        sections.append(DiagnosticsOverviewState(
+            appTrusted: appTrusted,
+            appEnabled: appEnabled,
+            lastSuggestionDecision: lastSuggestionDecision,
+            runtimeReport: runtimeReport,
+            runtimeTargetSummary: runtimeTargetSummary,
+            compatibilityStatus: compatibilityStatus,
+            diagnostics: diagnostics,
+            traceSummary: traceSummary,
+            tracingPaused: tracingPaused,
+            screenshotTracingEnabled: screenshotTracingEnabled
+        ).text)
         sections.append(
             """
-            Local model: \(runtimeReport.summary)
+            Local model detail:
               target: \(runtimeTargetSummary)
               stage: \(runtimeReport.stage.rawValue)
               action: \(runtimeReport.action.displayName)
@@ -369,6 +383,91 @@ final class DiagnosticsWindowController {
     @objc
     private func deleteTraces() {
         deleteTracesAction?()
+    }
+}
+
+struct DiagnosticsOverviewState: Equatable {
+    let accessibilityText: String
+    let suggestionText: String
+    let localModelText: String
+    let currentAppText: String
+    let tracingText: String
+
+    init(
+        appTrusted: Bool,
+        appEnabled: Bool,
+        lastSuggestionDecision: String,
+        runtimeReport: RuntimeReadinessReport,
+        runtimeTargetSummary: String,
+        compatibilityStatus: CompatibilitySupportStatus,
+        diagnostics: FocusedTextDiagnostics?,
+        traceSummary: AutocompleteTraceSummary,
+        tracingPaused: Bool,
+        screenshotTracingEnabled: Bool
+    ) {
+        accessibilityText = appTrusted ? "On" : "Needs permission"
+        suggestionText = Self.suggestionSummary(lastSuggestionDecision)
+        localModelText = Self.oneLine(
+            "\(runtimeReport.summary) | stage \(runtimeReport.stage.rawValue) | action \(runtimeReport.action.displayName) | target \(runtimeTargetSummary)",
+            maxLength: 140
+        )
+
+        let appName = diagnostics?.localizedAppName ?? "No focused app"
+        let bundle = diagnostics?.bundleIdentifier.map { " (\($0))" } ?? ""
+        let enabledText = appEnabled ? "enabled" : "disabled"
+        currentAppText = Self.oneLine(
+            "\(appName)\(bundle) | \(compatibilityStatus.summary) | \(enabledText)",
+            maxLength: 140
+        )
+        tracingText = Self.oneLine(
+            "traces \(tracingPaused ? "paused" : "on") | screenshots \(screenshotTracingEnabled ? "on" : "off") | events \(traceSummary.totalEvents) | accept \(Self.percent(traceSummary.acceptRate)) | useful \(Self.percent(traceSummary.usefulRate))",
+            maxLength: 140
+        )
+    }
+
+    var text: String {
+        [
+            "Overview",
+            "Accessibility: \(accessibilityText)",
+            "Suggestion: \(suggestionText)",
+            "Local model: \(localModelText)",
+            "Current app: \(currentAppText)",
+            "Tracing: \(tracingText)"
+        ].joined(separator: "\n")
+    }
+
+    private static func suggestionSummary(_ decision: String) -> String {
+        let trimmed = oneLine(decision, maxLength: 100)
+        guard !trimmed.isEmpty else {
+            return "No suggestion yet"
+        }
+
+        if trimmed.localizedCaseInsensitiveContains("shown") {
+            return "Shown"
+        }
+
+        for prefix in ["Blocked:", "Waiting:", "Ready:", "Paused", "Starting"] where trimmed.hasPrefix(prefix) {
+            return trimmed
+        }
+
+        return trimmed
+    }
+
+    private static func oneLine(_ text: String, maxLength: Int) -> String {
+        let collapsed = text
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard collapsed.count > maxLength else {
+            return collapsed
+        }
+
+        let cutoff = collapsed.index(collapsed.startIndex, offsetBy: maxLength - 1)
+        return String(collapsed[..<cutoff]) + "..."
+    }
+
+    private static func percent(_ value: Double) -> String {
+        String(format: "%.0f%%", value * 100)
     }
 }
 

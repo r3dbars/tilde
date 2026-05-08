@@ -45,7 +45,7 @@
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Real Monaco and ProseMirror proof now pass under isolated Chrome with renderer accessibility forced, but broad production-site proof and default-Chrome AX exposure remain open."
+        "Real Monaco and ProseMirror proof now pass under isolated Chrome with renderer accessibility forced. The explicit default-Chrome AX lane currently reproduces no editable field for both real editor fixtures, so broad production-site proof and default-Chrome AX exposure remain open."
       ]
     },
     {
@@ -62,7 +62,7 @@
         "docs/product/visual-placement-screenshots/chrome-monaco-real.png"
       ],
       "gaps": [
-        "Proof uses an isolated temp-profile Chrome process with renderer accessibility forced. Placement fell back to floating mirror/element anchoring, so default Chrome exposure and caret-quality proof remain open."
+        "Proof uses an isolated temp-profile Chrome process with renderer accessibility forced. Placement fell back to floating mirror/element anchoring. The default-Chrome AX lane currently reports no editable field, so default Chrome exposure and caret-quality proof remain open."
       ]
     },
     {
@@ -79,7 +79,7 @@
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Proof uses an isolated temp-profile Chrome process with renderer accessibility forced. Placement fell back to floating mirror/element anchoring, so default Chrome exposure and caret-quality proof remain open."
+        "Proof uses an isolated temp-profile Chrome process with renderer accessibility forced. Placement fell back to floating mirror/element anchoring. The default-Chrome AX lane currently reports no editable field, so default Chrome exposure and caret-quality proof remain open."
       ]
     },
     {

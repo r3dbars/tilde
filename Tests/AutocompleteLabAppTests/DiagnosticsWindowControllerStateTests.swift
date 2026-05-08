@@ -5,6 +5,52 @@ import AutocompleteLabCore
 
 @Suite("Diagnostics window state")
 struct DiagnosticsWindowControllerStateTests {
+    @Test("Overview renders short inspector rows without suggestion text")
+    func overviewRendersShortInspectorRowsWithoutSuggestionText() {
+        let overview = DiagnosticsOverviewState(
+            appTrusted: true,
+            appEnabled: false,
+            lastSuggestionDecision: "Shown: private phrase should never appear",
+            runtimeReport: RuntimeReadinessReport(
+                stage: .ready,
+                summary: "ready",
+                action: .none,
+                isReady: true
+            ),
+            runtimeTargetSummary: "MLX local model",
+            compatibilityStatus: .unsupported,
+            diagnostics: nil,
+            traceSummary: AutocompleteTraceSummary(
+                totalEvents: 12,
+                presentedCount: 6,
+                acceptedCount: 3,
+                typedThroughCount: 0,
+                typedOverCount: 1,
+                ignoredCount: 2,
+                insertionFailureCount: 0,
+                acceptRate: 0.5,
+                usefulRate: 0.25,
+                p50LatencyMilliseconds: nil,
+                p90LatencyMilliseconds: nil,
+                p95LatencyMilliseconds: nil,
+                topMisses: []
+            ),
+            tracingPaused: false,
+            screenshotTracingEnabled: true
+        )
+
+        let lines = overview.text.split(separator: "\n").map(String.init)
+        #expect(lines.count == 6)
+        #expect(overview.text.contains("Overview"))
+        #expect(overview.text.contains("Accessibility: On"))
+        #expect(overview.text.contains("Suggestion: Shown"))
+        #expect(overview.text.contains("Local model: ready | stage ready | action None | target MLX local model"))
+        #expect(overview.text.contains("Current app: No focused app | blocked: no MVP compatibility profile | disabled"))
+        #expect(overview.text.contains("Tracing: traces on | screenshots on | events 12 | accept 50% | useful 25%"))
+        #expect(!overview.text.contains("private phrase"))
+        #expect(lines.allSatisfy { $0.count <= 160 })
+    }
+
     @Test("Placement diagnostics expose confidence without suggestion text")
     func placementDiagnosticsExposeConfidenceWithoutSuggestionText() {
         let diagnostics = PlacementDiagnostics(
