@@ -199,7 +199,7 @@ public struct AutocompleteBehaviorProfile: Equatable, Sendable {
                 ),
                 promptGuidance: [
                     "Keep prompt-app continuations tiny: one word when possible.",
-                    "Never suggest sending, submitting, pressing Enter or Return, running a command, or answering the prompt."
+                    "Never suggest sending, submitting, pressing Enter or Return, running a command, approval text, slash commands, @ references, bang commands, shell text, or answering the prompt."
                 ]
             )
         }

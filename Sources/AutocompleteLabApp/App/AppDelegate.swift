@@ -4461,6 +4461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         safeMetadata["app"] = profile.bundleIdentifier
         safeMetadata["renderMode"] = profile.renderMode.rawValue
         safeMetadata["insertionMode"] = profile.insertionMode.rawValue
+        safeMetadata["promptSafetyMode"] = profile.promptAppSafetyMode.rawValue
         safeMetadata["fieldIdentityMode"] = profile.fieldIdentityMode.rawValue
         safeMetadata["role"] = context.role ?? "unknown"
         safeMetadata["subrole"] = context.subrole ?? "none"
@@ -4548,7 +4549,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         skippingInsertionModes skippedModes: Set<InsertionMode> = []
     ) -> Bool {
         guard let profile = currentProfile else {
-            return accessibilityClient.insertText(acceptedText)
+            setSuggestionDecision("Blocked: missing compatibility profile")
+            DiagnosticsLog.shared.record(
+                "insert-blocked",
+                metadata: [
+                    "reason": "missing-compatibility-profile",
+                    "acceptedChars": String(acceptedText.count)
+                ]
+            )
+            RawAutocompleteTraceLog.shared.record(
+                type: .insertionFailed,
+                suggestionID: currentSuggestionID ?? "",
+                appBundleIdentifier: currentSuggestionAppBundleIdentifier ?? "",
+                fieldIdentity: currentSuggestionFieldIdentity?.traceDescription
+                    ?? currentFieldIdentity?.traceDescription
+                    ?? "",
+                requestMode: currentSuggestionRequestMode?.rawValue ?? "",
+                acceptedText: acceptedText,
+                reason: "missing-compatibility-profile",
+                metadata: [
+                    "safetyGate": "compatibilityProfile"
+                ]
+            )
+            hideSuggestion(reason: "insert-missing-compatibility-profile")
+            return false
         }
 
         keyboardEventTap?.suppressPassthroughObservation(
@@ -4565,6 +4589,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "app": profile.bundleIdentifier,
                     "mode": InsertionMode.axValueReplacement.rawValue,
+                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
                     "success": String(succeeded),
                     "skippedModes": skippedModes
                         .map(\.rawValue)
@@ -4588,6 +4613,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "app": profile.bundleIdentifier,
                     "mode": InsertionMode.clipboardFallbackOptIn.rawValue,
+                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
                     "success": String(succeeded),
                     "skippedModes": skippedModes
                         .map(\.rawValue)
@@ -4614,6 +4640,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "app": profile.bundleIdentifier,
                 "mode": result.mode.rawValue,
+                "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
                 "success": String(result.succeeded),
                 "skippedModes": skippedModes
                     .map(\.rawValue)

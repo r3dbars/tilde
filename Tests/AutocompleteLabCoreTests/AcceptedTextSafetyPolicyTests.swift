@@ -69,4 +69,40 @@ struct AcceptedTextSafetyPolicyTests {
         )
         #expect(policy.decision(acceptedText: " make this", profile: textEdit) == .allowed)
     }
+
+    @Test("Prompt-safe profiles block command-like one-word accepts")
+    func promptSafeProfilesBlockCommandLikeOneWordAccepts() throws {
+        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
+        let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+
+        #expect(
+            policy.decision(acceptedText: " /review", profile: codex)
+                == .blocked(reason: "accepted-text-prompt-command-prefix")
+        )
+        #expect(
+            policy.decision(acceptedText: " @file", profile: codex)
+                == .blocked(reason: "accepted-text-prompt-command-prefix")
+        )
+        #expect(
+            policy.decision(acceptedText: " --force", profile: codex)
+                == .blocked(reason: "accepted-text-prompt-command-prefix")
+        )
+        #expect(
+            policy.decision(acceptedText: " curl", profile: codex)
+                == .blocked(reason: "accepted-text-prompt-action-word")
+        )
+        #expect(
+            policy.decision(acceptedText: " deploy", profile: codex)
+                == .blocked(reason: "accepted-text-prompt-action-word")
+        )
+        #expect(
+            policy.decision(acceptedText: " keep|send", profile: codex)
+                == .blocked(reason: "accepted-text-prompt-shell-metacharacter")
+        )
+        #expect(
+            policy.decision(acceptedText: " word\u{200B}", profile: codex)
+                == .blocked(reason: "accepted-text-hidden-control-character")
+        )
+        #expect(policy.decision(acceptedText: " /review", profile: textEdit) == .allowed)
+    }
 }
