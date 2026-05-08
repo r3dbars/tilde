@@ -3615,16 +3615,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textBeforeCursor: request.textBeforeCursor
             )
         )
+        let displayFieldClassification = fieldClassification(for: context)
+        let acceptedAndKeptSignal = acceptedAndKeptSignal(
+            request: request,
+            fieldClassification: displayFieldClassification,
+            profile: profile
+        )
+        let isRepeatedMiss = suggestionRepetitionSuppressor.shouldSuppress(
+            suggestion.visibleText,
+            mode: request.mode,
+            scope: request.appBundleIdentifier ?? profile.bundleIdentifier
+        )
         let displayScoreDecision = displayScorePolicy
             .adjustingThresholds(by: prefixEagernessAdjustment.thresholdAdjustment)
             .decision(
-            for: displayScore(
+            for: suggestionOrchestrator.displayScore(
                 suggestion: suggestion,
                 request: request,
                 context: context,
+                fieldClassification: displayFieldClassification,
                 profile: profile,
                 triggerReason: triggerReason,
-                latencyMilliseconds: latencyMilliseconds
+                latencyMilliseconds: latencyMilliseconds,
+                acceptedAndKeptSignal: acceptedAndKeptSignal,
+                isRepeatedMiss: isRepeatedMiss
             ),
             mode: request.mode,
             behaviorProfileID: request.behaviorProfile.id
@@ -4181,227 +4195,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(suggestionAggressiveness.traceMetadata) { current, _ in current }
     }
 
-    private func displayScore(
-        suggestion: CompletionSuggestion,
+    private func acceptedAndKeptSignal(
         request: CompletionRequest,
-        context: FocusedTextContext,
-        profile: CompatibilityProfile,
-        triggerReason: String,
-        latencyMilliseconds: Int
-    ) -> DisplayScore {
-        let classification = fieldClassification(for: context)
-        let requestFieldKind = request.fieldKind == .unknown ? classification.kind : request.fieldKind
-        let behaviorProfile = request.behaviorProfile
-        let visibleWordCount = suggestion.visibleWordCount
-        let visibleCharacterCount = suggestion.visibleText.count
+        fieldClassification: AXFieldClassification,
+        profile: CompatibilityProfile
+    ) -> AcceptedAndKeptLearningSignal {
+        let requestFieldKind = request.fieldKind == .unknown ? fieldClassification.kind : request.fieldKind
         let appBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
         let acceptedAndKeptKey = AcceptedAndKeptLearningKey(
             appBundleIdentifier: appBundleIdentifier,
             fieldKind: requestFieldKind,
             requestMode: request.mode,
-            behaviorProfileID: behaviorProfile.id
+            behaviorProfileID: request.behaviorProfile.id
         )
-        let acceptedAndKeptSignal = activeAppProofBundleIdentifiers.contains(appBundleIdentifier)
+
+        return activeAppProofBundleIdentifiers.contains(appBundleIdentifier)
             ? AcceptedAndKeptLearningStore().signal(for: acceptedAndKeptKey)
             : acceptedAndKeptLearning.signal(for: acceptedAndKeptKey)
-
-        return DisplayScore(
-            utility: displayUtility(
-                mode: request.mode,
-                visibleWordCount: visibleWordCount,
-                visibleCharacterCount: visibleCharacterCount,
-                acceptedAndKeptSignal: acceptedAndKeptSignal
-            ),
-            styleFit: displayStyleFit(
-                fieldKind: requestFieldKind,
-                profile: profile,
-                behaviorProfile: behaviorProfile
-            ),
-            contextFit: displayContextFit(request: request, context: context),
-            userAffinity: displayUserAffinity(
-                mode: request.mode,
-                triggerReason: triggerReason,
-                acceptedAndKeptSignal: acceptedAndKeptSignal
-            ),
-            risk: displayRisk(
-                fieldKind: requestFieldKind,
-                profile: profile,
-                behaviorProfile: behaviorProfile,
-                context: context
-            ),
-            repetition: displayRepetition(
-                suggestion: suggestion,
-                request: request,
-                profile: profile
-            ),
-            instability: displayInstability(
-                context: context,
-                triggerReason: triggerReason,
-                latencyMilliseconds: latencyMilliseconds
-            ),
-            acceptedAndKeptProbability: acceptedAndKeptSignal.probability,
-            acceptedAndKeptSampleCount: acceptedAndKeptSignal.sampleCount,
-            acceptedAndKeptUtilityAdjustment: acceptedAndKeptSignal.utilityAdjustment
-        )
-    }
-
-    private func displayUtility(
-        mode: CompletionRequestMode,
-        visibleWordCount: Int,
-        visibleCharacterCount: Int,
-        acceptedAndKeptSignal: AcceptedAndKeptLearningSignal
-    ) -> Double {
-        let base: Double
-        switch mode {
-        case .wordCompletion:
-            if visibleCharacterCount <= 12 {
-                base = 0.85
-            } else {
-                base = 0.65
-            }
-        case .sentenceContinuation:
-            switch visibleWordCount {
-            case 3...5:
-                base = 0.64
-            case 2, 6:
-                base = 0.52
-            default:
-                base = 0.38
-            }
-        case .phraseContinuation:
-            switch visibleWordCount {
-            case 2...4:
-                base = 0.70
-            case 5...7:
-                base = 0.58
-            case 1:
-                base = 0.48
-            default:
-                base = 0.40
-            }
-        }
-
-        return displayComponent(base + acceptedAndKeptSignal.utilityAdjustment)
-    }
-
-    private func displayStyleFit(
-        fieldKind: AXFieldKind,
-        profile: CompatibilityProfile,
-        behaviorProfile: AutocompleteBehaviorProfile
-    ) -> Double {
-        if fieldKind.suppressesSuggestionsByDefault
-            || profile.isSensitive
-            || behaviorProfile.suppressionDefaults.suppressesSuggestionsByDefault {
-            return 0.05
-        }
-
-        switch fieldKind {
-        case .multilineCompose:
-            return 0.48
-        case .singlelineCompose:
-            return 0.40
-        case .unknown:
-            return 0.32
-        case .search, .form, .secure, .url:
-            return 0.05
-        }
-    }
-
-    private func displayContextFit(
-        request: CompletionRequest,
-        context: FocusedTextContext
-    ) -> Double {
-        var score = request.textBeforeCursor == context.textBeforeCursor ? 0.50 : 0.30
-        if !context.textAfterCursor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            score -= 0.15
-        }
-        if context.selectedTextLength > 0 {
-            score -= 0.35
-        }
-        return displayComponent(score)
-    }
-
-    private func displayUserAffinity(
-        mode: CompletionRequestMode,
-        triggerReason: String,
-        acceptedAndKeptSignal: AcceptedAndKeptLearningSignal
-    ) -> Double {
-        let base: Double
-        if triggerReason == "fast-word-completion" {
-            base = 0.25
-        } else {
-            switch mode {
-            case .wordCompletion:
-                base = 0.20
-            case .sentenceContinuation:
-                base = 0.10
-            case .phraseContinuation:
-                base = 0.15
-            }
-        }
-
-        return displayComponent(base + acceptedAndKeptSignal.userAffinityAdjustment)
-    }
-
-    private func displayRisk(
-        fieldKind: AXFieldKind,
-        profile: CompatibilityProfile,
-        behaviorProfile: AutocompleteBehaviorProfile,
-        context: FocusedTextContext
-    ) -> Double {
-        if context.isSecure
-            || profile.isSensitive
-            || fieldKind.suppressesSuggestionsByDefault
-            || behaviorProfile.suppressionDefaults.suppressesSuggestionsByDefault {
-            return 0.95
-        }
-
-        switch profile.supportLevel {
-        case .green:
-            return fieldKind == .unknown ? 0.18 : 0.05
-        case .yellow:
-            return fieldKind == .unknown ? 0.25 : 0.12
-        case .diagnosticsOnly:
-            return 0.85
-        case .unsupported:
-            return 0.95
-        }
-    }
-
-    private func displayRepetition(
-        suggestion: CompletionSuggestion,
-        request: CompletionRequest,
-        profile: CompatibilityProfile
-    ) -> Double {
-        suggestionRepetitionSuppressor.shouldSuppress(
-            suggestion.visibleText,
-            mode: request.mode,
-            scope: request.appBundleIdentifier ?? profile.bundleIdentifier
-        ) ? 0.90 : 0.05
-    }
-
-    private func displayInstability(
-        context: FocusedTextContext,
-        triggerReason: String,
-        latencyMilliseconds: Int
-    ) -> Double {
-        var score = 0.05
-        if triggerReason == "model-stream" {
-            score += 0.15
-        }
-        if context.caretIsSynthetic {
-            score += 0.12
-        }
-        if latencyMilliseconds >= 1_500 {
-            score += 0.30
-        } else if latencyMilliseconds >= 800 {
-            score += 0.15
-        }
-        return displayComponent(score)
-    }
-
-    private func displayComponent(_ value: Double) -> Double {
-        min(max(value, 0), 1)
     }
 
     private func fieldClassification(for context: FocusedTextContext) -> AXFieldClassification {

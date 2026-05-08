@@ -247,6 +247,98 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Display score uses request context and profile")
+    func displayScoreUsesRequestContextAndProfile() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "Can we",
+            textAfterCursor: "",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4,
+            mode: .phraseContinuation,
+            suggestionID: "score"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let score = orchestrator.displayScore(
+            suggestion: CompletionSuggestion(text: " make this easier", maxVisibleWords: 4),
+            request: request,
+            context: makeContext(textBeforeCursor: "Can we", textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            triggerReason: "model-result",
+            latencyMilliseconds: 400,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false
+        )
+
+        #expect(abs(score.utility - 0.70) < 0.001)
+        #expect(abs(score.styleFit - 0.48) < 0.001)
+        #expect(abs(score.contextFit - 0.50) < 0.001)
+        #expect(abs(score.userAffinity - 0.15) < 0.001)
+        #expect(abs(score.risk - 0.12) < 0.001)
+        #expect(abs(score.repetition - 0.05) < 0.001)
+        #expect(abs(score.instability - 0.05) < 0.001)
+        #expect(score.acceptedAndKeptSampleCount == 0)
+    }
+
+    @MainActor
+    @Test("Display score includes learning repetition and streaming instability")
+    func displayScoreIncludesLearningRepetitionAndStreamingInstability() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "Can we",
+            textAfterCursor: "",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4,
+            mode: .phraseContinuation,
+            suggestionID: "score-learning"
+        )
+        let key = acceptedAndKeptKey(
+            request: request,
+            fieldKind: classification.kind,
+            profile: profile
+        )
+        var store = AcceptedAndKeptLearningStore(priorWeight: 1)
+        var signal = store.signal(for: key)
+        for offset in 0..<6 {
+            signal = store.record(.kept, key: key, now: Date(timeIntervalSince1970: Double(offset)))
+        }
+
+        let score = orchestrator.displayScore(
+            suggestion: CompletionSuggestion(text: " make this easier", maxVisibleWords: 4),
+            request: request,
+            context: makeContext(textBeforeCursor: "Can we", textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            triggerReason: "model-stream",
+            latencyMilliseconds: 1_600,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: true
+        )
+
+        #expect(score.utility > 0.70)
+        #expect(score.userAffinity > 0.15)
+        #expect(abs(score.repetition - 0.90) < 0.001)
+        #expect(abs(score.instability - 0.50) < 0.001)
+        #expect(score.acceptedAndKeptSampleCount == 6)
+    }
+
+    @MainActor
     @Test("Suggestion calls delegate to the configured engine")
     func suggestionDelegatesToEngine() async throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
@@ -317,6 +409,19 @@ private struct FixedCompletionEngine: CompletionEngine {
     func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
         CompletionSuggestion(text: text, maxVisibleWords: request.maxVisibleWords)
     }
+}
+
+private func acceptedAndKeptKey(
+    request: CompletionRequest,
+    fieldKind: AXFieldKind,
+    profile: CompatibilityProfile
+) -> AcceptedAndKeptLearningKey {
+    AcceptedAndKeptLearningKey(
+        appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+        fieldKind: fieldKind,
+        requestMode: request.mode,
+        behaviorProfileID: request.behaviorProfile.id
+    )
 }
 
 private func makeContext(
