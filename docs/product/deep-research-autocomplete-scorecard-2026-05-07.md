@@ -741,14 +741,17 @@ these are true.
 66. Done: add a clipboard fallback policy so pasteboard insertion remains
    blocked unless the debug runtime flag is enabled and the specific
    compatibility profile explicitly opts into clipboard fallback.
-67. Done: wire strict manual-smoke, visual-evidence, and proof-manifest gates
+67. Done: make clipboard fallback restore the original pasteboard only while
+   the pasteboard still contains this app's temporary payload at the same
+   change count, preserving user clipboard changes made during fallback.
+68. Done: wire strict manual-smoke, visual-evidence, and proof-manifest gates
    into the score target script for the real scorecard files, so Markdown score
    edits cannot report completion while proof artifacts are still partial or
    pending.
-68. Done: replace process-random Swift `Hasher` stable-bounds field IDs with a
+69. Done: replace process-random Swift `Hasher` stable-bounds field IDs with a
    deterministic privacy-safe hash over normalized field metadata and rounded
    geometry, with an exact stable-ID unit test.
-69. Done: add profile-aware acceptance safety before insertion so no-submit
+70. Done: add profile-aware acceptance safety before insertion so no-submit
    prompt profiles block full accept and multiword/non-visible/control accepted
    text, while standard profiles still allow proven full visible accept.
 

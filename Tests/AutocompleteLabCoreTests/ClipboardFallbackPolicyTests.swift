@@ -4,6 +4,7 @@ import Testing
 @Suite("Clipboard fallback policy")
 struct ClipboardFallbackPolicyTests {
     private let policy = ClipboardFallbackPolicy()
+    private let restorePolicy = ClipboardFallbackRestorePolicy()
 
     @Test("Runtime flag must be enabled before clipboard fallback can run")
     func runtimeFlagMustBeEnabled() {
@@ -57,6 +58,50 @@ struct ClipboardFallbackPolicyTests {
             profile: fallbackOptIn,
             runtimeEnabled: true
         ) == .allowed)
+    }
+
+    @Test("Restore policy restores only the app fallback payload")
+    func restorePolicyRestoresOnlyFallbackPayload() {
+        #expect(restorePolicy.decision(
+            insertedText: " accepted",
+            currentString: " accepted",
+            fallbackChangeCount: 12,
+            currentChangeCount: 12
+        ) == .restoreOriginalPasteboard)
+    }
+
+    @Test("Restore policy preserves user clipboard changes")
+    func restorePolicyPreservesUserClipboardChanges() {
+        #expect(restorePolicy.decision(
+            insertedText: " accepted",
+            currentString: " user copied text",
+            fallbackChangeCount: 12,
+            currentChangeCount: 13
+        ) == .preserveCurrentPasteboard)
+
+        #expect(restorePolicy.decision(
+            insertedText: " accepted",
+            currentString: " accepted",
+            fallbackChangeCount: 12,
+            currentChangeCount: 13
+        ) == .preserveCurrentPasteboard)
+    }
+
+    @Test("Restore policy preserves missing or empty fallback payloads")
+    func restorePolicyPreservesMissingOrEmptyFallbackPayloads() {
+        #expect(restorePolicy.decision(
+            insertedText: " accepted",
+            currentString: nil,
+            fallbackChangeCount: 12,
+            currentChangeCount: 12
+        ) == .preserveCurrentPasteboard)
+
+        #expect(restorePolicy.decision(
+            insertedText: "",
+            currentString: "",
+            fallbackChangeCount: 12,
+            currentChangeCount: 12
+        ) == .preserveCurrentPasteboard)
     }
 
     private func profile(
