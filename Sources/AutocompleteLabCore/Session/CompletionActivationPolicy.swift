@@ -52,7 +52,7 @@ public enum SuggestionPace: String, CaseIterable, Codable, Equatable, Sendable {
         case .normal:
             "Normal"
         case .eager:
-            "Eager"
+            "Proactive"
         }
     }
 
@@ -63,8 +63,16 @@ public enum SuggestionPace: String, CaseIterable, Codable, Equatable, Sendable {
         case .normal:
             "Normal starts suggestions a little sooner."
         case .eager:
-            "Eager starts phrase suggestions sooner in allowed apps."
+            "Proactive predicts partial words quickly and starts phrase suggestions after short pauses."
         }
+    }
+
+    public func maxVisibleWords(defaultMaxVisibleWords: Int, requestMode: CompletionRequestMode) -> Int {
+        guard self == .eager, requestMode.isContinuation else {
+            return defaultMaxVisibleWords
+        }
+
+        return min(defaultMaxVisibleWords, 4)
     }
 }
 
@@ -76,10 +84,8 @@ public struct SuggestionAggressivenessPolicy: Equatable, Sendable {
         supportStatus: CompatibilitySupportStatus
     ) -> SuggestionPace {
         switch supportStatus.supportLevel {
-        case .green:
+        case .green, .yellow:
             return userPace
-        case .yellow:
-            return userPace == .eager ? .normal : userPace
         case .diagnosticsOnly, .unsupported:
             return .quiet
         }
@@ -127,11 +133,11 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             )
         case .eager:
             self.init(
-                minimumContextCharacters: 2,
-                minimumContextWords: 2,
-                minimumPhraseContinuationWords: 3,
+                minimumContextCharacters: 1,
+                minimumContextWords: 1,
+                minimumPhraseContinuationWords: 2,
                 minimumWordCompletionCharacters: 2,
-                maximumWordCompletionCharacters: 5
+                maximumWordCompletionCharacters: 16
             )
         }
     }

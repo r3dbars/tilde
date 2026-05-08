@@ -140,6 +140,26 @@ struct SuggestionTriggerPolicyTests {
         ) == .request(delayMilliseconds: 50))
     }
 
+    @Test("Proactive pace predicts short line-start word fragments")
+    func proactivePacePredictsShortLineStartWordFragments() {
+        let policy = SuggestionTriggerPolicy(pace: .eager)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "U",
+            currentTextBeforeCursor: "Um"
+        ) == .request(delayMilliseconds: 50))
+    }
+
+    @Test("Proactive pace asks for phrase help after a short word-boundary pause")
+    func proactivePaceAsksForPhraseHelpAfterShortWordBoundaryPause() {
+        let policy = SuggestionTriggerPolicy(pace: .eager)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I feel",
+            currentTextBeforeCursor: "I feel "
+        ) == .request(delayMilliseconds: 80))
+    }
+
     @Test("Sentence boundaries stay quiet by default")
     func sentenceBoundariesStayQuietByDefault() {
         let policy = SuggestionTriggerPolicy(sentenceBoundaryDelayMilliseconds: 500)

@@ -492,8 +492,8 @@ struct SettingsWindowControllerStateTests {
         #expect(optionTab.cycleButtonTitle == "Use Backtick")
     }
 
-    @Test("Suggestion aggressiveness copy supports quiet normal and eager")
-    func suggestionAggressivenessCopySupportsQuietNormalAndEager() {
+    @Test("Suggestion aggressiveness copy supports quiet normal and proactive")
+    func suggestionAggressivenessCopySupportsQuietNormalAndProactive() {
         let quiet = SettingsSuggestionAggressivenessState(aggressiveness: .quiet)
         let normal = SettingsSuggestionAggressivenessState(aggressiveness: .normal)
         let eager = SettingsSuggestionAggressivenessState(aggressiveness: .eager)
@@ -503,9 +503,9 @@ struct SettingsWindowControllerStateTests {
         #expect(quiet.cycleButtonTitle == "Use Normal")
         #expect(normal.statusText == "Aggressiveness: Normal")
         #expect(normal.detailText == "Shows a little sooner with longer suggestions.")
-        #expect(normal.cycleButtonTitle == "Use Eager")
-        #expect(eager.statusText == "Aggressiveness: Eager")
-        #expect(eager.detailText == "Shows sooner when safe, while keeping sensitive-field and high-risk blocks.")
+        #expect(normal.cycleButtonTitle == "Use Proactive")
+        #expect(eager.statusText == "Aggressiveness: Proactive")
+        #expect(eager.detailText == "Predicts partial words sooner and starts phrase help after short pauses.")
         #expect(eager.cycleButtonTitle == "Use Quiet")
     }
 

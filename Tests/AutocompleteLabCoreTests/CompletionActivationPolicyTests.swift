@@ -459,6 +459,13 @@ struct CompletionActivationPolicyTests {
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
         ) == .allow(.phraseContinuation))
+        #expect(eager.decision(
+            textBeforeCursor: "I feel ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
         #expect(quiet.decision(
             textBeforeCursor: "di",
             textAfterCursor: "",
@@ -473,17 +480,24 @@ struct CompletionActivationPolicyTests {
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
         ) == .allow(.wordCompletion))
+        #expect(eager.decision(
+            textBeforeCursor: "reccomen",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.wordCompletion))
     }
 
-    @Test("App support level caps eager suggestion pace for unproven apps")
-    func appSupportLevelCapsEagerSuggestionPace() throws {
+    @Test("App support level allows proactive pace in green and yellow apps")
+    func appSupportLevelAllowsProactivePaceInGreenAndYellowApps() throws {
         let store = CompatibilityProfileStore.mvp
         let policy = SuggestionAggressivenessPolicy()
         let textEdit = try #require(store.profile(for: "com.apple.TextEdit"))
         let notes = try #require(store.profile(for: "com.apple.Notes"))
 
         #expect(policy.pace(userPace: .eager, supportStatus: .supported(textEdit)) == .eager)
-        #expect(policy.pace(userPace: .eager, supportStatus: .supported(notes)) == .normal)
+        #expect(policy.pace(userPace: .eager, supportStatus: .supported(notes)) == .eager)
         #expect(policy.pace(userPace: .normal, supportStatus: .supported(notes)) == .normal)
         #expect(policy.pace(userPace: .quiet, supportStatus: .supported(notes)) == .quiet)
         #expect(policy.pace(userPace: .eager, supportStatus: .unsupported) == .quiet)
