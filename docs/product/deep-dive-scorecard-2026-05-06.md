@@ -56,7 +56,7 @@ should stay lower until those rows are closed.
 | Visual caret alignment | 9.65/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, Apple Notes title/body/checklist, a disposable Codex prompt, and Claude desktop now have screenshot-backed proof. Stale line rects are dropped, vertical clipping is enforced, too-narrow inline space suppresses display instead of showing a sliver, async suggestions refresh current geometry before display, and low-confidence mirror fallback is now suppressed for untrusted yellow profiles instead of showing detached element/window ghosts. Claude desktop's current one-line composer proof is same-baseline with screenshot detector offset near zero. Codex still needs same-slice accept/no-submit proof, Claude Code now has a terminal-host lane but still needs screenshot proof, and more prompt/editor layouts remain open. |
 | Self-healing behavior | 9.5/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, applies only explicit trusted visual offsets, manual nudges move the visible ghost immediately, untrusted placement suppression now hides any stale ghost, and trusted visual offsets expire when the target app version, screen, or field shape changes. A unit-tested pixel detector can now identify screenshot offset from synthetic pixels, screenshot capture logs offset metadata, and per-app screenshot tracing can write trusted scoped corrections through the existing trust gate. Fresh real-app screenshot proof still needs to prove this before it can count as complete. |
 | Screenshot tracing | 9.4/10 | Screen Recording is preflighted, capture runs off the hot path, screenshots include editor bounds plus ghost text, traces/logs include capture rect plus rendered panel rect, and capture now has a backlog guard plus timeout. |
-| TextEdit support | 9.7/10 | Fresh bounded screenshot-backed run at 2026-05-08T04:53:15Z shows ghost text aligned after the caret, two verified accepts, and current proof fingerprints. The smoke harness now respects the active full-accept shortcut, opens a unique disposable file, targets that exact TextEdit window, and dismisses TextEdit's native inline completion before waiting for Autocomplete Lab. |
+| TextEdit support | 9.75/10 | Fresh bounded screenshot-backed run at 2026-05-08T09:16:49Z shows ghost text aligned after the caret, two verified accepts, accepted-insertion undo proof, and current proof fingerprints. The smoke harness now respects the active full-accept shortcut, opens a unique disposable file through a fresh TextEdit instance, targets that exact AX window/title even when old TextEdit windows are restored, seeds only that disposable text area, and dismisses TextEdit's native inline completion before waiting for Autocomplete Lab. |
 | Notes support | 9.15/10 | Profile is safer than before, and title, body, and checklist fields now have bounded strict visual proof with two verified accepts each. Notes now tries verified AX insertion before key fallback, uses a slower read-only verification recheck for Notes AX lag, repairs stale Notes text-after-cursor reads before display/verification, and still fails closed if accepted text is unchanged. More list lengths, checked items, and undo variants are still needed. |
 | Chrome textarea support | 9/10 | Fresh full-frame screenshot and two verified accepts. |
 | Chrome contenteditable support | 9/10 | Fresh full-frame screenshot and two verified accepts. |
@@ -178,10 +178,11 @@ should stay lower until those rows are closed.
   app-proof gaps remain. It is now the repeatable repo command for grinding
   against the score targets without inflating grades.
 - Latest live TextEdit proof: after launching with TextEdit proof mode,
-  `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit --skip-build`
-  passed at 2026-05-08T04:53:15Z with two verified accepts, strict screenshot
-  trace evidence, bounded diagnostics lines 172361-172391, bounded trace lines
-  50612-50620, and current trace/placement/key/runtime proof fingerprints.
+  `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit`
+  passed at 2026-05-08T09:16:49Z with two verified accepts, accepted-insertion
+  undo proof, strict screenshot trace evidence, bounded diagnostics lines
+  174704-174742, bounded trace lines 50686-50694, and current
+  trace/placement/key/runtime proof fingerprints.
 - Latest live Notes body proof: `AUTOCOMPLETE_LAB_LOG_START_LINE=138145 AUTOCOMPLETE_LAB_TRACE_START_LINE=35010 AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT=optionTab ./script/manual_smoke_session.sh notes-body --check --visual`
   passed at 2026-05-07T23:33:48Z with two verified accepts, strict screenshot
   trace evidence, bounded diagnostics lines 138146-138299, bounded trace lines
@@ -379,8 +380,8 @@ should stay lower until those rows are closed.
 - App-level Command-Z undo now clears acceptance-survival tracking and records
   `acceptanceRetentionCleared` with `accepted-insertion-undone`, so deliberate
   undo is not treated as accidental accepted-then-deleted. The TextEdit smoke
-  lane asserts this log event, but the latest live rerun timed out before the
-  first suggestion and still does not close the per-app undo proof row.
+  lane now has a fresh live pass that asserts this log event; remaining undo
+  work is per-app coverage beyond TextEdit.
 - Codex prompt proof now also requires explicit confirmation that the disposable
   prompt contains `AUTOCOMPLETE_LAB_CODEX_PROOF`; unmarked Codex proof slices
   fail before they can be recorded.
