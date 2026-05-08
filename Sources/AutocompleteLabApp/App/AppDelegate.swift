@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let accessibilityClient = AccessibilityClient()
     private let profileStore = CompatibilityProfileStore.mvp
     private let promptEditorPolicy = PromptEditorFingerprintPolicy()
+    private let browserHostedSurfacePolicy = BrowserHostedSurfacePolicy()
     private let suggestionControlPolicy = SuggestionControlPolicy()
     private let activationPolicy = CompletionActivationPolicy()
     private let fieldClassifier = AXFieldClassifier()
@@ -896,6 +897,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion()
             return
         }
+
+        let hostedSurfaceDecision = browserHostedSurfacePolicy.decision(
+            bundleIdentifier: frontmostApp.bundleIdentifier,
+            fingerprint: rawContext.fingerprint
+        )
+        guard case let .blocked(hostedSurfaceBlock) = hostedSurfaceDecision else {
+            return await continueProcessingFocusedTextContext(
+                rawContext,
+                frontmostApp: frontmostApp,
+                profile: profile
+            )
+        }
+
+        let hostedSurfaceFieldIdentity = fieldIdentity(
+            app: frontmostApp,
+            context: rawContext,
+            profile: profile
+        )
+        clearFocusedFieldState(resetBlockLogGate: false)
+        currentProfile = profile
+        setSuggestionDecision("Blocked: \(hostedSurfaceBlock.userFacingReason)")
+        RawAutocompleteTraceLog.shared.record(
+            type: .suggestionSuppressed,
+            suggestionID: UUID().uuidString,
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldIdentity: hostedSurfaceFieldIdentity.traceDescription,
+            requestMode: "",
+            triggerReason: "browser-hosted-surface-policy",
+            textBeforeCursor: rawContext.textBeforeCursor,
+            textAfterCursor: rawContext.textAfterCursor,
+            reason: hostedSurfaceBlock.traceReason,
+            metadata: hostedSurfaceBlock.traceMetadata
+        )
+        recordBlockedSuggestionEvent(
+            "suggestion-blocked",
+            context: rawContext,
+            profile: profile,
+            fieldIdentity: hostedSurfaceFieldIdentity,
+            metadata: hostedSurfaceBlock.traceMetadata
+        )
+        hideSuggestion(reason: hostedSurfaceBlock.traceReason)
+    }
+
+    private func continueProcessingFocusedTextContext(
+        _ rawContext: FocusedTextContext,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile
+    ) async {
         let rawFieldIdentity = fieldIdentity(
             app: frontmostApp,
             context: rawContext,
