@@ -1057,7 +1057,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lineStartBehavior: SuggestionLineStartBehavior.behavior(
                 for: triggerBehaviorProfile.id,
                 currentLineStructure: currentLineStructure
-            )
+            ),
+            behaviorProfileID: triggerBehaviorProfile.id
         )
 
         guard case let .request(delayMilliseconds) = triggerDecision else {

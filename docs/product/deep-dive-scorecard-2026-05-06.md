@@ -360,6 +360,9 @@ evidence-backed score should stay lower until those rows are closed.
   sentence starters.
 - Repeated typed-over misses now escalate from a short prefix cooldown to a
   longer quiet period for that same app/field/mode/prefix family.
+- Punctuation cadence is now profile-aware at fragile boundaries: email
+  greeting commas and short list-label colons wait longer, while coding closing
+  brackets stay quiet.
 - Chrome chat-like no-submit proof now uses a tab-title submit counter so the
   smoke test works even when Chrome JavaScript execution from Apple Events is
   disabled.
