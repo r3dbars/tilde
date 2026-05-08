@@ -54,6 +54,7 @@ public enum PrefixFamilyCooldownDecision: Equatable, Sendable {
 
 public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
     public let typedOverCooldownMilliseconds: Int
+    public let repeatedTypedOverCooldownMilliseconds: Int
     public let escapeCooldownMilliseconds: Int
     public let repeatedEscapeCooldownMilliseconds: Int
     public let deletionCooldownMilliseconds: Int
@@ -63,12 +64,17 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
 
     public init(
         typedOverCooldownMilliseconds: Int = 5_000,
+        repeatedTypedOverCooldownMilliseconds: Int = 30_000,
         escapeCooldownMilliseconds: Int = 15_000,
         repeatedEscapeCooldownMilliseconds: Int = 60_000,
         deletionCooldownMilliseconds: Int = 250,
         prefixFamilyTokenLimit: Int = 3
     ) {
         self.typedOverCooldownMilliseconds = max(0, typedOverCooldownMilliseconds)
+        self.repeatedTypedOverCooldownMilliseconds = max(
+            self.typedOverCooldownMilliseconds,
+            repeatedTypedOverCooldownMilliseconds
+        )
         self.escapeCooldownMilliseconds = max(0, escapeCooldownMilliseconds)
         self.repeatedEscapeCooldownMilliseconds = max(self.escapeCooldownMilliseconds, repeatedEscapeCooldownMilliseconds)
         self.deletionCooldownMilliseconds = max(0, deletionCooldownMilliseconds)
@@ -82,7 +88,9 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
     ) -> PrefixFamilyCooldown? {
         let key = key(for: input)
         let isEscalated = shouldEscalate(reason, existing: cooldowns[key], now: now)
-        let durationMilliseconds = isEscalated ? repeatedEscapeCooldownMilliseconds : duration(for: reason)
+        let durationMilliseconds = isEscalated
+            ? escalatedDuration(for: reason)
+            : duration(for: reason)
         guard durationMilliseconds > 0 else {
             return nil
         }
@@ -128,14 +136,33 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
         }
     }
 
+    private func escalatedDuration(for reason: PrefixFamilyCooldownReason) -> Int {
+        switch reason {
+        case .typedOver:
+            repeatedTypedOverCooldownMilliseconds
+        case .escapeDismissal:
+            repeatedEscapeCooldownMilliseconds
+        case .deletion:
+            deletionCooldownMilliseconds
+        }
+    }
+
     private func shouldEscalate(
         _ reason: PrefixFamilyCooldownReason,
         existing: PrefixFamilyCooldown?,
         now: Date
     ) -> Bool {
-        reason == .escapeDismissal
-            && existing?.reason == .escapeDismissal
-            && (existing?.until ?? now) > now
+        guard existing?.reason == reason,
+              (existing?.until ?? now) > now else {
+            return false
+        }
+
+        switch reason {
+        case .typedOver, .escapeDismissal:
+            return true
+        case .deletion:
+            return false
+        }
     }
 
     private func key(for input: PrefixFamilyCooldownInput) -> PrefixFamilyCooldownKey {
