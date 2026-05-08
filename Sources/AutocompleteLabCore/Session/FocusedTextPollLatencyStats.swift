@@ -66,3 +66,29 @@ public struct FocusedTextPollLatencySummary: Equatable, Sendable {
         self.maxMilliseconds = maxMilliseconds
     }
 }
+
+public struct FocusedTextPollDiagnosticsPolicy: Equatable, Sendable {
+    public static let typingDiagnostics = FocusedTextPollDiagnosticsPolicy()
+
+    public let slowPollMarkerMilliseconds: Int
+    public let slowAXReadMarkerMilliseconds: Int
+
+    public init(
+        slowPollMarkerMilliseconds: Int = 120,
+        slowAXReadMarkerMilliseconds: Int = 120
+    ) {
+        self.slowPollMarkerMilliseconds = max(0, slowPollMarkerMilliseconds)
+        self.slowAXReadMarkerMilliseconds = max(0, slowAXReadMarkerMilliseconds)
+    }
+
+    public func shouldRecordSlowPollMarker(durationMilliseconds: Int) -> Bool {
+        durationMilliseconds >= slowPollMarkerMilliseconds
+    }
+
+    public func shouldRecordSlowAXReadMarker(
+        queueDelayMilliseconds: Int,
+        readDurationMilliseconds: Int
+    ) -> Bool {
+        max(queueDelayMilliseconds, readDurationMilliseconds) >= slowAXReadMarkerMilliseconds
+    }
+}

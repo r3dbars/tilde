@@ -7,7 +7,7 @@ struct KeyboardEventTapConsumptionPolicyTests {
 
     @Test("Passes through all keys when no suggestion is visible")
     func passesThroughWithoutVisibleSuggestion() {
-        for key in [AutocompleteKey.tab, .backtick, .optionTab, .escape, .other] {
+        for key in [AutocompleteKey.tab, .backtick, .optionTab, .escape, .commandZ, .other] {
             #expect(!policy.shouldConsume(input(
                 key: key,
                 hasVisibleSuggestion: false,
@@ -19,11 +19,12 @@ struct KeyboardEventTapConsumptionPolicyTests {
 
     @Test("Passes through all keys after user typing invalidates the suggestion")
     func passesThroughAfterUserTypingInvalidatesSuggestion() {
-        for key in [AutocompleteKey.tab, .backtick, .optionTab, .escape, .other] {
+        for key in [AutocompleteKey.tab, .backtick, .optionTab, .escape, .commandZ, .other] {
             #expect(!policy.shouldConsume(input(
                 key: key,
                 supportsOneWordAcceptance: true,
                 supportsFullAcceptance: true,
+                hasPendingAcceptedInsertionUndo: true,
                 isInvalidatedByUserTyping: true
             )))
         }
@@ -109,11 +110,31 @@ struct KeyboardEventTapConsumptionPolicyTests {
         #expect(policy.shouldReplayUnhandledConsumedKey(.other))
     }
 
+    @Test("Command Z is consumed only for a pending native undo replay")
+    func commandZConsumesOnlyForPendingUndoReplay() {
+        #expect(policy.shouldConsume(input(
+            key: .commandZ,
+            hasVisibleSuggestion: false,
+            hasPendingAcceptedInsertionUndo: true
+        )))
+        #expect(policy.shouldConsume(input(
+            key: .commandZ,
+            hasVisibleSuggestion: true,
+            hasPendingAcceptedInsertionUndo: true
+        )))
+        #expect(!policy.shouldConsume(input(
+            key: .commandZ,
+            hasVisibleSuggestion: true,
+            hasPendingAcceptedInsertionUndo: false
+        )))
+    }
+
     private func input(
         key: AutocompleteKey,
         hasVisibleSuggestion: Bool = true,
         supportsOneWordAcceptance: Bool = true,
         supportsFullAcceptance: Bool = false,
+        hasPendingAcceptedInsertionUndo: Bool = false,
         isInvalidatedByUserTyping: Bool = false,
         acceptAllShortcut: AcceptAllShortcut = .backtick
     ) -> KeyboardEventTapConsumptionInput {
@@ -123,6 +144,7 @@ struct KeyboardEventTapConsumptionPolicyTests {
             supportsOneWordAcceptance: supportsOneWordAcceptance,
             supportsFullAcceptance: supportsFullAcceptance,
             isInvalidatedByUserTyping: isInvalidatedByUserTyping,
+            hasPendingAcceptedInsertionUndo: hasPendingAcceptedInsertionUndo,
             acceptAllShortcut: acceptAllShortcut
         )
     }

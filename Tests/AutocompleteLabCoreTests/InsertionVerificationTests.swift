@@ -135,4 +135,25 @@ struct InsertionVerificationTests {
             currentTextAfterCursor: " writing"
         ) == .selectionChangedUnexpectedly)
     }
+
+    @Test("Detects after-cursor mutation even when the accepted prefix landed")
+    func detectsAfterCursorMutationWithVerifiedPrefix() {
+        let verifier = InsertionVerification()
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we make",
+            previousTextAfterCursor: " this work",
+            currentTextAfterCursor: " work"
+        ) == .selectionChangedUnexpectedly)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we\u{00A0}make",
+            previousTextAfterCursor: " this work",
+            currentTextAfterCursor: " work"
+        ) == .selectionChangedUnexpectedly)
+    }
 }

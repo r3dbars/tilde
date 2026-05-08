@@ -18,6 +18,10 @@ if ! grep -F "Real app smoke: textedit" "$TMP_DIR/textedit.txt" >/dev/null; then
   echo "real app smoke self-test did not print the TextEdit dry-run plan" >&2
   exit 1
 fi
+if ! grep -F "Proof mode bundle(s): com.apple.TextEdit" "$TMP_DIR/textedit.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the TextEdit proof mode bundle" >&2
+  exit 1
+fi
 
 script/real_app_smoke.sh textedit-multiline --dry-run >"$TMP_DIR/textedit-multiline.txt"
 if ! grep -F "two-line test fragment" "$TMP_DIR/textedit-multiline.txt" >/dev/null; then
@@ -36,9 +40,21 @@ if ! grep -F "disposable Chrome textarea fixture" "$TMP_DIR/chrome.txt" >/dev/nu
   echo "real app smoke self-test did not print the Chrome dry-run plan" >&2
   exit 1
 fi
+if ! grep -F "Proof mode bundle(s): com.google.Chrome" "$TMP_DIR/chrome.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Chrome proof mode bundle" >&2
+  exit 1
+fi
 
 if ! grep -F "temporarily enables Chrome only for this proof pass" "$TMP_DIR/chrome.txt" >/dev/null; then
   echo "real app smoke self-test did not explain temporary Chrome enablement" >&2
+  exit 1
+fi
+if ! grep -F "requires Chrome to expose a focused editable web text target" "$TMP_DIR/chrome.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Chrome focused editable guard" >&2
+  exit 1
+fi
+if ! grep -F "Chrome setup text is sent to the Chrome process and verified through the focused AX editor" "$TMP_DIR/chrome.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain targeted Chrome setup insertion" >&2
   exit 1
 fi
 
@@ -66,15 +82,61 @@ if ! grep -F "disposable Chrome prosemirror-like fixture" "$TMP_DIR/chrome-prose
   exit 1
 fi
 
+script/real_app_smoke.sh chrome --fixture monaco-real --dry-run >"$TMP_DIR/chrome-monaco-real.txt"
+if ! grep -F "disposable Chrome monaco-real fixture" "$TMP_DIR/chrome-monaco-real.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the real Chrome Monaco dry-run plan" >&2
+  exit 1
+fi
+if ! grep -F "Chrome accessibility: forced renderer accessibility for real editor fixtures" "$TMP_DIR/chrome-monaco-real.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the forced Chrome accessibility mode" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh chrome --fixture monaco-real --chrome-accessibility default --dry-run >"$TMP_DIR/chrome-monaco-real-default.txt"
+if ! grep -F "Chrome accessibility: default Chrome accessibility exposure; experimental proof lane, weaker than forced renderer mode" "$TMP_DIR/chrome-monaco-real-default.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the default Chrome accessibility proof lane" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh chrome --fixture=prosemirror-real --chrome-accessibility=default --dry-run >"$TMP_DIR/chrome-prosemirror-real-default.txt"
+if ! grep -F "Chrome fixture: prosemirror-real" "$TMP_DIR/chrome-prosemirror-real-default.txt" >/dev/null; then
+  echo "real app smoke self-test did not parse --chrome-accessibility=default with --fixture=prosemirror-real" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh chrome --fixture prosemirror-real --dry-run >"$TMP_DIR/chrome-prosemirror-real.txt"
+if ! grep -F "disposable Chrome prosemirror-real fixture" "$TMP_DIR/chrome-prosemirror-real.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the real Chrome ProseMirror dry-run plan" >&2
+  exit 1
+fi
+
 script/real_app_smoke.sh chrome --fixture chat-like --dry-run >"$TMP_DIR/chrome-chat-like.txt"
 if ! grep -F "disposable Chrome chat-like fixture" "$TMP_DIR/chrome-chat-like.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome chat-like dry-run plan" >&2
   exit 1
 fi
 
+for official_fixture in codemirror-official monaco-official prosemirror-official; do
+  script/real_app_smoke.sh chrome --fixture "$official_fixture" --dry-run >"$TMP_DIR/chrome-$official_fixture.txt"
+  if ! grep -F "public official $official_fixture demo page" "$TMP_DIR/chrome-$official_fixture.txt" >/dev/null; then
+    echo "real app smoke self-test did not print the Chrome $official_fixture dry-run plan" >&2
+    exit 1
+  fi
+  if ! grep -F "Allow JavaScript from Apple Events" "$TMP_DIR/chrome-$official_fixture.txt" >/dev/null; then
+    echo "real app smoke self-test did not print the Chrome $official_fixture JavaScript preflight requirement" >&2
+    exit 1
+  fi
+done
+
 script/real_app_smoke.sh chrome --fixture all --dry-run >"$TMP_DIR/chrome-all.txt"
-if ! grep -F "textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, and chat-like no-submit local fixtures" "$TMP_DIR/chrome-all.txt" >/dev/null; then
+if ! grep -F "textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, real Monaco, real ProseMirror, and chat-like no-submit local fixtures" "$TMP_DIR/chrome-all.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome all-fixtures dry-run plan" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh chrome --fixture all --include-default-real-editor-proof --dry-run >"$TMP_DIR/chrome-all-default-addon.txt"
+if ! grep -F "rerun real Monaco and real ProseMirror in default Chrome AX mode after the forced renderer lane" "$TMP_DIR/chrome-all-default-addon.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Chrome default AX add-on plan" >&2
   exit 1
 fi
 
@@ -90,7 +152,7 @@ if ! grep -F "choose a manual-gated Apple Notes surface" "$TMP_DIR/notes.txt" >/
   exit 1
 fi
 
-for notes_surface in notes-title notes-body notes-checklist; do
+for notes_surface in notes-title notes-body notes-checklist notes-title-undo notes-body-undo notes-checklist-undo; do
   script/real_app_smoke.sh "$notes_surface" --dry-run >"$TMP_DIR/$notes_surface.txt"
   if ! grep -F "manual-gated Apple Notes ${notes_surface#notes-} proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
     echo "real app smoke self-test did not print the $notes_surface proof plan" >&2
@@ -109,8 +171,55 @@ if script/real_app_smoke.sh chrome --fixture unknown --dry-run >/dev/null 2>&1; 
   exit 1
 fi
 
+LOCK_DIR="$TMP_DIR/smoke.lock"
+mkdir -p "$LOCK_DIR"
+echo "$$" >"$LOCK_DIR/pid"
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$LOCK_DIR" script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/lock-fail.txt"; then
+  echo "real app smoke self-test expected concurrent smoke lock to fail" >&2
+  exit 1
+fi
+if ! grep -F "Another real app smoke run is already active" "$TMP_DIR/lock-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the concurrent smoke lock" >&2
+  exit 1
+fi
+rm -rf "$LOCK_DIR"
+
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 999 bash ./script/real_app_smoke.sh chrome --fixture textarea\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/process-fail.txt"; then
+  echo "real app smoke self-test expected concurrent process scan to fail" >&2
+  exit 1
+fi
+if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/process-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the concurrent process scan" >&2
+  exit 1
+fi
+
 if script/real_app_smoke.sh chrome --fixture >/dev/null 2>&1; then
   echo "real app smoke self-test expected missing Chrome fixture values to fail" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh chrome --chrome-accessibility unknown --dry-run >/dev/null 2>&1; then
+  echo "real app smoke self-test expected unknown Chrome accessibility modes to fail" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh chrome --chrome-accessibility >/dev/null 2>&1; then
+  echo "real app smoke self-test expected missing Chrome accessibility values to fail" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh chrome --fixture monaco-real --include-default-real-editor-proof --dry-run >/dev/null 2>&1; then
+  echo "real app smoke self-test expected default real-editor add-on without all fixtures to fail" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh chrome --fixture all --chrome-accessibility default --include-default-real-editor-proof --dry-run >/dev/null 2>&1; then
+  echo "real app smoke self-test expected default real-editor add-on from default accessibility mode to fail" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh textedit --include-default-real-editor-proof --dry-run >/dev/null 2>&1; then
+  echo "real app smoke self-test expected Chrome default real-editor add-on outside Chrome to fail" >&2
   exit 1
 fi
 
@@ -119,15 +228,32 @@ if script/real_app_smoke.sh textedit --fixture contenteditable --dry-run >/dev/n
   exit 1
 fi
 
+if script/real_app_smoke.sh textedit --chrome-accessibility default --dry-run >/dev/null 2>&1; then
+  echo "real app smoke self-test expected non-Chrome accessibility modes to fail" >&2
+  exit 1
+fi
+
 script/real_app_smoke.sh codex --dry-run >"$TMP_DIR/codex.txt"
 if ! grep -F "one-word Tab accept without submit" "$TMP_DIR/codex.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the Codex one-word no-submit proof" >&2
+  exit 1
+fi
+if ! grep -F "Proof mode bundle(s): com.openai.codex" "$TMP_DIR/codex.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Codex proof mode bundle" >&2
   exit 1
 fi
 
 script/real_app_smoke.sh claude-code --dry-run >"$TMP_DIR/claude-code.txt"
 if ! grep -F "one-word Tab accept without submit" "$TMP_DIR/claude-code.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the Claude Code one-word no-submit proof" >&2
+  exit 1
+fi
+if ! grep -F "Proof mode bundle(s): com.anthropic.claude-code" "$TMP_DIR/claude-code.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Claude Code proof mode bundle" >&2
+  exit 1
+fi
+if ! grep -F "terminal-host Claude Code proof" "$TMP_DIR/claude-code.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Claude Code terminal-host proof lane" >&2
   exit 1
 fi
 
@@ -149,6 +275,16 @@ fi
 
 if ! grep -F "requires --manual-gate" "$TMP_DIR/codex-fail.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the Codex safety gate" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh claude-code >/dev/null 2>"$TMP_DIR/claude-code-fail.txt"; then
+  echo "real app smoke self-test expected Claude Code to require --manual-gate" >&2
+  exit 1
+fi
+
+if ! grep -F "requires --manual-gate" "$TMP_DIR/claude-code-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Claude Code safety gate" >&2
   exit 1
 fi
 
@@ -174,6 +310,11 @@ fi
 
 if ! grep -F "script/real_app_smoke.sh notes-title --manual-gate" "$TMP_DIR/notes-generic-fail.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Notes title command after generic proof failure" >&2
+  exit 1
+fi
+
+if ! grep -F "script/real_app_smoke.sh notes-title-undo --manual-gate" "$TMP_DIR/notes-generic-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Notes title undo command after generic proof failure" >&2
   exit 1
 fi
 

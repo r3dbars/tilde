@@ -355,6 +355,34 @@ struct PlacementHealthTests {
         #expect(suppression.reason == .untrustedSyntheticCaret)
     }
 
+    @Test("Keeps trusted synthetic inline caret")
+    func keepsTrustedSyntheticInlineCaret() {
+        let plan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: .floatingMirror,
+            caretRect: CGRect(x: 320, y: 260, width: 0, height: 22),
+            elementRect: CGRect(x: 100, y: 200, width: 500, height: 180),
+            windowRect: CGRect(x: 80, y: 160, width: 560, height: 300),
+            textLineRect: CGRect(x: 320, y: 260, width: 0, height: 22),
+            caretIsSynthetic: true,
+            allowsDetachedSuggestions: true,
+            trustPolicy: PlacementTrustPolicy(
+                allowsLowConfidencePlacement: false,
+                allowsSyntheticCaretPlacement: true
+            )
+        )
+
+        guard case let .present(presentation) = plan else {
+            Issue.record("Expected trusted synthetic caret to stay inline")
+            return
+        }
+
+        #expect(presentation.renderMode == .inlineAdjacent)
+        #expect(presentation.anchorSource == .syntheticCaret)
+        #expect(presentation.textLineRect == CGRect(x: 320, y: 260, width: 0, height: 22))
+        #expect(presentation.metadata["placementConfidenceBand"] == "medium")
+    }
+
     @Test("Keeps mirror placement on focused element anchor")
     func keepsMirrorPlacementOnFocusedElementAnchor() {
         let plan = PlacementHealth.plan(

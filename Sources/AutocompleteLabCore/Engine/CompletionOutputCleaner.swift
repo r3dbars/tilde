@@ -51,7 +51,33 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return suggestions
     }
 
+    public func cleanBestCandidate(
+        _ rawOutput: String,
+        after textBeforeCursor: String?,
+        mode: CompletionRequestMode,
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
+        limit: Int = 3,
+        ranker: CompletionCandidateRanker = CompletionCandidateRanker()
+    ) -> CompletionCandidateSelection {
+        let candidates = cleanCandidates(
+            rawOutput,
+            after: textBeforeCursor,
+            mode: mode,
+            limit: limit
+        )
+        return ranker.selection(
+            candidates,
+            mode: mode,
+            textBeforeCursor: textBeforeCursor,
+            behaviorProfileID: behaviorProfileID
+        )
+    }
+
     public func clean(_ rawOutput: String, after textBeforeCursor: String?, mode: CompletionRequestMode) -> CompletionSuggestion? {
+        guard !containsUnsafePromptHiddenOrControlCharacter(rawOutput) else {
+            return nil
+        }
+
         let withoutThinking = rawOutput
             .replacingOccurrences(
                 of: #"<think>[\s\S]*?</think>"#,
@@ -119,12 +145,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         if let textBeforeCursor,
-           looksLikeGenericAgentProductivityFiller(withoutPromptEchoLabel, after: textBeforeCursor) {
+           restartsCurrentSentence(withoutPromptEchoLabel, after: textBeforeCursor) {
             return nil
         }
 
-        if let textBeforeCursor,
-           restartsCurrentSentence(withoutPromptEchoLabel, after: textBeforeCursor) {
+        guard !isAdviceOrToneDriftPhrase(withoutPromptEchoLabel) else {
             return nil
         }
 
@@ -137,6 +162,12 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         guard !trimmedSuggestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+
+        if mode.isContinuation,
+           let textBeforeCursor,
+           duplicatesVisibleTypedWords(trimmedSuggestion, after: textBeforeCursor) {
             return nil
         }
 
@@ -293,24 +324,25 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return normalized.hasPrefix("that makes a lot of sense")
-            || normalized.hasPrefix("i would like to")
-            || normalized.hasPrefix("i will do that")
-            || normalized.hasPrefix("i'll do that")
-            || normalized.hasPrefix("let me know")
-            || normalized.hasPrefix("okay, i would")
-            || normalized.hasPrefix("okay, would")
-            || normalized.hasPrefix("integrate it seamlessly")
-            || normalized.hasPrefix("enhance the experience")
-            || normalized.hasPrefix("leverage the system")
-            || normalized.hasPrefix("sure,")
-            || normalized.hasPrefix("certainly,")
+        return Self.genericFillerPrefixes.contains { normalized.hasPrefix($0) }
     }
 
     private func looksLikeUnsafePromptAction(_ text: String) -> Bool {
+        if containsUnsafePromptHiddenOrControlCharacter(text) {
+            return true
+        }
+
         let normalized = text
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if Self.unsafePromptCommandPrefixes.contains(where: { normalized.hasPrefix($0) }) {
+            return true
+        }
+
+        if normalized.hasPrefix("```") || normalized.hasPrefix("$ ") || normalized.hasPrefix("> ") {
+            return true
+        }
 
         return normalized.hasPrefix("press enter")
             || normalized.hasPrefix("press return")
@@ -322,6 +354,19 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("run this command")
             || normalized.hasPrefix("execute this command")
             || normalized.hasPrefix("execute the command")
+            || Self.unsafePromptActionWords.contains(normalized)
+    }
+
+    private func containsUnsafePromptHiddenOrControlCharacter(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            if Self.unsafePromptHiddenScalars.contains(scalar) {
+                return true
+            }
+            if scalar == "\n" || scalar == "\r" {
+                return false
+            }
+            return CharacterSet.controlCharacters.contains(scalar)
+        }
     }
 
     private func looksLikeAssistantResponseToPrompt(_ text: String, after textBeforeCursor: String) -> Bool {
@@ -335,19 +380,6 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
         let nearbyContext = String(textBeforeCursor.suffix(180)).lowercased()
         return Self.promptRequestMarkers.contains(where: { nearbyContext.contains($0) })
-    }
-
-    private func looksLikeGenericAgentProductivityFiller(_ text: String, after textBeforeCursor: String) -> Bool {
-        let nearbyContext = String(textBeforeCursor.suffix(180)).lowercased()
-        guard Self.promptRequestMarkers.contains(where: { nearbyContext.contains($0) }) else {
-            return false
-        }
-
-        let normalizedCandidate = text
-            .lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return Self.genericAgentProductivityFillers.contains { normalizedCandidate.hasPrefix($0) }
     }
 
     private func ensureLeadingSpace(_ text: String) -> String {
@@ -449,17 +481,46 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return contextWords.windows(ofCount: leadPhrase.count).contains(leadPhrase)
     }
 
+    private func duplicatesVisibleTypedWords(_ suggestion: String, after textBeforeCursor: String) -> Bool {
+        let suggestionWords = normalizedWords(in: suggestion)
+        guard !suggestionWords.isEmpty else {
+            return false
+        }
+
+        let currentSentenceWords = normalizedWords(in: currentSentence(in: textBeforeCursor))
+        guard !currentSentenceWords.isEmpty else {
+            return false
+        }
+
+        if suggestionWords.count == 1,
+           let onlyWord = suggestionWords.first,
+           onlyWord.count > 3,
+           !Self.lowValueSingleWordPhrases.contains(onlyWord),
+           currentSentenceWords.contains(onlyWord) {
+            return true
+        }
+
+        let maximumLead = min(3, suggestionWords.count, currentSentenceWords.count)
+        guard maximumLead >= 2 else {
+            return false
+        }
+
+        for leadCount in stride(from: maximumLead, through: 2, by: -1) {
+            let leadPhrase = Array(suggestionWords.prefix(leadCount))
+            if currentSentenceWords.windows(ofCount: leadCount).contains(leadPhrase) {
+                return true
+            }
+        }
+
+        return false
+    }
+
     private func restartsCurrentSentence(_ suggestion: String, after textBeforeCursor: String) -> Bool {
         let currentSentenceWords = normalizedWords(in: currentSentence(in: textBeforeCursor))
         let suggestionWords = normalizedWords(in: suggestion)
 
         guard currentSentenceWords.count > 3,
               suggestionWords.count >= 3 else {
-            return false
-        }
-
-        if suggestionWords.count > currentSentenceWords.count,
-           Array(suggestionWords.prefix(currentSentenceWords.count)) == currentSentenceWords {
             return false
         }
 
@@ -535,17 +596,32 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "write "
     ]
 
-    private static let genericAgentProductivityFillers: Set<String> = [
-        "boost productivity",
-        "enhance productivity",
-        "increase efficiency",
-        "make it more productive",
-        "make this more productive",
-        "optimize the workflow",
-        "save time and effort",
-        "streamline the process",
-        "streamline the workflow",
-        "work smarter"
+    private static let unsafePromptCommandPrefixes = [
+        "/", "!", "@", "--", "sudo ", "curl ", "bash ", "sh ", "rm "
+    ]
+
+    private static let unsafePromptActionWords: Set<String> = [
+        "allow",
+        "approve",
+        "click",
+        "delete",
+        "deploy",
+        "enter",
+        "execute",
+        "merge",
+        "return",
+        "run",
+        "send",
+        "ship",
+        "submit"
+    ]
+
+    private static let unsafePromptHiddenScalars: Set<Unicode.Scalar> = [
+        "\u{200B}",
+        "\u{200C}",
+        "\u{200D}",
+        "\u{2060}",
+        "\u{FEFF}"
     ]
 
     private static let lowSignalWords: Set<String> = [
@@ -568,28 +644,87 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "there is"
     ]
 
+    private static let genericFillerPrefixes: Set<String> = [
+        "boost productivity",
+        "absolutely,",
+        "certainly,",
+        "drive better outcomes",
+        "enhance the experience",
+        "enhance user experience",
+        "improve productivity",
+        "improve the user experience",
+        "increase productivity",
+        "integrate it seamlessly",
+        "i would like to",
+        "i will do that",
+        "i'll do that",
+        "let me know",
+        "leverage the system",
+        "make users more productive",
+        "maximize efficiency",
+        "of course,",
+        "okay, i would",
+        "okay, would",
+        "one option is",
+        "optimize the workflow",
+        "save time and effort",
+        "streamline the workflow",
+        "streamline workflows",
+        "sure,",
+        "that makes a lot of sense",
+        "unlock efficiency"
+    ]
+
     private static let adviceOrToneDriftStarters: Set<[String]> = [
         ["a", "good", "way"],
+        ["a", "better", "approach"],
         ["absolutely"],
+        ["boost", "productivity"],
+        ["drive", "better", "outcomes"],
         ["great", "question"],
         ["happy", "to", "help"],
+        ["i'd", "recommend"],
+        ["i'd", "suggest"],
+        ["i’d", "recommend"],
+        ["i’d", "suggest"],
         ["i", "love", "this"],
         ["i", "recommend"],
         ["i", "suggest"],
+        ["i", "would", "recommend"],
+        ["i", "would", "suggest"],
+        ["i", "think", "we", "should"],
         ["it", "is", "important"],
         ["it's", "important"],
+        ["let's"],
+        ["lets"],
+        ["make", "sure", "to"],
+        ["make", "users", "more", "productive"],
+        ["maximize", "efficiency"],
         ["one", "thing", "to", "consider"],
+        ["one", "option", "is"],
         ["next", "action"],
         ["next", "step"],
+        ["optimize", "the", "workflow"],
         ["rewrite", "this"],
+        ["save", "time", "and", "effort"],
         ["seamless", "experience"],
         ["sounds", "great"],
+        ["streamline", "the", "workflow"],
+        ["streamline", "workflows"],
         ["the", "best", "way"],
+        ["the", "next", "step"],
+        ["the", "best", "approach"],
         ["this", "is", "a", "great"],
         ["this", "is", "exciting"],
         ["try", "saying"],
+        ["unlock", "efficiency"],
         ["you", "may", "want"],
-        ["you", "might", "want"]
+        ["you", "might", "want"],
+        ["you", "need", "to"],
+        ["you", "should"],
+        ["we", "need", "to"],
+        ["we", "should"],
+        ["what", "i", "would", "do"]
     ]
 }
 

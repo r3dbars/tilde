@@ -64,6 +64,17 @@ Proof status: **$proof_status**.
 EOF
 }
 
+write_overall_excellence() {
+  local path="$1"
+  local score="$2"
+
+  cat >"$path" <<EOF
+# Overall Excellence Scorecard
+
+Overall score: $score/100
+EOF
+}
+
 write_app_proof() {
   local path="$1"
   local grade="$2"
@@ -79,20 +90,24 @@ EOF
 
 PASSING_DEEP="$TMP_DIR/deep-pass.md"
 PASSING_RESEARCH="$TMP_DIR/research-pass.md"
+PASSING_OVERALL="$TMP_DIR/overall-pass.md"
 PASSING_APPLE="$TMP_DIR/apple-pass.md"
 PASSING_PROOF="$TMP_DIR/proof-pass.md"
 FAILING_DEEP="$TMP_DIR/deep-fail.md"
 FAILING_RESEARCH="$TMP_DIR/research-fail.md"
+FAILING_OVERALL="$TMP_DIR/overall-fail.md"
 FAILING_APPLE="$TMP_DIR/apple-fail.md"
 FAILING_PROOF="$TMP_DIR/proof-fail.md"
 
 write_deep_dive "$PASSING_DEEP" 10 10
 write_deep_research "$PASSING_RESEARCH" 100 complete
+write_overall_excellence "$PASSING_OVERALL" 100
 write_apple_native "$PASSING_APPLE" 100 100
 write_app_proof "$PASSING_PROOF" A
 
 AUTOCOMPLETE_LAB_DEEP_DIVE_SCORECARD="$PASSING_DEEP" \
 AUTOCOMPLETE_LAB_DEEP_RESEARCH_SCORECARD="$PASSING_RESEARCH" \
+AUTOCOMPLETE_LAB_OVERALL_EXCELLENCE_SCORECARD="$PASSING_OVERALL" \
 AUTOCOMPLETE_LAB_APPLE_NATIVE_CHECKLIST="$PASSING_APPLE" \
 AUTOCOMPLETE_LAB_APP_PROOF_MATRIX="$PASSING_PROOF" \
   script/check_score_targets.sh >"$TMP_DIR/passing.txt"
@@ -102,13 +117,49 @@ if ! grep -F "All score targets are complete." "$TMP_DIR/passing.txt" >/dev/null
   exit 1
 fi
 
+GATE_FAIL_SCRIPT="$TMP_DIR/strict-gate-fail.sh"
+cat >"$GATE_FAIL_SCRIPT" <<'EOF'
+#!/usr/bin/env bash
+echo "mock strict proof gate failed"
+exit 1
+EOF
+chmod +x "$GATE_FAIL_SCRIPT"
+
+if AUTOCOMPLETE_LAB_DEEP_DIVE_SCORECARD="$PASSING_DEEP" \
+  AUTOCOMPLETE_LAB_DEEP_RESEARCH_SCORECARD="$PASSING_RESEARCH" \
+  AUTOCOMPLETE_LAB_APPLE_NATIVE_CHECKLIST="$PASSING_APPLE" \
+  AUTOCOMPLETE_LAB_APP_PROOF_MATRIX="$PASSING_PROOF" \
+  AUTOCOMPLETE_LAB_SCORE_TARGET_STRICT_PROOF_GATES=always \
+  AUTOCOMPLETE_LAB_SCORE_TARGET_MANUAL_SMOKE_GATE_SCRIPT="$GATE_FAIL_SCRIPT" \
+  AUTOCOMPLETE_LAB_SCORE_TARGET_VISUAL_EVIDENCE_GATE_SCRIPT="$GATE_FAIL_SCRIPT" \
+  AUTOCOMPLETE_LAB_SCORE_TARGET_PROOF_MANIFEST_GATE_SCRIPT="$GATE_FAIL_SCRIPT" \
+  script/check_score_targets.sh >"$TMP_DIR/strict-proof-failing.txt" 2>&1; then
+  echo "score target self-test expected failing strict proof gates to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Strict proof gate failed: manual smoke status" \
+  "Strict proof gate failed: visual placement evidence" \
+  "Strict proof gate failed: proof manifest" \
+  "Strict proof gates: 3 issue(s)" \
+  "Score target check failed with 3 issue(s)."; do
+  if ! grep -F -- "$expected" "$TMP_DIR/strict-proof-failing.txt" >/dev/null; then
+    echo "score target self-test missing expected strict proof gate failure: $expected" >&2
+    cat "$TMP_DIR/strict-proof-failing.txt" >&2
+    exit 1
+  fi
+done
+
 write_deep_dive "$FAILING_DEEP" 8.9 9.7
 write_deep_research "$FAILING_RESEARCH" 99 "not complete"
+write_overall_excellence "$FAILING_OVERALL" 75
 write_apple_native "$FAILING_APPLE" 82 92
 write_app_proof "$FAILING_PROOF" B-
 
 if AUTOCOMPLETE_LAB_DEEP_DIVE_SCORECARD="$FAILING_DEEP" \
   AUTOCOMPLETE_LAB_DEEP_RESEARCH_SCORECARD="$FAILING_RESEARCH" \
+  AUTOCOMPLETE_LAB_OVERALL_EXCELLENCE_SCORECARD="$FAILING_OVERALL" \
   AUTOCOMPLETE_LAB_APPLE_NATIVE_CHECKLIST="$FAILING_APPLE" \
   AUTOCOMPLETE_LAB_APP_PROOF_MATRIX="$FAILING_PROOF" \
   script/check_score_targets.sh >"$TMP_DIR/failing.txt" 2>&1; then
@@ -121,12 +172,26 @@ for expected in \
   "$FAILING_DEEP: Normal typing passthrough is 9.7/10" \
   "$FAILING_RESEARCH: Current implementation score is 99/100" \
   "$FAILING_RESEARCH: Proof status is not complete" \
+  "$FAILING_OVERALL: Overall excellence score is 75/100" \
   "$FAILING_APPLE: Overall Apple-native feel is 82/100" \
   "$FAILING_APPLE: Typing must feel untouched is 92/100" \
   "$FAILING_APPLE: Category 1 current score is 92/100" \
   "$FAILING_PROOF: TextEdit is B-"; do
   if ! grep -F -- "$expected" "$TMP_DIR/failing.txt" >/dev/null; then
     echo "score target self-test missing expected failure: $expected" >&2
+    cat "$TMP_DIR/failing.txt" >&2
+    exit 1
+  fi
+done
+
+for expected in \
+  "Blocking themes" \
+  "Live prompt proof: 1 issue(s)" \
+  "Real-app variant proof: 2 issue(s)" \
+  "Typing restraint and noise: 2 issue(s)" \
+  "Release and architecture polish: 5 issue(s)"; do
+  if ! grep -F -- "$expected" "$TMP_DIR/failing.txt" >/dev/null; then
+    echo "score target self-test missing expected blocker summary: $expected" >&2
     cat "$TMP_DIR/failing.txt" >&2
     exit 1
   fi

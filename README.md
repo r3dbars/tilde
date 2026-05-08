@@ -8,7 +8,7 @@ This is intentionally separate from Transcripted. The goal is to learn fast with
 
 Transcripted helps people get thoughts out.
 
-This app explores the next step: helping people keep typing everywhere without opening a prompt box.
+This app explores the next step: helping people keep typing in a few proven writing contexts without opening a prompt box.
 
 The magic feeling we are testing:
 
@@ -35,9 +35,14 @@ Target apps for the first pass:
 
 Diagnostics-only until same-slice one-word no-submit proof exists:
 
-- Codex and Claude prompt fields
+- Codex prompt fields
 
-Mail is diagnostics-only until compose insertion is proven safe.
+Claude desktop is limited to one-word proof-gated acceptance; full accept stays
+off until separate no-submit proof exists.
+
+Mail is diagnostics-only until compose insertion is proven safe. Claude Code
+CLI sessions are also diagnostics-only for now because the live typing surface
+is a terminal host, not the background-only `com.anthropic.claude-code` bundle.
 
 ## Model Decision
 
@@ -47,13 +52,15 @@ The first supported hardware target is Apple Silicon with 16 GB RAM. The app sho
 
 Users should never need to start a model server. The model runtime is owned by the app. Any Ollama or llama.cpp run is only a private benchmark tool, not part of the product experience.
 
-Current lab build:
+## Permissions And Local-First Behavior
 
-- defaults to a bundled local-runtime helper
-- tries LiteRT-LM Gemma 4 E2B first
-- falls back to mock suggestions if the runtime is missing or too broken
-- exposes privacy/runtime toggles from the menu bar
-- keeps typed text local
+Accessibility is required so the app can see the focused text field, find the cursor, and insert text only when the user accepts a suggestion. The app should explain this before opening System Settings.
+
+Screen Recording is not required for normal autocomplete. It is only for optional local placement diagnostics when screenshot proof is explicitly enabled.
+
+Suggestions run locally after the model is installed. Installing the default model downloads files from Hugging Face once. Redacted diagnostics stay on the Mac unless the user chooses to share an exported privacy bundle.
+
+The user can pause suggestions, block the current app, delete local traces, and remove local model files from the model folder.
 
 ## What We Are Not Building Yet
 

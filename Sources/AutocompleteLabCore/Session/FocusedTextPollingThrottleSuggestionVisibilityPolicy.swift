@@ -8,10 +8,19 @@ public struct FocusedTextPollingThrottleSuggestionVisibilityPolicy: Equatable, S
         currentSuggestionFieldIdentity: FocusedFieldIdentity?,
         currentFieldIdentity: FocusedFieldIdentity?,
         frontmostBundleIdentifier: String?,
-        isInvalidatedByUserTyping: Bool
+        isInvalidatedByUserTyping: Bool,
+        currentSuggestionAgeMilliseconds: Int? = nil,
+        maximumPreservedAgeMilliseconds: Int? = nil
     ) -> Bool {
         if isInvalidatedByUserTyping {
             return true
+        }
+
+        if let maximumPreservedAgeMilliseconds {
+            guard let currentSuggestionAgeMilliseconds,
+                  currentSuggestionAgeMilliseconds <= maximumPreservedAgeMilliseconds else {
+                return true
+            }
         }
 
         guard let currentSuggestionBundleIdentifier,

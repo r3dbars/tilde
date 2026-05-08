@@ -198,11 +198,22 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let caretGeometryFailureRateByRenderMode: [String: Double]
     public let annoyanceScore: Double
     public let annoyanceSignalCounts: [String: Int]
+    public let activeWritingMinutes: Int
+    public let shownPerActiveMinute: Double
+    public let explicitDismissalCount: Int
+    public let explicitDismissalsPerShown: Double
+    public let typedOverRate: Double
+    public let staleOrWrongContextCount: Int
+    public let staleOrWrongContextRate: Double
     public let acceptRate: Double
     public let usefulRate: Double
     public let p50LatencyMilliseconds: Int?
     public let p90LatencyMilliseconds: Int?
     public let p95LatencyMilliseconds: Int?
+    public let p50VisibleLifetimeMilliseconds: Int?
+    public let p95VisibleLifetimeMilliseconds: Int?
+    public let p50HideLatencyMilliseconds: Int?
+    public let p95HideLatencyMilliseconds: Int?
     public let modelResultP50LatencyMilliseconds: Int?
     public let modelResultP90LatencyMilliseconds: Int?
     public let modelResultP95LatencyMilliseconds: Int?
@@ -282,11 +293,22 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         caretGeometryFailureRateByRenderMode: [String: Double] = [:],
         annoyanceScore: Double = 0,
         annoyanceSignalCounts: [String: Int] = [:],
+        activeWritingMinutes: Int = 0,
+        shownPerActiveMinute: Double = 0,
+        explicitDismissalCount: Int = 0,
+        explicitDismissalsPerShown: Double = 0,
+        typedOverRate: Double = 0,
+        staleOrWrongContextCount: Int = 0,
+        staleOrWrongContextRate: Double = 0,
         acceptRate: Double,
         usefulRate: Double,
         p50LatencyMilliseconds: Int?,
         p90LatencyMilliseconds: Int?,
         p95LatencyMilliseconds: Int?,
+        p50VisibleLifetimeMilliseconds: Int? = nil,
+        p95VisibleLifetimeMilliseconds: Int? = nil,
+        p50HideLatencyMilliseconds: Int? = nil,
+        p95HideLatencyMilliseconds: Int? = nil,
         modelResultP50LatencyMilliseconds: Int? = nil,
         modelResultP90LatencyMilliseconds: Int? = nil,
         modelResultP95LatencyMilliseconds: Int? = nil,
@@ -365,11 +387,22 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.caretGeometryFailureRateByRenderMode = caretGeometryFailureRateByRenderMode
         self.annoyanceScore = annoyanceScore
         self.annoyanceSignalCounts = annoyanceSignalCounts
+        self.activeWritingMinutes = activeWritingMinutes
+        self.shownPerActiveMinute = shownPerActiveMinute
+        self.explicitDismissalCount = explicitDismissalCount
+        self.explicitDismissalsPerShown = explicitDismissalsPerShown
+        self.typedOverRate = typedOverRate
+        self.staleOrWrongContextCount = staleOrWrongContextCount
+        self.staleOrWrongContextRate = staleOrWrongContextRate
         self.acceptRate = acceptRate
         self.usefulRate = usefulRate
         self.p50LatencyMilliseconds = p50LatencyMilliseconds
         self.p90LatencyMilliseconds = p90LatencyMilliseconds
         self.p95LatencyMilliseconds = p95LatencyMilliseconds
+        self.p50VisibleLifetimeMilliseconds = p50VisibleLifetimeMilliseconds
+        self.p95VisibleLifetimeMilliseconds = p95VisibleLifetimeMilliseconds
+        self.p50HideLatencyMilliseconds = p50HideLatencyMilliseconds
+        self.p95HideLatencyMilliseconds = p95HideLatencyMilliseconds
         self.modelResultP50LatencyMilliseconds = modelResultP50LatencyMilliseconds
         self.modelResultP90LatencyMilliseconds = modelResultP90LatencyMilliseconds
         self.modelResultP95LatencyMilliseconds = modelResultP95LatencyMilliseconds
@@ -450,6 +483,16 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let acceptedTextEdited = events.filter { $0.type == .acceptedTextEdited }
         let acceptanceRetentionCleared = events.filter { $0.type == .acceptanceRetentionCleared }
         let modelResults = events.filter { $0.type == .modelResult }
+        let hidden = events.filter { $0.type == .suggestionHidden }
+        let explicitDismissals = hidden.filter { $0.reason == "escape" }
+        let activeMinutes = activeWritingMinutes(in: events)
+        let visibleLifetimes = hidden
+            .compactMap { intMetadata($0, key: "lifetimeMs") ?? intMetadata($0, key: "visibleLifetimeMs") }
+            .sorted()
+        let hideLatencies = hidden
+            .compactMap { intMetadata($0, key: "hideLatencyMs") }
+            .sorted()
+        let staleOrWrongContextEvents = events.filter(isStaleOrWrongContextEvent)
         let firstShownLatencies = firstPresentedByID.values.compactMap(\.latencyMilliseconds).sorted()
         let modelResultLatencies = modelResults
             .compactMap { modelTotalGenerationLatency($0) }
@@ -525,11 +568,33 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             ),
             annoyanceScore: annoyanceScore(signalCounts: annoyanceSignals, presentedCount: firstPresentedByID.count),
             annoyanceSignalCounts: annoyanceSignals,
+            activeWritingMinutes: activeMinutes,
+            shownPerActiveMinute: activeMinutes == 0
+                ? 0
+                : Double(firstPresentedByID.count) / Double(activeMinutes),
+            explicitDismissalCount: explicitDismissals.count,
+            explicitDismissalsPerShown: rate(
+                numerator: explicitDismissals.count,
+                denominator: firstPresentedByID.count
+            ),
+            typedOverRate: rate(
+                numerator: typedOver.count,
+                denominator: firstPresentedByID.count
+            ),
+            staleOrWrongContextCount: staleOrWrongContextEvents.count,
+            staleOrWrongContextRate: rate(
+                numerator: staleOrWrongContextEvents.count,
+                denominator: firstPresentedByID.count
+            ),
             acceptRate: presentedIDs.isEmpty ? 0 : Double(acceptedIDs.count) / Double(presentedIDs.count),
             usefulRate: presentedIDs.isEmpty ? 0 : Double(usefulIDs.count) / Double(presentedIDs.count),
             p50LatencyMilliseconds: percentile(0.50, in: firstShownLatencies),
             p90LatencyMilliseconds: percentile(0.90, in: firstShownLatencies),
             p95LatencyMilliseconds: percentile(0.95, in: firstShownLatencies),
+            p50VisibleLifetimeMilliseconds: percentile(0.50, in: visibleLifetimes),
+            p95VisibleLifetimeMilliseconds: percentile(0.95, in: visibleLifetimes),
+            p50HideLatencyMilliseconds: percentile(0.50, in: hideLatencies),
+            p95HideLatencyMilliseconds: percentile(0.95, in: hideLatencies),
             modelResultP50LatencyMilliseconds: percentile(0.50, in: modelResultLatencies),
             modelResultP90LatencyMilliseconds: percentile(0.90, in: modelResultLatencies),
             modelResultP95LatencyMilliseconds: percentile(0.95, in: modelResultLatencies),
@@ -1832,6 +1897,21 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             event.type == .suggestionHidden
                 && (intMetadata(event, key: "lifetimeMs") ?? Int.max) < 150
         }.count
+    }
+
+    private func isStaleOrWrongContextEvent(_ event: AutocompleteTraceEvent) -> Bool {
+        if event.metadata["focusMismatch"] == "true" {
+            return true
+        }
+
+        if event.reason == "wrong-app-or-field-before-accept"
+            || event.reason == "focus-changed"
+            || event.reason == "stale-after-keydown"
+            || event.reason.hasPrefix("stale-") {
+            return true
+        }
+
+        return false
     }
 
     private func acceptedThenDeletedCount(in events: [AutocompleteTraceEvent]) -> Int {

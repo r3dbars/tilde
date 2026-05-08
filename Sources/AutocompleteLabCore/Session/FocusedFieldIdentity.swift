@@ -319,18 +319,18 @@ public struct FocusedFieldIdentityPolicy: Sendable {
     }
 
     private func stableBoundsIdentifier(input: FocusedFieldIdentityInput) -> Int {
-        var hasher = Hasher()
-        hasher.combine(input.role ?? "unknown")
-        hasher.combine(input.subrole ?? "none")
+        var hasher = StableFieldIdentityHasher()
+        hasher.combine("role", normalizedStableValue(input.role))
+        hasher.combine("subrole", normalizedStableValue(input.subrole))
         combineStableFingerprint(input.fingerprint, into: &hasher)
-        combineRoundedRect(input.elementRect, into: &hasher)
-        combineRoundedRect(input.windowRect, into: &hasher)
+        combineRoundedRect(input.elementRect, label: "elementRect", into: &hasher)
+        combineRoundedRect(input.windowRect, label: "windowRect", into: &hasher)
         return hasher.finalize()
     }
 
     private func combineStableFingerprint(
         _ fingerprint: FocusedElementFingerprint,
-        into hasher: inout Hasher
+        into hasher: inout StableFieldIdentityHasher
     ) {
         combineStableFingerprintValue(fingerprint.identifier, label: "identifier", into: &hasher)
         combineStableFingerprintValue(fingerprint.title, label: "title", into: &hasher)
@@ -343,30 +343,67 @@ public struct FocusedFieldIdentityPolicy: Sendable {
     private func combineStableFingerprintValue(
         _ value: String?,
         label: String,
-        into hasher: inout Hasher
+        into hasher: inout StableFieldIdentityHasher
     ) {
+        hasher.combine(label, normalizedStableValue(value))
+    }
+
+    private func combineRoundedRect(
+        _ rect: CGRect?,
+        label: String,
+        into hasher: inout StableFieldIdentityHasher
+    ) {
+        guard let rect else {
+            hasher.combine(label, "missing")
+            return
+        }
+
+        hasher.combine(label, "x", Int(rect.origin.x.rounded()))
+        hasher.combine(label, "y", Int(rect.origin.y.rounded()))
+        hasher.combine(label, "width", Int(rect.width.rounded()))
+        hasher.combine(label, "height", Int(rect.height.rounded()))
+    }
+
+    private func normalizedStableValue(_ value: String?) -> String {
         let normalized = value?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
 
         guard let normalized, !normalized.isEmpty else {
-            hasher.combine("\(label):missing")
-            return
+            return "missing"
         }
 
-        hasher.combine(label)
-        hasher.combine(normalized)
+        return normalized
+    }
+}
+
+private struct StableFieldIdentityHasher {
+    private static let offsetBasis: UInt64 = 14_695_981_039_346_656_037
+    private static let prime: UInt64 = 1_099_511_628_211
+    private static let positiveMask: UInt64 = 0x7fff_ffff_ffff_ffff
+
+    private var value = offsetBasis
+
+    mutating func combine(_ parts: CustomStringConvertible...) {
+        for part in parts {
+            update(String(describing: part))
+            update(byte: 0xff)
+        }
+        update(byte: 0xfe)
     }
 
-    private func combineRoundedRect(_ rect: CGRect?, into hasher: inout Hasher) {
-        guard let rect else {
-            hasher.combine("missing")
-            return
-        }
+    func finalize() -> Int {
+        Int(value & Self.positiveMask)
+    }
 
-        hasher.combine(Int(rect.origin.x.rounded()))
-        hasher.combine(Int(rect.origin.y.rounded()))
-        hasher.combine(Int(rect.width.rounded()))
-        hasher.combine(Int(rect.height.rounded()))
+    private mutating func update(_ string: String) {
+        for byte in string.utf8 {
+            update(byte: byte)
+        }
+    }
+
+    private mutating func update(byte: UInt8) {
+        value ^= UInt64(byte)
+        value = value &* Self.prime
     }
 }

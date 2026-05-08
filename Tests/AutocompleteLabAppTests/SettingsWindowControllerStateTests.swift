@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 import AutocompleteLabCore
@@ -5,6 +6,23 @@ import AutocompleteLabCore
 
 @Suite("Settings window control state")
 struct SettingsWindowControllerStateTests {
+    @Test("Settings layout stays native and unframed")
+    func settingsLayoutStaysNativeAndUnframed() {
+        let style = SettingsLayoutStyle.nativeUtility
+
+        #expect(!style.usesFramedCards)
+        #expect(style.usesSystemFonts)
+        #expect(style.usesDynamicSystemColors)
+        #expect(style.appearanceCoverage.coversLightDarkAndHighContrast)
+        #expect(style.sectionSpacing == 14)
+        #expect(style.sectionItemSpacing == 5)
+        #expect(style.contentInsets.top == 24)
+        #expect(style.contentInsets.left == 24)
+        #expect(style.contentInsets.bottom == 24)
+        #expect(style.contentInsets.right == 24)
+        #expect(style.secondaryLabelMaxWidth == 470)
+    }
+
     @Test("Current app copy makes support stance and blocked state clear")
     func currentAppCopyMakesSupportStanceAndBlockedStateClear() {
         let store = CompatibilityProfileStore.mvp
@@ -16,32 +34,37 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 0
         )
 
-        #expect(allowed.statusText == "Current app: TextEdit is green and allowed")
+        #expect(allowed.statusText == "Current app: TextEdit is green and on")
         #expect(
             allowed.detailText
                 == "Verified inline suggestions and native text insertion. Suggestions are on for this app."
         )
         #expect(allowed.modeText == "Mode: inline, mirror fallback")
         #expect(allowed.acceptanceText == "Acceptance: Tab next word + full accept")
-        #expect(allowed.pathText == "Path: display inline -> mirror | insert selected text -> value repair | track focused field")
-        #expect(
-            allowed.safetyText
-                == "Safety: Inline when caret proof is trusted; mirror fallback if inline is unsafe."
-        )
-        #expect(allowed.canToggleMirrorMode)
-        #expect(!allowed.isMirrorForced)
-        #expect(allowed.mirrorModeTitle == "Force mirror mode")
-        #expect(!allowed.canQuietCurrentField)
-        #expect(allowed.proofGuideText == "Proof: copies the disposable TextEdit smoke command.")
-        #expect(
-            allowed.proofCommandText
-                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit"
-        )
+        #expect(allowed.fallbackText == "Fallback: not needed; inline is available.")
+        #expect(allowed.proofText == "Proof: use disposable text, press Tab once, then the full-accept shortcut.")
+        #expect(allowed.proofCommandText == "Command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit")
+        #expect(allowed.proofCommandClipboardText == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit")
+        #expect(allowed.copyProofCommandButtonTitle == "Copy Proof Command")
         #expect(allowed.canCopyProofCommand)
+        #expect(allowed.proofButtonTitle == "Run TextEdit Proof")
         #expect(allowed.toggleTitle == "Allow suggestions in this app")
         #expect(allowed.menuToggleTitle == "Disable TextEdit")
         #expect(allowed.blockedAppsText == "Blocked apps: none")
         #expect(allowed.canToggle)
+
+        let chrome = SettingsCurrentAppState(
+            displayName: "Chrome",
+            bundleIdentifier: "com.google.Chrome",
+            supportStatus: store.supportStatus(for: "com.google.Chrome"),
+            isEnabled: true,
+            disabledAppCount: 0
+        )
+
+        #expect(chrome.proofButtonTitle == "Run Chrome Proof")
+        #expect(chrome.proofCommandText == "Manual command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all")
+        #expect(chrome.proofCommandClipboardText == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all")
+        #expect(chrome.canStartProof)
 
         let blocked = SettingsCurrentAppState(
             displayName: "Notes",
@@ -51,36 +74,43 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 2
         )
 
-        #expect(blocked.statusText == "Current app: Notes is yellow and blocked")
+        #expect(blocked.statusText == "Current app: Notes is yellow and off")
         #expect(
             blocked.detailText
-                == "Rich text can drift; display stays mirror-first and insertion fails closed until each Notes surface is proven. Suggestions are blocked by your app list."
+                == "Rich text can drift; display can fall back to floating, and insertion fails closed. Suggestions are off for this app. Turn them on only where you want to test."
         )
-        #expect(blocked.modeText == "Mode: mirror")
+        #expect(blocked.modeText == "Mode: inline, mirror fallback")
         #expect(blocked.acceptanceText == "Acceptance: Tab next word + full accept")
-        #expect(blocked.pathText == "Path: display mirror | insert AX then keys -> keys | track focused field")
-        #expect(
-            blocked.safetyText
-                == "Safety: Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Insertion fails closed if the primary method is not verified."
-        )
-        #expect(!blocked.canToggleMirrorMode)
-        #expect(blocked.mirrorModeTitle == "Force mirror mode")
-        #expect(
-            blocked.proofGuideText
-                == "Proof: use only a disposable note; title, body, and checklist need separate passes."
-        )
-        #expect(
-            blocked.proofCommandText
-                == [
-                    "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate",
-                    "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate",
-                    "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate"
-                ].joined(separator: "\n")
-        )
-        #expect(blocked.canCopyProofCommand)
+        #expect(blocked.fallbackText == "Fallback: off because this app is disabled.")
+        #expect(blocked.proofText == "Proof: turn on suggestions for this app first.")
+        #expect(blocked.proofCommandText == nil)
+        #expect(blocked.proofCommandClipboardText == nil)
+        #expect(blocked.copyProofCommandButtonTitle == "No Proof Command")
+        #expect(!blocked.canCopyProofCommand)
         #expect(blocked.menuToggleTitle == "Enable Notes")
         #expect(blocked.blockedAppsText == "Blocked apps: 2")
         #expect(blocked.canToggle)
+
+        let enabledNotes = SettingsCurrentAppState(
+            displayName: "Notes",
+            bundleIdentifier: "com.apple.Notes",
+            supportStatus: store.supportStatus(for: "com.apple.Notes"),
+            isEnabled: true,
+            disabledAppCount: 0
+        )
+
+        #expect(enabledNotes.proofCommandText?.contains("notes-title --manual-gate") == true)
+        #expect(enabledNotes.proofCommandText?.contains("notes-body --manual-gate") == true)
+        #expect(enabledNotes.proofCommandText?.contains("notes-checklist --manual-gate") == true)
+        #expect(
+            enabledNotes.proofCommandClipboardText
+                == """
+                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate
+                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate
+                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
+                """
+        )
+        #expect(enabledNotes.canCopyProofCommand)
     }
 
     @Test("Diagnostics-only unsupported or missing current app cannot be toggled")
@@ -101,38 +131,13 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(diagnosticsOnly.modeText == "Mode: disabled")
         #expect(diagnosticsOnly.acceptanceText == "Acceptance: off here")
-        #expect(diagnosticsOnly.pathText == "Path: display off | insert off")
-        #expect(diagnosticsOnly.safetyText == "Safety: Suggestions stay off here.")
-        #expect(!diagnosticsOnly.canToggleMirrorMode)
-        #expect(diagnosticsOnly.menuToggleTitle == "Suggestions unavailable in Mail")
-        #expect(diagnosticsOnly.proofGuideText == "Proof: no proof flow for this app yet.")
+        #expect(diagnosticsOnly.fallbackText == "Fallback: unavailable in sensitive apps or fields.")
+        #expect(diagnosticsOnly.proofText == "Proof: unavailable here.")
         #expect(diagnosticsOnly.proofCommandText == nil)
+        #expect(diagnosticsOnly.proofCommandClipboardText == nil)
         #expect(!diagnosticsOnly.canCopyProofCommand)
+        #expect(diagnosticsOnly.menuToggleTitle == "Suggestions unavailable in Mail")
         #expect(!diagnosticsOnly.canToggle)
-
-        let atlas = SettingsCurrentAppState(
-            displayName: "Atlas",
-            bundleIdentifier: "com.openai.atlas",
-            supportStatus: store.supportStatus(for: "com.openai.atlas"),
-            isEnabled: false,
-            disabledAppCount: 1
-        )
-
-        #expect(atlas.statusText == "Current app: Atlas is diagnostics-only")
-        #expect(
-            atlas.detailText
-                == "Atlas can contain private browser text and prompt chats; no no-submit proof exists. Suggestions stay off here."
-        )
-        #expect(atlas.modeText == "Mode: disabled")
-        #expect(atlas.acceptanceText == "Acceptance: off here")
-        #expect(atlas.pathText == "Path: display off | insert off")
-        #expect(atlas.safetyText == "Safety: Suggestions stay off here.")
-        #expect(!atlas.canToggleMirrorMode)
-        #expect(atlas.menuToggleTitle == "Suggestions unavailable in Atlas")
-        #expect(atlas.proofGuideText == "Proof: no proof flow for this app yet.")
-        #expect(atlas.proofCommandText == nil)
-        #expect(!atlas.canCopyProofCommand)
-        #expect(!atlas.canToggle)
 
         let unsupported = SettingsCurrentAppState(
             displayName: "Unknown",
@@ -143,22 +148,15 @@ struct SettingsWindowControllerStateTests {
         )
 
         #expect(unsupported.statusText == "Current app: Unknown is unsupported")
-        #expect(
-            unsupported.detailText
-                == "No compatibility profile yet; broad unknown-app support stays off until proven apps feel safe. Suggestions are intentionally off until this app is tested."
-        )
-        #expect(unsupported.modeText == "Mode: disabled")
+        #expect(unsupported.detailText == "No compatibility profile yet. Suggestions stay off here.")
+        #expect(unsupported.modeText == "Mode: not tested yet")
         #expect(unsupported.acceptanceText == "Acceptance: off here")
-        #expect(unsupported.pathText == "Path: display off | insert off")
-        #expect(
-            unsupported.safetyText
-                == "Safety: Suggestions are intentionally off until this app has a compatibility profile."
-        )
-        #expect(!unsupported.canToggleMirrorMode)
-        #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Unknown")
-        #expect(unsupported.proofGuideText == "Proof: no proof flow for this app yet.")
+        #expect(unsupported.fallbackText == "Fallback: unavailable until this app has a profile.")
+        #expect(unsupported.proofText == "Proof: unavailable here.")
         #expect(unsupported.proofCommandText == nil)
+        #expect(unsupported.proofCommandClipboardText == nil)
         #expect(!unsupported.canCopyProofCommand)
+        #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Unknown")
         #expect(!unsupported.canToggle)
 
         let missing = SettingsCurrentAppState(
@@ -173,35 +171,32 @@ struct SettingsWindowControllerStateTests {
         #expect(missing.detailText == "Open a writing app to see whether suggestions are supported.")
         #expect(missing.modeText == "Mode: choose a writing app")
         #expect(missing.acceptanceText == "Acceptance: off until an app is selected")
-        #expect(missing.pathText == "Path: choose a writing app")
-        #expect(missing.safetyText == "Safety: choose a writing app first")
-        #expect(!missing.canToggleMirrorMode)
-        #expect(missing.menuToggleTitle == "Toggle Current App")
-        #expect(missing.proofGuideText == "Proof: choose a writing app first.")
+        #expect(missing.fallbackText == "Fallback: choose a writing app first.")
+        #expect(missing.proofText == "Proof: choose a writing app first.")
         #expect(missing.proofCommandText == nil)
+        #expect(missing.proofCommandClipboardText == nil)
         #expect(!missing.canCopyProofCommand)
+        #expect(missing.menuToggleTitle == "Toggle Current App")
         #expect(!missing.canToggle)
     }
 
-    @Test("Current app copy exposes forced mirror mode")
-    func currentAppCopyExposesForcedMirrorMode() {
+    @Test("Diagnostics-only non-sensitive apps show copy-only fallback")
+    func diagnosticsOnlyNonSensitiveAppsShowCopyOnlyFallback() {
         let store = CompatibilityProfileStore.mvp
-        let forced = SettingsCurrentAppState(
-            displayName: "TextEdit",
-            bundleIdentifier: "com.apple.TextEdit",
-            supportStatus: store.supportStatus(for: "com.apple.TextEdit"),
+        let safari = SettingsCurrentAppState(
+            displayName: "Safari",
+            bundleIdentifier: "com.apple.Safari",
+            supportStatus: store.supportStatus(for: "com.apple.Safari"),
             isEnabled: true,
-            disabledAppCount: 0,
-            renderModeOverride: .floatingMirror,
-            canQuietCurrentField: true
+            disabledAppCount: 0
         )
 
-        #expect(forced.modeText == "Mode: mirror forced")
-        #expect(forced.safetyText == "Safety: Mirror forced by you; inline placement stays off for this app.")
-        #expect(forced.canToggleMirrorMode)
-        #expect(forced.isMirrorForced)
-        #expect(forced.mirrorModeTitle == "Force mirror mode")
-        #expect(forced.canQuietCurrentField)
+        #expect(safari.statusText == "Current app: Safari is diagnostics-only")
+        #expect(safari.modeText == "Mode: disabled")
+        #expect(safari.acceptanceText == "Acceptance: off here")
+        #expect(safari.fallbackText == "Fallback: copy-only; inline and auto-insert stay off until proof passes.")
+        #expect(safari.proofText == "Proof: unavailable here.")
+        #expect(!safari.canToggle)
     }
 
     @Test("Prompt apps stay disabled until no-submit proof exists")
@@ -217,208 +212,65 @@ struct SettingsWindowControllerStateTests {
 
         #expect(codex.modeText == "Mode: disabled")
         #expect(codex.acceptanceText == "Acceptance: off here")
-        #expect(codex.pathText == "Path: display off | insert off")
-        #expect(
-            codex.safetyText
-                == "Safety: Suggestions stay off here."
-        )
-        #expect(
-            codex.proofGuideText
-                == "Proof: use harmless prompt text; press Tab only, never Enter; confirm NO-SUBMIT only after checking it was not sent."
-        )
-        #expect(
-            codex.proofCommandText
-                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
-        )
-        #expect(codex.canCopyProofCommand)
-        #expect(!codex.canToggleMirrorMode)
+        #expect(codex.proofText == "Proof: unavailable here.")
+        #expect(codex.proofCommandText == nil)
+        #expect(codex.proofCommandClipboardText == nil)
+        #expect(!codex.canCopyProofCommand)
     }
 
-    @Test("Proof commands cover manual-gated target apps")
-    func proofCommandsCoverManualGatedTargetApps() {
+    @Test("Per-app mode copy exposes forced mirror overrides")
+    func perAppModeCopyExposesForcedMirrorOverrides() {
         let store = CompatibilityProfileStore.mvp
-        let obsidian = SettingsCurrentAppState(
-            displayName: "Obsidian",
-            bundleIdentifier: "md.obsidian",
-            supportStatus: store.supportStatus(for: "md.obsidian"),
+        let forcedMirror = SettingsCurrentAppState(
+            displayName: "TextEdit",
+            bundleIdentifier: "com.apple.TextEdit",
+            supportStatus: store.supportStatus(for: "com.apple.TextEdit"),
             isEnabled: true,
-            disabledAppCount: 0
-        )
-        let chrome = SettingsCurrentAppState(
-            displayName: "Chrome",
-            bundleIdentifier: "com.google.Chrome",
-            supportStatus: store.supportStatus(for: "com.google.Chrome"),
-            isEnabled: true,
-            disabledAppCount: 0
-        )
-        let claudeCode = SettingsCurrentAppState(
-            displayName: "Claude Code",
-            bundleIdentifier: "com.anthropic.claude-code",
-            supportStatus: store.supportStatus(for: "com.anthropic.claude-code"),
-            isEnabled: true,
-            disabledAppCount: 0
-        )
-        let claude = SettingsCurrentAppState(
-            displayName: "Claude",
-            bundleIdentifier: "com.anthropic.claudefordesktop",
-            supportStatus: store.supportStatus(for: "com.anthropic.claudefordesktop"),
-            isEnabled: true,
-            disabledAppCount: 0
+            disabledAppCount: 0,
+            renderModeOverride: .floatingMirror
         )
 
-        #expect(obsidian.proofGuideText == "Proof: use a disposable vault note.")
-        #expect(
-            obsidian.proofCommandText
-                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate"
-        )
-        #expect(
-            chrome.proofCommandText
-                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all"
-        )
-        #expect(
-            claudeCode.proofCommandText
-                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
-        )
-        #expect(
-            claude.proofCommandText
-                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
-        )
-    }
+        #expect(forcedMirror.modeText == "Mode: mirror forced (profile inline)")
+        #expect(forcedMirror.modeButtonTitle == "Use Profile Mode")
+        #expect(forcedMirror.canOverrideMode)
+        #expect(forcedMirror.proofButtonTitle == "Run TextEdit Proof")
+        #expect(forcedMirror.canStartProof)
 
-    @Test("First-run copy keeps setup focused on Accessibility model readiness and TextEdit")
-    func firstRunCopyKeepsSetupFocusedOnAccessibilityModelReadinessAndTextEdit() {
-        let store = CompatibilityProfileStore.mvp
-        let textEdit = SettingsCurrentAppState(
+        let profileMode = SettingsCurrentAppState(
             displayName: "TextEdit",
             bundleIdentifier: "com.apple.TextEdit",
             supportStatus: store.supportStatus(for: "com.apple.TextEdit"),
             isEnabled: true,
             disabledAppCount: 0
         )
-        let notes = SettingsCurrentAppState(
-            displayName: "Notes",
-            bundleIdentifier: "com.apple.Notes",
-            supportStatus: store.supportStatus(for: "com.apple.Notes"),
-            isEnabled: true,
+
+        #expect(profileMode.modeButtonTitle == "Force Mirror Mode")
+        #expect(profileMode.canOverrideMode)
+        #expect(profileMode.proofButtonTitle == "Run TextEdit Proof")
+        #expect(profileMode.canStartProof)
+
+        let diagnosticsOnly = SettingsCurrentAppState(
+            displayName: "Mail",
+            bundleIdentifier: "com.apple.mail",
+            supportStatus: store.supportStatus(for: "com.apple.mail"),
+            isEnabled: false,
             disabledAppCount: 0
         )
-        let readyReport = RuntimeReadinessReport(
-            stage: .ready,
-            summary: "ready",
-            action: .none,
-            isReady: true
-        )
-        let missingModelReport = RuntimeReadinessReport(
-            stage: .downloadNeeded,
-            summary: "download needed",
-            action: .installModel
+
+        #expect(!diagnosticsOnly.canOverrideMode)
+        #expect(!diagnosticsOnly.canStartProof)
+
+        let disabled = SettingsCurrentAppState(
+            displayName: "TextEdit",
+            bundleIdentifier: "com.apple.TextEdit",
+            supportStatus: store.supportStatus(for: "com.apple.TextEdit"),
+            isEnabled: false,
+            disabledAppCount: 1
         )
 
-        let permissionNeeded = SettingsFirstRunState(
-            isTrusted: false,
-            suggestionsPaused: false,
-            runtimeReport: readyReport,
-            currentApp: textEdit
-        )
-        #expect(
-            permissionNeeded.message
-                == "Start here: allow Accessibility so Autocomplete Lab can read cursor text and bounds, then insert only what you accept. Text stays on this Mac."
-        )
-        #expect(
-            permissionNeeded.checklistText
-                == "Accessibility needed | Model ready | TextEdit test locked"
-        )
-        #expect(permissionNeeded.textEditTestButtonTitle == "Open TextEdit Test")
-        #expect(
-            permissionNeeded.textEditTestButtonToolTip
-                == "Allow Accessibility before opening the disposable TextEdit test."
-        )
-        #expect(!permissionNeeded.canOpenTextEditTest)
-        let missingModel = SettingsFirstRunState(
-            isTrusted: true,
-            suggestionsPaused: true,
-            runtimeReport: missingModelReport,
-            currentApp: textEdit
-        )
-        #expect(missingModel.message.contains("Model missing"))
-        #expect(
-            missingModel.checklistText
-                == "Accessibility allowed | Model install needed | TextEdit test locked"
-        )
-        #expect(
-            missingModel.textEditTestButtonToolTip
-                == "The local model must be ready before the disposable TextEdit test starts."
-        )
-        #expect(
-            !missingModel.canOpenTextEditTest
-        )
-        #expect(
-            SettingsFirstRunState(
-                isTrusted: true,
-                suggestionsPaused: true,
-                runtimeReport: readyReport,
-                currentApp: textEdit
-            ).message
-                == "Start paused: open TextEdit with a disposable document, then turn on Suggestions when you are ready to test."
-        )
-        let readyTextEdit = SettingsFirstRunState(
-            isTrusted: true,
-            suggestionsPaused: false,
-            runtimeReport: readyReport,
-            currentApp: textEdit
-        )
-        #expect(
-            readyTextEdit.message
-                == "Ready: TextEdit is the first test app. Use a disposable document; Tab accepts one word and Esc dismisses."
-        )
-        #expect(
-            readyTextEdit.checklistText
-                == "Accessibility allowed | Model ready | TextEdit test ready"
-        )
-        #expect(
-            readyTextEdit.textEditTestButtonToolTip
-                == "Opens a disposable TextEdit document for the first safe writing test."
-        )
-        #expect(readyTextEdit.canOpenTextEditTest)
-        #expect(
-            SettingsFirstRunState(
-                isTrusted: true,
-                suggestionsPaused: false,
-                runtimeReport: readyReport,
-                currentApp: notes
-            ).message
-                == "Ready: start in TextEdit with a disposable document before testing Notes, Obsidian, or prompt apps."
-        )
-    }
-
-    @Test("Runtime install control can cancel in-progress setup and retry failures")
-    func runtimeInstallControlCanCancelAndRetry() {
-        let missingModelReport = RuntimeReadinessReport(
-            stage: .downloadNeeded,
-            summary: "download needed",
-            action: .installModel
-        )
-
-        let installing = SettingsRuntimeControlState(
-            report: missingModelReport,
-            installStatus: "Model install: downloading 25%",
-            installInProgress: true
-        )
-
-        #expect(installing.action == .cancelModelInstall)
-        #expect(installing.actionLabelText == "Next step: Cancel Model Install")
-        #expect(installing.actionButtonTitle == "Cancel Install")
-        #expect(installing.isActionEnabled)
-
-        let failed = SettingsRuntimeControlState(
-            report: missingModelReport,
-            installStatus: "Model install failed: network unavailable",
-            installInProgress: false
-        )
-
-        #expect(failed.action == .installModel)
-        #expect(failed.actionButtonTitle == "Install Model")
-        #expect(failed.isActionEnabled)
+        #expect(disabled.proofButtonTitle == "Enable App First")
+        #expect(!disabled.canStartProof)
+        #expect(!disabled.canCopyProofCommand)
     }
 
     @Test("Accessibility permission copy says what the app reads and keeps local")
@@ -428,7 +280,7 @@ struct SettingsWindowControllerStateTests {
         #expect(needed.statusText == "Accessibility permission: needed")
         #expect(
             needed.detailText
-                == "Allow Accessibility so Autocomplete Lab can read the active field text around the cursor, read cursor and field bounds, and insert only text you accept. Text stays on this Mac."
+                == "Allow Accessibility in System Settings so Autocomplete Lab can see the focused text field, find the cursor, and insert text only when you accept. Text stays on this Mac."
         )
 
         let allowed = SettingsPermissionState(isTrusted: true)
@@ -436,7 +288,7 @@ struct SettingsWindowControllerStateTests {
         #expect(allowed.statusText == "Accessibility permission: allowed")
         #expect(
             allowed.detailText
-                == "Autocomplete Lab can read the active field text around the cursor, read cursor and field bounds, and insert only text you accept. Text stays on this Mac."
+                == "Autocomplete Lab can see the focused text field, place suggestions at the cursor, and insert text only when you accept. Text stays on this Mac."
         )
     }
 
@@ -459,23 +311,18 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(privacy.contentStatusText == "Raw text capture: off")
         #expect(
-            privacy.screenRecordingPermissionText
-                == "Screen Recording: only captures placement screenshots while this debug switch is on. Normal suggestions do not need it."
+            privacy.sharingStatusText
+                == "Data leaving Mac: none automatically. Share only the redacted Privacy Bundle, not debug traces or screenshots."
         )
-        #expect(privacy.screenRecordingSettingsButtonTitle == "Open Screen Recording Settings")
-        #expect(privacy.pathText == "Logs: /tmp/diagnostics.log | Traces: /tmp/traces.jsonl")
         #expect(
-            privacy.statusPanelText
-                == [
-                    "Autocomplete Lab keeps suggestions and diagnostics on this Mac.",
-                    "Diagnostics: performance + placement traces recording, screenshots on",
-                    "Raw text capture: off",
-                    "Screen Recording: only captures placement screenshots while this debug switch is on. Normal suggestions do not need it.",
-                    "Leave raw text capture off for normal use.",
-                    "Logs: /tmp/diagnostics.log",
-                    "Traces: /tmp/traces.jsonl"
-                ].joined(separator: "\n")
+            privacy.learningStatusText
+                == "Learning: accepted-kept scores, style sketch, and recent words stay local"
         )
+        #expect(
+            privacy.screenRecordingPermissionText
+                == "Screen Recording: used only while screenshot proof is on to capture local placement screenshots."
+        )
+        #expect(privacy.pathText == "Logs: /tmp/diagnostics.log | Traces: /tmp/traces.jsonl")
 
         let paused = SettingsPrivacyState(
             tracingPaused: true,
@@ -491,61 +338,245 @@ struct SettingsWindowControllerStateTests {
             paused.diagnosticsStatusText
                 == "Diagnostics: performance + placement traces paused, screenshots off"
         )
-        #expect(paused.contentStatusText == "Raw text capture: on temporarily; can include what you type")
-        #expect(paused.screenRecordingPermissionText == nil)
-        #expect(paused.screenRecordingSettingsButtonTitle == nil)
+        #expect(paused.contentStatusText == "Raw text capture: on temporarily")
         #expect(
-            paused.statusPanelText.contains(
-                "Screen Recording: off; normal suggestions do not need it."
-            )
+            paused.sharingStatusText
+                == "Data leaving Mac: none automatically. Share only the redacted Privacy Bundle, not debug traces or screenshots."
         )
+        #expect(paused.screenRecordingPermissionText == nil)
 
         let temporaryScreenshots = SettingsPrivacyState(
             tracingPaused: false,
             rawContentTracingEnabled: false,
             rawContentTracingExpiresAt: nil,
             screenshotTracingEnabled: true,
-            screenshotTracingExpiresAt: Date(timeIntervalSince1970: 1_000),
+            screenshotTracingExpiresAt: Date(timeIntervalSince1970: 2_000),
             diagnosticsPath: "/tmp/diagnostics.log",
             tracePath: "/tmp/traces.jsonl"
         )
-        #expect(temporaryScreenshots.diagnosticsStatusText.contains("screenshots on temporarily"))
+
         #expect(
             temporaryScreenshots.screenRecordingPermissionText
-                == "Screen Recording: only captures temporary placement screenshots. Normal suggestions do not need it."
+                == "Screen Recording: used only for temporary local placement screenshots."
         )
-    }
 
-    @Test("Keyboard shortcut state exposes explicit picker choices")
-    func keyboardShortcutStateExposesExplicitPickerChoices() {
-        let shortcuts = SettingsKeyboardShortcutState(acceptAllShortcut: .optionTab)
+        let shareSafe = SettingsPrivacyState(
+            tracingPaused: false,
+            rawContentTracingEnabled: false,
+            rawContentTracingExpiresAt: nil,
+            screenshotTracingEnabled: false,
+            screenshotTracingExpiresAt: nil,
+            diagnosticsPath: "/tmp/diagnostics.log",
+            tracePath: "/tmp/traces.jsonl"
+        )
 
-        #expect(shortcuts.statusText == "Shortcuts: Tab next word | Option-Tab all")
-        #expect(shortcuts.pickerTitles == ["Backtick", "Option-Tab", "Off"])
-        #expect(shortcuts.selectedShortcutTitle == "Option-Tab")
         #expect(
-            SettingsKeyboardShortcutState(acceptAllShortcut: .disabled).statusText
-                == "Shortcuts: Tab next word | full accept off"
+            shareSafe.sharingStatusText
+                == "Data leaving Mac: none automatically. Model install downloads once; Privacy Bundle excludes raw text, prompts, accepted text, and screenshots."
         )
     }
 
-    @Test("Suggestion control state exposes quiet normal eager choices")
-    func suggestionControlStateExposesPaceChoices() {
-        let control = SettingsSuggestionControlState(
+    @Test("Onboarding copy explains first run without private app tests")
+    func onboardingCopyExplainsFirstRunWithoutPrivateAppTests() {
+        let missingPermission = SettingsOnboardingState(
+            isTrusted: false,
             suggestionsPaused: false,
-            pace: .quiet
+            runtimeGuidance: RuntimeReadinessGuidance(
+                report: RuntimeReadinessReport(
+                    stage: .ready,
+                    summary: "ready",
+                    action: .none,
+                    isReady: true
+                )
+            )
         )
 
-        #expect(control.statusText == "Suggestions: ready | Pace: Quiet")
-        #expect(control.detailText == "Quiet waits for more context before phrase suggestions.")
-        #expect(control.pickerTitles == ["Quiet", "Normal", "Eager"])
-        #expect(control.selectedPaceTitle == "Quiet")
-
         #expect(
-            SettingsSuggestionControlState(
-                suggestionsPaused: true,
-                pace: .eager
-            ).statusText == "Suggestions: paused | Pace: Eager"
+            missingPermission.text
+                == "Allow Accessibility in System Settings so suggestions can appear at the cursor and insert only when you accept. Text stays on this Mac."
+        )
+
+        let paused = SettingsOnboardingState(
+            isTrusted: true,
+            suggestionsPaused: true,
+            runtimeGuidance: RuntimeReadinessGuidance(
+                report: RuntimeReadinessReport(
+                    stage: .ready,
+                    summary: "ready",
+                    action: .none,
+                    isReady: true
+                )
+            )
+        )
+
+        #expect(paused.text == "Paused. Resume when you want to test suggestions.")
+
+        let ready = SettingsOnboardingState(
+            isTrusted: true,
+            suggestionsPaused: false,
+            runtimeGuidance: RuntimeReadinessGuidance(
+                report: RuntimeReadinessReport(
+                    stage: .ready,
+                    summary: "ready",
+                    action: .none,
+                    isReady: true
+                )
+            )
+        )
+
+        #expect(ready.text == "Ready: open TextEdit, turn on suggestions for TextEdit, type a short sentence, press Tab for one word, or Esc to dismiss.")
+        #expect(!ready.text.localizedCaseInsensitiveContains("Notes"))
+    }
+
+    @Test("Field control copy scopes silence to the current field")
+    func fieldControlCopyScopesSilenceToCurrentField() {
+        let missing = SettingsFieldControlState(
+            appDisplayName: nil,
+            hasFieldTarget: false,
+            isCurrentField: false,
+            isSilenced: false
+        )
+
+        #expect(missing.statusText == "Current field: no writing field selected")
+        #expect(missing.detailText == "Click into a writing field to silence only that field.")
+        #expect(missing.buttonTitle == "Silence This Field")
+        #expect(!missing.canSilence)
+
+        let active = SettingsFieldControlState(
+            appDisplayName: "TextEdit",
+            hasFieldTarget: true,
+            isCurrentField: true,
+            isSilenced: false
+        )
+
+        #expect(active.statusText == "Current field: active in TextEdit")
+        #expect(
+            active.detailText
+                == "Silence only this field for the current session; other fields and apps stay available."
+        )
+        #expect(active.buttonTitle == "Silence This Field")
+        #expect(active.canSilence)
+
+        let silenced = SettingsFieldControlState(
+            appDisplayName: "TextEdit",
+            hasFieldTarget: true,
+            isCurrentField: false,
+            isSilenced: true
+        )
+
+        #expect(silenced.statusText == "Last field: silenced for this session")
+        #expect(silenced.detailText == "Suggestions stay off here until you leave this field.")
+        #expect(silenced.buttonTitle == "Field Silenced")
+        #expect(!silenced.canSilence)
+    }
+
+    @Test("Keyboard shortcut copy supports direct accept-all editing")
+    func keyboardShortcutCopySupportsDirectAcceptAllEditing() {
+        let backtick = SettingsKeyboardShortcutState(acceptAllShortcut: .backtick)
+
+        #expect(backtick.statusText == "Shortcuts: Tab next word | Backtick all")
+        #expect(backtick.acceptAllPickerLabel == "Accept all:")
+        #expect(backtick.cycleButtonTitle == "Use Option-Tab")
+
+        let optionTab = SettingsKeyboardShortcutState(acceptAllShortcut: .optionTab)
+
+        #expect(optionTab.statusText == "Shortcuts: Tab next word | Option-Tab all")
+        #expect(optionTab.acceptAllPickerLabel == "Accept all:")
+        #expect(optionTab.cycleButtonTitle == "Use Backtick")
+    }
+
+    @Test("Suggestion aggressiveness copy supports quiet normal and eager")
+    func suggestionAggressivenessCopySupportsQuietNormalAndEager() {
+        let quiet = SettingsSuggestionAggressivenessState(aggressiveness: .quiet)
+        let normal = SettingsSuggestionAggressivenessState(aggressiveness: .normal)
+        let eager = SettingsSuggestionAggressivenessState(aggressiveness: .eager)
+
+        #expect(quiet.statusText == "Aggressiveness: Quiet")
+        #expect(quiet.detailText == "Waits longer and needs stronger scores before showing.")
+        #expect(quiet.cycleButtonTitle == "Use Normal")
+        #expect(normal.statusText == "Aggressiveness: Normal")
+        #expect(normal.detailText == "Uses the current balanced timing and score gates.")
+        #expect(normal.cycleButtonTitle == "Use Eager")
+        #expect(eager.statusText == "Aggressiveness: Eager")
+        #expect(eager.detailText == "Shows sooner when safe, while keeping sensitive-field and high-risk blocks.")
+        #expect(eager.cycleButtonTitle == "Use Quiet")
+    }
+
+    @MainActor
+    @Test("Settings proof actions dispatch current app proof and copy clean command")
+    func settingsProofActionsDispatchCurrentAppProofAndCopyCleanCommand() throws {
+        _ = NSApplication.shared
+        var proofStartCount = 0
+        let controller = SettingsWindowController(
+            requestPermission: {},
+            openAccessibilitySettings: {},
+            toggleSuggestionsPaused: {},
+            silenceCurrentField: {},
+            performRuntimeAction: { _ in },
+            toggleCurrentApp: {},
+            toggleCurrentAppMirrorMode: {},
+            startCurrentAppProof: {
+                proofStartCount += 1
+            },
+            enableAllApps: {},
+            toggleTracingPaused: {},
+            toggleRawContentTracing: {},
+            toggleScreenshotTracing: {},
+            deleteLocalLogs: {},
+            clearLearningData: {},
+            cycleAcceptAllShortcut: {},
+            setAcceptAllShortcut: { _ in },
+            cycleSuggestionAggressiveness: {}
+        )
+
+        controller.refresh(
+            isTrusted: true,
+            suggestionsPaused: false,
+            runtimeReport: RuntimeReadinessReport(
+                stage: .ready,
+                summary: "ready",
+                action: .none,
+                isReady: true
+            ),
+            runtimeTargetSummary: "Qwen local - short completions - normal",
+            modelDirectoryPath: "/tmp/AutocompleteLab/Models",
+            modelInstallStatusText: nil,
+            isModelInstallInProgress: false,
+            currentApp: SettingsCurrentAppState(
+                displayName: "TextEdit",
+                bundleIdentifier: "com.apple.TextEdit",
+                supportStatus: CompatibilityProfileStore.mvp.supportStatus(for: "com.apple.TextEdit"),
+                isEnabled: true,
+                disabledAppCount: 0
+            ),
+            fieldControl: SettingsFieldControlState(
+                appDisplayName: "TextEdit",
+                hasFieldTarget: true,
+                isCurrentField: true,
+                isSilenced: false
+            ),
+            privacy: SettingsPrivacyState(
+                tracingPaused: false,
+                rawContentTracingEnabled: false,
+                rawContentTracingExpiresAt: nil,
+                screenshotTracingEnabled: false,
+                screenshotTracingExpiresAt: nil,
+                diagnosticsPath: "/tmp/diagnostics.log",
+                tracePath: "/tmp/traces.jsonl"
+            ),
+            keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .backtick),
+            suggestionAggressiveness: SettingsSuggestionAggressivenessState(aggressiveness: .normal),
+            lastSuggestionDecision: "Shown"
+        )
+
+        controller.performStartAppProofAction()
+        #expect(proofStartCount == 1)
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        controller.copyCurrentProofCommand(to: pasteboard)
+        #expect(
+            pasteboard.string(forType: .string)
+                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit"
         )
     }
 }
