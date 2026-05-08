@@ -48,7 +48,9 @@ First-run setup now explains Accessibility in one short paragraph and points
 first success at TextEdit, not private notes.
 Chrome-hosted Google Docs, Notion, Slack, and Discord now have an explicit
 unsupported surface policy so the yellow Chrome profile does not silently
-extend to unproved production editors or chat boxes.
+extend to unproved production editors or chat boxes. Post-accept insertion
+verification now also fails closed when the frontmost app, focused text context,
+or focused field no longer matches the accepted suggestion baseline.
 
 The largest miss is still visual placement proof in real apps. Ghost text can
 still be unproven or under-polished in Codex, terminal-hosted Claude Code,
@@ -239,6 +241,7 @@ autocomplete suggestion.
 - [x] Selected text blocks suggestions and acceptance.
 - [x] Insertion verification checks whether accepted text landed.
 - [x] Failed insertion can suppress the field.
+- [x] Post-accept app, focused-text, and field mismatches trace as failed insertions.
 - [x] Notes fails closed instead of trusting flaky rich-text insertion.
 - [x] Chat-like fixture exists to prove accept does not submit a form.
 - [x] Keyboard capture starts after a usable panel is shown, not before.

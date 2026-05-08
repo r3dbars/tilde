@@ -68,7 +68,11 @@ deeper invalidation: strict proof still fails for Codex same-slice no-submit
 proof and some partial browser/editor manifest gates, and the app still lacks full window/scroll/display revision
 tokens. A later hardening pass also made stable-bounds field identity
 deterministic instead of process-random, which makes replay and trace evidence
-more comparable across lab app launches.
+more comparable across lab app launches. The merge also keeps the stricter
+trust gate from the branch: an anchor that cannot map to a known display
+suppresses instead of falling back to the main display, and post-accept
+verification mismatches trace as insertion failures rather than silently
+passing.
 
 ## Score
 

@@ -62,10 +62,15 @@ require_pattern "Tests/AutocompleteLabCoreTests/PromptEditorFingerprintPolicyTes
 require_file "Tests/AutocompleteLabCoreTests/DiagnosticValueRedactorTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/DiagnosticValueRedactorTests.swift" "without raw text" "privacy-safe diagnostics coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/DiagnosticValueRedactorTests.swift" "redacts likely raw text keys" "raw-text redaction coverage"
+require_file "Tests/AutocompleteLabAppTests/CompatibilityLearningStorePrivacyTests.swift"
+require_pattern "Tests/AutocompleteLabAppTests/CompatibilityLearningStorePrivacyTests.swift" "Delete all clears compatibility learning artifacts" "delete local learning artifact coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift" "Verifies accepted text landed exactly" "successful insertion verification coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift" "Detects unchanged and partially inserted text" "failed insertion verification coverage"
+require_file "Tests/AutocompleteLabCoreTests/InsertionVerificationPreflightPolicyTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationPreflightPolicyTests.swift" "Fails when focus moved to another app" "post-accept app mismatch coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/InsertionVerificationPreflightPolicyTests.swift" "Fails when focus moved to another field in the same app" "post-accept field mismatch coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift" "Suppresses one word twitch completions" "model-output cleanup coverage"
@@ -82,6 +87,10 @@ require_pattern "Tests/AutocompleteLabCoreTests/SuggestionPresentationGateTests.
 require_file "Tests/AutocompleteLabCoreTests/SuggestionAcceptanceGuardTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/SuggestionAcceptanceGuardTests.swift" "Blocks accept after app bundle changes" "wrong-app accept guard coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/SuggestionAcceptanceGuardTests.swift" "Blocks accept when text before cursor changed" "text snapshot accept guard coverage"
+require_file "Tests/AutocompleteLabCoreTests/FocusedFieldIdentityPolicyTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/FocusedFieldIdentityPolicyTests.swift" "Stable bounds mode uses a deterministic hash fixture" "stable field identity hash coverage"
+require_file "Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift" "Blocks unknown field kinds unless explicitly allowed" "unknown field-kind suppression coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/TypingBurstPolicyTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/TypingBurstPolicyTests.swift" "Fast repeated character inserts become a burst" "typing-burst silence coverage"

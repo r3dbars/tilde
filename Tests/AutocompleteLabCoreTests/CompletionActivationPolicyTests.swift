@@ -112,6 +112,29 @@ struct CompletionActivationPolicyTests {
         ) == .allow(.phraseContinuation))
     }
 
+    @Test("Blocks unknown field kinds unless explicitly allowed")
+    func blocksUnknownFieldKindsUnlessAllowed() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "I think this through ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .unknown,
+            allowsUnknownFieldKind: false
+        ) == .block(.blockedFieldKind))
+
+        #expect(policy.decision(
+            textBeforeCursor: "I think this through ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .unknown,
+            allowsUnknownFieldKind: true
+        ) == .allow(.phraseContinuation))
+    }
+
     @Test("Blocks selected text so accept cannot overwrite user content")
     func blocksSelectedText() {
         let policy = CompletionActivationPolicy()

@@ -175,6 +175,13 @@ struct CompatibilityProfileTests {
         #expect(!store.allows(bundleIdentifier: "com.openai.atlas"))
     }
 
+    @Test("MVP profiles do not allow unknown field kinds by default")
+    func mvpProfilesDoNotAllowUnknownFieldKindsByDefault() {
+        for profile in CompatibilityProfileStore.mvp.profiles.values {
+            #expect(!profile.allowsUnknownFieldKind)
+        }
+    }
+
     @Test("Support status explains unsupported and denylisted apps")
     func supportStatusExplainsBlockedApps() {
         let store = CompatibilityProfileStore.mvp
