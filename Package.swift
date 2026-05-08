@@ -15,7 +15,16 @@ let package = Package(
         .executable(
             name: "AutocompleteLab",
             targets: ["AutocompleteLabApp"]
+        ),
+        .executable(
+            name: "AutocompleteTraceReplay",
+            targets: ["AutocompleteTraceReplay"]
         )
+    ],
+    dependencies: [
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", .upToNextMajor(from: "3.31.3")),
+        .package(url: "https://github.com/huggingface/swift-huggingface.git", .upToNextMajor(from: "0.9.0")),
+        .package(url: "https://github.com/huggingface/swift-transformers.git", .upToNextMajor(from: "1.3.0"))
     ],
     targets: [
         .target(
@@ -25,26 +34,46 @@ let package = Package(
                 "Compatibility/AGENTS.md",
                 "Configuration/AGENTS.md",
                 "Engine/AGENTS.md",
+                "Experiments/AGENTS.md",
                 "Geometry/AGENTS.md",
                 "Runtime/AGENTS.md",
                 "Session/AGENTS.md",
                 "Suggestions/AGENTS.md",
-                "Text/AGENTS.md"
+                "Text/AGENTS.md",
+                "Tracing/AGENTS.md"
             ]
         ),
         .executableTarget(
             name: "AutocompleteLabApp",
-            dependencies: ["AutocompleteLabCore"],
+            dependencies: [
+                "AutocompleteLabCore",
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXVLM", package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "MLXHuggingFace", package: "mlx-swift-lm"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers")
+            ],
             exclude: [
                 "AGENTS.md",
                 "App/AGENTS.md",
                 "Mac/AGENTS.md",
+                "Runtime/AGENTS.md",
                 "UI/AGENTS.md"
             ]
+        ),
+        .executableTarget(
+            name: "AutocompleteTraceReplay",
+            dependencies: ["AutocompleteLabCore"]
         ),
         .testTarget(
             name: "AutocompleteLabCoreTests",
             dependencies: ["AutocompleteLabCore"],
+            exclude: ["AGENTS.md"]
+        ),
+        .testTarget(
+            name: "AutocompleteLabAppTests",
+            dependencies: ["AutocompleteLabApp"],
             exclude: ["AGENTS.md"]
         )
     ]

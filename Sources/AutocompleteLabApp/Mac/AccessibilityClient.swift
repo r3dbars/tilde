@@ -3,34 +3,125 @@ import ApplicationServices
 import AutocompleteLabCore
 import CoreGraphics
 
-struct RunningApplicationInfo: Equatable {
+struct RunningApplicationInfo: Equatable, Sendable {
     let bundleIdentifier: String
     let localizedName: String
     let processIdentifier: pid_t
 }
 
-struct FocusedTextContext: Equatable {
+struct FocusedTextContext: Equatable, Sendable {
+    let elementIdentifier: Int
+    let role: String?
+    let subrole: String?
+    let fingerprint: FocusedElementFingerprint
     let textBeforeCursor: String
     let textAfterCursor: String
+    let selectedText: String
+    let selectedTextLength: Int
     let caretRect: CGRect?
+    let elementRect: CGRect?
+    let windowRect: CGRect?
     let textLineRect: CGRect?
-    let textElementRect: CGRect?
     let textStyle: FocusedTextStyle?
-    let elementRole: String?
-    let elementSubrole: String?
     let isSecure: Bool
-    let diagnostics: FocusedTextDiagnostics
+    let fieldClassification: AXFieldClassification
+    let caretIsSynthetic: Bool
+    let capabilities: FocusedTextCapabilities
 }
 
-struct FocusedTextDiagnostics: Equatable {
-    let supportedAttributes: [String]
-    let supportedParameterizedAttributes: [String]
-    let selectedRangeLocation: Int?
-    let selectedRangeLength: Int?
-    let textLengthUTF16: Int
+struct FocusedTextCapabilities: Equatable, Sendable {
+    let canReadValue: Bool
+    let canReadSelectedTextRange: Bool
+    let canReadBoundsForRange: Bool
+    let canReadAttributedText: Bool
+    let canSetSelectedText: Bool
+
+    var supportsInlineSuggestions: Bool {
+        canReadValue && canReadSelectedTextRange && canReadBoundsForRange
+    }
+
+    var supportsAXInsertion: Bool {
+        canSetSelectedText
+    }
 }
 
-struct FocusedTextStyle: Equatable {
+struct FocusedTextDiagnostics: Equatable, Sendable {
+    let bundleIdentifier: String?
+    let localizedAppName: String?
+    let role: String?
+    let subrole: String?
+    let isSecure: Bool
+    let textBeforeCursorLength: Int
+    let textAfterCursorLength: Int
+    let selectedRangeDescription: String
+    let caretRect: CGRect?
+    let elementRect: CGRect?
+    let windowRect: CGRect?
+    let textLineRect: CGRect?
+    let capabilities: FocusedTextCapabilities
+    let attributeDump: FocusedElementAttributeDump
+
+    var summary: String {
+        """
+        App: \(localizedAppName ?? "Unknown") (\(bundleIdentifier ?? "unknown bundle"))
+        Role: \(role ?? "unknown")
+        Subrole: \(subrole ?? "none")
+        Secure: \(isSecure)
+        Selected range: \(selectedRangeDescription)
+        Text before cursor: \(textBeforeCursorLength) chars
+        Text after cursor: \(textAfterCursorLength) chars
+        Caret rect: \(caretRect.map(String.init(describing:)) ?? "missing")
+        Element rect: \(elementRect.map(String.init(describing:)) ?? "missing")
+        Window rect: \(windowRect.map(String.init(describing:)) ?? "missing")
+        Text line rect: \(textLineRect.map(String.init(describing:)) ?? "missing")
+        Capabilities:
+          value: \(capabilities.canReadValue)
+          selected range: \(capabilities.canReadSelectedTextRange)
+          bounds for range: \(capabilities.canReadBoundsForRange)
+          attributed text: \(capabilities.canReadAttributedText)
+          selected text insertion: \(capabilities.canSetSelectedText)
+
+        Attributes:
+        \(attributeDump.attributeSummary)
+
+        Parameterized attributes:
+        \(attributeDump.parameterizedAttributeSummary)
+        """
+    }
+}
+
+struct FocusedElementAttributeDump: Equatable, Sendable {
+    let attributes: [FocusedElementAttributeSummary]
+    let parameterizedAttributes: [String]
+
+    var attributeSummary: String {
+        guard !attributes.isEmpty else {
+            return "  unavailable"
+        }
+
+        return attributes
+            .map { "  \($0.name): \($0.valueSummary) | settable=\($0.isSettable)" }
+            .joined(separator: "\n")
+    }
+
+    var parameterizedAttributeSummary: String {
+        guard !parameterizedAttributes.isEmpty else {
+            return "  none"
+        }
+
+        return parameterizedAttributes
+            .map { "  \($0)" }
+            .joined(separator: "\n")
+    }
+}
+
+struct FocusedElementAttributeSummary: Equatable, Sendable {
+    let name: String
+    let valueSummary: String
+    let isSettable: Bool
+}
+
+struct FocusedTextStyle: Equatable, @unchecked Sendable {
     let fontName: String
     let fontSize: CGFloat
     let foregroundColor: NSColor?
@@ -40,57 +131,10 @@ struct FocusedTextStyle: Equatable {
     }
 }
 
-private struct PasteboardSnapshot: Sendable {
-    struct Item: Sendable {
-        let values: [Value]
-    }
+final class AccessibilityClient: @unchecked Sendable {
+    private let sensitiveTextFieldPolicy = SensitiveTextFieldPolicy()
+    private let fieldClassifier = AXFieldClassifier()
 
-    struct Value: Sendable {
-        let type: String
-        let data: Data
-    }
-
-    let items: [Item]
-
-    static func capture(from pasteboard: NSPasteboard) -> PasteboardSnapshot {
-        let items = pasteboard.pasteboardItems?.compactMap { item -> Item? in
-            let values = item.types.compactMap { type -> Value? in
-                guard let data = item.data(forType: type) else {
-                    return nil
-                }
-
-                return Value(type: type.rawValue, data: data)
-            }
-
-            guard !values.isEmpty else {
-                return nil
-            }
-
-            return Item(values: values)
-        } ?? []
-
-        return PasteboardSnapshot(items: items)
-    }
-
-    func restore(to pasteboard: NSPasteboard) {
-        pasteboard.clearContents()
-
-        let pasteboardItems = items.map { item in
-            let pasteboardItem = NSPasteboardItem()
-            for value in item.values {
-                pasteboardItem.setData(value.data, forType: NSPasteboard.PasteboardType(value.type))
-            }
-
-            return pasteboardItem
-        }
-
-        if !pasteboardItems.isEmpty {
-            pasteboard.writeObjects(pasteboardItems)
-        }
-    }
-}
-
-final class AccessibilityClient {
     var isTrusted: Bool {
         AXIsProcessTrusted()
     }
@@ -120,214 +164,340 @@ final class AccessibilityClient {
         )
     }
 
-    func focusedTextContext() -> FocusedTextContext? {
-        guard let app = NSWorkspace.shared.frontmostApplication else {
+    func focusedTextContext(allowDescendantTextFallback: Bool = false) -> FocusedTextContext? {
+        guard let app = frontmostApplication() else {
             return nil
         }
 
+        return focusedTextContext(
+            for: app,
+            allowDescendantTextFallback: allowDescendantTextFallback
+        )
+    }
+
+    func focusedTextContext(
+        for app: RunningApplicationInfo,
+        allowDescendantTextFallback: Bool = false
+    ) -> FocusedTextContext? {
         guard let focusedElement = focusedElement(for: app.processIdentifier) else {
             return nil
         }
 
-        let isSecure = isSecureTextElement(focusedElement)
+        configureMessagingTimeout(for: focusedElement)
 
-        guard let text = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String else {
+        let role = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
+        let subrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
+        let fingerprint = focusedElementFingerprint(
+            for: focusedElement,
+            processIdentifier: app.processIdentifier
+        )
+        let isSecure = isSensitiveTextElement(
+            focusedElement,
+            role: role,
+            subrole: subrole,
+            fingerprint: fingerprint
+        )
+
+        guard !isSecure else {
+            return secureTextContext(
+                element: focusedElement,
+                role: role,
+                subrole: subrole,
+                fingerprint: fingerprint,
+                processIdentifier: app.processIdentifier
+            )
+        }
+
+        guard let text = editableText(
+            in: focusedElement,
+            role: role,
+            processIdentifier: app.processIdentifier,
+            allowDescendantTextFallback: allowDescendantTextFallback
+        ) else {
             return nil
         }
 
         let selectedRange = selectedTextRange(in: focusedElement)
+        let selectedTextLength = max(0, selectedRange?.length ?? 0)
         let textSlice = CursorTextSplitter.split(
             text,
             utf16Offset: selectedRange?.location ?? text.utf16.count
         )
+        let selectedText = selectedText(in: focusedElement, fullText: text, selectedRange: selectedRange)
         let caretRect = selectedRange.flatMap {
-            resolvedCaretBounds(
-                for: focusedElement,
-                textLength: text.utf16.count,
-                textBeforeCursor: textSlice.textBeforeCursor,
-                range: $0
+            AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
+        }
+        let elementRect = elementBounds(for: focusedElement)
+        let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
+        let textLineRect = selectedRange.flatMap {
+            AccessibilityTextBoundsPolicy.usableTextBounds(
+                textLineBounds(
+                    for: focusedElement,
+                    textLength: text.utf16.count,
+                    textBeforeCursor: textSlice.textBeforeCursor,
+                    range: $0
+                )
             )
         }
-        let textLineRect = selectedRange.flatMap {
-            textLineBounds(for: focusedElement, textLength: text.utf16.count, textBeforeCursor: textSlice.textBeforeCursor, range: $0)
-        }
-        let textElementRect = frameBounds(for: focusedElement)
         let textStyle = selectedRange.flatMap {
             focusedTextStyle(in: focusedElement, textLength: text.utf16.count, range: $0)
         }
-        let elementRole = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
-        let elementSubrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
+        let fieldClassification = fieldClassification(
+            role: role,
+            subrole: subrole,
+            fingerprint: fingerprint,
+            isSecure: isSecure,
+            textBeforeCursorLength: textSlice.textBeforeCursor.count,
+            textAfterCursorLength: textSlice.textAfterCursor.count,
+            selectedTextLength: selectedTextLength,
+            lineCount: lineCount(in: text)
+        )
+        let capabilities = textCapabilities(
+            for: focusedElement,
+            selectedRange: selectedRange,
+            caretRect: caretRect,
+            textStyle: textStyle
+        )
 
         return FocusedTextContext(
+            elementIdentifier: Int(CFHash(focusedElement)),
+            role: role,
+            subrole: subrole,
+            fingerprint: fingerprint,
             textBeforeCursor: textSlice.textBeforeCursor,
             textAfterCursor: textSlice.textAfterCursor,
+            selectedText: selectedText,
+            selectedTextLength: selectedTextLength,
             caretRect: caretRect,
+            elementRect: elementRect,
+            windowRect: windowRect,
             textLineRect: textLineRect,
-            textElementRect: textElementRect,
             textStyle: textStyle,
-            elementRole: elementRole,
-            elementSubrole: elementSubrole,
             isSecure: isSecure,
-            diagnostics: FocusedTextDiagnostics(
-                supportedAttributes: supportedAttributeNames(in: focusedElement),
-                supportedParameterizedAttributes: supportedParameterizedAttributeNames(in: focusedElement),
-                selectedRangeLocation: selectedRange?.location,
-                selectedRangeLength: selectedRange?.length,
-                textLengthUTF16: text.utf16.count
+            fieldClassification: fieldClassification,
+            caretIsSynthetic: false,
+            capabilities: capabilities
+        )
+    }
+
+    private func secureTextContext(
+        element: AXUIElement,
+        role: String?,
+        subrole: String?,
+        fingerprint: FocusedElementFingerprint,
+        processIdentifier: pid_t
+    ) -> FocusedTextContext {
+        FocusedTextContext(
+            elementIdentifier: Int(CFHash(element)),
+            role: role,
+            subrole: subrole,
+            fingerprint: fingerprint,
+            textBeforeCursor: "",
+            textAfterCursor: "",
+            selectedText: "",
+            selectedTextLength: 0,
+            caretRect: nil,
+            elementRect: elementBounds(for: element),
+            windowRect: containingWindowBounds(for: element, processIdentifier: processIdentifier),
+            textLineRect: nil,
+            textStyle: nil,
+            isSecure: true,
+            fieldClassification: fieldClassification(
+                role: role,
+                subrole: subrole,
+                fingerprint: fingerprint,
+                isSecure: true,
+                textBeforeCursorLength: 0,
+                textAfterCursorLength: 0,
+                selectedTextLength: 0,
+                lineCount: 0
+            ),
+            caretIsSynthetic: false,
+            capabilities: FocusedTextCapabilities(
+                canReadValue: false,
+                canReadSelectedTextRange: false,
+                canReadBoundsForRange: false,
+                canReadAttributedText: false,
+                canSetSelectedText: false
             )
         )
     }
 
-    func insertText(_ text: String, allowClipboardFallback: Bool = true) -> Bool {
-        guard !text.isEmpty else {
-            return true
-        }
-
+    func insertText(_ text: String) -> Bool {
         guard let app = NSWorkspace.shared.frontmostApplication,
               let focusedElement = focusedElement(for: app.processIdentifier) else {
             return false
         }
 
-        guard !isSecureTextElement(focusedElement) else {
-            return false
-        }
-
-        let originalValue = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String
-        let originalRange = selectedTextRange(in: focusedElement)
-        let expectedValue = expectedTextValue(
-            afterInserting: text,
-            into: originalValue,
-            selectedRange: originalRange
-        )
-
+        let textBeforeInsert = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String
         let result = AXUIElementSetAttributeValue(
             focusedElement,
             kAXSelectedTextAttribute as CFString,
             text as CFTypeRef
         )
 
-        if result == .success {
-            if directInsertionChangedValue(
-                in: focusedElement,
-                originalValue: originalValue,
-                expectedValue: expectedValue
-            ) {
-                return true
-            }
-
-            guard allowClipboardFallback else {
-                return false
-            }
-
-            return pasteTextThroughClipboard(text)
-        }
-
-        guard allowClipboardFallback else {
+        guard result == .success else {
             return false
         }
 
-        return pasteTextThroughClipboard(text)
-    }
-
-    private func expectedTextValue(
-        afterInserting text: String,
-        into originalValue: String?,
-        selectedRange: CFRange?
-    ) -> String? {
-        guard let originalValue,
-              let selectedRange,
-              selectedRange.location >= 0,
-              selectedRange.length >= 0 else {
-            return nil
-        }
-
-        let startOffset = min(selectedRange.location, originalValue.utf16.count)
-        let endOffset = min(startOffset + selectedRange.length, originalValue.utf16.count)
-        let prefix = CursorTextSplitter.split(originalValue, utf16Offset: startOffset).textBeforeCursor
-        let suffix = CursorTextSplitter.split(originalValue, utf16Offset: endOffset).textAfterCursor
-
-        return prefix + text + suffix
-    }
-
-    private func directInsertionChangedValue(
-        in focusedElement: AXUIElement,
-        originalValue: String?,
-        expectedValue: String?
-    ) -> Bool {
-        guard let expectedValue else {
+        guard let textBeforeInsert else {
             return true
         }
 
-        if copiedTextValue(in: focusedElement) == expectedValue {
-            return true
-        }
-
-        Thread.sleep(forTimeInterval: 0.02)
-        let updatedValue = copiedTextValue(in: focusedElement)
-        if updatedValue == expectedValue {
-            return true
-        }
-
-        guard let updatedValue else {
-            return false
-        }
-
-        return updatedValue != originalValue
+        let textAfterInsert = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String
+        return textAfterInsert != textBeforeInsert
     }
 
-    private func copiedTextValue(in focusedElement: AXUIElement) -> String? {
-        copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String
-    }
-
-    private func pasteTextThroughClipboard(_ text: String) -> Bool {
-        let pasteboard = NSPasteboard.general
-        let snapshot = PasteboardSnapshot.capture(from: pasteboard)
-
-        pasteboard.clearContents()
-        guard pasteboard.setString(text, forType: .string) else {
-            snapshot.restore(to: pasteboard)
+    func replaceSelectedTextBySettingValue(_ text: String) -> Bool {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              let focusedElement = focusedElement(for: app.processIdentifier),
+              let textBeforeInsert = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String,
+              let selectedRange = selectedTextRange(in: focusedElement),
+              let replacement = SelectedTextRangeReplacer.replacingSelectedRange(
+                  in: textBeforeInsert,
+                  utf16Location: selectedRange.location,
+                  utf16Length: selectedRange.length,
+                  with: text
+              ) else {
             return false
         }
 
-        let temporaryChangeCount = pasteboard.changeCount
-        guard postCommandV() else {
-            snapshot.restore(to: pasteboard)
+        let result = AXUIElementSetAttributeValue(
+            focusedElement,
+            kAXValueAttribute as CFString,
+            replacement.text as CFTypeRef
+        )
+
+        guard result == .success else {
             return false
         }
 
-        restorePasteboard(snapshot, ifChangeCountIs: temporaryChangeCount)
-        return true
+        var cursorRange = CFRange(location: replacement.cursorUTF16Offset, length: 0)
+        if let rangeValue = AXValueCreate(.cfRange, &cursorRange) {
+            _ = AXUIElementSetAttributeValue(
+                focusedElement,
+                kAXSelectedTextRangeAttribute as CFString,
+                rangeValue
+            )
+        }
+
+        if replacement.cursorUTF16Offset == replacement.text.utf16.count,
+           !cursorMatches(cursorRange, in: focusedElement) {
+            moveInsertionPointToLineEnd()
+        }
+
+        let textAfterInsert = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String
+        return textAfterInsert == replacement.text
     }
 
-    private func postCommandV() -> Bool {
-        guard let eventSource = CGEventSource(stateID: .hidSystemState),
-              let keyDown = CGEvent(keyboardEventSource: eventSource, virtualKey: CGKeyCode(9), keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: eventSource, virtualKey: CGKeyCode(9), keyDown: false) else {
+    private func cursorMatches(_ expectedRange: CFRange, in element: AXUIElement) -> Bool {
+        guard let currentRange = selectedTextRange(in: element) else {
             return false
+        }
+
+        return currentRange.location == expectedRange.location
+            && currentRange.length == expectedRange.length
+    }
+
+    private func moveInsertionPointToLineEnd() {
+        let source = CGEventSource(stateID: .hidSystemState)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: false) else {
+            return
         }
 
         keyDown.flags = .maskCommand
         keyUp.flags = .maskCommand
         keyDown.post(tap: .cghidEventTap)
         keyUp.post(tap: .cghidEventTap)
-        return true
     }
 
-    private func restorePasteboard(_ snapshot: PasteboardSnapshot, ifChangeCountIs temporaryChangeCount: Int) {
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(150))
-
-            let pasteboard = NSPasteboard.general
-            guard pasteboard.changeCount == temporaryChangeCount else {
-                return
-            }
-
-            snapshot.restore(to: pasteboard)
+    func focusedTextDiagnostics(allowDescendantTextFallback: Bool = false) -> FocusedTextDiagnostics? {
+        guard let app = frontmostApplication() else {
+            return nil
         }
+
+        return focusedTextDiagnostics(for: app, allowDescendantTextFallback: allowDescendantTextFallback)
+    }
+
+    func focusedTextDiagnostics(
+        for app: RunningApplicationInfo,
+        allowDescendantTextFallback: Bool = false
+    ) -> FocusedTextDiagnostics? {
+        guard let focusedElement = focusedElement(for: app.processIdentifier) else {
+            return nil
+        }
+
+        configureMessagingTimeout(for: focusedElement)
+
+        let role = copyAttribute(focusedElement, attribute: kAXRoleAttribute) as? String
+        let subrole = copyAttribute(focusedElement, attribute: kAXSubroleAttribute) as? String
+        let fingerprint = focusedElementFingerprint(
+            for: focusedElement,
+            processIdentifier: app.processIdentifier
+        )
+        let text = editableText(
+            in: focusedElement,
+            role: role,
+            processIdentifier: app.processIdentifier,
+            allowDescendantTextFallback: allowDescendantTextFallback
+        )
+        let selectedRange = selectedTextRange(in: focusedElement)
+        let textSlice = text.map {
+            CursorTextSplitter.split($0, utf16Offset: selectedRange?.location ?? $0.utf16.count)
+        }
+        let caretRect = selectedRange.flatMap {
+            AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
+        }
+        let elementRect = elementBounds(for: focusedElement)
+        let windowRect = containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
+        let textLineRect = selectedRange.flatMap {
+            AccessibilityTextBoundsPolicy.usableTextBounds(
+                textLineBounds(
+                    for: focusedElement,
+                    textLength: text?.utf16.count ?? 0,
+                    textBeforeCursor: textSlice?.textBeforeCursor ?? "",
+                    range: $0
+                )
+            )
+        }
+        let textStyle = selectedRange.flatMap {
+            focusedTextStyle(in: focusedElement, textLength: text?.utf16.count ?? 0, range: $0)
+        }
+        let capabilities = textCapabilities(
+            for: focusedElement,
+            selectedRange: selectedRange,
+            caretRect: caretRect,
+            textStyle: textStyle
+        )
+        let attributeDump = focusedElementAttributeDump(for: focusedElement)
+
+        return FocusedTextDiagnostics(
+            bundleIdentifier: app.bundleIdentifier,
+            localizedAppName: app.localizedName,
+            role: role,
+            subrole: subrole,
+            isSecure: isSensitiveTextElement(
+                focusedElement,
+                role: role,
+                subrole: subrole,
+                fingerprint: fingerprint
+            ),
+            textBeforeCursorLength: textSlice?.textBeforeCursor.count ?? 0,
+            textAfterCursorLength: textSlice?.textAfterCursor.count ?? 0,
+            selectedRangeDescription: selectedRange.map { "location=\($0.location), length=\($0.length)" } ?? "missing",
+            caretRect: caretRect,
+            elementRect: elementRect,
+            windowRect: windowRect,
+            textLineRect: textLineRect,
+            capabilities: capabilities,
+            attributeDump: attributeDump
+        )
     }
 
     private func focusedElement(for processIdentifier: pid_t) -> AXUIElement? {
         let appElement = AXUIElementCreateApplication(processIdentifier)
+        configureMessagingTimeout(for: appElement)
         guard let focusedElementValue = copyAttribute(appElement, attribute: kAXFocusedUIElementAttribute) else {
             return nil
         }
@@ -345,24 +515,221 @@ final class AccessibilityClient {
         return value
     }
 
-    private func supportedAttributeNames(in element: AXUIElement) -> [String] {
-        var names: CFArray?
-        let result = AXUIElementCopyAttributeNames(element, &names)
-        guard result == .success, let names else {
-            return []
+    private func focusedElementAttributeDump(for element: AXUIElement) -> FocusedElementAttributeDump {
+        let attributes = attributeNames(for: element).map { attribute in
+            FocusedElementAttributeSummary(
+                name: attribute,
+                valueSummary: diagnosticValueSummary(copyAttribute(element, attribute: attribute)),
+                isSettable: canSetAttribute(element, attribute: attribute)
+            )
         }
 
-        return (names as? [String] ?? []).sorted()
+        return FocusedElementAttributeDump(
+            attributes: attributes,
+            parameterizedAttributes: parameterizedAttributeNames(for: element)
+        )
     }
 
-    private func supportedParameterizedAttributeNames(in element: AXUIElement) -> [String] {
+    private func attributeNames(for element: AXUIElement) -> [String] {
         var names: CFArray?
-        let result = AXUIElementCopyParameterizedAttributeNames(element, &names)
-        guard result == .success, let names else {
+        let result = AXUIElementCopyAttributeNames(element, &names)
+
+        guard result == .success,
+              let names = names as? [String] else {
             return []
         }
 
-        return (names as? [String] ?? []).sorted()
+        return names.sorted()
+    }
+
+    private func parameterizedAttributeNames(for element: AXUIElement) -> [String] {
+        var names: CFArray?
+        let result = AXUIElementCopyParameterizedAttributeNames(element, &names)
+
+        guard result == .success,
+              let names = names as? [String] else {
+            return []
+        }
+
+        return names.sorted()
+    }
+
+    private func diagnosticValueSummary(_ value: CFTypeRef?) -> String {
+        guard let value else {
+            return "unavailable"
+        }
+
+        if let string = value as? String {
+            return DiagnosticValueRedactor.stringSummary(length: string.count)
+        }
+
+        if let attributedString = value as? NSAttributedString {
+            return DiagnosticValueRedactor.attributedStringSummary(length: attributedString.length)
+        }
+
+        if let array = value as? [Any] {
+            return DiagnosticValueRedactor.arraySummary(count: array.count)
+        }
+
+        if let bool = value as? Bool {
+            return String(bool)
+        }
+
+        if let number = value as? NSNumber {
+            return number.stringValue
+        }
+
+        let cfTypeID = CFGetTypeID(value)
+
+        if cfTypeID == AXUIElementGetTypeID() {
+            return "AXUIElement"
+        }
+
+        if cfTypeID == AXValueGetTypeID(),
+           let summary = axValueSummary(value as! AXValue) {
+            return summary
+        }
+
+        return DiagnosticValueRedactor.unknownSummary(typeName: String(describing: type(of: value)))
+    }
+
+    private func axValueSummary(_ value: AXValue) -> String? {
+        switch AXValueGetType(value) {
+        case .cfRange:
+            var range = CFRange()
+            guard AXValueGetValue(value, .cfRange, &range) else {
+                return nil
+            }
+
+            return "Range(location=\(range.location), length=\(range.length))"
+
+        case .cgPoint:
+            var point = CGPoint.zero
+            guard AXValueGetValue(value, .cgPoint, &point) else {
+                return nil
+            }
+
+            return "Point(x=\(Int(point.x)), y=\(Int(point.y)))"
+
+        case .cgSize:
+            var size = CGSize.zero
+            guard AXValueGetValue(value, .cgSize, &size) else {
+                return nil
+            }
+
+            return "Size(width=\(Int(size.width)), height=\(Int(size.height)))"
+
+        case .cgRect:
+            var rect = CGRect.zero
+            guard AXValueGetValue(value, .cgRect, &rect) else {
+                return nil
+            }
+
+            return "Rect(x=\(Int(rect.origin.x)), y=\(Int(rect.origin.y)), width=\(Int(rect.width)), height=\(Int(rect.height)))"
+
+        default:
+            return "AXValue(\(AXValueGetType(value).rawValue))"
+        }
+    }
+
+    private func editableText(
+        in element: AXUIElement,
+        role: String?,
+        processIdentifier: pid_t,
+        allowDescendantTextFallback: Bool
+    ) -> String? {
+        let directText = copyAttribute(element, attribute: kAXValueAttribute) as? String
+        guard allowDescendantTextFallback,
+              role == "AXWebArea",
+              directText?.isEmpty != false,
+              containingWindowTitle(for: element, processIdentifier: processIdentifier) == "New Message" else {
+            return directText
+        }
+
+        let descendantText = descendantText(in: element)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !descendantText.isEmpty else {
+            return directText
+        }
+
+        return descendantText
+    }
+
+    private func containingWindowTitle(for element: AXUIElement, processIdentifier: pid_t) -> String? {
+        if let windowValue = copyAttribute(element, attribute: kAXWindowAttribute),
+           let title = copyAttribute((windowValue as! AXUIElement), attribute: kAXTitleAttribute) as? String {
+            return title
+        }
+
+        let appElement = AXUIElementCreateApplication(processIdentifier)
+        configureMessagingTimeout(for: appElement)
+
+        guard let windowValue = copyAttribute(appElement, attribute: kAXFocusedWindowAttribute) else {
+            return nil
+        }
+
+        return copyAttribute((windowValue as! AXUIElement), attribute: kAXTitleAttribute) as? String
+    }
+
+    private func focusedElementFingerprint(
+        for element: AXUIElement,
+        processIdentifier: pid_t
+    ) -> FocusedElementFingerprint {
+        FocusedElementFingerprint(
+            identifier: compactAttributeText(copyAttribute(element, attribute: "AXIdentifier") as? String),
+            title: compactAttributeText(copyAttribute(element, attribute: kAXTitleAttribute) as? String),
+            description: compactAttributeText(copyAttribute(element, attribute: kAXDescriptionAttribute) as? String),
+            help: compactAttributeText(copyAttribute(element, attribute: kAXHelpAttribute) as? String),
+            placeholder: compactAttributeText(copyAttribute(element, attribute: "AXPlaceholderValue") as? String),
+            windowTitle: compactAttributeText(containingWindowTitle(for: element, processIdentifier: processIdentifier))
+        )
+    }
+
+    private func compactAttributeText(_ value: String?) -> String? {
+        guard let value else {
+            return nil
+        }
+
+        let compact = value
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !compact.isEmpty else {
+            return nil
+        }
+
+        return String(compact.prefix(120))
+    }
+
+    private func descendantText(in element: AXUIElement, depth: Int = 0) -> String {
+        guard depth < 6 else {
+            return ""
+        }
+
+        let children = copyAttribute(element, attribute: kAXChildrenAttribute) as? [AXUIElement] ?? []
+        var parts: [String] = []
+
+        for child in children {
+            configureMessagingTimeout(for: child)
+
+            if let value = copyAttribute(child, attribute: kAXValueAttribute) as? String,
+               !value.isEmpty {
+                parts.append(value)
+            }
+
+            let nestedText = descendantText(in: child, depth: depth + 1)
+            if !nestedText.isEmpty {
+                parts.append(nestedText)
+            }
+        }
+
+        return parts.joined(separator: "\n")
+    }
+
+    private func configureMessagingTimeout(for element: AXUIElement) {
+        AXUIElementSetMessagingTimeout(element, 0.12)
     }
 
     private func selectedTextRange(in element: AXUIElement) -> CFRange? {
@@ -378,43 +745,26 @@ final class AccessibilityClient {
         return range
     }
 
+    private func selectedText(in element: AXUIElement, fullText: String, selectedRange: CFRange?) -> String {
+        if let selectedText = copyAttribute(element, attribute: kAXSelectedTextAttribute) as? String,
+           !selectedText.isEmpty {
+            return selectedText
+        }
+
+        guard let selectedRange, selectedRange.length > 0 else {
+            return ""
+        }
+
+        let startOffset = max(0, min(selectedRange.location, fullText.utf16.count))
+        let endOffset = max(startOffset, min(startOffset + selectedRange.length, fullText.utf16.count))
+        let startIndex = String.Index(utf16Offset: startOffset, in: fullText)
+        let endIndex = String.Index(utf16Offset: endOffset, in: fullText)
+        return String(fullText[startIndex..<endIndex])
+    }
+
     private func caretBounds(for element: AXUIElement, range: CFRange) -> CGRect? {
         let caretRange = CFRange(location: range.location, length: 0)
         return bounds(for: element, range: caretRange)
-    }
-
-    private func resolvedCaretBounds(
-        for element: AXUIElement,
-        textLength: Int,
-        textBeforeCursor: String,
-        range: CFRange
-    ) -> CGRect? {
-        let reportedCaretRect = caretBounds(for: element, range: range)
-        guard range.length == 0 else {
-            return reportedCaretRect
-        }
-
-        let isAfterNewline = textBeforeCursor.last?.isNewline == true
-        let previousGlyphRect: CGRect?
-        if !isAfterNewline, range.location > 0 {
-            previousGlyphRect = bounds(for: element, range: CFRange(location: range.location - 1, length: 1))
-        } else {
-            previousGlyphRect = nil
-        }
-
-        let nextGlyphRect: CGRect?
-        if isAfterNewline, range.location < textLength {
-            nextGlyphRect = bounds(for: element, range: CFRange(location: range.location, length: 1))
-        } else {
-            nextGlyphRect = nil
-        }
-
-        return CaretRectResolver.resolve(
-            reportedCaretRect: reportedCaretRect,
-            previousGlyphRect: previousGlyphRect,
-            nextGlyphRect: nextGlyphRect,
-            isAfterNewline: isAfterNewline
-        )
     }
 
     private func textLineBounds(
@@ -463,17 +813,36 @@ final class AccessibilityClient {
         return rect
     }
 
-    private func frameBounds(for element: AXUIElement) -> CGRect? {
-        guard let frameValue = copyAttribute(element, attribute: "AXFrame") else {
+    private func elementBounds(for element: AXUIElement) -> CGRect? {
+        guard let positionValue = copyAttribute(element, attribute: kAXPositionAttribute),
+              let sizeValue = copyAttribute(element, attribute: kAXSizeAttribute) else {
             return nil
         }
 
-        var rect = CGRect.zero
-        guard AXValueGetValue(frameValue as! AXValue, .cgRect, &rect) else {
+        var position = CGPoint.zero
+        var size = CGSize.zero
+
+        guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+              AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else {
             return nil
         }
 
-        return rect
+        return CGRect(origin: position, size: size)
+    }
+
+    private func containingWindowBounds(for element: AXUIElement, processIdentifier: pid_t) -> CGRect? {
+        if let windowValue = copyAttribute(element, attribute: kAXWindowAttribute) {
+            return elementBounds(for: (windowValue as! AXUIElement))
+        }
+
+        let appElement = AXUIElementCreateApplication(processIdentifier)
+        configureMessagingTimeout(for: appElement)
+
+        guard let windowValue = copyAttribute(appElement, attribute: kAXFocusedWindowAttribute) else {
+            return nil
+        }
+
+        return elementBounds(for: (windowValue as! AXUIElement))
     }
 
     private func focusedTextStyle(in element: AXUIElement, textLength: Int, range: CFRange) -> FocusedTextStyle? {
@@ -516,6 +885,27 @@ final class AccessibilityClient {
             fontName: font.fontName,
             fontSize: font.pointSize,
             foregroundColor: accessibilityForegroundColor(from: attributes)
+        )
+    }
+
+    private func canSetAttribute(_ element: AXUIElement, attribute: String) -> Bool {
+        var settable = DarwinBoolean(false)
+        let result = AXUIElementIsAttributeSettable(element, attribute as CFString, &settable)
+        return result == .success && settable.boolValue
+    }
+
+    private func textCapabilities(
+        for element: AXUIElement,
+        selectedRange: CFRange?,
+        caretRect: CGRect?,
+        textStyle: FocusedTextStyle?
+    ) -> FocusedTextCapabilities {
+        FocusedTextCapabilities(
+            canReadValue: copyAttribute(element, attribute: kAXValueAttribute) is String,
+            canReadSelectedTextRange: selectedRange != nil,
+            canReadBoundsForRange: caretRect != nil,
+            canReadAttributedText: textStyle != nil,
+            canSetSelectedText: canSetAttribute(element, attribute: kAXSelectedTextAttribute)
         )
     }
 
@@ -562,9 +952,13 @@ final class AccessibilityClient {
         return nil
     }
 
-    private func isSecureTextElement(_ element: AXUIElement) -> Bool {
-        if let subrole = copyAttribute(element, attribute: kAXSubroleAttribute) as? String,
-           subrole == "AXSecureTextField" {
+    private func isSensitiveTextElement(
+        _ element: AXUIElement,
+        role: String?,
+        subrole: String?,
+        fingerprint: FocusedElementFingerprint
+    ) -> Bool {
+        if subrole == "AXSecureTextField" {
             return true
         }
 
@@ -572,6 +966,44 @@ final class AccessibilityClient {
             return protected
         }
 
-        return false
+        return sensitiveTextFieldPolicy.isSensitive(
+            role: role,
+            subrole: subrole,
+            fingerprint: fingerprint
+        )
+    }
+
+    private func fieldClassification(
+        role: String?,
+        subrole: String?,
+        fingerprint: FocusedElementFingerprint,
+        isSecure: Bool,
+        textBeforeCursorLength: Int,
+        textAfterCursorLength: Int,
+        selectedTextLength: Int,
+        lineCount: Int
+    ) -> AXFieldClassification {
+        fieldClassifier.classification(
+            for: AXFieldClassifierInput(
+                role: role,
+                subrole: subrole,
+                title: fingerprint.title,
+                placeholder: fingerprint.placeholder,
+                windowTitle: fingerprint.windowTitle,
+                isSecure: isSecure,
+                textBeforeCursorLength: textBeforeCursorLength,
+                textAfterCursorLength: textAfterCursorLength,
+                selectedTextLength: selectedTextLength,
+                lineCount: lineCount
+            )
+        )
+    }
+
+    private func lineCount(in text: String) -> Int {
+        guard !text.isEmpty else {
+            return 0
+        }
+
+        return text.split(separator: "\n", omittingEmptySubsequences: false).count
     }
 }

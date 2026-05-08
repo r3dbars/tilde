@@ -2,75 +2,121 @@
 
 ## Decision
 
-Do not make users start Ollama, llama.cpp, or any other model server.
+Do not make users start Ollama, llama.cpp, Python helper scripts, or any other
+model server.
 
-The product should own the model runtime. The user launches one Mac app and autocomplete works.
+The product should own the model runtime. The user launches one Mac app and
+autocomplete works.
 
-## First Candidate: LiteRT-LM
+## Current Preferred Path: MLX + Qwen3.5 4B
 
-LiteRT-LM is the first runtime candidate because it is Google's app/runtime path for Gemma edge models. Google says LiteRT-LM supports desktop and has Gemma 4 support, including a `gemma-4-E2B-it-litert-lm` package path. It also exposes stable C++ APIs, while Swift support is still marked as in development.
+MLX is the current runtime path because it is Apple Silicon native and already
+lives behind the app-owned `ModelRuntime` boundary. Qwen3.5 4B is the documented
+default because it is the current low-latency quality target for short
+autocomplete completions. LiteRT-LM stays tracked as a fallback candidate for
+future app-owned packaging work.
+
+The preferred beta model asset is Qwen3.5 4B 4-bit:
+
+```text
+~/Library/Application Support/AutocompleteLab/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
+```
+
+The matching development download alias is:
+
+```bash
+script/download_mlx_model.py --model qwen35-4b
+```
+
+That helper is for local development and packaging prep. It should not be part
+of tester onboarding.
+
+In the app, Settings now owns the install path. When the model folder is
+missing, use `Install Local Model`. When the folder is incomplete, use `Repair
+Local Model`. The app rechecks the asset and retries the MLX runtime after the
+download completes.
+
+Sources:
+
+- [MLX Swift LM GitHub](https://github.com/ml-explore/mlx-swift-lm)
+- [MLX Swift LM package](https://github.com/ml-explore/mlx-swift-lm/blob/main/Package.swift)
+- [Qwen3.5 4B MLX model](https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit)
+
+## macOS Target
+
+Lower the runtime target to macOS 14.
+
+Evidence: the current app code does not use macOS 26-only APIs, and the pinned
+`mlx-swift-lm` dependency declares macOS 14 as its minimum. Keep Apple Silicon
+as the hardware target because MLX/Metal is the runtime path.
+
+Build settings:
+
+- `Package.swift`: `.macOS(.v14)`
+- app bundle `LSMinimumSystemVersion`: `14.0`
+
+## Other Local Trial Models
+
+These are useful for developer trials, not the default beta promise:
+
+- `qwen35-4b` or `qwen3.5-4b`: preferred Qwen3.5 4B beta asset.
+- `qwen35-9b` or `qwen3.5-9b`: Qwen3.5 9B 4-bit, better quality trial with higher cost.
+- `qwen3-1.7b`: smaller Qwen3 baseline.
+- `qwen3-0.6b`: very small smoke-test baseline.
+- `gemma-4-e2b`: historical Gemma E2B candidate.
+- `gemma-4-e4b`, `gemma4-e4b`, or `gemma-4-e4b-4bit`: Gemma 4 E4B MLX trial.
+- `gemma-4-e4b-it-optiq`, `gemma-4-e4b-it-optiq-4bit`, or `gemma4-e4b-it-optiq`: Gemma 4 E4B OptiQ trial.
+- `gemma-4-26b`: larger Gemma 4 trial.
+
+Gemma 4 E2B is no longer the beta target. It remains a historical candidate
+because earlier MLX loading did not make it the fastest path to a playable
+native build.
+
+## Model Asset Format
+
+Use the MLX/Hugging Face directory format under:
+
+```text
+~/Library/Application Support/AutocompleteLab/Models/<ModelName>/MLX/<AssetFolder>
+```
+
+The preferred beta asset currently resolves to:
+
+```text
+~/Library/Application Support/AutocompleteLab/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
+```
+
+The directory should contain at least:
+
+- `config.json`
+- tokenizer files such as `tokenizer.json` or `tokenizer_config.json`
+- one or more `.safetensors` weight files
+
+The default model repo is `mlx-community/Qwen3.5-4B-MLX-4bit`.
+
+## Fallback Candidate: LiteRT-LM
+
+LiteRT-LM stays tracked as a future packaged runtime candidate, especially for
+Gemma-family edge models. It is not the current beta path.
 
 Sources:
 
 - [LiteRT-LM GitHub](https://github.com/google-ai-edge/LiteRT-LM)
 - [LiteRT GenAI overview](https://ai.google.dev/edge/litert/genai/overview)
 
-## Fallback Candidate: MLX
-
-MLX is the fallback to benchmark because Google lists MLX as a day-one Gemma 4 ecosystem option, and it is Apple Silicon native. If the LiteRT-LM Swift/macOS path is not ready enough, MLX may be the more practical embedded route.
-
-Source:
-
-- [Gemma 4 launch post](https://blog.google/innovation-and-ai/technology/developers-tools/gemma-4/)
-
 ## Product Constraints
 
 - app-owned runtime
 - no user-managed server
-- Gemma 4 E2B
-- M1 / 16 GB first target
+- Qwen3.5 4B 4-bit preferred beta asset
+- macOS 14 or newer on Apple Silicon for the private beta
+- Apple Silicon with 16 GB RAM first target
 - reasoning off
-- 8-16 generated tokens
-- 2-8 visible words
-- average latency under 700ms
+- 9 generated tokens by default
+- 1-3 visible words by default
+- p95 first-visible latency at or below 750ms for supported status
+- p95 first-visible latency at or below 1000ms for caveated status
+- average latency under 700ms as a private beta target
 - stretch latency under 300ms after warmup
-
-## Benchmark Scaffold
-
-Run the local scaffold with:
-
-```sh
-script/gemma_runtime_benchmark.sh
-```
-
-It checks LiteRT-LM first and MLX second, runs warmup/sample prompts when a runtime is available, reports average latency, and never starts a user-managed server.
-
-The app bundles `script/local_completion_runtime.py` into `AutocompleteLab.app/Contents/Resources`. That helper tries:
-
-1. LiteRT-LM CLI with `litert-community/gemma-4-E2B-it-litert-lm`
-2. MLX with `mlx-community/gemma-4-E2B-it-4bit`
-3. Swift mock fallback if neither runtime works
-
-Useful overrides:
-
-- `AUTOCOMPLETE_LAB_RUNTIME_BACKEND=litert|mlx|auto`
-- `AUTOCOMPLETE_LAB_LITERT_BIN=/path/to/litert-lm`
-- `AUTOCOMPLETE_LAB_LITERT_REPO=litert-community/gemma-4-E2B-it-litert-lm`
-- `AUTOCOMPLETE_LAB_LITERT_MODEL=gemma-4-E2B-it.litertlm`
-- `AUTOCOMPLETE_LAB_MLX_BIN=/path/to/mlx_lm.generate`
-- `AUTOCOMPLETE_LAB_MLX_MODEL=mlx-community/gemma-4-E2B-it-4bit`
-
-Google's current LiteRT-LM CLI docs install the CLI with:
-
-```sh
-uv tool install litert-lm
-```
-
-And run Gemma 4 E2B with:
-
-```sh
-litert-lm run \
-  --from-huggingface-repo=litert-community/gemma-4-E2B-it-litert-lm \
-  gemma-4-E2B-it.litertlm \
-  --prompt="What is the capital of France?"
-```
+- no beta if runtime falls back to mock output
+- default latency proof: `./script/model_latency_report.py --default-model-proof`

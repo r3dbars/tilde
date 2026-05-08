@@ -24,66 +24,38 @@ struct CompletionPrefixTrimmerTests {
         #expect(trimmed == "and keep moving")
     }
 
-    @Test("Removes a full repeated context from model output")
-    func removesFullRepeatedContext() {
-        let trimmed = CompletionPrefixTrimmer.trim("I think and feel a sense of wonder", after: "I think and")
-
-        #expect(trimmed == " feel a sense of wonder")
-    }
-
-    @Test("Removes a full repeated context after existing whitespace")
-    func removesFullRepeatedContextAfterWhitespace() {
-        let trimmed = CompletionPrefixTrimmer.trim("I think and feel a sense of wonder", after: "I think and ")
-
-        #expect(trimmed == "feel a sense of wonder")
-    }
-
-    @Test("Completes a later matching word when the model repeats nearby context")
-    func completesLaterMatchingWord() {
-        let trimmed = CompletionPrefixTrimmer.trim(
-            " to do this project",
-            after: "Hey how we going to do the th"
-        )
-
-        #expect(trimmed == "is project")
-    }
-
-    @Test("Completes a repeated partial word from full context output")
-    func completesRepeatedPartialWordFromFullContextOutput() {
-        let trimmed = CompletionPrefixTrimmer.trim("Hey that sounds", after: "Hey that soun")
-
-        #expect(trimmed == "ds")
-    }
-
-    @Test("Suppresses partial word suggestions that do not complete the typed fragment")
-    func suppressesBadPartialWordSuggestion() {
-        let trimmed = CompletionPrefixTrimmer.trim(" and keep moving", after: "Hey th")
-        let longerTrimmed = CompletionPrefixTrimmer.trim(" and keep moving", after: "Hey that soun")
-        let typoTrimmed = CompletionPrefixTrimmer.trim("Hey that sounds", after: "Hey\nHry")
-
-        #expect(trimmed == "")
-        #expect(longerTrimmed == "")
-        #expect(typoTrimmed == "")
-    }
-
-    @Test("Suppresses model echoes from the beginning of the current text")
-    func suppressesBeginningContextEchoes() {
-        let trimmed = CompletionPrefixTrimmer.trim(
-            "Hey. How are",
-            after: "Hey. How are we going to do the"
-        )
+    @Test("Removes a duplicated phrase from model output")
+    func removesDuplicatedPhraseFromModelOutput() {
+        let trimmed = CompletionPrefixTrimmer.trim(" Know you are", after: "I know you are")
 
         #expect(trimmed == "")
     }
 
-    @Test("Keeps suggestions after common short complete words")
-    func keepsSuggestionAfterCommonShortCompleteWord() {
-        let trimmed = CompletionPrefixTrimmer.trim(" make this feel instant", after: "can we")
-        let trimmedAfterThe = CompletionPrefixTrimmer.trim(" next step is clear", after: "what is the")
-        let trimmedAfterAnd = CompletionPrefixTrimmer.trim(" keep moving", after: "Hey and")
+    @Test("Removes overlapping phrase and keeps the new continuation")
+    func removesOverlappingPhraseAndKeepsContinuation() {
+        let trimmed = CompletionPrefixTrimmer.trim(" you are right", after: "I know you are")
 
-        #expect(trimmed == " make this feel instant")
-        #expect(trimmedAfterThe == " next step is clear")
-        #expect(trimmedAfterAnd == " keep moving")
+        #expect(trimmed == " right")
+    }
+
+    @Test("Removes duplicated greeting and keeps only new words")
+    func removesDuplicatedGreeting() {
+        let trimmed = CompletionPrefixTrimmer.trim(" Hey there.", after: "Hey")
+
+        #expect(trimmed == " there.")
+    }
+
+    @Test("Removes echoed phrase when the last typed word is partial")
+    func removesEchoedPhraseWithPartialLastWord() {
+        let trimmed = CompletionPrefixTrimmer.trim(" hello and welcome", after: "hello and w")
+
+        #expect(trimmed == "elcome")
+    }
+
+    @Test("Keeps remaining words after a partial phrase overlap")
+    func keepsRemainingWordsAfterPartialPhraseOverlap() {
+        let trimmed = CompletionPrefixTrimmer.trim(" we should keep going", after: "I think we sh")
+
+        #expect(trimmed == "ould keep going")
     }
 }

@@ -6,8 +6,8 @@ public enum CompletionPrefixTrimmer {
             return suggestion
         }
 
-        if let trimmedFullPrefix = trimFullPrefix(suggestion, after: textBeforeCursor) {
-            return trimmedFullPrefix
+        if let overlapTrimmed = trimOverlappingLeadingWords(suggestion, after: textBeforeCursor) {
+            return overlapTrimmed
         }
 
         if textBeforeCursor.last?.isWhitespace == true {
@@ -20,158 +20,136 @@ public enum CompletionPrefixTrimmer {
         }
 
         let suggestionBody = suggestion.drop(while: { $0.isWhitespace })
-        if repeatsBeginningOfContext(suggestionBody, textBeforeCursor: textBeforeCursor) {
-            return ""
-        }
+        let firstSuggestedWord = suggestionBody.prefix(while: { !$0.isWhitespace })
 
-        let suggestedWords = wordRanges(in: suggestionBody)
-        guard let firstSuggestedWord = suggestedWords.first else {
+        guard !firstSuggestedWord.isEmpty,
+              normalized(String(firstSuggestedWord)).hasPrefix(normalized(typedFragment)) else {
             return suggestion
         }
-        let normalizedTypedFragment = normalized(typedFragment)
 
-        if normalized(String(firstSuggestedWord.word)).hasPrefix(normalizedTypedFragment) {
-            return completionSuffix(
-                in: suggestionBody,
-                wordRange: firstSuggestedWord.range,
-                typedFragment: typedFragment
-            )
+        let overlapCount = typedFragment.count
+        if overlapCount >= firstSuggestedWord.count {
+            return String(suggestionBody.dropFirst(firstSuggestedWord.count))
         }
 
-        if looksLikeUnfinishedFragment(typedFragment),
-           let laterMatchingWord = suggestedWords.prefix(4).first(where: {
-               normalized(String($0.word)).hasPrefix(normalizedTypedFragment)
-           }) {
-            return completionSuffix(
-                in: suggestionBody,
-                wordRange: laterMatchingWord.range,
-                typedFragment: typedFragment
-            )
-        }
-
-        if looksLikeUnfinishedFragment(typedFragment) {
-            return ""
-        }
-
-        return suggestion
+        return String(suggestionBody.dropFirst(overlapCount))
     }
 
-    private static func trimFullPrefix(_ suggestion: String, after textBeforeCursor: String) -> String? {
-        let typedContext = textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !typedContext.isEmpty else {
+    private static func trimOverlappingLeadingWords(_ suggestion: String, after textBeforeCursor: String) -> String? {
+        let typedWords = normalizedWords(in: textBeforeCursor)
+        let suggestionWords = wordRanges(in: suggestion)
+
+        guard !typedWords.isEmpty, !suggestionWords.isEmpty else {
             return nil
         }
 
-        let suggestionBody = suggestion.drop(while: { $0.isWhitespace })
-        guard suggestionBody.lowercased().hasPrefix(typedContext.lowercased()) else {
+        let normalizedSuggestionWords = suggestionWords.map { normalized(String(suggestion[$0])) }
+        let maximumOverlap = min(typedWords.count, normalizedSuggestionWords.count)
+
+        for overlap in stride(from: maximumOverlap, through: 1, by: -1) {
+            let typedSuffix = Array(typedWords.suffix(overlap))
+            let suggestionPrefix = Array(normalizedSuggestionWords.prefix(overlap))
+
+            if typedSuffix == suggestionPrefix {
+                if overlap >= suggestionWords.count {
+                    return ""
+                }
+
+                let nextStart = suggestionWords[overlap].lowerBound
+                return formattedRemainingSuggestion(String(suggestion[nextStart...]), after: textBeforeCursor)
+            }
+
+            if let partialRemaining = trimPartialFinalWordOverlap(
+                suggestion,
+                suggestionWords: suggestionWords,
+                typedSuffix: typedSuffix,
+                suggestionPrefix: suggestionPrefix,
+                overlap: overlap,
+                after: textBeforeCursor
+            ) {
+                return partialRemaining
+            }
+        }
+
+        return nil
+    }
+
+    private static func trimPartialFinalWordOverlap(
+        _ suggestion: String,
+        suggestionWords: [Range<String.Index>],
+        typedSuffix: [String],
+        suggestionPrefix: [String],
+        overlap: Int,
+        after textBeforeCursor: String
+    ) -> String? {
+        guard textBeforeCursor.last?.isWhitespace != true,
+              overlap > 0,
+              typedSuffix.count == suggestionPrefix.count,
+              let typedLast = typedSuffix.last,
+              let suggestionLast = suggestionPrefix.last,
+              !typedLast.isEmpty,
+              suggestionLast.hasPrefix(typedLast),
+              typedLast.count < suggestionLast.count,
+              Array(typedSuffix.dropLast()) == Array(suggestionPrefix.dropLast()) else {
             return nil
         }
 
-        let remainderStart = suggestionBody.index(suggestionBody.startIndex, offsetBy: typedContext.count)
-        let remainder = suggestionBody[remainderStart...]
-
-        if textBeforeCursor.last?.isWhitespace == true {
-            return String(remainder.drop(while: { $0.isWhitespace }))
+        let lastWordRange = suggestionWords[overlap - 1]
+        guard let remainingStart = suggestion.index(
+            lastWordRange.lowerBound,
+            offsetBy: typedLast.count,
+            limitedBy: lastWordRange.upperBound
+        ) else {
+            return nil
         }
 
-        return String(remainder)
+        return String(suggestion[remainingStart...])
+    }
+
+    private static func formattedRemainingSuggestion(_ suggestion: String, after textBeforeCursor: String) -> String {
+        guard textBeforeCursor.last?.isWhitespace != true,
+              suggestion.first?.isWhitespace != true else {
+            return suggestion
+        }
+
+        return " " + suggestion
     }
 
     private static func trailingWordFragment(in text: String) -> String? {
         text.split(whereSeparator: { $0.isWhitespace }).last.map(String.init)
     }
 
-    private static func looksLikeUnfinishedFragment(_ fragment: String) -> Bool {
-        let normalizedFragment = normalized(fragment)
-        guard normalizedFragment.count >= 2, normalizedFragment.count <= 4 else {
-            return false
-        }
-
-        let commonCompleteShortWords: Set<String> = [
-            "a", "all", "an", "and", "any", "are", "as", "at", "be", "but",
-            "by", "can", "did", "do", "for", "get", "go", "had", "has", "he",
-            "her", "hey", "hi", "his", "how", "i", "if", "in", "is", "it",
-            "like", "make", "me", "my", "need", "new", "no", "not", "now",
-            "of", "on", "one", "or", "our", "out", "plan", "see", "she",
-            "so", "that", "the", "then", "this", "to", "too", "up", "us",
-            "want", "was", "we", "what", "when", "who", "why", "will",
-            "with", "work", "yes", "yet", "you"
-        ]
-
-        return !commonCompleteShortWords.contains(normalizedFragment)
+    private static func normalizedWords(in text: String) -> [String] {
+        wordRanges(in: text)
+            .map { normalized(String(text[$0])) }
+            .filter { !$0.isEmpty }
     }
 
-    private static func repeatsBeginningOfContext(
-        _ suggestionBody: Substring,
-        textBeforeCursor: String
-    ) -> Bool {
-        let normalizedSuggestion = normalizedPhrase(String(suggestionBody))
-        let normalizedContext = normalizedPhrase(textBeforeCursor)
+    private static func wordRanges(in text: String) -> [Range<String.Index>] {
+        var ranges: [Range<String.Index>] = []
+        var wordStart: String.Index?
 
-        guard normalizedSuggestion.count >= 6,
-              normalizedContext.count > normalizedSuggestion.count,
-              normalizedContext.hasPrefix(normalizedSuggestion) else {
-            return false
+        for index in text.indices {
+            if text[index].isWhitespace {
+                if let start = wordStart {
+                    ranges.append(start..<index)
+                    wordStart = nil
+                }
+            } else if wordStart == nil {
+                wordStart = index
+            }
         }
 
-        return !normalizedContext.hasSuffix(normalizedSuggestion)
-    }
-
-    private static func wordRanges(in text: Substring) -> [(word: Substring, range: Range<String.Index>)] {
-        var ranges: [(word: Substring, range: Range<String.Index>)] = []
-        var index = text.startIndex
-
-        while index < text.endIndex {
-            while index < text.endIndex, text[index].isWhitespace {
-                index = text.index(after: index)
-            }
-
-            guard index < text.endIndex else {
-                break
-            }
-
-            let wordStart = index
-            while index < text.endIndex, !text[index].isWhitespace {
-                index = text.index(after: index)
-            }
-
-            let range = wordStart..<index
-            ranges.append((word: text[range], range: range))
+        if let start = wordStart {
+            ranges.append(start..<text.endIndex)
         }
 
         return ranges
-    }
-
-    private static func completionSuffix(
-        in text: Substring,
-        wordRange: Range<String.Index>,
-        typedFragment: String
-    ) -> String {
-        let overlapCount = typedFragment.count
-        if overlapCount >= text[wordRange].count {
-            return String(text[wordRange.upperBound...])
-        }
-
-        let suffixStart = text.index(wordRange.lowerBound, offsetBy: overlapCount, limitedBy: wordRange.upperBound)
-            ?? wordRange.upperBound
-        return String(text[suffixStart...])
     }
 
     private static func normalized(_ word: String) -> String {
         word
             .trimmingCharacters(in: .punctuationCharacters)
             .lowercased()
-    }
-
-    private static func normalizedPhrase(_ text: String) -> String {
-        var normalized = ""
-        for character in text.lowercased() {
-            normalized.append(character.isLetter || character.isNumber ? character : " ")
-        }
-
-        return normalized
-            .split(whereSeparator: { $0.isWhitespace })
-            .map(String.init)
-            .joined(separator: " ")
     }
 }
