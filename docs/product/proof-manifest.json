@@ -194,5 +194,115 @@
       ],
       "gaps": []
     }
+  ],
+  "profileCoverage": [
+    {
+      "bundle": "com.apple.TextEdit",
+      "displayName": "TextEdit",
+      "supportLevel": "green",
+      "surface": "TextEdit",
+      "status": "complete",
+      "owner": "core proof lane",
+      "safetyNote": "Reference native AppKit target with current strict visual smoke, screenshots, verified one-word acceptance, and full-accept proof."
+    },
+    {
+      "bundle": "com.apple.Notes",
+      "displayName": "Notes",
+      "supportLevel": "yellow",
+      "surface": "Apple Notes title/body/checklist",
+      "status": "partial",
+      "owner": "rich-text adapter lane",
+      "safetyNote": "Notes has separate title, body, and checklist proof, but rich-text drift and more lengths/undo variants keep the profile yellow."
+    },
+    {
+      "bundle": "md.obsidian",
+      "displayName": "Obsidian",
+      "supportLevel": "yellow",
+      "surface": "Obsidian",
+      "status": "partial",
+      "owner": "electron editor adapter lane",
+      "safetyNote": "Real CodeMirror proof exists, but more vault themes, panes, long notes, and hidden-caret variants are still required before green support."
+    },
+    {
+      "bundle": "com.apple.mail",
+      "displayName": "Mail",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "Mail",
+      "status": "blocked",
+      "owner": "sensitive-compose lane",
+      "safetyNote": "Mail compose remains diagnostics-only because private/sensitive content and insertion safety are not proven."
+    },
+    {
+      "bundle": "com.google.Chrome",
+      "displayName": "Chrome",
+      "supportLevel": "yellow",
+      "surface": "Chrome text fields/editor/chat-like surfaces",
+      "status": "partial",
+      "owner": "browser editor adapter lane",
+      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures are proven, but production-site variance and default Chrome AX exposure remain open."
+    },
+    {
+      "bundle": "com.openai.codex",
+      "displayName": "Codex",
+      "supportLevel": "yellow",
+      "surface": "Codex",
+      "status": "partial",
+      "owner": "prompt-app proof lane",
+      "safetyNote": "Screenshot proof exists, but support must stay yellow until one trace slice proves one-word accept with no prompt submit."
+    },
+    {
+      "bundle": "com.anthropic.claude-code",
+      "displayName": "Claude Code",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "Claude Code",
+      "status": "blocked",
+      "owner": "terminal-host adapter lane",
+      "safetyNote": "The direct bundle is a background-only helper; terminal-hosted Claude Code must prove one-word accept without submitting shell or agent input."
+    },
+    {
+      "bundle": "com.anthropic.claudefordesktop",
+      "displayName": "Claude",
+      "supportLevel": "yellow",
+      "surface": "Claude desktop",
+      "status": "partial",
+      "owner": "prompt-app proof lane",
+      "safetyNote": "Same-baseline no-submit proof exists for one composer layout; full accept and more prompt layouts remain blocked."
+    },
+    {
+      "bundle": "com.apple.Safari",
+      "displayName": "Safari",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "Safari",
+      "status": "blocked",
+      "owner": "webkit browser adapter lane",
+      "safetyNote": "Safari rich editors need separate textarea, contenteditable, insertion, and no-submit proof before suggestions can be enabled."
+    },
+    {
+      "bundle": "com.tinyspeck.slackmacgap",
+      "displayName": "Slack",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "Slack",
+      "status": "blocked",
+      "owner": "electron chat adapter lane",
+      "safetyNote": "Slack message composition is diagnostics-only until composer geometry, insertion safety, and no-submit behavior are proven."
+    },
+    {
+      "bundle": "com.microsoft.VSCode",
+      "displayName": "VS Code",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "VS Code",
+      "status": "blocked",
+      "owner": "monaco editor adapter lane",
+      "safetyNote": "VS Code stays diagnostics-only until Monaco caret placement and Tab behavior are proven in the real app."
+    },
+    {
+      "bundle": "com.todesktop.230313mzl4w4u92",
+      "displayName": "Cursor",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "Cursor",
+      "status": "blocked",
+      "owner": "monaco editor adapter lane",
+      "safetyNote": "Cursor stays diagnostics-only until Monaco caret placement, AI composer safety, and Tab behavior are proven in the real app."
+    }
   ]
 }

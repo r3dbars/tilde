@@ -131,6 +131,84 @@ write_manifest() {
 JSON
 }
 
+write_profile_source() {
+  local path="$1"
+  cat >"$path" <<'SWIFT'
+public struct CompatibilityProfileStore {
+    public static let mvp = [
+        CompatibilityProfile(
+            bundleIdentifier: "com.apple.TextEdit",
+            displayName: "TextEdit",
+            supportLevel: .green,
+            notes: "fixture"
+        ),
+        CompatibilityProfile(
+            bundleIdentifier: "com.openai.codex",
+            displayName: "Codex",
+            supportLevel: .yellow,
+            notes: "fixture"
+        )
+    ]
+}
+SWIFT
+}
+
+write_profile_manifest() {
+  local path="$1"
+  local include_codex="${2:-yes}"
+  local codex_row=""
+  if [[ "$include_codex" == "yes" ]]; then
+    codex_row=', {
+      "bundle": "com.openai.codex",
+      "displayName": "Codex",
+      "supportLevel": "yellow",
+      "surface": "Codex",
+      "status": "partial",
+      "owner": "prompt-app proof lane",
+      "safetyNote": "Codex needs one-word no-submit proof."
+    }'
+  fi
+
+  cat >"$path" <<JSON
+{
+  "schemaVersion": 1,
+  "proofFingerprint": {
+    "traceProofVersion": "$TRACE_PROOF_VERSION",
+    "placementProofVersion": "$PLACEMENT_PROOF_VERSION",
+    "keyCaptureProofVersion": "$KEY_CAPTURE_PROOF_VERSION",
+    "runtimeProofVersion": "$RUNTIME_PROOF_VERSION"
+  },
+  "surfaces": [
+    {
+      "surface": "TextEdit",
+      "status": "complete",
+      "manualSmoke": {
+        "app": "TextEdit",
+        "bundle": "com.apple.TextEdit",
+        "proof": "default",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/textedit-inline.png"
+      ],
+      "gaps": []
+    }
+  ],
+  "profileCoverage": [
+    {
+      "bundle": "com.apple.TextEdit",
+      "displayName": "TextEdit",
+      "supportLevel": "green",
+      "surface": "TextEdit",
+      "status": "complete",
+      "owner": "core proof lane",
+      "safetyNote": "TextEdit is the green reference proof target."
+    }$codex_row
+  ]
+}
+JSON
+}
 MANUAL_SMOKE="$TMP_DIR/manual-smoke-runs.md"
 UNBOUNDED_MANUAL_SMOKE="$TMP_DIR/manual-smoke-runs-unbounded.md"
 TRACE_FILE="$TMP_DIR/traces.jsonl"
@@ -141,6 +219,9 @@ PENDING_MANIFEST="$TMP_DIR/pending.json"
 STALE_MANIFEST="$TMP_DIR/stale.json"
 MISSING_SMOKE_MANIFEST="$TMP_DIR/missing-smoke.json"
 MISSING_SCREENSHOT_MANIFEST="$TMP_DIR/missing-screenshot.json"
+PROFILE_SOURCE="$TMP_DIR/CompatibilityProfile.swift"
+PROFILE_MANIFEST="$TMP_DIR/profile-pass.json"
+MISSING_PROFILE_MANIFEST="$TMP_DIR/profile-missing.json"
 
 write_trace "$TRACE_FILE"
 write_stale_trace "$STALE_TRACE_FILE"
@@ -152,11 +233,15 @@ write_manifest "$PENDING_MANIFEST" pending "docs/product/visual-placement-screen
 write_manifest "$STALE_MANIFEST" complete "docs/product/visual-placement-screenshots/textedit-inline.png" "old-proof"
 write_manifest "$MISSING_SMOKE_MANIFEST" complete "docs/product/visual-placement-screenshots/codex-inline.png" "$TRACE_PROOF_VERSION" "Codex" "com.openai.codex" "default" 2
 write_manifest "$MISSING_SCREENSHOT_MANIFEST" complete "docs/product/visual-placement-screenshots/missing-proof.png"
+write_profile_source "$PROFILE_SOURCE"
+write_profile_manifest "$PROFILE_MANIFEST" yes
+write_profile_manifest "$MISSING_PROFILE_MANIFEST" no
 
 script/check_proof_manifest.sh \
   --manifest "$PASS_MANIFEST" \
   --manual-smoke "$MANUAL_SMOKE" \
   --scorecard "$SCORECARD" \
+  --skip-profile-coverage \
   --strict >"$TMP_DIR/pass.out"
 
 if ! grep -F "Proof manifest verified." "$TMP_DIR/pass.out" >/dev/null; then
@@ -169,6 +254,7 @@ script/check_proof_manifest.sh \
   --manifest "$PASS_MANIFEST" \
   --manual-smoke "$MANUAL_SMOKE" \
   --scorecard "$SCORECARD" \
+  --skip-profile-coverage \
   --verify-trace-slices >"$TMP_DIR/pass-trace.out"
 
 if ! grep -F "Verified trace slices: 1" "$TMP_DIR/pass-trace.out" >/dev/null; then
@@ -177,10 +263,39 @@ if ! grep -F "Verified trace slices: 1" "$TMP_DIR/pass-trace.out" >/dev/null; th
   exit 1
 fi
 
+script/check_proof_manifest.sh \
+  --manifest "$PROFILE_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --compatibility-profiles "$PROFILE_SOURCE" >"$TMP_DIR/profile-pass.out"
+
+if ! grep -F "Profile coverage rows: 2" "$TMP_DIR/profile-pass.out" >/dev/null; then
+  echo "proof manifest self-test did not verify profile coverage" >&2
+  cat "$TMP_DIR/profile-pass.out" >&2
+  exit 1
+fi
+
+if script/check_proof_manifest.sh \
+  --manifest "$MISSING_PROFILE_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --compatibility-profiles "$PROFILE_SOURCE" >"$TMP_DIR/profile-missing.out" 2>&1; then
+  echo "proof manifest self-test expected missing profile coverage to fail" >&2
+  cat "$TMP_DIR/profile-missing.out" >&2
+  exit 1
+fi
+
+if ! grep -F "profileCoverage missing bundle(s): com.openai.codex" "$TMP_DIR/profile-missing.out" >/dev/null; then
+  echo "proof manifest self-test did not explain missing profile coverage" >&2
+  cat "$TMP_DIR/profile-missing.out" >&2
+  exit 1
+fi
+
 if script/check_proof_manifest.sh \
   --manifest "$PASS_MANIFEST" \
   --manual-smoke "$UNBOUNDED_MANUAL_SMOKE" \
   --scorecard "$SCORECARD" \
+  --skip-profile-coverage \
   --strict >"$TMP_DIR/unbounded-strict.out" 2>&1; then
   echo "proof manifest self-test expected strict unbounded trace proof to fail" >&2
   cat "$TMP_DIR/unbounded-strict.out" >&2
@@ -199,6 +314,7 @@ if script/check_proof_manifest.sh \
   --manifest "$PASS_MANIFEST" \
   --manual-smoke "$MANUAL_SMOKE" \
   --scorecard "$SCORECARD" \
+  --skip-profile-coverage \
   --strict >"$TMP_DIR/stale-trace.out" 2>&1; then
   echo "proof manifest self-test expected stale trace proof to fail" >&2
   cat "$TMP_DIR/stale-trace.out" >&2
@@ -216,7 +332,8 @@ write_manual_smoke "$MANUAL_SMOKE" "$TRACE_FILE"
 script/check_proof_manifest.sh \
   --manifest "$PENDING_MANIFEST" \
   --manual-smoke "$MANUAL_SMOKE" \
-  --scorecard "$SCORECARD" >"$TMP_DIR/pending.out"
+  --scorecard "$SCORECARD" \
+  --skip-profile-coverage >"$TMP_DIR/pending.out"
 
 if ! grep -F "Pending proof:" "$TMP_DIR/pending.out" >/dev/null; then
   echo "proof manifest self-test did not report pending proof" >&2
@@ -228,6 +345,7 @@ if script/check_proof_manifest.sh \
   --manifest "$PENDING_MANIFEST" \
   --manual-smoke "$MANUAL_SMOKE" \
   --scorecard "$SCORECARD" \
+  --skip-profile-coverage \
   --strict >"$TMP_DIR/pending-strict.out" 2>&1; then
   echo "proof manifest self-test expected strict pending proof to fail" >&2
   cat "$TMP_DIR/pending-strict.out" >&2
@@ -243,7 +361,8 @@ fi
 if script/check_proof_manifest.sh \
   --manifest "$STALE_MANIFEST" \
   --manual-smoke "$MANUAL_SMOKE" \
-  --scorecard "$SCORECARD" >"$TMP_DIR/stale.out" 2>&1; then
+  --scorecard "$SCORECARD" \
+  --skip-profile-coverage >"$TMP_DIR/stale.out" 2>&1; then
   echo "proof manifest self-test expected stale fingerprint to fail" >&2
   cat "$TMP_DIR/stale.out" >&2
   exit 1
@@ -258,7 +377,8 @@ fi
 if script/check_proof_manifest.sh \
   --manifest "$MISSING_SMOKE_MANIFEST" \
   --manual-smoke "$MANUAL_SMOKE" \
-  --scorecard "$SCORECARD" >"$TMP_DIR/missing-smoke.out" 2>&1; then
+  --scorecard "$SCORECARD" \
+  --skip-profile-coverage >"$TMP_DIR/missing-smoke.out" 2>&1; then
   echo "proof manifest self-test expected missing smoke proof to fail" >&2
   cat "$TMP_DIR/missing-smoke.out" >&2
   exit 1
@@ -273,7 +393,8 @@ fi
 if script/check_proof_manifest.sh \
   --manifest "$MISSING_SCREENSHOT_MANIFEST" \
   --manual-smoke "$MANUAL_SMOKE" \
-  --scorecard "$SCORECARD" >"$TMP_DIR/missing-screenshot.out" 2>&1; then
+  --scorecard "$SCORECARD" \
+  --skip-profile-coverage >"$TMP_DIR/missing-screenshot.out" 2>&1; then
   echo "proof manifest self-test expected missing screenshot to fail" >&2
   cat "$TMP_DIR/missing-screenshot.out" >&2
   exit 1

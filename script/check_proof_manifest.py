@@ -13,6 +13,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT_DIR / "docs/product/proof-manifest.json"
 DEFAULT_MANUAL_SMOKE = ROOT_DIR / "docs/product/manual-smoke-runs.md"
 DEFAULT_SCORECARD = ROOT_DIR / "docs/product/deep-dive-scorecard-2026-05-06.md"
+DEFAULT_COMPATIBILITY_PROFILES = ROOT_DIR / "Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift"
 PROOF_METADATA_SOURCE = ROOT_DIR / "Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift"
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 TRACE_REFERENCE_PATTERN = re.compile(
@@ -74,6 +75,28 @@ def current_commit() -> str:
         ).strip()
     except subprocess.CalledProcessError:
         return ""
+
+
+def compatibility_profiles(path: Path) -> dict[str, dict[str, str]]:
+    if not path.exists():
+        fail(f"missing compatibility profile source {path}")
+
+    source = path.read_text(encoding="utf-8")
+    pattern = re.compile(
+        r'CompatibilityProfile\(\s*bundleIdentifier:\s*"([^"]+)",\s*'
+        r'displayName:\s*"([^"]+)".*?supportLevel:\s*\.([A-Za-z0-9_]+)',
+        re.DOTALL,
+    )
+    profiles: dict[str, dict[str, str]] = {}
+    for bundle, display_name, support_level in pattern.findall(source):
+        profiles[bundle] = {
+            "displayName": display_name,
+            "supportLevel": support_level,
+        }
+
+    if not profiles:
+        fail(f"could not find compatibility profiles in {path}")
+    return profiles
 
 
 def is_tracked(path: Path) -> bool:
@@ -324,8 +347,10 @@ def verify_manifest(
     manifest_path: Path,
     manual_smoke_path: Path,
     scorecard_path: Path,
+    compatibility_profiles_path: Path,
     require_all: bool,
     require_current_commit: bool,
+    skip_profile_coverage: bool,
     verify_trace_slices: bool,
     require_bounded_trace_slices: bool,
     trace_window_lines: int,
@@ -336,6 +361,14 @@ def verify_manifest(
 
     if manifest.get("schemaVersion") != 1:
         failures.append("schemaVersion must be 1")
+
+    profile_coverage_count = 0
+    if not skip_profile_coverage:
+        profile_coverage_count = verify_profile_coverage(
+            manifest,
+            compatibility_profiles(compatibility_profiles_path),
+            failures,
+        )
 
     proof_fingerprint = manifest.get("proofFingerprint", {})
     current_versions = current_proof_versions()
@@ -449,6 +482,8 @@ def verify_manifest(
     print(f"Complete surfaces: {complete}")
     print(f"Partial surfaces: {len(partial)}")
     print(f"Pending surfaces: {len(pending)}")
+    if not skip_profile_coverage:
+        print(f"Profile coverage rows: {profile_coverage_count}")
     if verify_trace_slices:
         print(f"Verified trace slices: {verified_trace_slices}")
     if partial:
@@ -474,13 +509,72 @@ def verify_manifest(
     return 0
 
 
+def verify_profile_coverage(
+    manifest: dict,
+    expected_profiles: dict[str, dict[str, str]],
+    failures: list[str],
+) -> int:
+    rows = manifest.get("profileCoverage")
+    if not isinstance(rows, list) or not rows:
+        failures.append("profileCoverage must list every CompatibilityProfile bundle")
+        return 0
+
+    allowed_statuses = {"complete", "partial", "pending", "blocked"}
+    seen: dict[str, dict] = {}
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            failures.append(f"profileCoverage entry {index + 1} must be an object")
+            continue
+
+        bundle = str(row.get("bundle", "")).strip()
+        if not bundle:
+            failures.append(f"profileCoverage entry {index + 1} is missing bundle")
+            continue
+        if bundle in seen:
+            failures.append(f"profileCoverage duplicate bundle: {bundle}")
+        seen[bundle] = row
+
+        if bundle not in expected_profiles:
+            failures.append(f"profileCoverage unknown bundle: {bundle}")
+            continue
+
+        expected = expected_profiles[bundle]
+        display_name = str(row.get("displayName", "")).strip()
+        if display_name != expected["displayName"]:
+            failures.append(
+                f"profileCoverage {bundle}: displayName is {display_name!r}; expected {expected['displayName']!r}"
+            )
+
+        support_level = str(row.get("supportLevel", "")).strip()
+        if support_level != expected["supportLevel"]:
+            failures.append(
+                f"profileCoverage {bundle}: supportLevel is {support_level!r}; expected {expected['supportLevel']!r}"
+            )
+
+        status = str(row.get("status", "")).strip()
+        if status not in allowed_statuses:
+            failures.append(f"profileCoverage {bundle}: status must be complete, partial, pending, or blocked")
+
+        for key in ["surface", "owner", "safetyNote"]:
+            if not str(row.get(key, "")).strip():
+                failures.append(f"profileCoverage {bundle}: missing {key}")
+
+    missing = sorted(set(expected_profiles) - set(seen))
+    if missing:
+        failures.append("profileCoverage missing bundle(s): " + ", ".join(missing))
+
+    return len(seen)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify machine-readable app proof status.")
     parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST))
     parser.add_argument("--manual-smoke", default=str(DEFAULT_MANUAL_SMOKE))
     parser.add_argument("--scorecard", default=str(DEFAULT_SCORECARD))
+    parser.add_argument("--compatibility-profiles", default=str(DEFAULT_COMPATIBILITY_PROFILES))
     parser.add_argument("--require-all", "--strict", action="store_true", dest="require_all")
     parser.add_argument("--require-current-commit", action="store_true")
+    parser.add_argument("--skip-profile-coverage", action="store_true")
     parser.add_argument("--verify-trace-slices", action="store_true")
     parser.add_argument("--require-bounded-trace-slices", action="store_true")
     parser.add_argument("--trace-window-lines", type=int, default=80)
@@ -492,8 +586,10 @@ def main() -> int:
         manifest_path=repo_path(args.manifest),
         manual_smoke_path=repo_path(args.manual_smoke),
         scorecard_path=repo_path(args.scorecard),
+        compatibility_profiles_path=repo_path(args.compatibility_profiles),
         require_all=args.require_all,
         require_current_commit=args.require_current_commit,
+        skip_profile_coverage=args.skip_profile_coverage,
         verify_trace_slices=args.verify_trace_slices or args.require_all,
         require_bounded_trace_slices=args.require_bounded_trace_slices or args.require_all,
         trace_window_lines=args.trace_window_lines,
