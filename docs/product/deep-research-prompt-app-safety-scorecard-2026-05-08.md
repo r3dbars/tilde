@@ -395,4 +395,3 @@ human/manual proof.
   private beta archive, not by this code path.
 - The prompt-app metrics analyzer exists, but there is not yet a dedicated
   command-line prompt-app proof gate around it.
-

@@ -170,6 +170,15 @@ traces, screenshots, prompts, or typed text anywhere.
 Start with TextEdit. Then try Notes. Then try Obsidian. Chrome textarea is a
 sanity check, not the main product loop.
 
+Read before inviting testers:
+
+- \`PRIVACY-BETA.md\`
+- \`KNOWN-LIMITATIONS.md\`
+- \`UNINSTALL-DELETE-DATA.md\`
+- \`DIAGNOSTIC-EXPORT.md\`
+- \`RELEASE-NOTES.md\`
+- \`.github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml\`
+
 Useful commands:
 
 \`\`\`bash
@@ -204,6 +213,8 @@ EOF
 
 Stop the test if suggestions feel distracting, appear in the wrong app, or
 insert text somewhere surprising.
+
+For rollback, removal, or a clean reset, use `UNINSTALL-DELETE-DATA.md`.
 EOF
 
   local expected_model_path
