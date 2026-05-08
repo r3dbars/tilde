@@ -466,6 +466,20 @@ struct CompletionActivationPolicyTests {
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
         ) == .allow(.phraseContinuation))
+        #expect(eager.decision(
+            textBeforeCursor: "Um ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
+        #expect(eager.decision(
+            textBeforeCursor: "I think this works. ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
         #expect(quiet.decision(
             textBeforeCursor: "di",
             textAfterCursor: "",
