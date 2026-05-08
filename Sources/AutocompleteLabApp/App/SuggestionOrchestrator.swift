@@ -5,6 +5,7 @@ import AutocompleteLabCore
 final class SuggestionOrchestrator {
     private let engineBox: CompletionEngineBox
     private let wordCompletionRanker: WordCompletionCandidateRanker
+    private let failureVisibilityPolicy = CompletionFailureVisibilityPolicy()
     private var requestGate = SuggestionRequestGate()
     private var currentRequestStorage: CompletionRequest?
 
@@ -18,10 +19,6 @@ final class SuggestionOrchestrator {
 
     var currentRequest: CompletionRequest? {
         currentRequestStorage
-    }
-
-    var requestGateSnapshot: SuggestionRequestGate {
-        requestGate
     }
 
     func beginRequest(
@@ -146,6 +143,20 @@ final class SuggestionOrchestrator {
         currentFieldIdentity: FocusedFieldIdentity?
     ) -> Bool {
         allows(ticket) && currentFieldIdentity == fieldIdentity
+    }
+
+    func shouldHideVisibleSuggestionAfterFailure(
+        ticket: SuggestionRequestTicket,
+        failedRequestFieldIdentity: FocusedFieldIdentity,
+        currentFieldIdentity: FocusedFieldIdentity?
+    ) -> Bool {
+        failureVisibilityPolicy.shouldHideVisibleSuggestion(
+            requestGate: requestGate,
+            ticket: ticket,
+            currentRequest: currentRequestStorage,
+            failedRequestFieldIdentity: failedRequestFieldIdentity,
+            currentFieldIdentity: currentFieldIdentity
+        )
     }
 
     func invalidate() {

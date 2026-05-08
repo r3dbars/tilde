@@ -51,7 +51,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
     private let suggestionReplacementPolicy = SuggestionReplacementPolicy()
-    private let completionFailureVisibilityPolicy = CompletionFailureVisibilityPolicy()
     private var displayScorePolicy: DisplayScorePolicy {
         suggestionAggressiveness.displayScorePolicy
     }
@@ -3457,10 +3456,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } catch {
                 await MainActor.run {
                     self.streamingPresentationStates[suggestionID] = nil
-                    guard self.completionFailureVisibilityPolicy.shouldHideVisibleSuggestion(
-                        requestGate: self.suggestionOrchestrator.requestGateSnapshot,
+                    guard self.suggestionOrchestrator.shouldHideVisibleSuggestionAfterFailure(
                         ticket: requestTicket,
-                        currentRequest: self.suggestionOrchestrator.currentRequest,
                         failedRequestFieldIdentity: fieldIdentity,
                         currentFieldIdentity: self.currentFieldIdentity
                     ) else {

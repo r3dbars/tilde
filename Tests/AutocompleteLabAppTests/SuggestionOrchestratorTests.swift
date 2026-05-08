@@ -163,6 +163,44 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Failure visibility uses current request and current field")
+    func failureVisibilityUsesCurrentRequestAndCurrentField() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: "com.example.editor",
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let otherField = FocusedFieldIdentity(
+            bundleIdentifier: "com.example.editor",
+            processIdentifier: 42,
+            elementIdentifier: 8
+        )
+        let staleTicket = orchestrator.beginRequest(
+            CompletionRequest(textBeforeCursor: "Can we", suggestionID: "stale")
+        ).ticket
+        let currentTicket = orchestrator.beginRequest(
+            CompletionRequest(textBeforeCursor: "Can we make", suggestionID: "current")
+        ).ticket
+
+        #expect(!orchestrator.shouldHideVisibleSuggestionAfterFailure(
+            ticket: staleTicket,
+            failedRequestFieldIdentity: field,
+            currentFieldIdentity: field
+        ))
+        #expect(!orchestrator.shouldHideVisibleSuggestionAfterFailure(
+            ticket: currentTicket,
+            failedRequestFieldIdentity: field,
+            currentFieldIdentity: otherField
+        ))
+        #expect(orchestrator.shouldHideVisibleSuggestionAfterFailure(
+            ticket: currentTicket,
+            failedRequestFieldIdentity: field,
+            currentFieldIdentity: field
+        ))
+    }
+
+    @MainActor
     @Test("Invalidating clears the current request and blocks stale tickets")
     func invalidateClearsCurrentRequestAndBlocksTickets() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
