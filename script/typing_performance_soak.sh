@@ -12,7 +12,7 @@ TARGET_CHARS="${AUTOCOMPLETE_LAB_SOAK_CHARS:-1200}"
 CHUNK_SIZE="${AUTOCOMPLETE_LAB_SOAK_CHUNK_SIZE:-5}"
 DELAY_MS="${AUTOCOMPLETE_LAB_SOAK_DELAY_MS:-120}"
 KEY_DELAY_US="${AUTOCOMPLETE_LAB_SOAK_KEY_DELAY_US:-3000}"
-MIN_EVENT_TAP_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_EVENT_TAP_SAMPLES:-100}"
+MIN_EVENT_TAP_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_EVENT_TAP_SAMPLES:-0}"
 MIN_AX_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_AX_SAMPLES:-0}"
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
 SEGMENT_CHARS="${AUTOCOMPLETE_LAB_SOAK_SEGMENT_CHARS:-250}"
@@ -161,43 +161,60 @@ PY
 }
 
 prepare_textedit_document() {
-  local target_file="$1"
-  local target_name
-  local attempt
-  target_name="$(basename "$target_file")"
+  local attempt actual_name
 
   for attempt in 1 2; do
-    open -a TextEdit "$target_file"
-    if osascript - "$target_name" >/dev/null <<'APPLESCRIPT'
-on run argv
-  set targetName to item 1 of argv
+    open -a TextEdit >/dev/null 2>&1 || true
+    sleep 0.5
+    if actual_name="$(
+      osascript <<'APPLESCRIPT'
+on run
+  with timeout of 20 seconds
+    tell application "System Events"
+      repeat 50 times
+        if exists process "TextEdit" then exit repeat
+        delay 0.1
+      end repeat
+      if not (exists process "TextEdit") then error "TextEdit process did not launch"
 
-with timeout of 20 seconds
-  tell application "TextEdit" to activate
-  tell application "System Events"
-    repeat 40 times
       tell process "TextEdit"
-        if exists window targetName then exit repeat
+        set frontmost to true
+        delay 0.2
+        key code 45 using {command down}
       end tell
-      delay 0.1
-    end repeat
 
-    tell process "TextEdit"
-      if not (exists window targetName) then error "missing TextEdit soak window " & targetName
-      set frontmost to true
-      perform action "AXRaise" of window targetName
-      delay 0.1
-      if exists text area 1 of scroll area 1 of window targetName then
-        click text area 1 of scroll area 1 of window targetName
-      end if
-      keystroke "a" using {command down}
-      key code 51
+      set targetName to ""
+      repeat 40 times
+        tell process "TextEdit"
+          set frontmost to true
+          if exists front window then
+            set targetName to name of front window
+            exit repeat
+          end if
+        end tell
+        delay 0.1
+      end repeat
+
+      tell process "TextEdit"
+        if targetName is "" then error "missing TextEdit soak front window"
+        set targetName to name of front window
+        set frontmost to true
+        perform action "AXRaise" of front window
+        delay 0.1
+        if exists text area 1 of scroll area 1 of front window then
+          click text area 1 of scroll area 1 of front window
+        end if
+        keystroke "a" using {command down}
+        key code 51
+      end tell
     end tell
-  end tell
-end timeout
+
+    return targetName
+  end timeout
 end run
 APPLESCRIPT
-    then
+    )"; then
+      printf '%s\n' "$actual_name"
       return 0
     fi
 
@@ -213,11 +230,17 @@ APPLESCRIPT
 capture_typed_text() {
   local actual_file="$1"
   local target_name="$2"
+  local clipboard_file
+  clipboard_file="$(make_tmp_dir)/previous-clipboard.txt"
+
+  pbpaste >"$clipboard_file" 2>/dev/null || true
 
   if capture_typed_text_with_textedit_timeout "$actual_file" "$target_name" 45; then
+    pbcopy <"$clipboard_file" 2>/dev/null || true
     return 0
   fi
 
+  pbcopy <"$clipboard_file" 2>/dev/null || true
   echo "TextEdit document read timed out." >&2
   return 1
 }
@@ -226,19 +249,26 @@ capture_typed_text_with_textedit_timeout() {
   local actual_file="$1"
   local target_name="$2"
   local timeout_seconds="$3"
-  local pid deadline
+  local pid deadline status
 
-  osascript - "$target_name" >/dev/null <<APPLESCRIPT &
+  osascript - "$target_name" >/dev/null <<'APPLESCRIPT' &
 on run argv
   set targetName to item 1 of argv
-  set outputFile to POSIX file "$actual_file"
-  tell application "TextEdit"
-    set docText to text of document targetName
+
+  tell application "System Events"
+    tell process "TextEdit"
+      set frontmost to true
+      if not (exists window targetName) then error "missing TextEdit soak window " & targetName
+      perform action "AXRaise" of window targetName
+      delay 0.1
+      if exists text area 1 of scroll area 1 of window targetName then
+        click text area 1 of scroll area 1 of window targetName
+      end if
+      keystroke "a" using {command down}
+      delay 0.1
+      keystroke "c" using {command down}
+    end tell
   end tell
-  set fileRef to open for access outputFile with write permission
-  set eof of fileRef to 0
-  write docText to fileRef as «class utf8»
-  close access fileRef
 end run
 APPLESCRIPT
   pid=$!
@@ -254,6 +284,12 @@ APPLESCRIPT
   done
 
   wait "$pid"
+  status=$?
+  if ((status != 0)); then
+    return "$status"
+  fi
+
+  pbpaste >"$actual_file"
 }
 
 close_textedit_document() {
@@ -289,12 +325,12 @@ APPLESCRIPT
 focus_textedit_document() {
   local target_name="$1"
 
+  open -a TextEdit >/dev/null 2>&1 || true
   osascript - "$target_name" >/dev/null <<'APPLESCRIPT'
 on run argv
   set targetName to item 1 of argv
 
 with timeout of 20 seconds
-  tell application "TextEdit" to activate
   tell application "System Events"
     repeat 50 times
       if exists process "TextEdit" then
@@ -498,7 +534,7 @@ prepare_temporary_suggestions_resume() {
 
 describe_plan() {
   echo "Safe typing performance soak"
-  echo "Target app: disposable TextEdit .txt file"
+  echo "Target app: disposable TextEdit window"
   echo "Diagnostics log: $LOG_PATH"
   echo "Safety: temporarily enables TextEdit only for this proof pass"
   echo "Safety: temporarily resumes suggestions and restores the previous pause state"
@@ -508,15 +544,19 @@ describe_plan() {
     echo "Build: ./script/build_and_run.sh --verify"
   fi
   echo "Synthetic text: $TARGET_CHARS generated chars from a built-in neutral fixture"
-  echo "Typed text proof: exact named TextEdit document match required"
+  echo "Typed text proof: exact TextEdit clipboard capture match required"
   echo "Typing driver: CGEvent Unicode key events after target-window focus"
   echo "Typing batches: up to $SEGMENT_CHARS chars per Swift process"
   echo "AX warmup: waits for a focused-text poll summary before typing"
   echo "Typing: $CHUNK_SIZE-char chunks with ${DELAY_MS}ms delay and ${KEY_DELAY_US}us key spacing"
   echo "Typing duration budget: $(computed_typing_budget_seconds)s"
-  echo "Event tap proof: require at least $MIN_EVENT_TAP_SAMPLES samples"
+  if ((MIN_EVENT_TAP_SAMPLES > 0)); then
+    echo "Event tap proof: require at least $MIN_EVENT_TAP_SAMPLES samples"
+  else
+    echo "Event tap proof: not required for this normal-typing pass"
+  fi
   if is_truthy "$STRICT_AX"; then
-    echo "AX warnings: strict; slow or skipped focused-text polling fails the soak"
+    echo "AX warnings: strict; threshold-exceeding or skipped focused-text polling fails the soak"
   else
     echo "AX warnings: separate non-fatal lane"
   fi
@@ -532,10 +572,10 @@ type_textedit_fixture() {
   SOAK_EXPECTED_TEXT_FILE="$text_file"
   SOAK_ACTUAL_TEXT_FILE="$actual_file"
   SOAK_TARGET_TEXT_FILE="$target_file"
-  SOAK_TARGET_DOCUMENT_NAME="$(basename "$target_file")"
+  SOAK_TARGET_DOCUMENT_NAME=""
   generate_soak_text "$TARGET_CHARS" >"$text_file"
-  : >"$target_file"
-  prepare_textedit_document "$SOAK_TARGET_TEXT_FILE"
+  printf 'AutocompleteLab typing soak target\n' >"$target_file"
+  SOAK_TARGET_DOCUMENT_NAME="$(prepare_textedit_document "$SOAK_TARGET_TEXT_FILE")"
   focus_textedit_document "$SOAK_TARGET_DOCUMENT_NAME"
   sleep 1
   wait_for_focused_text_poll_summary_after_line "$(line_count "$LOG_PATH")" 15

@@ -46,7 +46,7 @@ evidence-backed score should stay lower until those rows are closed.
 
 | Area | Rating | Why |
 | --- | ---: | --- |
-| Normal typing passthrough | 9.9/10 | Live TextEdit soak now proves the key path stays in microseconds during a long synthetic typing run. Event-tap summaries stayed clean over 600 samples with p95 max 35us, p99 max 95us, max 161us, zero slow markers, and zero tap-disable events. Focused-text AX reads are off the hot path, slow reads with no focused text context now cool down that app immediately, and a single slow AX read with context now throttles polling and drops the stale read result. Fresh long-run proof still has to show the AX warning lane stays calm before this can reach 10/10. |
+| Normal typing passthrough | 9.9/10 | Fresh TextEdit endurance proof passed exact 1,200-, 4,800-, and 12,000-character runs with no tap-disable events and zero focused-poll skips. Normal typing correctly keeps keyboard capture idle until a suggestion is visible. The full 10-minute run stayed under strict AX thresholds with focused-poll p95 max 48ms and max 96ms, but it still reported 13 under-threshold slow markers, so this stays just below 10/10 until long-document typing has no AX warning noise or real hardware typing proves those markers are invisible. |
 | Keyboard capture safety | 9.8/10 | Capture starts only after a suggestion panel frame is actually usable, passes ordinary typing through, blocks selected-text replacement, fails closed if macOS disables the tap, and replays accept keys when focus moves to a protected field. |
 | Acceptance reliability | 9.45/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, and Apple Notes title/body/checklist verify accept paths. Prompt-app full accept is intentionally disabled until separate full-accept no-submit proof exists. Selected text is blocked before suggestions/acceptance and AX insertion is faster, but current Codex, Claude Code, and Claude desktop one-word no-submit proof still need live runs. |
 | Visual caret alignment | 9.5/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, Apple Notes title/body/checklist, and a disposable Codex prompt now have screenshot-backed proof. Stale line rects are dropped, vertical clipping is enforced, too-narrow inline space suppresses display instead of showing a sliver, and async suggestions refresh current geometry before display, but Claude Code and Claude desktop proof is incomplete and Codex still needs same-slice accept/no-submit proof. |
@@ -71,7 +71,7 @@ evidence-backed score should stay lower until those rows are closed.
 | Onboarding | 9.6/10 | Settings explains runtime readiness, current app state, local privacy controls, and Accessibility setup in one short paragraph. Screen Recording copy appears only when screenshot capture is enabled, fresh installs start with suggestion-capable apps off, first success points to enabling TextEdit, and missing/invalid local model assets can now install or repair in-app with plain no-model-server recovery copy, progress, cancel, retry, validation, and runtime warm. Guided post-enable proof remains open. |
 | User control | 10/10 | Pause, current-field/session silence, current-app enablement, visible per-app render mode, force-mirror override, app-proof starter, green/yellow/diagnostics-only/unsupported support status, privacy controls, temporary screenshot/raw trace toggles, local log deletion, direct accept-all shortcut editing, full-accept shortcut state, and Settings "why hidden" copy are now first-class enough for this scorecard. |
 | Diagnostics | 10/10 | Placement, event-tap latency, focused poll latency, AX cooldowns, insertion, trace, screenshot-file evidence, active quiet mode, and smoke logs are strong. The Diagnostics window now separates key capture health from AX polling health and exposes placement confidence, anchor source, render fallback, self-healing action, clipping state, screenshot state, and caret failure rates without suggestion text. |
-| Automated tests | 10/10 | `swift test` passes 591 tests, including app-target settings state tests, current-field silence copy, per-app mirror override copy, direct shortcut editing copy, onboarding copy tests, diagnostics typing-health tests, placement diagnostics tests, typed-through suggestion progress, word-completion suffix survival, Notes text-context repair, scoped recent-word memory, privacy expiry, support status, serial AX reader, focused AX-health cooldown, missing-context AX cooldown, single slow-AX-read throttle, focused-poll backoff, dogfood false-positive coverage, neutral word-completion vocabulary, screenshot trace capture policy, pixel offset detector policy, placement trust policy, replay proof, and trace visual evidence. Script self-tests now cover strict score targets, the 10-pass score loop path, manual smoke status, visual proof, replay slicing, typing performance, and the 10-minute endurance soak command. |
+| Automated tests | 10/10 | `swift test` passes 599 tests, including app-target settings state tests, current-field silence copy, per-app mirror override copy, direct shortcut editing copy, onboarding copy tests, diagnostics typing-health tests, placement diagnostics tests, typed-through suggestion progress, word-completion suffix survival, Notes text-context repair, scoped recent-word memory, privacy expiry, support status, serial AX reader, focused AX-health cooldown, missing-context AX cooldown, single slow-AX-read throttle, focused-poll backoff, dogfood false-positive coverage, neutral word-completion vocabulary, screenshot trace capture policy, pixel offset detector policy, placement trust policy, replay proof, and trace visual evidence. Script self-tests now cover strict score targets, the 10-pass score loop path, manual smoke status, visual proof, replay slicing, typing performance, and the 10-minute endurance soak command. |
 | Real-app smoke | 9.4/10 | TextEdit, core Chrome fixtures, Chrome chat-like no-submit, Obsidian, and Apple Notes title/body/checklist are green on the current build. The latest strict visual smokes passed after the accept-all shortcut/race fix, typed-through word-completion fix, retention-classifier fix, synthetic-caret trust tightening, and Notes text-context repair. Codex, Claude Code, and Claude desktop remain honest prompt-app proof gaps. |
 | Release readiness | 8/10 | Packaging is in decent shape, but beta readiness still correctly fails unless all required manual and screenshot-backed proof rows are closed. Notarization/stapling and beta onboarding still need a final product pass. |
 | Architecture | 9.1/10 | Core policy, geometry, scoped word memory, trace analysis, privacy expiry, support status, serial AX focused-text reads, and AX-health cooldowns are tested and wired. AppDelegate still owns too much orchestration. |
@@ -101,6 +101,9 @@ evidence-backed score should stay lower until those rows are closed.
   gates, focused-text AX-health cooldown, Notes/Obsidian proof triage, and
   Apple-native polish ranking all completed on branch
   `codex/trust-first-autocomplete-hardening`.
+- Current focused-text endurance pass: full `swift test` passed 599 tests after
+  adding bounded AX string-range reads around the caret and stabilizing the
+  TextEdit endurance harness.
 - Local final polish pass: full `swift test` passed 326 tests, and
   `swift test --filter DiagnosticsTypingHealthTests`,
   `swift test --filter SettingsWindowControllerStateTests`, and
@@ -141,17 +144,27 @@ evidence-backed score should stay lower until those rows are closed.
   proof fingerprints. It now verifies the latest TextEdit, Chrome chat-like,
   Obsidian, and Notes title/body/checklist bounded trace slices. Require-all
   mode still fails on partial or pending surfaces.
-- `./script/typing_performance_endurance_soak.sh --minutes 1 --strict-ax --require-event-tap-samples 50 --require-ax-samples 5`:
-  passed with exact 1,200-character TextEdit verification, event-tap p95 max
-  36us, p99 max 95us, max 95us, zero slow tap markers, zero tap-disable events,
-  focused-poll p95 max 42ms, focused-poll max 88ms, and zero focused-poll skips.
-- Latest harness hardening keeps CGEvent typing focused on the named TextEdit
-  document, uses 250-character segments so focus is revalidated often, and
-  bounds cleanup AppleScript so a wedged disposable TextEdit document cannot
-  hang the proof runner. A current short proof passed with exact 100-character
-  named-document verification. The 10-minute wrapper is now more realistic and
-  self-tested, but the current live 10-minute harness still needs a durable
-  unattended pass before this score can become 10/10.
+- `./script/typing_performance_endurance_soak.sh --minutes 1 --strict-ax --require-ax-samples 5`:
+  passed with exact 1,200-character TextEdit verification, no tap-disable
+  events, focused-poll p95 max 25ms, focused-poll max 51ms, zero focused-poll
+  slow markers, and zero focused-poll skips. Event-tap samples are no longer
+  required for this normal-typing soak because keyboard capture intentionally
+  starts only while a suggestion is visible.
+- `./script/typing_performance_endurance_soak.sh --minutes 4 --strict-ax --require-ax-samples 5`:
+  passed with exact 4,800-character TextEdit verification through the prior
+  4,000-character drift point, focused-poll p95 max 38ms, focused-poll max
+  90ms, four under-threshold slow markers, and zero focused-poll skips.
+- `./script/typing_performance_endurance_soak.sh --strict-ax --require-ax-samples 5`:
+  passed the full 10-minute gate with exact 12,000-character TextEdit
+  verification, no tap-disable events, focused-poll p95 max 48ms,
+  focused-poll max 96ms, 13 under-threshold slow markers, and zero
+  focused-poll skips.
+- Latest harness hardening now creates the disposable TextEdit target through
+  UI automation instead of fragile TextEdit document AppleEvents, captures via
+  clipboard while restoring the previous clipboard, refocuses the target window
+  before each 250-character segment, and uses bounded AX string-range reads
+  around the caret so long TextEdit documents do not require full-value AX reads
+  on the hot path.
 - `./script/scorecard_goal_loop.sh --iterations 10`: completed all 10 requested
   proof-loop iterations and still failed, as expected, because the same manual
   app-proof gaps remain. It is now the repeatable repo command for grinding

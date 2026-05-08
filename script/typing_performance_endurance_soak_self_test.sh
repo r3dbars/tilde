@@ -13,9 +13,9 @@ for expected in \
   "Typing endurance soak" \
   "Duration target: 10 minute(s)" \
   "Computed text: 12000 generated chars" \
-  "Underlying command: script/typing_performance_soak.sh --characters 12000 --chunk-size 5 --delay-ms 250 --require-event-tap-samples 250 --require-ax-samples 0" \
+  "Underlying command: script/typing_performance_soak.sh --characters 12000 --chunk-size 5 --delay-ms 250 --require-event-tap-samples 0 --require-ax-samples 0" \
   "Synthetic text: 12000 generated chars from a built-in neutral fixture" \
-  "Typed text proof: exact named TextEdit document match required" \
+  "Typed text proof: exact TextEdit clipboard capture match required" \
   "Typing driver: CGEvent Unicode key events after target-window focus" \
   "Typing batches: up to 250 chars per Swift process" \
   "AX warmup: waits for a focused-text poll summary before typing"; do
@@ -40,7 +40,7 @@ for expected in \
   "Duration target: 1 minute(s)" \
   "Computed text: 6000 generated chars" \
   "Build: skipped; using an already-running app" \
-  "AX warnings: strict; slow or skipped focused-text polling fails the soak" \
+  "AX warnings: strict; threshold-exceeding or skipped focused-text polling fails the soak" \
   "AX sample proof: require at least 5 focused-text poll samples"; do
   if ! grep -F "$expected" "$TMP_DIR/custom.txt" >/dev/null; then
     echo "endurance soak self-test missing custom output: $expected" >&2

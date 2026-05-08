@@ -129,8 +129,16 @@ struct FocusedTextStyle: Equatable, @unchecked Sendable {
     }
 }
 
+private struct EditableTextSnapshot {
+    let slice: CursorTextSlice
+    let utf16Length: Int
+    let canReadValue: Bool
+}
+
 final class AccessibilityClient: @unchecked Sendable {
     private let sensitiveTextFieldPolicy = SensitiveTextFieldPolicy()
+    private let focusedContextBeforeUTF16Limit = 2_000
+    private let focusedContextAfterUTF16Limit = 500
 
     var isTrusted: Bool {
         AXIsProcessTrusted()
@@ -205,21 +213,18 @@ final class AccessibilityClient: @unchecked Sendable {
             )
         }
 
-        guard let text = editableText(
+        let selectedRange = selectedTextRange(in: focusedElement)
+        guard let textSnapshot = editableTextSnapshot(
             in: focusedElement,
             role: role,
             processIdentifier: app.processIdentifier,
-            allowDescendantTextFallback: allowDescendantTextFallback
+            allowDescendantTextFallback: allowDescendantTextFallback,
+            selectedRange: selectedRange
         ) else {
             return nil
         }
 
-        let selectedRange = selectedTextRange(in: focusedElement)
         let selectedTextLength = max(0, selectedRange?.length ?? 0)
-        let textSlice = CursorTextSplitter.split(
-            text,
-            utf16Offset: selectedRange?.location ?? text.utf16.count
-        )
         let caretRect = selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
         }
@@ -229,20 +234,21 @@ final class AccessibilityClient: @unchecked Sendable {
             AccessibilityTextBoundsPolicy.usableTextBounds(
                 textLineBounds(
                     for: focusedElement,
-                    textLength: text.utf16.count,
-                    textBeforeCursor: textSlice.textBeforeCursor,
+                    textLength: textSnapshot.utf16Length,
+                    textBeforeCursor: textSnapshot.slice.textBeforeCursor,
                     range: $0
                 )
             )
         }
         let textStyle = selectedRange.flatMap {
-            focusedTextStyle(in: focusedElement, textLength: text.utf16.count, range: $0)
+            focusedTextStyle(in: focusedElement, textLength: textSnapshot.utf16Length, range: $0)
         }
         let capabilities = textCapabilities(
             for: focusedElement,
             selectedRange: selectedRange,
             caretRect: caretRect,
-            textStyle: textStyle
+            textStyle: textStyle,
+            canReadValue: textSnapshot.canReadValue
         )
 
         return FocusedTextContext(
@@ -250,8 +256,8 @@ final class AccessibilityClient: @unchecked Sendable {
             role: role,
             subrole: subrole,
             fingerprint: fingerprint,
-            textBeforeCursor: textSlice.textBeforeCursor,
-            textAfterCursor: textSlice.textAfterCursor,
+            textBeforeCursor: textSnapshot.slice.textBeforeCursor,
+            textAfterCursor: textSnapshot.slice.textAfterCursor,
             selectedTextLength: selectedTextLength,
             caretRect: caretRect,
             elementRect: elementRect,
@@ -635,6 +641,117 @@ final class AccessibilityClient: @unchecked Sendable {
         }
     }
 
+    private func editableTextSnapshot(
+        in element: AXUIElement,
+        role: String?,
+        processIdentifier: pid_t,
+        allowDescendantTextFallback: Bool,
+        selectedRange: CFRange?
+    ) -> EditableTextSnapshot? {
+        if let selectedRange,
+           let boundedSnapshot = boundedEditableTextSnapshot(
+               in: element,
+               selectedRange: selectedRange
+           ) {
+            return boundedSnapshot
+        }
+
+        guard let text = editableText(
+            in: element,
+            role: role,
+            processIdentifier: processIdentifier,
+            allowDescendantTextFallback: allowDescendantTextFallback
+        ) else {
+            return nil
+        }
+
+        return EditableTextSnapshot(
+            slice: CursorTextSplitter.split(
+                text,
+                utf16Offset: selectedRange?.location ?? text.utf16.count
+            ),
+            utf16Length: text.utf16.count,
+            canReadValue: true
+        )
+    }
+
+    private func boundedEditableTextSnapshot(
+        in element: AXUIElement,
+        selectedRange: CFRange
+    ) -> EditableTextSnapshot? {
+        guard selectedRange.location >= 0,
+              selectedRange.length >= 0,
+              let textLength = editableTextUTF16Length(in: element) else {
+            return nil
+        }
+
+        let cursorLocation = min(selectedRange.location, textLength)
+        let beforeStart = max(0, cursorLocation - focusedContextBeforeUTF16Limit)
+        let beforeLength = cursorLocation - beforeStart
+        let afterLength = min(
+            focusedContextAfterUTF16Limit,
+            max(0, textLength - cursorLocation)
+        )
+
+        guard let before = stringForRange(
+            in: element,
+            range: CFRange(location: beforeStart, length: beforeLength)
+        ),
+            let after = stringForRange(
+                in: element,
+                range: CFRange(location: cursorLocation, length: afterLength)
+            ) else {
+            return nil
+        }
+
+        return EditableTextSnapshot(
+            slice: CursorTextSlice(textBeforeCursor: before, textAfterCursor: after),
+            utf16Length: textLength,
+            canReadValue: true
+        )
+    }
+
+    private func editableTextUTF16Length(in element: AXUIElement) -> Int? {
+        if let number = copyAttribute(element, attribute: "AXNumberOfCharacters") as? NSNumber {
+            return max(0, number.intValue)
+        }
+
+        if let string = copyAttribute(element, attribute: kAXValueAttribute) as? String {
+            return string.utf16.count
+        }
+
+        return nil
+    }
+
+    private func stringForRange(in element: AXUIElement, range: CFRange) -> String? {
+        guard range.location >= 0, range.length >= 0 else {
+            return nil
+        }
+
+        guard range.length > 0 else {
+            return ""
+        }
+
+        var range = range
+        guard let rangeValue = AXValueCreate(.cfRange, &range) else {
+            return nil
+        }
+
+        var stringValue: CFTypeRef?
+        let result = AXUIElementCopyParameterizedAttributeValue(
+            element,
+            "AXStringForRange" as CFString,
+            rangeValue,
+            &stringValue
+        )
+
+        guard result == .success else {
+            return nil
+        }
+
+        return stringValue as? String
+    }
+
     private func editableText(
         in element: AXUIElement,
         role: String?,
@@ -884,10 +1001,11 @@ final class AccessibilityClient: @unchecked Sendable {
         for element: AXUIElement,
         selectedRange: CFRange?,
         caretRect: CGRect?,
-        textStyle: FocusedTextStyle?
+        textStyle: FocusedTextStyle?,
+        canReadValue: Bool? = nil
     ) -> FocusedTextCapabilities {
         FocusedTextCapabilities(
-            canReadValue: copyAttribute(element, attribute: kAXValueAttribute) is String,
+            canReadValue: canReadValue ?? (copyAttribute(element, attribute: kAXValueAttribute) is String),
             canReadSelectedTextRange: selectedRange != nil,
             canReadBoundsForRange: caretRect != nil,
             canReadAttributedText: textStyle != nil,
