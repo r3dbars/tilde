@@ -6,7 +6,7 @@ final class SuggestionOrchestrator {
     private let engine: any CompletionEngine
     private let wordCompletionRanker: WordCompletionCandidateRanker
     private var requestGate = SuggestionRequestGate()
-    private var currentRequest: CompletionRequest?
+    private var currentRequestStorage: CompletionRequest?
 
     init(
         engine: any CompletionEngine,
@@ -14,6 +14,14 @@ final class SuggestionOrchestrator {
     ) {
         self.engine = engine
         self.wordCompletionRanker = wordCompletionRanker
+    }
+
+    var currentRequest: CompletionRequest? {
+        currentRequestStorage
+    }
+
+    var requestGateSnapshot: SuggestionRequestGate {
+        requestGate
     }
 
     func beginRequest(
@@ -32,10 +40,13 @@ final class SuggestionOrchestrator {
             mode: requestMode,
             suggestionID: suggestionID
         )
-        currentRequest = request
+        return beginRequest(request)
+    }
 
+    func beginRequest(_ request: CompletionRequest) -> SuggestionOrchestration {
+        currentRequestStorage = request
         return SuggestionOrchestration(
-            suggestionID: suggestionID,
+            suggestionID: request.suggestionID,
             request: request,
             ticket: requestGate.issue(request: request),
             startedAt: Date()
@@ -43,11 +54,11 @@ final class SuggestionOrchestrator {
     }
 
     func allows(_ ticket: SuggestionRequestTicket) -> Bool {
-        requestGate.allows(ticket, currentRequest: currentRequest)
+        requestGate.allows(ticket, currentRequest: currentRequestStorage)
     }
 
     func invalidate() {
-        currentRequest = nil
+        currentRequestStorage = nil
         requestGate.invalidate()
     }
 
@@ -55,7 +66,17 @@ final class SuggestionOrchestrator {
         for textBeforeCursor: String,
         recentWords: [String]
     ) -> CompletionSuggestion? {
-        wordCompletionRanker.suggestion(
+        fastWordSelection(
+            for: textBeforeCursor,
+            recentWords: recentWords
+        ).suggestion
+    }
+
+    nonisolated func fastWordSelection(
+        for textBeforeCursor: String,
+        recentWords: [String]
+    ) -> WordCompletionCandidateSelection {
+        wordCompletionRanker.selection(
             for: textBeforeCursor,
             recentWords: recentWords
         )

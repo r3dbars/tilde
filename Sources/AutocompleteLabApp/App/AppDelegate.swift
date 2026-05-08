@@ -44,6 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let insertionVerificationTimingPolicy = InsertionVerificationTimingPolicy()
     private let suggestionAcceptanceProofPolicy = SuggestionAcceptanceProofPolicy()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
+    private lazy var suggestionOrchestrator = SuggestionOrchestrator(
+        engine: engine,
+        wordCompletionRanker: wordCompletionRanker
+    )
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private let suggestionPresentationGate = SuggestionPresentationGate()
     private let suggestionReplacementPolicy = SuggestionReplacementPolicy()
@@ -159,11 +163,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var focusedTextAXHealthState = FocusedTextAXHealthState()
     private var focusedTextPollLatencyStats = FocusedTextPollLatencyStats()
     private var focusedTextPollSkipStats = FocusedTextPollSkipStats()
-    private var suggestionRequestGate = SuggestionRequestGate()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
     private lazy var prefixFamilyCooldownPolicy = makePrefixFamilyCooldownPolicy()
-    private var currentCompletionRequest: CompletionRequest?
     private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
     private var currentSuggestionID: String?
     private var currentSuggestionAppBundleIdentifier: String?
@@ -275,7 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleWorkspaceFocusChange(reason: String) {
         guard suggestionSession.hasVisibleSuggestion
-            || currentCompletionRequest != nil
+            || suggestionOrchestrator.currentRequest != nil
             || currentFieldIdentity != nil else {
             return
         }
@@ -2589,7 +2591,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let fieldClassification = currentSuggestionFieldClassification
         let fieldKind = fieldClassification?.kind ?? .unknown
-        let behaviorProfileID = currentCompletionRequest?.behaviorProfile.id
+        let behaviorProfileID = suggestionOrchestrator.currentRequest?.behaviorProfile.id
             ?? AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
                 appBundleIdentifier: profile.bundleIdentifier,
                 fieldKind: fieldKind,
@@ -3149,7 +3151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionID: suggestionID
         )
         let runtimeSessionCacheDecision = RuntimeSessionCachePolicy().decision(
-            previous: currentCompletionRequest,
+            previous: suggestionOrchestrator.currentRequest,
             current: request
         )
         let requestMetadata = traceRequestMetadata(
@@ -3157,10 +3159,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldClassification: fieldClassification
         )
         .merging(runtimeSessionCacheDecision.traceMetadata) { current, _ in current }
-        currentCompletionRequest = request
+        let orchestration = suggestionOrchestrator.beginRequest(request)
         streamingPresentationStates[suggestionID] = StreamingPresentationState()
-        let requestTicket = suggestionRequestGate.issue(request: request)
-        let requestStartedAt = Date()
+        let requestTicket = orchestration.ticket
+        let requestStartedAt = orchestration.startedAt
 
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionRequested,
@@ -3179,7 +3181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         if requestMode == .wordCompletion {
-            let fastSelection = wordCompletionRanker.selection(
+            let fastSelection = suggestionOrchestrator.fastWordSelection(
                 for: context.textBeforeCursor,
                 recentWords: recentWordMemory.words(for: appBundleIdentifier)
             )
@@ -3275,7 +3277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        debounceTask = Task { [engine, requestTicket, fieldIdentity] in
+        debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity] in
             let renderDelay = renderMode == .inlineAdjacent ? delayMilliseconds : max(delayMilliseconds, 60)
             try? await Task.sleep(for: .milliseconds(renderDelay))
             guard !Task.isCancelled else {
@@ -3283,15 +3285,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             do {
-                let suggestion = try await engine.suggestion(
+                let suggestion = try await suggestionOrchestrator.suggestion(
                     for: request,
                     onPartialSuggestion: { partialSuggestion in
                         Task { @MainActor in
                             let latencyMilliseconds = max(0, Int(Date().timeIntervalSince(requestStartedAt) * 1000))
-                            guard self.suggestionRequestGate.allows(
-                                requestTicket,
-                                currentRequest: self.currentCompletionRequest
-                            ), self.currentFieldIdentity == fieldIdentity else {
+                            guard self.suggestionOrchestrator.allows(requestTicket),
+                                  self.currentFieldIdentity == fieldIdentity else {
                                 return
                             }
 
@@ -3332,10 +3332,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 await MainActor.run {
                     let latencyMilliseconds = max(0, Int(Date().timeIntervalSince(requestStartedAt) * 1000))
-                    guard self.suggestionRequestGate.allows(
-                        requestTicket,
-                        currentRequest: self.currentCompletionRequest
-                    ), self.currentFieldIdentity == fieldIdentity else {
+                    guard self.suggestionOrchestrator.allows(requestTicket),
+                          self.currentFieldIdentity == fieldIdentity else {
                         return
                     }
 
@@ -3469,9 +3467,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await MainActor.run {
                     self.streamingPresentationStates[suggestionID] = nil
                     guard self.completionFailureVisibilityPolicy.shouldHideVisibleSuggestion(
-                        requestGate: self.suggestionRequestGate,
+                        requestGate: self.suggestionOrchestrator.requestGateSnapshot,
                         ticket: requestTicket,
-                        currentRequest: self.currentCompletionRequest,
+                        currentRequest: self.suggestionOrchestrator.currentRequest,
                         failedRequestFieldIdentity: fieldIdentity,
                         currentFieldIdentity: self.currentFieldIdentity
                     ) else {
@@ -5436,9 +5434,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func invalidatePendingSuggestionRequest() {
         debounceTask?.cancel()
         debounceTask = nil
-        currentCompletionRequest = nil
         streamingPresentationStates.removeAll(keepingCapacity: true)
-        suggestionRequestGate.invalidate()
+        suggestionOrchestrator.invalidate()
     }
 
     @objc
