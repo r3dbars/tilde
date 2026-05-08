@@ -207,10 +207,6 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         prompt: CompletionPrompt,
         rawOutput: String,
         cleanedSuggestion: CompletionSuggestion?,
-        cleanedCandidateCount: Int = 0,
-        candidateTopScore: Double? = nil,
-        candidateScoreMargin: Double? = nil,
-        candidateSuppressionReason: String? = nil,
         suggestionID: String = "",
         latencyMilliseconds: Int? = nil,
         firstTokenLatencyMilliseconds: Int? = nil
@@ -221,13 +217,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
 
         var metadata = [
             "cleanedWordCount": String(cleanedSuggestion?.visibleWordCount ?? 0),
-            "cleanedCandidateCount": String(cleanedCandidateCount),
-            "candidateTopScore": Self.formattedCandidateScore(candidateTopScore),
-            "candidateScoreMargin": Self.formattedCandidateScore(candidateScoreMargin),
-            "candidateSuppressionReason": candidateSuppressionReason ?? "none",
             "emptyResult": String(cleanedSuggestion == nil)
         ]
-        metadata.merge(request.behaviorProfileTraceMetadata) { current, _ in current }
         if let latencyMilliseconds {
             metadata["totalGenerationLatencyMilliseconds"] = String(latencyMilliseconds)
         }
@@ -308,9 +299,6 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         }
 
         let rawContentEnabled = rawContentTracingEnabled
-        let proofMetadata = metadata.merging(AutocompleteTraceProofMetadata.current) { _, current in
-            current
-        }
         let event = AutocompleteTraceEvent(
             timestamp: ISO8601DateFormatter().string(from: Date()),
             sessionID: sessionID,
@@ -361,7 +349,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             reason: reason,
             screenshotPath: screenshotPath,
             metadata: AutocompleteTracePrivacyFilter.metadata(
-                proofMetadata,
+                metadata,
                 rawContentEnabled: rawContentEnabled
             )
         )
@@ -403,12 +391,6 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
 
     func summary(limit: Int = 2_000) -> AutocompleteTraceSummary {
         AutocompleteTraceAnalyzer().summary(for: recentEvents(limit: limit))
-    }
-
-    func exportPrivacyBundle(limit: Int = 2_000) -> URL? {
-        queue.sync { [folderURL] in
-            LocalReportExporter(folderURL: folderURL).exportPrivacyBundle(limit: limit)
-        }
     }
 
     func exportHTMLReport(limit: Int = 2_000) -> URL? {
@@ -616,14 +598,6 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
             .replacingOccurrences(of: "\"", with: "&quot;")
-    }
-
-    private static func formattedCandidateScore(_ score: Double?) -> String {
-        guard let score else {
-            return "none"
-        }
-
-        return String(format: "%.3f", score)
     }
 
     private static func screenshotLink(_ path: String) -> String {

@@ -74,8 +74,26 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
     }
 
     public var hasTrustedVisualAdjustment: Bool {
-        guard hasVisualAdjustment,
-              visualScope != nil else {
+        guard hasVisualAdjustment else {
+            return false
+        }
+
+        guard lastReason == "manual-visual-nudge"
+                || lastReason == "screenshot-visual-correction" else {
+            return false
+        }
+
+        if visualScope != nil {
+            return true
+        }
+
+        return lastReason == "screenshot-visual-correction" && confidence >= 0.85
+    }
+
+    public func hasTrustedVisualAdjustment(
+        in context: CompatibilityLearningVisualTrustContext?
+    ) -> Bool {
+        guard hasVisualAdjustment else {
             return false
         }
 
@@ -85,7 +103,7 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         }
 
         guard let context else {
-            return true
+            return hasTrustedVisualAdjustment
         }
 
         return matchesVisualTrustContext(context)
@@ -152,15 +170,18 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
     public let profile: CompatibilityLearningProfile?
     public let effectiveRenderMode: SuggestionRenderMode
     public let renderModeOverrideIgnored: Bool
+    public let visualOffsetTrustedOverride: Bool?
 
     public init(
         profile: CompatibilityLearningProfile?,
         effectiveRenderMode: SuggestionRenderMode,
-        renderModeOverrideIgnored: Bool = false
+        renderModeOverrideIgnored: Bool = false,
+        visualOffsetTrustedOverride: Bool? = nil
     ) {
         self.profile = profile
         self.effectiveRenderMode = effectiveRenderMode
         self.renderModeOverrideIgnored = renderModeOverrideIgnored
+        self.visualOffsetTrustedOverride = visualOffsetTrustedOverride
     }
 
     public var shouldCaptureScreenshot: Bool {
@@ -178,7 +199,8 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
         return CompatibilityLearningAdjustment(
             profile: profile,
             effectiveRenderMode: effectiveRenderMode,
-            renderModeOverrideIgnored: renderModeOverrideIgnored
+            renderModeOverrideIgnored: renderModeOverrideIgnored,
+            visualOffsetTrustedOverride: false
         )
     }
 
@@ -190,6 +212,22 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
         matching visualScope: CompatibilityLearningVisualScope?
     ) -> CompatibilityLearningAdjustment {
         trustedVisualOffsetOnly(matching: visualScope, allowUnscopedTrustedOffset: false)
+    }
+
+    public func trustedVisualOffsetOnly(
+        context: CompatibilityLearningVisualTrustContext?
+    ) -> CompatibilityLearningAdjustment {
+        guard let profile,
+              profile.hasTrustedVisualAdjustment(in: context) else {
+            return withoutVisualOffset
+        }
+
+        return CompatibilityLearningAdjustment(
+            profile: profile,
+            effectiveRenderMode: effectiveRenderMode,
+            renderModeOverrideIgnored: renderModeOverrideIgnored,
+            visualOffsetTrustedOverride: true
+        )
     }
 
     private func trustedVisualOffsetOnly(
@@ -217,13 +255,14 @@ public struct CompatibilityLearningAdjustment: Equatable, Sendable {
         }
 
         let renderModeOverrideApplied = profile.renderModeOverride != nil && !renderModeOverrideIgnored
+        let visualOffsetTrusted = visualOffsetTrustedOverride ?? profile.hasTrustedVisualAdjustment
         return [
             "learningApplied": String(profile.hasVisualAdjustment || renderModeOverrideApplied),
             "learningRenderMode": effectiveRenderMode.rawValue,
             "learningRenderModeOverrideIgnored": String(renderModeOverrideIgnored),
             "learningXOffset": String(format: "%.1f", Double(profile.xOffset)),
             "learningYOffset": String(format: "%.1f", Double(profile.yOffset)),
-            "learningVisualOffsetTrusted": String(profile.hasTrustedVisualAdjustment),
+            "learningVisualOffsetTrusted": String(visualOffsetTrusted),
             "learningVisualScope": profile.visualScope?.debugSummary ?? "none",
             "learningConfidence": String(format: "%.2f", profile.confidence),
             "learningObservations": String(profile.observations),

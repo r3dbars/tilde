@@ -18,7 +18,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.Notes")?.appFamily == .swiftUIAppKit)
         #expect(store.profile(for: "com.apple.Notes")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.apple.Notes")?.renderMode == .floatingMirror)
-        #expect(store.profile(for: "com.apple.Notes")?.fallbackInsertionMode == .disabled)
+        #expect(store.profile(for: "com.apple.Notes")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "com.apple.Notes")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "md.obsidian")?.renderMode == .floatingMirror)
         #expect(store.profile(for: "md.obsidian")?.appFamily == .electron)

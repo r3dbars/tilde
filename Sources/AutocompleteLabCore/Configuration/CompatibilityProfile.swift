@@ -218,7 +218,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
             sentences.append("Full accept stays off until no-submit proof exists.")
         }
 
-        if fallbackInsertionMode == .disabled {
+        if fallbackInsertionMode == .disabled || (supportLevel == .yellow && suppressesAfterInsertionFailure) {
             sentences.append("Insertion fails closed if the primary method is not verified.")
         }
 
@@ -292,14 +292,14 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .swiftUIAppKit,
             supportLevel: .yellow,
             supportReason: "Rich text can drift; display stays mirror-first and insertion fails closed until each Notes surface is proven.",
-            safetyOwnerNote: "Owner: Notes stays yellow because rich text can drift; mirror-only display, no detached anchors, and disabled insertion fallback fail closed until title, body, and checklist proof is current.",
+            safetyOwnerNote: "Owner: Notes stays yellow because rich text can drift; mirror-only display, no detached anchors, and key-event fallback fail closed until title, body, and checklist proof is current.",
             renderMode: .floatingMirror,
-            insertionMode: .keyEvents,
-            fallbackInsertionMode: .disabled,
+            insertionMode: .axThenKeyEvents,
+            fallbackInsertionMode: .keyEvents,
             knownFailureModes: ["AX selected-text insertion can report success without moving the caret"],
             supportsObserverUpdates: true,
             allowsDetachedSuggestions: false,
-            notes: "Yellow rich-text target. Use key events only, fail closed on unchanged verification, and use caret-bound mirror placement until fresh title/body/checklist proof exists. Suppress detached mirror placement because Notes can report AX selected-text insertion success without moving the caret."
+            notes: "Yellow rich-text target. Try AX selected-text insertion before key-event fallback, fail closed on unchanged verification, and use caret-bound mirror placement until fresh title/body/checklist proof exists. Suppress detached mirror placement because Notes can report AX selected-text insertion success without moving the caret."
         ),
         CompatibilityProfile(
             bundleIdentifier: "md.obsidian",

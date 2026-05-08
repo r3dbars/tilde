@@ -24,7 +24,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var engine: any CompletionEngine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
     private let keyboardCapturePolicy = KeyboardCapturePolicy()
-    private let keyboardEventTapIdleStopPolicy = KeyboardEventTapIdleStopPolicy()
     private let insertionVerification = InsertionVerification()
     private let insertionRetryPolicy = InsertionRetryPolicy()
     private let suggestionAcceptanceGuard = SuggestionAcceptanceGuard()
@@ -124,7 +123,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusMenuItem: NSMenuItem?
     private var runtimeMenuItem: NSMenuItem?
     private var pauseSuggestionsMenuItem: NSMenuItem?
-    private var silenceFieldMenuItem: NSMenuItem?
     private var toggleAppMenuItem: NSMenuItem?
     private var quietFieldMenuItem: NSMenuItem?
     private var pollTimer: Timer?
@@ -136,7 +134,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastClippingRect: CGRect?
     private var lastTextStyle: FocusedTextStyle?
     private var lastRenderMode: SuggestionRenderMode?
-    private var lastCompatibilityLearningTrustContext: CompatibilityLearningVisualTrustContext?
     private var currentFieldIdentity: FocusedFieldIdentity?
     private var currentProfile: CompatibilityProfile?
     private var lastTextSnapshot: FocusedTextSnapshot?
@@ -145,8 +142,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var disabledBundleIdentifiers: Set<String> = []
     private var debounceTask: Task<Void, Never>?
     private var insertionVerificationTask: Task<Void, Never>?
-    private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
-    private var acceptanceSurvivalTasks: [String: Task<Void, Never>] = [:]
     private var runtimeWarmTask: Task<Void, Never>?
     private var modelInstallTask: Task<Void, Never>?
     private var modelInstallStatusText: String?
@@ -172,24 +167,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionTextBeforeCursor: String?
     private var currentSuggestionAcceptanceSnapshot: SuggestionAcceptanceSnapshot?
     private var currentSuggestionDisplayedText: String?
-    private var currentSuggestionFieldClassification: AXFieldClassification?
-    private var currentSuggestionPresentedAt: Date?
-    private var currentSuggestionDisplayScoreFinal: Double?
     private var currentSuggestionInvalidatedByUserKeyDown = false
     private var lastScreenLayoutFingerprint: String?
     private var scheduledScreenshotSuggestionIDs: Set<String> = []
     private let maxScheduledScreenshotSuggestionIDs = 256
     private var recentWordMemory = ScopedRecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
-    private var pendingAcceptedInsertionUndo: AcceptedInsertionUndo?
-    private var acceptedInsertionUndoExpirationTask: Task<Void, Never>?
     private var lastStatusLine: String?
     private var lastSuggestionDecision = "Starting"
     private var lastSyntheticCaretDiagnosticSignature: String?
-    private var lastTextContextRepairDiagnosticSignature: String?
     private var lastEligibleTargetApp: RunningApplicationInfo?
     private var lastObservedSettingsApp: RunningApplicationInfo?
-    private var lastFieldControlTarget: FieldControlTarget?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
     private var commandContextDraft: CommandContextDraft?
     private var commandContextSuggestionText: String?
@@ -244,7 +232,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debounceTask?.cancel()
         keyboardEventTapStopTask?.cancel()
         insertionVerificationTask?.cancel()
-        acceptedInsertionUndoExpirationTask?.cancel()
         runtimeWarmTask?.cancel()
         modelInstallTask?.cancel()
         commandContextRequestTask?.cancel()
@@ -263,11 +250,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let statusMenu = NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: "")
         let runtimeMenu = NSMenuItem(title: "Model: starting", action: nil, keyEquivalent: "")
         let pauseItem = NSMenuItem(title: pauseSuggestionsTitle, action: #selector(togglePauseSuggestions), keyEquivalent: "p")
-        let silenceFieldItem = NSMenuItem(
-            title: "Silence This Field",
-            action: #selector(silenceCurrentField),
-            keyEquivalent: "s"
-        )
         let toggleItem = NSMenuItem(title: "Toggle Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
         let quietFieldItem = NSMenuItem(title: "Quiet Current Field", action: #selector(quietCurrentFieldFromControl), keyEquivalent: "")
         let debugMenuItem = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
@@ -278,7 +260,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(runtimeMenu)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(pauseItem)
-        menu.addItem(silenceFieldItem)
         menu.addItem(toggleItem)
         menu.addItem(quietFieldItem)
         menu.addItem(NSMenuItem(title: "Command Context...", action: #selector(showCommandContextPanel), keyEquivalent: ""))
@@ -304,7 +285,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusMenuItem = statusMenu
         runtimeMenuItem = runtimeMenu
         pauseSuggestionsMenuItem = pauseItem
-        silenceFieldMenuItem = silenceFieldItem
         toggleAppMenuItem = toggleItem
         quietFieldMenuItem = quietFieldItem
         refreshMenuBarIcon()
@@ -468,12 +448,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentRuntimeState = state
         refreshRuntimeChrome()
         let report = runtimeReadinessReport
-        if report.allowsSuggestions,
-           modelInstallTask == nil,
-           modelInstallStatusText != nil {
-            modelInstallStatusText = "Model install: ready"
-            refreshRuntimeChrome()
-        }
         if !wasReadyForSuggestions && report.allowsSuggestions {
             rearmFocusedTextAfterRuntimeReady()
         }
@@ -522,10 +496,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 runtimeInstallStatus: modelInstallStatusText,
                 runtimeInstallInProgress: modelInstallTask != nil,
                 modelDirectoryPath: modelDirectoryPath,
-                modelInstallStatusText: modelInstallStatusText,
-                isModelInstallInProgress: modelInstallTask != nil,
                 currentApp: settingsCurrentAppState,
-                fieldControl: settingsFieldControlState,
                 privacy: settingsPrivacyState,
                 keyboardShortcuts: settingsKeyboardShortcutState,
                 lastSuggestionDecision: lastSuggestionDecision
@@ -548,8 +519,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 bundleIdentifier: nil,
                 supportStatus: .unsupported,
                 isEnabled: false,
-                disabledAppCount: disabledBundleIdentifiers.count,
-                renderModeOverride: nil
+                disabledAppCount: disabledBundleIdentifiers.count
             )
         }
 
@@ -562,34 +532,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             renderModeOverride: compatibilityLearningStore.profile(for: app.bundleIdentifier)?.renderModeOverride,
             canQuietCurrentField: canQuietCurrentField
         )
-    }
-
-    private var settingsFieldControlState: SettingsFieldControlState {
-        guard let target = fieldControlTarget else {
-            return SettingsFieldControlState(
-                appDisplayName: nil,
-                hasFieldTarget: false,
-                isCurrentField: false,
-                isSilenced: false
-            )
-        }
-
-        return SettingsFieldControlState(
-            appDisplayName: target.appDisplayName,
-            hasFieldTarget: true,
-            isCurrentField: target.fieldIdentity == currentFieldIdentity,
-            isSilenced: suppressedFieldIdentities.contains(target.fieldIdentity)
-        )
-    }
-
-    private var fieldControlTarget: FieldControlTarget? {
-        if let currentFieldIdentity,
-           let target = lastFieldControlTarget,
-           target.fieldIdentity == currentFieldIdentity {
-            return target
-        }
-
-        return lastFieldControlTarget
     }
 
     private var appForSettingsState: RunningApplicationInfo? {
@@ -622,21 +564,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         lastEligibleTargetApp = app
-    }
-
-    private func rememberFieldControlTarget(
-        app: RunningApplicationInfo,
-        fieldIdentity: FocusedFieldIdentity,
-        requestMode: CompletionRequestMode?,
-        fieldKind: AXFieldKind
-    ) {
-        lastFieldControlTarget = FieldControlTarget(
-            appBundleIdentifier: app.bundleIdentifier,
-            appDisplayName: app.localizedName,
-            fieldIdentity: fieldIdentity,
-            requestMode: requestMode,
-            fieldKind: fieldKind
-        )
     }
 
     private var settingsPrivacyState: SettingsPrivacyState {
@@ -672,7 +599,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .downloadNeeded, .repairNeeded, .runtimeUnavailable, .failed:
             return true
         case .warming, .ready:
-            return !appEnablementSetupCompleted
+            return false
         }
     }
 
@@ -806,7 +733,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             allowDescendantTextFallback: profile.allowsDescendantTextFallback
         ) { [weak self, profile, startedAt] result in
             Task { @MainActor [weak self, profile, startedAt] in
-                await self?.completeFocusedTextPoll(
+                self?.completeFocusedTextPoll(
                     result: result,
                     profile: profile,
                     startedAt: startedAt
@@ -821,7 +748,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         result: FocusedTextAXReadResult,
         profile: CompatibilityProfile,
         startedAt: UInt64
-    ) async {
+    ) {
         defer {
             finishFocusedTextPoll(startedAt: startedAt)
         }
@@ -854,16 +781,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if applyFocusedTextPollingThrottleIfNeeded(
-            focusedTextPollingBackoffPolicy.throttleRecommendation(
-                queueDelayMilliseconds: result.queueDelayMilliseconds,
-                readDurationMilliseconds: result.readDurationMilliseconds
-            )
-        ) {
-            setSuggestionDecision("Waiting: AX read")
-            return
-        }
-
         guard let activeApp = accessibilityClient.frontmostApplication(),
               activeApp.bundleIdentifier == result.app.bundleIdentifier,
               activeApp.processIdentifier == result.app.processIdentifier else {
@@ -880,7 +797,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        await processFocusedTextContext(
+        processFocusedTextContext(
             rawContext,
             frontmostApp: result.app,
             profile: profile
@@ -891,7 +808,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ rawContext: FocusedTextContext,
         frontmostApp: RunningApplicationInfo,
         profile: CompatibilityProfile
-    ) async {
+    ) {
         let promptMatch = promptTextAreaMatch(
             for: frontmostApp.bundleIdentifier,
             context: rawContext
@@ -912,32 +829,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion()
             return
         }
-        let rawFieldIdentity = fieldIdentity(
-            app: frontmostApp,
-            context: rawContext,
-            profile: profile
-        )
-        transitionToField(rawFieldIdentity)
+        let context = presentationAdjustedContext(rawContext, app: frontmostApp, profile: profile)
 
-        let previousSnapshot = lastTextSnapshot
-        let context = presentationAdjustedContext(
-            rawContext,
-            app: frontmostApp,
-            profile: profile,
-            previousSnapshot: previousSnapshot
-        )
         let fieldIdentity = fieldIdentity(
             app: frontmostApp,
             context: context,
             profile: profile
         )
-        let fieldClassification = fieldClassification(for: context)
-        rememberFieldControlTarget(
-            app: frontmostApp,
-            fieldIdentity: fieldIdentity,
-            requestMode: nil,
-            fieldKind: fieldClassification.kind
-        )
+        transitionToField(fieldIdentity)
 
         let snapshot = FocusedTextSnapshot(
             fieldIdentity: fieldIdentity,
@@ -945,7 +844,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textAfterCursor: context.textAfterCursor
         )
 
-        guard snapshot != previousSnapshot else {
+        guard snapshot != lastTextSnapshot else {
             setSuggestionDecision(
                 suggestionSession.hasVisibleSuggestion
                     ? "Shown: tracking current field"
@@ -967,28 +866,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile
         )
         rememberTypedWordsIfNeeded(
-            previousSnapshot: previousSnapshot,
+            previousSnapshot: lastTextSnapshot,
             currentSnapshot: snapshot,
             appBundleIdentifier: frontmostApp.bundleIdentifier
         )
-        if advanceVisibleSuggestionForTypingProgressIfNeeded(
-            context: context,
-            profile: profile,
-            fieldIdentity: fieldIdentity,
-            snapshot: snapshot
-        ) {
-            return
-        }
+        hideStaleSuggestionIfNeeded(
+            newTextBeforeCursor: context.textBeforeCursor,
+            fieldIdentity: fieldIdentity
+        )
 
         lastTextSnapshot = snapshot
         invalidatePendingSuggestionRequest()
-        if suggestionCadenceResetPolicy.shouldResetLastRequestedText(
-            previousTextBeforeCursor: previousSnapshot?.textBeforeCursor,
-            currentTextBeforeCursor: context.textBeforeCursor,
-            selectedTextLength: context.selectedTextLength
-        ) {
-            lastRequestedTextBeforeCursor = nil
-        }
 
         guard profile.canPresentSuggestions else {
             setSuggestionDecision("Blocked: profile diagnostics only")
@@ -1098,20 +986,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let currentLineStructure = CurrentLineStructure.from(textBeforeCursor: context.textBeforeCursor)
-        let triggerBehaviorProfile = AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
-            appBundleIdentifier: frontmostApp.bundleIdentifier,
-            fieldKind: fieldClassification.kind,
-            currentLineStructure: currentLineStructure
-        ))
         let triggerDecision = triggerPolicy.decision(
             previousTextBeforeCursor: lastRequestedTextBeforeCursor,
-            currentTextBeforeCursor: context.textBeforeCursor,
-            lineStartBehavior: SuggestionLineStartBehavior.behavior(
-                for: triggerBehaviorProfile.id,
-                currentLineStructure: currentLineStructure
-            ),
-            behaviorProfileID: triggerBehaviorProfile.id
+            currentTextBeforeCursor: context.textBeforeCursor
         )
 
         guard case let .request(delayMilliseconds) = triggerDecision else {
@@ -1177,7 +1054,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             appBundleIdentifier: frontmostApp.bundleIdentifier,
             fieldIdentity: fieldIdentity,
-            fieldClassification: fieldClassification,
             renderMode: renderMode,
             delayMilliseconds: delayMilliseconds,
             requestMode: requestMode
@@ -1212,7 +1088,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "remainingMilliseconds": String(cooldown.remainingMilliseconds)
                 ]
             )
-            handleFocusedTextAXHealthCooldown(cooldown, source: "poll")
+            invalidatePendingSuggestionRequest()
+            if suggestionSession.hasVisibleSuggestion {
+                hideSuggestion(reason: "focused-text-ax-health-\(cooldown.reason.rawValue)")
+            }
             setSuggestionDecision("Waiting: AX cooldown")
             return false
         }
@@ -1223,7 +1102,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             bundleIdentifier: result.app.bundleIdentifier,
             queueDelayMilliseconds: result.queueDelayMilliseconds,
             readDurationMilliseconds: result.readDurationMilliseconds,
-            hasContext: result.context != nil,
             now: Date(),
             state: &focusedTextAXHealthState
         )
@@ -1245,41 +1123,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "hasContext": String(result.context != nil)
             ]
         )
-        handleFocusedTextAXHealthCooldown(cooldown, source: "read")
+        invalidatePendingSuggestionRequest()
+        if suggestionSession.hasVisibleSuggestion {
+            hideSuggestion(reason: "focused-text-ax-health-\(cooldown.reason.rawValue)")
+        }
         setSuggestionDecision("Waiting: AX cooldown")
         return true
-    }
-
-    private func handleFocusedTextAXHealthCooldown(
-        _ cooldown: FocusedTextAXHealthCooldown,
-        source: String
-    ) {
-        invalidatePendingSuggestionRequest()
-        guard suggestionSession.hasVisibleSuggestion else {
-            return
-        }
-
-        if focusedTextAXHealthSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
-            during: cooldown,
-            currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
-            currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
-            currentFieldIdentity: currentFieldIdentity,
-            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown
-        ) {
-            hideSuggestion(reason: "focused-text-ax-health-\(cooldown.reason.rawValue)")
-            return
-        }
-
-        updateKeyboardEventTapSnapshot()
-        DiagnosticsLog.shared.record(
-            "focused-text-ax-health-suggestion-preserved",
-            metadata: [
-                "app": cooldown.bundleIdentifier,
-                "reason": cooldown.reason.rawValue,
-                "source": source,
-                "remainingMilliseconds": String(cooldown.remainingMilliseconds)
-            ]
-        )
     }
 
     private func recordFocusedTextPollLatency(_ durationMilliseconds: Int) {
@@ -1332,14 +1181,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    @discardableResult
     private func applyFocusedTextPollingThrottleIfNeeded(
         _ recommendation: FocusedTextPollingThrottleRecommendation
-    ) -> Bool {
+    ) {
         guard recommendation.shouldThrottle,
               let reason = recommendation.reason,
               recommendation.pauseMilliseconds > 0 else {
-            return false
+            return
         }
 
         focusedTextPollingPause.pause(
@@ -1349,27 +1197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         invalidatePendingSuggestionRequest()
         if suggestionSession.hasVisibleSuggestion {
-            let frontmostBundleIdentifier = accessibilityClient.frontmostApplication()?.bundleIdentifier
-            if focusedTextPollingThrottleSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
-                currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
-                currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
-                currentFieldIdentity: currentFieldIdentity,
-                frontmostBundleIdentifier: frontmostBundleIdentifier,
-                isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown
-            ) {
-                hideSuggestion(reason: "focused-text-poll-\(reason.rawValue)")
-            } else {
-                updateKeyboardEventTapSnapshot()
-                DiagnosticsLog.shared.record(
-                    "focused-text-poll-suggestion-preserved",
-                    metadata: [
-                        "app": currentSuggestionAppBundleIdentifier ?? "",
-                        "frontmostApp": frontmostBundleIdentifier ?? "",
-                        "reason": reason.rawValue,
-                        "pauseMilliseconds": String(recommendation.pauseMilliseconds)
-                    ]
-                )
-            }
+            hideSuggestion(reason: "focused-text-poll-\(reason.rawValue)")
         }
         DiagnosticsLog.shared.record(
             "focused-text-poll-throttled",
@@ -1378,35 +1206,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "pauseMilliseconds": String(recommendation.pauseMilliseconds)
             ]
         )
-        return true
     }
 
     private func presentationAdjustedContext(
         _ context: FocusedTextContext,
         app: RunningApplicationInfo,
-        profile: CompatibilityProfile,
-        previousSnapshot: FocusedTextSnapshot? = nil
+        profile: CompatibilityProfile
     ) -> FocusedTextContext {
-        let repair = textContextRepairPolicy.repair(TextContextRepairInput(
-            bundleIdentifier: app.bundleIdentifier,
-            role: context.role,
-            textBeforeCursor: context.textBeforeCursor,
-            textAfterCursor: context.textAfterCursor,
-            selectedTextLength: context.selectedTextLength,
-            previousTextBeforeCursor: previousSnapshot?.textBeforeCursor,
-            previousTextAfterCursor: previousSnapshot?.textAfterCursor
-        ))
-        let context = repair.wasRepaired
-            ? contextReplacingText(
-                context,
-                textBeforeCursor: repair.textBeforeCursor,
-                textAfterCursor: repair.textAfterCursor
-            )
-            : context
-        if repair.wasRepaired {
-            recordTextContextRepairIfNeeded(repair, context: context, profile: profile)
-        }
-
         guard supportsSyntheticTextAreaCaret(for: app.bundleIdentifier),
               promptTextAreaMatch(for: app.bundleIdentifier, context: context).canSuggest,
               context.caretRect == nil,
@@ -1445,30 +1251,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldClassification: context.fieldClassification,
             caretIsSynthetic: true,
             capabilities: capabilities
-        )
-    }
-
-    private func contextReplacingText(
-        _ context: FocusedTextContext,
-        textBeforeCursor: String,
-        textAfterCursor: String
-    ) -> FocusedTextContext {
-        FocusedTextContext(
-            elementIdentifier: context.elementIdentifier,
-            role: context.role,
-            subrole: context.subrole,
-            fingerprint: context.fingerprint,
-            textBeforeCursor: textBeforeCursor,
-            textAfterCursor: textAfterCursor,
-            selectedTextLength: context.selectedTextLength,
-            caretRect: context.caretRect,
-            elementRect: context.elementRect,
-            windowRect: context.windowRect,
-            textLineRect: context.textLineRect,
-            textStyle: context.textStyle,
-            isSecure: context.isSecure,
-            caretIsSynthetic: context.caretIsSynthetic,
-            capabilities: context.capabilities
         )
     }
 
@@ -1691,45 +1473,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func recordTextContextRepairIfNeeded(
-        _ repair: TextContextRepairResult,
-        context: FocusedTextContext,
-        profile: CompatibilityProfile
-    ) {
-        guard let reason = repair.reason else {
-            return
-        }
-
-        let signature = [
-            profile.bundleIdentifier,
-            String(context.elementIdentifier),
-            reason.rawValue,
-            String(context.textBeforeCursor.count),
-            String(context.textAfterCursor.count)
-        ].joined(separator: "|")
-
-        guard signature != lastTextContextRepairDiagnosticSignature else {
-            return
-        }
-
-        lastTextContextRepairDiagnosticSignature = signature
-        DiagnosticsLog.shared.record(
-            "text-context-repaired",
-            metadata: [
-                "app": profile.bundleIdentifier,
-                "reason": reason.rawValue,
-                "role": context.role ?? "unknown",
-                "beforeChars": String(context.textBeforeCursor.count),
-                "afterChars": String(context.textAfterCursor.count),
-                "hasCaretRect": String(context.caretRect != nil),
-                "hasElementRect": String(context.elementRect != nil)
-            ]
-        )
-    }
-
     @discardableResult
     private func startKeyboardEventTapIfPossible() -> Bool {
-        cancelKeyboardEventTapIdleStop()
+        keyboardEventTapStopTask?.cancel()
+        keyboardEventTapStopTask = nil
 
         guard keyboardEventTap == nil else {
             return true
@@ -1776,7 +1523,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             supportsOneWordAcceptance: currentProfile?.supportsOneWordAcceptance == true,
             supportsFullAcceptance: currentProfile?.supportsFullAcceptance == true,
             isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
-            hasPendingAcceptedInsertionUndo: acceptedInsertionUndoIsActive(),
             acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut
         )
     }
@@ -1810,11 +1556,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? await Task.sleep(for: .milliseconds(idleStopDelayMilliseconds))
             guard !Task.isCancelled,
                   let self,
-                  self.keyboardEventTapIdleStopPolicy.shouldStopKeyboardCapture(
-                      hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion,
-                      isSuggestionPanelVisible: self.suggestionPanel.isVisible,
-                      hasPendingAcceptedInsertionUndo: self.acceptedInsertionUndoIsActive()
-                  ) else {
+                  !self.suggestionSession.hasVisibleSuggestion else {
                 return
             }
 
@@ -1822,13 +1564,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func cancelKeyboardEventTapIdleStop() {
+    private func stopKeyboardEventTapNow(reason: String) {
         keyboardEventTapStopTask?.cancel()
         keyboardEventTapStopTask = nil
-    }
-
-    private func stopKeyboardEventTapNow(reason: String) {
-        cancelKeyboardEventTapIdleStop()
 
         guard let keyboardEventTap else {
             return
@@ -1849,7 +1587,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             now: Date(),
             durationMilliseconds: postTypingPollPauseMilliseconds
         )
-        clearPendingAcceptedInsertionUndo(reason: "typing")
 
         guard suggestionSession.hasVisibleSuggestion else {
             return
@@ -1868,27 +1605,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> Bool {
         if didObservePassthroughKeyDown {
             currentSuggestionInvalidatedByUserKeyDown = true
-            clearPendingAcceptedInsertionUndo(reason: "typing")
-        }
-
-        let action = KeyboardActionRouter(shortcutConfiguration: keyboardShortcutConfiguration).action(
-            for: key,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            hasPendingAcceptedInsertionUndo: acceptedInsertionUndoIsActive()
-        )
-
-        if action == .undoAcceptedInsertion {
-            let handled = undoAcceptedInsertion()
-            if handled {
-                suppressKey(key)
-            }
-            recordKeyboardAction(
-                key: key,
-                action: action,
-                handled: handled,
-                reason: handled ? "accepted-insertion-undone" : "undo-unavailable"
-            )
-            return handled
         }
 
         guard suggestionSession.hasVisibleSuggestion else {
@@ -1928,10 +1644,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
 
-        switch action {
-        case .undoAcceptedInsertion:
-            return false
+        let action = KeyboardActionRouter(shortcutConfiguration: keyboardShortcutConfiguration).action(
+            for: key,
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+        )
 
+        switch action {
         case .acceptNextWord:
             guard currentProfile?.supportsOneWordAcceptance == true else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-one-word")
@@ -2020,6 +1738,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "dismissed")
             return true
+
+        case .undoAcceptedInsertion:
+            recordKeyboardAction(key: key, action: action, handled: false, reason: "undo-unavailable")
+            return false
 
         case .passThrough:
             if key != .other {
@@ -2158,186 +1880,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suppressKeyUntil[key] = Date().addingTimeInterval(0.25)
     }
 
-    private func acceptedInsertionUndoIsActive(now: Date = Date()) -> Bool {
-        guard let pendingAcceptedInsertionUndo else {
-            return false
-        }
-
-        return pendingAcceptedInsertionUndo.expiresAt > now
-    }
-
-    private func armAcceptedInsertionUndo(
-        acceptedText: String,
-        acceptanceID: String,
-        acceptedAt: Date
-    ) {
-        guard let currentFieldIdentity,
-              let lastTextSnapshot,
-              lastTextSnapshot.fieldIdentity == currentFieldIdentity,
-              let appBundleIdentifier = currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier else {
-            clearPendingAcceptedInsertionUndo(reason: "missing-baseline")
-            return
-        }
-
-        let expiresAt = acceptedAt.addingTimeInterval(8)
-        pendingAcceptedInsertionUndo = AcceptedInsertionUndo(
-            acceptanceID: acceptanceID,
-            appBundleIdentifier: appBundleIdentifier,
-            fieldIdentity: currentFieldIdentity,
-            textBeforeCursor: lastTextSnapshot.textBeforeCursor,
-            textAfterCursor: lastTextSnapshot.textAfterCursor,
-            acceptedTextLength: acceptedText.count,
-            acceptedAt: acceptedAt,
-            expiresAt: expiresAt
-        )
-        DiagnosticsLog.shared.record(
-            "accepted-insertion-undo-armed",
-            metadata: [
-                "acceptanceID": acceptanceID,
-                "app": appBundleIdentifier,
-                "fieldIdentity": currentFieldIdentity.traceDescription,
-                "acceptedTextLength": String(acceptedText.count),
-                "previousBeforeLength": String(lastTextSnapshot.textBeforeCursor.count),
-                "previousAfterLength": String(lastTextSnapshot.textAfterCursor.count),
-                "expiresInMilliseconds": "8000"
-            ]
-        )
-        updateKeyboardEventTapSnapshot()
-        scheduleAcceptedInsertionUndoExpiration(acceptanceID: acceptanceID, expiresAt: expiresAt)
-    }
-
-    private func scheduleAcceptedInsertionUndoExpiration(acceptanceID: String, expiresAt: Date) {
-        acceptedInsertionUndoExpirationTask?.cancel()
-        acceptedInsertionUndoExpirationTask = Task { @MainActor [weak self] in
-            let delay = max(0, expiresAt.timeIntervalSinceNow)
-            try? await Task.sleep(for: .milliseconds(Int(delay * 1_000)))
-            guard !Task.isCancelled,
-                  let self,
-                  self.pendingAcceptedInsertionUndo?.acceptanceID == acceptanceID else {
-                return
-            }
-
-            self.clearPendingAcceptedInsertionUndo(reason: "expired")
-            self.scheduleKeyboardEventTapStopIfIdle()
-        }
-    }
-
-    private func clearPendingAcceptedInsertionUndo(reason: String) {
-        guard let pendingAcceptedInsertionUndo else {
-            return
-        }
-
-        acceptedInsertionUndoExpirationTask?.cancel()
-        acceptedInsertionUndoExpirationTask = nil
-        self.pendingAcceptedInsertionUndo = nil
-        DiagnosticsLog.shared.record(
-            "accepted-insertion-undo-cleared",
-            metadata: [
-                "acceptanceID": pendingAcceptedInsertionUndo.acceptanceID,
-                "reason": reason
-            ]
-        )
-        updateKeyboardEventTapSnapshot()
-    }
-
-    private func undoAcceptedInsertion() -> Bool {
-        guard let undo = pendingAcceptedInsertionUndo,
-              undo.expiresAt > Date() else {
-            clearPendingAcceptedInsertionUndo(reason: "expired")
-            return false
-        }
-
-        guard let frontmostApp = accessibilityClient.frontmostApplication(),
-              frontmostApp.bundleIdentifier == undo.appBundleIdentifier,
-              let profile = profileStore.profile(for: frontmostApp.bundleIdentifier),
-              let rawContext = accessibilityClient.focusedTextContext(
-                  allowDescendantTextFallback: profile.allowsDescendantTextFallback
-              ),
-              !rawContext.isSecure,
-              rawContext.selectedTextLength == 0,
-              promptTextAreaMatch(for: frontmostApp.bundleIdentifier, context: rawContext).canSuggest else {
-            clearPendingAcceptedInsertionUndo(reason: "stale-focus")
-            return false
-        }
-
-        let context = presentationAdjustedContext(
-            rawContext,
-            app: frontmostApp,
-            profile: profile,
-            previousSnapshot: lastTextSnapshot
-        )
-        guard fieldIdentity(app: frontmostApp, context: context, profile: profile) == undo.fieldIdentity else {
-            clearPendingAcceptedInsertionUndo(reason: "stale-field")
-            return false
-        }
-
-        let restoredText = undo.textBeforeCursor + undo.textAfterCursor
-        guard accessibilityClient.restoreFocusedTextValue(
-            restoredText,
-            cursorUTF16Offset: undo.textBeforeCursor.utf16.count
-        ) else {
-            clearPendingAcceptedInsertionUndo(reason: "restore-failed")
-            return false
-        }
-
-        lastTextSnapshot = FocusedTextSnapshot(
-            fieldIdentity: undo.fieldIdentity,
-            textBeforeCursor: undo.textBeforeCursor,
-            textAfterCursor: undo.textAfterCursor
-        )
-        focusedTextPollingPause.pause(
-            now: Date(),
-            durationMilliseconds: postInsertionPollPauseMilliseconds
-        )
-        DiagnosticsLog.shared.record(
-            "accepted-insertion-undone",
-            metadata: [
-                "acceptanceID": undo.acceptanceID,
-                "app": undo.appBundleIdentifier,
-                "fieldIdentity": undo.fieldIdentity.traceDescription,
-                "acceptedTextLength": String(undo.acceptedTextLength),
-                "restoredTextLength": String(restoredText.count)
-            ]
-        )
-        clearPendingAcceptedInsertionUndo(reason: "undone")
-        setSuggestionDecision("Accepted insertion undone")
-        scheduleKeyboardEventTapStopIfIdle()
-        return true
-    }
-
-    private func insertionVerificationBaseline(
-        acceptanceID: String,
-        acceptedAt: Date,
-        acceptMode: String
-    ) -> InsertionVerificationBaseline? {
+    private func insertionVerificationBaseline() -> InsertionVerificationBaseline? {
         guard let currentFieldIdentity,
               let lastTextSnapshot,
               lastTextSnapshot.fieldIdentity == currentFieldIdentity,
               let profile = currentProfile else {
             return nil
         }
-        let fieldClassification = currentSuggestionFieldClassification
-        let fieldKind = fieldClassification?.kind ?? .unknown
-        let behaviorProfileID = currentCompletionRequest?.behaviorProfile.id
-            ?? AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
-                appBundleIdentifier: profile.bundleIdentifier,
-                fieldKind: fieldKind,
-                currentLineStructure: CurrentLineStructure.from(textBeforeCursor: lastTextSnapshot.textBeforeCursor)
-            )).id
 
         return InsertionVerificationBaseline(
             fieldIdentity: currentFieldIdentity,
             previousTextBeforeCursor: lastTextSnapshot.textBeforeCursor,
-            previousTextAfterCursor: lastTextSnapshot.textAfterCursor,
             profile: profile,
             suggestionID: currentSuggestionID,
             requestMode: currentSuggestionRequestMode,
-            acceptanceID: acceptanceID,
-            acceptedAt: acceptedAt,
-            acceptMode: acceptMode,
-            fieldKind: fieldKind,
-            fieldKindReason: fieldClassification?.reason ?? "unknown",
-            behaviorProfileID: behaviorProfileID,
             retryCount: 0
         )
     }
@@ -2352,22 +1908,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         insertionVerificationTask?.cancel()
         insertionVerificationTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(
-                insertionVerificationTimingPolicy.delayMilliseconds(
-                    for: baseline.profile,
-                    retryCount: baseline.retryCount
-                )
-            ))
+            try? await Task.sleep(for: .milliseconds(140))
             guard !Task.isCancelled else {
                 return
             }
 
-            let verificationContextRead = focusedInsertionVerificationContext(for: baseline)
-            guard case let .ready(context: verificationContext) = verificationContextRead else {
-                if case .fieldChanged = verificationContextRead {
-                    return
-                }
-
+            guard let frontmostApp = accessibilityClient.frontmostApplication(),
+                  let context = accessibilityClient.focusedTextContext(
+                      allowDescendantTextFallback: baseline.profile.allowsDescendantTextFallback
+                  ) else {
                 DiagnosticsLog.shared.record(
                     "insert-verification",
                     metadata: [
@@ -2379,13 +1928,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            var context = verificationContext
-            var result = insertionVerification.verify(
+            let currentIdentity = fieldIdentity(
+                app: frontmostApp,
+                context: context,
+                profile: baseline.profile
+            )
+
+            guard currentIdentity == baseline.fieldIdentity else {
+                return
+            }
+
+            let result = insertionVerification.verify(
                 previousTextBeforeCursor: baseline.previousTextBeforeCursor,
                 acceptedText: acceptedText,
-                currentTextBeforeCursor: context.textBeforeCursor,
-                previousTextAfterCursor: baseline.previousTextAfterCursor,
-                currentTextAfterCursor: context.textAfterCursor
+                currentTextBeforeCursor: context.textBeforeCursor
             )
 
             DiagnosticsLog.shared.record(
@@ -2398,41 +1954,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "currentBeforeChars": String(context.textBeforeCursor.count)
                 ]
             )
-
-            if !result.isVerified,
-               let recheckDelayMilliseconds = insertionVerificationTimingPolicy.readOnlyRecheckDelayMilliseconds(
-                   for: baseline.profile,
-                   result: result,
-                   retryCount: baseline.retryCount
-               ) {
-                try? await Task.sleep(for: .milliseconds(recheckDelayMilliseconds))
-                guard !Task.isCancelled else {
-                    return
-                }
-
-                if case let .ready(context: recheckContext) = focusedInsertionVerificationContext(for: baseline) {
-                    context = recheckContext
-                    result = insertionVerification.verify(
-                        previousTextBeforeCursor: baseline.previousTextBeforeCursor,
-                        acceptedText: acceptedText,
-                        currentTextBeforeCursor: context.textBeforeCursor,
-                        previousTextAfterCursor: baseline.previousTextAfterCursor,
-                        currentTextAfterCursor: context.textAfterCursor
-                    )
-                    DiagnosticsLog.shared.record(
-                        "insert-verification",
-                        metadata: [
-                            "app": baseline.profile.bundleIdentifier,
-                            "result": String(describing: result),
-                            "acceptedChars": String(acceptedText.count),
-                            "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                            "currentBeforeChars": String(context.textBeforeCursor.count),
-                            "source": "read-only-recheck",
-                            "recheckDelayMilliseconds": String(recheckDelayMilliseconds)
-                        ]
-                    )
-                }
-            }
 
             guard result.isVerified else {
                 if insertionRetryPolicy.shouldRetry(
@@ -2459,16 +1980,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         let retryBaseline = InsertionVerificationBaseline(
                             fieldIdentity: baseline.fieldIdentity,
                             previousTextBeforeCursor: baseline.previousTextBeforeCursor,
-                            previousTextAfterCursor: baseline.previousTextAfterCursor,
                             profile: baseline.profile,
                             suggestionID: baseline.suggestionID,
                             requestMode: baseline.requestMode,
-                            acceptanceID: baseline.acceptanceID,
-                            acceptedAt: baseline.acceptedAt,
-                            acceptMode: baseline.acceptMode,
-                            fieldKind: baseline.fieldKind,
-                            fieldKindReason: baseline.fieldKindReason,
-                            behaviorProfileID: baseline.behaviorProfileID,
                             retryCount: baseline.retryCount + 1
                         )
                         scheduleInsertionVerification(acceptedText: acceptedText, baseline: retryBaseline)
@@ -2495,29 +2009,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     outcome: String(describing: result),
                     reason: "insert-verification-failed",
                     metadata: [
-                        "acceptanceID": baseline.acceptanceID,
-                        "acceptMode": baseline.acceptMode,
-                        "fieldKind": baseline.fieldKind.rawValue,
-                        "fieldKindReason": baseline.fieldKindReason,
-                        "behaviorProfile": baseline.behaviorProfileID.rawValue,
                         "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                         "currentBeforeChars": String(context.textBeforeCursor.count)
-                    ]
-                )
-                recordAnnoyanceSignal(
-                    .wrongInsertion,
-                    context: annoyanceContext(
-                        appBundleIdentifier: baseline.profile.bundleIdentifier,
-                        fieldIdentity: baseline.fieldIdentity,
-                        requestMode: baseline.requestMode,
-                        fieldKind: baseline.fieldKind
-                    ),
-                    suggestionID: baseline.suggestionID ?? "",
-                    reason: "insert-verification-failed",
-                    metadata: [
-                        "acceptanceID": baseline.acceptanceID,
-                        "acceptMode": baseline.acceptMode,
-                        "insertionResult": String(describing: result)
                     ]
                 )
                 if baseline.profile.suppressesAfterInsertionFailure {
@@ -2544,227 +2037,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 fieldIdentity: baseline.fieldIdentity.traceDescription,
                 requestMode: baseline.requestMode?.rawValue ?? "",
                 acceptedText: acceptedText,
-                outcome: "verified",
-                metadata: [
-                    "acceptanceID": baseline.acceptanceID,
-                    "acceptMode": baseline.acceptMode,
-                    "fieldKind": baseline.fieldKind.rawValue,
-                    "fieldKindReason": baseline.fieldKindReason,
-                    "behaviorProfile": baseline.behaviorProfileID.rawValue
-                ]
-            )
-            let tracker = AcceptanceSurvivalTracker(
-                acceptanceID: baseline.acceptanceID,
-                suggestionID: baseline.suggestionID ?? "",
-                appBundleIdentifier: baseline.profile.bundleIdentifier,
-                fieldIdentity: baseline.fieldIdentity,
-                requestMode: baseline.requestMode?.rawValue ?? "",
-                acceptMode: baseline.acceptMode,
-                acceptedText: acceptedText,
-                expectedInsertionUTF16Offset: baseline.previousTextBeforeCursor.utf16.count,
-                acceptedAt: baseline.acceptedAt,
-                profile: baseline.profile,
-                fieldKind: baseline.fieldKind,
-                fieldKindReason: baseline.fieldKindReason,
-                behaviorProfileID: baseline.behaviorProfileID
-            )
-            startAcceptanceSurvivalTracking(tracker)
-        }
-    }
-
-    private func focusedInsertionVerificationContext(
-        for baseline: InsertionVerificationBaseline
-    ) -> FocusedInsertionVerificationContext {
-        guard let frontmostApp = accessibilityClient.frontmostApplication(),
-              let context = accessibilityClient.focusedTextContext(
-                  allowDescendantTextFallback: baseline.profile.allowsDescendantTextFallback
-              ) else {
-            return .missingContext
-        }
-
-        let previousSnapshot = FocusedTextSnapshot(
-            fieldIdentity: baseline.fieldIdentity,
-            textBeforeCursor: baseline.previousTextBeforeCursor,
-            textAfterCursor: baseline.previousTextAfterCursor
-        )
-        let adjustedContext = presentationAdjustedContext(
-            context,
-            app: frontmostApp,
-            profile: baseline.profile,
-            previousSnapshot: previousSnapshot
-        )
-
-        let currentIdentity = fieldIdentity(
-            app: frontmostApp,
-            context: adjustedContext,
-            profile: baseline.profile
-        )
-
-        guard currentIdentity == baseline.fieldIdentity else {
-            return .fieldChanged
-        }
-
-        return .ready(context: adjustedContext)
-    }
-
-    private func startAcceptanceSurvivalTracking(_ tracker: AcceptanceSurvivalTracker) {
-        acceptanceSurvivalTasks[tracker.acceptanceID]?.cancel()
-        acceptanceSurvivalTasks[tracker.acceptanceID] = Task { @MainActor [weak self] in
-            guard let self else {
-                return
-            }
-
-            await self.acceptanceSurvivalChecker.beginTracking(tracker)
-            let checkpoints: [(AcceptanceSurvivalCheckpoint, Duration)] = [
-                (.twoSeconds, .seconds(2)),
-                (.tenSeconds, .seconds(8)),
-                (.thirtySeconds, .seconds(20))
-            ]
-
-            for (checkpoint, delay) in checkpoints {
-                try? await Task.sleep(for: delay)
-                guard !Task.isCancelled else {
-                    return
-                }
-
-                await self.measureAcceptanceSurvival(
-                    acceptanceID: tracker.acceptanceID,
-                    checkpoint: checkpoint
-                )
-            }
-        }
-    }
-
-    private func measureAcceptanceSurvival(
-        acceptanceID: String,
-        checkpoint: AcceptanceSurvivalCheckpoint
-    ) async {
-        guard let tracker = await acceptanceSurvivalChecker.tracker(acceptanceID: acceptanceID) else {
-            return
-        }
-
-        guard let currentTextWindow = currentTextWindow(for: tracker) else {
-            if checkpoint.isFinalMetricCheckpoint {
-                acceptanceSurvivalTasks[acceptanceID] = nil
-                _ = await acceptanceSurvivalChecker.finishTracking(acceptanceID: acceptanceID)
-            }
-            return
-        }
-
-        guard let result = await acceptanceSurvivalChecker.measure(
-            acceptanceID: acceptanceID,
-            checkpoint: checkpoint,
-            currentTextWindow: currentTextWindow
-        ) else {
-            return
-        }
-
-        recordAcceptanceSurvivalResult(result)
-        if result.shouldFinish {
-            acceptanceSurvivalTasks[acceptanceID] = nil
-            _ = await acceptanceSurvivalChecker.finishTracking(acceptanceID: acceptanceID)
-        }
-    }
-
-    private func finalizeAcceptanceSurvivalForCurrentField() {
-        guard let currentFieldIdentity,
-              let lastTextSnapshot,
-              lastTextSnapshot.fieldIdentity == currentFieldIdentity else {
-            return
-        }
-
-        finalizeAcceptanceSurvival(
-            fieldIdentity: currentFieldIdentity,
-            currentTextWindow: lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
-        )
-    }
-
-    private func finalizeAcceptanceSurvival(
-        fieldIdentity: FocusedFieldIdentity,
-        currentTextWindow: String
-    ) {
-        Task { @MainActor [weak self] in
-            guard let self else {
-                return
-            }
-
-            let results = await self.acceptanceSurvivalChecker.measureFieldBlur(
-                fieldIdentity: fieldIdentity,
-                currentTextWindow: currentTextWindow
-            )
-            for result in results {
-                self.recordAcceptanceSurvivalResult(result)
-                if result.shouldFinish {
-                    self.acceptanceSurvivalTasks[result.tracker.acceptanceID]?.cancel()
-                    self.acceptanceSurvivalTasks[result.tracker.acceptanceID] = nil
-                    _ = await self.acceptanceSurvivalChecker.finishTracking(
-                        acceptanceID: result.tracker.acceptanceID
-                    )
-                }
-            }
-        }
-    }
-
-    private func currentTextWindow(for tracker: AcceptanceSurvivalTracker) -> String? {
-        guard let frontmostApp = accessibilityClient.frontmostApplication(),
-              frontmostApp.bundleIdentifier == tracker.appBundleIdentifier,
-              let rawContext = accessibilityClient.focusedTextContext(
-                  allowDescendantTextFallback: tracker.profile.allowsDescendantTextFallback
-              ),
-              !rawContext.isSecure else {
-            return nil
-        }
-
-        let context = presentationAdjustedContext(
-            rawContext,
-            app: frontmostApp,
-            profile: tracker.profile,
-            previousSnapshot: lastTextSnapshot
-        )
-        guard fieldIdentity(
-            app: frontmostApp,
-            context: context,
-            profile: tracker.profile
-        ) == tracker.fieldIdentity else {
-            return nil
-        }
-
-        return context.textBeforeCursor + context.textAfterCursor
-    }
-
-    private func recordAcceptanceSurvivalResult(_ result: AcceptanceSurvivalCheckResult) {
-        var metadata = result.measurement.traceMetadata
-        metadata["acceptanceID"] = result.tracker.acceptanceID
-        metadata["acceptMode"] = result.tracker.acceptMode
-        metadata["fieldKind"] = result.tracker.fieldKind.rawValue
-        metadata["fieldKindReason"] = result.tracker.fieldKindReason
-        metadata["behaviorProfile"] = result.tracker.behaviorProfileID.rawValue
-        if let learningSignal = recordAcceptedAndKeptLearningIfNeeded(result) {
-            metadata.merge(learningSignal.traceMetadata) { current, _ in current }
-        }
-        if let finishReason = result.finishReason {
-            metadata["finishReason"] = finishReason
-        }
-
-        RawAutocompleteTraceLog.shared.record(
-            type: .acceptedTextEdited,
-            suggestionID: result.tracker.suggestionID,
-            appBundleIdentifier: result.tracker.appBundleIdentifier,
-            fieldIdentity: result.tracker.fieldIdentity.traceDescription,
-            requestMode: result.tracker.requestMode,
-            acceptedText: result.tracker.acceptedText,
-            outcome: result.measurement.survivalClass.rawValue,
-            reason: result.finishReason ?? result.measurement.checkpoint.rawValue,
-            metadata: metadata
-        )
-
-        if result.shouldRecordAcceptedAndKept {
-            recordAnnoyanceSignal(
-                .acceptedAndKept,
-                context: annoyanceContext(for: result.tracker),
-                suggestionID: result.tracker.suggestionID,
-                reason: result.finishReason ?? result.measurement.checkpoint.rawValue,
-                metadata: metadata
+                outcome: "verified"
             )
             recordAnnoyance(
                 .acceptedAndKept,
@@ -2773,71 +2046,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 requestMode: baseline.requestMode
             )
         }
-
-        guard result.shouldRecordAcceptedThenDeleted else {
-            return
-        }
-
-        recordAnnoyanceSignal(
-            .acceptedThenDeleted,
-            context: annoyanceContext(for: result.tracker),
-            suggestionID: result.tracker.suggestionID,
-            reason: "accepted-then-deleted",
-            metadata: metadata
-        )
-
-        RawAutocompleteTraceLog.shared.record(
-            type: .acceptanceRetentionCleared,
-            suggestionID: result.tracker.suggestionID,
-            appBundleIdentifier: result.tracker.appBundleIdentifier,
-            fieldIdentity: result.tracker.fieldIdentity.traceDescription,
-            requestMode: result.tracker.requestMode,
-            acceptedText: result.tracker.acceptedText,
-            outcome: result.measurement.survivalClass.rawValue,
-            reason: "accepted-then-deleted",
-            metadata: metadata
-        )
-    }
-
-    private func recordAcceptedAndKeptLearningIfNeeded(
-        _ result: AcceptanceSurvivalCheckResult
-    ) -> AcceptedAndKeptLearningSignal? {
-        guard let requestMode = CompletionRequestMode(rawValue: result.tracker.requestMode) else {
-            return nil
-        }
-
-        let outcome: AcceptedAndKeptLearningOutcome
-        if result.shouldRecordAcceptedThenDeleted {
-            outcome = .rejected
-        } else if result.measurement.checkpoint.isFinalMetricCheckpoint,
-                  !result.measurement.deletedWithinTwoSeconds {
-            outcome = result.measurement.isFinalAcceptedAndKept ? .kept : .rejected
-        } else {
-            return nil
-        }
-
-        let signal = acceptedAndKeptLearning.record(
-            outcome,
-            key: AcceptedAndKeptLearningKey(
-                appBundleIdentifier: result.tracker.appBundleIdentifier,
-                fieldKind: result.tracker.fieldKind,
-                requestMode: requestMode,
-                behaviorProfileID: result.tracker.behaviorProfileID
-            )
-        )
-        if outcome == .kept {
-            acceptedTextStyleMemory.recordKeptText(
-                result.tracker.acceptedText,
-                key: AcceptedTextStyleMemoryKey(
-                    appBundleIdentifier: result.tracker.appBundleIdentifier,
-                    fieldKind: result.tracker.fieldKind,
-                    behaviorProfileID: result.tracker.behaviorProfileID
-                )
-            )
-            persistAcceptedTextStyleMemory()
-        }
-        persistAcceptedAndKeptLearning()
-        return signal
     }
 
     private func scheduleSuggestion(
@@ -2845,7 +2053,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         appBundleIdentifier: String,
         fieldIdentity: FocusedFieldIdentity,
-        fieldClassification: AXFieldClassification,
         renderMode: SuggestionRenderMode,
         delayMilliseconds: Int,
         requestMode: CompletionRequestMode
@@ -2853,32 +2060,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastRequestedTextBeforeCursor = context.textBeforeCursor
 
         let suggestionID = UUID().uuidString
-        let behaviorProfile = AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
-            appBundleIdentifier: appBundleIdentifier,
-            fieldKind: fieldClassification.kind,
-            currentLineStructure: CurrentLineStructure.from(textBeforeCursor: context.textBeforeCursor)
-        ))
-        let acceptedTextStyleSketch = acceptedTextStyleMemory.sketch(
-            for: AcceptedTextStyleMemoryKey(
-                appBundleIdentifier: appBundleIdentifier,
-                fieldKind: fieldClassification.kind,
-                behaviorProfileID: behaviorProfile.id
-            )
-        )
         let request = CompletionRequest(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             appBundleIdentifier: appBundleIdentifier,
-            fieldKind: fieldClassification.kind,
-            behaviorProfileID: behaviorProfile.id,
-            acceptedTextStyleSketch: acceptedTextStyleSketch,
             maxVisibleWords: completionLengthConfiguration.maxVisibleWords,
             mode: requestMode,
             suggestionID: suggestionID
-        )
-        let requestMetadata = traceRequestMetadata(
-            request: request,
-            fieldClassification: fieldClassification
         )
         currentCompletionRequest = request
         streamingPresentationStates[suggestionID] = StreamingPresentationState()
@@ -2899,7 +2087,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "renderMode": renderMode.rawValue,
                 "delayMilliseconds": String(delayMilliseconds)
             ]
-            .merging(requestMetadata) { current, _ in current }
         )
 
         if requestMode == .wordCompletion {
@@ -2928,7 +2115,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         metadata: [
                             "renderMode": renderMode.rawValue
                         ]
-                        .merging(requestMetadata) { current, _ in current }
                     )
                     recordSuggestionEvent(
                         "suggestion-blocked",
@@ -2938,17 +2124,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             "reason": "repeated-miss",
                             "triggerReason": "fast-word-completion"
                         ]
-                    )
-                    recordAnnoyanceSignal(
-                        .repeatedRejection,
-                        context: annoyanceContext(
-                            appBundleIdentifier: appBundleIdentifier,
-                            fieldIdentity: fieldIdentity,
-                            requestMode: request.mode,
-                            fieldKind: fieldClassification.kind
-                        ),
-                        suggestionID: suggestionID,
-                        reason: "repeated-miss"
                     )
                     hideSuggestion()
                     return
@@ -2981,7 +2156,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "renderMode": renderMode.rawValue
                 ]
-                .merging(requestMetadata) { current, _ in current }
             )
             if suggestionSession.hasVisibleSuggestion {
                 setSuggestionDecision("Shown: no fast word replacement")
@@ -3074,8 +2248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             textBeforeCursor: request.textBeforeCursor,
                             textAfterCursor: request.textAfterCursor,
                             latencyMilliseconds: latencyMilliseconds,
-                            reason: "empty-suggestion",
-                            metadata: requestMetadata
+                            reason: "empty-suggestion"
                         )
                         self.recordSuggestionEvent(
                             "suggestion-blocked",
@@ -3102,8 +2275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             cleanedVisibleText: suggestion.visibleText,
                             displayedText: suggestion.visibleText,
                             latencyMilliseconds: latencyMilliseconds,
-                            reason: "missing-anchor",
-                            metadata: requestMetadata
+                            reason: "missing-anchor"
                         )
                         self.recordSuggestionEvent(
                             "suggestion-blocked",
@@ -3128,8 +2300,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         textAfterCursor: request.textAfterCursor,
                         cleanedVisibleText: suggestion.visibleText,
                         displayedText: suggestion.visibleText,
-                        latencyMilliseconds: latencyMilliseconds,
-                        metadata: requestMetadata
+                        latencyMilliseconds: latencyMilliseconds
                     )
                     guard !self.suggestionRepetitionSuppressor.shouldSuppress(
                         suggestion.visibleText,
@@ -3148,18 +2319,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             cleanedVisibleText: suggestion.visibleText,
                             displayedText: suggestion.visibleText,
                             latencyMilliseconds: latencyMilliseconds,
-                            reason: "repeated-miss",
-                            metadata: requestMetadata
-                        )
-                        self.recordAnnoyanceSignal(
-                            .repeatedRejection,
-                            context: self.annoyanceContext(
-                                appBundleIdentifier: appBundleIdentifier,
-                                fieldIdentity: fieldIdentity,
-                                requestMode: request.mode,
-                                fieldKind: fieldClassification.kind
-                            ),
-                            suggestionID: suggestionID,
                             reason: "repeated-miss"
                         )
                         self.hideSuggestion()
@@ -3181,15 +2340,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } catch {
                 await MainActor.run {
                     self.streamingPresentationStates[suggestionID] = nil
-                    guard self.completionFailureVisibilityPolicy.shouldHideVisibleSuggestion(
-                        requestGate: self.suggestionRequestGate,
-                        ticket: requestTicket,
-                        currentRequest: self.currentCompletionRequest,
-                        failedRequestFieldIdentity: fieldIdentity,
-                        currentFieldIdentity: self.currentFieldIdentity
-                    ) else {
-                        return
-                    }
                     self.hideSuggestion(reason: "engine-error")
                 }
             }
@@ -3228,7 +2378,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 latencyMilliseconds: latencyMilliseconds,
                 reason: reason,
                 metadata: traceGeometryMetadata(context: originalContext, renderMode: renderMode)
-                    .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
             )
             recordSuggestionEvent(
                 "suggestion-blocked",
@@ -3237,7 +2386,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "reason": reason
                 ]
-                .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
             )
             hideSuggestion(reason: reason)
             return
@@ -3324,7 +2472,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 latencyMilliseconds: latencyMilliseconds,
                 reason: suppression.reason.rawValue,
                 metadata: traceGeometryMetadata(context: context, renderMode: learningAdjustment.effectiveRenderMode)
-                    .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                     .merging(learningAdjustment.metadata) { current, _ in current }
                     .merging(suppression.metadata) { current, _ in current }
             )
@@ -3335,7 +2482,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "reason": suppression.reason.rawValue
                 ]
-                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(suppression.metadata) { current, _ in current }
             )
@@ -3397,7 +2543,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "reason": failureReason
                 ]
-                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(activePlacement.metadata) { current, _ in current }
             )
@@ -3435,9 +2580,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             selectedTextLength: context.selectedTextLength
         )
         currentSuggestionDisplayedText = suggestion.visibleText
-        currentSuggestionFieldClassification = fieldClassification(for: context)
-        currentSuggestionPresentedAt = Date()
-        currentSuggestionDisplayScoreFinal = displayScoreTrace.score.finalScore
         currentSuggestionInvalidatedByUserKeyDown = false
         keyboardEventTap?.resetPassthroughObservation()
         updateKeyboardEventTapSnapshot()
@@ -3446,7 +2588,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion(reason: "keyboard-capture-unavailable")
             return
         }
-        keyboardEventTap?.suppressPassthroughObservation(for: 0.35)
 
         let screenshotCapture = captureTraceScreenshot(
             around: [
@@ -3455,12 +2596,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 panelRect,
                 activePlacement.clippingRect
             ].compactMap { $0 },
-            expectedSignalRect: screenshotExpectedSignalRect(panelRect: panelRect),
             suggestionID: suggestionID,
             bundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
             triggerReason: triggerReason,
-            appScreenshotTracingEnabled: learningAdjustment.shouldCaptureScreenshot,
-            visualTrustContext: visualTrustContext
+            appScreenshotTracingEnabled: learningAdjustment.shouldCaptureScreenshot
         )
         compatibilityLearningStore.recordObservation(
             for: profile.bundleIdentifier,
@@ -3511,7 +2650,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "clippingRect": activePlacement.clippingRect.map(compactRectDescription) ?? "none",
                 "screenshotCaptureRect": screenshotCapture.rectDescription
             ]
-            .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
             .merging(learningAdjustment.metadata) { current, _ in current }
             .merging(activePlacement.metadata) { current, _ in current }
         )
@@ -3546,8 +2684,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let context = presentationAdjustedContext(
             rawContext,
             app: frontmostApp,
-            profile: profile,
-            previousSnapshot: lastTextSnapshot
+            profile: profile
         )
         guard self.fieldIdentity(
             app: frontmostApp,
@@ -3592,12 +2729,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func captureTraceScreenshot(
         around rects: [CGRect],
-        expectedSignalRect: CGRect?,
         suggestionID: String,
         bundleIdentifier: String,
         triggerReason: String,
-        appScreenshotTracingEnabled: Bool,
-        visualTrustContext: CompatibilityLearningVisualTrustContext?
+        appScreenshotTracingEnabled: Bool
     ) -> TraceScreenshotCapture {
         guard let captureRect = ScreenshotCaptureRegion.enclosing(rects) else {
             return .none
@@ -3625,80 +2760,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ScreenshotTraceCapture.shared.capture(
             rect: captureRect,
             to: screenshotURL,
-            bundleIdentifier: bundleIdentifier,
-            expectedSignalRect: expectedSignalRect,
-            visualTrustContext: visualTrustContext,
-            allowsLearningCorrection: appScreenshotTracingEnabled
+            bundleIdentifier: bundleIdentifier
         )
         return TraceScreenshotCapture(
             path: screenshotURL.path,
             rectDescription: compactRectDescription(captureRect)
         )
-    }
-
-    private func screenshotExpectedSignalRect(panelRect: CGRect) -> CGRect {
-        CGRect(
-            x: panelRect.minX,
-            y: panelRect.minY,
-            width: min(max(panelRect.width, 1), max(12, panelRect.height * 2)),
-            height: max(panelRect.height, 1)
-        )
-    }
-
-    private func compatibilityLearningVisualTrustContext(
-        for context: FocusedTextContext,
-        bundleIdentifier: String
-    ) -> CompatibilityLearningVisualTrustContext {
-        CompatibilityLearningVisualTrustContext(
-            appVersion: appVersionFingerprint(for: bundleIdentifier),
-            screenFingerprint: visualRectFingerprint(context.windowRect ?? context.elementRect ?? context.caretRect),
-            fieldShapeFingerprint: [
-                context.role ?? "unknown",
-                context.subrole ?? "none",
-                "synthetic=\(context.caretIsSynthetic)",
-                "inline=\(context.capabilities.supportsInlineSuggestions)",
-                visualRectFingerprint(context.elementRect) ?? "element=none",
-                visualRectFingerprint(context.textLineRect) ?? "line=none"
-            ].joined(separator: "|")
-        )
-    }
-
-    private func appVersionFingerprint(for bundleIdentifier: String) -> String? {
-        guard !bundleIdentifier.isEmpty,
-              let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier),
-              let bundle = Bundle(url: appURL) else {
-            return nil
-        }
-
-        let shortVersion = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        let buildVersion = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-        let versionParts = [shortVersion, buildVersion]
-            .compactMap { value -> String? in
-                guard let value,
-                      !value.isEmpty else {
-                    return nil
-                }
-                return value
-            }
-
-        guard !versionParts.isEmpty else {
-            return nil
-        }
-
-        return versionParts.joined(separator: "#")
-    }
-
-    private func visualRectFingerprint(_ rect: CGRect?) -> String? {
-        guard let rect else {
-            return nil
-        }
-
-        return [
-            Int((rect.minX / 8).rounded()),
-            Int((rect.minY / 8).rounded()),
-            Int((rect.width / 8).rounded()),
-            Int((rect.height / 8).rounded())
-        ].map(String.init).joined(separator: "x")
     }
 
     private func traceGeometryMetadata(
@@ -3793,7 +2860,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         safeMetadata["canReadRange"] = String(context.capabilities.canReadSelectedTextRange)
         safeMetadata["canReadBounds"] = String(context.capabilities.canReadBoundsForRange)
         safeMetadata["canSetSelectedText"] = String(context.capabilities.canSetSelectedText)
-        safeMetadata.merge(traceFieldMetadata(context: context)) { current, _ in current }
 
         DiagnosticsLog.shared.record(event, metadata: safeMetadata)
     }
@@ -4042,7 +3108,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         currentSuggestionDisplayedText = suggestion.visibleText
-        cancelKeyboardEventTapIdleStop()
         guard suggestionPanel.show(
             text: suggestion.visibleText,
             near: caretRect,
@@ -4229,20 +3294,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        var metadata = [
-            "typedSuffix": typedSuffix
-        ]
-        metadata.merge(recordPrefixFamilyCooldown(
-            .typedOver,
-            input: PrefixFamilyCooldownInput(
-                appBundleIdentifier: profile.bundleIdentifier,
-                fieldIdentifier: fieldIdentity.traceDescription,
-                requestMode: currentSuggestionRequestMode,
-                textBeforeCursor: newTextBeforeCursor
-            )
-        )) { current, _ in current }
-        metadata.merge(currentSuggestionLifetimeMetadata()) { current, _ in current }
-
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionTypedOver,
             suggestionID: suggestionID,
@@ -4253,65 +3304,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             displayedText: displayedText,
             outcome: "typed-over",
             reason: "typed-against-visible-suggestion",
-            metadata: metadata
-        )
-        recordAnnoyanceSignal(
-            .typedOver,
-            context: annoyanceContext(
-                appBundleIdentifier: profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity,
-                requestMode: currentSuggestionRequestMode,
-                fieldKind: currentSuggestionFieldClassification?.kind ?? .unknown
-            ),
-            suggestionID: suggestionID,
-            reason: "typed-against-visible-suggestion",
-            metadata: metadata
+            metadata: [
+                "typedSuffix": typedSuffix
+            ]
         )
     }
 
-    private func advanceVisibleSuggestionForTypingProgressIfNeeded(
-        context: FocusedTextContext,
-        profile: CompatibilityProfile,
-        fieldIdentity: FocusedFieldIdentity,
-        snapshot: FocusedTextSnapshot
-    ) -> Bool {
+    private func hideStaleSuggestionIfNeeded(
+        newTextBeforeCursor: String,
+        fieldIdentity: FocusedFieldIdentity
+    ) {
         guard suggestionSession.hasVisibleSuggestion,
               fieldIdentity == currentFieldIdentity,
               let originalTextBeforeCursor = currentSuggestionTextBeforeCursor,
               let displayedText = currentSuggestionDisplayedText,
-              context.textBeforeCursor.hasPrefix(originalTextBeforeCursor),
-              context.textBeforeCursor != originalTextBeforeCursor else {
-            return false
+              newTextBeforeCursor.hasPrefix(originalTextBeforeCursor),
+              newTextBeforeCursor != originalTextBeforeCursor else {
+            return
         }
 
         let progress = suggestionTypingProgressPolicy.progress(
             originalTextBeforeCursor: originalTextBeforeCursor,
             displayedText: displayedText,
-            newTextBeforeCursor: context.textBeforeCursor
+            newTextBeforeCursor: newTextBeforeCursor
         )
 
-        if case let .typedThroughVisiblePrefix(typedSuffix) = progress {
-            guard suggestionSession.commitTypedVisiblePrefix(typedSuffix) else {
-                return false
-            }
-
-            lastTextSnapshot = snapshot
-            invalidatePendingSuggestionRequest()
-            currentSuggestionTextBeforeCursor = context.textBeforeCursor
-            setSuggestionDecision("Shown: typing through suggestion")
-            recordSuggestionEvent(
-                "suggestion-typed-through",
-                context: context,
-                profile: profile,
-                metadata: [
-                    "reason": "visible-prefix-advanced",
-                    "typedSuffixChars": String(typedSuffix.count),
-                    "remainingVisibleChars": String(suggestionSession.visibleSuggestion?.visibleText.count ?? 0)
-                ]
-            )
-            keyboardEventTap?.suppressPassthroughObservation(for: 0.35)
-            repositionVisibleSuggestion(context: context, profile: profile)
-            return true
+        if case .typedThroughVisiblePrefix = progress {
+            hideSuggestion(reason: "typed-through-visible-prefix")
         } else if case .typedOver = progress {
             suggestionRepetitionSuppressor.recordMiss(
                 displayedText,
@@ -4330,8 +3349,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 setSuggestionDecision("Blocked: repeated typed-over")
             }
         }
-
-        return false
     }
 
     private func hideSuggestion(reason: String = "hidden") {
@@ -4352,19 +3369,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 outcome = "ignored"
             }
             let displayedText = currentSuggestionDisplayedText ?? suggestionSession.visibleSuggestion?.visibleText ?? ""
-            let lifetimeMilliseconds = currentSuggestionLifetimeMilliseconds()
-            var metadata = currentSuggestionLifetimeMetadata(lifetimeMilliseconds: lifetimeMilliseconds)
 
             if outcome == "ignored" {
-                let missRecord = suggestionRepetitionSuppressor.recordIgnored(
+                suggestionRepetitionSuppressor.recordMiss(
                     displayedText,
                     mode: currentSuggestionRequestMode,
-                    scope: appBundleIdentifier,
-                    lifetimeMilliseconds: lifetimeMilliseconds
+                    scope: appBundleIdentifier
                 )
-                if let missRecord {
-                    metadata.merge(missRecord.traceMetadata) { current, _ in current }
-                }
             }
 
             RawAutocompleteTraceLog.shared.record(
@@ -4375,8 +3386,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 requestMode: currentSuggestionRequestMode?.rawValue ?? "",
                 displayedText: displayedText,
                 outcome: outcome,
-                reason: reason,
-                metadata: metadata
+                reason: reason
             )
             setSuggestionDecision("Hidden: \(reason)")
         }
@@ -4390,9 +3400,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionTextBeforeCursor = nil
         currentSuggestionAcceptanceSnapshot = nil
         currentSuggestionDisplayedText = nil
-        currentSuggestionFieldClassification = nil
-        currentSuggestionPresentedAt = nil
-        currentSuggestionDisplayScoreFinal = nil
         currentSuggestionInvalidatedByUserKeyDown = false
         streamingPresentationStates.removeAll(keepingCapacity: true)
         lastCaretRect = nil
@@ -4400,7 +3407,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastClippingRect = nil
         lastTextStyle = nil
         lastRenderMode = nil
-        lastCompatibilityLearningTrustContext = nil
         suggestionPanel.hide()
         updateKeyboardEventTapSnapshot()
         scheduleKeyboardEventTapStopIfIdle()
@@ -4436,7 +3442,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 canQuietCurrentField: canQuietCurrentField
             )
         }
-        let fieldControlState = settingsFieldControlState
         let statusLine = statusMenuTitle(
             app: app,
             supportStatus: supportStatus,
@@ -4448,9 +3453,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusMenuItem?.toolTip = lastSuggestionDecision
         refreshMenuBarIcon(statusLine: statusLine)
         pauseSuggestionsMenuItem?.title = pauseSuggestionsTitle
-        silenceFieldMenuItem?.title = fieldControlState.buttonTitle
-        silenceFieldMenuItem?.isEnabled = fieldControlState.canSilence
-        silenceFieldMenuItem?.toolTip = fieldControlState.detailText
         toggleAppMenuItem?.title = appControlState?.menuToggleTitle ?? "Toggle Current App"
         toggleAppMenuItem?.isEnabled = appControlState?.canToggle ?? false
         quietFieldMenuItem?.isEnabled = canQuietCurrentField
@@ -4464,10 +3466,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 runtimeInstallStatus: modelInstallStatusText,
                 runtimeInstallInProgress: modelInstallTask != nil,
                 modelDirectoryPath: modelDirectoryPath,
-                modelInstallStatusText: modelInstallStatusText,
-                isModelInstallInProgress: modelInstallTask != nil,
                 currentApp: settingsCurrentAppState,
-                fieldControl: settingsFieldControlState,
                 privacy: settingsPrivacyState,
                 keyboardShortcuts: settingsKeyboardShortcutState,
                 lastSuggestionDecision: lastSuggestionDecision
@@ -4645,7 +3644,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        finalizeAcceptanceSurvivalForCurrentField()
         if suggestionSession.hasVisibleSuggestion {
             hideSuggestion(reason: "focus-changed")
         }
@@ -4667,7 +3665,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hideReason: String = "focus-lost",
         resetBlockLogGate: Bool = true
     ) {
-        finalizeAcceptanceSurvivalForCurrentField()
         if suggestionSession.hasVisibleSuggestion {
             hideSuggestion(reason: hideReason)
         }
@@ -4707,10 +3704,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeInstallStatus: modelInstallStatusText,
             runtimeInstallInProgress: modelInstallTask != nil,
             modelDirectoryPath: modelDirectoryPath,
-            modelInstallStatusText: modelInstallStatusText,
-            isModelInstallInProgress: modelInstallTask != nil,
             currentApp: settingsCurrentAppState,
-            fieldControl: settingsFieldControlState,
             privacy: settingsPrivacyState,
             keyboardShortcuts: settingsKeyboardShortcutState,
             lastSuggestionDecision: lastSuggestionDecision
@@ -4749,10 +3743,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeInstallStatus: modelInstallStatusText,
             runtimeInstallInProgress: modelInstallTask != nil,
             modelDirectoryPath: modelDirectoryPath,
-            modelInstallStatusText: modelInstallStatusText,
-            isModelInstallInProgress: modelInstallTask != nil,
             currentApp: settingsCurrentAppState,
-            fieldControl: settingsFieldControlState,
             privacy: settingsPrivacyState,
             keyboardShortcuts: settingsKeyboardShortcutState,
             lastSuggestionDecision: lastSuggestionDecision
@@ -5272,7 +4263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "keyboard-shortcut-control",
             metadata: [
                 "surface": "settings",
-                "acceptAllShortcut": shortcut.rawValue
+                "acceptAllShortcut": keyboardShortcutConfiguration.acceptAllShortcut.rawValue
             ]
         )
         refreshRuntimeChrome()
@@ -5429,7 +4420,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        NSWorkspace.shared.open(bundleURL)
+        NSWorkspace.shared.open(reportURL)
         DiagnosticsLog.shared.record(
             "trace-report-exported",
             metadata: [
@@ -5452,31 +4443,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         selection.set(app.bundleIdentifier, disabled: shouldDisable)
         disabledBundleIdentifiers = selection.bundleIdentifiers
 
-        if !shouldDisable {
-            markAppEnablementSetupCompleted()
-        }
-
         if shouldDisable {
-            let context = currentAnnoyanceContext(appBundleIdentifier: app.bundleIdentifier)
-                ?? annoyanceContext(
-                    appBundleIdentifier: app.bundleIdentifier,
-                    fieldIdentity: currentFieldIdentity,
-                    requestMode: currentSuggestionRequestMode
-                )
-            RawAutocompleteTraceLog.shared.record(
-                type: .appDisabled,
-                suggestionID: currentSuggestionID ?? "",
-                appBundleIdentifier: app.bundleIdentifier,
-                fieldIdentity: context.fieldIdentifier,
-                requestMode: context.requestMode?.rawValue ?? "",
-                reason: "manual"
-            )
-            recordAnnoyanceSignal(
-                .appDisable,
-                context: context,
-                suggestionID: currentSuggestionID ?? "",
-                reason: "manual"
-            )
             clearFocusedFieldState()
             hideSuggestion()
         }
@@ -5497,79 +4464,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    @objc
-    private func toggleCurrentAppMirrorMode() {
-        guard let app = targetAppForControls(),
-              let profile = profileStore.profile(for: app.bundleIdentifier),
-              profile.canPresentSuggestions,
-              !profile.isSensitive,
-              profile.renderMode != .disabled else {
-            return
-        }
-
-        let currentOverride = compatibilityLearningStore
-            .profile(for: app.bundleIdentifier)?
-            .renderModeOverride
-        let nextOverride: SuggestionRenderMode? = currentOverride == .floatingMirror ? nil : .floatingMirror
-        compatibilityLearningStore.setRenderModeOverride(nextOverride, for: app.bundleIdentifier)
-
-        let overrideText = nextOverride?.rawValue ?? "profile"
-        let suggestionID = currentSuggestionID ?? ""
-        setSuggestionDecision("Ready: app mode \(overrideText)")
-        lastTextSnapshot = nil
-        lastRequestedTextBeforeCursor = nil
-        invalidatePendingSuggestionRequest()
-        if suggestionSession.hasVisibleSuggestion {
-            hideSuggestion(reason: "render-mode-changed")
-        }
-
-        RawAutocompleteTraceLog.shared.record(
-            type: .renderModeChanged,
-            suggestionID: suggestionID,
-            appBundleIdentifier: app.bundleIdentifier,
-            fieldIdentity: currentFieldIdentity?.traceDescription ?? "",
-            requestMode: currentSuggestionRequestMode?.rawValue ?? "",
-            reason: "manual",
-            metadata: [
-                "renderModeOverride": overrideText
-            ]
-        )
-        DiagnosticsLog.shared.record(
-            "app-mode-control",
-            metadata: [
-                "app": app.bundleIdentifier,
-                "renderModeOverride": overrideText
-            ]
-        )
-        refreshRuntimeChrome()
-        updateStatusMenu(
-            app: app,
-            profile: profile,
-            appEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier)
-        )
-    }
-
-    @objc
-    private func startCurrentAppProof() {
-        guard let app = targetAppForControls(),
-              let profile = profileStore.profile(for: app.bundleIdentifier),
-              !profile.isSensitive else {
-            return
-        }
-
-        compatibilityLearningStore.setScreenshotTracing(true, for: app.bundleIdentifier)
-        setSuggestionDecision("Ready: app proof started")
-        DiagnosticsLog.shared.record(
-            "app-proof-started",
-            metadata: [
-                "app": app.bundleIdentifier,
-                "support": profile.supportLevel.rawValue
-            ]
-        )
-        refreshRuntimeChrome()
-        showDiagnostics()
-    }
-
     private func enableAllDisabledApps() {
         var selection = DisabledAppSelection(bundleIdentifiers: disabledBundleIdentifiers)
         guard !selection.isEmpty else {
@@ -5579,7 +4473,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let disabledCount = selection.count
         selection.clear()
         disabledBundleIdentifiers = selection.bundleIdentifiers
-        markAppEnablementSetupCompleted()
         persistDisabledApps()
 
         let frontmostApp = targetAppForControls()
@@ -5638,24 +4531,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setSuggestionDecision(transition.decisionText)
 
         let cleanupReason = transition.cleanupReason?.hideReason
-        if suggestionsPaused {
-            let context = currentAnnoyanceContext()
-            RawAutocompleteTraceLog.shared.record(
-                type: .appPaused,
-                suggestionID: currentSuggestionID ?? "",
-                appBundleIdentifier: context?.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? "",
-                fieldIdentity: context?.fieldIdentifier ?? "",
-                requestMode: context?.requestMode?.rawValue ?? "",
-                reason: "manual"
-            )
-            recordAnnoyanceSignal(
-                .manualPause,
-                context: context,
-                suggestionID: currentSuggestionID ?? "",
-                reason: "manual"
-            )
-        }
-
         if transition.shouldClearFocusedField {
             clearFocusedFieldState(hideReason: cleanupReason ?? "control-toggle")
         }
@@ -5707,10 +4582,6 @@ private extension AppDelegate {
         "SuggestionsPaused"
     }
 
-    static var appEnablementSetupCompletedDefaultsKey: String {
-        "AppEnablementSetupCompleted"
-    }
-
     static var acceptAllShortcutDefaultsKey: String {
         "AcceptAllShortcut"
     }
@@ -5740,37 +4611,10 @@ private extension AppDelegate {
     }
 
     func loadDisabledApps() {
-        let defaults = UserDefaults.standard
-        let disabledAppsKeyExists = defaults.object(forKey: Self.disabledAppsDefaultsKey) != nil
-        let setupKeyExists = defaults.object(forKey: Self.appEnablementSetupCompletedDefaultsKey) != nil
-        let temporarilyEnabledBundleIDs = ProcessInfo.processInfo.environment[
-            Self.temporarilyEnabledBundleIDsEnvironmentKey
-        ]
-
-        if disabledAppsKeyExists {
-            let persisted = defaults.stringArray(forKey: Self.disabledAppsDefaultsKey) ?? []
-            var selection = DisabledAppSelection(
-                persistedBundleIdentifiers: persisted
-            )
-            selection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
-            disabledBundleIdentifiers = selection.bundleIdentifiers
-            appEnablementSetupCompleted = setupKeyExists
-                ? defaults.bool(forKey: Self.appEnablementSetupCompletedDefaultsKey)
-                : true
-            defaults.set(appEnablementSetupCompleted, forKey: Self.appEnablementSetupCompletedDefaultsKey)
-            return
-        }
-
-        var defaultOffSelection = DisabledAppSelection(
-            defaultOffProfileStore: profileStore
-        )
-        disabledBundleIdentifiers = defaultOffSelection.bundleIdentifiers
-        appEnablementSetupCompleted = false
-        defaults.set(false, forKey: Self.appEnablementSetupCompletedDefaultsKey)
-        persistDisabledApps()
-
-        defaultOffSelection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
-        disabledBundleIdentifiers = defaultOffSelection.bundleIdentifiers
+        let persisted = UserDefaults.standard.stringArray(forKey: Self.disabledAppsDefaultsKey) ?? []
+        disabledBundleIdentifiers = DisabledAppSelection(
+            persistedBundleIdentifiers: persisted
+        ).bundleIdentifiers
     }
 
     func persistDisabledApps() {
@@ -5779,15 +4623,6 @@ private extension AppDelegate {
             selection.persistedBundleIdentifiers,
             forKey: Self.disabledAppsDefaultsKey
         )
-    }
-
-    func markAppEnablementSetupCompleted() {
-        guard !appEnablementSetupCompleted else {
-            return
-        }
-
-        appEnablementSetupCompleted = true
-        UserDefaults.standard.set(true, forKey: Self.appEnablementSetupCompletedDefaultsKey)
     }
 
     func loadKeyboardShortcutConfiguration() {
@@ -5817,45 +4652,13 @@ private extension AppDelegate {
     }
 }
 
-    private struct InsertionVerificationBaseline: Equatable {
-        let fieldIdentity: FocusedFieldIdentity
-        let previousTextBeforeCursor: String
-        let previousTextAfterCursor: String
-        let profile: CompatibilityProfile
+private struct InsertionVerificationBaseline: Equatable {
+    let fieldIdentity: FocusedFieldIdentity
+    let previousTextBeforeCursor: String
+    let profile: CompatibilityProfile
     let suggestionID: String?
     let requestMode: CompletionRequestMode?
-    let acceptanceID: String
-    let acceptedAt: Date
-    let acceptMode: String
-    let fieldKind: AXFieldKind
-    let fieldKindReason: String
-    let behaviorProfileID: AutocompleteBehaviorProfileID
     let retryCount: Int
-}
-
-private enum FocusedInsertionVerificationContext {
-    case ready(context: FocusedTextContext)
-    case missingContext
-    case fieldChanged
-}
-
-private struct AcceptedInsertionUndo: Equatable {
-    let acceptanceID: String
-    let appBundleIdentifier: String
-    let fieldIdentity: FocusedFieldIdentity
-    let textBeforeCursor: String
-    let textAfterCursor: String
-    let acceptedTextLength: Int
-    let acceptedAt: Date
-    let expiresAt: Date
-}
-
-private struct FieldControlTarget: Equatable {
-    let appBundleIdentifier: String
-    let appDisplayName: String
-    let fieldIdentity: FocusedFieldIdentity
-    let requestMode: CompletionRequestMode?
-    let fieldKind: AXFieldKind
 }
 
 private extension FocusedFieldIdentityInput {

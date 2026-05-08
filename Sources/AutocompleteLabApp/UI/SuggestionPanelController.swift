@@ -10,10 +10,6 @@ final class SuggestionPanelController {
     private var lastFrame: CGRect?
     private var lastRenderMode: SuggestionRenderMode?
 
-    var isVisible: Bool {
-        panel.isVisible
-    }
-
     init() {
         backdropView = NSVisualEffectView(frame: .zero)
         ghostTextView = GhostTextView(frame: .zero)

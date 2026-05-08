@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 public enum SuggestionPanelFrameCalculator {
-    public static let minimumUsefulInlineWordWidth: CGFloat = 36
+    public static let minimumUsefulInlineWordWidth: CGFloat = 40
 
     public static func shouldRefreshPresentation(
         previousText: String?,

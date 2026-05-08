@@ -11,7 +11,6 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private let usesVisionLanguageFactory: Bool
     private let promptBuilder: CompletionPromptBuilder
     private let cleaner: CompletionOutputCleaner
-    private let candidateRanker: CompletionCandidateRanker
     private let lengthConfiguration: CompletionLengthConfiguration
     private let stateQueue = DispatchQueue(label: "app.transcripted.autocomplete.mlx-model-runtime")
 
@@ -24,15 +23,13 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         usesVisionLanguageFactory: Bool = false,
         lengthConfiguration: CompletionLengthConfiguration = .default,
         promptBuilder: CompletionPromptBuilder? = nil,
-        cleaner: CompletionOutputCleaner? = nil,
-        candidateRanker: CompletionCandidateRanker = CompletionCandidateRanker()
+        cleaner: CompletionOutputCleaner? = nil
     ) {
         self.modelDirectoryURL = modelDirectoryURL
         self.usesVisionLanguageFactory = usesVisionLanguageFactory
         self.lengthConfiguration = lengthConfiguration
         self.promptBuilder = promptBuilder ?? CompletionPromptBuilder(maxVisibleWords: lengthConfiguration.maxVisibleWords)
         self.cleaner = cleaner ?? CompletionOutputCleaner(maxVisibleWords: lengthConfiguration.maxVisibleWords)
-        self.candidateRanker = candidateRanker
         self.storedState = .unavailable(reason: "MLX runtime has not been warmed.")
     }
 
@@ -106,13 +103,11 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let startedAt = Date()
         let prompt = promptBuilder.prompt(for: request)
         let promptBuiltAt = Date()
-        let requestCleaner = cleaner(for: request)
-        let requestMaxGeneratedTokens = maxGeneratedTokens(for: request)
         let session = ChatSession(
             container,
             instructions: prompt.system,
             generateParameters: GenerateParameters(
-                maxTokens: requestMaxGeneratedTokens,
+                maxTokens: maxGeneratedTokens(for: request.mode),
                 temperature: 0
             ),
             additionalContext: ["enable_thinking": false]
@@ -133,14 +128,14 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
                 rawOutput += chunk
 
-                if let partialSuggestion = requestCleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode),
+                if let partialSuggestion = cleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode),
                    !partialSuggestion.isEmpty,
                    partialSuggestion.visibleText != lastPartialVisibleText {
                     lastPartialVisibleText = partialSuggestion.visibleText
                     onPartialSuggestion(partialSuggestion)
                 }
 
-                if shouldStopEarly(rawOutput, request: request, cleaner: requestCleaner) {
+                if shouldStopEarly(rawOutput, request: request) {
                     break
                 }
             }
@@ -159,20 +154,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let generatedAt = Date()
         try Task.checkCancellation()
 
-        let cleanedCandidates = requestCleaner.cleanCandidates(
-            rawOutput,
-            after: request.textBeforeCursor,
-            mode: request.mode,
-            limit: 3
-        )
-        let candidateSelection = candidateRanker.selection(
-            cleanedCandidates,
-            mode: request.mode,
-            textBeforeCursor: request.textBeforeCursor,
-            behaviorProfileID: request.behaviorProfile.id
-        )
-        let cleanedSuggestion = candidateSelection.suggestion
-        let candidateTopScore = candidateSelection.rankedCandidates.first?.score
+        let cleanedSuggestion = cleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode)
         let cleanedAt = Date()
         let totalMilliseconds = Self.milliseconds(from: startedAt, to: cleanedAt)
         DiagnosticsLog.shared.record(
@@ -180,21 +162,15 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             metadata: [
                 "app": request.appBundleIdentifier ?? "unknown",
                 "mode": request.mode.rawValue,
-                "fieldKind": request.fieldKind.rawValue,
-                "behaviorProfile": request.behaviorProfile.id.rawValue,
                 "promptMilliseconds": String(Self.milliseconds(from: startedAt, to: promptBuiltAt)),
                 "sessionMilliseconds": String(Self.milliseconds(from: promptBuiltAt, to: sessionBuiltAt)),
                 "firstChunkMilliseconds": firstChunkMilliseconds.map(String.init) ?? "none",
                 "generationMilliseconds": String(Self.milliseconds(from: sessionBuiltAt, to: generatedAt)),
                 "cleanupMilliseconds": String(Self.milliseconds(from: generatedAt, to: cleanedAt)),
                 "totalMilliseconds": String(totalMilliseconds),
-                "maxTokens": String(requestMaxGeneratedTokens),
-                "maxVisibleWords": String(effectiveMaxVisibleWords(for: request)),
+                "maxTokens": String(maxGeneratedTokens(for: request.mode)),
+                "maxVisibleWords": String(lengthConfiguration.maxVisibleWords),
                 "rawChars": String(rawOutput.count),
-                "cleanedCandidateCount": String(cleanedCandidates.count),
-                "candidateTopScore": Self.formattedCandidateScore(candidateTopScore),
-                "candidateScoreMargin": Self.formattedCandidateScore(candidateSelection.scoreMargin),
-                "candidateSuppressionReason": candidateSelection.suppressionReason?.rawValue ?? "none",
                 "cleanedChars": String(cleanedSuggestion?.visibleText.count ?? 0)
             ]
         )
@@ -203,10 +179,6 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             prompt: prompt,
             rawOutput: rawOutput,
             cleanedSuggestion: cleanedSuggestion,
-            cleanedCandidateCount: cleanedCandidates.count,
-            candidateTopScore: candidateTopScore,
-            candidateScoreMargin: candidateSelection.scoreMargin,
-            candidateSuppressionReason: candidateSelection.suppressionReason?.rawValue,
             suggestionID: request.suggestionID,
             latencyMilliseconds: totalMilliseconds,
             firstTokenLatencyMilliseconds: firstChunkMilliseconds
@@ -215,12 +187,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         return cleanedSuggestion
     }
 
-    private func shouldStopEarly(
-        _ rawOutput: String,
-        request: CompletionRequest,
-        cleaner requestCleaner: CompletionOutputCleaner
-    ) -> Bool {
-        guard let suggestion = requestCleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode) else {
+    private func shouldStopEarly(_ rawOutput: String, request: CompletionRequest) -> Bool {
+        guard let suggestion = cleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode) else {
             return false
         }
 
@@ -229,7 +197,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         }
 
         return suggestion.visibleWordCount >= CompletionModelPolicy.minimumVisibleWords
-            && (suggestion.visibleWordCount >= effectiveMaxVisibleWords(for: request)
+            && (suggestion.visibleWordCount >= lengthConfiguration.maxVisibleWords
                 || rawOutput.contains(where: { [".", "!", "?", "\n"].contains($0) }))
     }
 
@@ -237,40 +205,13 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         max(0, Int(end.timeIntervalSince(start) * 1000))
     }
 
-    private static func formattedCandidateScore(_ score: Double?) -> String {
-        guard let score else {
-            return "none"
+    private func maxGeneratedTokens(for mode: CompletionRequestMode) -> Int {
+        switch mode {
+        case .wordCompletion:
+            return 3
+        case .phraseContinuation, .sentenceContinuation:
+            return lengthConfiguration.maxGeneratedTokens
         }
-
-        return String(format: "%.3f", score)
-    }
-
-    private func cleaner(for request: CompletionRequest) -> CompletionOutputCleaner {
-        let maxVisibleWords = effectiveMaxVisibleWords(for: request)
-        guard maxVisibleWords != cleaner.maxVisibleWords else {
-            return cleaner
-        }
-
-        return CompletionOutputCleaner(
-            minimumVisibleWords: cleaner.minimumVisibleWords,
-            maxVisibleWords: maxVisibleWords
-        )
-    }
-
-    private func effectiveMaxVisibleWords(for request: CompletionRequest) -> Int {
-        min(
-            lengthConfiguration.maxVisibleWords,
-            request.maxVisibleWords,
-            request.behaviorProfile.maxVisibleWords
-        )
-    }
-
-    private func maxGeneratedTokens(for request: CompletionRequest) -> Int {
-        min(
-            lengthConfiguration.maxGeneratedTokens,
-            request.behaviorProfile.maxGeneratedTokens,
-            request.mode.generatedTokenCeiling
-        )
     }
 
     private func readyContainer() async throws -> ModelContainer {

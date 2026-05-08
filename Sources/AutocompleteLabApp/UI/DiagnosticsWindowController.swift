@@ -64,7 +64,7 @@ final class DiagnosticsWindowController {
         pauseTracingButton = NSButton(title: "Pause", target: nil, action: nil)
         screenshotTracingButton = NSButton(title: "Screenshots", target: nil, action: nil)
         openTraceFolderButton = NSButton(title: "Trace Folder", target: nil, action: nil)
-        exportReportButton = NSButton(title: "Export Privacy Bundle", target: nil, action: nil)
+        exportReportButton = NSButton(title: "Export", target: nil, action: nil)
         deleteTracesButton = NSButton(title: "Delete", target: nil, action: nil)
 
         let scrollView = NSScrollView(frame: .zero)
@@ -198,14 +198,6 @@ final class DiagnosticsWindowController {
             compatibilityLearningPath: compatibilityLearningPath,
             compatibilityLearningProfile: compatibilityLearningProfile
         ))
-        sections.append(SuggestionLearningDiagnostics(
-            summary: traceSummary,
-            recentEvents: recentTraceEvents
-        ).text)
-        sections.append(PlacementDiagnostics(
-            summary: traceSummary,
-            recentEvents: recentTraceEvents
-        ).text)
         sections.append(acceptRateBucketsText(title: "Accept rate by app", buckets: traceSummary.acceptRateByApp))
         sections.append(acceptRateBucketsText(title: "Accept rate by mode", buckets: traceSummary.acceptRateByMode))
         sections.append(acceptRateBucketsText(title: "Useful rate by app", buckets: traceSummary.usefulRateByApp))
