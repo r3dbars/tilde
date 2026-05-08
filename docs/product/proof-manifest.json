@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "409f75bff4a6eed9c2256e1865394d677d7ae16a",
+  "proofFingerprint": {
+    "traceProofVersion": "2026-05-07.1",
+    "placementProofVersion": "placement-v4",
+    "keyCaptureProofVersion": "key-capture-v3",
+    "runtimeProofVersion": "runtime-v2"
+  },
+  "surfaces": [
+    {
+      "surface": "TextEdit",
+      "status": "complete",
+      "manualSmoke": {
+        "app": "TextEdit",
+        "bundle": "com.apple.TextEdit",
+        "proof": "default",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/textedit-inline.png"
+      ],
+      "gaps": []
+    },
+    {
+      "surface": "Chrome text fields",
+      "status": "partial",
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/chrome-textarea.png",
+        "docs/product/visual-placement-screenshots/chrome-contenteditable.png"
+      ],
+      "gaps": [
+        "Still local fixture proof, not broad production website proof."
+      ]
+    },
+    {
+      "surface": "Browser editor fixtures",
+      "status": "partial",
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/chrome-editor-like.png",
+        "docs/product/visual-placement-screenshots/chrome-monaco-like.png",
+        "docs/product/visual-placement-screenshots/chrome-prosemirror-like.png"
+      ],
+      "gaps": [
+        "Needs real Monaco and real ProseMirror screenshots beyond local fixtures."
+      ]
+    },
+    {
+      "surface": "Chrome chat-like composer",
+      "status": "partial",
+      "manualSmoke": {
+        "app": "Chrome",
+        "bundle": "com.google.Chrome",
+        "proof": "chat-like",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/chrome-chat-like.png"
+      ],
+      "gaps": [
+        "Local no-submit fixture is proven, but real prompt/chat app proof is still missing."
+      ]
+    },
+    {
+      "surface": "Codex",
+      "status": "partial",
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/codex-inline.png"
+      ],
+      "gaps": [
+        "Needs one strict trace slice that proves screenshot, one-word Tab accept, and no prompt submit together."
+      ]
+    },
+    {
+      "surface": "Obsidian",
+      "status": "complete",
+      "manualSmoke": {
+        "app": "Obsidian",
+        "bundle": "md.obsidian",
+        "proof": "default",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/obsidian.png"
+      ],
+      "gaps": []
+    },
+    {
+      "surface": "Apple Notes title",
+      "status": "complete",
+      "manualSmoke": {
+        "app": "Notes",
+        "bundle": "com.apple.Notes",
+        "proof": "notes-title",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/notes-title.png"
+      ],
+      "gaps": []
+    },
+    {
+      "surface": "Apple Notes body",
+      "status": "complete",
+      "manualSmoke": {
+        "app": "Notes",
+        "bundle": "com.apple.Notes",
+        "proof": "notes-body",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/notes-body.png"
+      ],
+      "gaps": []
+    },
+    {
+      "surface": "Apple Notes checklist",
+      "status": "complete",
+      "manualSmoke": {
+        "app": "Notes",
+        "bundle": "com.apple.Notes",
+        "proof": "notes-checklist",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/notes-checklist.png"
+      ],
+      "gaps": []
+    },
+    {
+      "surface": "Claude Code",
+      "status": "pending",
+      "screenshots": [],
+      "gaps": [
+        "Needs safe live prompt proof with screenshot and one-word no-submit accept."
+      ]
+    },
+    {
+      "surface": "Claude desktop",
+      "status": "partial",
+      "screenshots": [],
+      "gaps": [
+        "Prior accepts exist, but fresh screenshot-backed one-word no-submit proof is still missing."
+      ]
+    }
+  ]
+}

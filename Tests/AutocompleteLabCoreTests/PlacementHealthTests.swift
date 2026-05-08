@@ -299,8 +299,8 @@ struct PlacementHealthTests {
         #expect(presentation.isLowConfidence)
     }
 
-    @Test("Suppresses synthetic caret placement unless it is trusted")
-    func suppressesSyntheticCaretPlacementUnlessTrusted() {
+    @Test("Falls back to mirror for untrusted synthetic inline caret when detached anchors are allowed")
+    func fallsBackToMirrorForUntrustedSyntheticInlineCaretWhenDetachedAnchorsAllowed() {
         let plan = PlacementHealth.plan(
             requestedRenderMode: .inlineAdjacent,
             fallbackRenderMode: .floatingMirror,
@@ -310,6 +310,37 @@ struct PlacementHealthTests {
             textLineRect: CGRect(x: 140, y: 220, width: 0, height: 22),
             caretIsSynthetic: true,
             allowsDetachedSuggestions: true,
+            trustPolicy: PlacementTrustPolicy(
+                allowsLowConfidencePlacement: true,
+                allowsSyntheticCaretPlacement: false
+            )
+        )
+
+        guard case let .present(presentation) = plan else {
+            Issue.record("Expected untrusted synthetic caret placement to heal to mirror")
+            return
+        }
+
+        #expect(presentation.renderMode == .floatingMirror)
+        #expect(presentation.anchorSource == .element)
+        #expect(presentation.reason == .untrustedSyntheticCaret)
+        #expect(presentation.isSelfHealing)
+        #expect(presentation.metadata["placementSelfHealingAction"] == "fallback-floating-mirror")
+        #expect(presentation.metadata["placementConfidenceScore"] == "0.60")
+        #expect(presentation.metadata["placementConfidenceBand"] == "medium")
+    }
+
+    @Test("Suppresses untrusted synthetic inline caret when detached anchors are disabled")
+    func suppressesUntrustedSyntheticInlineCaretWhenDetachedAnchorsDisabled() {
+        let plan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: .floatingMirror,
+            caretRect: CGRect(x: 140, y: 220, width: 0, height: 22),
+            elementRect: CGRect(x: 80, y: 180, width: 520, height: 160),
+            windowRect: CGRect(x: 40, y: 120, width: 640, height: 360),
+            textLineRect: CGRect(x: 140, y: 220, width: 0, height: 22),
+            caretIsSynthetic: true,
+            allowsDetachedSuggestions: false,
             trustPolicy: PlacementTrustPolicy(
                 allowsLowConfidencePlacement: true,
                 allowsSyntheticCaretPlacement: false

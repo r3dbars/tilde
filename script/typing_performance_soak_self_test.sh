@@ -17,14 +17,50 @@ if ! grep -F "Safe typing performance soak" "$TMP_DIR/default.txt" >/dev/null; t
   exit 1
 fi
 
-if ! grep -F "Target app: TextEdit disposable temp file" "$TMP_DIR/default.txt" >/dev/null; then
+if ! grep -F "Target app: disposable TextEdit .txt file" "$TMP_DIR/default.txt" >/dev/null; then
   echo "typing soak self-test did not explain the safe TextEdit target" >&2
   cat "$TMP_DIR/default.txt" >&2
   exit 1
 fi
 
-if ! grep -F "Synthetic text: 1800 generated chars from a built-in neutral fixture" "$TMP_DIR/default.txt" >/dev/null; then
+if ! grep -F "Safety: temporarily enables TextEdit only for this proof pass" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain temporary TextEdit enablement" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Safety: temporarily resumes suggestions and restores the previous pause state" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain temporary pause-state recovery" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Synthetic text: 1200 generated chars from a built-in neutral fixture" "$TMP_DIR/default.txt" >/dev/null; then
   echo "typing soak self-test did not report the default synthetic text length" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Typed text proof: exact named TextEdit document match required" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain exact typed-text verification" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Typing driver: CGEvent Unicode key events after target-window focus" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain the CGEvent typing driver" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Typing batches: up to 250 chars per Swift process" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain segmented Swift typing batches" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "AX warmup: waits for a focused-text poll summary before typing" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain the AX warmup flush" >&2
   cat "$TMP_DIR/default.txt" >&2
   exit 1
 fi
@@ -69,14 +105,14 @@ if ! grep -F "Build: skipped; using an already-running app" "$TMP_DIR/strict.txt
   exit 1
 fi
 
-if ! grep -F "Typing: 7-char chunks with 2ms delay" "$TMP_DIR/strict.txt" >/dev/null; then
+if ! grep -F "Typing: 7-char chunks with 2ms delay and 3000us key spacing" "$TMP_DIR/strict.txt" >/dev/null; then
   echo "typing soak self-test did not honor chunk and delay overrides" >&2
   cat "$TMP_DIR/strict.txt" >&2
   exit 1
 fi
 
-if ! grep -F "AppleScript timeout:" "$TMP_DIR/strict.txt" >/dev/null; then
-  echo "typing soak self-test did not print the computed AppleScript timeout" >&2
+if ! grep -F "Typing duration budget:" "$TMP_DIR/strict.txt" >/dev/null; then
+  echo "typing soak self-test did not print the computed typing duration budget" >&2
   cat "$TMP_DIR/strict.txt" >&2
   exit 1
 fi

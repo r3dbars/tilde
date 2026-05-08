@@ -6,6 +6,8 @@ For a repeatable local record, use `script/real_app_smoke.sh <app>` when it is
 listed below. It builds/relaunches the app, prints the safe steps, waits while
 you test, then validates the new diagnostics and matching JSONL trace coverage.
 Successful runs are recorded in `docs/product/manual-smoke-runs.md`.
+The recorder temporarily enables only the target app for that proof launch, so
+fresh installs can stay default-off without blocking disposable proof runs.
 Run `script/manual_smoke_status.sh` to see insertion proof and separate
 screenshot-backed placement proof. Use `script/manual_smoke_status.sh --strict`
 when missing insertion proof or missing screenshot proof should block
@@ -36,7 +38,7 @@ manual proof pass.
 - Keep test text local and disposable.
 - Watch `~/Library/Logs/AutocompleteLab/diagnostics.log` for `suggestion-presented`, `keyboard-action`, `insert`, and `insert-verification`.
 - Watch `~/Library/Logs/AutocompleteLab/traces.jsonl` for matching `suggestionPresented`, `suggestionAccepted`, and `insertionVerified` events.
-- Prefer a real hardware key press for Tab/backtick acceptance. Some automation paths can set text or insert a literal tab without going through the app's event tap, which is useful to catch but does not count as an accept pass.
+- Prefer a real hardware key press for Tab and the configured full-accept shortcut. Some automation paths can set text or insert a literal tab without going through the app's event tap, which is useful to catch but does not count as an accept pass.
 - If a recorder fails, read its layer summary. `suggestion-presented` with `Tab autocomplete action: 0` means rendering worked but key routing did not.
 - Recovered insertion fallbacks are allowed when the same suggestion later verifies.
   Unrecovered insertion failures fail the recorder.
@@ -70,10 +72,11 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-multiline
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-wrapped
 ```
 
-- Type `Can we`.
+- Type `Smoke proof feels inst`.
 - Confirm a suggestion appears.
-- Press Tab and expect `Can we make`.
-- Press the key above Tab and expect the rest of the visible suggestion.
+- Press Tab and expect `instant`.
+- Type ` and stays inst`.
+- Press the configured full-accept shortcut and expect another `instant` completion.
 - Confirm `insert-verification result=verified`.
 - Run the multiline and wrapped-line variants before treating TextEdit as fully current.
 
@@ -90,9 +93,9 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --m
 - Use the existing autocomplete smoke note.
 - Do not let automation create, delete, or search private notes.
 - Do not record a generic `notes` pass as proof. Title, body, and checklist are separate proof targets.
-- Test title-only text with `Can we`.
-- Test body text with `Autocomplete smoke` on line one and `Can we` on line two.
-- Toggle Checklist and test a checklist row.
+- Test title-only text with `Smoke proof feels inst`, then ` and stays inst`.
+- Test body text with `Autocomplete smoke` on line one and `Smoke proof feels inst` on line two, then ` and stays inst`.
+- Toggle Checklist and test a checklist row with `Smoke proof feels inst`, then ` and stays inst`.
 - Confirm one-word and full accepts verify.
 
 ## Obsidian
@@ -120,11 +123,13 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture al
 
 - Use a local fixture page: textarea, contenteditable, editor-like,
   Monaco-like, or ProseMirror-like.
-- Type `Can we`.
+- Type `Smoke proof feels inst`.
 - Confirm the profile is Chrome, render mode is `inlineAdjacent` when synthetic
   caret placement is available and `floatingMirror` only as fallback. Insertion
   uses key events with AX value replacement as fallback.
-- Press Tab and expect `Can we make` without focus leaving the editor.
+- Press Tab and expect `instant` without focus leaving the editor.
+- Type ` and stays inst`.
+- Press the configured full-accept shortcut and expect another `instant` completion.
 - Confirm verification succeeds.
 - Each fixture records its own proof label.
 
@@ -161,6 +166,8 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
 - Type a harmless local test fragment like `Can we make this`.
 - Confirm a suggestion appears near the prompt or in a stable mirror position.
 - Press Tab and expect the next word/suffix to insert without submitting.
+- Confirm the text stayed in the composer, no user message bubble appeared, and
+  no assistant response started.
 - Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
 - When the recorder asks, type `NO-SUBMIT` only after confirming the prompt was not sent.
@@ -177,6 +184,8 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manua
 - Type a harmless local test fragment like `Can we make this`.
 - Confirm a suggestion appears near the prompt or in a stable mirror position.
 - Press Tab and expect the next word/suffix to insert without submitting.
+- Confirm the text stayed in the composer, no user message bubble appeared, and
+  no assistant response started.
 - Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
 - When the recorder asks, type `NO-SUBMIT` only after confirming the prompt was not sent.
@@ -193,6 +202,8 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gat
 - Type a harmless local test fragment like `Can we make this`.
 - Confirm a suggestion appears near the prompt or in a stable mirror position.
 - Press Tab and expect the next word/suffix to insert without submitting.
+- Confirm the text stayed in the composer, no user message bubble appeared, and
+  no assistant response started.
 - Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
 - When the recorder asks, type `NO-SUBMIT` only after confirming the prompt was not sent.

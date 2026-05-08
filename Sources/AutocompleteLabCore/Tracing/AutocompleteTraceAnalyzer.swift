@@ -1211,7 +1211,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                     p50LatencyMilliseconds: percentile(0.50, in: latencies),
                     p95LatencyMilliseconds: percentile(0.95, in: latencies),
                     severeFailures: severeFailureCount(in: dayEvents),
-                    pauses: dayEvents.filter { $0.type == .appPaused }.count,
+                    pauses: dayEvents.filter { $0.type == .appPaused || $0.type == .fieldPaused }.count,
                     disables: dayEvents.filter { $0.type == .appDisabled }.count
                 )
             }
@@ -1334,7 +1334,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             typedOver: typedOverCount,
             escapeDismissed: events.filter { $0.type == .suggestionHidden && $0.reason == "escape" }.count,
             acceptedThenDeleted: acceptedThenDeletedCount(in: events),
-            paused: events.filter { $0.type == .appPaused }.count,
+            paused: events.filter { $0.type == .appPaused || $0.type == .fieldPaused }.count,
             disabled: events.filter { $0.type == .appDisabled }.count
         )
     }
@@ -1515,7 +1515,14 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     }
 
     private func slowSuggestionThresholdMilliseconds(for requestMode: String) -> Int {
-        requestMode == "wordCompletion" ? 25 : 225
+        switch requestMode {
+        case CompletionRequestMode.wordCompletion.rawValue:
+            return 25
+        case CompletionRequestMode.sentenceContinuation.rawValue:
+            return 450
+        default:
+            return 225
+        }
     }
 
     private func suggestionLifecycleScopeChanged(
@@ -1977,7 +1984,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             "repeatedRejection": 0.4,
             "manualPause": 1.0,
             "appDisable": 1.2,
-            "caretGeometryFailed": 0.6
+            "caretGeometryFailed": 0.3
         ]
 
         let weightedTotal = signalCounts.reduce(0.0) { total, item in

@@ -11,6 +11,7 @@ INSTALL_PATH="$PACKET_DIR/install-checklist.md"
 FEEDBACK_PATH="$PACKET_DIR/feedback-log.md"
 SESSION_REPORT_PATH="$PACKET_DIR/session-report.md"
 MODEL_ASSET_PATH="$PACKET_DIR/model-asset.md"
+PRIVACY_STATUS_PATH="$PACKET_DIR/privacy-status.md"
 CHECKSUM_PATH="$PACKET_DIR/checksums.txt"
 
 cd "$ROOT_DIR"
@@ -181,6 +182,9 @@ Useful commands:
 ./script/check_redacted_report_export.sh
 open "\$HOME/Library/Logs/AutocompleteLab"
 \`\`\`
+
+Default beta feedback uses only the redacted privacy bundle. Do not ask testers
+for raw traces, screenshots, prompts, typed text, or accepted text by default.
 EOF
 
   cat >"$INSTALL_PATH" <<'EOF'
@@ -210,6 +214,37 @@ EOF
   print_feedback_template >"$FEEDBACK_PATH"
   print_session_report_template >"$SESSION_REPORT_PATH"
 
+  cat >"$PRIVACY_STATUS_PATH" <<'EOF'
+# Privacy Status
+
+Default beta feedback is redacted and local.
+
+Allowed by default:
+
+- `privacy-export/PRIVACY-CHECKLIST.md`
+- `privacy-export/manifest.json`
+- `privacy-export/redacted-traces.jsonl`
+- `privacy-export/survival-report.json`
+- `privacy-export/trace-report.html`
+- `privacy-export/visual-calibration-report.txt`
+
+Not requested by default:
+
+- raw traces,
+- screenshots,
+- typed text,
+- prompts,
+- model output,
+- accepted text,
+- document names,
+- URLs,
+- recipients,
+- subject lines.
+
+Use raw text or screenshots only for an explicit debug session, and write that
+consent in the session notes before collecting them.
+EOF
+
   printf 'AutocompleteLab.zip  %s\n' "$sha" >"$CHECKSUM_PATH"
   echo "Private beta packet created: $PACKET_DIR"
 }
@@ -224,7 +259,7 @@ check_packet() {
     exit 1
   }
 
-  for path in "$README_PATH" "$INSTALL_PATH" "$MODEL_ASSET_PATH" "$FEEDBACK_PATH" "$SESSION_REPORT_PATH" "$CHECKSUM_PATH"; do
+  for path in "$README_PATH" "$INSTALL_PATH" "$MODEL_ASSET_PATH" "$FEEDBACK_PATH" "$SESSION_REPORT_PATH" "$PRIVACY_STATUS_PATH" "$CHECKSUM_PATH"; do
     if [[ ! -s "$path" ]]; then
       echo "missing beta packet file: $path" >&2
       exit 1

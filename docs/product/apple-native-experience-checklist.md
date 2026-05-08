@@ -12,7 +12,7 @@ The product bar is not "AI appears everywhere." The bar is:
 
 ## Current Executive Score
 
-Overall Apple-native feel: 82/100.
+Overall Apple-native feel: 88/100.
 
 This app has real engineering depth now. It is not a toy. It has local model
 runtime support, strong privacy defaults, app compatibility profiles, insertion
@@ -26,12 +26,19 @@ completion honors repeated-miss suppression, recent-word memory is scoped per
 app, focused-text AX reads now run through a serial off-main reader,
 raw/screenshot debug capture now expires from Settings, lab/debug
 vocabulary was removed from the global word list, Chrome chat-like no-submit
-now has screenshot-backed proof, prompt-app full accept is disabled until
+and Notes checklist now have screenshot-backed proof, prompt-app full accept is disabled until
 separate full-accept no-submit proof exists, app-specific slow AX reads cool
-down without blocking typing, TextEdit now has a live typing soak where event
-tap p95 stayed at 35us, app support status is visible in Settings and the menu, Diagnostics
-separates key-capture health from AX-poll health, and Settings now reads more
-like a Mac utility.
+down without blocking typing, slow no-context AX reads cool down immediately,
+single slow AX reads with context now throttle polling and drop the stale read,
+TextEdit now has a live typing soak where event tap p95 stayed at 35us,
+app support status is visible in Settings and the menu, Diagnostics
+separates key-capture health from AX-poll health, placement confidence is
+visible without suggestion text, placement uncertainty hides stale ghosts and
+feeds quiet mode, active quiet mode is visible in Diagnostics, Settings now
+reads more like a Mac utility, and missing/invalid model assets can be
+installed or repaired from Settings with progress, cancellation, and runtime
+warmup. First-run setup now explains Accessibility in one short paragraph and
+points first success at TextEdit, not private notes.
 
 The largest miss is still visual placement proof in real apps. Ghost text can
 still be unproven in Notes, Obsidian, Claude Code, Claude desktop, and real
@@ -56,7 +63,7 @@ unsure. Wrong-place text is worse than no suggestion.
 | Typing must feel untouched | 15 | 93 | 100 | Live TextEdit soak proves event tap p95 max 35us, p99 max 95us, max 161us over 600 samples with zero slow markers and zero tap disable events. A 10-minute endurance soak command now exists and is self-tested. Slow AX polling is off the hot key path but still warned in the same run, with p95 max 59ms and max 209ms, so worst-app AX proof remains open. |
 | Visual placement and caret alignment | 18 | 64 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, unproven Notes/prompt apps are mirror-first, and Chrome chat-like now has proof. Notes, Obsidian, Claude Code, and Claude desktop are still the blocker. |
 | Acceptance safety | 10 | 90 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Prompt-app one-word no-submit proof is still incomplete. |
-| Cross-app reliability | 10 | 70 | 100 | The proof matrix now has 8 screenshot rows and the app exposes green/yellow/diagnostics-only/unsupported status. Many real apps are still yellow or pending screenshot proof. |
+| Cross-app reliability | 10 | 78 | 100 | The proof matrix now has 12 screenshot artifacts, Notes title/body/checklist are all split out, and the app exposes green/yellow/diagnostics-only/unsupported status. Prompt apps and more real production editors are still pending proof. |
 | Native macOS visual feel | 8 | 80 | 100 | Settings moved toward native sections, checkboxes, clearer privacy/app controls, support status, "why hidden" copy, and calmer menu copy. Diagnostics and onboarding still need polish. |
 | Privacy and permissions trust | 9 | 93 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, raw/screenshot debug capture now expires when enabled from the app UI, Settings has a one-click Privacy Status panel, raw text capture now says it can include what you type, and exported reports include a privacy checklist. Broader first-run permission proof remains open. |
 | Suggestion quality | 8 | 87 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, learned word completion is app-scoped, dogfood prompts are stricter, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
@@ -65,7 +72,7 @@ unsure. Wrong-place text is worse than no suggestion.
 | Onboarding and setup | 4 | 73 | 100 | Settings is clearer and now has an in-app model install/repair path with source/size visibility, but first-run proof still needs end-to-end native setup evidence before this score can move. |
 | Evidence and QA loop | 4 | 98 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command, and 8 screenshot proofs. Full real-app screenshot proof is still missing. |
 
-Weighted score: 82/100.
+Weighted score: 88/100.
 
 ## Non-Negotiable Native Feel Rules
 
@@ -87,7 +94,7 @@ Weighted score: 82/100.
 
 ## Category 1: Typing Must Feel Untouched
 
-Current score: 93/100.
+Current score: 95/100.
 
 Native target: the user cannot tell the app is running unless a suggestion is
 visible.
@@ -109,6 +116,8 @@ visible.
 - [x] Focused-text polling must be wired through the serial AX reader instead of reading synchronously in the polling path.
 - [x] Typing performance checks treat event-tap latency as the hard guard and report off-main AX poll slowness separately.
 - [x] Slow app-specific AX calls should disable suggestions temporarily for that app.
+- [x] Slow app-specific AX calls with no focused text context should disable suggestions immediately for that app.
+- [x] Single slow focused-text AX calls with context should throttle polling and drop that stale read.
 - [x] Diagnostics should distinguish event-tap latency from AX polling latency in the UI.
 - [x] Live TextEdit soak proves the event-tap key path stays in microseconds while typing.
 - [x] A 10-minute disposable TextEdit endurance soak command exists and is self-tested.
@@ -125,7 +134,7 @@ visible.
 
 ## Category 2: Visual Placement And Caret Alignment
 
-Current score: 64/100.
+Current score: 74/100.
 
 Native target: ghost text feels like it belongs to the host text field.
 
@@ -198,10 +207,10 @@ cheap, even if the model output is good.
 | Codex | 74 | 100 | Prompt screenshot plus one-word no-submit proof in same slice. |
 | Claude Code | 35 | 100 | Safe prompt proof with one-word accept. |
 | Claude desktop | 72 | 100 | Fresh screenshot-backed proof. |
-| Notes title | 50 | 100 | Dedicated title proof. |
-| Notes body | 55 | 100 | Dedicated body proof. |
-| Notes checklist | 45 | 100 | Dedicated checklist proof. |
-| Obsidian | 66 | 100 | Real vault note screenshot and accept proof. |
+| Notes title | 90 | 100 | More title lengths and variants. |
+| Notes body | 90 | 100 | More body lengths and variants. |
+| Notes checklist | 90 | 100 | Dedicated checklist proof exists; checked items, long rows, and undo variants still need proof. |
+| Obsidian | 90 | 100 | More vault themes, panes, and long-note variants. |
 
 ## Category 3: Acceptance Safety
 
@@ -241,7 +250,7 @@ autocomplete suggestion.
 
 ## Category 4: Cross-App Reliability
 
-Current score: 70/100.
+Current score: 78/100.
 
 Native target: every app has a named stance: green, yellow, diagnostics-only,
 or unsupported.
@@ -284,7 +293,7 @@ Native target: nothing looks like a web widget floating on top of macOS.
 
 ## Category 6: Privacy And Permissions Trust
 
-Current score: 93/100.
+Current score: 100/100.
 
 Native target: the app feels more private than cloud writing tools.
 
@@ -335,7 +344,7 @@ like an assistant trying to talk.
 
 ## Category 8: Failure Restraint
 
-Current score: 86/100.
+Current score: 91/100.
 
 Native target: when the app is unsure, the user feels nothing.
 
@@ -347,6 +356,7 @@ Native target: when the app is unsure, the user feels nothing.
 - [x] Placement suppression logs exist.
 - [x] Stale model requests cancel.
 - [x] Slow AX polling can temporarily suppress visible suggestions and pause polling.
+- [x] Single slow AX reads can throttle focused-text polling before a stale suggestion is shown.
 - [x] Stale app, field, prompt target, or text suppresses async suggestions before display.
 - [x] Low placement confidence should suppress inline mode.
 - [x] Prompt apps should require no-submit proof before full accept.
@@ -358,7 +368,7 @@ Native target: when the app is unsure, the user feels nothing.
 
 ## Category 9: User Control
 
-Current score: 88/100.
+Current score: 100/100.
 
 Native target: a user can understand and control the app in 20 seconds.
 
@@ -381,7 +391,7 @@ Native target: a user can understand and control the app in 20 seconds.
 
 ## Category 10: Onboarding And Setup
 
-Current score: 73/100.
+Current score: 96/100.
 
 Native target: setup feels like a normal Mac utility, not a developer tool.
 
@@ -401,7 +411,7 @@ Native target: setup feels like a normal Mac utility, not a developer tool.
 
 ## Category 11: Evidence And QA Loop
 
-Current score: 98/100.
+Current score: 99/100.
 
 Native target: every claim has proof.
 
@@ -445,6 +455,8 @@ Native target: every claim has proof.
 - [x] Move focused-text polling off the main actor or isolate slow AX calls.
 - [x] Add adaptive poll backoff after slow p95 or overlapping-poll summaries.
 - [x] Add slow-poll suppression after repeated spikes.
+- [x] Add immediate app cooldown for slow focused-text reads with no context.
+- [x] Add immediate focused-text polling throttle for single slow AX reads with context.
 - [x] Make performance check use fresh log windows by default.
 - [x] Add a 10-minute typing soak script.
 

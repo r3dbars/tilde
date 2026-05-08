@@ -37,6 +37,11 @@ if ! grep -F "disposable Chrome textarea fixture" "$TMP_DIR/chrome.txt" >/dev/nu
   exit 1
 fi
 
+if ! grep -F "temporarily enables Chrome only for this proof pass" "$TMP_DIR/chrome.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain temporary Chrome enablement" >&2
+  exit 1
+fi
+
 script/real_app_smoke.sh chrome --fixture contenteditable --dry-run >"$TMP_DIR/chrome-contenteditable.txt"
 if ! grep -F "disposable Chrome contenteditable fixture" "$TMP_DIR/chrome-contenteditable.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome contenteditable dry-run plan" >&2

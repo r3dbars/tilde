@@ -209,7 +209,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         switch mode {
         case .wordCompletion:
             return 3
-        case .phraseContinuation:
+        case .phraseContinuation, .sentenceContinuation:
             return lengthConfiguration.maxGeneratedTokens
         }
     }

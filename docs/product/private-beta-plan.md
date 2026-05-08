@@ -21,6 +21,7 @@ That must create and verify:
 - `dist/private-beta/install-checklist.md`
 - `dist/private-beta/feedback-log.md`
 - `dist/private-beta/session-report.md`
+- `dist/private-beta/privacy-status.md`
 - `dist/private-beta/checksums.txt`
 
 Also read:

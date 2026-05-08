@@ -24,7 +24,7 @@ case "$MODE" in
     echo "Marker: $MARK_PATH"
     exit 0
     ;;
-  --eval)
+  --eval|--replay)
     if [[ ! -f "$MARK_PATH" ]]; then
       echo "trace mark missing: $MARK_PATH" >&2
       echo "Run ./script/trace_mark.sh --save before the dogfood pass." >&2
@@ -46,6 +46,11 @@ case "$MODE" in
       exit 0
     fi
 
+    if [[ "$MODE" == "--replay" ]]; then
+      swift run AutocompleteTraceReplay --start-line "$SAVED_LINE" "$TRACE_PATH"
+      exit 0
+    fi
+
     if [[ -n "$APP_BUNDLE_ID" ]]; then
       AUTOCOMPLETE_LAB_TRACE_START_LINE="$SAVED_LINE" \
       AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP="$APP_BUNDLE_ID" \
@@ -59,7 +64,7 @@ case "$MODE" in
   "")
     ;;
   *)
-    echo "usage: $0 [--quiet|--save|--eval [bundle-id]]" >&2
+    echo "usage: $0 [--quiet|--save|--eval [bundle-id]|--replay]" >&2
     exit 2
     ;;
 esac
@@ -80,4 +85,5 @@ Shortcut:
   # do the dogfood pass
   ./script/trace_mark.sh --eval com.openai.codex
   ./script/trace_mark.sh --eval com.anthropic.claude-code
+  ./script/trace_mark.sh --replay
 EOF

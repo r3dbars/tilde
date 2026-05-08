@@ -62,6 +62,58 @@ struct AcceptanceSurvivalClassifierTests {
         #expect(measurement.traceMetadata["deletedWithinTwoSeconds"] == "true")
     }
 
+    @Test("Counts kept word-completion suffixes inside the completed word")
+    func countsKeptWordCompletionSuffixesInsideCompletedWord() {
+        let measurement = classifier.classifyAroundExpectedInsertion(
+            acceptedText: "ation",
+            currentFullText: "I use dictation every day.",
+            expectedInsertionUTF16Offset: "I use dict".utf16.count,
+            checkpoint: .twoSeconds
+        )
+
+        #expect(measurement.survivalClass == .lightlyEditedKept)
+        #expect(measurement.tokenRecall == 1.0)
+        #expect(measurement.deletedWithinTwoSeconds == false)
+    }
+
+    @Test("Combines exact and suffix-kept tokens")
+    func combinesExactAndSuffixKeptTokens() {
+        let measurement = classifier.classifyAroundExpectedInsertion(
+            acceptedText: "ation every",
+            currentFullText: "I use dictation every day.",
+            expectedInsertionUTF16Offset: "I use dict".utf16.count,
+            checkpoint: .twoSeconds
+        )
+
+        #expect(measurement.survivalClass == .lightlyEditedKept)
+        #expect(measurement.tokenRecall == 1.0)
+    }
+
+    @Test("Does not count tiny suffix coincidences as kept word completions")
+    func doesNotCountTinySuffixCoincidencesAsKeptWordCompletions() {
+        let measurement = classifier.classify(
+            acceptedText: "in",
+            currentTextWindow: "I changed the thing.",
+            checkpoint: .twoSeconds
+        )
+
+        #expect(measurement.survivalClass == .rejectedAfterAccept)
+        #expect(measurement.tokenRecall == 0)
+    }
+
+    @Test("Does not count unrelated suffixes away from the insertion point")
+    func doesNotCountUnrelatedSuffixesAwayFromInsertionPoint() {
+        let measurement = classifier.classifyAroundExpectedInsertion(
+            acceptedText: "ing",
+            currentFullText: "I changed the meeting.",
+            expectedInsertionUTF16Offset: "I changed ".utf16.count,
+            checkpoint: .twoSeconds
+        )
+
+        #expect(measurement.survivalClass == .rejectedAfterAccept)
+        #expect(measurement.tokenRecall == 0)
+    }
+
     @Test("Final checkpoint counts partially kept accepted text")
     func finalCheckpointCountsPartiallyKeptText() {
         let measurement = classifier.classify(

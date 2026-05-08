@@ -58,7 +58,7 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(blocked.modeText == "Mode: mirror")
         #expect(blocked.acceptanceText == "Acceptance: Tab next word + full accept")
-        #expect(blocked.pathText == "Path: display mirror | insert keys | track focused field")
+        #expect(blocked.pathText == "Path: display mirror | insert AX then keys -> keys | track focused field")
         #expect(
             blocked.safetyText
                 == "Safety: Mirror only until caret placement proof is current. Detached field/window suggestions are disabled. Insertion fails closed if the primary method is not verified."

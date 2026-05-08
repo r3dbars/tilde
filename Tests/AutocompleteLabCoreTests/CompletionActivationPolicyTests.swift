@@ -205,8 +205,8 @@ struct CompletionActivationPolicyTests {
         ) == .allow(.phraseContinuation))
     }
 
-    @Test("Does not treat punctuation as word completion")
-    func doesNotTreatPunctuationAsWordCompletion() {
+    @Test("Sentence-ending punctuation uses sentence continuation mode")
+    func sentenceEndingPunctuationUsesSentenceContinuationMode() {
         let policy = CompletionActivationPolicy()
 
         #expect(policy.decision(
@@ -214,7 +214,14 @@ struct CompletionActivationPolicyTests {
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: false
-        ) == .allow(.phraseContinuation))
+        ) == .allow(.sentenceContinuation))
+
+        #expect(policy.decision(
+            textBeforeCursor: "I finished the thing. ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.sentenceContinuation))
     }
 
     @Test("Blocks phrase continuation while cursor is inside a common word")
@@ -284,6 +291,25 @@ struct CompletionActivationPolicyTests {
             isSecure: false,
             isFieldSuppressed: false
         ) == .allow(.wordCompletion))
+    }
+
+    @Test("Allows checklist completions after constrained item text")
+    func allowsChecklistCompletionsAfterConstrainedItemText() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "- [ ] Follow upd",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.wordCompletion))
+
+        #expect(policy.decision(
+            textBeforeCursor: "- [ ] Follow up with ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false
+        ) == .allow(.phraseContinuation))
     }
 
     @Test("Blocks common complete one word context")

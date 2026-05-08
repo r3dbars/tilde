@@ -10,6 +10,8 @@ historical evidence only.
 
 When a trace slice says `visual strict-complete`, strict screenshot evidence was
 required and passed. Rows without that marker are insertion proof only.
+Rows with `lines N+` are historical open-ended proof. New recorder rows should
+use bounded `lines N-M` ranges so strict proof can replay exactly that slice.
 
 Rows also include a build proof token in the trace slice. Current proof must
 match either the current Git commit or the current release archive checksum.
@@ -141,3 +143,10 @@ match either the current Git commit or the current release archive checksum.
 | 2026-05-07T01:17:35Z | Chrome | `com.google.Chrome` | `chat-like` | 2 | `inlineAdjacent|floatingMirror` | lines 72130+ in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 22775+ in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`; visual `strict-complete` |
 | 2026-05-07T01:44:45Z | TextEdit | `com.apple.TextEdit` | `default` | 2 | `inlineAdjacent|floatingMirror` | lines 75390+ in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 23185+ in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`; visual `strict-complete` |
 | 2026-05-07T02:28:19Z | TextEdit | `com.apple.TextEdit` | `default` | 2 | `inlineAdjacent|floatingMirror` | lines 82051+ in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 24363+ in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`; visual `strict-complete` |
+| 2026-05-07T17:16:51Z | TextEdit | `com.apple.TextEdit` | `default` | 2 | `inlineAdjacent|floatingMirror` | lines 91058+ in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 25208+ in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`; visual `strict-complete` |
+| 2026-05-07T21:01:59Z | TextEdit | `com.apple.TextEdit` | `default` | 2 | `inlineAdjacent|floatingMirror` | lines 135065-135095 in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 34620-34630 in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`; visual `strict-complete` |
+| 2026-05-07T21:10:14Z | Chrome | `com.google.Chrome` | `chat-like` | 2 | `inlineAdjacent|floatingMirror` | lines 135820-135860 in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 34782-34793 in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`; visual `strict-complete` |
+| 2026-05-07T21:15:51Z | Obsidian | `md.obsidian` | `default` | 2 | `floatingMirror` | lines 136017-136060 in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 34826-34841 in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`; visual `strict-complete` |
+| 2026-05-07T21:24:14Z | Notes | `com.apple.Notes` | `notes-title` | 2 | `inlineAdjacent|floatingMirror` | lines 136267-136303 in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 34870-34884 in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`; visual `strict-complete` |
+| 2026-05-07T23:33:48Z | Notes | `com.apple.Notes` | `notes-body` | 2 | `inlineAdjacent|floatingMirror` | lines 138146-138299 in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 35011-35048 in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`; visual `strict-complete` |
+| 2026-05-08T00:21:33Z | Notes | `com.apple.Notes` | `notes-checklist` | 2 | `inlineAdjacent|floatingMirror` | lines 138741-138783 in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 35083-35095 in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`; visual `strict-complete` |

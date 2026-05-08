@@ -60,7 +60,7 @@ struct RuntimePolicyTests {
 
         #expect(report.stage == .runtimeUnavailable)
         #expect(report.summary == "runtime unavailable (MLX); fallback: ready (mock)")
-        #expect(report.detail == "MLX runtime is not linked yet")
+        #expect(report.detail == "This build is missing its local model engine. A separate model server will not fix it.")
         #expect(report.action == .none)
         #expect(!report.isReady)
         #expect(!report.allowsSuggestions)
@@ -94,6 +94,7 @@ struct RuntimePolicyTests {
 
     @Test("Runtime readiness guidance gives stage-specific setup actions")
     func runtimeReadinessGuidanceGivesStageSpecificSetupActions() {
+        #expect(RuntimeReadinessAction.cancelModelInstall.displayName == "Cancel Model Install")
         let missing = RuntimeReadinessGuidance(
             report: RuntimeReadinessReport(
                 stage: .downloadNeeded,

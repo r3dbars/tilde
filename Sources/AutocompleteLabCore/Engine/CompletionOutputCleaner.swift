@@ -1,6 +1,8 @@
 import Foundation
 
 public struct CompletionOutputCleaner: Equatable, Sendable {
+    private static let noSuggestionToken = CompletionPromptBuilder.noSuggestionToken.lowercased()
+
     public let minimumVisibleWords: Int
     public let maxVisibleWords: Int
 
@@ -18,6 +20,35 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
     public func clean(_ rawOutput: String, after textBeforeCursor: String?) -> CompletionSuggestion? {
         clean(rawOutput, after: textBeforeCursor, mode: .phraseContinuation)
+    }
+
+    public func cleanCandidates(
+        _ rawOutput: String,
+        after textBeforeCursor: String?,
+        mode: CompletionRequestMode,
+        limit: Int = 3
+    ) -> [CompletionSuggestion] {
+        let maxCandidateCount = max(1, limit)
+        var seen: Set<String> = []
+        var suggestions: [CompletionSuggestion] = []
+
+        for candidateLine in candidateLines(from: rawOutput) {
+            guard let suggestion = clean(candidateLine, after: textBeforeCursor, mode: mode) else {
+                continue
+            }
+
+            let key = normalizedCandidateKey(suggestion.visibleText)
+            guard seen.insert(key).inserted else {
+                continue
+            }
+
+            suggestions.append(suggestion)
+            if suggestions.count >= maxCandidateCount {
+                break
+            }
+        }
+
+        return suggestions
     }
 
     public func clean(_ rawOutput: String, after textBeforeCursor: String?, mode: CompletionRequestMode) -> CompletionSuggestion? {
@@ -39,6 +70,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        guard !isNoSuggestionSentinel(withoutThinking) else {
+            return nil
+        }
+
         let singleLine = withoutThinking
             .components(separatedBy: .newlines)
             .first?
@@ -55,6 +90,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         let withoutPromptEchoLabel = strippingPromptEchoLabel(from: singleLine)
 
         guard !withoutPromptEchoLabel.isEmpty else {
+            return nil
+        }
+
+        guard !isNoSuggestionSentinel(withoutPromptEchoLabel) else {
             return nil
         }
 
@@ -120,22 +159,68 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
-        if mode == .phraseContinuation,
+        if mode.isContinuation,
            isLowValueSingleWordPhrase(suggestion.visibleText) {
             return nil
         }
 
-        if mode == .phraseContinuation,
+        if mode.isContinuation,
            isLowSignalPhrase(suggestion.visibleText) {
             return nil
         }
 
-        if mode == .phraseContinuation,
+        if mode.isContinuation,
            isAdviceOrToneDriftPhrase(suggestion.visibleText) {
             return nil
         }
 
         return suggestion
+    }
+
+    private func candidateLines(from rawOutput: String) -> [String] {
+        let withoutThinking = rawOutput
+            .replacingOccurrences(
+                of: #"<think>[\s\S]*?</think>"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: #"</?think>"#,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+
+        let lines = withoutThinking
+            .components(separatedBy: .newlines)
+            .map(strippingCandidatePrefix)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+        return lines.isEmpty ? [withoutThinking] : lines
+    }
+
+    private func strippingCandidatePrefix(from text: String) -> String {
+        text.replacingOccurrences(
+            of: #"^\s*(?:[-*•]|\d+[\).:]|[A-Za-z][\).:])\s+"#,
+            with: "",
+            options: .regularExpression
+        )
+    }
+
+    private func normalizedCandidateKey(_ text: String) -> String {
+        text
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+    }
+
+    private func isNoSuggestionSentinel(_ text: String) -> Bool {
+        let trimmed = text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: Self.noSuggestionWrapperCharacters)
+
+        return trimmed.lowercased() == Self.noSuggestionToken
     }
 
     private func looksLikeAssistantMeta(_ text: String) -> Bool {
@@ -175,9 +260,14 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
         return normalized.hasPrefix("before cursor:")
             || normalized.hasPrefix("after cursor:")
+            || normalized.hasPrefix("action:")
             || normalized.hasPrefix("inline autocomplete")
             || normalized.hasPrefix("inline word completion")
+            || normalized.hasPrefix("next action:")
+            || normalized.hasPrefix("recommendation:")
             || normalized.hasPrefix("return only")
+            || normalized.hasPrefix("return exactly")
+            || normalized.hasPrefix("rewrite:")
             || normalized.hasPrefix("no spaces")
             || normalized.hasPrefix("continue the current sentence")
             || normalized.hasPrefix("start the next sentence")
@@ -414,6 +504,8 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "suffix:"
     ]
 
+    private static let noSuggestionWrapperCharacters = CharacterSet(charactersIn: "\"'`")
+
     private static let commonWholeWords = Set(WordCompletionCandidateRanker.defaultWords)
         .union(lowValueSingleWordPhrases)
 
@@ -487,11 +579,15 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["it", "is", "important"],
         ["it's", "important"],
         ["one", "thing", "to", "consider"],
+        ["next", "action"],
+        ["next", "step"],
+        ["rewrite", "this"],
         ["seamless", "experience"],
         ["sounds", "great"],
         ["the", "best", "way"],
         ["this", "is", "a", "great"],
         ["this", "is", "exciting"],
+        ["try", "saying"],
         ["you", "may", "want"],
         ["you", "might", "want"]
     ]

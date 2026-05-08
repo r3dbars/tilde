@@ -36,10 +36,10 @@ struct SuggestionPanelFrameCalculatorTests {
     @Test("Hides inline ghost when less than one useful word can fit")
     func hidesInlineGhostWhenLessThanOneUsefulWordFits() {
         let crampedFrame = CGRect(x: 100, y: 100, width: 30, height: 20)
-        let usefulFrame = CGRect(x: 100, y: 100, width: 36, height: 20)
+        let usefulFrame = CGRect(x: 100, y: 100, width: 40, height: 20)
 
         #expect(
-            SuggestionPanelFrameCalculator.minimumUsefulInlineWordWidth == 36
+            SuggestionPanelFrameCalculator.minimumUsefulInlineWordWidth == 40
         )
         #expect(!SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(crampedFrame))
         #expect(SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(usefulFrame))
@@ -71,6 +71,20 @@ struct SuggestionPanelFrameCalculatorTests {
 
         #expect(frame.minX >= 1264)
         #expect(frame.maxX <= 1304)
+    }
+
+    @Test("Suppresses inline ghost when less than a useful word fits")
+    func suppressesInlineGhostWhenLessThanUsefulWordFits() {
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            caretRect: CGRect(x: 1268, y: 420, width: 0, height: 22),
+            textLineRect: CGRect(x: 20, y: 415, width: 1248, height: 22),
+            textSize: CGSize(width: 180, height: 22),
+            screenFrame: CGRect(x: 0, y: 0, width: 1600, height: 900),
+            clippingFrame: CGRect(x: 0, y: 80, width: 1312, height: 740)
+        )
+
+        #expect(frame.width < 40)
+        #expect(!SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(frame))
     }
 
     @Test("Keeps inline ghost text inside negative-origin editor bounds")

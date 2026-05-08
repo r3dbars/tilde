@@ -48,6 +48,19 @@ struct AnnoyanceSuppressorTests {
         #expect(suppressor.quietMode(for: context, now: start.addingTimeInterval(10)).traceReason == "quiet-mode-app")
     }
 
+    @Test("Repeated caret geometry failures quiet the current field")
+    func repeatedCaretGeometryFailuresQuietField() {
+        let start = Date(timeIntervalSince1970: 0)
+        var suppressor = AnnoyanceSuppressor()
+
+        _ = suppressor.record(.caretGeometryFailed, context: context, now: start)
+        #expect(suppressor.quietMode(for: context, now: start) == .normal)
+
+        _ = suppressor.record(.caretGeometryFailed, context: context, now: start.addingTimeInterval(5))
+
+        #expect(suppressor.quietMode(for: context, now: start.addingTimeInterval(5)).traceReason == "quiet-mode-field")
+    }
+
     @Test("Wrong insertion hard-stops the field")
     func wrongInsertionHardStopsField() {
         let start = Date(timeIntervalSince1970: 0)

@@ -409,7 +409,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
             return RuntimeReadinessReport(
                 stage: .runtimeUnavailable,
                 summary: fallbackSummary("runtime unavailable (\(decision.preferredCandidate.displayName))", runtimeState: runtimeState),
-                detail: "\(decision.preferredCandidate.displayName) runtime is not linked yet",
+                detail: "This build is missing its local model engine. A separate model server will not fix it.",
                 action: .none
             )
         }

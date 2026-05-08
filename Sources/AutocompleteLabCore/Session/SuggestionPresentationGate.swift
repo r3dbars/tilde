@@ -51,7 +51,7 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
         }
 
         guard phase == .streamingPartial,
-              mode == .phraseContinuation else {
+              mode.isContinuation else {
             return true
         }
 

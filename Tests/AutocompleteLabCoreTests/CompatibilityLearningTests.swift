@@ -290,6 +290,111 @@ struct CompatibilityLearningTests {
         #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "false")
     }
 
+    @Test("Learning keeps screenshot visual corrections from detector")
+    func keepsScreenshotVisualCorrectionsFromDetector() {
+        let detection = ScreenshotPlacementOffsetDetection(
+            dx: 4,
+            dy: -6,
+            confidence: 0.91,
+            signalPixelCount: 64,
+            signalBounds: CGRect(x: 24, y: 12, width: 16, height: 4),
+            reason: .detected
+        )
+        let correction = VisualPlacementCorrectionPolicy().correction(
+            dx: detection.dx,
+            dy: detection.dy,
+            observations: 3,
+            confidence: detection.confidence
+        )
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "md.obsidian",
+            xOffset: correction.dx,
+            yOffset: correction.dy,
+            observations: 3,
+            confidence: detection.confidence,
+            lastReason: "screenshot-visual-correction"
+        )
+        let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+        let adjustment = engine.adjustment(
+            for: "md.obsidian",
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly
+
+        let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
+
+        #expect(correction.decision == .accepted)
+        #expect(adjustment.adjusted(rect) == CGRect(x: 104, y: 194, width: 0, height: 20))
+        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "true")
+        #expect(adjustment.metadata["learningConfidence"] == "0.91")
+    }
+
+    @Test("Learning expires visual offsets when trust context changes")
+    func expiresVisualOffsetsWhenTrustContextChanges() {
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "md.obsidian",
+            xOffset: 7,
+            yOffset: -5,
+            visualAppVersion: "1.2.3",
+            visualScreenFingerprint: "screen-a",
+            visualFieldShapeFingerprint: "field-a",
+            observations: 4,
+            confidence: 0.8,
+            lastReason: "screenshot-visual-correction"
+        )
+        let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+        let matching = CompatibilityLearningVisualTrustContext(
+            appVersion: "1.2.3",
+            screenFingerprint: "screen-a",
+            fieldShapeFingerprint: "field-a"
+        )
+        let movedScreen = CompatibilityLearningVisualTrustContext(
+            appVersion: "1.2.3",
+            screenFingerprint: "screen-b",
+            fieldShapeFingerprint: "field-a"
+        )
+        let rect = CGRect(x: 100, y: 200, width: 0, height: 20)
+
+        let trusted = engine.adjustment(
+            for: "md.obsidian",
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly(context: matching)
+        let expired = engine.adjustment(
+            for: "md.obsidian",
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly(context: movedScreen)
+
+        #expect(trusted.adjusted(rect) == CGRect(x: 107, y: 195, width: 0, height: 20))
+        #expect(trusted.metadata["learningVisualOffsetTrusted"] == "true")
+        #expect(expired.adjusted(rect) == rect)
+        #expect(expired.metadata["learningVisualOffsetTrusted"] == "false")
+    }
+
+    @Test("Legacy visual offsets stay trusted until resaved with context")
+    func legacyVisualOffsetsStayTrustedUntilResavedWithContext() {
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "md.obsidian",
+            xOffset: 2,
+            yOffset: 3,
+            observations: 4,
+            confidence: 0.7,
+            lastReason: "screenshot-visual-correction"
+        )
+        let context = CompatibilityLearningVisualTrustContext(
+            appVersion: "1.2.3",
+            screenFingerprint: "screen-b",
+            fieldShapeFingerprint: "field-b"
+        )
+        let engine = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+        let adjustment = engine.adjustment(
+            for: "md.obsidian",
+            profileRenderMode: .inlineAdjacent
+        ).trustedVisualOffsetOnly(context: context)
+
+        #expect(adjustment.adjusted(CGRect(x: 100, y: 200, width: 0, height: 20))
+            == CGRect(x: 102, y: 203, width: 0, height: 20))
+        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "true")
+    }
+
     @Test("Missing learning profile leaves geometry alone")
     func missingProfileLeavesGeometryAlone() {
         let engine = CompatibilityLearningEngine()

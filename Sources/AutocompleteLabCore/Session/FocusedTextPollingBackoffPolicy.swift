@@ -1,6 +1,7 @@
 import Foundation
 
 public enum FocusedTextPollingThrottleReason: String, Equatable, Sendable {
+    case slowAXRead = "slow-ax-read"
     case slowPollLatency = "slow-poll-latency"
     case overlappingPolls = "overlapping-polls"
 }
@@ -140,6 +141,27 @@ public struct FocusedTextPollingBackoffPolicy: Equatable, Sendable {
         case (nil, nil):
             return .none
         }
+    }
+
+    public func throttleRecommendation(
+        queueDelayMilliseconds: Int,
+        readDurationMilliseconds: Int
+    ) -> FocusedTextPollingThrottleRecommendation {
+        let slowestAXMilliseconds = max(
+            max(0, queueDelayMilliseconds),
+            max(0, readDurationMilliseconds)
+        )
+        guard slowestAXMilliseconds >= slowPollP95Milliseconds else {
+            return .none
+        }
+
+        return recommendation(
+            reason: .slowAXRead,
+            pauseMilliseconds: min(
+                maxPauseDurationMilliseconds,
+                max(minimumThrottleMilliseconds, slowestAXMilliseconds * 2)
+            )
+        )
     }
 
     private func recommendation(

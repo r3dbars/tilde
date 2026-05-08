@@ -50,6 +50,9 @@ Open `Show Diagnostics` from the menu bar item.
 - `Delete Traces` deletes local trace files.
 - `Open Trace Folder` reveals the local trace folder.
 
+Open Settings to see the current sharing status. If raw text or screenshots are
+enabled for debugging, Settings says to share only the redacted privacy bundle.
+
 The command-line delete path is:
 
 ```bash

@@ -93,6 +93,12 @@ public struct AcceptanceSurvivalMeasurement: Equatable, Sendable {
 public struct AcceptanceSurvivalClassifier: Equatable, Sendable {
     public init() {}
 
+    private struct TokenSpan: Equatable, Sendable {
+        let token: String
+        let startUTF16Offset: Int
+        let endUTF16Offset: Int
+    }
+
     public func classify(
         acceptedText: String,
         currentTextWindow: String,
@@ -134,16 +140,50 @@ public struct AcceptanceSurvivalClassifier: Equatable, Sendable {
         deletedWithinTwoSeconds: Bool = false,
         radius: Int = 160
     ) -> AcceptanceSurvivalMeasurement {
-        classify(
-            acceptedText: acceptedText,
-            currentTextWindow: Self.localTextWindow(
-                in: currentFullText,
-                expectedInsertionUTF16Offset: expectedInsertionUTF16Offset,
-                acceptedTextUTF16Length: acceptedText.utf16.count,
-                radius: radius
-            ),
+        let windowBounds = Self.localTextWindowBounds(
+            in: currentFullText,
+            expectedInsertionUTF16Offset: expectedInsertionUTF16Offset,
+            acceptedTextUTF16Length: acceptedText.utf16.count,
+            radius: radius
+        )
+        let window = String(currentFullText[windowBounds.startIndex..<windowBounds.endIndex])
+        let localExpectedInsertionOffset = max(0, expectedInsertionUTF16Offset - windowBounds.startUTF16Offset)
+        let acceptedTokenSpans = Self.looseTokenSpans(in: acceptedText)
+        let currentTokenSpans = Self.looseTokenSpans(in: window)
+        let acceptedTokens = acceptedTokenSpans.map(\.token)
+        let currentTokens = currentTokenSpans.map(\.token)
+        let tokenRecall = Self.tokenRecall(
+            acceptedTokens: acceptedTokens,
+            currentTokens: currentTokens,
+            matches: { acceptedIndex, currentIndex in
+                let acceptedTokenSpan = acceptedTokenSpans[acceptedIndex]
+                let currentTokenSpan = currentTokenSpans[currentIndex]
+                if acceptedTokenSpan.token == currentTokenSpan.token {
+                    return true
+                }
+
+                return Self.tokenWasKeptAsWordCompletionSuffix(
+                    acceptedTokenSpan: acceptedTokenSpan,
+                    currentTokenSpan: currentTokenSpan,
+                    localExpectedInsertionUTF16Offset: localExpectedInsertionOffset
+                )
+            }
+        )
+        let editDistance = Self.bestNormalizedEditDistance(
+            acceptedTokens: acceptedTokens,
+            currentTokens: currentTokens
+        )
+        let survivalClass = Self.survivalClass(
+            tokenRecall: tokenRecall,
+            normalizedEditDistance: editDistance
+        )
+
+        return AcceptanceSurvivalMeasurement(
             checkpoint: checkpoint,
+            tokenRecall: tokenRecall,
+            normalizedEditDistance: editDistance,
             firstEditDelayMilliseconds: firstEditDelayMilliseconds,
+            survivalClass: survivalClass,
             deletedWithinTwoSeconds: deletedWithinTwoSeconds
         )
     }
@@ -154,14 +194,13 @@ public struct AcceptanceSurvivalClassifier: Equatable, Sendable {
         acceptedTextUTF16Length: Int,
         radius: Int = 160
     ) -> String {
-        let safeStart = max(0, expectedInsertionUTF16Offset - radius)
-        let safeEnd = min(
-            text.utf16.count,
-            max(expectedInsertionUTF16Offset, expectedInsertionUTF16Offset + acceptedTextUTF16Length) + radius
+        let bounds = localTextWindowBounds(
+            in: text,
+            expectedInsertionUTF16Offset: expectedInsertionUTF16Offset,
+            acceptedTextUTF16Length: acceptedTextUTF16Length,
+            radius: radius
         )
-        let startIndex = String.Index(utf16Offset: safeStart, in: text)
-        let endIndex = String.Index(utf16Offset: max(safeStart, safeEnd), in: text)
-        return String(text[startIndex..<endIndex])
+        return String(text[bounds.startIndex..<bounds.endIndex])
     }
 
     public static func looseTokens(in text: String) -> [String] {
@@ -191,12 +230,13 @@ public struct AcceptanceSurvivalClassifier: Equatable, Sendable {
             return 0
         }
 
-        let keptTokenCount = longestCommonSubsequenceLength(
-            acceptedTokens,
-            currentTokens
+        return tokenRecall(
+            acceptedTokens: acceptedTokens,
+            currentTokens: currentTokens,
+            matches: { acceptedIndex, currentIndex in
+                acceptedTokens[acceptedIndex] == currentTokens[currentIndex]
+            }
         )
-
-        return Double(keptTokenCount) / Double(acceptedTokens.count)
     }
 
     private static func survivalClass(
@@ -293,16 +333,52 @@ public struct AcceptanceSurvivalClassifier: Equatable, Sendable {
         return previous[rhs.count]
     }
 
+    private static func localTextWindowBounds(
+        in text: String,
+        expectedInsertionUTF16Offset: Int,
+        acceptedTextUTF16Length: Int,
+        radius: Int
+    ) -> (startUTF16Offset: Int, startIndex: String.Index, endIndex: String.Index) {
+        let safeStart = max(0, expectedInsertionUTF16Offset - radius)
+        let safeEnd = min(
+            text.utf16.count,
+            max(expectedInsertionUTF16Offset, expectedInsertionUTF16Offset + acceptedTextUTF16Length) + radius
+        )
+        let startIndex = String.Index(utf16Offset: safeStart, in: text)
+        let endIndex = String.Index(utf16Offset: max(safeStart, safeEnd), in: text)
+        return (safeStart, startIndex, endIndex)
+    }
+
+    private static func tokenRecall(
+        acceptedTokens: [String],
+        currentTokens: [String],
+        matches: (Int, Int) -> Bool
+    ) -> Double {
+        guard !acceptedTokens.isEmpty,
+              !currentTokens.isEmpty else {
+            return 0
+        }
+
+        let keptTokenCount = longestCommonSubsequenceLength(
+            acceptedTokens,
+            currentTokens,
+            matches: matches
+        )
+
+        return Double(keptTokenCount) / Double(acceptedTokens.count)
+    }
+
     private static func longestCommonSubsequenceLength(
         _ lhs: [String],
-        _ rhs: [String]
+        _ rhs: [String],
+        matches: (Int, Int) -> Bool
     ) -> Int {
         var previous = Array(repeating: 0, count: rhs.count + 1)
         var current = Array(repeating: 0, count: rhs.count + 1)
 
         for lhsIndex in 1...lhs.count {
             for rhsIndex in 1...rhs.count {
-                if lhs[lhsIndex - 1] == rhs[rhsIndex - 1] {
+                if matches(lhsIndex - 1, rhsIndex - 1) {
                     current[rhsIndex] = previous[rhsIndex - 1] + 1
                 } else {
                     current[rhsIndex] = max(previous[rhsIndex], current[rhsIndex - 1])
@@ -314,5 +390,71 @@ public struct AcceptanceSurvivalClassifier: Equatable, Sendable {
         }
 
         return previous[rhs.count]
+    }
+
+    private static func looseTokenSpans(in text: String) -> [TokenSpan] {
+        var spans: [TokenSpan] = []
+        var tokenStart: String.Index?
+        var index = text.startIndex
+
+        while index < text.endIndex {
+            let character = text[index]
+            let isTokenCharacter = character.unicodeScalars.allSatisfy {
+                CharacterSet.alphanumerics.contains($0)
+            }
+
+            if isTokenCharacter {
+                if tokenStart == nil {
+                    tokenStart = index
+                }
+            } else if let start = tokenStart {
+                spans.append(tokenSpan(in: text, start: start, end: index))
+                tokenStart = nil
+            }
+
+            index = text.index(after: index)
+        }
+
+        if let start = tokenStart {
+            spans.append(tokenSpan(in: text, start: start, end: text.endIndex))
+        }
+
+        return spans
+    }
+
+    private static func tokenSpan(in text: String, start: String.Index, end: String.Index) -> TokenSpan {
+        TokenSpan(
+            token: normalizedToken(String(text[start..<end])),
+            startUTF16Offset: start.utf16Offset(in: text),
+            endUTF16Offset: end.utf16Offset(in: text)
+        )
+    }
+
+    private static func normalizedToken(_ text: String) -> String {
+        var normalized = ""
+        for scalar in text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current).unicodeScalars {
+            if CharacterSet.alphanumerics.contains(scalar) {
+                normalized.unicodeScalars.append(scalar)
+            }
+        }
+        return normalized
+    }
+
+    private static func tokenWasKeptAsWordCompletionSuffix(
+        acceptedTokenSpan: TokenSpan,
+        currentTokenSpan: TokenSpan,
+        localExpectedInsertionUTF16Offset: Int
+    ) -> Bool {
+        guard acceptedTokenSpan.startUTF16Offset == 0,
+              acceptedTokenSpan.token.count >= 3,
+              currentTokenSpan.token != acceptedTokenSpan.token,
+              currentTokenSpan.token.count > acceptedTokenSpan.token.count,
+              currentTokenSpan.token.hasSuffix(acceptedTokenSpan.token),
+              currentTokenSpan.startUTF16Offset < localExpectedInsertionUTF16Offset,
+              currentTokenSpan.endUTF16Offset >= localExpectedInsertionUTF16Offset + acceptedTokenSpan.endUTF16Offset else {
+            return false
+        }
+
+        return true
     }
 }

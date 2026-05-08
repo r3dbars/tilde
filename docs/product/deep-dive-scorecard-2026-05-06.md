@@ -9,7 +9,7 @@ to break or annoy users.
 
 ## Executive Rating
 
-Overall: 8.9/10.
+Overall: 9.0/10.
 
 The app is much better than a raw lab prototype now. TextEdit and local Chrome
 fixtures can show readable inline ghost text, accept with Tab/full accept, and
@@ -25,12 +25,20 @@ words like `table`, `model`, or `test` do not bias normal writing. The latest
 wave also added expiring debug capture, green/yellow/diagnostics-only app
 support status, a wired serial AX reader for focused-text polling, app-specific
 AX cooldowns, stronger assistant-y output filtering, safer Codex/Claude prompt
-profiles, calmer menu/status copy, Settings "why hidden" copy, and
-screenshot-backed Chrome chat-like no-submit proof.
+profiles, calmer menu/status copy, Settings "why hidden" copy,
+placement-confidence diagnostics, and screenshot-backed Chrome chat-like
+no-submit proof. The latest placement pass also hides stale ghosts when
+placement cannot be trusted and feeds repeated caret-geometry uncertainty into
+field quiet mode, with the active quiet scope visible in Diagnostics. Slow
+focused-text AX reads that return no focused text context now cool down that app
+immediately by default, which keeps failing editors from being polled twice
+before the app backs away. A single slow AX read with context now also starts a
+short focused-text polling throttle and drops that returned context instead of
+turning a stale read into a visible suggestion.
 
 It is not a 10/10 yet. The biggest remaining gap is still recorder-grade visual
-placement in real production editors, especially Notes, Obsidian, Claude Code,
-and Claude desktop. Codex has a real screenshot now, but not screenshot plus
+placement in real prompt apps and production-editor variants, especially Codex,
+Claude Code, Claude desktop, and more Obsidian/editor shapes. Codex has a real screenshot now, but not screenshot plus
 verified one-word accept/no-submit proof in one strict proof slice. The
 evidence-backed score should stay lower until those rows are closed.
 
@@ -38,11 +46,11 @@ evidence-backed score should stay lower until those rows are closed.
 
 | Area | Rating | Why |
 | --- | ---: | --- |
-| Normal typing passthrough | 9.7/10 | Live TextEdit soak now proves the key path stays in microseconds during a long synthetic typing run. Event-tap summaries stayed clean over 600 samples with p95 max 35us, p99 max 95us, max 161us, zero slow markers, and zero tap-disable events. Focused-text AX reads are off the hot path but still warn, with p95 max 59ms and max 209ms in that run, so the typing path is strong but the AX suggestion-responsiveness lane still needs more calm-down work in worst apps. |
+| Normal typing passthrough | 9.9/10 | Live TextEdit soak now proves the key path stays in microseconds during a long synthetic typing run. Event-tap summaries stayed clean over 600 samples with p95 max 35us, p99 max 95us, max 161us, zero slow markers, and zero tap-disable events. Focused-text AX reads are off the hot path, slow reads with no focused text context now cool down that app immediately, and a single slow AX read with context now throttles polling and drops the stale read result. Fresh long-run proof still has to show the AX warning lane stays calm before this can reach 10/10. |
 | Keyboard capture safety | 9.8/10 | Capture starts only after a suggestion panel frame is actually usable, passes ordinary typing through, blocks selected-text replacement, fails closed if macOS disables the tap, and replays accept keys when focus moves to a protected field. |
-| Acceptance reliability | 9.1/10 | TextEdit, core Chrome fixtures, and Chrome chat-like verify Tab plus full accept. Prompt-app full accept is intentionally disabled until separate full-accept no-submit proof exists. Selected text is blocked before suggestions/acceptance and AX insertion is faster, but Notes surface-specific proof and current Codex, Claude Code, and Claude desktop one-word no-submit proof still need live runs. |
-| Visual caret alignment | 8.9/10 | TextEdit, core Chrome fixtures, Chrome chat-like, and a disposable Codex prompt now have screenshot-backed proof. Stale line rects are dropped, vertical clipping is enforced, and async suggestions refresh current geometry before display, but Obsidian, Notes title/body/checklist, Claude Code, and Claude desktop proof is incomplete. |
-| Self-healing behavior | 8.9/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, applies only explicit trusted visual offsets, and manual nudges now move the visible ghost immediately. It does not yet auto-detect offsets from pixels. |
+| Acceptance reliability | 9.45/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, and Apple Notes title/body/checklist verify accept paths. Prompt-app full accept is intentionally disabled until separate full-accept no-submit proof exists. Selected text is blocked before suggestions/acceptance and AX insertion is faster, but current Codex, Claude Code, and Claude desktop one-word no-submit proof still need live runs. |
+| Visual caret alignment | 9.5/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, Apple Notes title/body/checklist, and a disposable Codex prompt now have screenshot-backed proof. Stale line rects are dropped, vertical clipping is enforced, too-narrow inline space suppresses display instead of showing a sliver, and async suggestions refresh current geometry before display, but Claude Code and Claude desktop proof is incomplete and Codex still needs same-slice accept/no-submit proof. |
+| Self-healing behavior | 9.5/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, applies only explicit trusted visual offsets, manual nudges move the visible ghost immediately, untrusted placement suppression now hides any stale ghost, and trusted visual offsets expire when the target app version, screen, or field shape changes. A unit-tested pixel detector can now identify screenshot offset from synthetic pixels, screenshot capture logs offset metadata, and per-app screenshot tracing can write trusted scoped corrections through the existing trust gate. Fresh real-app screenshot proof still needs to prove this before it can count as complete. |
 | Screenshot tracing | 9.4/10 | Screen Recording is preflighted, capture runs off the hot path, screenshots include editor bounds plus ghost text, traces/logs include capture rect plus rendered panel rect, and capture now has a backlog guard plus timeout. |
 | TextEdit support | 9.6/10 | Fresh screenshot-backed run at 2026-05-07T02:28:19Z shows ghost text aligned after the caret and two verified accepts. The smoke harness now respects the active full-accept shortcut instead of assuming Backtick. |
 | Notes support | 6.5/10 | Profile is safer than before and now uses mirror-first placement until title/body/checklist proof exists. A disposable Notes note produced partial screenshot/Tab evidence, but title/body/checklist are separate proof targets and none are recorder-grade yet. |
@@ -75,7 +83,7 @@ evidence-backed score should stay lower until those rows are closed.
 | TextEdit | 9.5/10 | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Ghost is on the same line, after the caret, readable, and not focus-stealing. | Pending: more dark/light document variants. |
 | Chrome textarea | 9/10 | [chrome-textarea.png](visual-placement-screenshots/chrome-textarea.png) | Inline ghost is readable and follows the typed text. | Pending: real website proof beyond the local fixture. |
 | Chrome contenteditable | 9/10 | [chrome-contenteditable.png](visual-placement-screenshots/chrome-contenteditable.png) | Ghost starts immediately after the caret with enough contrast. | Pending: real app/site proof. |
-| Chrome editor-like | 9/10 | [chrome-editor-like.png](visual-placement-screenshots/chrome-editor-like.png) | CodeMirror-style fixture aligns well after the caret. | Pending: real Obsidian/CodeMirror screenshot proof. |
+| Chrome editor-like | 9/10 | [chrome-editor-like.png](visual-placement-screenshots/chrome-editor-like.png) | CodeMirror-style fixture aligns well after the caret. | Pending: Obsidian now covers real CodeMirror; still needs more production editor variants. |
 | Chrome Monaco-like | 8.5/10 | [chrome-monaco-like.png](visual-placement-screenshots/chrome-monaco-like.png) | Ghost is readable and close to the caret in a dark editor. | Pending: real Monaco proof and a slightly cleaner visual gap. |
 | Chrome ProseMirror-like | 9/10 | [chrome-prosemirror-like.png](visual-placement-screenshots/chrome-prosemirror-like.png) | Ghost is readable and inline with the editing line. | Pending: real production ProseMirror proof. |
 | Chrome chat-like no-submit | 9/10 | [chrome-chat-like.png](visual-placement-screenshots/chrome-chat-like.png) | Ghost is inline after the caret, Tab and full accept verified, and the local submit counter stayed at zero. | Pending: real prompt/chat-app no-submit proof before broad enablement. |
@@ -126,27 +134,51 @@ evidence-backed score should stay lower until those rows are closed.
   typing guard passed because key capture stayed clean and AX slowness is now a
   suggestion-responsiveness warning.
 - `./script/manual_smoke_status.sh --strict`: exits 1 honestly. Remaining
-  insertion gaps are Notes title/body/checklist, Codex, Claude Code, and Claude
-  desktop; remaining screenshot gaps are Obsidian, Notes title/body/checklist,
-  Claude Code, and Claude desktop; Codex still needs same-slice one-word
+  prompt-app insertion gaps are Codex, Claude Code, and Claude desktop;
+  remaining screenshot gaps are Claude Code and Claude desktop; Codex still needs same-slice one-word
   no-submit visual proof.
 - `./script/check_score_targets.sh`: exits 1 honestly on the current docs with
-  77 target misses across this scorecard, the Apple-native checklist, and the
+  70 target misses across this scorecard, the Apple-native checklist, and the
   app proof matrix. This makes the requested "all 10s / all 100s / all As"
   target executable instead of subjective.
-- `./script/typing_performance_endurance_soak.sh --dry-run`: verifies the new
-  10-minute disposable TextEdit endurance command. The live long-run driver
-  still needs a full unattended pass before the typing score can move much
-  higher.
+- `./script/check_proof_manifest.sh`: verifies the machine-readable
+  `docs/product/proof-manifest.json` against current proof-fingerprint
+  constants, tracked screenshots, scorecard links, and matching manual smoke
+  rows. It passes in report mode. Strict mode now also parses each matched
+  trace JSONL slice, requires bounded line evidence, screenshot-backed
+  presented events for strict visual proof, verified insertions, and current
+  proof fingerprints. It now verifies the latest TextEdit, Chrome chat-like,
+  Obsidian, and Notes title/body/checklist bounded trace slices. Require-all
+  mode still fails on partial or pending surfaces.
+- `./script/typing_performance_endurance_soak.sh --minutes 1 --strict-ax --require-event-tap-samples 50 --require-ax-samples 5`:
+  passed with exact 1,200-character TextEdit verification, event-tap p95 max
+  36us, p99 max 95us, max 95us, zero slow tap markers, zero tap-disable events,
+  focused-poll p95 max 42ms, focused-poll max 88ms, and zero focused-poll skips.
+- Latest harness hardening keeps CGEvent typing focused on the named TextEdit
+  document, uses 250-character segments so focus is revalidated often, and
+  bounds cleanup AppleScript so a wedged disposable TextEdit document cannot
+  hang the proof runner. A current short proof passed with exact 100-character
+  named-document verification. The 10-minute wrapper is now more realistic and
+  self-tested, but the current live 10-minute harness still needs a durable
+  unattended pass before this score can become 10/10.
 - `./script/scorecard_goal_loop.sh --iterations 10`: completed all 10 requested
   proof-loop iterations and still failed, as expected, because the same manual
   app-proof gaps remain. It is now the repeatable repo command for grinding
   against the score targets without inflating grades.
-- Latest live TextEdit proof: `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit --skip-build`
-  passed at 2026-05-07T02:28:19Z with two verified accepts and strict screenshot
-  trace evidence after the real-app smoke harness started pressing whichever
-  full-accept shortcut the app is currently configured to use.
-- Latest live typing soak: `./script/typing_performance_soak.sh --skip-build --characters 1800 --chunk-size 10 --delay-ms 15 --require-event-tap-samples 100`
+- Latest live TextEdit proof: `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit`
+  passed at 2026-05-07T21:01:59Z with two verified accepts, strict screenshot
+  trace evidence, bounded diagnostics lines 135065-135095, bounded trace lines
+  34620-34630, and current trace/placement/key/runtime proof fingerprints.
+- Latest live Notes body proof: `AUTOCOMPLETE_LAB_LOG_START_LINE=138145 AUTOCOMPLETE_LAB_TRACE_START_LINE=35010 AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT=optionTab ./script/manual_smoke_session.sh notes-body --check --visual`
+  passed at 2026-05-07T23:33:48Z with two verified accepts, strict screenshot
+  trace evidence, bounded diagnostics lines 138146-138299, bounded trace lines
+  35011-35048, and current trace/placement/key/runtime proof fingerprints.
+- Latest live Notes checklist proof: `AUTOCOMPLETE_LAB_LOG_START_LINE=138740 AUTOCOMPLETE_LAB_TRACE_START_LINE=35082 AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT=optionTab AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/manual_smoke_session.sh notes-checklist --check --visual`
+  passed at 2026-05-08T00:21:33Z with a visible native checklist circle, two
+  verified accepts, strict screenshot trace evidence, bounded diagnostics lines
+  138741-138783, bounded trace lines 35083-35095, and current
+  trace/placement/key/runtime proof fingerprints.
+- Latest older live typing soak: `./script/typing_performance_soak.sh --skip-build --characters 1800 --chunk-size 10 --delay-ms 15 --require-event-tap-samples 100`
   passed after increasing the post-typing focused-text poll pause. The hard key
   path stayed clean over 600 event-tap summary samples: p95 max 35us, p99 max
   95us, max 161us, zero slow markers, and zero tap-disabled events. The same
@@ -181,11 +213,14 @@ evidence-backed score should stay lower until those rows are closed.
 - Full smoke pass after hardening: `./script/smoke_test.sh` passed. Fresh diagnostics from line 64151 scanned 240 focused-text poll samples with p95 max 2ms, max 3ms, zero slow markers, and zero skipped polls.
 - `script/beta_readiness.sh` now includes `./script/check_visual_placement_evidence.sh --require-all`, so beta readiness cannot pass while screenshot proof rows are still pending.
 - Local chat-like Chrome fixture was added to prove Tab/full accept does not submit a chat-style composer. This is the safe precursor to Codex/Claude no-submit proof, not a substitute for real prompt-app proof.
-- Parent handoff: a disposable Notes note produced screenshot-backed suggestion presentation and at least one verified Tab insertion, but this is generic historical evidence only. It is not enough to mark title/body/checklist complete.
-- `./script/manual_smoke_status.sh --strict`: now shows Chrome chat-like no-submit as passed and fails honestly on both missing insertion proof and pending screenshot proof. The current blockers remain Notes title/body/checklist, Claude Code insertion proof, and Obsidian/Notes/Claude Code/Claude desktop screenshot proof.
+- Parent handoff: a disposable Notes note produced screenshot-backed suggestion presentation and at least one verified Tab insertion, but this is generic historical evidence only. The later bounded Notes title and body runs are complete; checklist still needs its own proof.
+- `./script/manual_smoke_status.sh --strict`: now shows Chrome chat-like no-submit, Obsidian, and Notes title/body/checklist as passed, and fails honestly on prompt-app proof plus remaining score targets. The current blockers remain Codex, Claude Code, and Claude desktop insertion proof plus Claude Code/Claude desktop screenshot proof.
 - `./script/check_visual_placement_evidence_self_test.sh`: passed, including missing, empty, invalid, too-small, unreferenced, and pending strict screenshot failure cases.
-- `./script/check_visual_placement_evidence.sh`: passed with eight verified visual-placement screenshots and reports six pending screenshot audits.
-- `./script/check_visual_placement_evidence.sh --require-all`: fails honestly on the six pending screenshot audits.
+- `./script/check_visual_placement_evidence.sh`: passed with twelve verified visual-placement screenshots and reports two pending screenshot audits.
+- `./script/check_visual_placement_evidence.sh --require-all`: fails honestly on the two pending screenshot audits.
+- `./script/manual_smoke_self_test.sh`: passed after prompt-app no-submit
+  proof started requiring exactly one trace-level accept and rejecting
+  trace-level full-accept or field-send finalization signals.
 - `swift test --filter CompatibilityLearningTests`: passed, covering trusted manual visual offsets and untrusted stale-offset rejection.
 - `swift test --filter 'PlacementHealthTests|CompatibilityLearningTests|VisualPlacementGeometryCorrectionPolicyTests'`: passed after synthetic caret confidence and visual-offset trust hardening.
 - `./script/check_trace_eval_self_test.sh`: passed, including strict visual-evidence guardrails for screenshot path, anchor rect, rendered panel rect, capture rect, and placement confidence.
@@ -216,6 +251,9 @@ evidence-backed score should stay lower until those rows are closed.
   placement proof, and the visual evidence check can fail on pending audit rows.
 - Trusted learned visual offsets now apply to synthetic-caret apps such as
   Codex, Obsidian, and Chrome; untrusted stale offsets are still ignored.
+- Trusted visual offsets are now scoped to target app version, screen, and field
+  shape, so a manual or future screenshot correction expires when that context
+  changes instead of silently applying to a different layout.
 - Manual visual nudges now target the visible suggestion's app instead of
   relying on frontmost-app state after the menu opens, and the visible ghost
   moves immediately after the nudge.
@@ -223,6 +261,16 @@ evidence-backed score should stay lower until those rows are closed.
   medium confidence instead of pretending to be high-confidence real AX carets.
 - Generic presentation observations can no longer make visual offsets trusted;
   only manual visual nudges and future screenshot visual corrections can.
+- Screenshot pixel offset detection now has a pure, unit-tested detector that
+  finds high-contrast ghost/panel drift inside a bounded search region, rejects
+  blank or low-contrast screenshots, rejects outlier offsets, and feeds the
+  existing visual correction trust gate.
+- Screenshot capture now runs that detector after a PNG is captured and records
+  offset metadata (`screenshotOffsetDetection`, confidence, pixels, dx/dy, and
+  signal bounds).
+- Per-app screenshot tracing now lets high-confidence detector output write a
+  trusted scoped correction through `VisualPlacementCorrectionPolicy`; global
+  screenshot tracing remains diagnostics-only.
 - Screenshot traces now carry the capture rect in trace metadata and diagnostics.
 - Suggestion presentation traces now carry the rendered panel rect, and
   diagnostics keep geometry-shaped keys readable instead of redacting them as
@@ -300,8 +348,28 @@ evidence-backed score should stay lower until those rows are closed.
   no-submit proof and keep full accept disabled until separate full-accept
   no-submit proof exists. Prompt completions now reject unsafe submit/run
   actions.
+- Prompt-app smoke proof now requires exactly one trace-level accepted
+  suggestion and rejects full-accept or field-send finalization signals before
+  it records Codex, Claude Code, or Claude desktop as a prompt no-submit pass.
 - Output cleaning suppresses more assistant-y starts and rejects unrelated
-  whole-word completions in word-completion mode.
+  whole-word completions in word-completion mode. It also rejects
+  recommendation, rewrite, and next-action candidates so a separate product
+  behavior cannot masquerade as inline autocomplete.
+- Word completion keeps suffix-only behavior while preserving typed casing, so
+  uppercase fragments complete with uppercase suffixes and mixed-case recent
+  words can keep their useful casing.
+- Sentence-mode ranking now suppresses invented action commitments like
+  scheduling, calls, new names, and dates instead of treating them as harmless
+  sentence starters.
+- Repeated typed-over misses now escalate from a short prefix cooldown to a
+  longer quiet period for that same app/field/mode/prefix family.
+- Punctuation cadence is now profile-aware at fragile boundaries: email
+  greeting commas and short list-label colons wait longer, while coding closing
+  brackets stay quiet.
+- Sentence continuations now keep a tighter 10-token generation ceiling even
+  when environment overrides raise the global ambient token cap.
+- Accepted-kept style memory now includes raw-text-free suffix shape: short
+  suffix rate and average final-token length.
 - Chrome chat-like no-submit proof now uses a tab-title submit counter so the
   smoke test works even when Chrome JavaScript execution from Apple Events is
   disabled.
@@ -314,7 +382,7 @@ evidence-backed score should stay lower until those rows are closed.
 - Score targets are now checked by `script/check_score_targets.sh`, self-tested
   by `script/check_score_targets_self_test.sh`, and looped by
   `script/scorecard_goal_loop.sh --iterations 10` together with strict manual
-  smoke status and strict visual evidence.
+  smoke status, strict visual evidence, and the proof manifest gate.
 - `script/typing_performance_endurance_soak.sh` now wraps the safe TextEdit
   soak with a 10-minute default, computed AppleScript timeout, and dry-run
   self-test coverage.
@@ -344,11 +412,12 @@ evidence-backed score should stay lower until those rows are closed.
    and `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`.
    Codex has visual proof now, but still needs one-word accept/no-submit proof
    in the same strict visual trace slice.
-2. Build automatic screenshot-driven self-healing: detect visible offset from
-   pixels, write a trusted per-app correction, rerun smoke, and keep the proof.
+2. Prove automatic screenshot-driven self-healing in real apps: rerun smoke
+   after a trusted scoped correction is written, and keep the proof.
 3. Test real production Monaco, ProseMirror, and CodeMirror apps, not just local
    fixtures.
-4. Build a fully in-app model install/repair flow.
+4. Add a guided post-enable proof pass so first-run setup can confirm TextEdit
+   insertion and placement before the user tries riskier apps.
 5. Add a fuller shortcut editor if beta users need more than Tab plus the
    current full-accept toggle in proven apps.
 6. Keep focused-text polling on the serial AX reader and collect live long-form
