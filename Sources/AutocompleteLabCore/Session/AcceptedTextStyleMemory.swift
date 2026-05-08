@@ -22,6 +22,8 @@ public struct AcceptedTextStyleSketch: Codable, Equatable, Sendable {
     public let terminalPunctuationRate: Double
     public let lowercaseStartRate: Double
     public let questionEndingRate: Double
+    public let shortSuffixRate: Double?
+    public let averageFinalTokenLength: Double?
     public let decayFactor: Double
 
     public init(
@@ -30,6 +32,8 @@ public struct AcceptedTextStyleSketch: Codable, Equatable, Sendable {
         terminalPunctuationRate: Double,
         lowercaseStartRate: Double,
         questionEndingRate: Double,
+        shortSuffixRate: Double? = nil,
+        averageFinalTokenLength: Double? = nil,
         decayFactor: Double = 1
     ) {
         self.sampleCount = max(0, sampleCount)
@@ -37,6 +41,8 @@ public struct AcceptedTextStyleSketch: Codable, Equatable, Sendable {
         self.terminalPunctuationRate = Self.rate(terminalPunctuationRate)
         self.lowercaseStartRate = Self.rate(lowercaseStartRate)
         self.questionEndingRate = Self.rate(questionEndingRate)
+        self.shortSuffixRate = shortSuffixRate.map(Self.rate)
+        self.averageFinalTokenLength = averageFinalTokenLength.map { max(0, $0) }
         self.decayFactor = Self.rate(decayFactor)
     }
 
@@ -45,16 +51,23 @@ public struct AcceptedTextStyleSketch: Codable, Equatable, Sendable {
             return nil
         }
 
-        return [
+        var pieces = [
             "Recent kept style sketch: avg \(Self.format(averageWordCount)) words",
             frequencyPhrase(rate: terminalPunctuationRate, label: "terminal punctuation"),
             frequencyPhrase(rate: lowercaseStartRate, label: "lowercase starts"),
             frequencyPhrase(rate: questionEndingRate, label: "question endings")
-        ].joined(separator: "; ") + "."
+        ]
+        if let shortSuffixRate {
+            pieces.append(frequencyPhrase(rate: shortSuffixRate, label: "short kept suffixes"))
+        }
+        if let averageFinalTokenLength {
+            pieces.append("avg final token \(Self.format(averageFinalTokenLength)) chars")
+        }
+        return pieces.joined(separator: "; ") + "."
     }
 
     public var traceMetadata: [String: String] {
-        [
+        var metadata = [
             "styleSketchSamples": String(sampleCount),
             "styleSketchAverageWords": Self.format(averageWordCount),
             "styleSketchTerminalPunctuationRate": Self.format(terminalPunctuationRate),
@@ -62,6 +75,13 @@ public struct AcceptedTextStyleSketch: Codable, Equatable, Sendable {
             "styleSketchQuestionEndingRate": Self.format(questionEndingRate),
             "styleSketchDecayFactor": Self.format(decayFactor)
         ]
+        if let shortSuffixRate {
+            metadata["styleSketchShortSuffixRate"] = Self.format(shortSuffixRate)
+        }
+        if let averageFinalTokenLength {
+            metadata["styleSketchAverageFinalTokenLength"] = Self.format(averageFinalTokenLength)
+        }
+        return metadata
     }
 
     private func frequencyPhrase(rate: Double, label: String) -> String {
@@ -167,9 +187,11 @@ public struct AcceptedTextStyleMemoryStore: Codable, Equatable, Sendable {
 
 private struct AcceptedTextStyleFeatures: Equatable, Sendable {
     let wordCount: Int
+    let finalTokenLength: Int
     let hasTerminalPunctuation: Bool
     let startsLowercase: Bool
     let endsWithQuestion: Bool
+    let isShortSuffix: Bool
 
     init?(text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -179,9 +201,11 @@ private struct AcceptedTextStyleFeatures: Equatable, Sendable {
         }
 
         self.wordCount = words.count
+        self.finalTokenLength = words.last?.count ?? 0
         self.hasTerminalPunctuation = trimmed.last.map(Self.isTerminalPunctuation) ?? false
         self.startsLowercase = trimmed.first.map(Self.isLowercaseLetter) ?? false
         self.endsWithQuestion = trimmed.hasSuffix("?")
+        self.isShortSuffix = words.count <= 2
     }
 
     private static func isTerminalPunctuation(_ character: Character) -> Bool {
@@ -199,6 +223,8 @@ private struct AcceptedTextStyleBucket: Codable, Equatable, Sendable {
     var terminalPunctuationWeight: Double = 0
     var lowercaseStartWeight: Double = 0
     var questionEndingWeight: Double = 0
+    var shortSuffixWeight: Double?
+    var finalTokenLengthWeight: Double?
     var lastDecayFactor: Double = 1
     var lastUpdatedSequence: UInt64 = 0
     var lastUpdatedAt: Date = Date(timeIntervalSince1970: 0)
@@ -209,6 +235,8 @@ private struct AcceptedTextStyleBucket: Codable, Equatable, Sendable {
         terminalPunctuationWeight += features.hasTerminalPunctuation ? 1 : 0
         lowercaseStartWeight += features.startsLowercase ? 1 : 0
         questionEndingWeight += features.endsWithQuestion ? 1 : 0
+        shortSuffixWeight = (shortSuffixWeight ?? 0) + (features.isShortSuffix ? 1 : 0)
+        finalTokenLengthWeight = (finalTokenLengthWeight ?? 0) + Double(features.finalTokenLength)
     }
 
     mutating func decay(now: Date, halfLifeSeconds: TimeInterval) {
@@ -234,6 +262,8 @@ private struct AcceptedTextStyleBucket: Codable, Equatable, Sendable {
         terminalPunctuationWeight *= factor
         lowercaseStartWeight *= factor
         questionEndingWeight *= factor
+        shortSuffixWeight = shortSuffixWeight.map { $0 * factor }
+        finalTokenLengthWeight = finalTokenLengthWeight.map { $0 * factor }
         lastUpdatedAt = now
         lastDecayFactor = factor
     }
@@ -249,6 +279,8 @@ private struct AcceptedTextStyleBucket: Codable, Equatable, Sendable {
             terminalPunctuationRate: terminalPunctuationWeight / sampleWeight,
             lowercaseStartRate: lowercaseStartWeight / sampleWeight,
             questionEndingRate: questionEndingWeight / sampleWeight,
+            shortSuffixRate: shortSuffixWeight.map { $0 / sampleWeight },
+            averageFinalTokenLength: finalTokenLengthWeight.map { $0 / sampleWeight },
             decayFactor: lastDecayFactor
         )
     }

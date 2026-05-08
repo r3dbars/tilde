@@ -365,6 +365,8 @@ evidence-backed score should stay lower until those rows are closed.
   brackets stay quiet.
 - Sentence continuations now keep a tighter 10-token generation ceiling even
   when environment overrides raise the global ambient token cap.
+- Accepted-kept style memory now includes raw-text-free suffix shape: short
+  suffix rate and average final-token length.
 - Chrome chat-like no-submit proof now uses a tab-title submit counter so the
   smoke test works even when Chrome JavaScript execution from Apple Events is
   disabled.
