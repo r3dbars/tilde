@@ -12,7 +12,7 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         recentWords: [String] = []
     ) -> CompletionSuggestion? {
         guard let fragment = trailingFragment(in: textBeforeCursor),
-              fragment.count >= 2,
+              fragment.count >= 3,
               fragment.allSatisfy({ $0.isLetter }) else {
             return nil
         }
