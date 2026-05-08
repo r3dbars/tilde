@@ -28,4 +28,12 @@ struct AppCompatibilityProfileTests {
         #expect(registry.profile(for: "example.unknown.Writer").id == "fallback")
         #expect(registry.profile(for: nil).id == "fallback")
     }
+
+    @Test("Default profiles do not use clipboard fallback acceptance")
+    func defaultProfilesDoNotUseClipboardFallback() {
+        let clipboardProfiles = AppCompatibilityRegistry.defaultProfiles
+            .filter { $0.acceptMode == .clipboardFallback }
+
+        #expect(clipboardProfiles.isEmpty)
+    }
 }

@@ -41,13 +41,18 @@ struct AXFieldClassifierTests {
         ).reason == "unprovenSurface:notion")
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", windowTitle: "general - Slack")) == .unprovenSurface)
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", windowTitle: "Discord")) == .unprovenSurface)
+        #expect(classifier.classification(
+            for: AXFieldClassifierInput(role: "AXWebArea", textBeforeCursorLength: 12)
+        ).reason == "webAreaWithoutComposeHint")
         #expect(AXFieldKind.unprovenSurface.suppressesSuggestionsByDefault)
     }
 
     @Test("Classifies compose fields")
     func classifiesComposeFields() {
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea")) == .multilineCompose)
-        #expect(classifier.classify(AXFieldClassifierInput(role: "AXWebArea", textBeforeCursorLength: 12)) == .multilineCompose)
+        #expect(classifier.classification(
+            for: AXFieldClassifierInput(role: "AXWebArea", placeholder: "Write a reply", textBeforeCursorLength: 12)
+        ).reason == "webComposeHint")
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextField", placeholder: "Message", lineCount: 2)) == .multilineCompose)
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextField", placeholder: "Message")) == .singlelineCompose)
         #expect(!AXFieldKind.multilineCompose.suppressesSuggestionsByDefault)

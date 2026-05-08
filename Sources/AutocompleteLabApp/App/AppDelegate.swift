@@ -1811,6 +1811,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 context: context,
                 profile: profile
             ),
+            targetFingerprint: targetFingerprint(context: context),
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             selectedTextLength: context.selectedTextLength
@@ -1884,12 +1885,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let currentFieldIdentity,
               let lastTextSnapshot,
               lastTextSnapshot.fieldIdentity == currentFieldIdentity,
+              let currentSuggestionAcceptanceSnapshot,
               let profile = currentProfile else {
             return nil
         }
 
         return InsertionVerificationBaseline(
             fieldIdentity: currentFieldIdentity,
+            targetFingerprint: currentSuggestionAcceptanceSnapshot.targetFingerprint.postInsertionScope,
             previousTextBeforeCursor: lastTextSnapshot.textBeforeCursor,
             previousTextAfterCursor: lastTextSnapshot.textAfterCursor,
             profile: profile,
@@ -1965,6 +1968,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
+            let currentTargetFingerprint = targetFingerprint(context: context).postInsertionScope
+            guard baseline.targetFingerprint.matches(currentTargetFingerprint) else {
+                DiagnosticsLog.shared.record(
+                    "insert-verification",
+                    metadata: [
+                        "app": baseline.profile.bundleIdentifier,
+                        "result": "target-fingerprint-mismatch"
+                    ]
+                )
+                recordInsertionVerificationFailure(
+                    acceptedText: acceptedText,
+                    baseline: baseline,
+                    outcome: "target-fingerprint-mismatch",
+                    reason: "insert-verification-target-fingerprint-mismatch",
+                    metadata: [:]
+                )
+                hideSuggestion()
+                return
+            }
+
             let result = insertionVerification.verify(
                 previousTextBeforeCursor: baseline.previousTextBeforeCursor,
                 acceptedText: acceptedText,
@@ -2008,6 +2031,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     if insertAcceptedText(acceptedText, skippingInsertionModes: skippedModes) {
                         let retryBaseline = InsertionVerificationBaseline(
                             fieldIdentity: baseline.fieldIdentity,
+                            targetFingerprint: baseline.targetFingerprint,
                             previousTextBeforeCursor: baseline.previousTextBeforeCursor,
                             previousTextAfterCursor: baseline.previousTextAfterCursor,
                             profile: baseline.profile,
@@ -2631,6 +2655,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionTextBeforeCursor = request.textBeforeCursor
         currentSuggestionAcceptanceSnapshot = SuggestionAcceptanceSnapshot(
             fieldIdentity: fieldIdentity,
+            targetFingerprint: targetFingerprint(context: context),
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             selectedTextLength: context.selectedTextLength
@@ -3036,6 +3061,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private func targetFingerprint(context: FocusedTextContext) -> FocusedTargetFingerprint {
+        FocusedTargetFingerprint(
+            role: context.role,
+            subrole: context.subrole,
+            elementFingerprint: context.fingerprint,
+            elementRect: context.elementRect,
+            windowRect: context.windowRect,
+            caretRect: context.caretRect,
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor
+        )
+    }
+
     private func insertionRetrySkippedModes(
         result: InsertionVerificationResult,
         profile: CompatibilityProfile,
@@ -3269,10 +3307,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if let lastTextSnapshot,
-           lastTextSnapshot.fieldIdentity == currentFieldIdentity {
+           lastTextSnapshot.fieldIdentity == currentFieldIdentity,
+           let currentSuggestionAcceptanceSnapshot {
             currentSuggestionTextBeforeCursor = lastTextSnapshot.textBeforeCursor
-            currentSuggestionAcceptanceSnapshot = SuggestionAcceptanceSnapshot(
+            self.currentSuggestionAcceptanceSnapshot = SuggestionAcceptanceSnapshot(
                 fieldIdentity: lastTextSnapshot.fieldIdentity,
+                targetFingerprint: currentSuggestionAcceptanceSnapshot.targetFingerprint.advancingTextRevision(
+                    textBeforeCursor: lastTextSnapshot.textBeforeCursor,
+                    textAfterCursor: lastTextSnapshot.textAfterCursor
+                ),
                 textBeforeCursor: lastTextSnapshot.textBeforeCursor,
                 textAfterCursor: lastTextSnapshot.textAfterCursor,
                 selectedTextLength: 0
@@ -3286,6 +3329,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let currentSuggestionAcceptanceSnapshot {
                 self.currentSuggestionAcceptanceSnapshot = SuggestionAcceptanceSnapshot(
                     fieldIdentity: currentSuggestionAcceptanceSnapshot.fieldIdentity,
+                    targetFingerprint: currentSuggestionAcceptanceSnapshot.targetFingerprint.advancingTextRevision(
+                        textBeforeCursor: advancedTextBeforeCursor,
+                        textAfterCursor: currentSuggestionAcceptanceSnapshot.textAfterCursor
+                    ),
                     textBeforeCursor: advancedTextBeforeCursor,
                     textAfterCursor: currentSuggestionAcceptanceSnapshot.textAfterCursor,
                     selectedTextLength: 0
@@ -4710,6 +4757,7 @@ private extension AppDelegate {
 
 private struct InsertionVerificationBaseline: Equatable {
     let fieldIdentity: FocusedFieldIdentity
+    let targetFingerprint: FocusedTargetFingerprint
     let previousTextBeforeCursor: String
     let previousTextAfterCursor: String
     let profile: CompatibilityProfile

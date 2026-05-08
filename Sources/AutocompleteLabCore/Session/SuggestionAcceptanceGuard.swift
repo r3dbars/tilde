@@ -8,10 +8,11 @@ public enum SuggestionAcceptanceBlockReason: String, Equatable, Sendable {
     case missingCurrentSnapshot = "missing-current-snapshot-before-accept"
     case currentBecameSecure = "secure-field-before-accept"
     case promptTargetChanged = "prompt-target-changed-before-accept"
+    case targetFingerprintChanged = "target-fingerprint-changed-before-accept"
 
     public var isFocusMismatch: Bool {
         switch self {
-        case .appChanged, .fieldChanged, .selectedTextChanged:
+        case .appChanged, .fieldChanged, .selectedTextChanged, .targetFingerprintChanged:
             true
         case .textBeforeCursorChanged,
              .textAfterCursorChanged,
@@ -42,25 +43,33 @@ public enum SuggestionAcceptanceDecision: Equatable, Sendable {
 
 public struct SuggestionAcceptanceSnapshot: Equatable, Sendable {
     public let fieldIdentity: FocusedFieldIdentity
+    public let targetFingerprint: FocusedTargetFingerprint
     public let textBeforeCursor: String
     public let textAfterCursor: String
     public let selectedTextLength: Int
 
     public init(
         fieldIdentity: FocusedFieldIdentity,
+        targetFingerprint: FocusedTargetFingerprint,
         textBeforeCursor: String,
         textAfterCursor: String,
         selectedTextLength: Int
     ) {
         self.fieldIdentity = fieldIdentity
+        self.targetFingerprint = targetFingerprint
         self.textBeforeCursor = textBeforeCursor
         self.textAfterCursor = textAfterCursor
         self.selectedTextLength = max(0, selectedTextLength)
     }
 
-    public init(snapshot: FocusedTextSnapshot, selectedTextLength: Int) {
+    public init(
+        snapshot: FocusedTextSnapshot,
+        targetFingerprint: FocusedTargetFingerprint,
+        selectedTextLength: Int
+    ) {
         self.init(
             fieldIdentity: snapshot.fieldIdentity,
+            targetFingerprint: targetFingerprint,
             textBeforeCursor: snapshot.textBeforeCursor,
             textAfterCursor: snapshot.textAfterCursor,
             selectedTextLength: selectedTextLength
@@ -110,6 +119,10 @@ public struct SuggestionAcceptanceGuard: Equatable, Sendable {
 
         if shown.textAfterCursor != current.textAfterCursor {
             return .block(.textAfterCursorChanged)
+        }
+
+        if !shown.targetFingerprint.matches(current.targetFingerprint) {
+            return .block(.targetFingerprintChanged)
         }
 
         return .allow
