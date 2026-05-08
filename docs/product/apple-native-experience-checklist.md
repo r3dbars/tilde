@@ -73,7 +73,7 @@ fail quietly when it is unsure. Wrong-place text is worse than no suggestion.
 | Visual placement and caret alignment | 18 | 80 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, inline mode now hides when less than one useful word fits after the caret, screenshot-derived correction is wired behind explicit per-app screenshot tracing, learned visual offsets now expire when target app version, screen, or field shape changes, low-confidence mirror fallback is now suppressed for untrusted yellow profiles, Chrome chat-like, Obsidian, Notes title/body/checklist, and Claude desktop now have proof, and Diagnostics exposes placement confidence without suggestion text. Claude desktop's current one-line composer proof is same-baseline with detector offset near zero. Codex same-slice accept/no-submit proof, live Claude Code terminal-host screenshot proof, and more prompt/editor layouts are still blockers. |
 | Acceptance safety | 10 | 94 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, Esc dismissal is trace-marked as inserting zero suggestion text, full accept is blocked unless accepted text exactly matches the visible suggestion, Tab accept is traced as a visible-prefix accept, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, Claude desktop proved one-word Tab accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Claude Code now has a proof-only terminal-host adapter that blocks unsupported hosts, missing proof mode, missing marker, shell prompts, and multiline command buffers. Codex and Claude Code one-word no-submit proof are still incomplete. |
 | Cross-app reliability | 10 | 87 | 100 | The proof matrix now has 15 screenshot artifacts, Notes title/body/checklist are all split out, real Monaco/ProseMirror pass under isolated renderer-accessibility Chrome, Claude desktop has same-baseline real prompt no-submit proof, Claude Code has a proof-only terminal-host lane, every compatibility profile has owner/safety coverage in the proof manifest, and the app exposes green/yellow/diagnostics-only/unsupported status plus explicit copy-only fallback stance for non-sensitive diagnostics-only or untrusted-placement cases. Chrome-hosted Google Docs, Notion, Slack, and Discord are now blocked by surface policy until real proof exists. Codex, Claude Code terminal-host proof, default-Chrome editor AX exposure, and more production editor variants are still pending proof. |
-| Native macOS visual feel | 8 | 93 | 100 | Settings moved toward tested unframed native sections, checkboxes, clearer privacy/app controls, support status, copy-only fallback status, "why hidden" copy, and calmer menu copy. Diagnostics now opens with a short system-font inspector overview, onboarding/permission copy uses plain System Settings language, the menu bar uses a template SF Symbol with text fallback, inline ghost text uses a dynamic system placeholder color across light/dark/high-contrast appearance coverage, the bundle check now verifies a valid multi-size ICNS app icon, and Settings plus Diagnostics have generated light/dark/high-contrast screenshot evidence. Live suggestion overlay screenshot QA is still needed. |
+| Native macOS visual feel | 8 | 95 | 100 | Settings moved toward tested unframed native sections, checkboxes, clearer privacy/app controls, support status, copy-only fallback status, "why hidden" copy, and calmer menu copy. Diagnostics now opens with a short system-font inspector overview, onboarding/permission copy uses plain System Settings language, the menu bar uses a template SF Symbol with text fallback, inline ghost text uses a dynamic system placeholder color across light/dark/high-contrast appearance coverage, the bundle check now verifies a valid multi-size ICNS app icon, and Settings, Diagnostics, plus the suggestion overlay renderer have generated light/dark/high-contrast screenshot evidence. Real host-app light/dark document variants are still needed. |
 | Privacy and permissions trust | 9 | 100 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, raw/screenshot debug capture expires from the app UI, Settings shows share-safe privacy status, Diagnostics exports a redacted privacy bundle with a manifest/checklist, and the beta packet explicitly forbids raw traces, screenshots, prompts, typed text, and accepted text by default. |
 | Suggestion quality | 8 | 95 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, repeated typed-over pressure now raises display thresholds for the same app/field/mode/prefix family, accepted-kept learning now adjusts display utility, accepted-kept display thresholds now vary by behavior profile, quiet/normal/eager aggressiveness now tunes cadence and display thresholds, learned word completion is app-scoped, word completion now has a consistent 3+ typed-letter floor, profile-aware fresh paragraph starts stay quieter, suffix overlap is salvaged, visible typed-word duplicates and phrase restarts are suppressed, dogfood prompts avoid generic productivity filler, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
 | Failure restraint | 8 | 95 | 100 | Slow polling can hide suggestions, repeated slow app-specific AX reads cool down, slow no-context AX reads cool down immediately, single slow AX reads with context now throttle and drop stale results, stale geometry suppresses display, workspace focus changes immediately hide visible suggestions and invalidate pending requests, too-narrow inline placement suppresses instead of showing a sliver, untrusted low-confidence mirror fallback suppresses instead of showing detached placement, prompt/chat and sentence-like prose profiles now require stronger accepted-kept probability after enough samples, copy-only fallback status is explicit where inline is unsafe, event-tap disablement fails closed, prompt full accept requires proof, placement uncertainty now hides stale ghosts and feeds field quiet mode, active quiet mode is visible in Diagnostics, and unsupported apps explain their stance. Real-app proof remains open. |
@@ -275,7 +275,7 @@ or unsupported.
 
 ## Category 5: Native macOS Visual Feel
 
-Current score: 93/100.
+Current score: 95/100.
 
 Native target: nothing looks like a web widget floating on top of macOS.
 
@@ -290,7 +290,8 @@ Native target: nothing looks like a web widget floating on top of macOS.
 - [x] Onboarding should use system language for Accessibility and Screen Recording.
 - [x] Settings needs light, dark, and increased-contrast screenshot QA.
 - [x] Diagnostics needs light, dark, and increased-contrast screenshot QA.
-- [ ] Live suggestion overlay needs light, dark, and increased-contrast screenshot QA.
+- [x] Suggestion overlay renderer needs light, dark, and increased-contrast screenshot QA.
+- [ ] Real host-app light/dark document variants need smoke proof.
 - [x] Reduce custom visual language unless system controls cannot do the job.
 - [x] Use SF/system font behavior everywhere.
 - [x] Avoid card-heavy layouts in settings.
@@ -307,6 +308,10 @@ Native target: nothing looks like a web widget floating on top of macOS.
 - [Diagnostics dark](native-visual-qa/diagnostics-dark.png)
 - [Diagnostics high-contrast light](native-visual-qa/diagnostics-high-contrast-light.png)
 - [Diagnostics high-contrast dark](native-visual-qa/diagnostics-high-contrast-dark.png)
+- [Suggestion overlay light](native-visual-qa/suggestion-overlay-light.png)
+- [Suggestion overlay dark](native-visual-qa/suggestion-overlay-dark.png)
+- [Suggestion overlay high-contrast light](native-visual-qa/suggestion-overlay-high-contrast-light.png)
+- [Suggestion overlay high-contrast dark](native-visual-qa/suggestion-overlay-high-contrast-dark.png)
 
 ## Category 6: Privacy And Permissions Trust
 
@@ -508,7 +513,8 @@ Native target: every claim has proof.
 - [x] App icon/menu icon polish.
 - [x] Settings light, dark, increased contrast visual QA.
 - [x] Diagnostics light, dark, increased contrast visual QA.
-- [ ] Suggestion overlay light, dark, increased contrast visual QA.
+- [x] Suggestion overlay renderer light, dark, increased contrast visual QA.
+- [ ] Real host-app light/dark document variants.
 
 ## References
 
