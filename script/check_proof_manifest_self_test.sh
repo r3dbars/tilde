@@ -86,6 +86,19 @@ write_scorecard() {
 MARKDOWN
 }
 
+write_app_proof_matrix() {
+  local path="$1"
+  cat >"$path" <<'MARKDOWN'
+# App Proof Matrix
+
+| Surface | Grade | Screenshot proof | Accept proof | Current read | Evidence gap |
+| --- | --- | --- | --- | --- | --- |
+| TextEdit | A | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Complete. | Reference proof. | More variants. |
+| Obsidian | A- | [obsidian.png](visual-placement-screenshots/obsidian.png) | Partial. | Strong but variant-incomplete. | More variants. |
+| Codex | B- | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Partial. | Prompt proof missing. | No-submit proof. |
+MARKDOWN
+}
+
 write_manifest() {
   local path="$1"
   local status="$2"
@@ -95,6 +108,7 @@ write_manifest() {
   local bundle="${6:-com.apple.TextEdit}"
   local proof="${7:-default}"
   local min_accepts="${8:-2}"
+  local surface="${9:-$manual_app}"
 
   local gaps_json="[]"
   if [[ "$status" != "complete" ]]; then
@@ -112,7 +126,7 @@ write_manifest() {
   },
   "surfaces": [
     {
-      "surface": "$manual_app",
+      "surface": "$surface",
       "status": "$status",
       "manualSmoke": {
         "app": "$manual_app",
@@ -214,9 +228,11 @@ UNBOUNDED_MANUAL_SMOKE="$TMP_DIR/manual-smoke-runs-unbounded.md"
 TRACE_FILE="$TMP_DIR/traces.jsonl"
 STALE_TRACE_FILE="$TMP_DIR/stale-traces.jsonl"
 SCORECARD="$TMP_DIR/scorecard.md"
+APP_PROOF_MATRIX="$TMP_DIR/app-proof-matrix.md"
 PASS_MANIFEST="$TMP_DIR/pass.json"
 PARTIAL_MANIFEST="$TMP_DIR/partial.json"
 PENDING_MANIFEST="$TMP_DIR/pending.json"
+A_MINUS_COMPLETE_MANIFEST="$TMP_DIR/a-minus-complete.json"
 STALE_MANIFEST="$TMP_DIR/stale.json"
 MISSING_SMOKE_MANIFEST="$TMP_DIR/missing-smoke.json"
 MISSING_SCREENSHOT_MANIFEST="$TMP_DIR/missing-screenshot.json"
@@ -229,9 +245,11 @@ write_stale_trace "$STALE_TRACE_FILE"
 write_manual_smoke "$MANUAL_SMOKE" "$TRACE_FILE"
 write_unbounded_manual_smoke "$UNBOUNDED_MANUAL_SMOKE" "$TRACE_FILE"
 write_scorecard "$SCORECARD"
+write_app_proof_matrix "$APP_PROOF_MATRIX"
 write_manifest "$PASS_MANIFEST" complete "docs/product/visual-placement-screenshots/textedit-inline.png"
 write_manifest "$PARTIAL_MANIFEST" partial "docs/product/visual-placement-screenshots/textedit-inline.png"
 write_manifest "$PENDING_MANIFEST" pending "docs/product/visual-placement-screenshots/textedit-inline.png"
+write_manifest "$A_MINUS_COMPLETE_MANIFEST" complete "docs/product/visual-placement-screenshots/textedit-inline.png" "$TRACE_PROOF_VERSION" "TextEdit" "com.apple.TextEdit" "default" 2 "Obsidian"
 write_manifest "$STALE_MANIFEST" complete "docs/product/visual-placement-screenshots/textedit-inline.png" "old-proof"
 write_manifest "$MISSING_SMOKE_MANIFEST" complete "docs/product/visual-placement-screenshots/codex-inline.png" "$TRACE_PROOF_VERSION" "Codex" "com.openai.codex" "default" 2
 write_manifest "$MISSING_SCREENSHOT_MANIFEST" complete "docs/product/visual-placement-screenshots/missing-proof.png"
@@ -243,6 +261,7 @@ script/check_proof_manifest.sh \
   --manifest "$PASS_MANIFEST" \
   --manual-smoke "$MANUAL_SMOKE" \
   --scorecard "$SCORECARD" \
+  --app-proof-matrix "$APP_PROOF_MATRIX" \
   --skip-profile-coverage \
   --strict >"$TMP_DIR/pass.out"
 
@@ -256,6 +275,7 @@ script/check_proof_manifest.sh \
   --manifest "$PASS_MANIFEST" \
   --manual-smoke "$MANUAL_SMOKE" \
   --scorecard "$SCORECARD" \
+  --app-proof-matrix "$APP_PROOF_MATRIX" \
   --skip-profile-coverage \
   --verify-trace-slices >"$TMP_DIR/pass-trace.out"
 
@@ -265,10 +285,29 @@ if ! grep -F "Verified trace slices: 1" "$TMP_DIR/pass-trace.out" >/dev/null; th
   exit 1
 fi
 
+if script/check_proof_manifest.sh \
+  --manifest "$A_MINUS_COMPLETE_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --app-proof-matrix "$APP_PROOF_MATRIX" \
+  --skip-profile-coverage \
+  --strict >"$TMP_DIR/a-minus-complete.out" 2>&1; then
+  echo "proof manifest self-test expected strict A- complete proof to fail" >&2
+  cat "$TMP_DIR/a-minus-complete.out" >&2
+  exit 1
+fi
+
+if ! grep -F "app proof matrix grade is A-" "$TMP_DIR/a-minus-complete.out" >/dev/null; then
+  echo "proof manifest self-test did not explain A- complete proof mismatch" >&2
+  cat "$TMP_DIR/a-minus-complete.out" >&2
+  exit 1
+fi
+
 script/check_proof_manifest.sh \
   --manifest "$PARTIAL_MANIFEST" \
   --manual-smoke "$MANUAL_SMOKE" \
   --scorecard "$SCORECARD" \
+  --app-proof-matrix "$APP_PROOF_MATRIX" \
   --skip-profile-coverage \
   --verify-trace-slices >"$TMP_DIR/partial-trace.out"
 

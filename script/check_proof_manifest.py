@@ -13,6 +13,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT_DIR / "docs/product/proof-manifest.json"
 DEFAULT_MANUAL_SMOKE = ROOT_DIR / "docs/product/manual-smoke-runs.md"
 DEFAULT_SCORECARD = ROOT_DIR / "docs/product/deep-dive-scorecard-2026-05-06.md"
+DEFAULT_APP_PROOF_MATRIX = ROOT_DIR / "docs/product/app-proof-matrix.md"
 DEFAULT_COMPATIBILITY_PROFILES = ROOT_DIR / "Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift"
 PROOF_METADATA_SOURCE = ROOT_DIR / "Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift"
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
@@ -166,6 +167,33 @@ def manual_smoke_rows(path: Path) -> list[dict[str, str]]:
             }
         )
     return rows
+
+
+def app_proof_matrix_grades(path: Path, failures: list[str], require_matrix: bool) -> dict[str, str]:
+    if not path.exists():
+        if require_matrix:
+            failures.append(f"missing app proof matrix {path}")
+        return {}
+
+    grades: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line.startswith("|"):
+            continue
+        if "| Surface |" in line or "| --- |" in line:
+            continue
+        cells = split_markdown_row(line)
+        if len(cells) < 2:
+            continue
+        surface = cells[0].strip()
+        grade = cells[1].strip()
+        if not surface or not re.fullmatch(r"[A-D][+-]?", grade):
+            continue
+        grades[surface] = grade
+
+    if require_matrix and not grades:
+        failures.append(f"app proof matrix has no parseable surface grades: {path}")
+    return grades
 
 
 def find_manual_row(rows: list[dict[str, str]], claim: dict) -> dict[str, str] | None:
@@ -347,6 +375,7 @@ def verify_manifest(
     manifest_path: Path,
     manual_smoke_path: Path,
     scorecard_path: Path,
+    app_proof_matrix_path: Path,
     compatibility_profiles_path: Path,
     require_all: bool,
     require_current_commit: bool,
@@ -390,6 +419,11 @@ def verify_manifest(
     names: set[str] = set()
     smoke_rows = manual_smoke_rows(manual_smoke_path)
     scorecard_screenshots = referenced_scorecard_screenshots(scorecard_path)
+    app_proof_grades = app_proof_matrix_grades(
+        app_proof_matrix_path,
+        failures,
+        require_matrix=require_all,
+    )
     pending: list[str] = []
     partial: list[str] = []
     complete = 0
@@ -418,6 +452,10 @@ def verify_manifest(
             complete += 1
             if gaps:
                 failures.append(f"{name}: complete surfaces must not list gaps")
+            if require_all and app_proof_grades.get(name) == "A-":
+                failures.append(
+                    f"{name}: app proof matrix grade is A-; variant-incomplete proof must stay partial"
+                )
         else:
             if status == "partial":
                 partial.append(name)
@@ -571,6 +609,7 @@ def main() -> int:
     parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST))
     parser.add_argument("--manual-smoke", default=str(DEFAULT_MANUAL_SMOKE))
     parser.add_argument("--scorecard", default=str(DEFAULT_SCORECARD))
+    parser.add_argument("--app-proof-matrix", default=str(DEFAULT_APP_PROOF_MATRIX))
     parser.add_argument("--compatibility-profiles", default=str(DEFAULT_COMPATIBILITY_PROFILES))
     parser.add_argument("--require-all", "--strict", action="store_true", dest="require_all")
     parser.add_argument("--require-current-commit", action="store_true")
@@ -586,6 +625,7 @@ def main() -> int:
         manifest_path=repo_path(args.manifest),
         manual_smoke_path=repo_path(args.manual_smoke),
         scorecard_path=repo_path(args.scorecard),
+        app_proof_matrix_path=repo_path(args.app_proof_matrix),
         compatibility_profiles_path=repo_path(args.compatibility_profiles),
         require_all=args.require_all,
         require_current_commit=args.require_current_commit,
