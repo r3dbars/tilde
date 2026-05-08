@@ -60,6 +60,39 @@ struct MockModelRuntimeTests {
         }
         await #expect(runtime.state == .unavailable(reason: "Runtime was canceled."))
     }
+
+    @Test("Runtime backed engine backs off after repeated runtime failures")
+    func runtimeBackedEngineBacksOffAfterRepeatedFailures() async throws {
+        let runtime = FailingModelRuntime()
+        let clock = TestClock(milliseconds: 1_000)
+        let engine = RuntimeBackedCompletionEngine(
+            runtime: runtime,
+            failureBackoffPolicy: RuntimeFailureBackoffPolicy(
+                failureThreshold: 2,
+                cooldownMilliseconds: 5_000
+            ),
+            nowMilliseconds: { clock.milliseconds }
+        )
+
+        await #expect(throws: LocalCompletionRuntimeError.self) {
+            _ = try await engine.suggestion(for: CompletionRequest(textBeforeCursor: "I think"))
+        }
+        await #expect(throws: LocalCompletionRuntimeError.self) {
+            _ = try await engine.suggestion(for: CompletionRequest(textBeforeCursor: "I think"))
+        }
+
+        let suppressed = try await engine.suggestion(
+            for: CompletionRequest(textBeforeCursor: "I think")
+        )
+        #expect(suppressed == nil)
+        #expect(runtime.completeCallCount == 2)
+
+        clock.milliseconds = 6_001
+        await #expect(throws: LocalCompletionRuntimeError.self) {
+            _ = try await engine.suggestion(for: CompletionRequest(textBeforeCursor: "I think"))
+        }
+        #expect(runtime.completeCallCount == 3)
+    }
 }
 
 private final class PartialCollector: @unchecked Sendable {
@@ -75,6 +108,56 @@ private final class PartialCollector: @unchecked Sendable {
     func append(_ value: String) {
         lock.withLock {
             storedValues.append(value)
+        }
+    }
+}
+
+private final class FailingModelRuntime: ModelRuntime, @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedCompleteCallCount = 0
+
+    var completeCallCount: Int {
+        lock.withLock {
+            storedCompleteCallCount
+        }
+    }
+
+    var state: LocalRuntimeState {
+        get async {
+            .ready(candidate: .mlx)
+        }
+    }
+
+    func warm() async throws {}
+
+    func cancel() {}
+
+    func complete(_ request: CompletionRequest) async throws -> CompletionSuggestion? {
+        lock.withLock {
+            storedCompleteCallCount += 1
+        }
+        throw LocalCompletionRuntimeError.invalidOutput
+    }
+}
+
+private final class TestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedMilliseconds: Int
+
+    init(milliseconds: Int) {
+        self.storedMilliseconds = milliseconds
+    }
+
+    var milliseconds: Int {
+        get {
+            lock.withLock {
+                storedMilliseconds
+            }
+        }
+        set {
+            lock.withLock {
+                storedMilliseconds = newValue
+            }
         }
     }
 }

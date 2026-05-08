@@ -149,7 +149,12 @@ struct ModelAssetInstaller {
             path: snapshotURL.path,
             isDirectory: true,
             childFileNames: childFileNames,
-            modelBytes: modelBytes
+            modelBytes: modelBytes,
+            sourceRevisions: HuggingFaceModelMetadata.sourceRevisions(
+                in: snapshotURL,
+                childFileNames: childFileNames,
+                fileManager: fileManager
+            )
         ) {
         case .available:
             break

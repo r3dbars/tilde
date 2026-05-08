@@ -140,7 +140,12 @@ enum AppModelRuntimeFactory {
             path: path,
             isDirectory: isDirectory.boolValue,
             childFileNames: childFileNames,
-            modelBytes: modelBytes
+            modelBytes: modelBytes,
+            sourceRevisions: HuggingFaceModelMetadata.sourceRevisions(
+                in: modelDirectoryURL,
+                childFileNames: childFileNames,
+                fileManager: fileManager
+            )
         )
     }
 

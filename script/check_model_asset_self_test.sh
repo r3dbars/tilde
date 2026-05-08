@@ -12,7 +12,9 @@ MODEL_PATH="$(script/check_model_asset.py --model-root "$MODEL_ROOT" --print-pat
 MISSING_OUTPUT="$TMP_DIR/missing-output.txt"
 REQUIRED_OUTPUT="$TMP_DIR/required-output.txt"
 SMALL_OUTPUT="$TMP_DIR/small-output.txt"
+STALE_REVISION_OUTPUT="$TMP_DIR/stale-revision-output.txt"
 VALID_OUTPUT="$TMP_DIR/valid-output.txt"
+EXPECTED_REVISION="32f3e8ecf65426fc3306969496342d504bfa13f3"
 
 if script/check_model_asset.py --model-root "$MODEL_ROOT" >"$MISSING_OUTPUT" 2>&1; then
   echo "model asset self-test expected a missing model to fail" >&2
@@ -82,10 +84,43 @@ with path.open("wb") as handle:
     handle.write(b"\0")
 PY
 
+METADATA_DIR="$MODEL_PATH/.cache/huggingface/download"
+mkdir -p "$METADATA_DIR"
+for file_name in config.json tokenizer.json tokenizer_config.json model.safetensors; do
+  printf 'older-revision\netag-for-%s\n0\n' "$file_name" >"$METADATA_DIR/$file_name.metadata"
+done
+
+if script/check_model_asset.py --model-root "$MODEL_ROOT" >"$STALE_REVISION_OUTPUT" 2>&1; then
+  echo "model asset self-test expected stale revision metadata to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "revision mismatch for config.json" "$STALE_REVISION_OUTPUT" >/dev/null; then
+  echo "model asset self-test did not report stale revision metadata" >&2
+  cat "$STALE_REVISION_OUTPUT" >&2
+  exit 1
+fi
+
+for file_name in config.json tokenizer.json tokenizer_config.json model.safetensors; do
+  printf '%s\netag-for-%s\n0\n' "$EXPECTED_REVISION" "$file_name" >"$METADATA_DIR/$file_name.metadata"
+done
+
 script/check_model_asset.py --model-root "$MODEL_ROOT" >"$VALID_OUTPUT"
 
 if ! grep -F "Model asset verified: Qwen3.5 4B MLX (qwen35-4b)" "$VALID_OUTPUT" >/dev/null; then
   echo "model asset self-test did not pass the synthetic valid model" >&2
+  cat "$VALID_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "Revision: $EXPECTED_REVISION" "$VALID_OUTPUT" >/dev/null; then
+  echo "model asset self-test did not report the verified pinned revision" >&2
+  cat "$VALID_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "Metadata fingerprint: sha256:" "$VALID_OUTPUT" >/dev/null; then
+  echo "model asset self-test did not report the metadata fingerprint" >&2
   cat "$VALID_OUTPUT" >&2
   exit 1
 fi

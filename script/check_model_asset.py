@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import sys
@@ -96,6 +97,21 @@ def read_json_object(path: Path) -> str | None:
     return None
 
 
+def read_huggingface_metadata(path: Path, file_name: str) -> tuple[str, str, str | None]:
+    metadata_path = path / ".cache" / "huggingface" / "download" / f"{file_name}.metadata"
+    try:
+        lines = metadata_path.read_text().splitlines()
+    except OSError as error:
+        return "", "", f"missing revision metadata for {file_name} ({error})"
+
+    if not lines or not lines[0].strip():
+        return "", "", f"empty revision metadata for {file_name}"
+
+    revision = lines[0].strip()
+    etag = lines[1].strip() if len(lines) > 1 else ""
+    return revision, etag, None
+
+
 def validation_failure(model: str, path: Path, reason: str) -> str:
     display_name = MODEL_VALIDATION[model]["display_name"]
     return "\n".join(
@@ -118,34 +134,36 @@ def validation_failure(model: str, path: Path, reason: str) -> str:
     )
 
 
-def validate_model(model: str, path: Path) -> tuple[bool, str, int, int]:
+def validate_model(model: str, path: Path) -> tuple[bool, str, int, int, str | None, str | None]:
     validation = MODEL_VALIDATION[model]
+    model_definition = load_download_models()[model]
+    expected_revision = model_definition.get("revision", "main")
     required_files = validation["required_files"]
     weight_extension = validation["weight_extension"]
     minimum_weight_bytes = validation["minimum_weight_bytes"]
 
     if not path.exists():
-        return False, f"missing {validation['display_name']} MLX model", 0, 0
+        return False, f"missing {validation['display_name']} MLX model", 0, 0, None, None
 
     if not path.is_dir():
-        return False, "expected a model directory", 0, 0
+        return False, "expected a model directory", 0, 0, None, None
 
     children = {child.name: child for child in path.iterdir()}
     missing_files = sorted(required_files.difference(children))
     if missing_files:
-        return False, f"missing required file(s): {', '.join(missing_files)}", 0, 0
+        return False, f"missing required file(s): {', '.join(missing_files)}", 0, 0, None, None
 
     for file_name in sorted(required_files):
         json_error = read_json_object(children[file_name])
         if json_error:
-            return False, json_error, 0, 0
+            return False, json_error, 0, 0, None, None
 
     weight_files = [
         child for child in children.values()
         if child.is_file() and child.name.lower().endswith(weight_extension)
     ]
     if not weight_files:
-        return False, f"missing {weight_extension} weights", 0, 0
+        return False, f"missing {weight_extension} weights", 0, 0, None, None
 
     weight_bytes = sum(child.stat().st_size for child in weight_files)
     if weight_bytes < minimum_weight_bytes:
@@ -155,9 +173,37 @@ def validate_model(model: str, path: Path) -> tuple[bool, str, int, int]:
             f"({format_bytes(weight_bytes)} found, need at least {format_bytes(minimum_weight_bytes)})",
             len(weight_files),
             weight_bytes,
+            None,
+            None,
         )
 
-    return True, "ok", len(weight_files), weight_bytes
+    verified_revision = None
+    metadata_fingerprint = None
+    if expected_revision != "main":
+        fingerprint = hashlib.sha256()
+        fingerprint.update(f"{model}\0{expected_revision}\n".encode())
+        metadata_file_names = sorted(required_files.union({file.name for file in weight_files}))
+        for file_name in metadata_file_names:
+            revision, etag, metadata_error = read_huggingface_metadata(path, file_name)
+            if metadata_error:
+                return False, metadata_error, len(weight_files), weight_bytes, None, None
+            if revision != expected_revision:
+                return (
+                    False,
+                    f"revision mismatch for {file_name} "
+                    f"(found {revision}, expected {expected_revision})",
+                    len(weight_files),
+                    weight_bytes,
+                    None,
+                    None,
+                )
+            file_size = children[file_name].stat().st_size
+            fingerprint.update(f"{file_name}\0{file_size}\0{revision}\0{etag}\n".encode())
+
+        verified_revision = expected_revision
+        metadata_fingerprint = fingerprint.hexdigest()
+
+    return True, "ok", len(weight_files), weight_bytes, verified_revision, metadata_fingerprint
 
 
 def main() -> int:
@@ -168,7 +214,7 @@ def main() -> int:
         print(path)
         return 0
 
-    is_valid, reason, weight_count, weight_bytes = validate_model(args.model, path)
+    is_valid, reason, weight_count, weight_bytes, revision, fingerprint = validate_model(args.model, path)
     if not is_valid:
         print(validation_failure(args.model, path, reason), file=sys.stderr)
         return 1
@@ -177,6 +223,10 @@ def main() -> int:
         display_name = MODEL_VALIDATION[args.model]["display_name"]
         print(f"Model asset verified: {display_name} MLX ({args.model})")
         print(f"Path: {path}")
+        if revision:
+            print(f"Revision: {revision}")
+        if fingerprint:
+            print(f"Metadata fingerprint: sha256:{fingerprint}")
         print(f"Weights: {format_bytes(weight_bytes)} across {weight_count} file(s)")
 
     return 0

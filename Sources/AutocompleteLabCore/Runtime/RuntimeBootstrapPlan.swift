@@ -233,7 +233,8 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         path: String,
         isDirectory: Bool,
         childFileNames: Set<String>,
-        modelBytes: Int64
+        modelBytes: Int64,
+        sourceRevisions: [String: String] = [:]
     ) -> LocalModelAssetState {
         guard isDirectory else {
             return .invalid(path: path, reason: "expected a model directory")
@@ -259,7 +260,30 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
             return .invalid(path: path, reason: "model weights are too small")
         }
 
+        if let source, source.revision != "main" {
+            for fileName in sourceRevisionFileNames(childFileNames: childFileNames).sorted() {
+                guard let installedRevision = sourceRevisions[fileName],
+                      !installedRevision.isEmpty else {
+                    return .invalid(path: path, reason: "missing revision metadata for \(fileName)")
+                }
+
+                guard installedRevision == source.revision else {
+                    return .invalid(
+                        path: path,
+                        reason: "revision mismatch for \(fileName)"
+                    )
+                }
+            }
+        }
+
         return .available(path: path)
+    }
+
+    public func sourceRevisionFileNames(childFileNames: Set<String>) -> Set<String> {
+        let weightFileNames = childFileNames.filter { fileName in
+            fileName.lowercased().hasSuffix(".\(requiredModelFileExtension.lowercased())")
+        }
+        return requiredFileNames.union(weightFileNames)
     }
 }
 

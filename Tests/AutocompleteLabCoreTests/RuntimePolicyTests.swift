@@ -267,7 +267,70 @@ struct RuntimePolicyTests {
             isDirectory: true,
             childFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json", "model.safetensors"],
             modelBytes: 3 * 1024 * 1024 * 1024
-        ) == .available(path: "/tmp/gemma"))
+        ) == .invalid(path: "/tmp/gemma", reason: "missing revision metadata for config.json"))
+    }
+
+    @Test("Pinned MLX asset validation requires matching source revision metadata")
+    func pinnedMLXAssetValidationRequiresMatchingSourceRevisionMetadata() {
+        let source = LocalModelAssetSource(
+            repoID: "example/model",
+            revision: "abc123",
+            allowPatterns: LocalModelAssetSource.defaultMLXAllowPatterns
+        )
+        let manifest = LocalModelAssetManifest(
+            model: .qwen35FourB,
+            runtimeCandidate: .mlx,
+            cacheDirectoryName: "Models/Test/MLX",
+            fileName: "test-model",
+            source: source,
+            expectedMinimumBytes: 1,
+            requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"]
+        )
+        let files: Set<String> = [
+            "config.json",
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "model.safetensors"
+        ]
+
+        #expect(manifest.sourceRevisionFileNames(childFileNames: files) == files)
+        #expect(manifest.validatedDirectoryState(
+            path: "/tmp/model",
+            isDirectory: true,
+            childFileNames: files,
+            modelBytes: 3 * 1024 * 1024 * 1024,
+            sourceRevisions: [
+                "config.json": "abc123",
+                "tokenizer.json": "abc123",
+                "tokenizer_config.json": "abc123",
+                "model.safetensors": "abc123"
+            ]
+        ) == .available(path: "/tmp/model"))
+
+        #expect(manifest.validatedDirectoryState(
+            path: "/tmp/model",
+            isDirectory: true,
+            childFileNames: files,
+            modelBytes: 3 * 1024 * 1024 * 1024,
+            sourceRevisions: [
+                "config.json": "abc123",
+                "tokenizer.json": "abc123",
+                "tokenizer_config.json": "abc123",
+                "model.safetensors": "older"
+            ]
+        ) == .invalid(path: "/tmp/model", reason: "revision mismatch for model.safetensors"))
+
+        #expect(manifest.validatedDirectoryState(
+            path: "/tmp/model",
+            isDirectory: true,
+            childFileNames: files,
+            modelBytes: 3 * 1024 * 1024 * 1024,
+            sourceRevisions: [
+                "config.json": "abc123",
+                "tokenizer.json": "abc123",
+                "model.safetensors": "abc123"
+            ]
+        ) == .invalid(path: "/tmp/model", reason: "missing revision metadata for tokenizer_config.json"))
     }
 
     @Test("Benchmark passes when average latency is under target")

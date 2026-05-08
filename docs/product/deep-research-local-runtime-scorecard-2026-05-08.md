@@ -11,7 +11,7 @@
 
 The research says this app cannot be beta-ready just because it is "local." It needs an app-owned, warm, real model path that stays fast while the user types, fails closed under pressure, never asks testers to run a server, and never hides behind mock output.
 
-This repo has a real MLX/Qwen3.5 app-owned path, in-app model install/repair, strong output cleaning, local privacy defaults, stale-result guards, and good trace tooling. The biggest blockers are still fresh Qwen latency proof, no helper/XPC isolation, no real power or memory-pressure proof run, and incomplete benchmark gating.
+This repo has a real MLX/Qwen3.5 app-owned path, in-app model install/repair, strong output cleaning, local privacy defaults, stale-result guards, pinned installed-asset proof, runtime failure backoff, and good trace tooling. The biggest blockers are still fresh Qwen latency proof, no helper/XPC isolation, no real power or memory-pressure proof run, and incomplete benchmark gating.
 
 ## Product Standard
 
@@ -51,7 +51,7 @@ The score is still capped because `./script/model_latency_report.py --default-mo
 
 ## Score
 
-Overall score: **82/100**
+Overall score: **83/100**
 
 ## Score Breakdown
 
@@ -94,19 +94,19 @@ Overall score: **82/100**
 ### Install, Update, and Repair UX
 
 - Weight: 10
-- Current score: 9/10
-- Why this score: The app validates required model files, downloads through Settings, stages into scratch space, atomically replaces the target, keeps old assets on failure, and now pins the preferred Qwen3.5 4B Hugging Face revision.
-- Evidence found in repo: `Sources/AutocompleteLabApp/Runtime/ModelAssetInstaller.swift`, `Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swift`, `Tests/AutocompleteLabAppTests/ModelAssetInstallerTests.swift`, `script/download_mlx_model.py`, `script/check_model_asset.py`, `script/check_model_asset_self_test.sh`
-- Missing evidence: Resumable/background install, disk-space preflight, offline repair proof.
+- Current score: 9.5/10
+- Why this score: The app validates required model files, downloads through Settings, stages into scratch space, atomically replaces the target, keeps old assets on failure, pins the preferred Qwen3.5 4B Hugging Face revision, and now rejects installed folders whose Hugging Face metadata does not match the pinned revision.
+- Evidence found in repo: `Sources/AutocompleteLabApp/Runtime/ModelAssetInstaller.swift`, `Sources/AutocompleteLabApp/Runtime/HuggingFaceModelMetadata.swift`, `Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swift`, `Tests/AutocompleteLabAppTests/ModelAssetInstallerTests.swift`, `script/download_mlx_model.py`, `script/check_model_asset.py`, `script/check_model_asset_self_test.sh`
+- Missing evidence: Resumable/background install, disk-space preflight, offline repair proof, full file digest verification after install.
 - What would make it 100/100: Pinned model revision, resumable install, checksum/manifest verification, rollback and offline revalidation proved by tests.
 
 ### Failure Behavior and Observability
 
 - Weight: 10
-- Current score: 9/10
-- Why this score: Missing/invalid/warming/failed runtime states block suggestions. This pass removed mock fallback as app readiness, removed the legacy core mock fallback, and added backend sanity gating. Generation errors still need richer degraded-state handling.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swift`, `Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift`, `Sources/AutocompleteLabApp/Runtime/UnavailableModelRuntime.swift`, `Tests/AutocompleteLabCoreTests/LocalCompletionEngineTests.swift`, `Tests/AutocompleteLabAppTests/UnavailableModelRuntimeTests.swift`, `script/check_backend_sanity.sh`, `script/beta_readiness.sh`
-- Missing evidence: Repeated generation failure backoff, helper crash recovery, fallback-frequency metric from replay, CI gate that rejects mock in beta artifacts.
+- Current score: 9.5/10
+- Why this score: Missing/invalid/warming/failed runtime states block suggestions. This pass removed mock fallback as app readiness, removed the legacy core mock fallback, added backend sanity gating, and added a fail-closed generation-error backoff after repeated runtime failures.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swift`, `Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift`, `Sources/AutocompleteLabCore/Engine/RuntimeBackedCompletionEngine.swift`, `Sources/AutocompleteLabApp/Runtime/UnavailableModelRuntime.swift`, `Tests/AutocompleteLabCoreTests/LocalCompletionEngineTests.swift`, `Tests/AutocompleteLabCoreTests/MockModelRuntimeTests.swift`, `Tests/AutocompleteLabAppTests/UnavailableModelRuntimeTests.swift`, `script/check_backend_sanity.sh`, `script/beta_readiness.sh`
+- Missing evidence: Helper crash recovery, fallback-frequency metric from replay, CI gate that rejects mock in beta artifacts.
 - What would make it 100/100: Every failure has a typed reason, no deceptive fallback, repeated failures degrade or suspend, and release checks fail on hidden mock/network/server paths.
 
 ### Benchmark Coverage
@@ -161,17 +161,18 @@ The app owns the runtime in an isolated helper, ships one pinned default model p
 
 ## Verification This Pass
 
-- `swift test`: passed, 739 tests.
+- `swift test`: passed, 742 tests.
 - `swift test --filter RuntimePolicyTests`: passed.
 - `swift test --filter RuntimeResourcePressurePolicyTests`: passed.
 - `swift test --filter UnavailableModelRuntimeTests`: passed.
 - `swift test --filter 'CompletionPromptBuilderTests|MockModelRuntimeTests|ModelPolicyTests|LocalCompletionEngineTests'`: passed after MVP default changed to 3 visible words / 9 generated tokens and legacy local engine fallback changed to fail closed.
+- `swift test --filter 'MockModelRuntimeTests|RuntimePolicyTests|ModelAssetInstallerTests'`: passed after pinned revision validation and runtime failure backoff.
 - `./script/check_backend_sanity.sh`: passed.
 - `./script/model_latency_report_self_test.sh`: passed.
 - `./script/check_trace_eval_self_test.sh`: passed.
 - `./script/check_model_asset_self_test.sh`: passed.
 - `./script/check_test_coverage_manifest.sh`: passed.
-- `./script/check_model_asset.py`: passed for Qwen3.5 4B MLX.
+- `./script/check_model_asset.py`: passed for Qwen3.5 4B MLX after repairing the local model folder to pinned revision `32f3e8ecf65426fc3306969496342d504bfa13f3`; report includes metadata fingerprint `sha256:27f35688a1eacdcb59b9767e177cbce42a5545cbfd202a67f61e9f70140c4c41`.
 - `./script/model_latency_report.py --default-model-proof`: blocked, not enough current model timing samples.
 - `./script/smoke_test.sh`: blocked by visual placement evidence gaps after Swift tests, backend sanity, coverage manifest, and self-tests passed.
 - `./script/beta_readiness.sh --check-only`: blocked by stale/manual app proof, visual proof gaps, and missing beta archive; backend sanity, model asset, runtime production gate, redacted export, and package prerequisites passed.
@@ -214,6 +215,15 @@ The app owns the runtime in an isolated helper, ships one pinned default model p
 - Risk level: Medium
 - Expected score impact: +2
 
+### Done In This Pass: Verify Installed Model Revision and Add Failure Backoff
+
+- Objective: Treat stale or unproven pinned model folders as repair-needed and stop repeated runtime generation failures from hammering the typing path.
+- Files likely involved: `RuntimeBootstrapPlan.swift`, `HuggingFaceModelMetadata.swift`, `AppModelRuntimeFactory.swift`, `ModelAssetInstaller.swift`, `RuntimeBackedCompletionEngine.swift`, `check_model_asset.py`
+- Tests to add/update: `RuntimePolicyTests.swift`, `ModelAssetInstallerTests.swift`, `MockModelRuntimeTests.swift`, `check_model_asset_self_test.sh`
+- Proof required: `swift test --filter 'MockModelRuntimeTests|RuntimePolicyTests|ModelAssetInstallerTests'`, `./script/check_model_asset_self_test.sh`, `./script/check_model_asset.py`
+- Risk level: Medium
+- Expected score impact: +1
+
 ### Next: Generate Fresh Qwen Latency Proof
 
 - Objective: Produce enough current Qwen3.5 4B phrase timing and shown-latency samples to pass default proof.
@@ -241,7 +251,7 @@ The app owns the runtime in an isolated helper, ships one pinned default model p
 - Risk level: Medium
 - Expected score impact: +2 to +4
 
-Status: preferred Qwen3.5 4B repo revision is now pinned in code and the developer download script. Remaining work is installed-asset revision proof, checksum proof, and resumable repair.
+Status: preferred Qwen3.5 4B repo revision is now pinned in code and the developer download script. Installed folders are rejected if Hugging Face metadata does not match the pinned revision, and the local model folder has been repaired to the pinned revision. Remaining work is full file digest verification, resumable repair, and offline repair proof.
 
 ### Next: Full Benchmark Matrix
 
@@ -273,7 +283,7 @@ This goal is complete when:
 - Fresh default Qwen3.5 4B latency proof is still needed.
 - Runtime is not isolated into XPC/helper.
 - Real memory-pressure, battery, and thermal proof is missing.
-- Installed model revision is not yet verified from local metadata/checksum.
+- Installed model revision is now verified from local Hugging Face metadata; full file digest verification is still missing.
 - Install is not resumable/background-safe.
 - Runtime generation errors need degraded-state backoff.
 - Benchmark matrix is not broad enough for 100/100.

@@ -96,6 +96,83 @@ struct ModelAssetInstallerTests {
         #expect(fileManager.fileExists(atPath: targetURL.appendingPathComponent("old.txt").path))
     }
 
+    @Test("Finalizing a pinned snapshot requires matching revision metadata")
+    func finalizePinnedSnapshotRequiresMatchingRevisionMetadata() throws {
+        let fileManager = FileManager.default
+        let rootURL = fileManager.temporaryDirectory
+            .appendingPathComponent("AutocompleteLabInstallerTests-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? fileManager.removeItem(at: rootURL)
+        }
+
+        let snapshotURL = rootURL.appendingPathComponent("snapshot", isDirectory: true)
+        let targetURL = rootURL.appendingPathComponent("target", isDirectory: true)
+        try fileManager.createDirectory(at: snapshotURL, withIntermediateDirectories: true)
+        try "{}".write(
+            to: snapshotURL.appendingPathComponent("config.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "{}".write(
+            to: snapshotURL.appendingPathComponent("tokenizer.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "{}".write(
+            to: snapshotURL.appendingPathComponent("tokenizer_config.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "weights".write(
+            to: snapshotURL.appendingPathComponent("model.safetensors"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let metadataURL = snapshotURL
+            .appendingPathComponent(".cache", isDirectory: true)
+            .appendingPathComponent("huggingface", isDirectory: true)
+            .appendingPathComponent("download", isDirectory: true)
+        try fileManager.createDirectory(at: metadataURL, withIntermediateDirectories: true)
+        for fileName in ["config.json", "tokenizer.json", "tokenizer_config.json"] {
+            try "abc123\netag\n0\n".write(
+                to: metadataURL.appendingPathComponent("\(fileName).metadata"),
+                atomically: true,
+                encoding: .utf8
+            )
+        }
+        try "older\netag\n0\n".write(
+            to: metadataURL.appendingPathComponent("model.safetensors.metadata"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let manifest = LocalModelAssetManifest(
+            model: .qwen35FourB,
+            runtimeCandidate: .mlx,
+            cacheDirectoryName: "Models/Test/MLX",
+            fileName: "test-model",
+            source: LocalModelAssetSource(
+                repoID: "example/model",
+                revision: "abc123",
+                allowPatterns: LocalModelAssetSource.defaultMLXAllowPatterns
+            ),
+            expectedMinimumBytes: 1,
+            requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"]
+        )
+
+        #expect(throws: ModelAssetInstallerError.self) {
+            try ModelAssetInstaller.finalizeDownloadedSnapshot(
+                manifest: manifest,
+                snapshotURL: snapshotURL,
+                targetURL: targetURL,
+                fileManager: fileManager
+            )
+        }
+        #expect(fileManager.fileExists(atPath: snapshotURL.path))
+        #expect(!fileManager.fileExists(atPath: targetURL.path))
+    }
+
     @Test("Install progress formats percentage and speed")
     func installProgressFormatsStatusText() {
         let progress = ModelAssetInstallProgress(
