@@ -14,9 +14,22 @@ that are still below 10/10. In strict mode it also runs the screenshot evidence
 gate, so stale screenshot rows, unreferenced screenshot files, and below-target
 visual rows without a clear `Pending` label block the pass.
 
+For the full remaining manual beta proof sequence, run:
+
+```bash
+script/manual_proof_queue.sh --print
+```
+
+Use `script/manual_proof_queue.sh --run` only when you are ready to walk
+through each manual-gated recorder with disposable content. The queue verifies
+the current checkout's app bundle once, then reuses that running app for each
+manual proof pass.
+
 ## Setup
 
 - Launch `dist/AutocompleteLab.app`.
+- Prefer `./script/build_and_run.sh --verify` before using `--skip-build`; the
+  recorder rejects stale app processes from other checkouts.
 - Confirm the menu says `AX ok`.
 - Keep test text local and disposable.
 - Watch `~/Library/Logs/AutocompleteLab/diagnostics.log` for `suggestion-presented`, `keyboard-action`, `insert`, and `insert-verification`.

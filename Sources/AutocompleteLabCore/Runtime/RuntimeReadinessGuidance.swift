@@ -6,12 +6,12 @@ public struct RuntimeReadinessGuidance: Equatable, Sendable {
     public init(report: RuntimeReadinessReport) {
         switch report.stage {
         case .downloadNeeded:
-            message = "Model missing: open the model folder and install the app-owned MLX model. Suggestions stay off until this is ready."
-            actionTitle = "Open Model Folder"
+            message = "Model missing: install or repair the app-owned MLX model. Suggestions stay off until this is ready."
+            actionTitle = "Install / Repair Model"
             isActionEnabled = true
         case .repairNeeded:
-            message = "Model repair needed: open the model folder and replace the incomplete model files. Suggestions stay off until the folder is valid."
-            actionTitle = "Open Model Folder"
+            message = "Model repair needed: replace the incomplete app-owned MLX model files. Suggestions stay off until the folder is valid."
+            actionTitle = "Install / Repair Model"
             isActionEnabled = true
         case .runtimeUnavailable:
             message = "Runtime unavailable: this build cannot start the preferred local runtime. Suggestions stay off in this build."
