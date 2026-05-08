@@ -4,13 +4,70 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DEEP_DIVE_PATH="${AUTOCOMPLETE_LAB_DEEP_DIVE_SCORECARD:-docs/product/deep-dive-scorecard-2026-05-06.md}"
-DEEP_RESEARCH_PATH="${AUTOCOMPLETE_LAB_DEEP_RESEARCH_SCORECARD:-docs/product/deep-research-autocomplete-scorecard-2026-05-07.md}"
-OVERALL_EXCELLENCE_PATH="${AUTOCOMPLETE_LAB_OVERALL_EXCELLENCE_SCORECARD:-docs/product/deep-research-overall-excellence-scorecard-2026-05-08.md}"
-APPLE_NATIVE_PATH="${AUTOCOMPLETE_LAB_APPLE_NATIVE_CHECKLIST:-docs/product/apple-native-experience-checklist.md}"
-APP_PROOF_PATH="${AUTOCOMPLETE_LAB_APP_PROOF_MATRIX:-docs/product/app-proof-matrix.md}"
+DEFAULT_DEEP_DIVE_PATH="docs/product/deep-dive-scorecard-2026-05-06.md"
+DEFAULT_DEEP_RESEARCH_PATH="docs/product/deep-research-autocomplete-scorecard-2026-05-07.md"
+DEFAULT_APPLE_NATIVE_PATH="docs/product/apple-native-experience-checklist.md"
+DEFAULT_APP_PROOF_PATH="docs/product/app-proof-matrix.md"
+
+DEEP_DIVE_PATH="${AUTOCOMPLETE_LAB_DEEP_DIVE_SCORECARD:-$DEFAULT_DEEP_DIVE_PATH}"
+DEEP_RESEARCH_PATH="${AUTOCOMPLETE_LAB_DEEP_RESEARCH_SCORECARD:-$DEFAULT_DEEP_RESEARCH_PATH}"
+APPLE_NATIVE_PATH="${AUTOCOMPLETE_LAB_APPLE_NATIVE_CHECKLIST:-$DEFAULT_APPLE_NATIVE_PATH}"
+APP_PROOF_PATH="${AUTOCOMPLETE_LAB_APP_PROOF_MATRIX:-$DEFAULT_APP_PROOF_PATH}"
+STRICT_PROOF_GATES="${AUTOCOMPLETE_LAB_SCORE_TARGET_STRICT_PROOF_GATES:-auto}"
+MANUAL_SMOKE_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_MANUAL_SMOKE_GATE_SCRIPT:-./script/manual_smoke_status.sh}"
+VISUAL_EVIDENCE_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_VISUAL_EVIDENCE_GATE_SCRIPT:-./script/check_visual_placement_evidence.sh}"
+PROOF_MANIFEST_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_PROOF_MANIFEST_GATE_SCRIPT:-./script/check_proof_manifest.sh}"
 
 ISSUES=0
+LIVE_PROMPT_PROOF_ISSUES=0
+DEFAULT_CHROME_EDITOR_ISSUES=0
+VARIANT_PROOF_ISSUES=0
+TYPING_RESTRAINT_ISSUES=0
+RELEASE_ARCHITECTURE_ISSUES=0
+STRICT_PROOF_GATE_ISSUES=0
+
+record_blocker_theme() {
+  local file="$1"
+  local label="$2"
+  local target="$3"
+
+  case "$label" in
+    *Codex*|*"AI chat profile"*|*"Proof status"*)
+      LIVE_PROMPT_PROOF_ISSUES=$((LIVE_PROMPT_PROOF_ISSUES + 1))
+      return
+      ;;
+    *"Chrome Monaco"*|*"Chrome ProseMirror"*|*"Browser editor"*|*"editor-like"*|*"real Monaco"*|*"real ProseMirror"*)
+      DEFAULT_CHROME_EDITOR_ISSUES=$((DEFAULT_CHROME_EDITOR_ISSUES + 1))
+      return
+      ;;
+    *"Normal typing"*|*"Typing must feel untouched"*|*"Non-annoyance"*|*"Failure restraint"*|*"Failure Restraint"*)
+      TYPING_RESTRAINT_ISSUES=$((TYPING_RESTRAINT_ISSUES + 1))
+      return
+      ;;
+    *TextEdit*|*Notes*|*Obsidian*|*Chrome*|*"Claude desktop"*|*"Browser editor"*)
+      VARIANT_PROOF_ISSUES=$((VARIANT_PROOF_ISSUES + 1))
+      return
+      ;;
+    *"Overall"*|*"Current implementation score"*|*"Weighted score"*|*"Release readiness"*|*"Architecture"*|*"Evidence and QA loop"*|*"Evidence And QA Loop"*)
+      RELEASE_ARCHITECTURE_ISSUES=$((RELEASE_ARCHITECTURE_ISSUES + 1))
+      return
+      ;;
+  esac
+
+  if [[ "$target" == "A" ]]; then
+    VARIANT_PROOF_ISSUES=$((VARIANT_PROOF_ISSUES + 1))
+    return
+  fi
+
+  case "$file" in
+    *app-proof-matrix.md|*apple-native-experience-checklist.md|*deep-dive-scorecard-2026-05-06.md)
+      VARIANT_PROOF_ISSUES=$((VARIANT_PROOF_ISSUES + 1))
+      ;;
+    *)
+      RELEASE_ARCHITECTURE_ISSUES=$((RELEASE_ARCHITECTURE_ISSUES + 1))
+      ;;
+  esac
+}
 
 require_file() {
   local path="$1"
@@ -27,7 +84,31 @@ record_issue() {
   local target="$4"
 
   printf -- "- %s: %s is %s; target is %s\n" "$file" "$label" "$actual" "$target"
+  record_blocker_theme "$file" "$label" "$target"
   ISSUES=$((ISSUES + 1))
+}
+
+print_blocker_summary() {
+  echo
+  echo "Blocking themes"
+  if ((LIVE_PROMPT_PROOF_ISSUES > 0)); then
+    echo "- Live prompt proof: $LIVE_PROMPT_PROOF_ISSUES issue(s). Finish Codex same-slice no-submit proof."
+  fi
+  if ((DEFAULT_CHROME_EDITOR_ISSUES > 0)); then
+    echo "- Chrome editor production proof: $DEFAULT_CHROME_EDITOR_ISSUES issue(s). Local real Monaco/ProseMirror caret-quality proof exists; add production variants before target scores can reach 100."
+  fi
+  if ((VARIANT_PROOF_ISSUES > 0)); then
+    echo "- Real-app variant proof: $VARIANT_PROOF_ISSUES issue(s). Add missing Notes, Obsidian, Chrome, Claude desktop, and prompt layout variants."
+  fi
+  if ((TYPING_RESTRAINT_ISSUES > 0)); then
+    echo "- Typing restraint and noise: $TYPING_RESTRAINT_ISSUES issue(s). Keep normal typing untouched and separate key-path failures from AX warning noise."
+  fi
+  if ((RELEASE_ARCHITECTURE_ISSUES > 0)); then
+    echo "- Release and architecture polish: $RELEASE_ARCHITECTURE_ISSUES issue(s). Keep aggregate scores below target until proof gates and shared orchestration gaps close."
+  fi
+  if ((STRICT_PROOF_GATE_ISSUES > 0)); then
+    echo "- Strict proof gates: $STRICT_PROOF_GATE_ISSUES issue(s). Do not allow Markdown scores to reach target until manual smoke, visual evidence, and proof manifest gates pass."
+  fi
 }
 
 check_deep_dive() {
@@ -65,18 +146,6 @@ check_deep_research() {
       local status="${BASH_REMATCH[1]}"
       if [[ "$status" != "complete" ]]; then
         record_issue "$path" "Proof status" "$status" "complete"
-      fi
-    fi
-  done <"$path"
-}
-
-check_overall_excellence() {
-  local path="$1"
-
-  while IFS= read -r line; do
-    if [[ "$line" =~ ^Overall[[:space:]]score:[[:space:]]*([0-9]+)/100\.?$ ]]; then
-      if [[ "${BASH_REMATCH[1]}" != "100" ]]; then
-        record_issue "$path" "Overall excellence score" "${BASH_REMATCH[1]}/100" "100/100"
       fi
     fi
   done <"$path"
@@ -138,27 +207,80 @@ check_app_proof() {
   done <"$path"
 }
 
+should_run_strict_proof_gates() {
+  case "$STRICT_PROOF_GATES" in
+    always|true|1|yes)
+      return 0
+      ;;
+    never|false|0|no)
+      return 1
+      ;;
+    auto)
+      [[ "$DEEP_DIVE_PATH" == "$DEFAULT_DEEP_DIVE_PATH" \
+        && "$DEEP_RESEARCH_PATH" == "$DEFAULT_DEEP_RESEARCH_PATH" \
+        && "$APPLE_NATIVE_PATH" == "$DEFAULT_APPLE_NATIVE_PATH" \
+        && "$APP_PROOF_PATH" == "$DEFAULT_APP_PROOF_PATH" ]]
+      return
+      ;;
+    *)
+      echo "invalid AUTOCOMPLETE_LAB_SCORE_TARGET_STRICT_PROOF_GATES value: $STRICT_PROOF_GATES" >&2
+      exit 2
+      ;;
+  esac
+}
+
+record_strict_proof_gate_issue() {
+  local label="$1"
+  local output_path="$2"
+
+  printf -- "- Strict proof gate failed: %s; target is pass\n" "$label"
+  sed -n '1,18p' "$output_path" | sed 's/^/  /'
+  STRICT_PROOF_GATE_ISSUES=$((STRICT_PROOF_GATE_ISSUES + 1))
+  RELEASE_ARCHITECTURE_ISSUES=$((RELEASE_ARCHITECTURE_ISSUES + 1))
+  ISSUES=$((ISSUES + 1))
+}
+
+run_strict_proof_gate() {
+  local label="$1"
+  shift
+  local output_path
+  output_path="$(mktemp)"
+
+  if ! "$@" >"$output_path" 2>&1; then
+    record_strict_proof_gate_issue "$label" "$output_path"
+  fi
+
+  rm -f "$output_path"
+}
+
+check_strict_proof_gates() {
+  should_run_strict_proof_gates || return 0
+
+  run_strict_proof_gate "manual smoke status" "$MANUAL_SMOKE_GATE_SCRIPT" --require-all
+  run_strict_proof_gate "visual placement evidence" "$VISUAL_EVIDENCE_GATE_SCRIPT" --require-all
+  run_strict_proof_gate "proof manifest" "$PROOF_MANIFEST_GATE_SCRIPT" --require-all
+}
+
 require_file "$DEEP_DIVE_PATH"
 require_file "$DEEP_RESEARCH_PATH"
-require_file "$OVERALL_EXCELLENCE_PATH"
 require_file "$APPLE_NATIVE_PATH"
 require_file "$APP_PROOF_PATH"
 
 echo "Score target status"
 echo "Deep dive: $DEEP_DIVE_PATH"
 echo "Deep research: $DEEP_RESEARCH_PATH"
-echo "Overall excellence: $OVERALL_EXCELLENCE_PATH"
 echo "Apple-native checklist: $APPLE_NATIVE_PATH"
 echo "App proof matrix: $APP_PROOF_PATH"
 echo
 
 check_deep_dive "$DEEP_DIVE_PATH"
 check_deep_research "$DEEP_RESEARCH_PATH"
-check_overall_excellence "$OVERALL_EXCELLENCE_PATH"
 check_apple_native "$APPLE_NATIVE_PATH"
 check_app_proof "$APP_PROOF_PATH"
+check_strict_proof_gates
 
 if ((ISSUES > 0)); then
+  print_blocker_summary
   echo
   echo "Score target check failed with $ISSUES issue(s)."
   exit 1

@@ -88,15 +88,19 @@ Recorder:
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-undo --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-undo --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-undo --manual-gate
 ```
 
 - Use the existing autocomplete smoke note.
 - Do not let automation create, delete, or search private notes.
-- Do not record a generic `notes` pass as proof. Title, body, and checklist are separate proof targets.
+- Do not record a generic `notes` pass as proof. Title, body, checklist, and undo are separate proof targets.
 - Test title-only text with `Smoke proof feels inst`, then ` and stays inst`.
 - Test body text with `Autocomplete smoke` on line one and `Smoke proof feels inst` on line two, then ` and stays inst`.
 - Toggle Checklist and test a checklist row with `Smoke proof feels inst`, then ` and stays inst`.
 - Confirm one-word and full accepts verify.
+- In undo lanes, press Command-Z after the first Tab accept and confirm `accepted-insertion-undone` before the second accept.
 
 ## Obsidian
 
@@ -163,16 +167,24 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
 ```
 
 - Focus the Codex message box without submitting.
-- Type a harmless local test fragment like `Can we make this`.
+- Type only disposable prompt text that includes `AUTOCOMPLETE_LAB_CODEX_PROOF`,
+  then a harmless local test fragment like `Can we make this`.
 - Confirm a suggestion appears near the prompt or in a stable mirror position.
 - Press Tab and expect the next word/suffix to insert without submitting.
 - Confirm the text stayed in the composer, no user message bubble appeared, and
   no assistant response started.
+- The recorder will not accept a Codex proof unless the disposable proof marker
+  is explicitly confirmed.
 - Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
 - When the recorder asks, type `NO-SUBMIT` only after confirming the prompt was not sent.
 
 ## Claude Code
+
+Claude Code uses a proof-only terminal-host lane. The direct
+`com.anthropic.claude-code` bundle is still diagnostics-only, but a supported
+terminal host may count when explicit proof mode is active and the disposable
+marker is present.
 
 Recorder:
 
@@ -180,12 +192,14 @@ Recorder:
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate
 ```
 
-- Focus the Claude Code prompt without submitting.
+- Use a supported terminal host: Terminal, iTerm2, Warp, Ghostty, kitty, or Alacritty.
+- Include `AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF` in the prompt or terminal title.
+- Focus a disposable Claude Code prompt without submitting.
 - Type a harmless local test fragment like `Can we make this`.
 - Confirm a suggestion appears near the prompt or in a stable mirror position.
 - Press Tab and expect the next word/suffix to insert without submitting.
 - Confirm the text stayed in the composer, no user message bubble appeared, and
-  no assistant response started.
+  no shell command, user message, or assistant response started.
 - Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
 - When the recorder asks, type `NO-SUBMIT` only after confirming the prompt was not sent.

@@ -30,9 +30,11 @@ public struct CompletionRequest: Equatable, Sendable {
     public let textBeforeCursor: String
     public let textAfterCursor: String
     public let appBundleIdentifier: String?
+    public let fieldIdentityDescription: String?
     public let fieldKind: AXFieldKind
     public let behaviorProfileID: AutocompleteBehaviorProfileID?
     public let acceptedTextStyleSketch: AcceptedTextStyleSketch?
+    public let documentTitleShape: DocumentTitleShape?
     public let maxVisibleWords: Int
     public let mode: CompletionRequestMode
     public let suggestionID: String
@@ -41,9 +43,11 @@ public struct CompletionRequest: Equatable, Sendable {
         textBeforeCursor: String,
         textAfterCursor: String = "",
         appBundleIdentifier: String? = nil,
+        fieldIdentityDescription: String? = nil,
         fieldKind: AXFieldKind = .unknown,
         behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
         acceptedTextStyleSketch: AcceptedTextStyleSketch? = nil,
+        documentTitleShape: DocumentTitleShape? = nil,
         maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords,
         mode: CompletionRequestMode = .phraseContinuation,
         suggestionID: String = ""
@@ -51,9 +55,11 @@ public struct CompletionRequest: Equatable, Sendable {
         self.textBeforeCursor = textBeforeCursor
         self.textAfterCursor = textAfterCursor
         self.appBundleIdentifier = appBundleIdentifier
+        self.fieldIdentityDescription = fieldIdentityDescription
         self.fieldKind = fieldKind
         self.behaviorProfileID = behaviorProfileID
         self.acceptedTextStyleSketch = acceptedTextStyleSketch
+        self.documentTitleShape = documentTitleShape
         self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
         self.mode = mode
         self.suggestionID = suggestionID
@@ -73,6 +79,9 @@ public struct CompletionRequest: Equatable, Sendable {
         metadata["requestFieldKind"] = fieldKind.rawValue
         if let acceptedTextStyleSketch {
             metadata.merge(acceptedTextStyleSketch.traceMetadata) { current, _ in current }
+        }
+        if let documentTitleShape {
+            metadata.merge(documentTitleShape.traceMetadata) { current, _ in current }
         }
         if let partialWordShape {
             metadata.merge(partialWordShape.traceMetadata) { current, _ in current }

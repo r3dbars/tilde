@@ -20,7 +20,7 @@ struct DiagnosticsInspectorState: Equatable {
           Accessibility: \(appTrusted ? "allowed" : "needed")
           Suggestions: \(lastSuggestionDecision)
           App: \(compatibilityStatus.userFacingSummary), \(appEnabled ? "allowed" : "blocked")
-          Mode: \(compatibilityStatus.interactionMode.displayName)
+          Mode: \(Self.modeText(for: compatibilityStatus))
           Local model: \(runtimeReport.summary)
           Runtime target: \(runtimeTargetSummary)
           Next action: \(runtimeReport.action.displayName)
@@ -30,6 +30,26 @@ struct DiagnosticsInspectorState: Equatable {
           Learning file: \(compatibilityLearningPath)
           Learned adapter: \(compatibilityLearningProfile?.debugSummary ?? "none")
         """
+    }
+
+    private static func modeText(for status: CompatibilitySupportStatus) -> String {
+        guard case let .supported(profile) = status else {
+            return "off"
+        }
+
+        if profile.supportLevel == .yellow,
+           profile.fallbackRenderMode == .floatingMirror {
+            return "mirror"
+        }
+
+        switch profile.renderMode {
+        case .inlineAdjacent:
+            return "inline"
+        case .floatingMirror:
+            return "mirror"
+        case .disabled:
+            return "off"
+        }
     }
 }
 
@@ -54,22 +74,26 @@ final class DiagnosticsWindowController {
         textView = NSTextView(frame: .zero)
         textView.isEditable = false
         textView.isSelectable = true
-        textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.font = NSFont.systemFont(ofSize: 12)
         textView.textColor = .textColor
         textView.backgroundColor = .textBackgroundColor
         textView.drawsBackground = true
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.lineFragmentPadding = 0
         textView.textContainerInset = NSSize(width: 12, height: 12)
 
         refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
         pauseTracingButton = NSButton(title: "Pause", target: nil, action: nil)
         screenshotTracingButton = NSButton(title: "Screenshots", target: nil, action: nil)
         openTraceFolderButton = NSButton(title: "Trace Folder", target: nil, action: nil)
-        exportReportButton = NSButton(title: "Export", target: nil, action: nil)
+        exportReportButton = NSButton(title: "Export Privacy Bundle", target: nil, action: nil)
         deleteTracesButton = NSButton(title: "Delete", target: nil, action: nil)
 
         let scrollView = NSScrollView(frame: .zero)
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
+        scrollView.hasHorizontalScroller = false
         scrollView.borderType = .bezelBorder
         scrollView.documentView = textView
 
@@ -176,20 +200,30 @@ final class DiagnosticsWindowController {
 
         var sections: [String] = []
 
-        sections.append(DiagnosticsInspectorState(
+        sections.append(DiagnosticsOverviewState(
             appTrusted: appTrusted,
             appEnabled: appEnabled,
-            compatibilityStatus: compatibilityStatus,
             lastSuggestionDecision: lastSuggestionDecision,
             runtimeReport: runtimeReport,
             runtimeTargetSummary: runtimeTargetSummary,
-            tracePath: tracePath,
+            compatibilityStatus: compatibilityStatus,
+            diagnostics: diagnostics,
+            traceSummary: traceSummary,
             tracingPaused: tracingPaused,
-            screenshotTracingEnabled: screenshotTracingEnabled,
-            compatibilityLearningPath: compatibilityLearningPath,
-            compatibilityLearningProfile: compatibilityLearningProfile
-        ).summaryText)
+            screenshotTracingEnabled: screenshotTracingEnabled
+        ).text)
+        sections.append(
+            """
+            Local model detail:
+              target: \(runtimeTargetSummary)
+              stage: \(runtimeReport.stage.rawValue)
+              action: \(runtimeReport.action.displayName)
+              detail: \(runtimeReport.detail ?? "none")
+            """
+        )
         sections.append("Model folder: \(modelDirectoryPath)")
+        sections.append("Compatibility: \(compatibilityStatus.summary)")
+        sections.append("App enabled: \(appEnabled)")
         sections.append(traceSummaryText(
             traceSummary,
             tracePath: tracePath,
@@ -198,6 +232,17 @@ final class DiagnosticsWindowController {
             compatibilityLearningPath: compatibilityLearningPath,
             compatibilityLearningProfile: compatibilityLearningProfile
         ))
+        sections.append(SuggestionLearningDiagnostics(
+            summary: traceSummary,
+            recentEvents: recentTraceEvents
+        ).text)
+        sections.append(PromptContextDiagnostics(
+            recentEvents: recentTraceEvents
+        ).text)
+        sections.append(PlacementDiagnostics(
+            summary: traceSummary,
+            recentEvents: recentTraceEvents
+        ).text)
         sections.append(acceptRateBucketsText(title: "Accept rate by app", buckets: traceSummary.acceptRateByApp))
         sections.append(acceptRateBucketsText(title: "Accept rate by mode", buckets: traceSummary.acceptRateByMode))
         sections.append(acceptRateBucketsText(title: "Useful rate by app", buckets: traceSummary.usefulRateByApp))
@@ -208,7 +253,6 @@ final class DiagnosticsWindowController {
         sections.append(countBucketsText(title: "Actionable suppressed by app", buckets: traceSummary.actionableSuppressedByApp))
         sections.append(countBucketsText(title: "Actionable suppressed by mode", buckets: traceSummary.actionableSuppressedByMode))
         sections.append(topMissesText(traceSummary.topMisses))
-        sections.append(DiagnosticsPlacementEvidence(events: recentTraceEvents).summaryText)
 
         if let profile {
             sections.append(
@@ -226,7 +270,6 @@ final class DiagnosticsWindowController {
                   suppress after failed insert: \(profile.suppressesAfterInsertionFailure)
                   sensitive: \(profile.isSensitive)
                   debug summary: \(profile.debugSummary)
-                  safety owner: \(profile.safetyOwnerNote)
                   notes: \(profile.notes)
                 """
             )
@@ -242,6 +285,30 @@ final class DiagnosticsWindowController {
         textView.string = sections.joined(separator: "\n\n")
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func nativeAppearanceSnapshotPNGData(appearanceName: NSAppearance.Name) -> Data? {
+        guard let contentView = window.contentView,
+              let appearance = NSAppearance(named: appearanceName) else {
+            return nil
+        }
+
+        let previousAppearance = window.appearance
+        window.appearance = appearance
+        defer {
+            window.appearance = previousAppearance
+        }
+
+        contentView.needsLayout = true
+        contentView.layoutSubtreeIfNeeded()
+        let bounds = contentView.bounds
+        guard !bounds.isEmpty,
+              let bitmap = contentView.bitmapImageRepForCachingDisplay(in: bounds) else {
+            return nil
+        }
+
+        contentView.cacheDisplay(in: bounds, to: bitmap)
+        return bitmap.representation(using: .png, properties: [:])
     }
 
     private func traceSummaryText(
@@ -322,7 +389,16 @@ final class DiagnosticsWindowController {
     }
 
     private func recentTraceText(_ events: [AutocompleteTraceEvent]) -> String {
-        DiagnosticsTraceHistory(events: events).summaryText
+        guard !events.isEmpty else {
+            return "Recent trace events: none yet"
+        }
+
+        return """
+        Recent trace events:
+        \(events.suffix(16).map {
+            "  \($0.timestamp) \($0.type.rawValue) mode=\($0.requestMode) app=\($0.appBundleIdentifier) shown=\($0.displayedText) accepted=\($0.acceptedText) reason=\($0.reason) latency=\(Self.latency($0.latencyMilliseconds))"
+        }.joined(separator: "\n"))
+        """
     }
 
     private func recentDiagnosticsText(_ events: [String]) -> String {
@@ -383,6 +459,91 @@ final class DiagnosticsWindowController {
     @objc
     private func deleteTraces() {
         deleteTracesAction?()
+    }
+}
+
+struct DiagnosticsOverviewState: Equatable {
+    let accessibilityText: String
+    let suggestionText: String
+    let localModelText: String
+    let currentAppText: String
+    let tracingText: String
+
+    init(
+        appTrusted: Bool,
+        appEnabled: Bool,
+        lastSuggestionDecision: String,
+        runtimeReport: RuntimeReadinessReport,
+        runtimeTargetSummary: String,
+        compatibilityStatus: CompatibilitySupportStatus,
+        diagnostics: FocusedTextDiagnostics?,
+        traceSummary: AutocompleteTraceSummary,
+        tracingPaused: Bool,
+        screenshotTracingEnabled: Bool
+    ) {
+        accessibilityText = appTrusted ? "On" : "Needs permission"
+        suggestionText = Self.suggestionSummary(lastSuggestionDecision)
+        localModelText = Self.oneLine(
+            "\(runtimeReport.summary) | stage \(runtimeReport.stage.rawValue) | action \(runtimeReport.action.displayName) | target \(runtimeTargetSummary)",
+            maxLength: 140
+        )
+
+        let appName = diagnostics?.localizedAppName ?? "No focused app"
+        let bundle = diagnostics?.bundleIdentifier.map { " (\($0))" } ?? ""
+        let enabledText = appEnabled ? "enabled" : "disabled"
+        currentAppText = Self.oneLine(
+            "\(appName)\(bundle) | \(compatibilityStatus.summary) | \(enabledText)",
+            maxLength: 140
+        )
+        tracingText = Self.oneLine(
+            "traces \(tracingPaused ? "paused" : "on") | screenshots \(screenshotTracingEnabled ? "on" : "off") | events \(traceSummary.totalEvents) | accept \(Self.percent(traceSummary.acceptRate)) | useful \(Self.percent(traceSummary.usefulRate))",
+            maxLength: 140
+        )
+    }
+
+    var text: String {
+        [
+            "Overview",
+            "Accessibility: \(accessibilityText)",
+            "Suggestion: \(suggestionText)",
+            "Local model: \(localModelText)",
+            "Current app: \(currentAppText)",
+            "Tracing: \(tracingText)"
+        ].joined(separator: "\n")
+    }
+
+    private static func suggestionSummary(_ decision: String) -> String {
+        let trimmed = oneLine(decision, maxLength: 100)
+        guard !trimmed.isEmpty else {
+            return "No suggestion yet"
+        }
+
+        if trimmed.localizedCaseInsensitiveContains("shown") {
+            return "Shown"
+        }
+
+        for prefix in ["Blocked:", "Waiting:", "Ready:", "Paused", "Starting"] where trimmed.hasPrefix(prefix) {
+            return trimmed
+        }
+
+        return trimmed
+    }
+
+    private static func oneLine(_ text: String, maxLength: Int) -> String {
+        let collapsed = text
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard collapsed.count > maxLength else {
+            return collapsed
+        }
+
+        let cutoff = collapsed.index(collapsed.startIndex, offsetBy: maxLength - 1)
+        return String(collapsed[..<cutoff]) + "..."
+    }
+
+    private static func percent(_ value: Double) -> String {
+        String(format: "%.0f%%", value * 100)
     }
 }
 
@@ -525,6 +686,414 @@ struct DiagnosticsTraceHistory {
     }
 }
 
+struct PromptContextDiagnostics: Equatable {
+    let recentEvents: [AutocompleteTraceEvent]
+
+    var text: String {
+        [
+            headlineText,
+            latestDocumentTitleShapeText,
+            latestPartialWordShapeText,
+            latestCurrentLineShapeText
+        ].joined(separator: "\n")
+    }
+
+    private var headlineText: String {
+        "Prompt context diagnostics: recent shape events \(shapeEvents.count)"
+    }
+
+    private var latestDocumentTitleShapeText: String {
+        guard let event = latestEvent(containingAny: [
+            "documentTitleWordCount",
+            "documentTitleLengthBucket"
+        ]) else {
+            return "Document title shape: no recent title-shape metadata"
+        }
+
+        let words = event.metadata["documentTitleWordCount"] ?? "unknown"
+        let length = event.metadata["documentTitleLengthBucket"] ?? "unknown"
+        let fileExtension = event.metadata["documentTitleExtension"] ?? "none"
+        let untitled = event.metadata["documentTitleIsUntitled"] ?? "unknown"
+        let unsaved = event.metadata["documentTitleHasUnsavedMarker"] ?? "unknown"
+        return "Document title shape: length=\(length), words=\(words), extension=\(fileExtension), untitled=\(untitled), unsaved=\(unsaved)"
+    }
+
+    private var latestPartialWordShapeText: String {
+        guard let event = latestEvent(containingAny: [
+            "partialWordCharacters",
+            "partialWordLetters"
+        ]) else {
+            return "Partial word shape: no recent partial-word metadata"
+        }
+
+        let characters = event.metadata["partialWordCharacters"] ?? "unknown"
+        let letters = event.metadata["partialWordLetters"] ?? "unknown"
+        let digits = event.metadata["partialWordDigits"] ?? "unknown"
+        let casing = event.metadata["partialWordCasing"] ?? "unknown"
+        let hyphen = event.metadata["partialWordHasHyphen"] ?? "unknown"
+        let apostrophe = event.metadata["partialWordHasApostrophe"] ?? "unknown"
+        return "Partial word shape: chars=\(characters), letters=\(letters), digits=\(digits), casing=\(casing), hyphen=\(hyphen), apostrophe=\(apostrophe)"
+    }
+
+    private var latestCurrentLineShapeText: String {
+        guard let event = latestEvent(containingAny: [
+            "currentLineStructure",
+            "currentLineMarkerStyle"
+        ]) else {
+            return "Current line shape: no recent line-shape metadata"
+        }
+
+        let kind = event.metadata["currentLineStructure"] ?? "unknown"
+        let marker = event.metadata["currentLineMarkerStyle"] ?? "unknown"
+        let indentation = event.metadata["currentLineIndentationColumns"] ?? "unknown"
+        let contentWords = event.metadata["currentLineContentWords"] ?? "unknown"
+        return "Current line shape: kind=\(kind), marker=\(marker), indent=\(indentation), contentWords=\(contentWords)"
+    }
+
+    private var shapeEvents: [AutocompleteTraceEvent] {
+        recentEvents.filter { event in
+            event.metadata.keys.contains { key in
+                key.hasPrefix("documentTitle")
+                    || key.hasPrefix("partialWord")
+                    || key.hasPrefix("currentLine")
+            }
+        }
+    }
+
+    private func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
+        recentEvents.reversed().first { event in
+            !keys.isDisjoint(with: Set(event.metadata.keys))
+        }
+    }
+}
+
+struct PlacementDiagnostics: Equatable {
+    let summary: AutocompleteTraceSummary
+    let recentEvents: [AutocompleteTraceEvent]
+
+    var text: String {
+        [
+            headlineText,
+            latestPlacementText,
+            countBucketsText(title: "Recent confidence bands", buckets: confidenceBandCounts),
+            countBucketsText(title: "Placement self-healing actions", buckets: selfHealingActionCounts),
+            countBucketsText(title: "Render mode transitions", buckets: renderModeTransitionCounts),
+            nestedCountBucketsText(title: "Anchor quality by app", buckets: summary.anchorQualityByApp),
+            failureRatesText(
+                title: "Caret failures by app",
+                counts: summary.caretGeometryFailuresByApp,
+                rates: summary.caretGeometryFailureRateByApp
+            ),
+            failureRatesText(
+                title: "Caret failures by render mode",
+                counts: summary.caretGeometryFailuresByRenderMode,
+                rates: summary.caretGeometryFailureRateByRenderMode
+            )
+        ].joined(separator: "\n")
+    }
+
+    private var headlineText: String {
+        "Placement diagnostics: caret failures \(summary.caretGeometryFailureCount) (\(Self.percent(summary.caretGeometryFailureRate))), recent placement events \(recentPlacementEvents.count)"
+    }
+
+    private var latestPlacementText: String {
+        guard let event = latestEvent(containingAny: [
+            "placementConfidenceScore",
+            "placementConfidenceBand",
+            "placementAnchorSource",
+            "placementRequestedRenderMode",
+            "placementEffectiveRenderMode",
+            "placementSelfHealingAction"
+        ]) else {
+            return "Current placement: no recent placement metadata"
+        }
+
+        let score = event.metadata["placementConfidenceScore"] ?? "unknown"
+        let band = event.metadata["placementConfidenceBand"] ?? "unknown"
+        let anchor = event.metadata["placementAnchorSource"] ?? "unknown"
+        let requestedRenderMode = event.metadata["placementRequestedRenderMode"]
+            ?? event.metadata["requestedRenderMode"]
+            ?? "unknown"
+        let effectiveRenderMode = event.metadata["placementEffectiveRenderMode"]
+            ?? event.metadata["effectiveRenderMode"]
+            ?? "unknown"
+        let selfHealingApplied = event.metadata["placementSelfHealingApplied"] ?? "unknown"
+        let selfHealingAction = event.metadata["placementSelfHealingAction"] ?? "unknown"
+        let eventReason = event.reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reason = event.metadata["placementHealthReason"] ?? (eventReason.isEmpty ? "none" : eventReason)
+
+        return "Current placement: confidence=\(score) (\(band)), anchor=\(anchor), render=\(requestedRenderMode)->\(effectiveRenderMode), selfHealing=\(selfHealingApplied)/\(selfHealingAction), clipping=\(clippingDescription(for: event)), screenshot=\(screenshotDescription(for: event)), reason=\(reason)"
+    }
+
+    private var recentPlacementEvents: [AutocompleteTraceEvent] {
+        recentEvents.filter { event in
+            event.metadata.keys.contains { $0.hasPrefix("placement") }
+        }
+    }
+
+    private var confidenceBandCounts: [String: Int] {
+        counts(for: recentPlacementEvents.compactMap { $0.metadata["placementConfidenceBand"] })
+    }
+
+    private var selfHealingActionCounts: [String: Int] {
+        counts(for: recentPlacementEvents.compactMap { $0.metadata["placementSelfHealingAction"] })
+    }
+
+    private var renderModeTransitionCounts: [String: Int] {
+        counts(for: recentPlacementEvents.compactMap { event in
+            guard let requested = event.metadata["placementRequestedRenderMode"],
+                  let effective = event.metadata["placementEffectiveRenderMode"] else {
+                return nil
+            }
+
+            return "\(requested)->\(effective)"
+        })
+    }
+
+    private func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
+        recentEvents.reversed().first { event in
+            !keys.isDisjoint(with: Set(event.metadata.keys))
+        }
+    }
+
+    private func clippingDescription(for event: AutocompleteTraceEvent) -> String {
+        if let clipped = event.metadata["placementClipped"] {
+            return clipped
+        }
+
+        guard let clippingRect = event.metadata["clippingRect"] else {
+            return "unknown"
+        }
+
+        return clippingRect == "none" ? "missing" : "available"
+    }
+
+    private func screenshotDescription(for event: AutocompleteTraceEvent) -> String {
+        if let screenshotCaptured = event.metadata["screenshotCaptured"] {
+            return screenshotCaptured
+        }
+
+        return event.screenshotPath.isEmpty ? "false" : "true"
+    }
+
+    private func countBucketsText(title: String, buckets: [String: Int]) -> String {
+        guard !buckets.isEmpty else {
+            return "\(title): none yet"
+        }
+
+        return """
+        \(title):
+        \(buckets.sorted { lhs, rhs in
+            if lhs.value == rhs.value {
+                return lhs.key < rhs.key
+            }
+
+            return lhs.value > rhs.value
+        }.map { key, value in
+            "  \(key): \(value)"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func nestedCountBucketsText(title: String, buckets: [String: [String: Int]]) -> String {
+        guard !buckets.isEmpty else {
+            return "\(title): none yet"
+        }
+
+        return """
+        \(title):
+        \(buckets.sorted { $0.key < $1.key }.map { app, counts in
+            let countText = counts
+                .sorted { lhs, rhs in
+                    if lhs.value == rhs.value {
+                        return lhs.key < rhs.key
+                    }
+
+                    return lhs.value > rhs.value
+                }
+                .map { "\($0.key)=\($0.value)" }
+                .joined(separator: ", ")
+            return "  \(app): \(countText)"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func failureRatesText(title: String, counts: [String: Int], rates: [String: Double]) -> String {
+        let keys = Set(counts.keys).union(rates.keys)
+        guard !keys.isEmpty else {
+            return "\(title): none yet"
+        }
+
+        return """
+        \(title):
+        \(keys.sorted().map { key in
+            let count = counts[key] ?? 0
+            let rate = rates[key] ?? 0
+            return "  \(key): \(count) (\(Self.percent(rate)))"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func counts(for values: [String]) -> [String: Int] {
+        values.reduce(into: [:]) { result, value in
+            result[value, default: 0] += 1
+        }
+    }
+
+    private static func percent(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+}
+
+struct SuggestionLearningDiagnostics: Equatable {
+    let summary: AutocompleteTraceSummary
+    let recentEvents: [AutocompleteTraceEvent]
+
+    var text: String {
+        [
+            headlineText,
+            acceptedAndKeptText(title: "Accepted-kept by app", buckets: summary.acceptedAndKeptRateByApp),
+            acceptedAndKeptText(title: "Accepted-kept by mode", buckets: summary.acceptedAndKeptRateByRequestMode),
+            countBucketsText(title: "Annoyance signals", buckets: summary.annoyanceSignalCounts),
+            recentQuietModeText,
+            recentDisplayAffinityText,
+            recentRepeatedMissText,
+            recentPrefixCooldownText,
+            recentStyleSketchText
+        ].joined(separator: "\n")
+    }
+
+    private var headlineText: String {
+        "Learning diagnostics: accepted-kept \(summary.acceptedAndKeptCount) (\(Self.percent(summary.acceptedAndKeptRateAccepted)) of accepted, \(Self.percent(summary.acceptedAndKeptRateShown)) of shown), typed-over \(summary.typedOverCount), ignored \(summary.ignoredCount), annoyance \(Self.score(summary.annoyanceScore))"
+    }
+
+    private var recentDisplayAffinityText: String {
+        guard let event = latestEvent(containingAny: [
+            "displayScoreAcceptedAndKeptProbability",
+            "displayScoreAcceptedAndKeptSamples"
+        ]) else {
+            return "Current display affinity: no recent accepted-kept gate metadata"
+        }
+
+        let probability = event.metadata["displayScoreAcceptedAndKeptProbability"] ?? "unknown"
+        let samples = event.metadata["displayScoreAcceptedAndKeptSamples"] ?? "0"
+        let threshold = event.metadata["displayScoreAcceptedAndKeptThreshold"] ?? "n/a"
+        return "Current display affinity: probability=\(probability), samples=\(samples), threshold=\(threshold)"
+    }
+
+    private var recentQuietModeText: String {
+        guard let event = latestEvent(containingAny: [
+            "quietMode",
+            "quietReason",
+            "quietScore",
+            "annoyanceSignal"
+        ]) else {
+            return "Quiet mode: no recent quiet-mode metadata"
+        }
+
+        let mode = event.metadata["quietMode"] ?? "unknown"
+        let signal = event.metadata["annoyanceSignal"] ?? "unknown"
+        let reason = event.metadata["quietReason"] ?? event.metadata["annoyanceReason"] ?? "unknown"
+        let score = event.metadata["quietScore"] ?? event.metadata["annoyanceFieldScore"] ?? "unknown"
+        let until = event.metadata["quietUntil"].map { ", until=\($0)" } ?? ""
+        return "Quiet mode: scope=\(mode), signal=\(signal), reason=\(reason), score=\(score)\(until)"
+    }
+
+    private var recentRepeatedMissText: String {
+        guard let event = latestEvent(containingAny: [
+            "repetitionMissTotal",
+            "repetitionMissSuppressed"
+        ]) else {
+            return "Repeated miss state: no recent miss-score metadata"
+        }
+
+        let kind = event.metadata["repetitionMissKind"] ?? "miss"
+        let total = event.metadata["repetitionMissTotal"] ?? "unknown"
+        let threshold = event.metadata["repetitionMissThreshold"] ?? "unknown"
+        let suppressed = event.metadata["repetitionMissSuppressed"] ?? "false"
+        let lifetime = event.metadata["repetitionMissLifetimeMs"].map { ", lifetime=\($0)ms" } ?? ""
+        return "Repeated miss state: kind=\(kind), score=\(total)/\(threshold), suppressed=\(suppressed)\(lifetime)"
+    }
+
+    private var recentPrefixCooldownText: String {
+        guard let event = latestEvent(containingAny: [
+            "prefixCooldownReason",
+            "prefixCooldownDurationMilliseconds"
+        ]) else {
+            return "Prefix cooldown: no recent cooldown metadata"
+        }
+
+        let reason = event.metadata["prefixCooldownReason"] ?? "unknown"
+        let duration = event.metadata["prefixCooldownDurationMilliseconds"] ?? "unknown"
+        let tokens = event.metadata["prefixFamilyTokenCount"] ?? "unknown"
+        let escalated = event.metadata["prefixCooldownEscalated"] ?? "false"
+        let hash = event.metadata["prefixFamilyHMACToken"].map { ", familyHash=\($0)" } ?? ""
+        return "Prefix cooldown: reason=\(reason), duration=\(duration)ms, familyTokens=\(tokens), escalated=\(escalated)\(hash)"
+    }
+
+    private var recentStyleSketchText: String {
+        guard let event = latestEvent(containingAny: [
+            "styleSketchSamples",
+            "styleSketchAverageWords"
+        ]) else {
+            return "Style sketch: no recent aggregate style metadata"
+        }
+
+        let samples = event.metadata["styleSketchSamples"] ?? "0"
+        let averageWords = event.metadata["styleSketchAverageWords"] ?? "unknown"
+        let punctuation = event.metadata["styleSketchTerminalPunctuationRate"] ?? "unknown"
+        let lowercase = event.metadata["styleSketchLowercaseStartRate"] ?? "unknown"
+        let questions = event.metadata["styleSketchQuestionEndingRate"] ?? "unknown"
+        return "Style sketch: samples=\(samples), avgWords=\(averageWords), terminalPunctuation=\(punctuation), lowercaseStarts=\(lowercase), questionEndings=\(questions)"
+    }
+
+    private func acceptedAndKeptText(title: String, buckets: [String: Double]) -> String {
+        guard !buckets.isEmpty else {
+            return "\(title): none yet"
+        }
+
+        return """
+        \(title):
+        \(buckets.sorted { $0.key < $1.key }.map { key, value in
+            "  \(key): \(Self.percent(value))"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func countBucketsText(title: String, buckets: [String: Int]) -> String {
+        guard !buckets.isEmpty else {
+            return "\(title): none yet"
+        }
+
+        return """
+        \(title):
+        \(buckets.sorted { lhs, rhs in
+            if lhs.value == rhs.value {
+                return lhs.key < rhs.key
+            }
+
+            return lhs.value > rhs.value
+        }.map { key, value in
+            "  \(key): \(value)"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    private func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
+        recentEvents.reversed().first { event in
+            !keys.isDisjoint(with: Set(event.metadata.keys))
+        }
+    }
+
+    private static func percent(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+
+    private static func score(_ value: Double) -> String {
+        String(format: "%.2f", value)
+    }
+}
+
 struct DiagnosticsTypingHealth {
     private var keySamples = 0
     private var keySummarySamples = 0
@@ -532,6 +1101,8 @@ struct DiagnosticsTypingHealth {
     private var keyP95Micros: Int?
     private var slowKeyMarkers = 0
     private var disabledKeyEvents = 0
+    private var startFailedKeyEvents = 0
+    private var failedClosedKeyEvents = 0
 
     private var axSummarySamples = 0
     private var axP95Milliseconds: Int?
@@ -547,6 +1118,14 @@ struct DiagnosticsTypingHealth {
     }
 
     var keyCaptureStatus: String {
+        if startFailedKeyEvents > 0 {
+            return "needs attention - event tap start failed \(startFailedKeyEvents)x"
+        }
+
+        if failedClosedKeyEvents > 0 {
+            return "needs attention - event tap failed closed \(failedClosedKeyEvents)x"
+        }
+
         if disabledKeyEvents > 0 {
             return "needs attention - event tap disabled \(disabledKeyEvents)x"
         }
@@ -608,6 +1187,10 @@ struct DiagnosticsTypingHealth {
             keyMaxMicros = maxOptional(keyMaxMicros, fields.intValue(for: "durationMicros"))
         case "keyboard-event-tap-disabled":
             disabledKeyEvents += 1
+        case "keyboard-event-tap-start-failed":
+            startFailedKeyEvents += 1
+        case "keyboard-event-tap-failed-closed":
+            failedClosedKeyEvents += 1
         case "focused-text-poll-latency-summary":
             axSummarySamples += fields.intValue(for: "count") ?? 0
             axP95Milliseconds = maxOptional(axP95Milliseconds, fields.intValue(for: "p95Milliseconds"))

@@ -3,6 +3,7 @@ import Foundation
 
 public enum TracePrivacyFingerprint {
     public static let version = "hmac-sha256-v1"
+    public static let prefixFamilyVersion = "prefix-family-hmac-sha256-v1"
 
     public static func metadata(for text: String, secret: Data) -> [String: String] {
         let tokens = AcceptanceSurvivalClassifier.looseTokens(in: text)
@@ -24,6 +25,18 @@ public enum TracePrivacyFingerprint {
         }
 
         return metadata
+    }
+
+    public static func prefixFamilyMetadata(for tokens: [String], secret: Data) -> [String: String] {
+        guard !tokens.isEmpty, !secret.isEmpty else {
+            return [:]
+        }
+
+        let joined = tokens.joined(separator: " ")
+        return [
+            "prefixFamilyFingerprintVersion": prefixFamilyVersion,
+            "prefixFamilyHMACToken": hmacHex(joined, secret: secret, prefixBytes: 12)
+        ]
     }
 
     private static func threeGrams(_ tokens: [String]) -> [[String]] {

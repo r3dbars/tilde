@@ -29,6 +29,45 @@ struct FocusedTextPollingThrottleSuggestionVisibilityPolicyTests {
         ))
     }
 
+    @Test("Hides stale visible suggestion during polling throttle")
+    func hidesStaleVisibleSuggestionDuringThrottle() {
+        let policy = FocusedTextPollingThrottleSuggestionVisibilityPolicy()
+
+        #expect(policy.shouldHideVisibleSuggestion(
+            currentSuggestionBundleIdentifier: "com.apple.Notes",
+            currentSuggestionFieldIdentity: fieldIdentity(1),
+            currentFieldIdentity: fieldIdentity(1),
+            frontmostBundleIdentifier: "com.apple.Notes",
+            isInvalidatedByUserTyping: false,
+            currentSuggestionAgeMilliseconds: 901,
+            maximumPreservedAgeMilliseconds: 750
+        ))
+
+        #expect(!policy.shouldHideVisibleSuggestion(
+            currentSuggestionBundleIdentifier: "com.apple.Notes",
+            currentSuggestionFieldIdentity: fieldIdentity(1),
+            currentFieldIdentity: fieldIdentity(1),
+            frontmostBundleIdentifier: "com.apple.Notes",
+            isInvalidatedByUserTyping: false,
+            currentSuggestionAgeMilliseconds: 240,
+            maximumPreservedAgeMilliseconds: 750
+        ))
+    }
+
+    @Test("Hides visible suggestion with unknown age when freshness is required")
+    func hidesVisibleSuggestionWithUnknownAgeWhenFreshnessRequired() {
+        let policy = FocusedTextPollingThrottleSuggestionVisibilityPolicy()
+
+        #expect(policy.shouldHideVisibleSuggestion(
+            currentSuggestionBundleIdentifier: "com.apple.Notes",
+            currentSuggestionFieldIdentity: fieldIdentity(1),
+            currentFieldIdentity: fieldIdentity(1),
+            frontmostBundleIdentifier: "com.apple.Notes",
+            isInvalidatedByUserTyping: false,
+            maximumPreservedAgeMilliseconds: 750
+        ))
+    }
+
     @Test("Hides suggestion when frontmost app changes")
     func hidesSuggestionWhenFrontmostAppChanges() {
         let policy = FocusedTextPollingThrottleSuggestionVisibilityPolicy()

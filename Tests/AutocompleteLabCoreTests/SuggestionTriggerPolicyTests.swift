@@ -254,6 +254,29 @@ struct SuggestionTriggerPolicyTests {
         ) == .skip)
     }
 
+    @Test("Profiles with fresh paragraph suppression wait for stronger local context")
+    func profileFreshParagraphStartsNeedStrongerLocalContext() {
+        let policy = SuggestionTriggerPolicy()
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "The intro is enough.\n\nNew pla",
+            currentTextBeforeCursor: "The intro is enough.\n\nNew plan",
+            behaviorProfileID: .docsProse
+        ) == .skip)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "The intro is enough.\n\nNew plan nee",
+            currentTextBeforeCursor: "The intro is enough.\n\nNew plan need",
+            behaviorProfileID: .docsProse
+        ) == .request(delayMilliseconds: 120))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "The intro is enough.\n\nNew pla",
+            currentTextBeforeCursor: "The intro is enough.\n\nNew plan",
+            behaviorProfileID: .notes
+        ) == .request(delayMilliseconds: 120))
+    }
+
     @Test("Line start behavior follows profile and list shape")
     func lineStartBehaviorFollowsProfileAndListShape() {
         #expect(SuggestionLineStartBehavior.behavior(
