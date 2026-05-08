@@ -22,8 +22,36 @@ MLX_METALLIB="$ROOT_DIR/.build/mlx-metal/default.metallib"
 APP_NAME_MATCH="[${APP_NAME:0:1}]${APP_NAME:1}"
 APP_PROCESS_PATTERN="/${APP_NAME}.app/Contents/MacOS/${APP_NAME_MATCH}"
 CURRENT_APP_PROCESS_PATTERN="$DIST_DIR/${APP_NAME}.app/Contents/MacOS/${APP_NAME_MATCH}"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 cd "$ROOT_DIR"
+
+running_app_services() {
+  launchctl print "gui/$(id -u)" 2>/dev/null |
+    awk -v needle="application.$BUNDLE_ID." 'index($0, needle) { print $NF }'
+}
+
+stale_app_bundles() {
+  local search_root="$HOME/.codex/worktrees"
+  [[ -d "$search_root" ]] || return 0
+  find "$search_root" -path "*/dist/$APP_NAME.app" -type d -prune 2>/dev/null || true
+}
+
+quarantine_stale_app_bundles() {
+  local bundle
+  local disabled
+  local timestamp
+  timestamp="$(date +%Y%m%d%H%M%S)"
+
+  while IFS= read -r bundle; do
+    [[ -z "$bundle" || "$bundle" == "$APP_BUNDLE" ]] && continue
+    if [[ -x "$LSREGISTER" ]]; then
+      "$LSREGISTER" -u "$bundle" >/dev/null 2>&1 || true
+    fi
+    disabled="${bundle}.disabled-${timestamp}-$$"
+    mv "$bundle" "$disabled" >/dev/null 2>&1 || true
+  done < <(stale_app_bundles)
+}
 
 kill_running_app_instances() {
   local pid
@@ -46,6 +74,16 @@ kill_running_app_instances() {
   exit 1
 }
 
+stop_running_apps() {
+  local service
+  while IFS= read -r service; do
+    [[ -z "$service" ]] && continue
+    launchctl bootout "gui/$(id -u)/$service" >/dev/null 2>&1 || true
+  done < <(running_app_services)
+
+  kill_running_app_instances
+}
+
 wait_for_current_app_instance() {
   for _ in {1..20}; do
     if pgrep -fl "$CURRENT_APP_PROCESS_PATTERN" >/dev/null 2>&1; then
@@ -60,7 +98,8 @@ wait_for_current_app_instance() {
   exit 1
 }
 
-kill_running_app_instances
+quarantine_stale_app_bundles
+stop_running_apps
 
 find_signing_identity() {
   if [[ -n "${SIGN_IDENTITY:-}" ]]; then
@@ -246,6 +285,12 @@ open_app() {
     launchctl setenv AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS "$AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS"
   else
     launchctl unsetenv AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS >/dev/null 2>&1 || true
+  fi
+
+  if [[ -n "${AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS:-}" ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS "$AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS >/dev/null 2>&1 || true
   fi
 
   /usr/bin/open -n -F "$APP_BUNDLE"

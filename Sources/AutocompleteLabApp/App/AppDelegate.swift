@@ -4869,6 +4869,10 @@ private extension AppDelegate {
         "SuggestionPace"
     }
 
+    static var temporarilyEnabledBundleIDsEnvironmentKey: String {
+        "AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
+    }
+
     func loadPauseState() {
         let persistedPause: Bool?
         if UserDefaults.standard.object(forKey: Self.suggestionsPausedDefaultsKey) == nil {
@@ -4891,9 +4895,15 @@ private extension AppDelegate {
 
     func loadDisabledApps() {
         let persisted = UserDefaults.standard.stringArray(forKey: Self.disabledAppsDefaultsKey) ?? []
-        disabledBundleIdentifiers = DisabledAppSelection(
+        var selection = DisabledAppSelection(
             persistedBundleIdentifiers: persisted
-        ).bundleIdentifiers
+        )
+        selection.temporarilyEnable(
+            bundleIdentifiers: ProcessInfo.processInfo.environment[
+                Self.temporarilyEnabledBundleIDsEnvironmentKey
+            ]
+        )
+        disabledBundleIdentifiers = selection.bundleIdentifiers
     }
 
     func persistDisabledApps() {
