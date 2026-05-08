@@ -6,15 +6,15 @@ public struct RuntimeReadinessGuidance: Equatable, Sendable {
     public init(report: RuntimeReadinessReport) {
         switch report.stage {
         case .downloadNeeded:
-            message = "Model missing: install or repair the app-owned MLX model. Suggestions stay off until this is ready."
-            actionTitle = "Install / Repair Model"
+            message = "Model missing: install the app-owned Qwen3.5 4B MLX model. Do not start Ollama, llama.cpp, or a separate model server. Suggestions stay off until this is ready."
+            actionTitle = "Install Model"
             isActionEnabled = true
         case .repairNeeded:
-            message = "Model repair needed: replace the incomplete app-owned MLX model files. Suggestions stay off until the folder is valid."
-            actionTitle = "Install / Repair Model"
+            message = "Model repair needed: replace the incomplete app-owned MLX files from inside Autocomplete Lab. Do not start Ollama, llama.cpp, or a separate model server. Suggestions stay off until the folder is valid."
+            actionTitle = "Repair Model"
             isActionEnabled = true
         case .runtimeUnavailable:
-            message = "Runtime unavailable: this build cannot start the preferred local runtime. Suggestions stay off in this build."
+            message = "Runtime unavailable: this build cannot start the app-owned MLX runtime. Suggestions stay off in this build."
             actionTitle = "Unavailable"
             isActionEnabled = false
         case .warming:

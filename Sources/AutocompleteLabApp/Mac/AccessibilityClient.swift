@@ -16,6 +16,7 @@ struct FocusedTextContext: Equatable, Sendable {
     let fingerprint: FocusedElementFingerprint
     let textBeforeCursor: String
     let textAfterCursor: String
+    let selectedText: String
     let selectedTextLength: Int
     let caretRect: CGRect?
     let elementRect: CGRect?
@@ -23,6 +24,7 @@ struct FocusedTextContext: Equatable, Sendable {
     let textLineRect: CGRect?
     let textStyle: FocusedTextStyle?
     let isSecure: Bool
+    let fieldClassification: AXFieldClassification
     let caretIsSynthetic: Bool
     let capabilities: FocusedTextCapabilities
 }
@@ -131,6 +133,7 @@ struct FocusedTextStyle: Equatable, @unchecked Sendable {
 
 final class AccessibilityClient: @unchecked Sendable {
     private let sensitiveTextFieldPolicy = SensitiveTextFieldPolicy()
+    private let fieldClassifier = AXFieldClassifier()
 
     var isTrusted: Bool {
         AXIsProcessTrusted()
@@ -220,6 +223,7 @@ final class AccessibilityClient: @unchecked Sendable {
             text,
             utf16Offset: selectedRange?.location ?? text.utf16.count
         )
+        let selectedText = selectedText(in: focusedElement, fullText: text, selectedRange: selectedRange)
         let caretRect = selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(caretBounds(for: focusedElement, range: $0))
         }
@@ -238,6 +242,16 @@ final class AccessibilityClient: @unchecked Sendable {
         let textStyle = selectedRange.flatMap {
             focusedTextStyle(in: focusedElement, textLength: text.utf16.count, range: $0)
         }
+        let fieldClassification = fieldClassification(
+            role: role,
+            subrole: subrole,
+            fingerprint: fingerprint,
+            isSecure: isSecure,
+            textBeforeCursorLength: textSlice.textBeforeCursor.count,
+            textAfterCursorLength: textSlice.textAfterCursor.count,
+            selectedTextLength: selectedTextLength,
+            lineCount: lineCount(in: text)
+        )
         let capabilities = textCapabilities(
             for: focusedElement,
             selectedRange: selectedRange,
@@ -252,6 +266,7 @@ final class AccessibilityClient: @unchecked Sendable {
             fingerprint: fingerprint,
             textBeforeCursor: textSlice.textBeforeCursor,
             textAfterCursor: textSlice.textAfterCursor,
+            selectedText: selectedText,
             selectedTextLength: selectedTextLength,
             caretRect: caretRect,
             elementRect: elementRect,
@@ -259,6 +274,7 @@ final class AccessibilityClient: @unchecked Sendable {
             textLineRect: textLineRect,
             textStyle: textStyle,
             isSecure: isSecure,
+            fieldClassification: fieldClassification,
             caretIsSynthetic: false,
             capabilities: capabilities
         )
@@ -278,6 +294,7 @@ final class AccessibilityClient: @unchecked Sendable {
             fingerprint: fingerprint,
             textBeforeCursor: "",
             textAfterCursor: "",
+            selectedText: "",
             selectedTextLength: 0,
             caretRect: nil,
             elementRect: elementBounds(for: element),
@@ -285,6 +302,16 @@ final class AccessibilityClient: @unchecked Sendable {
             textLineRect: nil,
             textStyle: nil,
             isSecure: true,
+            fieldClassification: fieldClassification(
+                role: role,
+                subrole: subrole,
+                fingerprint: fingerprint,
+                isSecure: true,
+                textBeforeCursorLength: 0,
+                textAfterCursorLength: 0,
+                selectedTextLength: 0,
+                lineCount: 0
+            ),
             caretIsSynthetic: false,
             capabilities: FocusedTextCapabilities(
                 canReadValue: false,
@@ -718,6 +745,23 @@ final class AccessibilityClient: @unchecked Sendable {
         return range
     }
 
+    private func selectedText(in element: AXUIElement, fullText: String, selectedRange: CFRange?) -> String {
+        if let selectedText = copyAttribute(element, attribute: kAXSelectedTextAttribute) as? String,
+           !selectedText.isEmpty {
+            return selectedText
+        }
+
+        guard let selectedRange, selectedRange.length > 0 else {
+            return ""
+        }
+
+        let startOffset = max(0, min(selectedRange.location, fullText.utf16.count))
+        let endOffset = max(startOffset, min(startOffset + selectedRange.length, fullText.utf16.count))
+        let startIndex = String.Index(utf16Offset: startOffset, in: fullText)
+        let endIndex = String.Index(utf16Offset: endOffset, in: fullText)
+        return String(fullText[startIndex..<endIndex])
+    }
+
     private func caretBounds(for element: AXUIElement, range: CFRange) -> CGRect? {
         let caretRange = CFRange(location: range.location, length: 0)
         return bounds(for: element, range: caretRange)
@@ -927,5 +971,39 @@ final class AccessibilityClient: @unchecked Sendable {
             subrole: subrole,
             fingerprint: fingerprint
         )
+    }
+
+    private func fieldClassification(
+        role: String?,
+        subrole: String?,
+        fingerprint: FocusedElementFingerprint,
+        isSecure: Bool,
+        textBeforeCursorLength: Int,
+        textAfterCursorLength: Int,
+        selectedTextLength: Int,
+        lineCount: Int
+    ) -> AXFieldClassification {
+        fieldClassifier.classification(
+            for: AXFieldClassifierInput(
+                role: role,
+                subrole: subrole,
+                title: fingerprint.title,
+                placeholder: fingerprint.placeholder,
+                windowTitle: fingerprint.windowTitle,
+                isSecure: isSecure,
+                textBeforeCursorLength: textBeforeCursorLength,
+                textAfterCursorLength: textAfterCursorLength,
+                selectedTextLength: selectedTextLength,
+                lineCount: lineCount
+            )
+        )
+    }
+
+    private func lineCount(in text: String) -> Int {
+        guard !text.isEmpty else {
+            return 0
+        }
+
+        return text.split(separator: "\n", omittingEmptySubsequences: false).count
     }
 }

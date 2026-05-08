@@ -15,6 +15,26 @@ public enum InsertionMode: String, Equatable, Hashable, Sendable {
     case disabled
 }
 
+public enum CompatibilityInteractionMode: String, Equatable, Sendable {
+    case inline
+    case mirror
+    case commandOnly
+    case disabled
+
+    public var displayName: String {
+        switch self {
+        case .inline:
+            return "inline"
+        case .mirror:
+            return "mirror"
+        case .commandOnly:
+            return "command-only"
+        case .disabled:
+            return "disabled"
+        }
+    }
+}
+
 public enum FocusedFieldIdentityMode: String, Equatable, Sendable {
     case accessibilityElement
     case stableBounds
@@ -69,6 +89,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
     public let appFamily: CompatibilityAppFamily
     public let supportLevel: CompatibilitySupportLevel
     public let supportReason: String
+    public let safetyOwnerNote: String
     public let renderMode: SuggestionRenderMode
     public let insertionMode: InsertionMode
     public let fallbackRenderMode: SuggestionRenderMode?
@@ -95,6 +116,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         appFamily: CompatibilityAppFamily = .unknown,
         supportLevel: CompatibilitySupportLevel,
         supportReason: String,
+        safetyOwnerNote: String,
         renderMode: SuggestionRenderMode,
         insertionMode: InsertionMode,
         fallbackRenderMode: SuggestionRenderMode? = nil,
@@ -120,6 +142,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         self.appFamily = appFamily
         self.supportLevel = supportLevel
         self.supportReason = supportReason
+        self.safetyOwnerNote = safetyOwnerNote
         self.renderMode = renderMode
         self.insertionMode = insertionMode
         self.fallbackRenderMode = fallbackRenderMode
@@ -145,6 +168,58 @@ public struct CompatibilityProfile: Equatable, Sendable {
         renderMode != .disabled
             && insertionMode != .disabled
             && (supportsOneWordAcceptance || supportsFullAcceptance)
+    }
+
+    public var interactionMode: CompatibilityInteractionMode {
+        let canAcceptText = insertionMode != .disabled
+            && (supportsOneWordAcceptance || supportsFullAcceptance)
+
+        guard canAcceptText else {
+            return .disabled
+        }
+
+        switch renderMode {
+        case .inlineAdjacent:
+            return .inline
+        case .floatingMirror:
+            return .mirror
+        case .disabled:
+            return .commandOnly
+        }
+    }
+
+    public var userFacingSafetySummary: String {
+        guard canPresentSuggestions, !isSensitive else {
+            return "Suggestions stay off here."
+        }
+
+        var sentences: [String] = []
+        switch renderMode {
+        case .inlineAdjacent:
+            if fallbackRenderMode == .floatingMirror {
+                sentences.append("Inline when caret proof is trusted; mirror fallback if inline is unsafe.")
+            } else {
+                sentences.append("Inline only when caret proof is trusted.")
+            }
+        case .floatingMirror:
+            sentences.append("Mirror only until caret placement proof is current.")
+        case .disabled:
+            sentences.append("Suggestions stay off here.")
+        }
+
+        if !allowsDetachedSuggestions {
+            sentences.append("Detached field/window suggestions are disabled.")
+        }
+
+        if supportsOneWordAcceptance && !supportsFullAcceptance {
+            sentences.append("Full accept stays off until no-submit proof exists.")
+        }
+
+        if fallbackInsertionMode == .disabled {
+            sentences.append("Insertion fails closed if the primary method is not verified.")
+        }
+
+        return sentences.joined(separator: " ")
     }
 
     public var debugSummary: String {
@@ -199,6 +274,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .nativeAppKit,
             supportLevel: .green,
             supportReason: "Verified inline suggestions and native text insertion.",
+            safetyOwnerNote: "Owner: TextEdit allows inline because caret geometry, observer updates, and native AX selected-text insertion are verified; mirror fallback remains available.",
             renderMode: .inlineAdjacent,
             insertionMode: .axSelectedText,
             fallbackRenderMode: .floatingMirror,
@@ -212,15 +288,15 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Notes",
             appFamily: .swiftUIAppKit,
             supportLevel: .yellow,
-            supportReason: "Rich text can drift; display can fall back to floating, and insertion fails closed.",
-            renderMode: .inlineAdjacent,
+            supportReason: "Rich text can drift; display stays mirror-first and insertion fails closed until each Notes surface is proven.",
+            safetyOwnerNote: "Owner: Notes stays yellow because rich text can drift; mirror-only display, no detached anchors, and disabled insertion fallback fail closed until title, body, and checklist proof is current.",
+            renderMode: .floatingMirror,
             insertionMode: .keyEvents,
-            fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .disabled,
             knownFailureModes: ["AX selected-text insertion can report success without moving the caret"],
             supportsObserverUpdates: true,
             allowsDetachedSuggestions: false,
-            notes: "Yellow rich-text target. Use key events only, fail closed on unchanged verification, and suppress detached mirror placement until fresh title/body/checklist proof exists because Notes can report AX selected-text insertion success without moving the caret."
+            notes: "Yellow rich-text target. Use key events only, fail closed on unchanged verification, and use caret-bound mirror placement until fresh title/body/checklist proof exists. Suppress detached mirror placement because Notes can report AX selected-text insertion success without moving the caret."
         ),
         CompatibilityProfile(
             bundleIdentifier: "md.obsidian",
@@ -228,6 +304,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .electron,
             supportLevel: .yellow,
             supportReason: "Electron editors can hide caret bounds, so this uses floating or synthetic placement.",
+            safetyOwnerNote: "Owner: Obsidian stays yellow because CodeMirror can hide caret bounds; caret-only mirror placement and no detached suggestions prevent whole-editor ghosts.",
             renderMode: .floatingMirror,
             insertionMode: .axThenKeyEvents,
             fallbackRenderMode: .floatingMirror,
@@ -248,6 +325,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .nativeAppKit,
             supportLevel: .diagnosticsOnly,
             supportReason: "Mail compose is sensitive and insertion is not proven.",
+            safetyOwnerNote: "Owner: Mail remains diagnostics-only because compose fields can contain sensitive text and no safe insertion adapter exists.",
             renderMode: .disabled,
             insertionMode: .disabled,
             fallbackRenderMode: .disabled,
@@ -264,11 +342,33 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             notes: "Diagnostics-only rich-text compose target until Mail insertion has a verified safe adapter."
         ),
         CompatibilityProfile(
+            bundleIdentifier: "com.openai.atlas",
+            displayName: "ChatGPT Atlas",
+            appFamily: .chromium,
+            supportLevel: .diagnosticsOnly,
+            supportReason: "Atlas can contain private browser text and prompt chats; no no-submit proof exists.",
+            safetyOwnerNote: "Owner: Atlas remains diagnostics-only because browser fields and ChatGPT prompts can contain private text and no one-word no-submit proof exists.",
+            renderMode: .disabled,
+            insertionMode: .disabled,
+            fallbackRenderMode: .disabled,
+            fallbackInsertionMode: .disabled,
+            fieldIdentityMode: .stableBounds,
+            anchorLadder: [.none],
+            knownFailureModes: ["browser fields can contain private content", "prompt composer needs no-submit proof"],
+            allowsFieldAnchor: false,
+            allowsWindowAnchor: false,
+            supportsOneWordAcceptance: false,
+            supportsFullAcceptance: false,
+            isSensitive: true,
+            notes: "Diagnostics-only prompt/browser target until disposable prompt proof verifies placement and Tab accept cannot submit."
+        ),
+        CompatibilityProfile(
             bundleIdentifier: "com.google.Chrome",
             displayName: "Chrome",
             appFamily: .chromium,
             supportLevel: .yellow,
             supportReason: "Browser editors vary; display can fall back to floating and insertion can fall back to AX.",
+            safetyOwnerNote: "Owner: Chrome stays yellow because browser fields vary; inline requires caret proof and mirror/AX fallback covers proven local fixture paths.",
             renderMode: .inlineAdjacent,
             insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
@@ -282,10 +382,10 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Codex",
             appFamily: .customCanvas,
             supportLevel: .yellow,
-            supportReason: "Dogfood prompt support still needs one-word no-submit proof before it is green.",
-            renderMode: .inlineAdjacent,
+            supportReason: "Dogfood prompt support stays mirror-first until one-word no-submit proof is current.",
+            safetyOwnerNote: "Owner: Codex is prompt-gated because accidental submit is high risk; mirror next-word accept is allowed, full accept stays off until no-submit proof exists.",
+            renderMode: .floatingMirror,
             insertionMode: .axValueReplacement,
-            fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .keyEvents,
             fieldIdentityMode: .stableBounds,
             anchorLadder: [.caret],
@@ -295,7 +395,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportsFullAcceptance: false,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Dogfood target. Prefer caret-bound inline suggestions and AX value replacement in the prompt editor. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
+            notes: "Dogfood target. Prefer caret-bound mirror suggestions and AX value replacement in the prompt editor until same-slice screenshot and one-word no-submit proof is current. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claude-code",
@@ -303,9 +403,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .customCanvas,
             supportLevel: .yellow,
             supportReason: "Prompt insertion requires one-word no-submit proof and stays limited to next-word accept until full accept is separately proven safe.",
-            renderMode: .inlineAdjacent,
+            safetyOwnerNote: "Owner: Claude Code is prompt-gated because Enter must never be implied; key-event next-word accept is allowed, full accept stays off until no-submit proof exists.",
+            renderMode: .floatingMirror,
             insertionMode: .keyEvents,
-            fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .axThenKeyEvents,
             fieldIdentityMode: .stableBounds,
             anchorLadder: [.caret],
@@ -315,17 +415,17 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportsFullAcceptance: false,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Dogfood target. Prefer caret-bound inline suggestions when the prompt editor exposes bounds. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
+            notes: "Dogfood target. Prefer caret-bound mirror suggestions when the prompt editor exposes bounds until live no-submit proof is current. The app may synthesize a caret from the prompt text, but should not show detached whole-box suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claudefordesktop",
             displayName: "Claude",
             appFamily: .electron,
             supportLevel: .yellow,
-            supportReason: "Composer placement still needs one-word no-submit proof before it is green.",
-            renderMode: .inlineAdjacent,
+            supportReason: "Composer placement stays mirror-first until one-word no-submit proof is current.",
+            safetyOwnerNote: "Owner: Claude desktop is prompt-gated because composer submit is high risk; mirror next-word accept is allowed, full accept stays off until no-submit proof exists.",
+            renderMode: .floatingMirror,
             insertionMode: .axValueReplacement,
-            fallbackRenderMode: .floatingMirror,
             fieldIdentityMode: .stableBounds,
             anchorLadder: [.caret],
             knownFailureModes: ["composer may hide caret bounds", "detached whole-window suggestions are disallowed"],
@@ -334,7 +434,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportsFullAcceptance: false,
             suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
-            notes: "Dogfood target for Claude desktop. Prefer prompt-bound inline suggestions when the composer exposes bounds; otherwise use mirror placement without showing detached whole-window suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
+            notes: "Dogfood target for Claude desktop. Prefer prompt-bound mirror suggestions when the composer exposes bounds and suppress detached whole-window suggestions. Requires one-word no-submit proof; full accept stays disabled until separate full-accept no-submit proof is current."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.apple.Safari",
@@ -342,6 +442,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .webKit,
             supportLevel: .diagnosticsOnly,
             supportReason: "Browser rich editors need separate proof from textareas.",
+            safetyOwnerNote: "Owner: Safari remains diagnostics-only because textarea, contenteditable, and rich-editor placement and insertion proof need separate capture.",
             renderMode: .disabled,
             insertionMode: .disabled,
             fallbackRenderMode: .disabled,
@@ -360,6 +461,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
             supportReason: "Electron rich editor needs app-specific proof.",
+            safetyOwnerNote: "Owner: Slack remains diagnostics-only because message composer geometry and one-word no-submit insertion proof are not captured yet.",
             renderMode: .disabled,
             insertionMode: .disabled,
             fallbackRenderMode: .disabled,
@@ -373,11 +475,88 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             notes: "Diagnostics-only Electron target until message composer geometry and insertion are proven."
         ),
         CompatibilityProfile(
+            bundleIdentifier: "notion.id",
+            displayName: "Notion",
+            appFamily: .electron,
+            supportLevel: .diagnosticsOnly,
+            supportReason: "Notion pages need app-specific ProseMirror placement and insertion proof.",
+            safetyOwnerNote: "Owner: Notion remains diagnostics-only because page editors can contain private workspace content and ProseMirror placement, Tab behavior, and insertion proof are not captured yet.",
+            renderMode: .disabled,
+            insertionMode: .disabled,
+            fallbackRenderMode: .disabled,
+            fallbackInsertionMode: .disabled,
+            anchorLadder: [.none],
+            knownFailureModes: ["ProseMirror editor needs app-specific proof", "workspace pages can contain private content"],
+            allowsFieldAnchor: false,
+            allowsWindowAnchor: false,
+            supportsOneWordAcceptance: false,
+            supportsFullAcceptance: false,
+            notes: "Diagnostics-only Notion target until disposable page placement, insertion, and no-submit proof are captured."
+        ),
+        CompatibilityProfile(
+            bundleIdentifier: "com.hnc.Discord",
+            displayName: "Discord",
+            appFamily: .electron,
+            supportLevel: .diagnosticsOnly,
+            supportReason: "Discord message composers need explicit no-submit proof before suggestions can run.",
+            safetyOwnerNote: "Owner: Discord remains diagnostics-only because message composers can send chat text and one-word no-submit proof is not captured yet.",
+            renderMode: .disabled,
+            insertionMode: .disabled,
+            fallbackRenderMode: .disabled,
+            fallbackInsertionMode: .disabled,
+            anchorLadder: [.none],
+            knownFailureModes: ["message composer needs no-submit proof"],
+            allowsFieldAnchor: false,
+            allowsWindowAnchor: false,
+            supportsOneWordAcceptance: false,
+            supportsFullAcceptance: false,
+            notes: "Diagnostics-only chat target until a disposable server/channel proves placement and Tab accept cannot submit."
+        ),
+        CompatibilityProfile(
+            bundleIdentifier: "com.hnc.DiscordPTB",
+            displayName: "Discord PTB",
+            appFamily: .electron,
+            supportLevel: .diagnosticsOnly,
+            supportReason: "Discord message composers need explicit no-submit proof before suggestions can run.",
+            safetyOwnerNote: "Owner: Discord PTB remains diagnostics-only because message composers can send chat text and one-word no-submit proof is not captured yet.",
+            renderMode: .disabled,
+            insertionMode: .disabled,
+            fallbackRenderMode: .disabled,
+            fallbackInsertionMode: .disabled,
+            anchorLadder: [.none],
+            knownFailureModes: ["message composer needs no-submit proof"],
+            allowsFieldAnchor: false,
+            allowsWindowAnchor: false,
+            supportsOneWordAcceptance: false,
+            supportsFullAcceptance: false,
+            notes: "Diagnostics-only chat target until a disposable server/channel proves placement and Tab accept cannot submit."
+        ),
+        CompatibilityProfile(
+            bundleIdentifier: "com.hnc.DiscordCanary",
+            displayName: "Discord Canary",
+            appFamily: .electron,
+            supportLevel: .diagnosticsOnly,
+            supportReason: "Discord message composers need explicit no-submit proof before suggestions can run.",
+            safetyOwnerNote: "Owner: Discord Canary remains diagnostics-only because message composers can send chat text and one-word no-submit proof is not captured yet.",
+            renderMode: .disabled,
+            insertionMode: .disabled,
+            fallbackRenderMode: .disabled,
+            fallbackInsertionMode: .disabled,
+            anchorLadder: [.none],
+            knownFailureModes: ["message composer needs no-submit proof"],
+            allowsFieldAnchor: false,
+            allowsWindowAnchor: false,
+            supportsOneWordAcceptance: false,
+            supportsFullAcceptance: false,
+            notes: "Diagnostics-only chat target until a disposable server/channel proves placement and Tab accept cannot submit."
+        ),
+        CompatibilityProfile(
             bundleIdentifier: "com.microsoft.VSCode",
             displayName: "VS Code",
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
             supportReason: "Monaco editor exposes custom text geometry.",
+            safetyOwnerNote: "Owner: VS Code remains diagnostics-only because Monaco geometry and developer input surfaces are not proven safe.",
             renderMode: .disabled,
             insertionMode: .disabled,
             fallbackRenderMode: .disabled,
@@ -396,6 +575,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
             supportReason: "Monaco editor exposes custom text geometry.",
+            safetyOwnerNote: "Owner: Cursor remains diagnostics-only because Monaco geometry and developer input surfaces are not proven safe.",
             renderMode: .disabled,
             insertionMode: .disabled,
             fallbackRenderMode: .disabled,
@@ -495,7 +675,29 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
         case .denylisted:
             return "Blocked because this kind of app can expose secrets or shell input."
         case .unsupported:
-            return "No compatibility profile yet."
+            return "No compatibility profile yet; broad unknown-app support stays off until proven apps feel safe."
+        }
+    }
+
+    public var userFacingUnavailableText: String {
+        switch self {
+        case .supported:
+            return "Suggestions stay off here."
+        case .denylisted:
+            return "Suggestions are intentionally off here."
+        case .unsupported:
+            return "Suggestions are intentionally off until this app is tested."
+        }
+    }
+
+    public var userFacingSafetySummary: String {
+        switch self {
+        case let .supported(profile):
+            return profile.userFacingSafetySummary
+        case .denylisted:
+            return "Suggestions stay off because this kind of app can expose secrets or shell input."
+        case .unsupported:
+            return "Suggestions are intentionally off until this app has a compatibility profile."
         }
     }
 
@@ -505,6 +707,15 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
         }
 
         return profile.canPresentSuggestions && !profile.isSensitive
+    }
+
+    public var interactionMode: CompatibilityInteractionMode {
+        switch self {
+        case let .supported(profile):
+            return profile.isSensitive ? .disabled : profile.interactionMode
+        case .denylisted, .unsupported:
+            return .disabled
+        }
     }
 
     public func menuText(appDisplayName: String, isEnabled: Bool) -> String {

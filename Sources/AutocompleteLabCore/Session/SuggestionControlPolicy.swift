@@ -98,6 +98,10 @@ public struct SuggestionControlPolicy: Equatable, Sendable {
         SuggestionControlState(isPaused: isPaused)
     }
 
+    public func startupState(persistedIsPaused: Bool?) -> SuggestionControlState {
+        SuggestionControlState(isPaused: persistedIsPaused ?? true)
+    }
+
     public func suggestionAvailability(for state: SuggestionControlState) -> SuggestionControlDecision {
         switch state {
         case .running:

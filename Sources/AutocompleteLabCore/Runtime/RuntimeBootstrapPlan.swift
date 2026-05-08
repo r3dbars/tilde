@@ -35,6 +35,9 @@ public enum RuntimeReadinessStage: String, Equatable, Sendable {
 }
 
 public enum RuntimeReadinessAction: String, Equatable, Sendable {
+    case installModel
+    case repairModel
+    case cancelModelInstall
     case revealModelFolder
     case wait
     case retry
@@ -42,6 +45,12 @@ public enum RuntimeReadinessAction: String, Equatable, Sendable {
 
     public var displayName: String {
         switch self {
+        case .installModel:
+            return "Install Local Model"
+        case .repairModel:
+            return "Repair Local Model"
+        case .cancelModelInstall:
+            return "Cancel Model Install"
         case .revealModelFolder:
             return "Reveal Model Folder"
         case .wait:
@@ -298,6 +307,31 @@ public struct LocalModelAssetSource: Equatable, Sendable {
         estimatedBytes: 3_030_000_000,
         licenseURL: "https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit"
     )
+
+    public var displaySummary: String {
+        guard let estimatedBytes else {
+            return repoID
+        }
+
+        return "\(repoID) • about \(Self.formatBytes(estimatedBytes))"
+    }
+
+    private static func formatBytes(_ bytes: Int64) -> String {
+        let units = ["B", "KiB", "MiB", "GiB", "TiB"]
+        var size = Double(max(bytes, 0))
+        for unit in units {
+            if size < 1024 || unit == units.last {
+                if unit == "B" {
+                    return "\(Int(size)) \(unit)"
+                }
+
+                return String(format: "%.1f %@", size, unit)
+            }
+            size /= 1024
+        }
+
+        return "\(bytes) B"
+    }
 }
 
 public struct RuntimeBootstrapPlan: Equatable, Sendable {
@@ -356,7 +390,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
                 stage: .downloadNeeded,
                 summary: fallbackSummary("download needed (\(preferredAsset.model.rawValue))", runtimeState: runtimeState),
                 detail: "Expected MLX model folder at \(expectedPath)",
-                action: .revealModelFolder
+                action: .installModel
             )
 
         case let .invalid(path, reason):
@@ -364,7 +398,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
                 stage: .repairNeeded,
                 summary: fallbackSummary("model folder needs repair", runtimeState: runtimeState),
                 detail: "\(path): \(reason)",
-                action: .revealModelFolder
+                action: .repairModel
             )
 
         case .available:

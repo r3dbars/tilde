@@ -153,7 +153,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Make `check_trace_eval.sh` print supported / caveated / experimental / blocked.
 - [x] Update `compatibility-matrix.md` from smoke-pass status to beta-readiness status.
 - [x] Keep Mail diagnostics-only until compose insertion is proven safe.
-- [x] Keep Atlas unsupported until focused AX element reliability is proven.
+- [x] Keep Atlas diagnostics-only until browser-field privacy and no-submit proof exist.
 
 ## P1 - Experiments
 

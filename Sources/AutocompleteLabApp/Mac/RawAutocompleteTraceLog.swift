@@ -248,9 +248,11 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         appBundleIdentifier: String,
         acceptedText: String,
         remainingVisibleText: String?,
+        displayedText: String = "",
         suggestionID: String = "",
         fieldIdentity: String = "",
-        requestMode: String = ""
+        requestMode: String = "",
+        metadata: [String: String] = [:]
     ) {
         guard isEnabled else {
             return
@@ -262,9 +264,11 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             appBundleIdentifier: appBundleIdentifier,
             fieldIdentity: fieldIdentity,
             requestMode: requestMode,
+            displayedText: displayedText,
             acceptedText: acceptedText,
             remainingVisibleText: remainingVisibleText ?? "",
-            outcome: action
+            outcome: action,
+            metadata: metadata
         )
     }
 
@@ -527,6 +531,13 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         <body>
           <h1>Autocomplete Lab Trace Report</h1>
           <p>Generated locally. Nothing was uploaded.</p>
+          <h2>Privacy checklist</h2>
+          <ul>
+            <li>This report is local and is not uploaded by Autocomplete Lab.</li>
+            <li>Review it before sharing. If raw text or screenshots were enabled, event rows may include private writing or local screenshot links.</li>
+            <li>For normal beta feedback, prefer the redacted local report export.</li>
+            <li>Delete local logs when the debugging session is done.</li>
+          </ul>
           <div class="grid">
             <div class="metric"><b>\(summary.totalEvents)</b>events</div>
             <div class="metric"><b>\(summary.presentedCount)</b>shown</div>

@@ -89,6 +89,15 @@ local debug tracing is explicitly enabled.
 
 The headline product metric is accepted-and-kept, not raw accept rate. Accepted text is compared at 2s, 10s, 30s, and field blur. Durable checkpoint events store survival class, token recall, edit distance, accepted length, timing metadata, and redacted fingerprints. They should not need the current field text on disk.
 
+Acceptance events also carry log-safe proof that inserted text came from the
+visible suggestion slice: accepted character count, pre-accept visible character
+count, remaining visible character count, visible-prefix/full-visible match
+flags, and the acceptance source. Raw text is still only available when local
+debug tracing is explicitly enabled.
+Set `AUTOCOMPLETE_LAB_TRACE_REQUIRE_ACCEPTANCE_SLICE_PROOF=1` with
+`script/check_trace_eval.sh` to fail any slice where accepted events lack this
+proof.
+
 The RAM-only audit proof is the `acceptanceRetentionCleared` event. It records
 the clear reason, accepted text length, fingerprint metadata, and
 `rawAcceptedTextDurable=false`, but not the accepted raw text.

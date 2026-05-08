@@ -10,6 +10,7 @@ struct RuntimePolicyTests {
         #expect(decision.preferredCandidate == .mlx)
         #expect(decision.fallbackCandidate == .liteRTLM)
         #expect(decision.allowsUserManagedServer == false)
+        #expect(RuntimeReadinessAction.cancelModelInstall.displayName == "Cancel Model Install")
     }
 
     @Test("Runtime states have short status summaries")
@@ -77,7 +78,7 @@ struct RuntimePolicyTests {
         #expect(missingReport.stage == .downloadNeeded)
         #expect(missingReport.summary == "download needed (Qwen3.5 4B); fallback: ready (mock)")
         #expect(missingReport.detail == "Expected MLX model folder at /tmp/gemma")
-        #expect(missingReport.action == .revealModelFolder)
+        #expect(missingReport.action == .installModel)
 
         let invalidPlan = RuntimeBootstrapPlan(
             assetState: .invalid(path: "/tmp/gemma", reason: "missing config.json"),
@@ -88,7 +89,7 @@ struct RuntimePolicyTests {
         #expect(invalidReport.stage == .repairNeeded)
         #expect(invalidReport.summary == "model folder needs repair; fallback: ready (mock)")
         #expect(invalidReport.detail == "/tmp/gemma: missing config.json")
-        #expect(invalidReport.action == .revealModelFolder)
+        #expect(invalidReport.action == .repairModel)
     }
 
     @Test("Runtime readiness guidance gives stage-specific setup actions")
@@ -97,7 +98,14 @@ struct RuntimePolicyTests {
             report: RuntimeReadinessReport(
                 stage: .downloadNeeded,
                 summary: "download needed",
-                action: .revealModelFolder
+                action: .installModel
+            )
+        )
+        let repair = RuntimeReadinessGuidance(
+            report: RuntimeReadinessReport(
+                stage: .repairNeeded,
+                summary: "repair needed",
+                action: .repairModel
             )
         )
         let warming = RuntimeReadinessGuidance(
@@ -123,9 +131,14 @@ struct RuntimePolicyTests {
             )
         )
 
-        #expect(missing.actionTitle == "Install / Repair Model")
+        #expect(missing.actionTitle == "Install Model")
         #expect(missing.isActionEnabled)
         #expect(missing.message.contains("Model missing"))
+        #expect(missing.message.contains("app-owned Qwen3.5 4B MLX model"))
+        #expect(missing.message.contains("Do not start Ollama, llama.cpp, or a separate model server."))
+        #expect(repair.actionTitle == "Repair Model")
+        #expect(repair.isActionEnabled)
+        #expect(repair.message.contains("replace the incomplete app-owned MLX files from inside Autocomplete Lab"))
         #expect(warming.actionTitle == "Warming...")
         #expect(!warming.isActionEnabled)
         #expect(failed.actionTitle == "Retry Model")
@@ -192,6 +205,7 @@ struct RuntimePolicyTests {
         #expect(manifest.source?.repoID == "mlx-community/Qwen3.5-4B-MLX-4bit")
         #expect(manifest.source?.allowPatterns.contains("*.safetensors") == true)
         #expect(manifest.source?.estimatedBytes == 3_030_000_000)
+        #expect(manifest.source?.displaySummary == "mlx-community/Qwen3.5-4B-MLX-4bit • about 2.8 GiB")
         #expect(manifest.requiredFileNames.contains("config.json"))
         #expect(manifest.requiredModelFileExtension == "safetensors")
         #expect(!manifest.requiresVisionLanguageFactory)
