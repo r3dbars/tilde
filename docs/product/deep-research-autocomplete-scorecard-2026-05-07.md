@@ -242,7 +242,7 @@ Baseline scorecard from the initial audit:
 | Trigger gate and boundary timing | 14 | 69 | 9.7 | Strong stale/deletion/focus basics, but app timings are 0-15ms where research asks 90-450ms by mode. |
 | Ranking and expected utility | 12 | 68 | 8.2 | Word ranking exists; phrase/sentence ranking is still mostly single-candidate prompt plus cleaner. |
 | Context and prompt hygiene | 9 | 73 | 6.6 | Context is small and local, but lacks field metadata, style sketch, recent kept suffixes, and a hard `<NO_SUGGESTION>` prompt path. |
-| Output shape and cleanup | 8 | 88 | 7.0 | Cleaner is one of the strongest parts of the app. |
+| Output shape and cleanup | 8 | 89 | 7.1 | Cleaner is one of the strongest parts of the app, and now suppresses phrase restarts or visible typed-word duplicates that survive prefix trimming. |
 | Local runtime and latency | 10 | 84 | 8.4 | App-owned MLX runtime, warm model, streaming, timing slices; no KV/session cache and default length is still a little long. |
 | Ghost text UX and controls | 10 | 92 | 9.2 | One suggestion, Tab next word, full accept when allowed, direct accept-all shortcut editing, Esc dismiss, stale hiding, current-field/session silence, per-app force-mirror control, and app-level Command-Z restore for accepted insertions. |
 | Mode profiles and cross-app safety | 10 | 76 | 7.6 | Strong app profiles and a user-visible per-app mirror override now exist, but behavior modes are not first-class for email, notes, bullets, docs, code, forms, search, and AI chat. |
@@ -250,18 +250,18 @@ Baseline scorecard from the initial audit:
 | Metrics, replay, and proof gates | 5 | 85 | 4.3 | Trace/report scripts are strong, and Settings can now start per-app screenshot proof from the current app; true replay-first real-app rig is still missing. |
 | Architecture and tests | 2 | 91 | 1.8 | Good policy/test structure, though AppDelegate still owns too much orchestration. |
 
-Weighted total: **79.2/100**, rounded to **79/100**.
+Weighted total: **79.3/100**, rounded to **79/100**.
 
 ## Exact Research Items
 
 | Research item | Score | Current evidence | What 100/100 requires |
 | --- | ---: | --- | --- |
 | Finishing a word | 90 | `CompletionRequestMode.wordCompletion` exists, `WordCompletionCandidateRanker` uses recent words first, trigger, activation, and fast ranking all require 3+ alphabetic chars, and Tab accepts one word. | Preserve casing/punctuation perfectly and prove acceptance-kept tuning by app/field. |
-| Finishing a phrase | 86 | Phrase continuation prompt requests 1-3 tiny suffixes, cleaner removes low-signal/advice-like output, and `CompletionCandidateRanker` prefers useful short phrase candidates with score-margin suppression. | Replace heuristic phrase scoring with learned utility, style fit, context fit, user affinity, risk, repetition, and instability. |
+| Finishing a phrase | 87 | Phrase continuation prompt requests 1-3 tiny suffixes, prefix overlap is trimmed to suffixes, visible typed-word duplicates and phrase restarts are suppressed, and `CompletionCandidateRanker` prefers useful short phrase candidates with score-margin suppression. | Replace heuristic phrase scoring with learned utility, style fit, context fit, user affinity, risk, repetition, and instability. |
 | Continuing a sentence | 80 | First-class `sentenceContinuation` mode exists with activation, prompt guidance, stricter display threshold, streaming behavior, replay delay gate, sentence candidate ranking, and low-score suppression. | Fresh real-app proof that it does not drift into planning or take over the writer's next thought. |
 | Rewriting | 86 | Ambient rewrite is effectively avoided, which matches the research. | Add explicit selected-text rewrite only if needed; never ambient. |
 | Suggesting next action | 90 | Ambient next actions are not part of the app, and prompt-app guards block submit/run/Enter-like suggestions plus directive starters like "you should", "we need to", and "I'd recommend". | Keep next actions behind explicit invocation only, with tests preventing inline leakage. |
-| Specificity with restraint | 86 | Prompt asks for boring connective tissue, cleaner suppresses filler and directive recommendation starters, and context-aware candidate ranking now prefers restrained lengths while penalizing questions, generic filler, sentence planning drift, and unsupported new names/dates. | Tune the semantic-commitment weights against fresh traces. |
+| Specificity with restraint | 87 | Prompt asks for boring connective tissue, cleaner suppresses filler, directive recommendation starters, visible typed-word duplicates, and phrase restarts, and context-aware candidate ranking now prefers restrained lengths while penalizing questions, generic filler, sentence planning drift, and unsupported new names/dates. | Tune the semantic-commitment weights against fresh traces. |
 | Gate, not timer | 84 | Eligibility, stale request checks, repetition suppression, focus checks, mode-aware trigger delays, prefix-family cooldowns, and display scoring are live. | Prove the whole trigger/display decision from replayed real-app traces. |
 | Within-word mode | 88 | Word completion now requires 3+ alphabetic chars in trigger, activation, and fast ranking, uses a 90-140ms trigger delay, and word suffix cleaning rejects spaces/punctuation. | Perfect casing/punctuation preservation and fresh app-slice proof. |
 | Phrase mode | 84 | Word-boundary phrase requests use 140-240ms delay, phrase display threshold, behavior-profile prompt caps, and candidate ranking. | Fresh real-app proof and learned score margins. |
