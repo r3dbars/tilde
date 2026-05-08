@@ -360,6 +360,7 @@ struct CompatibilityProfileTests {
         )
 
         #expect(!chromeTrustPolicy.allowsLowConfidencePlacement)
+        #expect(!chromeTrustPolicy.allowsSyntheticCaretPlacement)
         guard case let .suppress(chromeSuppression) = chromePlan else {
             Issue.record("Expected untrusted yellow mirror fallback to suppress")
             return
@@ -370,6 +371,72 @@ struct CompatibilityProfileTests {
         #expect(chrome.placementTrustPolicy(input: CompatibilityPlacementTrustInput(
             hasTrustedVisualAdjustment: true
         )).allowsLowConfidencePlacement)
+    }
+
+    @Test("Chrome trusts proofed synthetic text-area caret placement without trusting detached fallback")
+    func chromeTrustsProofedSyntheticTextAreaCaretPlacement() throws {
+        let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+
+        let unproofedSyntheticCaretPlan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: chrome.fallbackRenderMode,
+            caretRect: CGRect(x: 320, y: 260, width: 0, height: 22),
+            elementRect: CGRect(x: 100, y: 200, width: 500, height: 180),
+            windowRect: CGRect(x: 80, y: 160, width: 560, height: 300),
+            textLineRect: CGRect(x: 320, y: 260, width: 0, height: 22),
+            caretIsSynthetic: true,
+            allowsDetachedSuggestions: chrome.allowsDetachedSuggestions,
+            trustPolicy: chrome.placementTrustPolicy()
+        )
+
+        guard case let .present(unproofedPresentation) = unproofedSyntheticCaretPlan else {
+            Issue.record("Expected unproofed Chrome synthetic caret placement to fall back")
+            return
+        }
+        #expect(unproofedPresentation.renderMode == .floatingMirror)
+        #expect(unproofedPresentation.anchorSource == .element)
+        #expect(unproofedPresentation.reason == .untrustedSyntheticCaret)
+
+        let syntheticCaretPlan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: chrome.fallbackRenderMode,
+            caretRect: CGRect(x: 320, y: 260, width: 0, height: 22),
+            elementRect: CGRect(x: 100, y: 200, width: 500, height: 180),
+            windowRect: CGRect(x: 80, y: 160, width: 560, height: 300),
+            textLineRect: CGRect(x: 320, y: 260, width: 0, height: 22),
+            caretIsSynthetic: true,
+            allowsDetachedSuggestions: chrome.allowsDetachedSuggestions,
+            trustPolicy: chrome.placementTrustPolicy(input: CompatibilityPlacementTrustInput(
+                hasProofedSyntheticCaret: true
+            ))
+        )
+
+        guard case let .present(presentation) = syntheticCaretPlan else {
+            Issue.record("Expected Chrome synthetic caret placement to present inline")
+            return
+        }
+        #expect(presentation.renderMode == .inlineAdjacent)
+        #expect(presentation.anchorSource == .syntheticCaret)
+        #expect(presentation.reason == .healthy)
+        #expect(presentation.metadata["placementConfidenceBand"] == "medium")
+
+        let detachedFallbackPlan = PlacementHealth.plan(
+            requestedRenderMode: .inlineAdjacent,
+            fallbackRenderMode: chrome.fallbackRenderMode,
+            caretRect: nil,
+            elementRect: CGRect(x: 100, y: 200, width: 500, height: 180),
+            windowRect: CGRect(x: 80, y: 160, width: 560, height: 300),
+            textLineRect: nil,
+            caretIsSynthetic: false,
+            allowsDetachedSuggestions: chrome.allowsDetachedSuggestions,
+            trustPolicy: chrome.placementTrustPolicy()
+        )
+
+        guard case let .suppress(suppression) = detachedFallbackPlan else {
+            Issue.record("Expected Chrome detached low-confidence fallback to stay suppressed")
+            return
+        }
+        #expect(suppression.reason == .lowConfidencePlacement)
     }
 
     @Test("Render mode plans choose stable anchors for inline and mirror modes")

@@ -3975,21 +3975,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textLineRect: learningAdjustment.adjusted(context.textLineRect),
             caretIsSynthetic: context.caretIsSynthetic,
             allowsDetachedSuggestions: profile.allowsDetachedSuggestions,
-            trustPolicy: placementTrustPolicy(profile: profile, learningAdjustment: learningAdjustment)
+            trustPolicy: placementTrustPolicy(
+                profile: profile,
+                context: context,
+                learningAdjustment: learningAdjustment
+            )
         )
     }
 
     private func placementTrustPolicy(
         profile: CompatibilityProfile,
+        context: FocusedTextContext,
         learningAdjustment: CompatibilityLearningAdjustment
     ) -> PlacementTrustPolicy {
-        profile.placementTrustPolicy(
+        let screenshotTracingEnabled = RawAutocompleteTraceLog.shared.screenshotTracingEnabled
+        let shouldCaptureScreenshot = learningAdjustment.shouldCaptureScreenshot
+        return profile.placementTrustPolicy(
             input: CompatibilityPlacementTrustInput(
                 hasTrustedVisualAdjustment: learningAdjustment.profile?.hasTrustedVisualAdjustment == true,
-                screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled,
-                shouldCaptureScreenshot: learningAdjustment.shouldCaptureScreenshot
+                hasProofedSyntheticCaret: hasProofedSyntheticCaretPlacement(
+                    profile: profile,
+                    context: context,
+                    screenshotTracingEnabled: screenshotTracingEnabled,
+                    shouldCaptureScreenshot: shouldCaptureScreenshot
+                ),
+                screenshotTracingEnabled: screenshotTracingEnabled,
+                shouldCaptureScreenshot: shouldCaptureScreenshot
             )
         )
+    }
+
+    private func hasProofedSyntheticCaretPlacement(
+        profile: CompatibilityProfile,
+        context: FocusedTextContext,
+        screenshotTracingEnabled: Bool,
+        shouldCaptureScreenshot: Bool
+    ) -> Bool {
+        guard profile.bundleIdentifier == "com.google.Chrome",
+              context.role == "AXTextArea",
+              context.caretIsSynthetic,
+              context.capabilities.canReadValue,
+              context.capabilities.canReadSelectedTextRange,
+              screenshotTracingEnabled || shouldCaptureScreenshot else {
+            return false
+        }
+
+        let searchable = context.fingerprint.searchableText
+        return searchable.contains("monaco") || searchable.contains("prosemirror")
     }
 
     private func captureTraceScreenshot(

@@ -131,6 +131,41 @@ struct SyntheticCaretEstimatorTests {
         #expect(caret == nil)
     }
 
+    @Test("Places synthetic carets inside Chrome real editor rows")
+    func placesSyntheticCaretsInsideChromeRealEditorRows() throws {
+        let monacoCaret = try #require(SyntheticCaretEstimator.caretRect(
+            textBeforeCursor: "Smoke proof feels inst",
+            elementRect: CGRect(x: 858, y: 216, width: 654, height: 24),
+            windowRect: CGRect(x: 760, y: 180, width: 776, height: 300),
+            lineHeight: 20,
+            horizontalPadding: 18,
+            verticalPadding: 4,
+            inlineGap: 44,
+            widthOfText: fixedWidth
+        ))
+
+        #expect(monacoCaret.minX >= 858)
+        #expect(monacoCaret.maxX <= 1512)
+        #expect(monacoCaret.minY >= 180)
+        #expect(monacoCaret.maxY <= 480)
+
+        let proseMirrorCaret = try #require(SyntheticCaretEstimator.caretRect(
+            textBeforeCursor: "Smoke proof feels inst",
+            elementRect: CGRect(x: 784, y: 237, width: 728, height: 206),
+            windowRect: CGRect(x: 760, y: 213, width: 776, height: 254),
+            lineHeight: 20,
+            horizontalPadding: 18,
+            verticalPadding: 14,
+            inlineGap: 8,
+            widthOfText: fixedWidth
+        ))
+
+        #expect(proseMirrorCaret.minX >= 784)
+        #expect(proseMirrorCaret.maxX <= 1512)
+        #expect(proseMirrorCaret.minY >= 213)
+        #expect(proseMirrorCaret.maxY <= 467)
+    }
+
     private func fixedWidth(_ text: String) -> CGFloat {
         CGFloat(text.count * 10)
     }

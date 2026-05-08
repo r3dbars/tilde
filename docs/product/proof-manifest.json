@@ -45,7 +45,7 @@
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Real Monaco and ProseMirror proof now pass under isolated Chrome with renderer accessibility forced and default Chrome AX exposure. Broad production-site proof and caret-quality placement remain open."
+        "Real Monaco and ProseMirror proof now pass under isolated Chrome with renderer accessibility forced, default Chrome AX exposure, and proof-gated inline synthetic-caret placement. Broad production-site proof remains open."
       ]
     },
     {
@@ -235,7 +235,7 @@
       "surface": "Chrome text fields/editor/chat-like surfaces",
       "status": "partial",
       "owner": "browser editor adapter lane",
-      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures and default-Chrome real-editor AX lanes are proven, but production-site variance and caret-quality editor placement remain open. Hosted Google Docs, Notion, Slack, and Discord are blocked by surface policy until real proof exists."
+      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures and default-Chrome real-editor AX plus proof-gated inline synthetic-caret lanes are proven, but production-site variance remains open. Hosted Google Docs, Notion, Slack, and Discord are blocked by surface policy until real proof exists."
     },
     {
       "bundle": "com.openai.codex",

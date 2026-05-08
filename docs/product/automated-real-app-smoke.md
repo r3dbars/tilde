@@ -89,8 +89,8 @@ Lab works when Chrome exposes real editor AX, but it is still weaker than
 default-Chrome production-site proof. The `--chrome-accessibility default` lane
 now records distinct `monaco-real-default` and `prosemirror-real-default` proof
 rows when normal Chrome exposes enough editor AX for strict screenshot-backed
-acceptance. The remaining Chrome editor gap is caret-quality placement and
-production editor variants. The chat-like fixture is not a real Codex or Claude
+acceptance and proof-gated inline synthetic-caret placement. The remaining
+Chrome editor gap is production editor variants. The chat-like fixture is not a real Codex or Claude
 proof; it is a local no-submit guardrail that must pass before trusting prompt
 app smoke results.
 

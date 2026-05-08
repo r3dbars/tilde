@@ -51,8 +51,8 @@ unsupported surface policy so the yellow Chrome profile does not silently
 extend to unproved production editors or chat boxes.
 
 The largest miss is still visual placement proof in real apps. Ghost text can
-still be unproven or under-polished in Codex, terminal-hosted Claude Code, real browser editors,
-and untested Claude desktop prompt layouts. A native-feeling Mac utility must
+still be unproven or under-polished in Codex, terminal-hosted Claude Code,
+production browser editors, and untested Claude desktop prompt layouts. A native-feeling Mac utility must
 fail quietly when it is unsure. Wrong-place text is worse than no suggestion.
 
 ## Scoring Rubric
@@ -71,9 +71,9 @@ fail quietly when it is unsure. Wrong-place text is worse than no suggestion.
 | Category | Weight | Current | Target | Why |
 | --- | ---: | ---: | ---: | --- |
 | Typing must feel untouched | 15 | 100 | 100 | The strict TextEdit endurance harness now creates and captures the disposable target through a unique temp file, restores the clipboard, waits for long-document selection/copy to settle, and refocuses before each segment. Fresh live proof passed exact 1,200-, 2,400-, 4,800-, and 12,000-character TextEdit runs. After the active-typing cadence change, the fresh 2026-05-08 10-minute strict run verified exact 12,000-character TextEdit text, event-tap p95 78us, event-tap p99/max 82us, focused-poll p95 max 35ms, focused-poll max 57ms, zero slow markers, zero focused-poll skips, and zero tap disables. Normal typing no longer requires event-tap samples because keyboard capture intentionally starts only while a suggestion is visible, and recent text-change polling now backs off while the user is actively typing. |
-| Visual placement and caret alignment | 18 | 80 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, inline mode now hides when less than one useful word fits after the caret, screenshot-derived correction is wired behind explicit per-app screenshot tracing, learned visual offsets now expire when target app version, screen, or field shape changes, low-confidence mirror fallback is now suppressed for untrusted yellow profiles, Chrome chat-like, Obsidian, Notes title/body/checklist, and Claude desktop now have proof, and Diagnostics exposes placement confidence without suggestion text. Claude desktop's current one-line composer proof is same-baseline with detector offset near zero. Codex same-slice accept/no-submit proof, live Claude Code terminal-host screenshot proof, and more prompt/editor layouts are still blockers. |
+| Visual placement and caret alignment | 18 | 82 | 100 | Stale async suggestions refresh focused geometry before display, unusable panels suppress before key capture, inline mode now hides when less than one useful word fits after the caret, screenshot-derived correction is wired behind explicit per-app screenshot tracing, learned visual offsets now expire when target app version, screen, or field shape changes, low-confidence mirror fallback is now suppressed for untrusted yellow profiles, Chrome chat-like, Obsidian, Notes title/body/checklist, Claude desktop, and proof-gated default-Chrome real Monaco/ProseMirror inline synthetic-caret placement now have proof, and Diagnostics exposes placement confidence without suggestion text. Claude desktop's current one-line composer proof is same-baseline with detector offset near zero. Codex same-slice accept/no-submit proof, live Claude Code terminal-host screenshot proof, and more prompt/editor layouts are still blockers. |
 | Acceptance safety | 10 | 94 | 100 | Tab capture is gated behind an actually shown panel, insertion is verified, Esc dismissal is trace-marked as inserting zero suggestion text, full accept is blocked unless accepted text exactly matches the visible suggestion, Tab accept is traced as a visible-prefix accept, the event tap fails closed, Chrome chat-like proved Tab/full accept without submit, Claude desktop proved one-word Tab accept without submit, and prompt-app full accept is disabled until separate full-accept no-submit proof exists. Claude Code now has a proof-only terminal-host adapter that blocks unsupported hosts, missing proof mode, missing marker, shell prompts, and multiline command buffers. Codex and Claude Code one-word no-submit proof are still incomplete. |
-| Cross-app reliability | 10 | 88 | 100 | The proof matrix now has 15 screenshot artifacts, Notes title/body/checklist are all split out, real Monaco/ProseMirror pass under isolated renderer-accessibility Chrome and default Chrome AX exposure, Claude desktop has same-baseline real prompt no-submit proof, Claude Code has a proof-only terminal-host lane, every compatibility profile has owner/safety coverage in the proof manifest, and the app exposes green/yellow/diagnostics-only/unsupported status plus explicit copy-only fallback stance for non-sensitive diagnostics-only or untrusted-placement cases. Chrome-hosted Google Docs, Notion, Slack, and Discord are now blocked by surface policy until real proof exists. Codex, Claude Code terminal-host proof, default-Chrome editor caret-quality placement, and more production editor variants are still pending proof. |
+| Cross-app reliability | 10 | 89 | 100 | The proof matrix now has 15 screenshot artifacts, Notes title/body/checklist are all split out, real Monaco/ProseMirror pass under isolated renderer-accessibility Chrome and default Chrome AX exposure with proof-gated inline synthetic-caret placement, Claude desktop has same-baseline real prompt no-submit proof, Claude Code has a proof-only terminal-host lane, every compatibility profile has owner/safety coverage in the proof manifest, and the app exposes green/yellow/diagnostics-only/unsupported status plus explicit copy-only fallback stance for non-sensitive diagnostics-only or untrusted-placement cases. Chrome-hosted Google Docs, Notion, Slack, and Discord are now blocked by surface policy until real proof exists. Codex, Claude Code terminal-host proof, and more production editor variants are still pending proof. |
 | Native macOS visual feel | 8 | 95 | 100 | Settings moved toward tested unframed native sections, checkboxes, clearer privacy/app controls, support status, copy-only fallback status, "why hidden" copy, and calmer menu copy. Diagnostics now opens with a short system-font inspector overview, onboarding/permission copy uses plain System Settings language, the menu bar uses a template SF Symbol with text fallback, inline ghost text uses a dynamic system placeholder color across light/dark/high-contrast appearance coverage, the bundle check now verifies a valid multi-size ICNS app icon, and Settings, Diagnostics, plus the suggestion overlay renderer have generated light/dark/high-contrast screenshot evidence. Real host-app light/dark document variants are still needed. |
 | Privacy and permissions trust | 9 | 100 | 100 | Local-first and redaction are strong, recent-word memory no longer crosses app boundaries, raw/screenshot debug capture expires from the app UI, Settings shows share-safe privacy status, Diagnostics exports a redacted privacy bundle with a manifest/checklist, and the beta packet explicitly forbids raw traces, screenshots, prompts, typed text, and accepted text by default. |
 | Suggestion quality | 8 | 95 | 100 | Output is bounded and filtered, repeated misses apply to fast word completion, repeated typed-over pressure now raises display thresholds for the same app/field/mode/prefix family, accepted-kept learning now adjusts display utility, accepted-kept display thresholds now vary by behavior profile, quiet/normal/eager aggressiveness now tunes cadence and display thresholds, learned word completion is app-scoped, word completion now has a consistent 3+ typed-letter floor, profile-aware fresh paragraph starts stay quieter, suffix overlap is salvaged, visible typed-word duplicates and phrase restarts are suppressed, dogfood prompts avoid generic productivity filler, unsafe prompt actions are suppressed, and assistant-y output filters are stronger. Raw-content quality audits remain opt-in. |
@@ -146,7 +146,7 @@ visible.
 
 ## Category 2: Visual Placement And Caret Alignment
 
-Current score: 80/100.
+Current score: 82/100.
 
 Native target: ghost text feels like it belongs to the host text field.
 
@@ -161,6 +161,7 @@ cheap, even if the model output is good.
 - [x] Chrome editor-like fixture has screenshot-backed placement proof.
 - [x] Chrome Monaco-like fixture has screenshot-backed placement proof.
 - [x] Chrome ProseMirror-like fixture has screenshot-backed placement proof.
+- [x] Default-Chrome real Monaco and ProseMirror use proof-gated inline synthetic-caret placement with strict visual trace evidence.
 - [x] Codex has at least one screenshot-backed prompt placement proof.
 - [x] Invalid caret rects are rejected.
 - [x] Stale text-line rects far from the caret are dropped.
@@ -211,8 +212,8 @@ cheap, even if the model output is good.
 | Chrome textarea | 88 | 100 | Live screenshot, wrap, Tab, full accept. |
 | Chrome contenteditable | 86 | 100 | Live screenshot, rich text, Tab, full accept. |
 | Chrome editor-like | 84 | 100 | Real CodeMirror or Obsidian proof. |
-| Chrome Monaco-like | 90 | 100 | `monaco-real` now has forced-renderer-accessibility and default-Chrome proof with screenshot, Tab, and full accept. Still needs caret-quality placement and production editor variants. |
-| Chrome ProseMirror-like | 91 | 100 | `prosemirror-real` now has forced-renderer-accessibility and default-Chrome proof with screenshot, Tab, and full accept. Still needs caret-quality placement and production editor variants. |
+| Chrome Monaco-like | 93 | 100 | `monaco-real` now has forced-renderer-accessibility and default-Chrome proof with screenshot, Tab, full accept, and proof-gated inline synthetic-caret placement. Still needs production editor variants. |
+| Chrome ProseMirror-like | 94 | 100 | `prosemirror-real` now has forced-renderer-accessibility and default-Chrome proof with screenshot, Tab, full accept, and proof-gated inline synthetic-caret placement. Still needs production editor variants. |
 | Chrome chat-like | 80 | 100 | Local screenshot-backed no-submit accept proof exists; real chat apps still need proof. |
 | Codex | 74 | 100 | Prompt screenshot plus one-word no-submit proof in same slice. |
 | Claude Code | 56 | 100 | Proof-only terminal-host adapter exists; still needs live screenshot/no-submit proof with one-word accept. |
@@ -253,7 +254,7 @@ autocomplete suggestion.
 
 ## Category 4: Cross-App Reliability
 
-Current score: 88/100.
+Current score: 89/100.
 
 Native target: every app has a named stance: green, yellow, diagnostics-only,
 or unsupported.
