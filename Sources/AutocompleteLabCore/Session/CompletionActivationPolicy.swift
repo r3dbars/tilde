@@ -61,7 +61,7 @@ public enum SuggestionPace: String, CaseIterable, Codable, Equatable, Sendable {
         case .quiet:
             "Quiet waits for more context before phrase suggestions."
         case .normal:
-            "Normal balances short completions with restraint."
+            "Normal starts suggestions a little sooner."
         case .eager:
             "Eager starts phrase suggestions sooner in allowed apps."
         }
@@ -118,7 +118,13 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
                 maximumWordCompletionCharacters: 4
             )
         case .normal:
-            self.init()
+            self.init(
+                minimumContextCharacters: 2,
+                minimumContextWords: 2,
+                minimumPhraseContinuationWords: 3,
+                minimumWordCompletionCharacters: 2,
+                maximumWordCompletionCharacters: 5
+            )
         case .eager:
             self.init(
                 minimumContextCharacters: 2,

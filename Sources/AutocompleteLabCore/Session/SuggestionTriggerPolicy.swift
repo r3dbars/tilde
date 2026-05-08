@@ -51,13 +51,13 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         largeTextChangeDelayMilliseconds: Int = 250
     ) {
         self.charactersBeforePauseRequest = max(1, charactersBeforePauseRequest)
-        self.wordCompletionDelayMilliseconds = wordCompletionDelayMilliseconds.clamped(to: 90...140)
-        self.wordBoundaryDelayMilliseconds = wordBoundaryDelayMilliseconds.clamped(to: 140...240)
-        self.softPunctuationDelayMilliseconds = softPunctuationDelayMilliseconds.clamped(to: 140...240)
-        self.structuralPunctuationDelayMilliseconds = structuralPunctuationDelayMilliseconds.clamped(to: 140...240)
-        self.closingPunctuationDelayMilliseconds = closingPunctuationDelayMilliseconds.clamped(to: 140...240)
-        self.sentenceBoundaryDelayMilliseconds = sentenceBoundaryDelayMilliseconds.clamped(to: 280...450)
-        self.pauseDelayMilliseconds = pauseDelayMilliseconds.clamped(to: 140...240)
+        self.wordCompletionDelayMilliseconds = wordCompletionDelayMilliseconds.clamped(to: 50...140)
+        self.wordBoundaryDelayMilliseconds = wordBoundaryDelayMilliseconds.clamped(to: 80...240)
+        self.softPunctuationDelayMilliseconds = softPunctuationDelayMilliseconds.clamped(to: 100...240)
+        self.structuralPunctuationDelayMilliseconds = structuralPunctuationDelayMilliseconds.clamped(to: 100...240)
+        self.closingPunctuationDelayMilliseconds = closingPunctuationDelayMilliseconds.clamped(to: 100...240)
+        self.sentenceBoundaryDelayMilliseconds = sentenceBoundaryDelayMilliseconds.clamped(to: 200...450)
+        self.pauseDelayMilliseconds = pauseDelayMilliseconds.clamped(to: 80...240)
         self.largeTextChangeCharacterThreshold = max(1, largeTextChangeCharacterThreshold)
         self.largeTextChangeDelayMilliseconds = max(self.pauseDelayMilliseconds, largeTextChangeDelayMilliseconds)
     }

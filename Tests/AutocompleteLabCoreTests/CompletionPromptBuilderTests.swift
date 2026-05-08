@@ -3,8 +3,8 @@ import Testing
 
 @Suite("Completion prompt builder")
 struct CompletionPromptBuilderTests {
-    @Test("Prompt asks for a tiny continuation only")
-    func promptAsksForTinyContinuationOnly() {
+    @Test("Prompt asks for a bounded continuation only")
+    func promptAsksForBoundedContinuationOnly() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
 
@@ -243,7 +243,7 @@ struct CompletionPromptBuilderTests {
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
 
         #expect(builder.maxVisibleWords == 7)
-        #expect(prompt.system.contains("next 5 words or fewer"))
+        #expect(prompt.system.contains("next 7 words or fewer"))
         #expect(prompt.system.contains("Behavior profile: docs_prose"))
     }
 

@@ -34,7 +34,7 @@ struct SuggestionTriggerPolicyTests {
             pauseDelayMilliseconds: 180
         )
 
-        #expect(policy.decision(previousTextBeforeCursor: "Can we", currentTextBeforeCursor: "Can we ") == .request(delayMilliseconds: 140))
+        #expect(policy.decision(previousTextBeforeCursor: "Can we", currentTextBeforeCursor: "Can we ") == .request(delayMilliseconds: 80))
     }
 
     @Test("Punctuation boundaries use separate researched delays")
@@ -105,8 +105,8 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(previousTextBeforeCursor: "I ", currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 120))
     }
 
-    @Test("Eager app-style delays are clamped to researched ranges")
-    func eagerAppStyleDelaysAreClampedToResearchedRanges() {
+    @Test("Eager app-style delays are clamped to responsive ranges")
+    func eagerAppStyleDelaysAreClampedToResponsiveRanges() {
         let policy = SuggestionTriggerPolicy(
             charactersBeforePauseRequest: 1,
             wordCompletionDelayMilliseconds: 0,
@@ -114,12 +114,12 @@ struct SuggestionTriggerPolicyTests {
             pauseDelayMilliseconds: 15
         )
 
-        #expect(policy.wordCompletionDelayMilliseconds == 90)
-        #expect(policy.wordBoundaryDelayMilliseconds == 140)
-        #expect(policy.pauseDelayMilliseconds == 140)
-        #expect(policy.decision(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I think ") == .request(delayMilliseconds: 140))
-        #expect(policy.decision(previousTextBeforeCursor: "I think this wor", currentTextBeforeCursor: "I think this work") == .request(delayMilliseconds: 90))
-        #expect(policy.decision(previousTextBeforeCursor: "I think ", currentTextBeforeCursor: "I think x") == .request(delayMilliseconds: 140))
+        #expect(policy.wordCompletionDelayMilliseconds == 50)
+        #expect(policy.wordBoundaryDelayMilliseconds == 80)
+        #expect(policy.pauseDelayMilliseconds == 80)
+        #expect(policy.decision(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I think ") == .request(delayMilliseconds: 80))
+        #expect(policy.decision(previousTextBeforeCursor: "I think this wor", currentTextBeforeCursor: "I think this work") == .request(delayMilliseconds: 50))
+        #expect(policy.decision(previousTextBeforeCursor: "I think ", currentTextBeforeCursor: "I think x") == .request(delayMilliseconds: 80))
     }
 
     @Test("Word fragments need three alphabetic characters")
@@ -127,7 +127,7 @@ struct SuggestionTriggerPolicyTests {
         let policy = SuggestionTriggerPolicy(wordCompletionDelayMilliseconds: 50)
 
         #expect(policy.decision(previousTextBeforeCursor: "I need d", currentTextBeforeCursor: "I need di") == .skip)
-        #expect(policy.decision(previousTextBeforeCursor: "I need di", currentTextBeforeCursor: "I need dic") == .request(delayMilliseconds: 90))
+        #expect(policy.decision(previousTextBeforeCursor: "I need di", currentTextBeforeCursor: "I need dic") == .request(delayMilliseconds: 50))
     }
 
     @Test("Word fragments after a space use researched word delay")
@@ -137,7 +137,7 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(
             previousTextBeforeCursor: "I need ",
             currentTextBeforeCursor: "I need dic"
-        ) == .request(delayMilliseconds: 90))
+        ) == .request(delayMilliseconds: 50))
     }
 
     @Test("Sentence boundaries stay quiet by default")
