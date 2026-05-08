@@ -59,6 +59,37 @@ struct CompletionPromptBuilderTests {
         #expect(!prompt.system.contains("make this simpler"))
     }
 
+    @Test("Prompt includes trace safe document title shape")
+    func promptIncludesTraceSafeDocumentTitleShape() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Can we keep this",
+            documentTitleShape: DocumentTitleShape.from(windowTitle: "Launch Plan.md *")
+        ))
+
+        #expect(prompt.system.contains("Document/window title shape"))
+        #expect(prompt.system.contains("file extension md"))
+        #expect(prompt.system.contains("unsaved marker present"))
+        #expect(prompt.system.contains("weak genre context"))
+        #expect(!prompt.system.contains("Launch"))
+        #expect(!prompt.system.contains("Plan"))
+    }
+
+    @Test("Word prompt includes trace safe document title shape")
+    func wordPromptIncludesTraceSafeDocumentTitleShape() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Lau",
+            documentTitleShape: DocumentTitleShape.from(windowTitle: "Launch Plan.md *"),
+            mode: .wordCompletion
+        ))
+
+        #expect(prompt.system.contains("Document/window title shape"))
+        #expect(prompt.system.contains("file extension md"))
+        #expect(!prompt.system.contains("Launch"))
+        #expect(!prompt.system.contains("Plan"))
+    }
+
     @Test("Prompt includes trace safe partial word shape")
     func promptIncludesTraceSafePartialWordShape() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)

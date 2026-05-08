@@ -3044,6 +3044,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldKind: fieldClassification.kind,
             behaviorProfileID: behaviorProfile.id,
             acceptedTextStyleSketch: acceptedTextStyleSketch,
+            documentTitleShape: DocumentTitleShape.from(windowTitle: context.fingerprint.windowTitle),
             maxVisibleWords: completionLengthConfiguration.maxVisibleWords,
             mode: requestMode,
             suggestionID: suggestionID

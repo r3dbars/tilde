@@ -143,6 +143,9 @@ Pass 1 shipped these improvements:
   by default.
 - Prompt/context metadata now includes trace-safe partial-word shape: counts,
   casing, digits, hyphen, and apostrophe only.
+- Prompt/context metadata now also includes trace-safe document/window title
+  shape: length bucket, word count, file extension, untitled state, and unsaved
+  marker only. Raw title text is never sent to prompts or trace metadata.
 - Accepted insertions now arm a one-step Command-Z restore path for the same
   focused app/field, with an 8s expiry and trace-safe diagnostics.
 - Line-start cadence now stays quiet in plain prose while allowing constrained
@@ -214,9 +217,9 @@ Remaining high-impact gaps:
   mostly cache and latency-slice proof. Sentence mode also has a tighter
   mode-level generation ceiling so env overrides cannot make it use the full
   ambient cap.
-- Prompt metadata now includes partial-word shape, and accepted-kept style
-  memory now adds raw-text-free kept suffix shape: short-suffix rate and average
-  final-token length.
+- Prompt metadata now includes partial-word shape, document/window title shape,
+  and accepted-kept style memory now adds raw-text-free kept suffix shape:
+  short-suffix rate and average final-token length.
 - Atomic undo now has an app-level restore path, but still needs per-app proof
   that Command-Z restores the accepted insertion cleanly in real editors.
 - Replay-first real-app proof is still missing. The command exists, but the
@@ -290,10 +293,10 @@ Weighted total: **80.6/100**, rounded to **81/100**.
 | Display score | 91 | Live display score includes utility, style fit, context fit, user affinity, risk, repetition, instability, accepted-and-kept probability, behavior profile, suggestion aggressiveness, and trace metadata. Accepted-kept learning now applies a bounded utility adjustment in addition to affinity and profile-aware low-probability suppression. Candidate count, top score, score margin, and suppression reason are logged at runtime. | Replace remaining heuristic components with learned estimates and use fresh traces to tune thresholds. |
 | Accept-and-keep probability threshold | 89 | Durable learning now gates by app, field kind, mode, and behavior profile after enough evidence, uses stricter thresholds for AI chat, casual chat, sentence-like prose, coding, forms, and search profiles, applies bounded affinity and utility adjustments, decays with a 14-day half-life, and Settings can clear learned suggestion state without deleting logs. | Prove thresholds with fresh real-app traces and expose tuning controls. |
 | Candidate generation | 84 | Phrase/sentence prompts ask for 1-3 candidates; `CompletionOutputCleaner.cleanCandidates` strips list prefixes, filters unsafe/sentinel lines, dedupes, and context/profile-aware `CompletionCandidateRanker` picks only high-score/high-margin candidates while penalizing unsupported names/dates, generic filler, email commitments, casual-chat steering, notes verbosity, docs new-point drift, coding block/API drift, repeated bullet markers, prompt-app submit actions, and form/search fills. | Prove real model outputs produce useful candidate sets and tune score/margin thresholds from traces. |
-| Context budget | 84 | Prompt context now uses a 48-96 token budget, keeps the current local fragment, borrows the prior sentence when the current fragment is tiny or sentence mode needs it, and borrows the prior paragraph only for tiny sentence-mode starts. | Tune the usefulness rules against fresh real-model traces and add document-title context without storing raw text. |
-| Metadata in prompt | 91 | App bundle, field kind, request mode, behavior profile, aggregate accepted-kept style sketch, trace-safe partial-word shape, trace-safe current-line list shape, and raw-text-free kept suffix shape now affect prompt/generation/scoring/tracing. | Include document title and tune these features against fresh traces. |
+| Context budget | 85 | Prompt context now uses a 48-96 token budget, keeps the current local fragment, borrows the prior sentence when the current fragment is tiny or sentence mode needs it, borrows the prior paragraph only for tiny sentence-mode starts, and adds trace-safe document/window title shape without raw title text. | Tune the usefulness rules against fresh real-model traces. |
+| Metadata in prompt | 92 | App bundle, field kind, request mode, behavior profile, aggregate accepted-kept style sketch, trace-safe partial-word shape, trace-safe current-line list shape, trace-safe document/window title shape, and raw-text-free kept suffix shape now affect prompt/generation/scoring/tracing. | Tune these features against fresh traces and expose the useful parts in diagnostics. |
 | Hard `<NO_SUGGESTION>` path | 86 | Word/phrase/sentence prompts include `<NO_SUGGESTION>` guidance, and cleaner suppresses direct sentinels plus prompt-echo sentinel lines. | Prove sentinel behavior in fresh real model traces. |
-| Privacy-first tracing | 95 | Raw content is redacted by default, raw/screenshot capture is opt-in with expiry, line/list shape metadata avoids item text, kept suffix shape stores aggregate rates/lengths instead of text, Settings can clear learned suggestion state separately from local logs, permission copy states what is read and why, and Diagnostics now exposes placement confidence/anchor/render/self-healing evidence without suggestion text. | Store prefix hashes and make compact style/learning features more inspectable. |
+| Privacy-first tracing | 95 | Raw content is redacted by default, raw/screenshot capture is opt-in with expiry, line/list and document/window title shape metadata avoid item/title text, kept suffix shape stores aggregate rates/lengths instead of text, Settings can clear learned suggestion state separately from local logs, permission copy states what is read and why, and Diagnostics now exposes placement confidence/anchor/render/self-healing evidence without suggestion text. | Store prefix hashes and make compact style/learning features more inspectable. |
 | Local runtime ownership | 92 | App-owned embedded runtime and no user-managed server dependency. | Keep this stance through beta and fail clearly if model assets are missing. |
 | Warm/runtime cache | 82 | Model container is warm and reused, static system prompts now go through a bounded redacted-key cache with hit/size trace metadata, `CompletionRequest` carries field identity, and `RuntimeSessionCachePolicy` defines a tested same-app/same-field/same-mode/same-neighborhood reuse gate with trace metadata for reuse eligibility and reset reasons. Each MLX request still builds a new `ChatSession`. | Wire safe per-field session/KV reuse into the app runtime. |
 | Generated length | 92 | MVP defaults to 5 visible words / 10 generated tokens, behavior profiles stay shorter by mode, env overrides clamp at 7 visible words / 16 generated tokens, and sentence mode has its own 10-token ceiling. | Tune defaults from fresh traces. |
