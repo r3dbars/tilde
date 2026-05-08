@@ -104,6 +104,18 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("word\u{200B}", after: "Safe") == nil)
     }
 
+    @Test("Suppresses visible OCR chrome suggestions")
+    func suppressesVisibleOCRChromeSuggestions() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("Untitled 13", after: "Can I do the things that") == nil)
+        #expect(cleaner.clean("New chat Search Plugins", after: "I want this to") == nil)
+        #expect(cleaner.clean("Helvetica Regular", after: "Make the text") == nil)
+        #expect(cleaner.clean("**Ep quadrant**", after: "We need to keep iterating") == nil)
+        #expect(cleaner.clean("Ep claudebrain", after: "We need to keep iterating") == nil)
+        #expect(cleaner.clean("next to the cursor", after: "I want this to show")?.visibleText == " next to the cursor")
+    }
+
     @Test("Suppresses assistant replies when user is drafting an agent request")
     func suppressesAssistantRepliesForAgentRequests() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
@@ -181,6 +193,7 @@ struct CompletionOutputCleanerTests {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
         #expect(cleaner.clean("Next words: keep moving today", after: "Let's")?.visibleText == " keep moving today")
+        #expect(cleaner.clean("candidate 1: keep moving today", after: "Let's")?.visibleText == " keep moving today")
         #expect(cleaner.clean("Suffix: tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
         #expect(cleaner.clean("Next words:", after: "Let's") == nil)
     }
@@ -190,6 +203,8 @@ struct CompletionOutputCleanerTests {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
         #expect(cleaner.clean("Before cursor: hello and w", after: "hello and w") == nil)
+        #expect(cleaner.clean("before cursor", after: "Can we") == nil)
+        #expect(cleaner.clean("candidate 1", after: "Can we") == nil)
         #expect(cleaner.clean("Inline autocomplete. Return only the continuation.", after: "Can we") == nil)
         #expect(cleaner.clean("Return only the next few words.", after: "Can we") == nil)
         #expect(cleaner.clean("No spaces or punctuation.", after: "hel", mode: .wordCompletion) == nil)

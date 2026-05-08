@@ -42,6 +42,7 @@ public struct VisiblePageContext: Equatable, Sendable {
         Act like a local writing companion that can see the screen but still only types the user's next words.
         Prefer a useful best guess when the visible context strongly implies the next word or short phrase.
         Ignore buttons, menus, sidebars, and anything unrelated to the active text field.
+        Never output visible window titles, document titles, tab labels, menu labels, sidebar labels, font controls, app navigation, or other OCR chrome.
         """
     }
 
@@ -69,12 +70,13 @@ public struct VisiblePageContext: Equatable, Sendable {
             .replacingOccurrences(of: "\u{00a0}", with: " ")
             .components(separatedBy: .newlines)
             .map { line in
-                line
+                Self.scrubOCRChromeFragments(in: line)
                     .split(whereSeparator: { $0.isWhitespace })
                     .joined(separator: " ")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
             }
             .filter(Self.isUsefulLine)
+            .filter { !Self.looksLikeOCRChromeLine($0) }
 
         var seen = Set<String>()
         var uniqueLines: [String] = []
@@ -103,6 +105,45 @@ public struct VisiblePageContext: Equatable, Sendable {
         }
 
         return Double(alphanumericCount) / Double(max(1, scalars.count)) >= 0.25
+    }
+
+    private static func scrubOCRChromeFragments(in line: String) -> String {
+        var scrubbed = line
+
+        for pattern in ocrChromeFragmentPatterns {
+            scrubbed = scrubbed.replacingOccurrences(
+                of: pattern,
+                with: " ",
+                options: [.regularExpression, .caseInsensitive]
+            )
+        }
+
+        return scrubbed
+    }
+
+    private static func looksLikeOCRChromeLine(_ line: String) -> Bool {
+        let words = normalizedWords(in: line)
+        guard !words.isEmpty else {
+            return true
+        }
+
+        if words[0] == "untitled" {
+            return words.count == 1
+                || words.dropFirst().allSatisfy { $0.allSatisfy(\.isNumber) || ocrChromeTokens.contains($0) }
+        }
+
+        guard words.count >= 2, words.count <= 5 else {
+            return false
+        }
+
+        return words.allSatisfy { ocrChromeTokens.contains($0) || $0.allSatisfy(\.isNumber) }
+    }
+
+    private static func normalizedWords(in text: String) -> [String] {
+        text
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .map { $0.lowercased() }
+            .filter { !$0.isEmpty }
     }
 
     private static func sanitizedAppName(_ appName: String?) -> String? {
@@ -137,4 +178,30 @@ public struct VisiblePageContext: Equatable, Sendable {
             .prefix(maximumPromptTokens)
             .joined(separator: " ")
     }
+
+    private static let ocrChromeTokens: Set<String> = [
+        "automations",
+        "chat",
+        "chats",
+        "edited",
+        "font",
+        "format",
+        "helvetica",
+        "new",
+        "plugins",
+        "projects",
+        "regular",
+        "search",
+        "settings",
+        "untitled"
+    ]
+
+    private static let ocrChromeFragmentPatterns: [String] = [
+        #"\bUntitled(?:\s+\d+)?\b"#,
+        #"\bNew\s+chat\b"#,
+        #"\bPlugins\s+Automations\s+Projects\b"#,
+        #"\bSettings\s+Show\s+more\b"#,
+        #"\bHelvetica\s+\d*\s*Regular(?:\s+\d+(?:\.\d+)?){0,2}\b"#,
+        #"\bEp\s+[A-Za-z][A-Za-z0-9_-]{2,}\b"#
+    ]
 }

@@ -139,6 +139,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        guard !looksLikeVisibleUIChromeCandidate(withoutPromptEchoLabel, mode: mode) else {
+            return nil
+        }
+
         if let textBeforeCursor,
            looksLikeAssistantResponseToPrompt(withoutPromptEchoLabel, after: textBeforeCursor) {
             return nil
@@ -205,6 +209,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        if looksLikeVisibleUIChromeCandidate(suggestion.visibleText, mode: mode) {
+            return nil
+        }
+
         return suggestion
     }
 
@@ -232,11 +240,17 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
     }
 
     private func strippingCandidatePrefix(from text: String) -> String {
-        text.replacingOccurrences(
-            of: #"^\s*(?:[-*•]|\d+[\).:]|[A-Za-z][\).:])\s+"#,
-            with: "",
-            options: .regularExpression
-        )
+        text
+            .replacingOccurrences(
+                of: #"^\s*candidate\s+\d+\s*[\).:-]?\s*"#,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            .replacingOccurrences(
+                of: #"^\s*(?:[-*•]|\d+[\).:]|[A-Za-z][\).:])\s+"#,
+                with: "",
+                options: .regularExpression
+            )
     }
 
     private func normalizedCandidateKey(_ text: String) -> String {
@@ -290,8 +304,13 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         return normalized.hasPrefix("before cursor:")
+            || normalized == "before cursor"
+            || normalized.hasPrefix("before cursor ")
             || normalized.hasPrefix("after cursor:")
+            || normalized == "after cursor"
+            || normalized.hasPrefix("after cursor ")
             || normalized.hasPrefix("action:")
+            || normalized.range(of: #"^candidate\s+\d+\s*[\).:-]?\s*$"#, options: .regularExpression) != nil
             || normalized.hasPrefix("inline autocomplete")
             || normalized.hasPrefix("inline word completion")
             || normalized.hasPrefix("next action:")
@@ -306,6 +325,15 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
     private func strippingPromptEchoLabel(from text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let withoutCandidateLabel = trimmed.replacingOccurrences(
+            of: #"^\s*candidate\s+\d+\s*[\).:-]\s*"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+
+        if withoutCandidateLabel != trimmed {
+            return withoutCandidateLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
 
         for label in Self.promptEchoLabels {
             guard trimmed.lowercased().hasPrefix(label) else {
@@ -462,6 +490,42 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
     }
 
+    private func looksLikeVisibleUIChromeCandidate(_ text: String, mode: CompletionRequestMode) -> Bool {
+        guard mode.isContinuation else {
+            return false
+        }
+
+        let words = normalizedWords(in: text)
+        guard !words.isEmpty else {
+            return false
+        }
+
+        if isWrappedInMarkdownEmphasis(text), words.count <= 4 {
+            return true
+        }
+
+        if words[0] == "untitled" {
+            return words.count == 1
+                || words.dropFirst().allSatisfy { $0.allSatisfy(\.isNumber) || Self.visibleUIChromeTokens.contains($0) }
+        }
+
+        if words[0] == "ep", words.count <= 3 {
+            return true
+        }
+
+        guard words.count >= 2, words.count <= 5 else {
+            return false
+        }
+
+        return words.allSatisfy { Self.visibleUIChromeTokens.contains($0) || $0.allSatisfy(\.isNumber) }
+    }
+
+    private func isWrappedInMarkdownEmphasis(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed.hasPrefix("**") && trimmed.hasSuffix("**"))
+            || (trimmed.hasPrefix("__") && trimmed.hasSuffix("__"))
+    }
+
     private func repeatsEarlierContext(_ suggestion: String, after textBeforeCursor: String) -> Bool {
         let suggestionWords = normalizedWords(in: suggestion)
         guard suggestionWords.count >= 3 else {
@@ -569,6 +633,23 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
     private static let commonWholeWords = Set(WordCompletionCandidateRanker.defaultWords)
         .union(lowValueSingleWordPhrases)
+
+    private static let visibleUIChromeTokens: Set<String> = [
+        "automations",
+        "chat",
+        "chats",
+        "edited",
+        "font",
+        "format",
+        "helvetica",
+        "new",
+        "plugins",
+        "projects",
+        "regular",
+        "search",
+        "settings",
+        "untitled"
+    ]
 
     private static let assistantResponsePrefixes: Set<String> = [
         "first,",
