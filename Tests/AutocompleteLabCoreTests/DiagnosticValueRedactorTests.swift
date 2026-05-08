@@ -71,5 +71,17 @@ struct DiagnosticValueRedactorTests {
                 value: "x=100,y=200,w=120,h=22"
             ) == "x=100,y=200,w=120,h=22"
         )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "acceptedTextHMACToken",
+                value: "abc123"
+            ) == "abc123"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "fingerprintText",
+                value: "private window title"
+            ) == "String(20 chars)"
+        )
     }
 }

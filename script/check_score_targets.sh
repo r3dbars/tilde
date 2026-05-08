@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 DEEP_DIVE_PATH="${AUTOCOMPLETE_LAB_DEEP_DIVE_SCORECARD:-docs/product/deep-dive-scorecard-2026-05-06.md}"
 DEEP_RESEARCH_PATH="${AUTOCOMPLETE_LAB_DEEP_RESEARCH_SCORECARD:-docs/product/deep-research-autocomplete-scorecard-2026-05-07.md}"
+OVERALL_EXCELLENCE_PATH="${AUTOCOMPLETE_LAB_OVERALL_EXCELLENCE_SCORECARD:-docs/product/deep-research-overall-excellence-scorecard-2026-05-08.md}"
 APPLE_NATIVE_PATH="${AUTOCOMPLETE_LAB_APPLE_NATIVE_CHECKLIST:-docs/product/apple-native-experience-checklist.md}"
 APP_PROOF_PATH="${AUTOCOMPLETE_LAB_APP_PROOF_MATRIX:-docs/product/app-proof-matrix.md}"
 
@@ -69,6 +70,18 @@ check_deep_research() {
   done <"$path"
 }
 
+check_overall_excellence() {
+  local path="$1"
+
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^Overall[[:space:]]score:[[:space:]]*([0-9]+)/100\.?$ ]]; then
+      if [[ "${BASH_REMATCH[1]}" != "100" ]]; then
+        record_issue "$path" "Overall excellence score" "${BASH_REMATCH[1]}/100" "100/100"
+      fi
+    fi
+  done <"$path"
+}
+
 check_apple_native() {
   local path="$1"
   local section_label=""
@@ -127,18 +140,21 @@ check_app_proof() {
 
 require_file "$DEEP_DIVE_PATH"
 require_file "$DEEP_RESEARCH_PATH"
+require_file "$OVERALL_EXCELLENCE_PATH"
 require_file "$APPLE_NATIVE_PATH"
 require_file "$APP_PROOF_PATH"
 
 echo "Score target status"
 echo "Deep dive: $DEEP_DIVE_PATH"
 echo "Deep research: $DEEP_RESEARCH_PATH"
+echo "Overall excellence: $OVERALL_EXCELLENCE_PATH"
 echo "Apple-native checklist: $APPLE_NATIVE_PATH"
 echo "App proof matrix: $APP_PROOF_PATH"
 echo
 
 check_deep_dive "$DEEP_DIVE_PATH"
 check_deep_research "$DEEP_RESEARCH_PATH"
+check_overall_excellence "$OVERALL_EXCELLENCE_PATH"
 check_apple_native "$APPLE_NATIVE_PATH"
 check_app_proof "$APP_PROOF_PATH"
 

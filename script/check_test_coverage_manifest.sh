@@ -94,6 +94,9 @@ require_file "Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift" "Secure field traces keep only shape data by default" "secure-field trace privacy coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift" "Unsupported app traces redact typed content by default" "unsupported-app trace privacy coverage"
 
+require_file "script/check_local_only_network_surface.sh"
+require_file "script/check_local_only_network_surface_self_test.sh"
+
 require_file "Tests/AutocompleteLabCoreTests/WordCompletionCandidateRankerTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/WordCompletionCandidateRankerTests.swift" "suppresses tiny recent suffixes until the fragment is strong" "recent-word completion quality coverage"
 
