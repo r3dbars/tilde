@@ -25,6 +25,9 @@ CURRENT_APP_PROCESS_PATTERN="$DIST_DIR/${APP_NAME}.app/Contents/MacOS/${APP_NAME
 
 cd "$ROOT_DIR"
 
+# shellcheck source=script/ui_proof_lock.sh
+source "$ROOT_DIR/script/ui_proof_lock.sh"
+
 kill_running_app_instances() {
   local pid
 
@@ -60,6 +63,12 @@ wait_for_current_app_instance() {
   exit 1
 }
 
+cleanup_build_and_run() {
+  release_autocomplete_lab_ui_lock
+}
+
+trap cleanup_build_and_run EXIT
+acquire_autocomplete_lab_ui_lock "build_and_run $MODE"
 kill_running_app_instances
 
 find_signing_identity() {

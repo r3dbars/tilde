@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# shellcheck source=script/ui_proof_lock.sh
+source "$ROOT_DIR/script/ui_proof_lock.sh"
+
 APP="${1:-}"
 REQUESTED_APP="$APP"
 NOTES_SESSION_APP=""
@@ -136,6 +139,7 @@ cleanup_smoke_tmp_dirs() {
 }
 
 cleanup_smoke() {
+  release_autocomplete_lab_ui_lock
   cleanup_smoke_tmp_dirs
 
   if [[ "$TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED" == "1" ]]; then
@@ -1269,6 +1273,9 @@ describe_plan
 if [[ "$DRY_RUN" == "1" ]]; then
   exit 0
 fi
+
+acquire_autocomplete_lab_ui_lock "real_app_smoke ${REQUESTED_APP:-$APP}"
+export AUTOCOMPLETE_LAB_UI_PROOF_LOCK_HELD=1
 
 case "$APP" in
   textedit)

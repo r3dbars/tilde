@@ -5,7 +5,7 @@
 - Deep Research topic: local-first macOS system-wide autocomplete excellence.
 - Repo: `transcripted-autocomplete-lab`
 - Date: 2026-05-08
-- Commit inspected: `a8c54bf25762`
+- Commit inspected: `64d72cf`
 
 ## Executive Summary
 
@@ -56,11 +56,13 @@ Pass 3 added the safe core foundation for deterministic snippets/templates: expl
 
 Pass 4 repaired the live proof harness: `script/build_and_run.sh` no longer calls removed launch helpers, `script/real_app_smoke.sh` can set disposable TextEdit setup text by document path, and the default TextEdit smoke recorded a fresh strict-visual pass. The score does not move because committing the harness makes that proof row stale relative to `HEAD`, and concurrent Codex worktrees repeatedly launched AutocompleteLab during multiline/Chrome proof attempts.
 
+Pass 5 added a shared UI proof lock used by `script/real_app_smoke.sh` and `script/build_and_run.sh`. New proof runs from this branch now fail closed if another local proof/build launch owns the macOS UI lane. This does not raise the score by itself because older worktrees still need to pick up the lock before a clean full proof sweep can count.
+
 ## Score
 
 Starting score: 76/100
 
-Current score after pass 4: 83/100
+Current score after pass 5: 83/100
 
 This is a strict product score, not an implementation-depth score. The score is still capped by stale/manual proof, prompt-app no-submit proof, live snippet insertion proof, and the need for a quiet single-owner proof lane.
 
@@ -252,10 +254,11 @@ A 100/100 app is boringly trusted. Every supported surface has fresh same-commit
 ### 7. Serialize UI Proof Runs
 
 - Objective: Prevent multiple Codex/worktree smoke sessions from racing the same macOS UI, launch environment, and AutocompleteLab app instance.
-- Files likely involved: `script/real_app_smoke.sh`, `script/build_and_run.sh`, possibly a shared shell helper under `script/`.
-- Tests to add/update: shell syntax tests plus a lock self-test that proves a second proof run exits before launching or changing `launchctl` app enablement.
+- Files likely involved: `script/real_app_smoke.sh`, `script/build_and_run.sh`, `script/ui_proof_lock.sh`.
+- Tests to add/update: shell syntax tests plus `script/ui_proof_lock_self_test.sh`, which proves a second proof run exits before launching or changing `launchctl` app enablement.
 - Proof required: one clean TextEdit smoke and one Chrome fixture smoke with no competing `app-proof-mode-started` rows from other worktrees.
 - Risk level: medium.
+- Status: Done for this branch; older/local worktrees still need this branch's scripts before the lock can protect every Codex instance.
 - Expected score impact: +1 to +4 by making current proof attainable and trustworthy.
 
 ## Codex Execution Goal
