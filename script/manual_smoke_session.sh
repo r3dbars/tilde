@@ -14,7 +14,7 @@ TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/tr
 REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-runs.md}"
 PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-default}"
 ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-backtick}"
-BUILD_PROOF="${AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF:-}"
+PROMPT_NO_SUBMIT_CONFIRMED="${AUTOCOMPLETE_LAB_PROMPT_NO_SUBMIT_CONFIRMED:-0}"
 
 usage() {
   cat <<'EOF'
@@ -221,7 +221,7 @@ case "$APP" in
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     REQUIRES_FULL_ACCEPT=0
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS=$'- Focus the Codex message box without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- When the recorder asks, type NO-SUBMIT only after confirming the prompt was not sent.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   claude-code)
     BUNDLE_ID="com.anthropic.claude-code"
@@ -229,7 +229,7 @@ case "$APP" in
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     REQUIRES_FULL_ACCEPT=0
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Claude Code prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS=$'- Focus the Claude Code prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- When the recorder asks, type NO-SUBMIT only after confirming the prompt was not sent.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   claude)
     BUNDLE_ID="com.anthropic.claudefordesktop"
@@ -237,7 +237,7 @@ case "$APP" in
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     REQUIRES_FULL_ACCEPT=0
     MIN_VERIFIED_ACCEPTS=1
-    STEPS=$'- Focus the Claude prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
+    STEPS=$'- Focus the Claude prompt without submitting.\n- Type a harmless local test fragment like `Can we make this`.\n- Confirm a suggestion appears near the prompt or in a stable mirror position.\n- Use Tab once for one word/suffix.\n- Do not press Enter as part of the smoke pass.\n- When the recorder asks, type NO-SUBMIT only after confirming the prompt was not sent.\n- Full visible accept stays disabled until separate full-accept no-submit proof exists.'
     ;;
   *)
     usage >&2
@@ -298,6 +298,14 @@ if [[ "$MODE" == "run" ]]; then
   echo "Starting at diagnostics line $START_LINE."
   echo "Starting at trace line $TRACE_START_LINE."
   read -r -p "Run the steps above, then press Enter to validate this app pass. " _
+  if [[ "$REQUIRES_FULL_ACCEPT" != "1" ]]; then
+    read -r -p "Type NO-SUBMIT to confirm the prompt was not sent. " prompt_confirmation
+    if [[ "$prompt_confirmation" != "NO-SUBMIT" ]]; then
+      echo "$SESSION_NAME prompt proof was not recorded because no-submit was not confirmed." >&2
+      exit 1
+    fi
+    PROMPT_NO_SUBMIT_CONFIRMED=1
+  fi
 elif [[ "$MODE" != "--check" ]]; then
   usage >&2
   exit 2
@@ -420,6 +428,9 @@ append_report_row() {
     trace_summary="$trace_summary; visual \`strict-complete\`"
   else
     trace_summary="$trace_summary; visual \`not-claimed\`"
+  fi
+  if [[ "$REQUIRES_FULL_ACCEPT" != "1" ]]; then
+    trace_summary="$trace_summary; prompt no-submit confirmed"
   fi
 
   local build_proof
@@ -550,6 +561,10 @@ if [[ "$REQUIRES_FULL_ACCEPT" != "1" ]] && (( VERIFIED_COUNT != 1 )); then
   echo "expected exactly one verified one-word accept for $SESSION_NAME, saw $VERIFIED_COUNT" >&2
   echo "log: $LOG_PATH" >&2
   print_failure_summary
+  exit 1
+fi
+if [[ "$REQUIRES_FULL_ACCEPT" != "1" ]] && ! is_truthy "$PROMPT_NO_SUBMIT_CONFIRMED"; then
+  echo "missing $SESSION_NAME no-submit confirmation; set AUTOCOMPLETE_LAB_PROMPT_NO_SUBMIT_CONFIRMED=1 only after confirming the prompt was not sent" >&2
   exit 1
 fi
 

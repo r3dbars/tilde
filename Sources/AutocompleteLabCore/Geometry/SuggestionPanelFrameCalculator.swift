@@ -2,6 +2,8 @@ import CoreGraphics
 import Foundation
 
 public enum SuggestionPanelFrameCalculator {
+    public static let minimumUsefulInlineWordWidth: CGFloat = 36
+
     public static func shouldRefreshPresentation(
         previousText: String?,
         previousFrame: CGRect?,
@@ -25,7 +27,7 @@ public enum SuggestionPanelFrameCalculator {
 
     public static func isUsableInlineGhostFrame(
         _ frame: CGRect,
-        minimumVisibleWidth: CGFloat = 24
+        minimumVisibleWidth: CGFloat = minimumUsefulInlineWordWidth
     ) -> Bool {
         frame.minX.isFinite
             && frame.minY.isFinite

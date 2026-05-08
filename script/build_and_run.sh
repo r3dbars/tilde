@@ -245,8 +245,21 @@ open_app() {
     launchctl unsetenv AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS >/dev/null 2>&1 || true
   fi
 
-  "$APP_BINARY" >/tmp/autocomplete-lab-run.log 2>&1 &
-  wait_for_current_app_instance
+  /usr/bin/open -n -F "$APP_BUNDLE"
+}
+
+is_target_app_running() {
+  local pid command
+
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    if [[ "$command" == "$APP_BINARY"* ]]; then
+      return 0
+    fi
+  done < <(pgrep -x "$APP_NAME" 2>/dev/null || true)
+
+  return 1
 }
 
 case "$MODE" in
@@ -267,11 +280,12 @@ case "$MODE" in
   --verify|verify)
     open_app
     for _ in {1..30}; do
-      if pgrep -x "$APP_NAME" >/dev/null; then
+      if is_target_app_running; then
         exit 0
       fi
       sleep 1
     done
+    echo "Timed out waiting for $APP_BINARY to run." >&2
     exit 1
     ;;
   --bundle-only|bundle-only)

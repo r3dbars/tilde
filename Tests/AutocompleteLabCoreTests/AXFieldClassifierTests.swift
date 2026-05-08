@@ -31,6 +31,19 @@ struct AXFieldClassifierTests {
         #expect(AXFieldKind.form.suppressesSuggestionsByDefault)
     }
 
+    @Test("Classifies unproven web surfaces")
+    func classifiesUnprovenWebSurfaces() {
+        #expect(classifier.classification(
+            for: AXFieldClassifierInput(role: "AXTextArea", windowTitle: "Untitled document - Google Docs")
+        ).kind == .unprovenSurface)
+        #expect(classifier.classification(
+            for: AXFieldClassifierInput(role: "AXTextArea", windowTitle: "Roadmap - Notion")
+        ).reason == "unprovenSurface:notion")
+        #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", windowTitle: "general - Slack")) == .unprovenSurface)
+        #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", windowTitle: "Discord")) == .unprovenSurface)
+        #expect(AXFieldKind.unprovenSurface.suppressesSuggestionsByDefault)
+    }
+
     @Test("Classifies compose fields")
     func classifiesComposeFields() {
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea")) == .multilineCompose)

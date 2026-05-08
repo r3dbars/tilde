@@ -6,31 +6,15 @@ public struct RuntimeReadinessGuidance: Equatable, Sendable {
     public init(report: RuntimeReadinessReport) {
         switch report.stage {
         case .downloadNeeded:
-            if report.action == .installLocalModel {
-                message = "Model missing: install the app-owned MLX model. Suggestions stay off until the model is valid."
-                actionTitle = "Install Local Model"
-                isActionEnabled = true
-            } else {
-                message = "Model missing: open the model folder and add the app-owned MLX model. Suggestions stay off until this is ready."
-                actionTitle = "Open Model Folder"
-                isActionEnabled = true
-            }
+            message = "Model missing: install the app-owned Qwen3.5 4B MLX model. Do not start Ollama, llama.cpp, or a separate model server. Suggestions stay off until this is ready."
+            actionTitle = "Install Model"
+            isActionEnabled = true
         case .repairNeeded:
-            if report.action == .repairLocalModel {
-                message = "Model repair needed: download the app-owned MLX model again. Suggestions stay off until the folder is valid."
-                actionTitle = "Repair Local Model"
-                isActionEnabled = true
-            } else {
-                message = "Model repair needed: open the model folder and replace the incomplete model files. Suggestions stay off until the folder is valid."
-                actionTitle = "Open Model Folder"
-                isActionEnabled = true
-            }
-        case .installing:
-            message = report.detail ?? "Installing the app-owned MLX model. Keep Autocomplete Lab open."
-            actionTitle = "Installing..."
-            isActionEnabled = false
+            message = "Model repair needed: replace the incomplete app-owned MLX files from inside Autocomplete Lab. Do not start Ollama, llama.cpp, or a separate model server. Suggestions stay off until the folder is valid."
+            actionTitle = "Repair Model"
+            isActionEnabled = true
         case .runtimeUnavailable:
-            message = "Runtime unavailable: this build cannot start the preferred local runtime. Suggestions stay off in this build."
+            message = "Runtime unavailable: this build cannot start the app-owned MLX runtime. Suggestions stay off in this build."
             actionTitle = "Unavailable"
             isActionEnabled = false
         case .warming:

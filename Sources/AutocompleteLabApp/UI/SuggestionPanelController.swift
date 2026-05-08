@@ -124,7 +124,10 @@ final class SuggestionPanelController {
     ) -> SuggestionPanelPresentation? {
         let fontSize = defaultFontSize(anchorRect: anchorRect, renderMode: renderMode)
         let font = style?.font ?? NSFont.systemFont(ofSize: fontSize, weight: .regular)
-        let color = textColor(matching: style?.foregroundColor, renderMode: renderMode)
+        let color = GhostTextColorPolicy.color(
+            matching: style?.foregroundColor,
+            renderMode: renderMode
+        )
 
         let textInsets = Self.textInsets(for: renderMode)
         let textPadding = CGSize(
@@ -325,29 +328,6 @@ final class SuggestionPanelController {
             ?? 0
     }
 
-    private static func screenIdentifier(_ screen: NSScreen, index: Int) -> String {
-        if let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
-            return number.stringValue
-        }
-
-        if !screen.localizedName.isEmpty {
-            return "\(screen.localizedName)-\(index)"
-        }
-
-        return "screen-\(index)"
-    }
-
-    private func textColor(matching _: NSColor?, renderMode: SuggestionRenderMode) -> NSColor {
-        switch renderMode {
-        case .floatingMirror:
-            return NSColor.labelColor
-        case .inlineAdjacent:
-            return NSColor(calibratedWhite: 0.58, alpha: 0.82)
-        case .disabled:
-            return NSColor.secondaryLabelColor
-        }
-    }
-
     private func defaultFontSize(anchorRect: CGRect, renderMode: SuggestionRenderMode) -> CGFloat {
         switch renderMode {
         case .inlineAdjacent:
@@ -388,6 +368,49 @@ final class SuggestionPanelController {
 
     private func compactFrameDescription(_ rect: CGRect) -> String {
         "x=\(Int(rect.origin.x.rounded())),y=\(Int(rect.origin.y.rounded())),w=\(Int(rect.width.rounded())),h=\(Int(rect.height.rounded()))"
+    }
+}
+
+enum GhostTextColorPolicy {
+    static func color(
+        matching foregroundColor: NSColor?,
+        renderMode: SuggestionRenderMode
+    ) -> NSColor {
+        switch renderMode {
+        case .floatingMirror:
+            return NSColor.labelColor
+        case .inlineAdjacent:
+            return inlineColor(matching: foregroundColor)
+        case .disabled:
+            return NSColor.secondaryLabelColor
+        }
+    }
+
+    private static func inlineColor(matching foregroundColor: NSColor?) -> NSColor {
+        guard let luminance = relativeLuminance(of: foregroundColor) else {
+            return NSColor(calibratedWhite: 0.58, alpha: 0.82)
+        }
+
+        if luminance >= 0.62 {
+            return NSColor(calibratedWhite: 0.82, alpha: 0.88)
+        }
+
+        if luminance <= 0.25 {
+            return NSColor(calibratedWhite: 0.52, alpha: 0.78)
+        }
+
+        return NSColor(calibratedWhite: 0.62, alpha: 0.82)
+    }
+
+    private static func relativeLuminance(of color: NSColor?) -> CGFloat? {
+        guard let color,
+              let rgbColor = color.usingColorSpace(.deviceRGB) else {
+            return nil
+        }
+
+        return (0.2126 * rgbColor.redComponent)
+            + (0.7152 * rgbColor.greenComponent)
+            + (0.0722 * rgbColor.blueComponent)
     }
 }
 

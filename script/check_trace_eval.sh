@@ -16,13 +16,14 @@ REQUIRE_CONFIDENT_PLACEMENT="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_CONFIDENT_PLACEMEN
 REQUIRE_VISUAL_EVIDENCE="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE:-0}"
 MIN_USEFUL_RATE="${AUTOCOMPLETE_LAB_TRACE_MIN_USEFUL_RATE:-}"
 MAX_REPEATED_UNACCEPTED="${AUTOCOMPLETE_LAB_TRACE_MAX_REPEATED_UNACCEPTED:-}"
+REQUIRE_ACCEPTANCE_SLICE_PROOF="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_ACCEPTANCE_SLICE_PROOF:-0}"
 
 if [[ ! -f "$TRACE_PATH" ]]; then
   echo "trace log missing: $TRACE_PATH" >&2
   exit 1
 fi
 
-python3 - "$TRACE_PATH" "$START_LINE" "$END_LINE" "$REQUIRE_APP" "$REQUIRE_EXPERIMENT_ARM" "$REQUIRE_SUPPORT_STATE" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" "$REQUIRE_CONFIDENT_PLACEMENT" "$REQUIRE_VISUAL_EVIDENCE" "$MIN_USEFUL_RATE" "$MAX_REPEATED_UNACCEPTED" <<'PY'
+python3 - "$TRACE_PATH" "$START_LINE" "$END_LINE" "$REQUIRE_APP" "$REQUIRE_EXPERIMENT_ARM" "$REQUIRE_SUPPORT_STATE" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" "$REQUIRE_CONFIDENT_PLACEMENT" "$REQUIRE_VISUAL_EVIDENCE" "$MIN_USEFUL_RATE" "$MAX_REPEATED_UNACCEPTED" "$REQUIRE_ACCEPTANCE_SLICE_PROOF" <<'PY'
 import json
 import os
 import sys
@@ -44,6 +45,7 @@ require_confident_placement = sys.argv[12].lower() in {"1", "true", "yes", "on"}
 require_visual_evidence = sys.argv[13].lower() in {"1", "true", "yes", "on"}
 min_useful_rate = int(sys.argv[14]) if sys.argv[14] else None
 max_repeated_unaccepted = int(sys.argv[15]) if sys.argv[15] else None
+require_acceptance_slice_proof = sys.argv[16].lower() in {"1", "true", "yes", "on"}
 events = []
 with open(path, "r", encoding="utf-8") as handle:
     for line_number, line in enumerate(handle, start=1):
@@ -298,6 +300,8 @@ def overlay_flicker(event):
 def severe_failure(event):
     metadata = event.get("metadata") or {}
     return (
+        metadata.get("severe") == "true"
+        or
         event.get("type") in {"insertionFailed", "appDisabled"}
         or (event.get("type") == "caretGeometryFailed" and metadata.get("severe") == "true")
         or metadata.get("focusStealing") == "true"
@@ -549,6 +553,7 @@ visual_evidence_failures = []
 annoyance_failures = []
 insertion_failures = []
 geometry_failures = []
+acceptance_slice_failures = []
 
 def event_key(event):
     suggestion_id = event.get("suggestionID")
@@ -637,6 +642,46 @@ stale_mismatch_examples = []
 def metadata_for(event):
     metadata = event.get("metadata") or {}
     return metadata if isinstance(metadata, dict) else {}
+
+def int_metadata(metadata, key):
+    try:
+        return int(metadata.get(key) or "")
+    except (TypeError, ValueError):
+        return None
+
+def acceptance_slice_issues(event):
+    metadata = metadata_for(event)
+    issues = []
+    source = metadata.get("acceptanceSource")
+    if source not in {"visiblePrefix", "visibleFull"}:
+        issues.append("missing acceptanceSource")
+    if metadata.get("acceptanceMatchesVisiblePrefix") != "true":
+        issues.append("visible prefix mismatch")
+    if source == "visibleFull" and metadata.get("acceptanceMatchesFullVisible") != "true":
+        issues.append("full visible mismatch")
+    if int_metadata(metadata, "acceptedChars") is None:
+        issues.append("missing acceptedChars")
+    if int_metadata(metadata, "visibleBeforeAcceptChars") is None:
+        issues.append("missing visibleBeforeAcceptChars")
+    if int_metadata(metadata, "remainingVisibleAfterAcceptChars") is None:
+        issues.append("missing remainingVisibleAfterAcceptChars")
+    return issues
+
+acceptance_slice_proof = [
+    event
+    for event in accepted
+    if not acceptance_slice_issues(event)
+]
+
+if require_acceptance_slice_proof:
+    for event in accepted:
+        issues = acceptance_slice_issues(event)
+        if issues:
+            app = event.get("appBundleIdentifier") or "unknown"
+            suggestion_id = event.get("suggestionID") or "unknown"
+            acceptance_slice_failures.append(
+                f"{app}/{suggestion_id}: " + "; ".join(issues)
+            )
 
 def metadata_text(metadata, *keys):
     for key in keys:
@@ -1098,6 +1143,7 @@ full_accepts = [
 ]
 tab_accept_share = 0 if not accepted else round((len(tab_accepts) / len(accepted)) * 100)
 full_accept_share = 0 if not accepted else round((len(full_accepts) / len(accepted)) * 100)
+acceptance_slice_proof_rate = 0 if not accepted else round((len(acceptance_slice_proof) / len(accepted)) * 100)
 verified_inserts = types["insertionVerified"]
 failed_inserts = types["insertionFailed"]
 insert_attempts = verified_inserts + failed_inserts
@@ -1109,6 +1155,7 @@ print(f"Accepted-and-kept shown rate: {accepted_and_kept_rate_shown}%")
 print(f"Accepted-and-kept accepted rate: {accepted_and_kept_rate_accepted}%")
 print(f"Tab accept share: {tab_accept_share}%")
 print(f"Full accept share: {full_accept_share}%")
+print(f"Visible acceptance slice proof: {len(acceptance_slice_proof)}/{len(accepted)} ({acceptance_slice_proof_rate}%)")
 print(f"Insertion verification success: {verification_success}%")
 print(f"p50 latency: {percentile(latencies, 0.50)}")
 print(f"p90 latency: {percentile(latencies, 0.90)}")
@@ -1462,4 +1509,6 @@ if annoyance_failures:
     raise SystemExit("suggestion annoyance guardrail failed: " + "; ".join(annoyance_failures))
 if geometry_failures:
     raise SystemExit("geometry proof guardrail failed: " + "; ".join(geometry_failures))
+if acceptance_slice_failures:
+    raise SystemExit("acceptance slice guardrail failed: " + "; ".join(acceptance_slice_failures))
 PY

@@ -69,6 +69,25 @@ struct AnnoyanceSuppressorTests {
         #expect(suppressor.score(for: context, now: start.addingTimeInterval(5)) == 0)
     }
 
+    @Test("Repeated typed-over misses quiet the current field")
+    func repeatedTypedOverMissesQuietField() {
+        let start = Date(timeIntervalSince1970: 0)
+        var suppressor = AnnoyanceSuppressor()
+
+        let first = suppressor.record(.typedOver, context: context, now: start)
+        #expect(first.startedQuietModes.isEmpty)
+
+        let second = suppressor.record(.typedOver, context: context, now: start.addingTimeInterval(1))
+
+        #expect(second.startedQuietModes.contains { mode in
+            if case let .field(_, reason, _) = mode {
+                return reason == .typedOver
+            }
+            return false
+        })
+        #expect(suppressor.quietMode(for: context, now: start.addingTimeInterval(1)).traceReason == "quiet-mode-field")
+    }
+
     @Test("Quiet modes expire")
     func quietModesExpire() {
         let start = Date(timeIntervalSince1970: 0)

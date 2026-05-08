@@ -36,6 +36,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.actionableSuppressedByApp["com.apple.TextEdit"] == 2)
         #expect(summary.actionableSuppressedByMode["wordCompletion"] == 2)
         #expect(summary.insertionFailureCount == 1)
+        #expect(summary.doNotShipCounters["insertion-failed"] == 1)
         #expect(summary.acceptRate == 1.0 / 3.0)
         #expect(summary.usefulRate == 2.0 / 3.0)
         #expect(summary.acceptRateByApp["com.apple.TextEdit"] == 1.0 / 3.0)
@@ -46,6 +47,29 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.topMisses.count == 2)
         #expect(summary.topMisses.contains { $0.fixCategory == "word-completion issue" })
         #expect(summary.topMisses.contains { $0.fixCategory == "insertion bug" })
+    }
+
+    @Test("counts wrong-app acceptance blocks as do-not-ship blockers")
+    func countsWrongAppAcceptanceBlocksAsDoNotShipBlockers() {
+        let events = [
+            event(
+                .suggestionSuppressed,
+                suggestionID: "one",
+                reason: "wrong-app-or-field-before-accept",
+                metadata: [
+                    "acceptanceGuardReason": "app-changed-before-accept",
+                    "doNotShip": "true",
+                    "focusMismatch": "true",
+                    "severe": "true"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.doNotShipCounters["wrong-app-or-field-before-accept"] == 1)
+        #expect(summary.dailySummaries.first?.severeFailures == 1)
+        #expect(summary.annoyanceSignalCounts["focusMismatch"] == 1)
     }
 
     @Test("Streaming updates count as one shown suggestion")
@@ -362,6 +386,7 @@ struct AutocompleteTraceAnalyzerTests {
                 ]
             ),
             event(.suggestionPresented, suggestionID: "four", metadata: ["fieldKind": "search"]),
+            event(.suggestionPresented, suggestionID: "four-b", metadata: ["fieldKind": "unprovenSurface"]),
             event(.suggestionSuppressed, suggestionID: "five", reason: "repeated-miss"),
             event(.insertionFailed, suggestionID: "six", reason: "insert-verification-failed"),
             event(.appDisabled, suggestionID: "seven", reason: "manual"),
@@ -373,7 +398,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.annoyanceSignalCounts["rapidEscDismissal"] == 1)
         #expect(summary.annoyanceSignalCounts["typedOverWithinOneSecond"] == 1)
         #expect(summary.annoyanceSignalCounts["acceptedThenDeleted"] == 1)
-        #expect(summary.annoyanceSignalCounts["searchOrFormLeakage"] == 1)
+        #expect(summary.annoyanceSignalCounts["searchOrFormLeakage"] == 2)
         #expect(summary.annoyanceSignalCounts["repeatedRejection"] == 1)
         #expect(summary.annoyanceSignalCounts["wrongInsertion"] == 1)
         #expect(summary.annoyanceSignalCounts["appDisable"] == 1)
