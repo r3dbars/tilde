@@ -39,6 +39,18 @@ struct FocusedFieldIdentityPolicyTests {
         #expect(first == second)
     }
 
+    @Test("Stable bounds mode uses a deterministic hash fixture")
+    func stableBoundsModeUsesDeterministicHashFixture() {
+        let identity = policy.identity(
+            bundleIdentifier: "md.obsidian",
+            processIdentifier: 7,
+            mode: .stableBounds,
+            input: input(elementIdentifier: 100)
+        )
+
+        #expect(identity.elementIdentifier == -2_393_395_333_997_730_881)
+    }
+
     @Test("Stable bounds mode changes when field geometry changes")
     func stableBoundsModeChangesWithFieldGeometry() {
         let first = policy.identity(

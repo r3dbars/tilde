@@ -126,18 +126,18 @@ public struct FocusedFieldIdentityPolicy: Sendable {
     }
 
     private func stableBoundsIdentifier(input: FocusedFieldIdentityInput) -> Int {
-        var hasher = Hasher()
+        var hasher = StableFieldIdentityHasher()
         hasher.combine(input.role ?? "unknown")
         hasher.combine(input.subrole ?? "none")
         combineStableFingerprint(input.fingerprint, into: &hasher)
         combineRoundedRect(input.elementRect, into: &hasher)
         combineRoundedRect(input.windowRect, into: &hasher)
-        return hasher.finalize()
+        return hasher.finalizeInt()
     }
 
     private func combineStableFingerprint(
         _ fingerprint: FocusedElementFingerprint,
-        into hasher: inout Hasher
+        into hasher: inout StableFieldIdentityHasher
     ) {
         combineStableFingerprintValue(fingerprint.identifier, label: "identifier", into: &hasher)
         combineStableFingerprintValue(fingerprint.title, label: "title", into: &hasher)
@@ -150,7 +150,7 @@ public struct FocusedFieldIdentityPolicy: Sendable {
     private func combineStableFingerprintValue(
         _ value: String?,
         label: String,
-        into hasher: inout Hasher
+        into hasher: inout StableFieldIdentityHasher
     ) {
         let normalized = value?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -165,7 +165,7 @@ public struct FocusedFieldIdentityPolicy: Sendable {
         hasher.combine(normalized)
     }
 
-    private func combineRoundedRect(_ rect: CGRect?, into hasher: inout Hasher) {
+    private func combineRoundedRect(_ rect: CGRect?, into hasher: inout StableFieldIdentityHasher) {
         guard let rect else {
             hasher.combine("missing")
             return
@@ -175,5 +175,36 @@ public struct FocusedFieldIdentityPolicy: Sendable {
         hasher.combine(Int(rect.origin.y.rounded()))
         hasher.combine(Int(rect.width.rounded()))
         hasher.combine(Int(rect.height.rounded()))
+    }
+}
+
+private struct StableFieldIdentityHasher {
+    private var hash: UInt64 = 14_695_981_039_346_656_037
+    private let prime: UInt64 = 1_099_511_628_211
+
+    mutating func combine(_ value: Int) {
+        combine(String(value))
+    }
+
+    mutating func combine(_ value: String) {
+        mix(bytes: String(value.utf8.count).utf8)
+        mix(0)
+        mix(bytes: value.utf8)
+        mix(255)
+    }
+
+    func finalizeInt() -> Int {
+        Int(truncatingIfNeeded: hash)
+    }
+
+    private mutating func mix(bytes: String.UTF8View) {
+        for byte in bytes {
+            mix(byte)
+        }
+    }
+
+    private mutating func mix(_ byte: UInt8) {
+        hash ^= UInt64(byte)
+        hash = hash &* prime
     }
 }

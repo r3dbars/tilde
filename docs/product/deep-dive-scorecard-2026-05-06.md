@@ -79,7 +79,7 @@ evidence-backed score should stay lower until those rows are closed.
 | Automated tests | 10/10 | `swift test` passes 326 tests, including app-target settings state tests, diagnostics typing-health tests, scoped recent-word memory, privacy expiry, support status, serial AX reader, focused AX-health cooldown, focused-poll backoff, dogfood false-positive coverage, neutral word-completion vocabulary, screenshot trace capture policy, placement trust policy, and trace visual evidence. Script self-tests now cover strict score targets, the 10-pass score loop path, manual smoke status, visual proof, typing performance, and the 10-minute endurance soak command. |
 | Real-app smoke | 8.8/10 | TextEdit, core Chrome fixtures, and Chrome chat-like no-submit are green on the current build. The latest TextEdit strict visual smoke passed after the accept-all shortcut/race fix. Notes title/body/checklist, Codex, Claude Code, and Claude desktop remain honest insertion-proof gaps. |
 | Release readiness | 8/10 | Packaging is in decent shape, and the current local archive has been notarized, stapled, and Gatekeeper-verified. Beta readiness still correctly fails unless all required manual and screenshot-backed proof rows are closed, and beta onboarding still needs a final product pass. |
-| Architecture | 9.1/10 | Core policy, geometry, scoped word memory, trace analysis, privacy expiry, support status, serial AX focused-text reads, and AX-health cooldowns are tested and wired. AppDelegate still owns too much orchestration. |
+| Architecture | 9.2/10 | Core policy, geometry, deterministic stable-bounds field identity, scoped word memory, trace analysis, privacy expiry, support status, serial AX focused-text reads, and AX-health cooldowns are tested and wired. AppDelegate still owns too much orchestration. |
 
 ## Visual Placement And Text Box Audit
 
@@ -110,6 +110,10 @@ evidence-backed score should stay lower until those rows are closed.
   signals, and suppresses the original field for profiles that quiet failed
   insertions. `swift test --filter InsertionVerification` passed 14 tests, and
   full `swift test` passed 744 tests.
+- 2026-05-08 stable identity pass: replaced Swift's randomized `Hasher` in
+  stable-bounds field identity with a deterministic FNV-style hash and pinned a
+  fixture in `FocusedFieldIdentityPolicyTests`. `swift test --filter
+  FocusedFieldIdentityPolicyTests` passed 6 tests.
 - Current 2026-05-07 goal pass: added a pre-accept snapshot guard for app,
   process, focused field, selected text, and before/after cursor text; records
   accept-key focus mismatches as `wrong-app-or-field-before-accept` severe
