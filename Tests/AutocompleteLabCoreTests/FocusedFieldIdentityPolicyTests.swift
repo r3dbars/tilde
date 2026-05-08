@@ -128,11 +128,13 @@ struct FocusedFieldIdentityPolicyTests {
         let base = targetFingerprint()
         let roleChanged = targetFingerprint(role: "AXGroup")
         let windowChanged = targetFingerprint(windowRect: CGRect(x: 40, y: 0, width: 900, height: 720))
+        let windowIdentifierChanged = targetFingerprint(windowIdentifier: 43)
         let caretChanged = targetFingerprint(caretRect: CGRect(x: 160, y: 650, width: 1, height: 20))
         let textChanged = targetFingerprint(textBeforeCursor: "hello there")
 
         #expect(!base.matches(roleChanged))
         #expect(!base.matches(windowChanged))
+        #expect(!base.matches(windowIdentifierChanged))
         #expect(!base.matches(caretChanged))
         #expect(!base.matches(textChanged))
     }
@@ -185,6 +187,7 @@ struct FocusedFieldIdentityPolicyTests {
     private func targetFingerprint(
         role: String? = "AXTextArea",
         subrole: String? = nil,
+        windowIdentifier: Int? = 42,
         elementRect: CGRect? = CGRect(x: 100.4, y: 620.4, width: 700.2, height: 84.2),
         windowRect: CGRect? = CGRect(x: 0, y: 0, width: 900, height: 720),
         caretRect: CGRect? = CGRect(x: 120, y: 650, width: 1, height: 20),
@@ -200,6 +203,7 @@ struct FocusedFieldIdentityPolicyTests {
                 placeholder: "Message",
                 windowTitle: "Window"
             ),
+            windowIdentifier: windowIdentifier,
             elementRect: elementRect,
             windowRect: windowRect,
             caretRect: caretRect,
