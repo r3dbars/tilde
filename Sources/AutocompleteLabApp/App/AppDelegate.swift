@@ -2650,18 +2650,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let verificationContextRead = focusedInsertionVerificationContext(for: baseline)
             guard case let .ready(context: verificationContext) = verificationContextRead else {
-                if case .fieldChanged = verificationContextRead {
-                    return
-                }
-
-                DiagnosticsLog.shared.record(
-                    "insert-verification",
-                    metadata: [
-                        "app": baseline.profile.bundleIdentifier,
-                        "result": "missing-context"
-                    ]
+                recordInsertionVerificationContextFailure(
+                    verificationContextRead,
+                    acceptedText: acceptedText,
+                    baseline: baseline
                 )
-                hideSuggestion()
                 return
             }
 
@@ -2681,7 +2674,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "result": String(describing: result),
                     "acceptedChars": String(acceptedText.count),
                     "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                    "currentBeforeChars": String(context.textBeforeCursor.count)
+                    "currentBeforeChars": String(context.textBeforeCursor.count),
+                    "previousAfterChars": String(baseline.previousTextAfterCursor.count),
+                    "currentAfterChars": String(context.textAfterCursor.count)
                 ]
             )
 
@@ -2713,6 +2708,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             "acceptedChars": String(acceptedText.count),
                             "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                             "currentBeforeChars": String(context.textBeforeCursor.count),
+                            "previousAfterChars": String(baseline.previousTextAfterCursor.count),
+                            "currentAfterChars": String(context.textAfterCursor.count),
                             "source": "read-only-recheck",
                             "recheckDelayMilliseconds": String(recheckDelayMilliseconds)
                         ]
@@ -2787,7 +2784,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "fieldKindReason": baseline.fieldKindReason,
                         "behaviorProfile": baseline.behaviorProfileID.rawValue,
                         "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                        "currentBeforeChars": String(context.textBeforeCursor.count)
+                        "currentBeforeChars": String(context.textBeforeCursor.count),
+                        "previousAfterChars": String(baseline.previousTextAfterCursor.count),
+                        "currentAfterChars": String(context.textAfterCursor.count)
                     ]
                 )
                 recordAnnoyanceSignal(
@@ -2856,6 +2855,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             startAcceptanceSurvivalTracking(tracker)
         }
+    }
+
+    private func recordInsertionVerificationContextFailure(
+        _ contextRead: FocusedInsertionVerificationContext,
+        acceptedText: String,
+        baseline: InsertionVerificationBaseline
+    ) {
+        guard let outcome = contextRead.failureOutcome,
+              let reason = contextRead.failureReason else {
+            return
+        }
+
+        DiagnosticsLog.shared.record(
+            "insert-verification",
+            metadata: [
+                "app": baseline.profile.bundleIdentifier,
+                "result": outcome,
+                "acceptedChars": String(acceptedText.count),
+                "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                "previousAfterChars": String(baseline.previousTextAfterCursor.count),
+                "retryCount": String(baseline.retryCount)
+            ]
+        )
+        RawAutocompleteTraceLog.shared.record(
+            type: .insertionFailed,
+            suggestionID: baseline.suggestionID ?? "",
+            appBundleIdentifier: baseline.profile.bundleIdentifier,
+            fieldIdentity: baseline.fieldIdentity.traceDescription,
+            requestMode: baseline.requestMode?.rawValue ?? "",
+            acceptedText: acceptedText,
+            outcome: outcome,
+            reason: reason,
+            metadata: [
+                "acceptanceID": baseline.acceptanceID,
+                "acceptMode": baseline.acceptMode,
+                "fieldKind": baseline.fieldKind.rawValue,
+                "fieldKindReason": baseline.fieldKindReason,
+                "behaviorProfile": baseline.behaviorProfileID.rawValue,
+                "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                "previousAfterChars": String(baseline.previousTextAfterCursor.count),
+                "retryCount": String(baseline.retryCount)
+            ]
+        )
+        recordAnnoyanceSignal(
+            .wrongInsertion,
+            context: annoyanceContext(
+                appBundleIdentifier: baseline.profile.bundleIdentifier,
+                fieldIdentity: baseline.fieldIdentity,
+                requestMode: baseline.requestMode,
+                fieldKind: baseline.fieldKind
+            ),
+            suggestionID: baseline.suggestionID ?? "",
+            reason: reason,
+            metadata: [
+                "acceptanceID": baseline.acceptanceID,
+                "acceptMode": baseline.acceptMode,
+                "insertionResult": outcome
+            ]
+        )
+        if baseline.profile.suppressesAfterInsertionFailure {
+            suppressCurrentField(reason: reason)
+        }
+        hideSuggestion()
     }
 
     private func focusedInsertionVerificationContext(
@@ -6271,6 +6333,28 @@ private enum FocusedInsertionVerificationContext {
     case ready(context: FocusedTextContext)
     case missingContext
     case fieldChanged
+
+    var failureOutcome: String? {
+        switch self {
+        case .ready:
+            return nil
+        case .missingContext:
+            return "missingContext"
+        case .fieldChanged:
+            return "fieldChanged"
+        }
+    }
+
+    var failureReason: String? {
+        switch self {
+        case .ready:
+            return nil
+        case .missingContext:
+            return "insert-verification-missing-context"
+        case .fieldChanged:
+            return "insert-verification-field-changed"
+        }
+    }
 }
 
 private struct AcceptedInsertionUndo: Equatable {
