@@ -54,14 +54,15 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             supportLevel: .yellow,
             supportReason: "Claude Code can be proofed only through an explicit terminal-host proof lane.",
             renderMode: .inlineAdjacent,
-            insertionMode: .keyEvents,
+            insertionMode: .clipboardFallbackOptIn,
             fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: nil,
             fieldIdentityMode: .stableBounds,
             anchorLadder: [.caret],
             knownFailureModes: [
                 "terminal-hosted CLI input can submit shell commands",
-                "terminal accessibility text can include scrollback instead of only the prompt line"
+                "terminal accessibility text can include scrollback instead of only the prompt line",
+                "terminal hosts often ignore synthetic Unicode key events"
             ],
             allowsFieldAnchor: false,
             allowsWindowAnchor: false,
@@ -71,7 +72,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             suppressesAfterInsertionFailure: true,
             allowsDetachedSuggestions: false,
             allowsSyntheticCaretPlacement: true,
-            notes: "Proof-only virtual Claude Code profile. It may be used only when a supported terminal host is frontmost, Claude Code proof mode is active, the proof marker is present, and the current input line is not a shell command."
+            notes: "Proof-only virtual Claude Code profile. It may be used only when a supported terminal host is frontmost, Claude Code proof mode is active, the proof marker is present, and the current input line is not a shell command. It uses clipboard paste insertion so Terminal accepts one-word completion text without submitting the prompt."
         )
     }
 

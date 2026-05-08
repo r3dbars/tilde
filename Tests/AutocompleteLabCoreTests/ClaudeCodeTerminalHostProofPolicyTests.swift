@@ -145,7 +145,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(profile.supportsOneWordAcceptance)
         #expect(!profile.supportsFullAcceptance)
         #expect(profile.requiresNoSubmitAcceptanceProof)
-        #expect(profile.insertionMode == .keyEvents)
+        #expect(profile.insertionMode == .clipboardFallbackOptIn)
         #expect(profile.anchorLadder == [.caret])
         #expect(!profile.allowsDetachedSuggestions)
     }
