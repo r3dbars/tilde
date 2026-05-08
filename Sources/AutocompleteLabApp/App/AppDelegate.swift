@@ -3267,6 +3267,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     reason: .missingAnchor
                 )
             }
+            let commandFallbackDecision = CommandFallbackPolicy().decision(
+                supportStatus: .supported(profile),
+                isEnabled: true,
+                fieldKind: request.fieldKind,
+                allowsLowConfidencePlacement: suppression.reason == .lowConfidencePlacement ? false : nil
+            )
+            let commandFallbackMetadata = [
+                "commandFallback": commandFallbackDecision.availability.rawValue,
+                "commandFallbackReason": commandFallbackDecision.reason.rawValue
+            ]
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
                 suggestionID: suggestionID,
@@ -3282,6 +3292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: traceGeometryMetadata(context: context, renderMode: learningAdjustment.effectiveRenderMode)
                     .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                     .merging(learningAdjustment.metadata) { current, _ in current }
+                    .merging(commandFallbackMetadata) { current, _ in current }
                     .merging(suppression.metadata) { current, _ in current }
             )
             recordSuggestionEvent(
@@ -3293,11 +3304,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
                 .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                 .merging(learningAdjustment.metadata) { current, _ in current }
+                .merging(commandFallbackMetadata) { current, _ in current }
                 .merging(suppression.metadata) { current, _ in current }
             )
             let placementMetadata = traceGeometryMetadata(context: context, renderMode: learningAdjustment.effectiveRenderMode)
                 .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                 .merging(learningAdjustment.metadata) { current, _ in current }
+                .merging(commandFallbackMetadata) { current, _ in current }
                 .merging(suppression.metadata) { current, _ in current }
             recordPlacementUncertainty(
                 suggestionID: suggestionID,
@@ -3308,6 +3321,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 reason: suppression.reason.rawValue,
                 metadata: placementMetadata
             )
+            let fallbackSuffix = commandFallbackDecision.canCopyOnly ? "; copy-only fallback available" : ""
+            setSuggestionDecision("Blocked: placement \(suppression.reason.rawValue)\(fallbackSuffix)")
             hideSuggestion(reason: "placement-\(suppression.reason.rawValue)")
             return
         }
@@ -4622,6 +4637,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             control,
             permission,
             appStatus,
+            appControlState?.fallbackText ?? "",
             lastSuggestionDecision,
             statusLine,
             fieldControlState.statusText
@@ -4635,6 +4651,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         silenceFieldMenuItem?.toolTip = fieldControlState.detailText
         toggleAppMenuItem?.title = appControlState?.menuToggleTitle ?? "Toggle Current App"
         toggleAppMenuItem?.isEnabled = appControlState?.canToggle ?? false
+        toggleAppMenuItem?.toolTip = appControlState?.fallbackText
         if settingsWindow.isShowing {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,

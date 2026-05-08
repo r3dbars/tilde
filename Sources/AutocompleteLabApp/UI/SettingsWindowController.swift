@@ -125,6 +125,14 @@ struct SettingsCurrentAppState: Equatable {
         }
     }
 
+    var fallbackText: String {
+        CommandFallbackPolicy().decision(
+            supportStatus: supportStatus,
+            isEnabled: isEnabled,
+            hasCurrentApp: bundleIdentifier != nil
+        ).statusText
+    }
+
     var toggleTitle: String {
         canToggle ? "Allow suggestions in this app" : "Suggestions unavailable in this app"
     }
@@ -430,6 +438,7 @@ final class SettingsWindowController: NSObject {
     private let currentAppDetailLabel = NSTextField(labelWithString: "")
     private let currentAppModeLabel = NSTextField(labelWithString: "")
     private let currentAppAcceptanceLabel = NSTextField(labelWithString: "")
+    private let currentAppFallbackLabel = NSTextField(labelWithString: "")
     private let currentAppProofLabel = NSTextField(labelWithString: "")
     private let currentAppProofCommandLabel = NSTextField(labelWithString: "")
     private let disabledAppsLabel = NSTextField(labelWithString: "")
@@ -631,6 +640,7 @@ final class SettingsWindowController: NSObject {
         currentAppDetailLabel.stringValue = currentApp.detailText
         currentAppModeLabel.stringValue = currentApp.modeText
         currentAppAcceptanceLabel.stringValue = currentApp.acceptanceText
+        currentAppFallbackLabel.stringValue = currentApp.fallbackText
         currentAppProofLabel.stringValue = currentApp.proofText
         currentAppProofCommandLabel.stringValue = currentApp.proofCommandText ?? ""
         currentAppProofCommandLabel.isHidden = currentApp.proofCommandText == nil
@@ -702,6 +712,7 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(currentAppDetailLabel)
         configureSecondaryLabel(currentAppModeLabel)
         configureSecondaryLabel(currentAppAcceptanceLabel)
+        configureSecondaryLabel(currentAppFallbackLabel)
         configureSecondaryLabel(currentAppProofLabel)
         configureSecondaryLabel(currentAppProofCommandLabel)
         configureSecondaryLabel(disabledAppsLabel)
@@ -819,6 +830,7 @@ final class SettingsWindowController: NSObject {
                     currentAppDetailLabel,
                     currentAppModeLabel,
                     currentAppAcceptanceLabel,
+                    currentAppFallbackLabel,
                     currentAppProofLabel,
                     currentAppProofCommandLabel,
                     makeButtonRow([forceMirrorModeButton, startAppProofButton, copyProofCommandButton]),
