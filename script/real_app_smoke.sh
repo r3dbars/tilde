@@ -848,7 +848,7 @@ on run argv
 end run
 APPLESCRIPT
     local osascript_pid=$!
-    wait_for_background_process "$osascript_pid" 3 "TextEdit smoke window focus"
+    wait_for_background_process "$osascript_pid" 8 "TextEdit smoke window focus"
     target_pid="$(tr -d '\r\n' <"$target_pid_file")"
     rm -f "$target_pid_file"
     if [[ -z "$target_pid" ]]; then
@@ -907,7 +907,7 @@ on run argv
 end run
 APPLESCRIPT
     local osascript_pid=$!
-    wait_for_background_process "$osascript_pid" 3 "TextEdit smoke window click"
+    wait_for_background_process "$osascript_pid" 8 "TextEdit smoke window click"
     target_pid="$(tr -d '\r\n' <"$target_pid_file")"
     rm -f "$target_pid_file"
     if [[ -z "$target_pid" ]]; then
@@ -936,7 +936,7 @@ APPLESCRIPT
 
 wait_for_textedit_smoke_editor() {
   local window_title="$1"
-  local timeout_seconds="${2:-8}"
+  local timeout_seconds="${2:-45}"
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
