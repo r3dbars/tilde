@@ -724,6 +724,22 @@ guard CommandLine.arguments.count == 2,
 
 app.activate(options: [.activateAllWindows])
 SWIFT
+
+  osascript - "$target_pid" <<'APPLESCRIPT' >/dev/null 2>&1 || true
+on run argv
+  set targetPID to (item 1 of argv) as integer
+  tell application "System Events"
+    repeat with procRef in application processes
+      try
+        if unix id of procRef is targetPID then
+          set frontmost of procRef to true
+          return
+        end if
+      end try
+    end repeat
+  end tell
+end run
+APPLESCRIPT
 }
 
 assert_frontmost_app() {
