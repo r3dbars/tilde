@@ -121,6 +121,34 @@ struct TextContextRepairPolicyTests {
         #expect(result.reason == .obsidianCodeMirrorTrailingCharacter)
     }
 
+    @Test("Repairs Chrome CodeMirror trailing character cursor drift only for CodeMirror fingerprints")
+    func repairsChromeCodeMirrorTrailingCharacter() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof feels dict",
+            textAfterCursor: "a",
+            selectedTextLength: 0,
+            fingerprintText: "Try CodeMirror"
+        ))
+
+        #expect(result.textBeforeCursor == "Smoke proof feels dicta")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .chromeCodeMirrorTrailingCharacter)
+
+        let normalChrome = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof feels dict",
+            textAfterCursor: "a",
+            selectedTextLength: 0,
+            fingerprintText: "Regular textarea"
+        ))
+        #expect(!normalChrome.wasRepaired)
+    }
+
     @Test("Repairs Obsidian CodeMirror line drift at the visual line end")
     func repairsObsidianCodeMirrorLineDrift() {
         let policy = TextContextRepairPolicy()
