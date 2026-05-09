@@ -589,6 +589,15 @@ Time: 2026-05-09T00:36:00Z
 - Current-commit evidence: Notes checklist diagnostics lines 249341-249402 and trace lines 62761-62780; build `commit:025399a9c2fb`, app SHA `ae947470b6f56c0de02c0d95357eafe89c3a7e10d2e3f949a3e7e31e8fc98914`.
 - Honest gate status: `script/manual_smoke_status.sh --require-all` now fails with 29 target-app proof gaps because the source retry commit made the earlier Chrome/TextEdit/Notes title/body/Codex rows stale. The important behavior fix is proven in Notes checklist on the current commit, but the next loop needs to refresh the broad proof matrix again instead of counting old rows as current.
 
+2026-05-09T06:02Z heartbeat follow-up: refreshed the broad current-head proof matrix after the cooldown retry docs commit.
+
+- Current head: PR #35 branch `codex/predictive-word-fallback-ocr`, commit `986a50ed7042`, still open and clean.
+- Runs refreshed with `qwen3-0.6b`: Chrome `--fixture all`, Chrome `--fixture production-text-fields`, TextEdit, Notes title, Notes body, and Codex one-word no-submit.
+- Result: all refreshed rows passed with strict screenshot-backed visual evidence. Notes checklist remains passed through source-compatible current proof from the cooldown retry commit.
+- Current proof evidence: Chrome local fixtures use diagnostics lines 249426-249924 and trace lines 62785-62892; public Chrome text fields use diagnostics lines 249949-250101 and trace lines 62897-62931; TextEdit uses diagnostics lines 250161-250207 and trace lines 62941-62950; Notes title/body use diagnostics lines 250248-250359 and trace lines 62960-62988; Codex uses diagnostics lines 250383-250433 and trace lines 62993-63001.
+- Default Chrome real-editor AX retry: `monaco-real --chrome-accessibility default` and `prosemirror-real --chrome-accessibility default` both failed closed because normal Chrome exposed only browser chrome, not page editor content. Isolated forced-renderer Chrome proof remains green; broad default-Chrome editor support remains a real gap.
+- Gate movement: `script/manual_smoke_status.sh --require-all` now reports TextEdit, Notes title/body/checklist, local Chrome, public Chrome text fields, real Chrome Monaco/ProseMirror forced AX, Chrome chat-like, and Codex as passed. It still fails correctly with 15 proof gaps: Obsidian default/variants, default-Chrome real-editor AX lanes, Claude Code, and Claude desktop layout lanes.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
