@@ -1,6 +1,6 @@
 # Word Completion Quality Eval - 2026-05-09
 
-Score: 9.7/10
+Score: 9.6/10
 
 This deterministic report uses app-surface-shaped cases for TextEdit, Notes,
 Obsidian, and Chrome-like fields. It checks that word completion stays
@@ -13,8 +13,8 @@ one-word, quiet, and app-scoped while measuring miss behavior.
 | Chrome-like fields | 3/4 | 100% | 33% | 33% | 1/1 | 1/1 | 1/1 |
 | Notes | 3/4 | 100% | 0% | 0% | 0/0 | 0/0 | 1/1 |
 | Obsidian | 3/4 | 100% | 0% | 0% | 0/0 | 0/0 | 1/1 |
-| TextEdit | 3/4 | 100% | 0% | 0% | 0/0 | 0/0 | 1/1 |
-| Total | 12/16 | 100% | 8% | 8% | 1/1 | 1/1 | 4/4 |
+| TextEdit | 2/4 | 100% | 0% | 0% | 0/0 | 0/0 | 1/1 |
+| Total | 11/16 | 100% | 9% | 9% | 1/1 | 1/1 | 4/4 |
 
 ## Case Evidence
 
@@ -39,5 +39,5 @@ one-word, quiet, and app-scoped while measuring miss behavior.
 
 ## Decision
 
-Word completion reaches 9.7/10 in this harness. The remaining gap to 10/10 is
+Word completion reaches 9.6/10 in this harness. The remaining gap to 10/10 is
 live dogfood volume, not a need to make completions louder.
