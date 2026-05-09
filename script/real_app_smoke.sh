@@ -5884,12 +5884,7 @@ SWIFT
 ensure_notes_title_smoke_note() {
   open -a Notes
   wait_for_frontmost_app "Notes" 8
-  osascript <<'APPLESCRIPT'
-tell application "System Events"
-  keystroke "n" using command down
-end tell
-delay 0.4
-APPLESCRIPT
+  create_notes_smoke_note
   assert_notes_title_smoke_target
 }
 
@@ -5898,12 +5893,7 @@ ensure_notes_checklist_smoke_note() {
 
   open -a Notes
   wait_for_frontmost_app "Notes" 8
-  osascript <<'APPLESCRIPT'
-tell application "System Events"
-  keystroke "n" using command down
-end tell
-delay 0.4
-APPLESCRIPT
+  create_notes_smoke_note
   type_notes_raw_smoke_text "$smoke_title"$'\n'
   osascript <<'APPLESCRIPT'
 tell application "System Events"
@@ -5924,14 +5914,22 @@ ensure_notes_body_smoke_note() {
 
   open -a Notes
   wait_for_frontmost_app "Notes" 8
-  osascript <<'APPLESCRIPT'
-tell application "System Events"
-  keystroke "n" using command down
-end tell
-delay 0.4
-APPLESCRIPT
+  create_notes_smoke_note
   type_notes_raw_smoke_text "$smoke_title"$'\n'"$smoke_marker"
   sleep 0.8
+}
+
+create_notes_smoke_note() {
+  osascript <<'APPLESCRIPT'
+tell application "Notes" to activate
+delay 0.2
+tell application "System Events"
+  tell process "Notes"
+    click menu item "New Note" of menu "File" of menu bar item "File" of menu bar 1
+  end tell
+end tell
+delay 0.8
+APPLESCRIPT
 }
 
 type_notes_raw_smoke_text() {
