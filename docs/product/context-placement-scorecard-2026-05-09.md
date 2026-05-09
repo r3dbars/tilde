@@ -3,7 +3,7 @@
 Placement-only scorecard for Autocomplete Lab. This does not grade model
 quality, speed, copy quality, onboarding, design polish, or usefulness.
 
-Base commit checked: `e8d8fdc9`. Branch: `codex/context-placement-scorecard-9361`.
+Latest gate commit checked: `92daf36e`. Branch: `codex/context-placement-scorecard-9361`.
 Display state on this Mac during the latest pass: `NSScreen.screens` reported
 one active display. Secondary-display placement is therefore not counted for
 surfaces refreshed after this note unless a later row says a second display was
@@ -21,7 +21,9 @@ Commands run in this pass:
 ./script/check_proof_manifest.sh --require-all
 ./script/check_prompt_app_proof.sh
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh obsidian --manual-gate
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh codex --manual-gate --skip-build
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh obsidian-theme --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh obsidian-pane --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh obsidian-long-note --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit-light
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit-dark
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit-long-wrap
@@ -31,14 +33,14 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit-scrolled
 
 Results:
 
-- `check_score_targets.sh`: failed with 60 issues. The main blockers were real-app variants, prompt proof, Chrome editor production proof, and strict proof gates.
-- `scorecard_goal_loop.sh --iterations 10`: failed after 10 loops. It reported 14 manual smoke proof gaps.
-- `manual_smoke_status.sh --strict`: failed. TextEdit, Notes title/body/checklist, Chrome textarea/contenteditable/public/editor/chat lanes passed; Obsidian, Codex, Claude Code, and Claude desktop lanes still need current proof.
-- `check_visual_placement_evidence.sh --require-all`: passed with 16 screenshot files.
-- `check_proof_manifest.sh --require-all`: failed with 13 manifest/proof gaps after the Chrome public text-field schema fix.
-- `check_prompt_app_proof.sh`: failed because the full trace contains 2 Codex `wrongContextInsertionCount` guard events.
-- Obsidian default live refresh: failed with `Could not read the focused Obsidian editor.`
-- Codex live refresh: failed safely with `Could not find a safe disposable Codex composer.`
+- `check_score_targets.sh`: failed with 58 issues. The main blockers are real-app variants, prompt proof, Chrome editor production proof, stale aggregate score docs, and strict proof gates.
+- `scorecard_goal_loop.sh --iterations 10`: failed after 10 loops. Final output still showed manual smoke, proof manifest, and prompt-app proof gaps.
+- `manual_smoke_status.sh --strict`: failed. TextEdit, Notes title/body/checklist, Obsidian default/theme/pane, Chrome textarea/contenteditable/public/editor/chat lanes passed. Obsidian long note is pending; Codex is stale; Claude Code and Claude desktop layout lanes are pending.
+- `check_visual_placement_evidence.sh --require-all`: passed with 22 screenshot files.
+- `check_proof_manifest.sh --require-all`: failed with 11 manifest/proof gaps: production Monaco/ProseMirror proof, real browser chat no-submit proof, Obsidian long note, Notes variants/undo, Claude Code host variants, and Claude desktop layouts/full-accept no-submit.
+- `check_prompt_app_proof.sh`: failed because the full trace contains 2 historical Codex `wrongContextInsertionCount` guard events at trace lines 57041 and 60795. Submit, send-key collision, prompt mutation, and unsafe content counts were 0.
+- Obsidian default/theme/pane refresh: passed at 2026-05-09T12:53Z with strict visual rows and two verified accepts each.
+- Obsidian long-note refresh: failed honestly. The first scrolled suggestion and Tab insertion verified, but after appending the second suffix, CodeMirror AX reported `beforeChars=1011` and `afterChars=21`; the app blocked with `reason=middleOfLine` and no row was recorded.
 - Chrome CodeMirror official live refresh: passed at 2026-05-09T12:02:35Z with 2 verified accepts, strict visual trace evidence, and screenshot `chrome-codemirror-official.png`.
 - Chrome Monaco official and ProseMirror official live refreshes: failed closed because this Chrome profile still rejects JavaScript from Apple Events and AX could not find a verified official editor target on those pages.
 - TextEdit variant refresh: light, dark, wrapped line, narrow window, and scrolled document all passed with 2 verified accepts each and strict screenshot trace evidence. During this pass, only one display was available.
@@ -97,7 +99,11 @@ They cannot reach 100 without real app-specific no-suggestion proof.
 ## Stop Condition
 
 This run cannot honestly close the goal at 100/100. The blockers are real:
-manual-gated app setup is missing for Obsidian variants, Claude layouts, and
-Claude Code host variants; Warp is not installed; the Codex helper refused to
-touch a non-disposable composer; and broad secure/private-field suppression does
-not yet have screenshot-backed app-specific proof.
+Obsidian long-note proof still has a real caret/context mismatch after the
+first verified scrolled accept; Claude desktop layouts and Claude Code host
+variants are still missing current no-submit/no-execute proof; Warp is not
+installed; the Codex helper refused to touch a non-disposable composer while the
+trace still contains 2 historical wrong-context guard events; Chrome Monaco and
+ProseMirror official/default production lanes remain incomplete; and broad
+secure/private-field suppression does not yet have screenshot-backed
+app-specific proof.
