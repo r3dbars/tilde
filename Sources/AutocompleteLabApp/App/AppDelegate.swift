@@ -226,6 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var pendingAcceptedInsertionUndo: AcceptedInsertionUndo?
     private var acceptedInsertionUndoExpirationTask: Task<Void, Never>?
+    private let acceptedInsertionUndoRecoveryMode = AcceptedInsertionUndoRecoveryMode.fromEnvironment()
     private var lastStatusLine: String?
     private var lastSuggestionDecision = "Starting"
     private var lastSyntheticCaretDiagnosticSignature: String?
@@ -2628,7 +2629,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             armAcceptedInsertionUndo(
                 acceptedText: acceptedText,
                 acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt
+                acceptedAt: acceptedAt,
+                acceptMode: action.diagnosticName
             )
             suggestionSession.commitNextWordAcceptance(acceptedText, keepsResidual: false)
             recordAcceptedText(acceptedText)
@@ -2693,7 +2695,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             armAcceptedInsertionUndo(
                 acceptedText: acceptedText,
                 acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt
+                acceptedAt: acceptedAt,
+                acceptMode: action.diagnosticName
             )
             suggestionSession.commitAllVisibleAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
@@ -3088,6 +3091,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func acceptedInsertionUndoIsActive(now: Date = Date()) -> Bool {
+        guard acceptedInsertionUndoRecoveryMode == .appRollback else {
+            return false
+        }
+
         guard let pendingAcceptedInsertionUndo else {
             return false
         }
@@ -3098,7 +3105,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func armAcceptedInsertionUndo(
         acceptedText: String,
         acceptanceID: String,
-        acceptedAt: Date
+        acceptedAt: Date,
+        acceptMode: String
     ) {
         guard let currentFieldIdentity,
               let lastTextSnapshot,
@@ -3116,6 +3124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: lastTextSnapshot.textBeforeCursor,
             textAfterCursor: lastTextSnapshot.textAfterCursor,
             acceptedTextLength: acceptedText.count,
+            acceptMode: acceptMode,
             acceptedAt: acceptedAt,
             expiresAt: expiresAt
         )
@@ -3125,6 +3134,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "acceptanceID": acceptanceID,
                 "app": appBundleIdentifier,
                 "fieldIdentity": currentFieldIdentity.traceDescription,
+                "acceptMode": acceptMode,
+                "undoMechanism": acceptedInsertionUndoRecoveryMode.traceMechanism.rawValue,
+                "nativeUndoProofMode": String(acceptedInsertionUndoRecoveryMode == .nativeProofOnly),
+                "appRollbackEnabled": String(acceptedInsertionUndoRecoveryMode == .appRollback),
                 "acceptedTextLength": String(acceptedText.count),
                 "previousBeforeLength": String(lastTextSnapshot.textBeforeCursor.count),
                 "previousAfterLength": String(lastTextSnapshot.textAfterCursor.count),
@@ -3163,7 +3176,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "accepted-insertion-undo-cleared",
             metadata: [
                 "acceptanceID": pendingAcceptedInsertionUndo.acceptanceID,
-                "reason": reason
+                "reason": reason,
+                "acceptMode": pendingAcceptedInsertionUndo.acceptMode,
+                "undoMechanism": acceptedInsertionUndoRecoveryMode.traceMechanism.rawValue
             ]
         )
         updateKeyboardEventTapSnapshot()
@@ -3233,6 +3248,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "acceptanceID": undo.acceptanceID,
                 "app": undo.appBundleIdentifier,
                 "fieldIdentity": undo.fieldIdentity.traceDescription,
+                "acceptMode": undo.acceptMode,
+                "undoMechanism": acceptedInsertionUndoRecoveryMode.traceMechanism.rawValue,
+                "sameSliceUndoProof": "true",
+                "restoredOriginalTarget": "true",
+                "acceptedTextLength": String(undo.acceptedTextLength),
+                "restoredTextLength": String(restoredText.count)
+            ]
+        )
+        RawAutocompleteTraceLog.shared.record(
+            type: .acceptedInsertionUndone,
+            suggestionID: "",
+            appBundleIdentifier: undo.appBundleIdentifier,
+            fieldIdentity: undo.fieldIdentity.traceDescription,
+            outcome: undo.acceptMode,
+            reason: "accepted-insertion-undone",
+            metadata: [
+                "acceptanceID": undo.acceptanceID,
+                "acceptMode": undo.acceptMode,
+                "undoMechanism": acceptedInsertionUndoRecoveryMode.traceMechanism.rawValue,
+                "sameSliceUndoProof": "true",
+                "restoredOriginalTarget": "true",
                 "acceptedTextLength": String(undo.acceptedTextLength),
                 "restoredTextLength": String(restoredText.count)
             ]
@@ -3267,6 +3303,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "acceptanceID": tracker.acceptanceID,
                     "acceptMode": tracker.acceptMode,
+                    "undoMechanism": self.acceptedInsertionUndoRecoveryMode.traceMechanism.rawValue,
+                    "sameSliceUndoProof": "true",
+                    "restoredOriginalTarget": "true",
                     "fieldKind": tracker.fieldKind.rawValue,
                     "fieldKindReason": tracker.fieldKindReason,
                     "behaviorProfile": tracker.behaviorProfileID.rawValue,
@@ -3461,7 +3500,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "result": String(describing: result),
                         "acceptedChars": String(acceptedText.count),
                         "retryCount": String(baseline.retryCount)
-                    ]
+                    ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
                 )
                 RawAutocompleteTraceLog.shared.record(
                     type: .insertionFailed,
@@ -3482,7 +3521,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "currentBeforeChars": String(context.textBeforeCursor.count),
                         "previousAfterChars": String(baseline.previousTextAfterCursor.count),
                         "currentAfterChars": String(context.textAfterCursor.count)
-                    ]
+                    ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
                 )
                 recordAnnoyanceSignal(
                     .wrongInsertion,
@@ -3576,7 +3615,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                 "previousAfterChars": String(baseline.previousTextAfterCursor.count),
                 "retryCount": String(baseline.retryCount)
-            ]
+            ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
         )
         RawAutocompleteTraceLog.shared.record(
             type: .insertionFailed,
@@ -3596,7 +3635,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                 "previousAfterChars": String(baseline.previousTextAfterCursor.count),
                 "retryCount": String(baseline.retryCount)
-            ]
+            ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
         )
         recordAnnoyanceSignal(
             .wrongInsertion,
@@ -4207,6 +4246,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                     "previousAfterChars": String(baseline.previousTextAfterCursor.count)
                 ]) { current, _ in current }
+                .merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
         )
     }
 
@@ -4230,6 +4270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         metadata["acceptedChars"] = String(acceptedText.count)
         metadata["retryCount"] = String(baseline.retryCount)
         metadata["result"] = reason.rawValue
+        metadata.merge(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
 
         DiagnosticsLog.shared.record(
             "insert-verification-final-failure",
@@ -4288,6 +4329,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return metadata
+    }
+
+    private func insertionFailureRecoverabilityMetadata(
+        baseline: InsertionVerificationBaseline
+    ) -> [String: String] {
+        let rollbackAvailable = pendingAcceptedInsertionUndo?.acceptanceID == baseline.acceptanceID
+            && acceptedInsertionUndoIsActive()
+        return InsertionUndoRecoverabilityModel().failureMetadata(
+            profile: baseline.profile,
+            acceptMode: baseline.acceptMode,
+            rollbackAvailable: rollbackAvailable,
+            rollbackMechanism: rollbackAvailable
+                ? acceptedInsertionUndoRecoveryMode.traceMechanism
+                : nil
+        )
     }
 
     private func scheduleSuggestion(
@@ -8675,8 +8731,34 @@ private struct AcceptedInsertionUndo: Equatable {
     let textBeforeCursor: String
     let textAfterCursor: String
     let acceptedTextLength: Int
+    let acceptMode: String
     let acceptedAt: Date
     let expiresAt: Date
+}
+
+private enum AcceptedInsertionUndoRecoveryMode: Equatable {
+    case appRollback
+    case nativeProofOnly
+
+    var traceMechanism: InsertionUndoRecoverabilityLevel {
+        switch self {
+        case .appRollback:
+            .appRollback
+        case .nativeProofOnly:
+            .nativeSingleEdit
+        }
+    }
+
+    static func fromEnvironment(
+        _ environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> AcceptedInsertionUndoRecoveryMode {
+        switch environment["AUTOCOMPLETE_LAB_ACCEPTED_INSERTION_UNDO_RECOVERY"]?.lowercased() {
+        case "native", "nativeonly", "native-proof", "nativeproofonly", "native-pass-through":
+            .nativeProofOnly
+        default:
+            .appRollback
+        }
+    }
 }
 
 private struct FieldControlTarget: Equatable {
