@@ -50,6 +50,7 @@ struct AutocompleteTraceReportGeneratorTests {
 
         #expect(html.contains("Autocomplete Lab Redacted Trace Report"))
         #expect(html.contains("Do-not-ship blockers"))
+        #expect(html.contains("Sensitive-field silence"))
         #expect(html.contains("RAM-only retention proof"))
         #expect(html.contains("Privacy checklist"))
         #expect(html.contains("Share only this redacted report for normal beta feedback."))
@@ -192,6 +193,17 @@ struct AutocompleteTraceReportGeneratorTests {
                 metadata: [
                     "doNotShip": "true",
                     "severe": "true"
+                ]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "sensitive",
+                reason: "sensitive-field",
+                metadata: [
+                    "sensitiveSuppressionCategory": "password",
+                    "sensitiveSuppressionProof": "boundedNative",
+                    "sensitiveSuppressionDecision": "blocked",
+                    "fieldKind": "secure"
                 ]
             )
         ]

@@ -60,7 +60,13 @@ struct RawTraceReportExportTests {
                     textAfterCursor: "private-after",
                     displayedText: "private-model-output",
                     screenshotPath: "/tmp/private-screenshot.png",
-                    metadata: ["fieldKind": "multilineCompose"]
+                    metadata: [
+                        "documentTitle": "private document title",
+                        "fieldKind": "multilineCompose",
+                        "recipientEmail": "private-recipient@example.com",
+                        "subjectLine": "private subject line",
+                        "visibleURL": "https://private.example/draft"
+                    ]
                 ),
                 event(
                     .suggestionAccepted,
@@ -105,6 +111,10 @@ struct RawTraceReportExportTests {
         #expect(!html.contains("private-model-output"))
         #expect(!html.contains("private-accepted"))
         #expect(!html.contains("/tmp/private-screenshot.png"))
+        #expect(!html.contains("private document title"))
+        #expect(!html.contains("private-recipient@example.com"))
+        #expect(!html.contains("private subject line"))
+        #expect(!html.contains("https://private.example/draft"))
 
         #expect(survivalEvents.map(\.type).contains(.suggestionAccepted))
         #expect(survivalEvents.map(\.type).contains(.acceptanceRetentionCleared))
