@@ -47,7 +47,9 @@ unregister_stale_app_bundles() {
   while IFS= read -r bundle; do
     [[ -z "$bundle" || "$bundle" == "$APP_BUNDLE" ]] && continue
     "$LSREGISTER" -u "$bundle" >/dev/null 2>&1 || true
-  done < <(stale_app_bundles)
+  done < <(stale_app_bundles) || true
+
+  return 0
 }
 
 quarantine_stale_app_bundles() {
@@ -63,7 +65,9 @@ quarantine_stale_app_bundles() {
     fi
     disabled="${bundle}.disabled-${timestamp}-$$"
     mv "$bundle" "$disabled" >/dev/null 2>&1 || true
-  done < <(stale_app_bundles)
+  done < <(stale_app_bundles) || true
+
+  return 0
 }
 
 stop_running_apps() {
