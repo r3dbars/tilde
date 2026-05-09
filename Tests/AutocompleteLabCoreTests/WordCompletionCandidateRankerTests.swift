@@ -74,6 +74,41 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "hey tryin")?.visibleText == "g")
     }
 
+    @Test("Predictive fallback can suggest the next word before a prefix is typed")
+    func predictiveFallbackSuggestsNextWord() {
+        let ranker = WordCompletionCandidateRanker()
+
+        #expect(ranker.suggestion(for: "Smoke proof feels") == nil)
+        #expect(
+            ranker.suggestion(
+                for: "Smoke proof feels",
+                allowPredictiveFallback: true
+            )?.visibleText == " instant"
+        )
+        #expect(
+            ranker.suggestion(
+                for: "and stays",
+                allowPredictiveFallback: true
+            )?.visibleText == " instant"
+        )
+    }
+
+    @Test("Predictive fallback records trace-safe source metadata")
+    func predictiveFallbackMetadata() {
+        let ranker = WordCompletionCandidateRanker()
+
+        let selection = ranker.selection(
+            for: "Smoke proof feels",
+            allowPredictiveFallback: true
+        )
+
+        #expect(selection.suggestion?.visibleText == " instant")
+        #expect(selection.candidateCount == 1)
+        #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-word-fallback")
+        #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        #expect(selection.traceMetadata.values.contains("feels") == false)
+    }
+
     @Test("suppresses low value static suffixes")
     func suppressesLowValueStaticSuffixes() {
         let ranker = WordCompletionCandidateRanker()

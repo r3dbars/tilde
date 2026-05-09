@@ -24,6 +24,9 @@ Default diagnostics are local and redacted. They can include app bundle IDs,
 field kind, render mode, insertion mode, request mode, timing, counters,
 failure labels, and text lengths.
 
+The field-by-field beta checklist is in
+[docs/product/beta-privacy-data-checklist.md](docs/product/beta-privacy-data-checklist.md).
+
 ## What Is Never Uploaded By Default
 
 The beta build must not upload typed text, nearby context, screenshots, window
@@ -56,3 +59,24 @@ See [UNINSTALL-DELETE-DATA.md](UNINSTALL-DELETE-DATA.md) for full removal.
 Current Swift package dependencies include MLX and Hugging Face libraries for
 local model loading. The app must not add analytics or crash SDKs without
 updating this document and keeping any remote reporting opt-in.
+
+Current dependency/SDK proof is in
+[docs/product/dependency-sdk-data-inventory.md](docs/product/dependency-sdk-data-inventory.md).
+Verify it against the current app build with:
+
+```bash
+./script/check_dependency_inventory.sh
+```
+
+## Current Build Export Proof
+
+The app binary can prove the default export path without using real tester
+text:
+
+```bash
+./script/check_current_build_privacy_export.sh
+```
+
+That command builds the current app bundle if needed, runs the app binary in
+proof mode, creates synthetic private sentinels, exports the redacted privacy
+bundle, and fails if any sentinel appears in the shareable files.

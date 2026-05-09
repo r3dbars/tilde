@@ -8,6 +8,8 @@ ZIP_PATH="$DIST_DIR/AutocompleteLab.zip"
 DMG_PATH="$DIST_DIR/AutocompleteLab.dmg"
 PROOF_DIR="$DIST_DIR/release-proof"
 CHECKSUM_PATH="$PROOF_DIR/checksums.txt"
+NOTARY_BLOCKER_PATH="$PROOF_DIR/notarization-blocker.txt"
+FRESH_INSTALL_PROOF_PATH="$PROOF_DIR/fresh-install-gatekeeper-proof.md"
 BUNDLE_ID="bar.r3d.autocomplete-lab"
 MODE="archive"
 REQUIRE_NOTARY_PROFILE=0
@@ -113,6 +115,8 @@ print_proof_template() {
 - installed app assessment: dist/release-proof/spctl-installed-app.txt
 - notary submission: dist/release-proof/notarytool-submit.txt
 - stapler validation: dist/release-proof/stapler-validate.txt
+- fresh install / Gatekeeper / quarantine proof: dist/release-proof/fresh-install-gatekeeper-proof.md
+- notarization blocker, when present: dist/release-proof/notarization-blocker.txt
 
 ## Manual Proof Still Required
 
@@ -124,6 +128,68 @@ print_proof_template() {
 - Run uninstall/delete-data instructions.
 - Launch with network disconnected after stapling to prove offline trust.
 EOF
+}
+
+write_fresh_install_proof_instructions() {
+  mkdir -p "$PROOF_DIR"
+  cat >"$FRESH_INSTALL_PROOF_PATH" <<EOF
+# Fresh Install / Gatekeeper / Quarantine Proof
+
+Use this after \`dist/AutocompleteLab.dmg\` is notarized and stapled.
+
+## Automated Local Quarantine Check
+
+\`\`\`bash
+verify_dir="\$(mktemp -d)"
+mkdir -p "\$verify_dir/mount"
+xattr -w com.apple.quarantine "0081;\$(printf '%x' "\$(date +%s)");AutocompleteLab;$(uuidgen)" dist/AutocompleteLab.dmg
+hdiutil attach dist/AutocompleteLab.dmg -mountpoint "\$verify_dir/mount" -nobrowse -quiet
+cp -R "\$verify_dir/mount/AutocompleteLab.app" "\$verify_dir/AutocompleteLab.app"
+hdiutil detach "\$verify_dir/mount" -quiet
+spctl --assess --type execute --verbose=4 "\$verify_dir/AutocompleteLab.app" | tee dist/release-proof/spctl-installed-app.txt
+rm -rf "\$verify_dir"
+\`\`\`
+
+## Fresh Machine / VM Check
+
+1. Download or copy \`dist/AutocompleteLab.dmg\` onto a machine or VM that has not seen this exact build.
+2. Confirm the DMG has quarantine metadata:
+
+\`\`\`bash
+xattr -p com.apple.quarantine AutocompleteLab.dmg
+\`\`\`
+
+3. Open the DMG, drag \`AutocompleteLab.app\` to \`/Applications\`, and launch it.
+4. Confirm Gatekeeper does not warn that the app cannot be checked for malware.
+5. Grant Accessibility, verify one safe TextEdit suggestion, then deny Accessibility and verify safe degradation.
+6. Run:
+
+\`\`\`bash
+spctl --assess --type execute --verbose=4 /Applications/AutocompleteLab.app | tee dist/release-proof/spctl-installed-app.txt
+xcrun stapler validate dist/AutocompleteLab.dmg | tee dist/release-proof/stapler-validate.txt
+\`\`\`
+EOF
+}
+
+write_notary_blocker() {
+  mkdir -p "$PROOF_DIR"
+  cat >"$NOTARY_BLOCKER_PATH" <<EOF
+Notarization blocked: NOTARYTOOL_PROFILE is not set in this environment.
+
+The release archive exists locally, but private beta readiness must remain
+blocked until the DMG is submitted to Apple, stapled, and fresh-install
+Gatekeeper proof is saved.
+
+Set a stored notary profile and rerun:
+
+  export NOTARYTOOL_PROFILE=<profile-name>
+  ./script/package_release.sh --notarize
+  ./script/beta_readiness.sh --check-only
+EOF
+}
+
+clear_notary_blocker() {
+  rm -f "$NOTARY_BLOCKER_PATH"
 }
 
 write_proof_checklist() {
@@ -221,7 +287,11 @@ case "$MODE" in
 
     ./script/check_model_asset.py
 
+    release_scratch_path="${AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH:-$ROOT_DIR/.build-release}"
+    release_build_jobs="${AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS:-4}"
     AUTOCOMPLETE_LAB_BUILD_CONFIGURATION=release \
+      AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH="$release_scratch_path" \
+      AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS="$release_build_jobs" \
       SIGN_IDENTITY="$developer_id" \
       ./script/build_and_run.sh --bundle-only
 
@@ -239,6 +309,13 @@ case "$MODE" in
     create_dmg
     write_checksums
     write_proof_checklist "archive" "pending" "pending" "pending"
+    write_fresh_install_proof_instructions
+    if [[ -z "${NOTARYTOOL_PROFILE:-}" ]]; then
+      write_notary_blocker
+      echo "Notarization blocked: set NOTARYTOOL_PROFILE and run ./script/package_release.sh --notarize"
+    else
+      clear_notary_blocker
+    fi
     echo "Release archive created: $ZIP_PATH"
     echo "Preferred beta artifact created: $DMG_PATH"
     echo "Release proof checklist: $PROOF_DIR/release-proof-checklist.md"
@@ -279,6 +356,8 @@ case "$MODE" in
       spctl --assess --type execute --verbose=4 "$verify_dir/AutocompleteLab.app"
     write_checksums
     write_proof_checklist "notarized" "accepted" "validated" "accepted"
+    write_fresh_install_proof_instructions
+    clear_notary_blocker
     echo "Notarized preferred artifact verified: $DMG_PATH"
     echo "Secondary ZIP refreshed: $ZIP_PATH"
     ;;

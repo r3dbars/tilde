@@ -39,6 +39,40 @@ struct DiagnosticValueRedactorTests {
         )
     }
 
+    @Test("Diagnostics metadata redacts URL title recipient and subject keys")
+    func diagnosticsMetadataRedactsPrivacyDocKeys() {
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "visibleURL",
+                value: "https://private.example/draft"
+            ) == "String(29 chars)"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "documentTitle",
+                value: "private roadmap"
+            ) == "String(15 chars)"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "recipientEmail",
+                value: "person@example.com"
+            ) == "String(18 chars)"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "subjectLine",
+                value: "private subject"
+            ) == "String(15 chars)"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "screenshotPath",
+                value: "/tmp/private-screenshot.png"
+            ) == "String(27 chars)"
+        )
+    }
+
     @Test("Diagnostics metadata keeps shape keys and flattens whitespace")
     func diagnosticsMetadataKeepsShapeKeys() {
         #expect(

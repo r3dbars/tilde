@@ -64,10 +64,12 @@ This loop improves live non-annoyance behavior and proof:
 - TextEdit default now has a current archive-backed strict visual smoke row with two verified accepts in `docs/product/manual-smoke-runs.md`.
 - `real_app_smoke.sh` now scans large diagnostics slices without `tail | grep`/`pipefail` SIGPIPE exits and focuses Chrome fixtures by their AX text area instead of fixed toolbar-relative coordinates.
 - `AutocompleteFlowTests` now has an integrated typed-over rejection test that proves conflicting user typing is classified as typed-over and starts a same-field prefix cooldown.
+- `AutocompleteNonAnnoyanceReport` and `script/non_annoyance_report.py` now gate redacted trace metrics for shown/min, dismissals/shown, typed-over within 1s, accepted-then-deleted, immediate resurfacing, late suggestions hidden, pause/disable rates, and severe-signal suppression coverage.
+- Accepted-then-deleted now starts a long same-prefix cooldown using the privacy-safe prefix-family fingerprint, so a fast delete can quiet future similar suggestions instead of only lowering a score.
 
 ## Score
 
-Overall score: 88/100.
+Overall score: 90/100.
 
 ## Score Breakdown
 
@@ -92,10 +94,10 @@ Overall score: 88/100.
 ### Interruption load
 
 - Weight: 20
-- Current score: 17/20
-- Why this score: Trigger delays, typing-burst suppression, repeated-miss suppression, prefix-family cooldown, field/app/global quiet mode, pause, app disable, and local log deletion are present and traceable. The score is capped by missing human pause/resume baseline and incomplete live shown/min evidence across app surfaces.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Session/SuggestionTriggerPolicy.swift`, `Sources/AutocompleteLabCore/Session/SuggestionRepetitionSuppressor.swift`, `Sources/AutocompleteLabCore/Session/PrefixFamilyCooldownPolicy.swift`, `Sources/AutocompleteLabCore/Session/AnnoyanceSuppressor.swift`, `Sources/AutocompleteLabApp/App/AppDelegate.swift`, `script/check_trace_eval.sh`.
-- Missing evidence: Real dogfood trace showing 0.5-2.0 shown/min, explicit dismissals/shown <= 0.25, typed-over <= 0.35, and no pause/resume uplift.
+- Current score: 19/20
+- Why this score: Trigger delays, typing-burst suppression, repeated-miss suppression, prefix-family cooldown, field/app/global quiet mode, pause, app disable, local log deletion, and a dedicated redacted non-annoyance gate are present and traceable. The score is capped by missing human pause/resume baseline and incomplete live shown/min evidence across app surfaces.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Session/SuggestionTriggerPolicy.swift`, `Sources/AutocompleteLabCore/Session/SuggestionRepetitionSuppressor.swift`, `Sources/AutocompleteLabCore/Session/PrefixFamilyCooldownPolicy.swift`, `Sources/AutocompleteLabCore/Session/AnnoyanceSuppressor.swift`, `Sources/AutocompleteLabCore/Tracing/AutocompleteNonAnnoyanceReport.swift`, `Sources/AutocompleteLabApp/App/AppDelegate.swift`, `script/check_trace_eval.sh`, `script/non_annoyance_report.py`, `script/non_annoyance_report_self_test.sh`.
+- Missing evidence: Real dogfood trace showing 0.5-2.0 shown/min, explicit dismissals/shown <= 0.25, typed-over-within-1s <= 0.20, accepted-then-deleted <= 0.05, and no pause/resume uplift.
 - What would make it 100/100: A repeatable trace/proof loop that automatically backs off when annoyance rates cross red lines.
 
 ### Usefulness

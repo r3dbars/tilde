@@ -11,7 +11,6 @@ public struct DisplayScore: Equatable, Sendable {
     public let risk: Double
     public let repetition: Double
     public let instability: Double
-    public let learningRestraint: Double
     public let acceptedAndKeptProbability: Double?
     public let acceptedAndKeptSampleCount: Int
     public let acceptedAndKeptUtilityAdjustment: Double
@@ -24,7 +23,6 @@ public struct DisplayScore: Equatable, Sendable {
         risk: Double,
         repetition: Double,
         instability: Double,
-        learningRestraint: Double = 0,
         acceptedAndKeptProbability: Double? = nil,
         acceptedAndKeptSampleCount: Int = 0,
         acceptedAndKeptUtilityAdjustment: Double = 0
@@ -36,7 +34,6 @@ public struct DisplayScore: Equatable, Sendable {
         self.risk = Self.component(risk)
         self.repetition = Self.component(repetition)
         self.instability = Self.component(instability)
-        self.learningRestraint = Self.component(learningRestraint)
         self.acceptedAndKeptProbability = acceptedAndKeptProbability.map(Self.component)
         self.acceptedAndKeptSampleCount = max(0, acceptedAndKeptSampleCount)
         self.acceptedAndKeptUtilityAdjustment = Self.bounded(
@@ -46,7 +43,7 @@ public struct DisplayScore: Equatable, Sendable {
     }
 
     public var rawScore: Double {
-        utility + styleFit + contextFit + userAffinity - risk - repetition - instability - learningRestraint
+        utility + styleFit + contextFit + userAffinity - risk - repetition - instability
     }
 
     public var finalScore: Double {
@@ -62,7 +59,6 @@ public struct DisplayScore: Equatable, Sendable {
             "displayScoreRisk": Self.format(risk),
             "displayScoreRepetition": Self.format(repetition),
             "displayScoreInstability": Self.format(instability),
-            "displayScoreLearningRestraint": Self.format(learningRestraint),
             "displayScoreRaw": Self.format(rawScore),
             "displayScoreFinal": Self.format(finalScore)
         ]
