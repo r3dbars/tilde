@@ -2821,6 +2821,23 @@ guard isEditableWebTarget(focusedElement) else {
 }
 
 let initialValue = copyAttribute(focusedElement, kAXValueAttribute) as? String ?? ""
+func currentFocusedValue() -> String {
+    copyAttribute(focusedElement, kAXValueAttribute) as? String ?? ""
+}
+
+func waitForInsertedText() -> Bool {
+    for _ in 0..<30 {
+        let currentValue = currentFocusedValue()
+        if currentValue.contains(text)
+            && (currentValue.count >= initialValue.count + text.count || currentValue.count >= text.count) {
+            return true
+        }
+        usleep(100_000)
+    }
+
+    return false
+}
+
 guard let source = CGEventSource(stateID: .hidSystemState) else {
     fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): could not create a CGEvent source.\n", stderr)
     exit(1)
@@ -2832,32 +2849,55 @@ if let app = NSRunningApplication(processIdentifier: pid) {
 
 Thread.sleep(forTimeInterval: 0.1)
 
-for codeUnit in text.utf16 {
-    var unit = codeUnit
-    guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
-          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
-        fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): could not create text events.\n", stderr)
-        exit(1)
-    }
-
-    keyDown.keyboardSetUnicodeString(stringLength: 1, unicodeString: &unit)
-    keyUp.keyboardSetUnicodeString(stringLength: 1, unicodeString: &unit)
-    keyDown.postToPid(pid)
-    keyUp.postToPid(pid)
-    usleep(15_000)
+enum TextEventDestination {
+    case pid
+    case eventTap
 }
 
-for _ in 0..<30 {
-    let currentValue = copyAttribute(focusedElement, kAXValueAttribute) as? String ?? ""
-    if currentValue.contains(text)
-        && (currentValue.count >= initialValue.count + text.count || currentValue.count >= text.count) {
-        exit(0)
+func postTextEvents(destination: TextEventDestination) {
+    for codeUnit in text.utf16 {
+        var unit = codeUnit
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+            fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): could not create text events.\n", stderr)
+            exit(1)
+        }
+
+        keyDown.keyboardSetUnicodeString(stringLength: 1, unicodeString: &unit)
+        keyUp.keyboardSetUnicodeString(stringLength: 1, unicodeString: &unit)
+        switch destination {
+        case .pid:
+            keyDown.postToPid(pid)
+            keyUp.postToPid(pid)
+        case .eventTap:
+            keyDown.post(tap: .cghidEventTap)
+            keyUp.post(tap: .cghidEventTap)
+        }
+        usleep(15_000)
     }
-    usleep(100_000)
 }
 
-let finalValue = copyAttribute(focusedElement, kAXValueAttribute) as? String ?? ""
-fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): targeted text events did not update the focused Chrome editor (beforeChars=\(initialValue.count), afterChars=\(finalValue.count)).\n", stderr)
+postTextEvents(destination: .pid)
+if waitForInsertedText() {
+    exit(0)
+}
+
+let selectedTextResult = AXUIElementSetAttributeValue(
+    focusedElement,
+    kAXSelectedTextAttribute as CFString,
+    text as CFTypeRef
+)
+if selectedTextResult == .success && waitForInsertedText() {
+    exit(0)
+}
+
+postTextEvents(destination: .eventTap)
+if waitForInsertedText() {
+    exit(0)
+}
+
+let finalValue = currentFocusedValue()
+fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): targeted text events, AX selected-text fallback, and foreground text events did not update the focused Chrome editor (beforeChars=\(initialValue.count), afterChars=\(finalValue.count), selectedTextResult=\(selectedTextResult.rawValue)).\n", stderr)
 exit(1)
 SWIFT
 }
@@ -2910,6 +2950,29 @@ print(copyAttribute(focusedElement, kAXValueAttribute) as? String ?? "")
 SWIFT
 }
 
+wait_for_chrome_focused_text_contains() {
+  local fixture="$1"
+  local chrome_pid="$2"
+  local expected_fragment="$3"
+  local label="$4"
+  local timeout_seconds="${5:-8}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    local current_text
+    current_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"
+    if [[ "$current_text" == *"$expected_fragment"* ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for Chrome setup text during $label." >&2
+  echo "Expected fragment: $expected_fragment" >&2
+  echo "Actual: $(chrome_focused_editor_text "$fixture" "$chrome_pid")" >&2
+  exit 1
+}
+
 wait_for_chrome_focused_text_exact() {
   local fixture="$1"
   local chrome_pid="$2"
@@ -2952,6 +3015,25 @@ APPLESCRIPT
   record_native_undo_proof "com.google.Chrome" "$acceptance_id" "$accept_mode" "$label"
 }
 
+escape_applescript_string() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '%s' "$value"
+}
+
+type_chrome_smoke_text_with_system_events() {
+  local text="$1"
+  local escaped_text
+  escaped_text="$(escape_applescript_string "$text")"
+
+  osascript <<APPLESCRIPT
+tell application "System Events"
+  keystroke "$escaped_text"
+end tell
+APPLESCRIPT
+}
+
 assert_chrome_ready_for_input() {
   local fixture="$1"
   local chrome_pid="$2"
@@ -2960,6 +3042,7 @@ assert_chrome_ready_for_input() {
 
   if [[ -n "$chrome_pid" ]]; then
     assert_frontmost_process_id "$chrome_pid" "Chrome $fixture $label"
+    assert_chrome_expected_tab "$fixture" "$expected_url" "$label"
     assert_chrome_focused_editable_ax "$fixture" "$chrome_pid" "$label"
     return 0
   fi
@@ -3284,7 +3367,15 @@ type_chrome_smoke_text() {
   local text="$5"
 
   assert_chrome_ready_for_input "$fixture" "$chrome_pid" "$expected_url" "$label"
-  insert_chrome_smoke_text_with_ax "$fixture" "$chrome_pid" "$label" "$text"
+  if insert_chrome_smoke_text_with_ax "$fixture" "$chrome_pid" "$label" "$text"; then
+    return 0
+  fi
+
+  focus_chrome_smoke_editor "$fixture" "$chrome_pid"
+  sleep 0.2
+  assert_chrome_ready_for_input "$fixture" "$chrome_pid" "$expected_url" "$label"
+  type_chrome_smoke_text_with_system_events "$text"
+  wait_for_chrome_focused_text_contains "$fixture" "$chrome_pid" "$text" "$label" 8
 }
 
 chrome_fixture_html() {
@@ -3891,7 +3982,7 @@ describe_plan() {
       fi
       echo "Safety: the smoke launch temporarily enables Chrome only for this proof pass."
       echo "Safety: before Chrome typing, the smoke requires Chrome to expose a focused editable web text target through Accessibility."
-      echo "Safety: Chrome setup text is sent to the Chrome process and verified through the focused AX editor, not global keystrokes."
+      echo "Safety: Chrome setup text first uses process-targeted events, then a guarded System Events fallback only after the disposable editor is rechecked as frontmost and editable."
       ;;
     notes)
       local notes_app notes_surface
@@ -4455,6 +4546,14 @@ run_chrome_fixture() {
   if chrome_fixture_uses_isolated_accessibility_chrome "$fixture"; then
     chrome_pid="$(launch_isolated_chrome_fixture "$chrome_url" "$tmp_dir")"
     sleep 2.2
+    osascript >/dev/null <<APPLESCRIPT
+tell application "Google Chrome"
+  activate
+  if not (exists window 1) then make new window
+  set URL of active tab of front window to "$chrome_url"
+end tell
+delay 1.2
+APPLESCRIPT
     focus_chrome_smoke_editor "$fixture" "$chrome_pid"
   else
     osascript >/dev/null <<APPLESCRIPT
