@@ -20,15 +20,14 @@ recorders, screenshot proof gates, and private beta packet scripts. This pass
 added preferred DMG packaging, a saved release-proof checklist, required beta
 docs, a structured feedback issue form, and a generated private beta packet. It
 also reconciled the default proof manifest with the scorecard so completed
-Notes and Obsidian screenshots are no longer treated as unreferenced. The
-privacy and ops passes add the missing dependency/SDK inventory, field-level
-data checklist, current-build redacted export proof, privacy-safe menu feedback
-path, triage labels, issue-template validation, daily tester checklist,
-redacted export flow, stop dashboard, and generated readiness summary artifact.
-The app is still not private-beta ready because the current checkout has no
-fresh notarized
-artifact, no fresh VM/install proof, and no safe same-slice prompt-app
-no-submit proof.
+Notes and Obsidian screenshots are no longer treated as unreferenced. This ops
+and privacy pass adds a privacy-safe menu feedback path, triage labels,
+issue-template validation, a daily tester checklist, a redacted export flow, a
+stop dashboard, a generated readiness summary artifact, the dependency/SDK
+inventory, the field-level data checklist, and current-build redacted export
+proof. The app is still not private-beta ready because the current checkout has
+no fresh notarized artifact, no fresh VM/install proof, and no safe same-slice
+prompt-app no-submit proof.
 
 ## Product Standard
 
@@ -97,7 +96,7 @@ Current local evidence:
 
 Starting score before this ops pass: 80/100
 
-Current score after this privacy and ops pass: 84/100
+Current score after this ops and privacy pass: 84/100
 
 Score movement: +4
 

@@ -40,10 +40,10 @@ Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-
 Runs a real app smoke pass where it is safe to automate. Notes body proof has
 a guarded disposable-note driver; other Notes surfaces, Obsidian, Codex,
 Claude Code, and Claude desktop are manual-gated so this script never types
-into private notes, vaults, terminal prompts, or agent prompts by surprise. The
-Codex lane uses a targeted disposable proof helper after the manual gate: it
-seeds AUTOCOMPLETE_LAB_CODEX_PROOF text into a safe composer, presses Tab once,
-and never presses Enter.
+into private notes, vaults, terminal prompts, or agent prompts by surprise.
+The Codex lane uses a targeted disposable proof helper after the manual gate:
+it seeds AUTOCOMPLETE_LAB_CODEX_PROOF text into a safe composer, presses Tab
+once, and never presses Enter.
 
 Notes proof must use notes-title, notes-body, notes-checklist, or their
 notes-*-undo variants. A generic notes run only prints the surface picker and

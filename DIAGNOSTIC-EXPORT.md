@@ -42,7 +42,8 @@ Open Diagnostics from the menu bar and use Export Report.
 
 For beta feedback, use the structured issue form from `Submit Feedback...`.
 Attach only the redacted Privacy Bundle when diagnostics are needed; the form
-does not attach diagnostics automatically.
+does not need raw traces or screenshots by default and does not attach
+diagnostics automatically.
 
 For command-line checks, run:
 
