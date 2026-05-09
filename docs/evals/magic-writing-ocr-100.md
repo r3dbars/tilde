@@ -516,6 +516,22 @@ Time: 2026-05-09T00:36:00Z
 - Trace proof: trace lines 61564-61567 captured the patched Obsidian `suggestionRequested`/`suggestionPresented` events with screenshot paths for `9F414CA0...png` and `C35E4616...png`.
 - Honest gate status: Obsidian is still not re-marked green because the synthetic Tab events from Computer Use/System Events/CGEvent landed in Obsidian as indentation and did not produce `keyboard-action app=md.obsidian key=tab`. `script/manual_smoke_status.sh --require-all` still correctly reports 17 target-app proof gaps, with Obsidian default listed as stale until a real/manual keypress or better guarded driver proves acceptance on the current build.
 
+2026-05-09T04:41Z heartbeat follow-up: refreshed the primary native writing lanes after the Obsidian source repair.
+
+- TextEdit run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit`.
+- TextEdit result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- TextEdit evidence: diagnostics lines 243835-243881 and trace lines 61577-61586; build `commit:ecd0e7900798`, app SHA `e4da8552e0bd568fb9a960970c99e87dddb80c78bbad3af9b34ab85b34788349`.
+- Notes title run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`.
+- Notes title result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- Notes title evidence: diagnostics lines 243999-244037 and trace lines 61615-61624; build `commit:ecd0e7900798`, app SHA `4f3a82497c95899b03f438765156074267648e534fe16157defd471b2facb791`.
+- Notes body run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate`.
+- Notes body result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- Notes body evidence: diagnostics lines 243928-243966 and trace lines 61600-61609; build `commit:ecd0e7900798`, app SHA `50acea31bb8defe45cff8e106bc44f631266038c5c468d846f64f09780f9d33d`.
+- Notes checklist run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`.
+- Notes checklist result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- Notes checklist evidence: diagnostics lines 244077-244117 and trace lines 61634-61643; build `commit:ecd0e7900798`, app SHA `eb3cde18e234be64e928cc6dbf5a23c9c17c7838886027c4ea135c114dcda166`.
+- Gate movement: after the source repair made older rows stale, strict status now has TextEdit plus all three Notes surfaces fresh green again. `script/manual_smoke_status.sh --require-all` still fails correctly with 26 target-app proof gaps: Obsidian acceptance/variants, Chrome refresh/production/default-AX lanes, Codex refresh, and Claude/Claude Code layout lanes.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
