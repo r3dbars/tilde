@@ -1866,6 +1866,23 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             }
         }
 
+        let promptMetrics = PromptAppNoSubmitMetricsAnalyzer().metrics(from: events)
+        if promptMetrics.accidentalSubmitCount > 0 {
+            counters["prompt-accidental-submit"] = promptMetrics.accidentalSubmitCount
+        }
+        if promptMetrics.sendKeyCollisionCount > 0 {
+            counters["prompt-send-key-collision"] = promptMetrics.sendKeyCollisionCount
+        }
+        if promptMetrics.promptMutationWithoutUserIntentCount > 0 {
+            counters["prompt-mutation-without-user-intent"] = promptMetrics.promptMutationWithoutUserIntentCount
+        }
+        if promptMetrics.wrongContextInsertionCount > 0 {
+            counters["prompt-wrong-context-insertion"] = promptMetrics.wrongContextInsertionCount
+        }
+        if promptMetrics.suggestionContentViolationCount > 0 {
+            counters["prompt-suggestion-content-violation"] = promptMetrics.suggestionContentViolationCount
+        }
+
         return counters
     }
 

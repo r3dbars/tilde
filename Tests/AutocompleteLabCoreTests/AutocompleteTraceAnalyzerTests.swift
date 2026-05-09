@@ -72,6 +72,43 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.annoyanceSignalCounts["focusMismatch"] == 1)
     }
 
+    @Test("surfaces prompt and browser chat no-submit metrics as do-not-ship counters")
+    func surfacesPromptAndBrowserChatNoSubmitMetricsAsDoNotShipCounters() {
+        let events = [
+            event(
+                .acceptedTextEdited,
+                suggestionID: "submit",
+                appBundleIdentifier: "com.google.Chrome",
+                reason: "field-send-finalized",
+                metadata: [
+                    "checkpoint": "fieldSend",
+                    "browserSurface": "chatgpt",
+                    "browserSurfaceSafetyClass": "browser-chat"
+                ]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "collision",
+                appBundleIdentifier: "com.google.Chrome",
+                reason: "send-key-collision",
+                metadata: ["browserChatProofSurface": "browser-chat-harness"]
+            ),
+            event(
+                .insertionFailed,
+                suggestionID: "mutation",
+                appBundleIdentifier: "com.openai.codex",
+                reason: "prompt-mutation-outside-accepted-span",
+                metadata: ["promptMutationWithoutUserIntent": "true"]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.doNotShipCounters["prompt-accidental-submit"] == 1)
+        #expect(summary.doNotShipCounters["prompt-send-key-collision"] == 1)
+        #expect(summary.doNotShipCounters["prompt-mutation-without-user-intent"] == 1)
+    }
+
     @Test("Streaming updates count as one shown suggestion")
     func streamingUpdatesCountAsOneShownSuggestion() {
         let events = [

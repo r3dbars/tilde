@@ -3,6 +3,7 @@ import Foundation
 public enum BrowserHostedSurface: String, Equatable, Sendable {
     case googleDocs = "google-docs"
     case notion = "notion"
+    case chatGPT = "chatgpt"
     case slack = "slack"
     case discord = "discord"
 
@@ -12,10 +13,21 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
             return "Google Docs"
         case .notion:
             return "Notion"
+        case .chatGPT:
+            return "ChatGPT"
         case .slack:
             return "Slack"
         case .discord:
             return "Discord"
+        }
+    }
+
+    public var safetyClass: String {
+        switch self {
+        case .chatGPT, .slack, .discord:
+            return "browser-chat"
+        case .googleDocs, .notion:
+            return "browser-editor"
         }
     }
 }
@@ -49,7 +61,9 @@ public struct BrowserHostedSurfaceBlock: Equatable, Sendable {
             "reason": traceReason,
             "browserSurface": surface.rawValue,
             "browserSurfaceDecision": "blocked",
-            "browserSurfaceReason": reason.rawValue
+            "browserSurfaceReason": reason.rawValue,
+            "browserSurfaceSafetyClass": surface.safetyClass,
+            "promptSafetyMetricSurface": surface.safetyClass
         ]
     }
 }
@@ -90,6 +104,9 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         if matchesNotion(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .notion))
         }
+        if matchesChatGPT(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .chatGPT))
+        }
         if matchesSlack(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .slack))
         }
@@ -111,6 +128,16 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
             || searchableText.contains("notion -")
             || searchableText.contains("- notion")
             || searchableText == "notion"
+    }
+
+    private func matchesChatGPT(_ searchableText: String) -> Bool {
+        searchableText.contains("chatgpt.com")
+            || searchableText.contains("chat.openai.com")
+            || searchableText.contains("chatgpt |")
+            || searchableText.contains("| chatgpt")
+            || searchableText.contains("chatgpt -")
+            || searchableText.contains("- chatgpt")
+            || searchableText == "chatgpt"
     }
 
     private func matchesSlack(_ searchableText: String) -> Bool {
