@@ -11,6 +11,7 @@ cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionPresented","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"fieldKind":"multilineCompose","effectiveRenderMode":"inlineAdjacent","insertionMode":"axSelectedText","model":"mlx-qwen3","anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
 {"type":"suggestionAccepted","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at"}
 {"type":"insertionVerified","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at","metadata":{"insertionMode":"axSelectedText"}}
+{"type":"acceptedInsertionUndone","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","outcome":"acceptNextWord","reason":"accepted-insertion-undone","metadata":{"acceptMode":"acceptNextWord","undoMechanism":"nativeSingleEdit","sameSliceUndoProof":"true","restoredOriginalTarget":"true"}}
 {"type":"acceptedTextEdited","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","metadata":{"fieldKind":"multilineCompose","checkpoint":"10s","survivalClass":"exactKept","tokenRecall":"1.000","normalizedEditDistance":"0.000","strongAcceptedAndKept":"true"}}
 {"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"two","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","latencyMilliseconds":120,"metadata":{"anchorSource":"field","hasElementRect":"true","placementConfidenceBand":"medium"}}
 {"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"two","appBundleIdentifier":"md.obsidian","requestMode":"phraseContinuation","latencyMilliseconds":220,"metadata":{"anchorSource":"field","hasElementRect":"true","placementConfidenceBand":"medium"}}
@@ -257,6 +258,18 @@ if ! grep -F "com.apple.TextEdit axSelectedText: 100% (1 ok / 0 failed)" /tmp/au
   exit 1
 fi
 
+if ! grep -F "Undo recoverability by app:" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not print undo recoverability by app" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+if ! grep -F "com.apple.TextEdit: nativeSingleEdit" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
+  echo "trace eval self-test did not print native undo recoverability for TextEdit" >&2
+  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
 if ! grep -F "com.apple.TextEdit: experimental" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not mark low-sample TextEdit traces as experimental" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
@@ -430,7 +443,7 @@ if ! grep -F "Start line: 3" /tmp/autocomplete-trace-eval-self-test-slice.txt >/
   exit 1
 fi
 
-if [[ "$(AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh --quiet)" != "27" ]]; then
+if [[ "$(AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh --quiet)" != "28" ]]; then
   echo "trace mark self-test did not report the current trace line" >&2
   AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" script/trace_mark.sh >&2
   exit 1
@@ -441,7 +454,7 @@ AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_FILE" \
 AUTOCOMPLETE_LAB_TRACE_MARK_PATH="$MARK_FILE" \
   script/trace_mark.sh --save >/tmp/autocomplete-trace-mark-save.txt
 
-if ! grep -F "Saved trace mark: 27" /tmp/autocomplete-trace-mark-save.txt >/dev/null; then
+if ! grep -F "Saved trace mark: 28" /tmp/autocomplete-trace-mark-save.txt >/dev/null; then
   echo "trace mark self-test did not save the current trace line" >&2
   cat /tmp/autocomplete-trace-mark-save.txt >&2
   exit 1

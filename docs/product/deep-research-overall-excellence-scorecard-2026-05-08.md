@@ -83,10 +83,10 @@ Release gate status: blocked. `Insertion safety`, `Privacy/trust`, and `Non-anno
 | App compatibility | 10 | 71 | 7.10 |
 | Visual placement | 8 | 74 | 5.92 |
 | User control | 6 | 78 | 4.68 |
-| Recoverability | 4 | 68 | 2.72 |
+| Recoverability | 4 | 78 | 3.12 |
 | Local model/runtime readiness | 2 | 64 | 1.28 |
 
-Weighted total: 76.90, rounded to 77/100.
+Weighted total: 77.30, rounded to 77/100.
 
 ### Insertion Safety
 
@@ -165,10 +165,10 @@ Weighted total: 76.90, rounded to 77/100.
 ### Recoverability
 
 - Weight: 4
-- Current score: 68/100
-- Why this score: Verification, app-level restore paths, RAM-only accepted-survival checks, retention-cleared traces, and 2s/10s/30s runtime scheduling now exist. Single-step undo and fresh live-editor proof remain incomplete.
-- Evidence found in repo: `Sources/AutocompleteLabApp/App/InsertionVerificationScheduler.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalChecker.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalTraceMetadata.swift`, `Sources/AutocompleteLabCore/Session/InsertionVerification.swift`, `Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift`, `Tests/AutocompleteLabCoreTests/AcceptanceSurvivalClassifierTests.swift`, `Tests/AutocompleteLabAppTests/AcceptanceSurvivalCheckerTests.swift`.
-- Missing evidence: Real-app undo/redo loops, crash/restart recovery, field-send finalization, and fresh live 2s/10s/30s accepted-and-kept trace slices.
+- Current score: 78/100
+- Why this score: Accepted insertion now has an explicit recoverability model, same-slice undo trace event, native single-edit proof lane for TextEdit/Chrome, and app-rollback metadata for degraded surfaces. Verification mismatches now carry rollback/failure recoverability metadata.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Session/InsertionUndoRecoverability.swift`, `Tests/AutocompleteLabCoreTests/InsertionUndoRecoverabilityTests.swift`, `Sources/AutocompleteLabCore/Tracing/AutocompleteTraceAnalyzer.swift`, `script/real_app_smoke.sh`, `script/check_trace_eval.sh`, `docs/product/app-proof-matrix.md`.
+- Missing evidence: Live Notes/Obsidian native undo graduation, crash/restart recovery, field-send finalization, and fresh live 2s/10s/30s accepted-and-kept trace slices.
 - What would make it 100/100: Every accepted insertion is one clean undo unit with rollback or explicit failure handling when verification mismatches.
 
 ### Local Model/Runtime Readiness

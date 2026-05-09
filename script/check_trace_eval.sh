@@ -17,13 +17,14 @@ REQUIRE_VISUAL_EVIDENCE="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE:-0}"
 MIN_USEFUL_RATE="${AUTOCOMPLETE_LAB_TRACE_MIN_USEFUL_RATE:-}"
 MAX_REPEATED_UNACCEPTED="${AUTOCOMPLETE_LAB_TRACE_MAX_REPEATED_UNACCEPTED:-}"
 REQUIRE_ACCEPTANCE_SLICE_PROOF="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_ACCEPTANCE_SLICE_PROOF:-0}"
+REQUIRE_UNDO_RECOVERABILITY="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_UNDO_RECOVERABILITY:-0}"
 
 if [[ ! -f "$TRACE_PATH" ]]; then
   echo "trace log missing: $TRACE_PATH" >&2
   exit 1
 fi
 
-python3 - "$TRACE_PATH" "$START_LINE" "$END_LINE" "$REQUIRE_APP" "$REQUIRE_EXPERIMENT_ARM" "$REQUIRE_SUPPORT_STATE" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" "$REQUIRE_CONFIDENT_PLACEMENT" "$REQUIRE_VISUAL_EVIDENCE" "$MIN_USEFUL_RATE" "$MAX_REPEATED_UNACCEPTED" "$REQUIRE_ACCEPTANCE_SLICE_PROOF" <<'PY'
+python3 - "$TRACE_PATH" "$START_LINE" "$END_LINE" "$REQUIRE_APP" "$REQUIRE_EXPERIMENT_ARM" "$REQUIRE_SUPPORT_STATE" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" "$REQUIRE_CONFIDENT_PLACEMENT" "$REQUIRE_VISUAL_EVIDENCE" "$MIN_USEFUL_RATE" "$MAX_REPEATED_UNACCEPTED" "$REQUIRE_ACCEPTANCE_SLICE_PROOF" "$REQUIRE_UNDO_RECOVERABILITY" <<'PY'
 import json
 import os
 import sys
@@ -46,6 +47,7 @@ require_visual_evidence = sys.argv[13].lower() in {"1", "true", "yes", "on"}
 min_useful_rate = int(sys.argv[14]) if sys.argv[14] else None
 max_repeated_unaccepted = int(sys.argv[15]) if sys.argv[15] else None
 require_acceptance_slice_proof = sys.argv[16].lower() in {"1", "true", "yes", "on"}
+require_undo_recoverability = sys.argv[17].lower() in {"1", "true", "yes", "on"}
 events = []
 with open(path, "r", encoding="utf-8") as handle:
     for line_number, line in enumerate(handle, start=1):
@@ -76,6 +78,10 @@ insertion_verified = [
     (index, event)
     for index, event in enumerate(events)
     if event.get("type") == "insertionVerified"
+]
+accepted_insertion_undone = [
+    event for event in events
+    if event.get("type") == "acceptedInsertionUndone"
 ]
 presented_by_id = {}
 presentations_by_id = defaultdict(list)
@@ -558,6 +564,58 @@ def insertion_mode_reliability(events):
             bucket[1] += 1
     return buckets
 
+def is_one_word_accept(event):
+    metadata = event.get("metadata") or {}
+    return (
+        metadata.get("acceptMode") in {"tab", "acceptNextWord"}
+        or event.get("outcome") == "acceptNextWord"
+    )
+
+def is_full_accept(event):
+    metadata = event.get("metadata") or {}
+    return (
+        metadata.get("acceptMode") in {"full", "acceptAllVisible"}
+        or event.get("outcome") == "acceptAllVisible"
+    )
+
+def undo_recoverability(events):
+    accepted_by_app = Counter(event.get("appBundleIdentifier") or "unknown" for event in accepted)
+    verified_by_app = Counter(
+        event.get("appBundleIdentifier") or "unknown"
+        for _, event in insertion_verified
+    )
+    undone_by_app = defaultdict(list)
+    for event in accepted_insertion_undone:
+        undone_by_app[event.get("appBundleIdentifier") or "unknown"].append(event)
+
+    apps = sorted(set(accepted_by_app) | set(verified_by_app) | set(undone_by_app))
+    rows = []
+    for app in apps:
+        undone = undone_by_app[app]
+        native = [event for event in undone if (event.get("metadata") or {}).get("undoMechanism") == "nativeSingleEdit"]
+        rollback = [event for event in undone if (event.get("metadata") or {}).get("undoMechanism") == "appRollback"]
+        degraded = [event for event in undone if (event.get("metadata") or {}).get("undoMechanism") == "degraded"]
+        if native:
+            status = "nativeSingleEdit"
+        elif rollback:
+            status = "appRollback"
+        elif degraded:
+            status = "degraded"
+        else:
+            status = "missing"
+        rows.append({
+            "app": app,
+            "accepted": accepted_by_app[app],
+            "verified": verified_by_app[app],
+            "native": len(native),
+            "rollback": len(rollback),
+            "degraded": len(degraded),
+            "one_word_native": sum(1 for event in native if is_one_word_accept(event)),
+            "full_native": sum(1 for event in native if is_full_accept(event)),
+            "status": status,
+        })
+    return rows
+
 missing = []
 if not presented:
     missing.append("suggestionPresented")
@@ -571,6 +629,7 @@ annoyance_failures = []
 insertion_failures = []
 geometry_failures = []
 acceptance_slice_failures = []
+undo_recoverability_failures = []
 
 def event_key(event):
     suggestion_id = event.get("suggestionID")
@@ -698,6 +757,13 @@ if require_acceptance_slice_proof:
             suggestion_id = event.get("suggestionID") or "unknown"
             acceptance_slice_failures.append(
                 f"{app}/{suggestion_id}: " + "; ".join(issues)
+            )
+
+if require_undo_recoverability:
+    for row in undo_recoverability(events):
+        if row["accepted"] > 0 and row["verified"] > 0 and row["status"] == "missing":
+            undo_recoverability_failures.append(
+                f"{row['app']}: missing same-slice acceptedInsertionUndone proof"
             )
 
 def metadata_text(metadata, *keys):
@@ -1551,6 +1617,18 @@ if insertion_reliability:
         print(f"  {app} {mode}: {success}% ({verified} ok / {failed} failed)")
 else:
     print("  none")
+print("Undo recoverability by app:")
+undo_rows = undo_recoverability(events)
+if undo_rows:
+    for row in undo_rows:
+        print(
+            f"  {row['app']}: {row['status']} "
+            f"(accepted={row['accepted']} verified={row['verified']} "
+            f"native={row['native']} appRollback={row['rollback']} degraded={row['degraded']} "
+            f"oneWordNative={row['one_word_native']} fullNative={row['full_native']})"
+        )
+else:
+    print("  none")
 
 if require_app:
     app_events = [event for event in events if event.get("appBundleIdentifier") == require_app]
@@ -1619,4 +1697,6 @@ if geometry_failures:
     raise SystemExit("geometry proof guardrail failed: " + "; ".join(geometry_failures))
 if acceptance_slice_failures:
     raise SystemExit("acceptance slice guardrail failed: " + "; ".join(acceptance_slice_failures))
+if undo_recoverability_failures:
+    raise SystemExit("undo recoverability guardrail failed: " + "; ".join(undo_recoverability_failures))
 PY

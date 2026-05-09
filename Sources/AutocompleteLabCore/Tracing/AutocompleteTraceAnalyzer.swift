@@ -166,6 +166,43 @@ public struct AutocompleteInsertionReliability: Equatable, Sendable {
     }
 }
 
+public struct AutocompleteUndoRecoverability: Equatable, Sendable {
+    public let appBundleIdentifier: String
+    public let acceptedCount: Int
+    public let verifiedCount: Int
+    public let nativeSingleEditCount: Int
+    public let appRollbackCount: Int
+    public let degradedCount: Int
+    public let oneWordNativeCount: Int
+    public let fullNativeCount: Int
+    public let status: String
+    public let reason: String
+
+    public init(
+        appBundleIdentifier: String,
+        acceptedCount: Int,
+        verifiedCount: Int,
+        nativeSingleEditCount: Int,
+        appRollbackCount: Int,
+        degradedCount: Int,
+        oneWordNativeCount: Int,
+        fullNativeCount: Int,
+        status: String,
+        reason: String
+    ) {
+        self.appBundleIdentifier = appBundleIdentifier
+        self.acceptedCount = acceptedCount
+        self.verifiedCount = verifiedCount
+        self.nativeSingleEditCount = nativeSingleEditCount
+        self.appRollbackCount = appRollbackCount
+        self.degradedCount = degradedCount
+        self.oneWordNativeCount = oneWordNativeCount
+        self.fullNativeCount = fullNativeCount
+        self.status = status
+        self.reason = reason
+    }
+}
+
 public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let totalEvents: Int
     public let presentedCount: Int
@@ -230,6 +267,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let annoyanceFunnel: AutocompleteAnnoyanceFunnel
     public let recommendedFixes: [AutocompleteRecommendedFix]
     public let insertionReliabilityByAppAndMode: [AutocompleteInsertionReliability]
+    public let undoRecoverabilityByApp: [AutocompleteUndoRecoverability]
     public let acceptRateByApp: [String: Double]
     public let acceptRateByMode: [String: Double]
     public let acceptRateByExperimentArm: [String: Double]
@@ -325,6 +363,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         annoyanceFunnel: AutocompleteAnnoyanceFunnel = AutocompleteAnnoyanceFunnel(),
         recommendedFixes: [AutocompleteRecommendedFix] = [],
         insertionReliabilityByAppAndMode: [AutocompleteInsertionReliability] = [],
+        undoRecoverabilityByApp: [AutocompleteUndoRecoverability] = [],
         acceptRateByApp: [String: Double] = [:],
         acceptRateByMode: [String: Double] = [:],
         acceptRateByExperimentArm: [String: Double] = [:],
@@ -419,6 +458,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.annoyanceFunnel = annoyanceFunnel
         self.recommendedFixes = recommendedFixes
         self.insertionReliabilityByAppAndMode = insertionReliabilityByAppAndMode
+        self.undoRecoverabilityByApp = undoRecoverabilityByApp
         self.acceptRateByApp = acceptRateByApp
         self.acceptRateByMode = acceptRateByMode
         self.acceptRateByExperimentArm = acceptRateByExperimentArm
@@ -479,6 +519,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let actionableSuppressed = suppressed.filter { isActionableSuppression($0) }
         let insertionFailures = events.filter { $0.type == .insertionFailed }
         let insertionVerified = events.filter { $0.type == .insertionVerified }
+        let acceptedInsertionUndone = events.filter { $0.type == .acceptedInsertionUndone }
         let caretGeometryFailures = events.filter { $0.type == .caretGeometryFailed }
         let acceptedTextEdited = events.filter { $0.type == .acceptedTextEdited }
         let acceptanceRetentionCleared = events.filter { $0.type == .acceptanceRetentionCleared }
@@ -627,6 +668,11 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             insertionReliabilityByAppAndMode: insertionReliabilityByAppAndMode(
                 insertionVerified: insertionVerified,
                 insertionFailures: insertionFailures
+            ),
+            undoRecoverabilityByApp: undoRecoverabilityByApp(
+                accepted: accepted,
+                insertionVerified: insertionVerified,
+                acceptedInsertionUndone: acceptedInsertionUndone
             ),
             acceptRateByApp: rates(
                 presentedByID: firstPresentedByID,
@@ -809,11 +855,15 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     }
 
     private func isTabAccept(_ event: AutocompleteTraceEvent) -> Bool {
-        event.metadata["acceptMode"] == "tab" || event.outcome == "acceptNextWord"
+        event.metadata["acceptMode"] == "tab"
+            || event.metadata["acceptMode"] == "acceptNextWord"
+            || event.outcome == "acceptNextWord"
     }
 
     private func isFullAccept(_ event: AutocompleteTraceEvent) -> Bool {
-        event.metadata["acceptMode"] == "full" || event.outcome == "acceptAllVisible"
+        event.metadata["acceptMode"] == "full"
+            || event.metadata["acceptMode"] == "acceptAllVisible"
+            || event.outcome == "acceptAllVisible"
     }
 
     private func isDuplicateTextEvent(_ event: AutocompleteTraceEvent) -> Bool {
@@ -1024,6 +1074,74 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
                 return $0.appBundleIdentifier < $1.appBundleIdentifier
             }
+    }
+
+    private func undoRecoverabilityByApp(
+        accepted: [AutocompleteTraceEvent],
+        insertionVerified: [AutocompleteTraceEvent],
+        acceptedInsertionUndone: [AutocompleteTraceEvent]
+    ) -> [AutocompleteUndoRecoverability] {
+        let acceptedByApp = Dictionary(grouping: accepted) { event in
+            event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
+        }
+        let verifiedByApp = Dictionary(grouping: insertionVerified) { event in
+            event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
+        }
+        let undoneByApp = Dictionary(grouping: acceptedInsertionUndone) { event in
+            event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
+        }
+
+        return Set(acceptedByApp.keys)
+            .union(verifiedByApp.keys)
+            .union(undoneByApp.keys)
+            .sorted()
+            .map { app in
+                let appAccepted = acceptedByApp[app] ?? []
+                let appVerified = verifiedByApp[app] ?? []
+                let appUndone = undoneByApp[app] ?? []
+                let native = appUndone.filter { undoMechanism($0) == .nativeSingleEdit }
+                let rollback = appUndone.filter { undoMechanism($0) == .appRollback }
+                let degraded = appUndone.filter { undoMechanism($0) == .degraded }
+                let oneWordNative = native.filter(isTabAccept)
+                let fullNative = native.filter(isFullAccept)
+                let status: String
+                let reason: String
+
+                if !native.isEmpty {
+                    status = "nativeSingleEdit"
+                    reason = "Native undo proof exists in the same trace slice."
+                } else if !rollback.isEmpty {
+                    status = "appRollback"
+                    reason = "App rollback proof exists, but native undo is not proven."
+                } else if !degraded.isEmpty {
+                    status = "degraded"
+                    reason = "Surface is marked degraded for undo."
+                } else {
+                    status = "missing"
+                    reason = "No same-slice undo proof recorded."
+                }
+
+                return AutocompleteUndoRecoverability(
+                    appBundleIdentifier: app,
+                    acceptedCount: appAccepted.count,
+                    verifiedCount: appVerified.count,
+                    nativeSingleEditCount: native.count,
+                    appRollbackCount: rollback.count,
+                    degradedCount: degraded.count,
+                    oneWordNativeCount: oneWordNative.count,
+                    fullNativeCount: fullNative.count,
+                    status: status,
+                    reason: reason
+                )
+            }
+    }
+
+    private func undoMechanism(_ event: AutocompleteTraceEvent) -> InsertionUndoRecoverabilityLevel? {
+        guard let value = event.metadata["undoMechanism"] ?? event.metadata["rollbackMechanism"] else {
+            return nil
+        }
+
+        return InsertionUndoRecoverabilityLevel(rawValue: value)
     }
 
     private func topMisses(from events: [AutocompleteTraceEvent]) -> [AutocompleteTraceMiss] {
