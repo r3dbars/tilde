@@ -399,6 +399,7 @@ public struct AutocompleteTraceReplay: Sendable {
                     .suggestionSuppressed,
                     .insertionVerified,
                     .insertionFailed,
+                    .acceptedInsertionUndone,
                     .acceptedTextEdited,
                     .caretGeometryFailed:
                 return true

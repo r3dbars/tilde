@@ -19,7 +19,7 @@ STRICT_PROOF_GATES="${AUTOCOMPLETE_LAB_SCORE_TARGET_STRICT_PROOF_GATES:-auto}"
 MANUAL_SMOKE_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_MANUAL_SMOKE_GATE_SCRIPT:-./script/manual_smoke_status.sh}"
 VISUAL_EVIDENCE_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_VISUAL_EVIDENCE_GATE_SCRIPT:-./script/check_visual_placement_evidence.sh}"
 PROOF_MANIFEST_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_PROOF_MANIFEST_GATE_SCRIPT:-./script/check_proof_manifest.sh}"
-PROMPT_APP_PROOF_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_PROMPT_APP_PROOF_GATE_SCRIPT:-./script/check_prompt_app_proof.sh}"
+PROMPT_APP_PROOF_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_PROMPT_APP_PROOF_GATE_SCRIPT:-./script/check_prompt_app_manifest_proof.sh}"
 
 ISSUES=0
 LIVE_PROMPT_PROOF_ISSUES=0
@@ -95,7 +95,7 @@ print_blocker_summary() {
   echo
   echo "Blocking themes"
   if ((LIVE_PROMPT_PROOF_ISSUES > 0)); then
-    echo "- Live prompt proof: $LIVE_PROMPT_PROOF_ISSUES issue(s). Finish Codex same-slice no-submit proof."
+    echo "- Live prompt proof: $LIVE_PROMPT_PROOF_ISSUES issue(s). Finish remaining prompt-app layout and full-accept proof without counting stale trace history."
   fi
   if ((DEFAULT_CHROME_EDITOR_ISSUES > 0)); then
     echo "- Chrome editor production proof: $DEFAULT_CHROME_EDITOR_ISSUES issue(s). Local real Monaco/ProseMirror caret-quality proof exists; add production variants before target scores can reach 100."
