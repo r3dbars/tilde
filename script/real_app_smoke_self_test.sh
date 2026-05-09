@@ -142,7 +142,12 @@ fi
 
 for notes_surface in notes-title notes-body notes-checklist notes-title-undo notes-body-undo notes-checklist-undo; do
   script/real_app_smoke.sh "$notes_surface" --dry-run >"$TMP_DIR/$notes_surface.txt"
-  if ! grep -F "manual-gated Apple Notes ${notes_surface#notes-} proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
+  if [[ "$notes_surface" == "notes-body" ]]; then
+    if ! grep -F "guarded Apple Notes body proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
+      echo "real app smoke self-test did not print the guarded Notes body proof plan" >&2
+      exit 1
+    fi
+  elif ! grep -F "manual-gated Apple Notes ${notes_surface#notes-} proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
     echo "real app smoke self-test did not print the $notes_surface proof plan" >&2
     exit 1
   fi
@@ -162,7 +167,9 @@ fi
 LOCK_DIR="$TMP_DIR/smoke.lock"
 mkdir -p "$LOCK_DIR"
 echo "$$" >"$LOCK_DIR/pid"
-if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$LOCK_DIR" script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/lock-fail.txt"; then
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'1 1 1 launchd\n' \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$LOCK_DIR" \
+  script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/lock-fail.txt"; then
   echo "real app smoke self-test expected concurrent smoke lock to fail" >&2
   exit 1
 fi
@@ -256,7 +263,9 @@ if script/real_app_smoke.sh unknown --dry-run >/dev/null 2>&1; then
   exit 1
 fi
 
-if script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/codex-fail.txt"; then
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'1 1 1 launchd\n' \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$TMP_DIR/codex-safety.lock" \
+  script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/codex-fail.txt"; then
   echo "real app smoke self-test expected Codex to require --manual-gate" >&2
   exit 1
 fi
@@ -266,7 +275,9 @@ if ! grep -F "requires --manual-gate" "$TMP_DIR/codex-fail.txt" >/dev/null; then
   exit 1
 fi
 
-if script/real_app_smoke.sh claude-code >/dev/null 2>"$TMP_DIR/claude-code-fail.txt"; then
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'1 1 1 launchd\n' \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$TMP_DIR/claude-code-safety.lock" \
+  script/real_app_smoke.sh claude-code >/dev/null 2>"$TMP_DIR/claude-code-fail.txt"; then
   echo "real app smoke self-test expected Claude Code to require --manual-gate" >&2
   exit 1
 fi
