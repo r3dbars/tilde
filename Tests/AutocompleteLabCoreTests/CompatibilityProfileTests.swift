@@ -23,7 +23,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "md.obsidian")?.appFamily == .electron)
         #expect(store.profile(for: "md.obsidian")?.anchorLadder == [.caret])
         #expect(store.profile(for: "md.obsidian")?.supportLevel == .yellow)
-        #expect(store.profile(for: "md.obsidian")?.insertionMode == .axThenKeyEvents)
+        #expect(store.profile(for: "md.obsidian")?.insertionMode == .axValueReplacement)
         #expect(store.profile(for: "md.obsidian")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "md.obsidian")?.suppressesAfterInsertionFailure == false)
         #expect(store.profile(for: "md.obsidian")?.fieldIdentityMode == .stableBounds)

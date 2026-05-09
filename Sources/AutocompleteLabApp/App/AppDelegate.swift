@@ -3639,6 +3639,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let context = accessibilityClient.focusedTextContext(
             allowDescendantTextFallback: baseline.profile.allowsDescendantTextFallback
         ) else {
+            if let context = obsidianDescendantInsertionVerificationContext(
+                baseline: baseline,
+                acceptedText: acceptedText,
+                frontmostApp: frontmostApp,
+                reason: "missing-focused-context"
+            ) {
+                return .ready(context: context)
+            }
             if let context = codexProofInsertionVerificationContext(
                 baseline: baseline,
                 acceptedText: acceptedText,
@@ -3678,6 +3686,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ) {
                 return .ready(context: context)
             }
+            if let context = obsidianDescendantInsertionVerificationContext(
+                baseline: baseline,
+                acceptedText: acceptedText,
+                frontmostApp: frontmostApp,
+                reason: "field-changed"
+            ) {
+                return .ready(context: context)
+            }
             if let context = codexProofInsertionVerificationContext(
                 baseline: baseline,
                 acceptedText: acceptedText,
@@ -3713,6 +3729,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ) {
                 return .ready(context: context)
             }
+            if let context = obsidianDescendantInsertionVerificationContext(
+                baseline: baseline,
+                acceptedText: acceptedText,
+                frontmostApp: frontmostApp,
+                reason: "target-fingerprint-changed"
+            ) {
+                return .ready(context: context)
+            }
             if let context = codexProofInsertionVerificationContext(
                 baseline: baseline,
                 acceptedText: acceptedText,
@@ -3722,6 +3746,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return .ready(context: context)
             }
             return .targetFingerprintChanged
+        }
+
+        if let context = obsidianDescendantInsertionVerificationContext(
+            baseline: baseline,
+            acceptedText: acceptedText,
+            frontmostApp: frontmostApp,
+            reason: "same-field-stale-selection"
+        ) {
+            return .ready(context: context)
         }
 
         return .ready(context: adjustedContext)
@@ -3766,6 +3799,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         return context
+    }
+
+    private func obsidianDescendantInsertionVerificationContext(
+        baseline: InsertionVerificationBaseline,
+        acceptedText: String,
+        frontmostApp: RunningApplicationInfo,
+        reason: String
+    ) -> FocusedTextContext? {
+        let bundleIdentifier = "md.obsidian"
+        guard baseline.profile.bundleIdentifier == bundleIdentifier,
+              frontmostApp.bundleIdentifier == bundleIdentifier,
+              frontmostApp.processIdentifier == baseline.fieldIdentity.processIdentifier,
+              !acceptedText.isEmpty,
+              !baseline.previousTextBeforeCursor.isEmpty else {
+            return nil
+        }
+
+        let expectedText = baseline.previousTextBeforeCursor + acceptedText + baseline.previousTextAfterCursor
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        guard Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: expectedText,
+            containing: baseline.previousTextBeforeCursor,
+            maxDepth: 32
+        ) != nil else {
+            return nil
+        }
+
+        DiagnosticsLog.shared.record(
+            "obsidian-descendant-insert-verification-fast-path",
+            metadata: [
+                "app": bundleIdentifier,
+                "acceptedChars": String(acceptedText.count),
+                "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                "previousAfterChars": String(baseline.previousTextAfterCursor.count),
+                "reason": reason
+            ]
+        )
+        return FocusedTextContext(
+            elementIdentifier: baseline.fieldIdentity.elementIdentifier,
+            role: "AXTextArea",
+            subrole: nil,
+            fingerprint: FocusedElementFingerprint(),
+            textBeforeCursor: baseline.previousTextBeforeCursor + acceptedText,
+            textAfterCursor: baseline.previousTextAfterCursor,
+            selectedText: "",
+            selectedTextLength: 0,
+            caretRect: nil,
+            elementRect: nil,
+            windowRect: nil,
+            windowIdentifier: nil,
+            textLineRect: nil,
+            textStyle: nil,
+            isSecure: false,
+            fieldClassification: AXFieldClassification(kind: baseline.fieldKind, reason: baseline.fieldKindReason),
+            caretIsSynthetic: true,
+            capabilities: FocusedTextCapabilities(
+                canReadValue: true,
+                canReadSelectedTextRange: true,
+                canReadBoundsForRange: false,
+                canReadAttributedText: false,
+                canSetSelectedText: true
+            )
+        )
     }
 
     private func codexProofInsertionVerificationContext(
@@ -5401,7 +5498,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyboardEventTap?.suppressPassthroughObservation(
             until: Date().addingTimeInterval(
                 shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile)
-                    || shouldUseCodexProofDirectInsertion(profile: profile) ? 0.75 : 0.25
+                    || shouldUseCodexProofDirectInsertion(profile: profile)
+                    || shouldUseObsidianDirectValueInsertion(profile: profile) ? 0.75 : 0.25
             )
         )
 
@@ -5436,6 +5534,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "app": profile.bundleIdentifier,
                     "mode": InsertionMode.clipboardFallbackOptIn.rawValue,
+                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
+                    "success": String(succeeded),
+                    "skippedModes": skippedModes
+                        .map(\.rawValue)
+                        .sorted()
+                        .joined(separator: ",")
+                ]
+            )
+            if succeeded {
+                focusedTextPollingPause.pause(
+                    now: Date(),
+                    durationMilliseconds: postInsertionPollPauseMilliseconds
+                )
+            }
+            return succeeded
+        }
+
+        if shouldUseObsidianDirectValueInsertion(profile: profile) {
+            let succeeded = insertObsidianDirectValueText(acceptedText)
+            DiagnosticsLog.shared.record(
+                "insert",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "mode": InsertionMode.axValueReplacement.rawValue,
                     "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
                     "success": String(succeeded),
                     "skippedModes": skippedModes
@@ -5497,6 +5619,111 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && profile.insertionMode == .axValueReplacement
             && profile.requiresNoSubmitAcceptanceProof
             && activeAppProofBundleIdentifiers.contains("com.openai.codex")
+    }
+
+    private func shouldUseObsidianDirectValueInsertion(profile: CompatibilityProfile) -> Bool {
+        currentSuggestionAppBundleIdentifier == "md.obsidian"
+            && profile.bundleIdentifier == "md.obsidian"
+            && profile.insertionMode == .axValueReplacement
+    }
+
+    private func insertObsidianDirectValueText(_ acceptedText: String) -> Bool {
+        let bundleIdentifier = "md.obsidian"
+        guard !acceptedText.isEmpty,
+              let lastTextSnapshot,
+              !lastTextSnapshot.textBeforeCursor.isEmpty,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == bundleIdentifier else {
+            DiagnosticsLog.shared.record(
+                "obsidian-direct-value-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "precondition-failed"
+                ]
+            )
+            return false
+        }
+
+        let previousText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
+        let replacementText = lastTextSnapshot.textBeforeCursor + acceptedText + lastTextSnapshot.textAfterCursor
+        let cursorUTF16Offset = lastTextSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        guard let textArea = Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: previousText,
+            containing: lastTextSnapshot.textBeforeCursor,
+            maxDepth: 32
+        ) else {
+            DiagnosticsLog.shared.record(
+                "obsidian-direct-value-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "text-area-not-found"
+                ]
+            )
+            return false
+        }
+
+        guard AXUIElementSetAttributeValue(
+            textArea,
+            kAXValueAttribute as CFString,
+            replacementText as CFTypeRef
+        ) == .success else {
+            DiagnosticsLog.shared.record(
+                "obsidian-direct-value-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "value-set-failed"
+                ]
+            )
+            return false
+        }
+
+        var cursorRange = CFRange(location: cursorUTF16Offset, length: 0)
+        if let rangeValue = AXValueCreate(.cfRange, &cursorRange) {
+            _ = AXUIElementSetAttributeValue(
+                textArea,
+                kAXSelectedTextRangeAttribute as CFString,
+                rangeValue
+            )
+        }
+        moveFrontmostInsertionPointToLineEnd()
+
+        var succeeded = false
+        for _ in 0..<5 {
+            if Self.axStringAttribute(textArea, kAXValueAttribute) == replacementText {
+                succeeded = true
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        DiagnosticsLog.shared.record(
+            "obsidian-direct-value-insert",
+            metadata: [
+                "app": bundleIdentifier,
+                "success": String(succeeded),
+                "acceptedChars": String(acceptedText.count),
+                "previousBeforeChars": String(lastTextSnapshot.textBeforeCursor.count),
+                "previousAfterChars": String(lastTextSnapshot.textAfterCursor.count)
+            ]
+        )
+        return succeeded
+    }
+
+    private func moveFrontmostInsertionPointToLineEnd() {
+        guard let source = CGEventSource(stateID: .hidSystemState),
+              let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: false) else {
+            return
+        }
+
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
     }
 
     private func insertCodexProofText(_ acceptedText: String) -> Bool {
