@@ -3332,6 +3332,128 @@ SWIFT
   CODEX_DRAFT_BACKUP_ACTIVE=0
 }
 
+focus_codex_proof_prompt() {
+  swift - <<'SWIFT'
+import AppKit
+import ApplicationServices
+import Foundation
+
+let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String {
+    copyAttribute(element, attribute) as? String ?? ""
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func setSelectedRange(_ element: AXUIElement, location: Int, length: Int) {
+    var range = CFRange(location: location, length: length)
+    guard let rangeValue = AXValueCreate(.cfRange, &range) else {
+        return
+    }
+    AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+}
+
+func postCommandRight(to pid: pid_t) {
+    guard let source = CGEventSource(stateID: .hidSystemState),
+          let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: true),
+          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: false) else {
+        return
+    }
+
+    keyDown.flags = .maskCommand
+    keyUp.flags = .maskCommand
+    keyDown.postToPid(pid)
+    keyUp.postToPid(pid)
+}
+
+func selectedRangeMatches(_ element: AXUIElement, location: Int, length: Int) -> Bool {
+    guard let rangeValue = copyAttribute(element, kAXSelectedTextRangeAttribute) else {
+        return false
+    }
+
+    var range = CFRange()
+    guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else {
+        return false
+    }
+    return range.location == location && range.length == length
+}
+
+func collectMarkedTextAreas(in element: AXUIElement, depth: Int = 0, results: inout [AXUIElement]) {
+    guard depth <= 32 else {
+        return
+    }
+
+    if stringAttribute(element, kAXRoleAttribute) == kAXTextAreaRole as String,
+       stringAttribute(element, kAXValueAttribute).contains(marker) {
+        results.append(element)
+    }
+
+    for child in children(of: element) {
+        collectMarkedTextAreas(in: child, depth: depth + 1, results: &results)
+    }
+}
+
+func focusedElement(in appElement: AXUIElement) -> AXUIElement? {
+    guard let focusedValue = copyAttribute(appElement, kAXFocusedUIElementAttribute) else {
+        return nil
+    }
+    return (focusedValue as! AXUIElement)
+}
+
+guard let app = NSRunningApplication.runningApplications(
+    withBundleIdentifier: "com.openai.codex"
+).first else {
+    fputs("Codex is not running.\n", stderr)
+    exit(1)
+}
+
+app.activate(options: [.activateAllWindows])
+Thread.sleep(forTimeInterval: 0.15)
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+AXUIElementSetMessagingTimeout(appElement, 0.75)
+var markedTextAreas: [AXUIElement] = []
+collectMarkedTextAreas(in: appElement, results: &markedTextAreas)
+guard let target = markedTextAreas.first else {
+    fputs("Could not refocus Codex proof prompt: marker text area not found.\n", stderr)
+    exit(1)
+}
+
+let text = stringAttribute(target, kAXValueAttribute)
+let cursorOffset = text.utf16.count
+for _ in 0..<4 {
+    AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    setSelectedRange(target, location: cursorOffset, length: 0)
+    postCommandRight(to: app.processIdentifier)
+    Thread.sleep(forTimeInterval: 0.08)
+    if selectedRangeMatches(target, location: cursorOffset, length: 0) {
+        break
+    }
+}
+
+guard let focused = focusedElement(in: appElement),
+      stringAttribute(focused, kAXValueAttribute).contains(marker),
+      selectedRangeMatches(focused, location: cursorOffset, length: 0) else {
+    fputs("Could not keep Codex proof prompt focused at the end before Tab.\n", stderr)
+    exit(1)
+}
+
+print("Focused Codex proof composer before Tab: chars=\(text.count)")
+SWIFT
+}
+
 assert_codex_prompt_retains_marker() {
   swift - <<'SWIFT'
 import AppKit
@@ -4151,6 +4273,8 @@ run_codex() {
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex" "Codex proof suggestion" 20
   wait_for_screenshot_capture_if_enabled "$start_line" "com.openai.codex" "Codex proof"
   assert_frontmost_app "Codex" "Codex proof"
+  focus_codex_proof_prompt
+  sleep 0.2
   press_key_code 48
   wait_for_log_fields "$start_line" "Codex Tab acceptance" 12 \
     "keyboard-action" \
