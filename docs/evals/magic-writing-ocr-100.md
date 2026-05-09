@@ -271,6 +271,14 @@ Time: 2026-05-09T00:36:00Z
 - Evidence: diagnostics lines 239593-239630, trace lines 60979-60988, manual smoke row `2026-05-09T02:51:56Z`, app binary SHA `202a9170fee3b2f968d79beb836d6c7bdbba8233ae46168fbcf5ee0aa1e381a7`.
 - Validation: `script/real_app_smoke_self_test.sh` and the live Notes body smoke passed. The model stayed `qwen3-0.6b`.
 
+2026-05-09T02:55Z heartbeat follow-up: fixed stale-proof bookkeeping for docs-only commits.
+
+- Result: the current fast model still passed Notes body on branch head `108a534b1922`, with 2 accepted insertions and strict visual trace evidence.
+- Evidence: diagnostics lines 239760-239798, trace lines 61010-61019, manual smoke row `2026-05-09T02:54:43Z`, app binary SHA `e31189c5ff57d595d60540e6f9f73b4f7181bccc7f888decb1504e2c740d8006`.
+- Finding: proof rows already record both commit and app binary SHA, but the status/refresh checkers rejected a row on commit mismatch before considering that the current app binary SHA still matched.
+- Fix: `manual_smoke_status.sh` and `manual_proof_refresh.sh` now accept a current app binary fingerprint for app-behavior proof, so docs-only commits do not make a valid current binary pass look stale.
+- Validation: manual smoke self-tests, proof refresh self-tests, and the live Notes body smoke passed. The model stayed `qwen3-0.6b`.
+
 ## 100 Test Situations
 
 | # | App | Situation | Target behavior | Score |

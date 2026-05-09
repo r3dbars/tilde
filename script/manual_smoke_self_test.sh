@@ -760,8 +760,8 @@ AUTOCOMPLETE_LAB_APP_BINARY="$FAKE_APP_BINARY" \
   AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
   script/manual_smoke_status.sh >"$STATUS_OUTPUT"
 
-if ! grep -F -- "- TextEdit: stale pass (needs current commit/archive proof; run" "$STATUS_OUTPUT" >/dev/null; then
-  echo "manual smoke self-test let a current app sha mask stale commit proof" >&2
+if ! grep -F -- "- TextEdit: passed" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test should accept current app binary proof after docs-only commits" >&2
   exit 1
 fi
 
