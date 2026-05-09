@@ -193,6 +193,14 @@ Time: 2026-05-09T00:15:12Z
 - Chrome diagnostics slices: textarea 223962-224031, contenteditable 224032-224124, editor-like 224125-224205, monaco-like 224206-224290, prosemirror-like 224291-224395, monaco-real 224396-224479, prosemirror-real 224480-224562, chat-like 224563-224641.
 - Manual smoke status now shows 9 remaining target gaps: Notes title/body/checklist, Obsidian, default-Chrome real Monaco/ProseMirror AX, Codex, Claude Code, and Claude desktop.
 
+## Latest Default Chrome Probe
+
+Time: 2026-05-09T00:17:00Z
+
+- Re-ran `chrome --fixture monaco-real --chrome-accessibility default --skip-build` against the stable `qwen3-0.6b` app binary.
+- Result: failed before typing because normal Chrome exposed only browser chrome through Accessibility, not an editable `AXWebArea` / `AXTextArea` editor tree.
+- Decision: keep default-Chrome real Monaco/ProseMirror as pending proof, despite older historical scorecard rows. Current reliable Chrome proof is the isolated forced-renderer lane.
+
 ## 100 Test Situations
 
 | # | App | Situation | Target behavior | Score |

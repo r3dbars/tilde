@@ -52,7 +52,7 @@
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Real Monaco and ProseMirror proof now pass under isolated Chrome with renderer accessibility forced, default Chrome AX exposure, and proof-gated inline synthetic-caret placement. Broad production-site proof remains open."
+        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Current default Chrome AX reruns expose only browser chrome on this machine, so default Chrome and broad production-site proof remain open."
       ],
       "requirements": [
         {
@@ -74,33 +74,51 @@
     },
     {
       "surface": "Chrome real Monaco",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Chrome",
         "bundle": "com.google.Chrome",
-        "proof": "monaco-real-default",
+        "proof": "monaco-real",
         "minVerifiedAccepts": 2,
         "requiresVisualStrictComplete": true
       },
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-monaco-real.png"
       ],
-      "gaps": []
+      "gaps": [
+        "Current forced-renderer Chrome proof is green, but default Chrome AX proof is not current; latest default rerun exposed only browser chrome before typing."
+      ],
+      "requirements": [
+        {
+          "id": "default-chrome-monaco-ax",
+          "status": "blocked",
+          "summary": "Refresh default Chrome Monaco proof only after normal Chrome exposes the editor AX tree, or replace this with another safe production proof path."
+        }
+      ]
     },
     {
       "surface": "Chrome real ProseMirror",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Chrome",
         "bundle": "com.google.Chrome",
-        "proof": "prosemirror-real-default",
+        "proof": "prosemirror-real",
         "minVerifiedAccepts": 2,
         "requiresVisualStrictComplete": true
       },
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
-      "gaps": []
+      "gaps": [
+        "Current forced-renderer Chrome proof is green, but default Chrome AX proof is not current; latest default Monaco probe exposed only browser chrome before typing."
+      ],
+      "requirements": [
+        {
+          "id": "default-chrome-prosemirror-ax",
+          "status": "blocked",
+          "summary": "Refresh default Chrome ProseMirror proof only after normal Chrome exposes the editor AX tree, or replace this with another safe production proof path."
+        }
+      ]
     },
     {
       "surface": "Chrome chat-like composer",
@@ -371,7 +389,7 @@
       "surface": "Chrome text fields/editor/chat-like surfaces",
       "status": "partial",
       "owner": "browser editor adapter lane",
-      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures and default-Chrome real-editor AX plus proof-gated inline synthetic-caret lanes are proven, but production-site variance remains open. Hosted Google Docs, Notion, Slack, and Discord are blocked by surface policy until real proof exists."
+      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures and forced-Chrome real-editor lanes are proven, but default-Chrome AX and production-site variance remain open. Hosted Google Docs, Notion, Slack, and Discord are blocked by surface policy until real proof exists."
     },
     {
       "bundle": "com.openai.codex",
@@ -435,6 +453,78 @@
       "status": "blocked",
       "owner": "monaco editor adapter lane",
       "safetyNote": "Cursor stays diagnostics-only until Monaco caret placement, AI composer safety, and Tab behavior are proven in the real app."
+    },
+    {
+      "bundle": "com.openai.atlas",
+      "displayName": "ChatGPT Atlas",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "ChatGPT Atlas",
+      "status": "blocked",
+      "owner": "prompt-browser safety lane",
+      "safetyNote": "Atlas can contain private browser text and prompt chats, so it stays disabled until disposable prompt and browser-field proof verifies placement, one-word accept, and no submit."
+    },
+    {
+      "bundle": "com.openai.chat",
+      "displayName": "ChatGPT",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "ChatGPT",
+      "status": "blocked",
+      "owner": "prompt-app proof lane",
+      "safetyNote": "ChatGPT prompt composers can submit messages, attach context, and expose tools, so suggestions stay disabled until exact-version no-submit proof exists."
+    },
+    {
+      "bundle": "com.openai.ChatGPT",
+      "displayName": "ChatGPT",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "ChatGPT",
+      "status": "blocked",
+      "owner": "prompt-app proof lane",
+      "safetyNote": "ChatGPT prompt composers can submit messages, attach context, and expose tools, so suggestions stay disabled until exact-version no-submit proof exists."
+    },
+    {
+      "bundle": "ru.keepcoder.Telegram",
+      "displayName": "Telegram",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "Telegram",
+      "status": "blocked",
+      "owner": "chat no-submit proof lane",
+      "safetyNote": "Telegram stays diagnostics-only until send-by-enter, attachment caption, insertion, and one-word no-submit proof are captured in a disposable chat surface."
+    },
+    {
+      "bundle": "notion.id",
+      "displayName": "Notion",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "Notion",
+      "status": "blocked",
+      "owner": "prosemirror editor adapter lane",
+      "safetyNote": "Notion pages can contain private workspace text and ProseMirror placement needs proof, so suggestions stay disabled until disposable-page placement, insertion, and no-submit proof exists."
+    },
+    {
+      "bundle": "com.hnc.Discord",
+      "displayName": "Discord",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "Discord",
+      "status": "blocked",
+      "owner": "chat no-submit proof lane",
+      "safetyNote": "Discord message composers stay diagnostics-only until a disposable server/channel proves placement, one-word accept, and no submit."
+    },
+    {
+      "bundle": "com.hnc.DiscordPTB",
+      "displayName": "Discord PTB",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "Discord PTB",
+      "status": "blocked",
+      "owner": "chat no-submit proof lane",
+      "safetyNote": "Discord PTB message composers stay diagnostics-only until a disposable server/channel proves placement, one-word accept, and no submit."
+    },
+    {
+      "bundle": "com.hnc.DiscordCanary",
+      "displayName": "Discord Canary",
+      "supportLevel": "diagnosticsOnly",
+      "surface": "Discord Canary",
+      "status": "blocked",
+      "owner": "chat no-submit proof lane",
+      "safetyNote": "Discord Canary message composers stay diagnostics-only until a disposable server/channel proves placement, one-word accept, and no submit."
     }
   ]
 }
