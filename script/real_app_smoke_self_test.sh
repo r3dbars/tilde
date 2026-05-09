@@ -287,7 +287,9 @@ if ! grep -F "requires --manual-gate" "$TMP_DIR/claude-code-fail.txt" >/dev/null
   exit 1
 fi
 
-if script/real_app_smoke.sh notes >/dev/null 2>"$TMP_DIR/notes-fail.txt"; then
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'1 1 1 launchd\n' \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$TMP_DIR/notes-safety.lock" \
+  script/real_app_smoke.sh notes >/dev/null 2>"$TMP_DIR/notes-fail.txt"; then
   echo "real app smoke self-test expected Notes to require --manual-gate" >&2
   exit 1
 fi
@@ -297,7 +299,9 @@ if ! grep -F "private Apple Notes content" "$TMP_DIR/notes-fail.txt" >/dev/null;
   exit 1
 fi
 
-if script/real_app_smoke.sh notes --manual-gate >/dev/null 2>"$TMP_DIR/notes-generic-fail.txt"; then
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'1 1 1 launchd\n' \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$TMP_DIR/notes-generic.lock" \
+  script/real_app_smoke.sh notes --manual-gate >/dev/null 2>"$TMP_DIR/notes-generic-fail.txt"; then
   echo "real app smoke self-test expected generic Notes proof to require a surface" >&2
   exit 1
 fi
@@ -317,7 +321,9 @@ if ! grep -F "script/real_app_smoke.sh notes-title-undo --manual-gate" "$TMP_DIR
   exit 1
 fi
 
-if script/real_app_smoke.sh obsidian >/dev/null 2>"$TMP_DIR/obsidian-fail.txt"; then
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'1 1 1 launchd\n' \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$TMP_DIR/obsidian-safety.lock" \
+  script/real_app_smoke.sh obsidian >/dev/null 2>"$TMP_DIR/obsidian-fail.txt"; then
   echo "real app smoke self-test expected Obsidian to require --manual-gate" >&2
   exit 1
 fi
@@ -327,7 +333,9 @@ if ! grep -F "private Obsidian vault" "$TMP_DIR/obsidian-fail.txt" >/dev/null; t
   exit 1
 fi
 
-if script/real_app_smoke.sh claude >/dev/null 2>"$TMP_DIR/claude-fail.txt"; then
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'1 1 1 launchd\n' \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$TMP_DIR/claude-safety.lock" \
+  script/real_app_smoke.sh claude >/dev/null 2>"$TMP_DIR/claude-fail.txt"; then
   echo "real app smoke self-test expected Claude to require --manual-gate" >&2
   exit 1
 fi

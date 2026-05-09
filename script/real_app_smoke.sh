@@ -2553,6 +2553,43 @@ build_if_needed() {
   AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1 \
     AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 \
     ./script/build_and_run.sh run
+  wait_for_current_autocomplete_lab_process
+}
+
+wait_for_current_autocomplete_lab_process() {
+  local expected_binary="$ROOT_DIR/dist/AutocompleteLab.app/Contents/MacOS/AutocompleteLab"
+  local deadline=$((SECONDS + 20))
+
+  while ((SECONDS <= deadline)); do
+    local found_current=0
+    local stale_processes=""
+    local pid command
+    while IFS= read -r pid; do
+      [[ -z "$pid" ]] && continue
+      command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+      [[ -z "$command" ]] && continue
+      if [[ "$command" == "$expected_binary" ]]; then
+        found_current=1
+      else
+        stale_processes+="${pid} ${command}"$'\n'
+      fi
+    done < <(pgrep -f "/[A]utocompleteLab.app/Contents/MacOS/AutocompleteLab" 2>/dev/null || true)
+
+    if [[ "$found_current" == "1" && -z "$stale_processes" ]]; then
+      return 0
+    fi
+    sleep 0.25
+  done
+
+  echo "AutocompleteLab smoke launch did not settle on this checkout's app bundle." >&2
+  echo "Expected binary: $expected_binary" >&2
+  echo "Running AutocompleteLab processes:" >&2
+  pgrep -f "/[A]utocompleteLab.app/Contents/MacOS/AutocompleteLab" 2>/dev/null |
+    while IFS= read -r pid; do
+      [[ -z "$pid" ]] && continue
+      ps -p "$pid" -o pid=,command= 2>/dev/null || true
+    done >&2
+  exit 1
 }
 
 run_manual_gated() {
@@ -2578,22 +2615,13 @@ run_manual_gated() {
     ./script/manual_smoke_session.sh "$manual_app"
 }
 
-type_notes_body_smoke_fragment() {
-  local fragment="$1"
-
-  AUTOCOMPLETE_LAB_NOTES_SMOKE_FRAGMENT="$fragment" swift - <<'SWIFT'
+assert_notes_body_smoke_target() {
+  swift - <<'SWIFT'
 import AppKit
 import ApplicationServices
-import CoreGraphics
 import Foundation
 
 let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_NOTES_SMOKE_MARKER"] ?? "Autocomplete smoke"
-let fragment = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_NOTES_SMOKE_FRAGMENT"] ?? ""
-
-guard !fragment.isEmpty else {
-    fputs("Notes smoke fragment is empty.\n", stderr)
-    exit(2)
-}
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -2612,22 +2640,6 @@ func children(of element: AXUIElement) -> [AXUIElement] {
         }
     }
     return result
-}
-
-func bounds(for element: AXUIElement) -> CGRect? {
-    guard let positionValue = copyAttribute(element, kAXPositionAttribute),
-          let sizeValue = copyAttribute(element, kAXSizeAttribute) else {
-        return nil
-    }
-
-    var position = CGPoint.zero
-    var size = CGSize.zero
-    guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
-          AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else {
-        return nil
-    }
-
-    return CGRect(origin: position, size: size)
 }
 
 func noteBody(in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
@@ -2652,37 +2664,9 @@ func noteBody(in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
     return nil
 }
 
-func postClick(at point: CGPoint, source: CGEventSource) {
-    for eventType in [CGEventType.leftMouseDown, .leftMouseUp] {
-        guard let event = CGEvent(
-            mouseEventSource: source,
-            mouseType: eventType,
-            mouseCursorPosition: point,
-            mouseButton: .left
-        ) else {
-            continue
-        }
-        event.post(tap: .cghidEventTap)
-        Thread.sleep(forTimeInterval: 0.03)
-    }
-}
-
-func postText(_ text: String, source: CGEventSource) {
-    for scalar in text.unicodeScalars {
-        guard scalar.value <= UInt16.max else {
-            continue
-        }
-        var chars = [UniChar(scalar.value)]
-        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
-            exit(1)
-        }
-        keyDown.keyboardSetUnicodeString(stringLength: chars.count, unicodeString: &chars)
-        keyUp.keyboardSetUnicodeString(stringLength: chars.count, unicodeString: &chars)
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
-        Thread.sleep(forTimeInterval: 0.025)
-    }
+guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Notes" else {
+    fputs("Notes is not frontmost for the Notes body smoke target.\n", stderr)
+    exit(3)
 }
 
 guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.Notes" }) else {
@@ -2695,43 +2679,18 @@ AXUIElementSetMessagingTimeout(appElement, 1.0)
 let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] ?? []
 
 guard let body = windows.lazy.compactMap({ noteBody(in: $0) }).first ?? noteBody(in: appElement) else {
-    fputs("Could not find a Notes body text view. Open the disposable Autocomplete smoke note and put focus in the note body.\n", stderr)
+    fputs("Could not find a Notes body text view with the smoke marker.\n", stderr)
     exit(3)
 }
 
 let bodyText = copyAttribute(body, kAXValueAttribute) as? String ?? ""
 guard bodyText.localizedCaseInsensitiveContains(marker) else {
-    fputs("Refusing to type in Notes because the focused/open note body does not contain the marker '\(marker)'.\n", stderr)
-    fputs("Open a disposable note whose body contains that marker, then rerun the Notes smoke.\n", stderr)
+    fputs("Refusing to type in Notes because the open note body does not contain the marker '\(marker)'.\n", stderr)
     exit(3)
 }
 
-guard let source = CGEventSource(stateID: .hidSystemState) else {
-    fputs("Could not create a CGEvent source for Notes smoke typing.\n", stderr)
-    exit(1)
-}
-
-app.activate(options: [.activateAllWindows])
-if let window = windows.first {
-    AXUIElementPerformAction(window, kAXRaiseAction as CFString)
-}
-Thread.sleep(forTimeInterval: 0.25)
 AXUIElementSetAttributeValue(body, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-
-if let rect = bounds(for: body) {
-    postClick(at: CGPoint(x: rect.midX, y: min(rect.maxY - 24, rect.midY)), source: source)
-    Thread.sleep(forTimeInterval: 0.12)
-}
-
-var endRange = CFRange(location: bodyText.utf16.count, length: 0)
-guard let rangeValue = AXValueCreate(.cfRange, &endRange) else {
-    fputs("Could not create a selected-range value for Notes smoke typing.\n", stderr)
-    exit(1)
-}
-AXUIElementSetAttributeValue(body, kAXSelectedTextRangeAttribute as CFString, rangeValue)
-Thread.sleep(forTimeInterval: 0.12)
-postText(fragment, source: source)
-print("typed Notes body smoke fragment")
+print("Notes body smoke target confirmed")
 SWIFT
 }
 
@@ -2819,7 +2778,8 @@ run_notes() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  type_notes_body_smoke_fragment $'\nSmoke proof feels inst'
+  assert_notes_body_smoke_target
+  type_notes_raw_smoke_text $'\nSmoke proof feels inst'
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes body"
   assert_frontmost_app "Notes" "Notes body"
@@ -2833,7 +2793,8 @@ run_notes() {
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.Notes .*result=verified" "Notes body first verified insertion"
 
   second_start_line="$(line_count "$LOG_PATH")"
-  type_notes_body_smoke_fragment " and stays inst"
+  assert_notes_body_smoke_target
+  type_notes_raw_smoke_text " and stays inst"
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes body second"
   assert_frontmost_app "Notes" "Notes body"
