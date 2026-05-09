@@ -652,3 +652,9 @@ Target real dogfood score: 92/100 or higher with no wrong-field insertions and n
 - Finding: CodeMirror/AX kept placing the real typing cursor before the final filler line. The app correctly blocked suggestions with `reason=middleOfLine` and `afterChars=90`, then a trim attempt exposed an even worse stale-selection shape with `beforeChars=0` and `afterChars=500`.
 - Decision: backed out the experimental harness change instead of committing a flaky or dishonest proof path. No green row was recorded.
 - Next fix target: build a safer long-note setup that can prove the actual focused AX selected range is at the visible document end before typing, or add a separate product rule only if the current-line suffix is provably empty/newline-delimited rather than real same-line text.
+
+2026-05-09T07:16Z heartbeat follow-up: tried a tighter long-note repair path and backed it out.
+
+- Attempt: added a scoped Obsidian repair for the shape "AX says cursor at document start, but the previous full text is a prefix and new text was appended at the end." Focused unit coverage passed, but live `obsidian-long-note` still did not present.
+- Finding: the live AX read only exposed a capped 500-character after-cursor window, so the app could not prove the previous full note was a prefix of the new full note. The bounded diagnostics still ended in `tooLittleContext` rather than a verifiable end-of-document context.
+- Decision: backed out the product/harness experiment and kept the gap open. The next credible fix needs a focused AX reader path that can verify long-document selected range near the end without relying on the capped hot-loop text window.
