@@ -1316,6 +1316,39 @@ async function tabWebSocketURL() {
 
 function expressionForFixture() {
   const encodedText = JSON.stringify(text);
+  if (!fixture.endsWith("-public") && !fixture.endsWith("-official")) {
+    return `(() => {
+      const text = ${encodedText};
+      if (typeof window.insertAutocompleteSmokeText === 'function') {
+        const result = window.insertAutocompleteSmokeText(text);
+        return { ok: true, role: result?.role || 'custom', valueLength: result?.valueLength || 0 };
+      }
+      const editor = document.querySelector('[data-smoke-editor]');
+      if (!editor) return { ok: false, reason: 'missing smoke editor' };
+      editor.focus();
+      if (editor.tagName === 'TEXTAREA' || editor.tagName === 'INPUT') {
+        const nextValue = String(editor.value || '') + text;
+        editor.value = nextValue;
+        editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+        if (typeof editor.setSelectionRange === 'function') {
+          editor.setSelectionRange(editor.value.length, editor.value.length);
+        }
+        return { ok: true, role: 'textarea', valueLength: editor.value.length };
+      }
+      const current = String(editor.textContent || '').replace(/^\\s+$/, '');
+      const nextValue = current + text;
+      editor.textContent = nextValue;
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+      return { ok: true, role: 'contenteditable', valueLength: editor.textContent.length };
+    })()`;
+  }
+
   if (fixture === "textarea-public") {
     return `(() => {
       const text = ${encodedText};
@@ -3596,6 +3629,76 @@ print(copyAttribute(focusedElement, kAXValueAttribute) as? String ?? "")
 SWIFT
 }
 
+reset_chrome_focused_editor_text() {
+  local fixture="$1"
+  local chrome_pid="$2"
+  local label="$3"
+
+  swift - "$fixture" "${chrome_pid:-0}" "$label" <<'SWIFT'
+import AppKit
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 4,
+      let rawPID = Int32(CommandLine.arguments[2]) else {
+    exit(2)
+}
+
+let fixture = CommandLine.arguments[1]
+let label = CommandLine.arguments[3]
+let pid: pid_t
+if rawPID > 0 {
+    pid = pid_t(rawPID)
+} else if let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+          let frontmost = NSWorkspace.shared.frontmostApplication,
+          frontmost.bundleIdentifier == "com.google.Chrome" || frontmost.localizedName == "Google Chrome" {
+    pid = frontmostPID
+} else {
+    fputs("Chrome \(fixture) smoke could not reset setup text during \(label): frontmost app is not Google Chrome.\n", stderr)
+    exit(1)
+}
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+
+    return value
+}
+
+func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String {
+    copyAttribute(element, attribute) as? String ?? ""
+}
+
+let appElement = AXUIElementCreateApplication(pid)
+AXUIElementSetMessagingTimeout(appElement, 0.5)
+guard let focusedValue = copyAttribute(appElement, kAXFocusedUIElementAttribute) else {
+    fputs("Chrome \(fixture) smoke could not reset setup text during \(label): Chrome has no focused AX element.\n", stderr)
+    exit(1)
+}
+
+let focusedElement = focusedValue as! AXUIElement
+let role = stringAttribute(focusedElement, kAXRoleAttribute)
+guard role == "AXTextArea" || role == "AXTextField" else {
+    fputs("Chrome \(fixture) smoke could not reset setup text during \(label): focused AX role is \(role.isEmpty ? "unknown" : role).\n", stderr)
+    exit(1)
+}
+
+let result = AXUIElementSetAttributeValue(focusedElement, kAXValueAttribute as CFString, "" as CFTypeRef)
+guard result == .success else {
+    fputs("Chrome \(fixture) smoke could not reset setup text during \(label): AX result \(result.rawValue).\n", stderr)
+    exit(1)
+}
+
+var cursorRange = CFRange(location: 0, length: 0)
+if let rangeValue = AXValueCreate(.cfRange, &cursorRange) {
+    AXUIElementSetAttributeValue(focusedElement, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+}
+SWIFT
+}
+
 wait_for_chrome_focused_text_contains() {
   local fixture="$1"
   local chrome_pid="$2"
@@ -3617,6 +3720,27 @@ wait_for_chrome_focused_text_contains() {
   echo "Expected fragment: $expected_fragment" >&2
   echo "Actual: $(chrome_focused_editor_text "$fixture" "$chrome_pid")" >&2
   exit 1
+}
+
+chrome_focused_text_stably_contains() {
+  local fixture="$1"
+  local chrome_pid="$2"
+  local expected_fragment="$3"
+  local stable_samples="${4:-6}"
+  local sample_delay="${5:-0.15}"
+  local matched_samples=0
+
+  while ((matched_samples < stable_samples)); do
+    local current_text
+    current_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"
+    if [[ "$current_text" != *"$expected_fragment"* ]]; then
+      return 1
+    fi
+    matched_samples=$((matched_samples + 1))
+    sleep "$sample_delay"
+  done
+
+  return 0
 }
 
 wait_for_chrome_focused_text_exact() {
@@ -4013,14 +4137,17 @@ type_chrome_smoke_text() {
   local text="$5"
 
   assert_chrome_ready_for_input "$fixture" "$chrome_pid" "$expected_url" "$label"
-  if chrome_fixture_is_public_text_field_demo "$fixture" \
-    && chrome_public_setup_text_with_devtools "$fixture" "$text"; then
+  if chrome_public_setup_text_with_devtools "$fixture" "$text"; then
     wait_for_chrome_focused_text_contains "$fixture" "$chrome_pid" "$text" "$label" 8
     return 0
   fi
 
   if insert_chrome_smoke_text_with_ax "$fixture" "$chrome_pid" "$label" "$text"; then
-    return 0
+    if chrome_focused_text_stably_contains "$fixture" "$chrome_pid" "$text"; then
+      return 0
+    fi
+    echo "Chrome $fixture setup text was not stable after AX insertion during $label; retrying through guarded System Events." >&2
+    reset_chrome_focused_editor_text "$fixture" "$chrome_pid" "$label"
   fi
 
   focus_chrome_smoke_editor "$fixture" "$chrome_pid"
@@ -4046,6 +4173,14 @@ window.focusSmokeEditor = function () {
   const editor = document.querySelector("[data-smoke-editor]");
   editor.focus();
   editor.setSelectionRange(editor.value.length, editor.value.length);
+};
+window.insertAutocompleteSmokeText = function (text) {
+  const editor = document.querySelector("[data-smoke-editor]");
+  editor.focus();
+  editor.value = editor.value + text;
+  editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
+  editor.setSelectionRange(editor.value.length, editor.value.length);
+  return { role: "textarea", valueLength: editor.value.length };
 };
 window.addEventListener("load", window.focusSmokeEditor);
 </script>
@@ -4210,6 +4345,18 @@ require(["vs/editor/editor.main"], function () {
 
   window.autocompleteSmokeEditorText = function () {
     return editor.getValue();
+  };
+  window.insertAutocompleteSmokeText = function (text) {
+    const model = editor.getModel();
+    const lineNumber = model.getLineCount();
+    const column = model.getLineMaxColumn(lineNumber);
+    editor.executeEdits("autocomplete-lab-smoke", [{
+      range: new monaco.Range(lineNumber, column, lineNumber, column),
+      text,
+      forceMoveMarkers: true
+    }]);
+    window.focusSmokeEditor();
+    return { role: "monaco", valueLength: editor.getValue().length };
   };
   window.focusSmokeEditor = function () {
     const model = editor.getModel();
@@ -5496,11 +5643,7 @@ run_chrome_fixture() {
   echo "Running Chrome fixture: $fixture"
 
   if chrome_fixture_uses_isolated_accessibility_chrome "$fixture"; then
-    if chrome_fixture_is_public_text_field_demo "$fixture"; then
-      CHROME_REMOTE_DEBUGGING_PORT="$(allocate_local_port)"
-    else
-      CHROME_REMOTE_DEBUGGING_PORT=""
-    fi
+    CHROME_REMOTE_DEBUGGING_PORT="$(allocate_local_port)"
     launch_isolated_chrome_fixture "$chrome_url" "$tmp_dir"
     chrome_pid="$CHROME_LAST_LAUNCHED_PID"
     wait_for_chrome_expected_tab "$fixture" "$chrome_url" "initial isolated fixture load" "$chrome_pid" 12
