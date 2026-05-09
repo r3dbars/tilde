@@ -479,6 +479,17 @@ Time: 2026-05-09T00:36:00Z
 - Chrome production textarea attempt: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public` failed closed before typing because Chrome's `View > Developer > Allow JavaScript from Apple Events` setting is off, so the harness cannot focus or verify the public demo field.
 - Default Chrome real Monaco attempt: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-real --chrome-accessibility default` failed closed because normal Chrome exposed only browser chrome through macOS Accessibility, not the page editor content.
 
+2026-05-09T04:10Z heartbeat follow-up: made Notes title proof scriptable and refreshed it on PR #35.
+
+- Finding: the first guarded title attempt used the older partial-word `inst` setup, which triggered Notes' own inline completion and made AX expose text after the caret. Autocomplete Lab correctly failed closed with `reason=middleOfLine`.
+- Fix: `notes-title` now has a guarded disposable-note driver like `notes-body`: it creates a fresh blank note, verifies Notes is frontmost, verifies the focused title line is blank and single-line before typing, moves the selected range to the end, and uses proactive next-word text (`Smoke proof feels`) instead of fighting Apple's native `inst` completion.
+- Harness validation: `bash -n script/real_app_smoke.sh script/manual_smoke_session.sh script/real_app_smoke_self_test.sh script/manual_smoke_self_test.sh`, `script/real_app_smoke_self_test.sh`, and `script/manual_smoke_self_test.sh` passed.
+- Live run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`.
+- Result: Notes title passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- Evidence: diagnostics lines 242753-242791 and trace lines 61496-61505; build `commit:646b11177843`, app SHA `399ac231701c62161e42db66994f104122edf0187d5130b8eb0513f0c7189012`.
+- Status fix: `manual_smoke_status.sh` now treats older proof rows as source-compatible when app/runtime source (`Package.swift`, `Package.resolved`, `Sources`) is unchanged, so safer proof-driver edits do not mark unrelated app proofs stale.
+- Gate movement: Notes title, Notes body, and TextEdit are now fresh green; remaining target-app proof gaps dropped from 20 to 19. `script/manual_smoke_status.sh --require-all` still fails correctly because those 19 proof gaps are real.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
