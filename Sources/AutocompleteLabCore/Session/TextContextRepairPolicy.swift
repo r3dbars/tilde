@@ -3,6 +3,8 @@ import Foundation
 public enum TextContextRepairReason: String, Equatable, Sendable {
     case notesTextAfterCursorTyping = "notes-text-after-cursor-typing"
     case notesTextAfterCursorStable = "notes-text-after-cursor-stable"
+    case obsidianCodeMirrorTrailingCharacter = "obsidian-codemirror-trailing-character"
+    case obsidianCodeMirrorLineDrift = "obsidian-codemirror-line-drift"
 }
 
 public struct TextContextRepairInput: Equatable, Sendable {
@@ -57,6 +59,17 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
     public init() {}
 
     public func repair(_ input: TextContextRepairInput) -> TextContextRepairResult {
+        if let obsidianRepair = obsidianCodeMirrorTrailingCharacterRepair(input) {
+            return obsidianRepair
+        }
+        if let obsidianRepair = obsidianCodeMirrorLineDriftRepair(input) {
+            return obsidianRepair
+        }
+
+        return notesTextAfterCursorRepair(input)
+    }
+
+    private func notesTextAfterCursorRepair(_ input: TextContextRepairInput) -> TextContextRepairResult {
         guard input.bundleIdentifier == "com.apple.Notes",
               input.role == "AXTextArea",
               input.selectedTextLength == 0 else {
@@ -108,6 +121,68 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
             textBeforeCursor: repairedTextBeforeCursor,
             textAfterCursor: repairedTextAfterCursor,
             reason: .notesTextAfterCursorTyping
+        )
+    }
+
+    private func obsidianCodeMirrorTrailingCharacterRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
+        guard input.bundleIdentifier == "md.obsidian",
+              input.role == "AXTextArea",
+              input.selectedTextLength == 0,
+              let lastCharacterBeforeCursor = input.textBeforeCursor.last,
+              lastCharacterBeforeCursor.isLetter else {
+            return nil
+        }
+
+        let lineAfterCursor = firstLine(in: input.textAfterCursor)
+        guard lineAfterCursor.count == 1,
+              lineAfterCursor.allSatisfy(\.isLetter) else {
+            return nil
+        }
+
+        let repairedTextBeforeCursor = input.textBeforeCursor + lineAfterCursor
+        let repairedTextAfterCursor = String(input.textAfterCursor.dropFirst(lineAfterCursor.count))
+        let repairedCurrentLine = currentLine(in: repairedTextBeforeCursor)
+        guard isPlausibleActiveTypingLine(repairedCurrentLine) else {
+            return nil
+        }
+
+        return TextContextRepairResult(
+            textBeforeCursor: repairedTextBeforeCursor,
+            textAfterCursor: repairedTextAfterCursor,
+            reason: .obsidianCodeMirrorTrailingCharacter
+        )
+    }
+
+    private func obsidianCodeMirrorLineDriftRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
+        guard input.bundleIdentifier == "md.obsidian",
+              input.role == "AXTextArea",
+              input.selectedTextLength == 0 else {
+            return nil
+        }
+
+        let currentLineBefore = currentLine(in: input.textBeforeCursor)
+        let lineAfterCursor = firstLine(in: input.textAfterCursor)
+        guard currentLineBefore.count >= 2,
+              currentLineBefore.count <= 24,
+              lineAfterCursor.count >= 2,
+              lineAfterCursor.count <= 80,
+              contentWordCount(in: currentLineBefore) <= 1,
+              let lastCharacterBeforeCursor = currentLineBefore.last,
+              let firstCharacterAfterCursor = lineAfterCursor.first,
+              lastCharacterBeforeCursor.isLetter,
+              firstCharacterAfterCursor.isLetter else {
+            return nil
+        }
+
+        let repairedLine = currentLineBefore + lineAfterCursor
+        guard isPlausibleActiveTypingLine(repairedLine) else {
+            return nil
+        }
+
+        return TextContextRepairResult(
+            textBeforeCursor: input.textBeforeCursor + lineAfterCursor,
+            textAfterCursor: String(input.textAfterCursor.dropFirst(lineAfterCursor.count)),
+            reason: .obsidianCodeMirrorLineDrift
         )
     }
 
