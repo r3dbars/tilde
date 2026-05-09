@@ -83,6 +83,7 @@ trim() {
 
 declare -a CURRENT_BUILD_PROOFS=()
 CURRENT_COMMIT_PROOF=""
+CURRENT_APP_PROOF=""
 CURRENT_ARCHIVE_PROOF=""
 
 collect_current_build_proofs() {
@@ -102,7 +103,8 @@ collect_current_build_proofs() {
     local app_sha
     app_sha="$(shasum -a 256 "$app_binary" | awk '{print $1}')"
     if [[ -n "$app_sha" ]]; then
-      CURRENT_BUILD_PROOFS+=("app-sha256:$app_sha")
+      CURRENT_APP_PROOF="app-sha256:$app_sha"
+      CURRENT_BUILD_PROOFS+=("$CURRENT_APP_PROOF")
     fi
   fi
 
@@ -132,6 +134,10 @@ line_has_current_build_proof() {
 
   if [[ "$line" == *"archive-sha256:"* ]]; then
     [[ -n "$CURRENT_ARCHIVE_PROOF" && "$line" == *"$CURRENT_ARCHIVE_PROOF"* ]] || return 1
+    return 0
+  fi
+
+  if [[ -n "$CURRENT_APP_PROOF" && "$line" == *"$CURRENT_APP_PROOF"* ]]; then
     return 0
   fi
 
