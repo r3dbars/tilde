@@ -7,6 +7,329 @@
     "keyCaptureProofVersion": "key-capture-v3",
     "runtimeProofVersion": "runtime-v2"
   },
+  "hostPolicy": {
+    "policyVersion": "2026-05-08.1",
+    "source": "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift",
+    "entries": [
+      {
+        "bundle": "com.apple.TextEdit",
+        "displayName": "TextEdit",
+        "versionState": "exact",
+        "hostVersion": "1.20",
+        "hostBuild": "415",
+        "versionSource": "/System/Applications/TextEdit.app",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "complete",
+        "killSwitch": "perHostDisable",
+        "proofArtifacts": [
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/textedit-inline.png"
+          },
+          {
+            "kind": "manual-smoke",
+            "reference": "TextEdit/default"
+          }
+        ],
+        "notes": "Reference native target with current strict visual and insertion proof."
+      },
+      {
+        "bundle": "com.apple.Notes",
+        "displayName": "Notes",
+        "versionState": "exact",
+        "hostVersion": "4.13",
+        "hostBuild": "3146.101.28",
+        "versionSource": "/System/Applications/Notes.app",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "partial",
+        "killSwitch": "perHostDisable",
+        "proofArtifacts": [
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/notes-title.png"
+          },
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/notes-body.png"
+          },
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/notes-checklist.png"
+          }
+        ],
+        "notes": "Rich-text proof is split by title, body, and checklist lanes."
+      },
+      {
+        "bundle": "md.obsidian",
+        "displayName": "Obsidian",
+        "versionState": "exact",
+        "hostVersion": "1.12.4",
+        "hostBuild": "0.14.8",
+        "versionSource": "/Applications/Obsidian.app",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "partial",
+        "killSwitch": "perHostDisable",
+        "proofArtifacts": [
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/obsidian.png"
+          }
+        ],
+        "notes": "Real CodeMirror proof exists, but theme, pane, and long-note variants remain open."
+      },
+      {
+        "bundle": "com.apple.mail",
+        "displayName": "Mail",
+        "versionState": "exact",
+        "hostVersion": "16.0",
+        "hostBuild": "3864.500.181",
+        "versionSource": "/System/Applications/Mail.app",
+        "safetyMode": "notPrompt",
+        "runtimeState": "diagnosticsOnly",
+        "proofState": "blocked",
+        "killSwitch": "diagnosticsOnly",
+        "proofArtifacts": [],
+        "notes": "Sensitive compose surface; suggestions remain off until insertion proof exists."
+      },
+      {
+        "bundle": "com.openai.atlas",
+        "displayName": "ChatGPT Atlas",
+        "versionState": "exact",
+        "hostVersion": "1.2026.112.0",
+        "hostBuild": "20260422141901000",
+        "versionSource": "/Applications/ChatGPT Atlas.app",
+        "safetyMode": "disabled",
+        "runtimeState": "disabled",
+        "proofState": "blocked",
+        "killSwitch": "hardDisabled",
+        "proofArtifacts": [],
+        "notes": "Prompt/browser hybrid stays disabled until disposable prompt and page-field proof exists."
+      },
+      {
+        "bundle": "com.openai.chat",
+        "displayName": "ChatGPT",
+        "versionState": "pending",
+        "versionReason": "App not installed or not proofed on this host.",
+        "safetyMode": "disabled",
+        "runtimeState": "disabled",
+        "proofState": "blocked",
+        "killSwitch": "hardDisabled",
+        "proofArtifacts": [],
+        "notes": "Prompt composer can submit or attach context; exact-version no-submit proof is required."
+      },
+      {
+        "bundle": "com.openai.ChatGPT",
+        "displayName": "ChatGPT",
+        "versionState": "pending",
+        "versionReason": "Alternate bundle ID not installed or not proofed on this host.",
+        "safetyMode": "disabled",
+        "runtimeState": "disabled",
+        "proofState": "blocked",
+        "killSwitch": "hardDisabled",
+        "proofArtifacts": [],
+        "notes": "Prompt composer can submit or attach context; exact-version no-submit proof is required."
+      },
+      {
+        "bundle": "com.google.Chrome",
+        "displayName": "Chrome",
+        "versionState": "exact",
+        "hostVersion": "148.0.7778.96",
+        "hostBuild": "7778.96",
+        "versionSource": "/Applications/Google Chrome.app",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "partial",
+        "killSwitch": "perHostDisable",
+        "proofArtifacts": [
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/chrome-textarea.png"
+          },
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/chrome-contenteditable.png"
+          },
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/chrome-chat-like.png"
+          }
+        ],
+        "notes": "Local fixtures are proven, but production sites and default AX editor variants remain open."
+      },
+      {
+        "bundle": "com.openai.codex",
+        "displayName": "Codex",
+        "versionState": "exact",
+        "hostVersion": "26.506.21252",
+        "hostBuild": "2575",
+        "versionSource": "/Applications/Codex.app",
+        "safetyMode": "wordOnly",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "partial",
+        "killSwitch": "proofModeRequired",
+        "proofArtifacts": [
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/codex-inline.png"
+          }
+        ],
+        "notes": "Dogfood prompt support is word-only; full accept and direct proof insertion require proof mode."
+      },
+      {
+        "bundle": "com.anthropic.claude-code",
+        "displayName": "Claude Code",
+        "versionState": "exact",
+        "hostVersion": "2.1.128",
+        "hostBuild": "2.1.128",
+        "versionSource": "/Users/redbars/Library/Application Support/Claude/claude-code/2.1.128/claude.app",
+        "safetyMode": "disabled",
+        "runtimeState": "proofModeOnly",
+        "proofState": "complete",
+        "killSwitch": "proofModeRequired",
+        "proofArtifacts": [
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/claude-code-terminal.png"
+          },
+          {
+            "kind": "manual-smoke",
+            "reference": "Claude Code/default"
+          }
+        ],
+        "notes": "Direct bundle is disabled; terminal-host proof is marker-gated and one-word only."
+      },
+      {
+        "bundle": "com.anthropic.claudefordesktop",
+        "displayName": "Claude",
+        "versionState": "exact",
+        "hostVersion": "1.6608.0",
+        "hostBuild": "1.6608.0",
+        "versionSource": "/Applications/Claude.app",
+        "safetyMode": "wordOnly",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "partial",
+        "killSwitch": "proofModeRequired",
+        "proofArtifacts": [
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/claude-desktop.png"
+          }
+        ],
+        "notes": "One prompt layout has no-submit proof; full accept and layout variants remain blocked."
+      },
+      {
+        "bundle": "com.apple.Safari",
+        "displayName": "Safari",
+        "versionState": "pending",
+        "versionReason": "Exact Safari build not captured in this proof pass.",
+        "safetyMode": "disabled",
+        "runtimeState": "disabled",
+        "proofState": "blocked",
+        "killSwitch": "hardDisabled",
+        "proofArtifacts": [],
+        "notes": "WebKit rich-editor and prompt surfaces need exact-version proof first."
+      },
+      {
+        "bundle": "com.tinyspeck.slackmacgap",
+        "displayName": "Slack",
+        "versionState": "pending",
+        "versionReason": "Slack not proofed on this host.",
+        "safetyMode": "disabled",
+        "runtimeState": "disabled",
+        "proofState": "blocked",
+        "killSwitch": "hardDisabled",
+        "proofArtifacts": [],
+        "notes": "Message composer stays disabled until no-submit proof exists."
+      },
+      {
+        "bundle": "ru.keepcoder.Telegram",
+        "displayName": "Telegram",
+        "versionState": "pending",
+        "versionReason": "Telegram not proofed on this host.",
+        "safetyMode": "disabled",
+        "runtimeState": "disabled",
+        "proofState": "blocked",
+        "killSwitch": "hardDisabled",
+        "proofArtifacts": [],
+        "notes": "Send-by-enter variants need disposable chat proof before suggestions run."
+      },
+      {
+        "bundle": "notion.id",
+        "displayName": "Notion",
+        "versionState": "pending",
+        "versionReason": "Notion not proofed on this host.",
+        "safetyMode": "notPrompt",
+        "runtimeState": "disabled",
+        "proofState": "blocked",
+        "killSwitch": "hardDisabled",
+        "proofArtifacts": [],
+        "notes": "Workspace text and ProseMirror placement need disposable-page proof."
+      },
+      {
+        "bundle": "com.hnc.Discord",
+        "displayName": "Discord",
+        "versionState": "pending",
+        "versionReason": "Discord not proofed on this host.",
+        "safetyMode": "disabled",
+        "runtimeState": "disabled",
+        "proofState": "blocked",
+        "killSwitch": "hardDisabled",
+        "proofArtifacts": [],
+        "notes": "Composer stays disabled until no-submit proof exists."
+      },
+      {
+        "bundle": "com.hnc.DiscordPTB",
+        "displayName": "Discord PTB",
+        "versionState": "pending",
+        "versionReason": "Discord PTB not proofed on this host.",
+        "safetyMode": "disabled",
+        "runtimeState": "disabled",
+        "proofState": "blocked",
+        "killSwitch": "hardDisabled",
+        "proofArtifacts": [],
+        "notes": "Composer stays disabled until no-submit proof exists."
+      },
+      {
+        "bundle": "com.hnc.DiscordCanary",
+        "displayName": "Discord Canary",
+        "versionState": "pending",
+        "versionReason": "Discord Canary not proofed on this host.",
+        "safetyMode": "disabled",
+        "runtimeState": "disabled",
+        "proofState": "blocked",
+        "killSwitch": "hardDisabled",
+        "proofArtifacts": [],
+        "notes": "Composer stays disabled until no-submit proof exists."
+      },
+      {
+        "bundle": "com.microsoft.VSCode",
+        "displayName": "VS Code",
+        "versionState": "pending",
+        "versionReason": "VS Code is denylisted and not proofed.",
+        "safetyMode": "notPrompt",
+        "runtimeState": "disabled",
+        "proofState": "blocked",
+        "killSwitch": "hardDisabled",
+        "proofArtifacts": [],
+        "notes": "Monaco editor and command surface stay blocked until app-specific proof exists."
+      },
+      {
+        "bundle": "com.todesktop.230313mzl4w4u92",
+        "displayName": "Cursor",
+        "versionState": "pending",
+        "versionReason": "Cursor is denylisted and not proofed.",
+        "safetyMode": "notPrompt",
+        "runtimeState": "disabled",
+        "proofState": "blocked",
+        "killSwitch": "hardDisabled",
+        "proofArtifacts": [],
+        "notes": "Monaco editor and AI composer stay blocked until app-specific proof exists."
+      }
+    ]
+  },
   "surfaces": [
     {
       "surface": "TextEdit",
@@ -31,13 +354,34 @@
         "docs/product/visual-placement-screenshots/chrome-contenteditable.png"
       ],
       "gaps": [
-        "Still local fixture proof, not broad production website proof."
+        "Production Chrome text-field proof is defined but still missing: run the bounded public W3Schools textarea/contenteditable lane with disposable text and strict screenshot tracing."
       ],
       "requirements": [
         {
           "id": "production-chrome-text-fields",
           "status": "pending",
-          "summary": "Add bounded screenshot-backed smoke proof for representative production Chrome text fields beyond local fixtures."
+          "summary": "Run bounded screenshot-backed smoke proof for representative production Chrome text fields beyond local fixtures.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture production-text-fields",
+          "safePath": [
+            "textarea-public: https://www.w3schools.com/tags/tryit.asp?filename=tryhtml_textarea",
+            "contenteditable-public: https://www.w3schools.com/tags/tryit.asp?filename=tryhtml5_global_contenteditable"
+          ],
+          "proofRows": [
+            {
+              "app": "Chrome",
+              "bundle": "com.google.Chrome",
+              "proof": "textarea-public",
+              "minVerifiedAccepts": 2,
+              "requiresVisualStrictComplete": true
+            },
+            {
+              "app": "Chrome",
+              "bundle": "com.google.Chrome",
+              "proof": "contenteditable-public",
+              "minVerifiedAccepts": 2,
+              "requiresVisualStrictComplete": true
+            }
+          ]
         }
       ]
     },
@@ -134,13 +478,13 @@
         "docs/product/visual-placement-screenshots/chrome-chat-like.png"
       ],
       "gaps": [
-        "Local no-submit fixture is proven, but real prompt/chat app proof is still missing."
+        "Local no-submit fixture is proven and the bounded HTTP browser-chat harness covers disposable browser-composer counters, but exact real-service proof for ChatGPT, Slack, and Discord is still missing."
       ],
       "requirements": [
         {
           "id": "production-chrome-chat-no-submit",
           "status": "pending",
-          "summary": "Add bounded no-submit proof for a real browser chat composer before broad chat support."
+          "summary": "Keep browser ChatGPT, Slack, and Discord blocked until each real service has exact no-submit proof. The browser-chat harness is disposable proof only."
         }
       ]
     },
@@ -178,24 +522,53 @@
       "gaps": [
         "More vault themes, panes, long notes, and hidden-caret variants are still required before green support."
       ],
-      "requirements": [
-        {
-          "id": "obsidian-theme-variants",
-          "status": "pending",
-          "summary": "Add bounded proof across at least one non-default vault theme."
-        },
-        {
-          "id": "obsidian-pane-variants",
-          "status": "pending",
-          "summary": "Add bounded proof with split panes or side panes visible."
-        },
-        {
-          "id": "obsidian-long-note-variants",
-          "status": "pending",
-          "summary": "Add bounded proof in a long scrolled note."
-        }
-      ]
-    },
+    "requirements": [
+      {
+        "id": "obsidian-theme-variants",
+        "status": "pending",
+        "summary": "Add bounded proof across at least one non-default vault theme.",
+        "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
+      },
+      {
+        "id": "obsidian-pane-variants",
+        "status": "pending",
+        "summary": "Add bounded proof with split panes or side panes visible.",
+        "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
+      },
+      {
+        "id": "obsidian-long-note-variants",
+        "status": "pending",
+        "summary": "Add bounded proof in a long scrolled note.",
+        "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
+      }
+    ],
+    "requiredManualSmokes": [
+      {
+        "id": "obsidian-theme",
+        "app": "Obsidian",
+        "bundle": "md.obsidian",
+        "proof": "obsidian-theme",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      {
+        "id": "obsidian-pane",
+        "app": "Obsidian",
+        "bundle": "md.obsidian",
+        "proof": "obsidian-pane",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      {
+        "id": "obsidian-long-note",
+        "app": "Obsidian",
+        "bundle": "md.obsidian",
+        "proof": "obsidian-long-note",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      }
+    ]
+  },
     {
       "surface": "Apple Notes title",
       "status": "partial",
@@ -293,7 +666,7 @@
     },
     {
       "surface": "Claude Code",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Claude Code",
         "bundle": "com.anthropic.claude-code",
@@ -305,12 +678,32 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/claude-code-terminal.png"
       ],
-      "gaps": [],
+      "gaps": [
+        "Terminal-host proof is stricter and host-labelable, but only the Terminal lane has historical screenshot-backed no-submit proof. iTerm2 and Ghostty are installed on this Mac and need their own host-labeled trace slices. Warp, kitty, Alacritty, and WezTerm are supported by policy but unavailable here or still pending proof."
+      ],
       "requirements": [
         {
           "id": "claude-code-terminal-host-no-submit",
           "status": "complete",
           "summary": "Live terminal-host screenshot-backed one-word Tab accept proof completes without submitting shell input or an agent prompt."
+        },
+        {
+          "id": "claude-code-iterm2-host-no-submit",
+          "status": "pending",
+          "summary": "Record host-labeled one-word no-submit proof in iTerm2.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host iterm2 --manual-gate"
+        },
+        {
+          "id": "claude-code-ghostty-host-no-submit",
+          "status": "pending",
+          "summary": "Record host-labeled one-word no-submit proof in Ghostty.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host ghostty --manual-gate"
+        },
+        {
+          "id": "claude-code-warp-host-no-submit",
+          "status": "blocked",
+          "summary": "Warp proof is blocked on this Mac because Warp is not installed.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host warp --manual-gate"
         }
       ]
     },
@@ -329,18 +722,55 @@
         "docs/product/visual-placement-screenshots/claude-desktop.png"
       ],
       "gaps": [
-        "More prompt layouts and separate full-accept no-submit proof are still required before A-level support."
+        "Claude desktop one-word support now has explicit layout proof lanes, but those rows are not all complete yet. Full accept remains blocked until a separate safe no-submit lane exists."
       ],
       "requirements": [
         {
-          "id": "claude-desktop-prompt-layout-variants",
+          "id": "claude-desktop-empty-composer",
           "status": "pending",
-          "summary": "Add bounded same-baseline proof for additional Claude desktop prompt layouts."
+          "summary": "Prove one-word no-submit support from an empty Claude desktop composer.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-empty --manual-gate"
+        },
+        {
+          "id": "claude-desktop-long-prompt",
+          "status": "pending",
+          "summary": "Prove one-word no-submit support with a long disposable Claude desktop prompt.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-long --manual-gate"
+        },
+        {
+          "id": "claude-desktop-wrapped-prompt",
+          "status": "pending",
+          "summary": "Prove one-word no-submit support with a wrapped Claude desktop prompt.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-wrapped --manual-gate"
+        },
+        {
+          "id": "claude-desktop-narrow-window",
+          "status": "pending",
+          "summary": "Prove one-word no-submit support in a narrow Claude desktop window.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-narrow --manual-gate"
+        },
+        {
+          "id": "claude-desktop-context-layout",
+          "status": "pending",
+          "summary": "Prove one-word no-submit support with a safe Claude desktop project/context or side-panel layout if available.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-context --manual-gate"
+        },
+        {
+          "id": "claude-desktop-light-appearance",
+          "status": "pending",
+          "summary": "Prove one-word no-submit support in Claude desktop light appearance if practical.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-light --manual-gate"
+        },
+        {
+          "id": "claude-desktop-dark-appearance",
+          "status": "pending",
+          "summary": "Prove one-word no-submit support in Claude desktop dark appearance if practical.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-dark --manual-gate"
         },
         {
           "id": "claude-desktop-full-accept-no-submit",
-          "status": "pending",
-          "summary": "Add separate full-accept no-submit proof before enabling full accept for Claude desktop."
+          "status": "blocked",
+          "summary": "No safe full-accept proof command exists yet; keep full accept disabled until a dedicated no-submit lane can prove it without enabling unsafe prompt behavior."
         }
       ]
     }
@@ -389,7 +819,7 @@
       "surface": "Chrome text fields/editor/chat-like surfaces",
       "status": "partial",
       "owner": "browser editor adapter lane",
-      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures and forced-Chrome real-editor lanes are proven, but default-Chrome AX and production-site variance remain open. Hosted Google Docs, Notion, Slack, and Discord are blocked by surface policy until real proof exists."
+      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures, the bounded browser-chat harness, and forced-Chrome real-editor lanes are proven, but default-Chrome AX and production-site variance remain open. Hosted Google Docs, Notion, ChatGPT, Slack, and Discord are blocked by surface policy until exact real proof exists."
     },
     {
       "bundle": "com.openai.codex",
@@ -407,7 +837,7 @@
       "surface": "Claude Code",
       "status": "blocked",
       "owner": "terminal-host adapter lane",
-      "safetyNote": "The direct bundle is a background-only helper; terminal-hosted Claude Code must prove one-word accept without submitting shell or agent input."
+      "safetyNote": "The direct bundle is a background-only helper; terminal-hosted Claude Code proof is virtual, proof-mode-only, and host-labeled, while normal terminal hosts remain denylisted."
     },
     {
       "bundle": "com.anthropic.claudefordesktop",
@@ -416,7 +846,7 @@
       "surface": "Claude desktop",
       "status": "partial",
       "owner": "prompt-app proof lane",
-      "safetyNote": "Same-baseline no-submit proof exists for one composer layout; full accept and more prompt layouts remain blocked."
+      "safetyNote": "Same-baseline no-submit proof exists for one composer layout; bounded layout commands now track empty, long, wrapped, narrow, context, light, and dark variants. Full accept remains disabled until a separate safe no-submit proof lane exists."
     },
     {
       "bundle": "com.apple.Safari",

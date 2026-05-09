@@ -11,6 +11,15 @@ TRACE_PROOF_VERSION="$(awk -F '"' '/traceProofVersion/ { print $2; exit }' Sourc
 PLACEMENT_PROOF_VERSION="$(awk -F '"' '/placementProofVersion/ { print $2; exit }' Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift)"
 KEY_CAPTURE_PROOF_VERSION="$(awk -F '"' '/keyCaptureProofVersion/ { print $2; exit }' Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift)"
 RUNTIME_PROOF_VERSION="$(awk -F '"' '/runtimeProofVersion/ { print $2; exit }' Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift)"
+HOST_POLICY_VERSION="$(awk -F '"' '/currentPolicyVersion/ { print $2; exit }' Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift)"
+HOST_POLICY_JSON="$(python3 - <<'PY'
+import json
+from pathlib import Path
+
+manifest = json.loads(Path("docs/product/proof-manifest.json").read_text())
+print(json.dumps(manifest["hostPolicy"], indent=2))
+PY
+)"
 
 write_manual_smoke() {
   local path="$1"
@@ -38,6 +47,18 @@ write_unbounded_manual_smoke() {
 MARKDOWN
 }
 
+write_undo_manual_smoke() {
+  local path="$1"
+  local trace_path="$2"
+  cat >"$path" <<MARKDOWN
+# Manual Smoke Runs
+
+| Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
+| --- | --- | --- | --- | ---: | --- | --- | --- |
+| 2026-05-07T12:15:00Z | TextEdit | \`com.apple.TextEdit\` | \`undo\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 70-76 | lines 20-26 in \`$trace_path\`; visual \`strict-complete\` |
+MARKDOWN
+}
+
 write_trace() {
   local path="$1"
   : >"$path"
@@ -50,6 +71,24 @@ write_trace() {
 {"type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","screenshotPath":"docs/product/visual-placement-screenshots/textedit-inline.png","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
 {"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
 {"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+JSONL
+}
+
+write_undo_trace() {
+  local path="$1"
+  : >"$path"
+  for _ in $(seq 1 19); do
+    printf '{"type":"renderModeChanged","appBundleIdentifier":"com.example.other","metadata":{}}\n' >>"$path"
+  done
+
+  cat >>"$path" <<JSONL
+{"type":"suggestionRequested","appBundleIdentifier":"com.apple.TextEdit","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","screenshotPath":"docs/product/visual-placement-screenshots/textedit-inline.png","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"acceptanceRetentionCleared","appBundleIdentifier":"com.apple.TextEdit","outcome":"undone","reason":"accepted-insertion-undone","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
 {"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
 {"type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","outcome":"verified","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
 JSONL
@@ -93,6 +132,59 @@ write_chrome_chat_trace() {
 JSONL
 }
 
+append_obsidian_trace_segment() {
+  local path="$1"
+  cat >>"$path" <<JSONL
+{"type":"suggestionRequested","appBundleIdentifier":"md.obsidian","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"suggestionPresented","appBundleIdentifier":"md.obsidian","screenshotPath":"docs/product/visual-placement-screenshots/obsidian.png","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"suggestionAccepted","appBundleIdentifier":"md.obsidian","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"insertionVerified","appBundleIdentifier":"md.obsidian","outcome":"verified","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"suggestionAccepted","appBundleIdentifier":"md.obsidian","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+{"type":"insertionVerified","appBundleIdentifier":"md.obsidian","outcome":"verified","metadata":{"traceProofVersion":"$TRACE_PROOF_VERSION","placementProofVersion":"$PLACEMENT_PROOF_VERSION","keyCaptureProofVersion":"$KEY_CAPTURE_PROOF_VERSION","runtimeProofVersion":"$RUNTIME_PROOF_VERSION"}}
+JSONL
+}
+
+write_obsidian_trace() {
+  local path="$1"
+  : >"$path"
+  for _ in $(seq 1 19); do
+    printf '{"type":"renderModeChanged","appBundleIdentifier":"com.example.other","metadata":{}}\n' >>"$path"
+  done
+  append_obsidian_trace_segment "$path"
+  for _ in $(seq 1 4); do
+    printf '{"type":"renderModeChanged","appBundleIdentifier":"com.example.other","metadata":{}}\n' >>"$path"
+  done
+  append_obsidian_trace_segment "$path"
+  for _ in $(seq 1 4); do
+    printf '{"type":"renderModeChanged","appBundleIdentifier":"com.example.other","metadata":{}}\n' >>"$path"
+  done
+  append_obsidian_trace_segment "$path"
+  for _ in $(seq 1 4); do
+    printf '{"type":"renderModeChanged","appBundleIdentifier":"com.example.other","metadata":{}}\n' >>"$path"
+  done
+  append_obsidian_trace_segment "$path"
+}
+
+write_obsidian_required_manual_smoke() {
+  local path="$1"
+  local trace_path="$2"
+  local include_variants="${3:-yes}"
+  cat >"$path" <<MARKDOWN
+# Manual Smoke Runs
+
+| Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
+| --- | --- | --- | --- | ---: | --- | --- | --- |
+| 2026-05-07T12:20:00Z | Obsidian | \`md.obsidian\` | \`default\` | 2 | \`floatingMirror\` | lines 10+ | lines 20-25 in \`$trace_path\`; visual \`strict-complete\` |
+MARKDOWN
+  if [[ "$include_variants" == "yes" ]]; then
+    cat >>"$path" <<MARKDOWN
+| 2026-05-07T12:21:00Z | Obsidian | \`md.obsidian\` | \`obsidian-theme\` | 2 | \`floatingMirror\` | lines 20+ | lines 30-35 in \`$trace_path\`; visual \`strict-complete\` |
+| 2026-05-07T12:22:00Z | Obsidian | \`md.obsidian\` | \`obsidian-pane\` | 2 | \`floatingMirror\` | lines 30+ | lines 40-45 in \`$trace_path\`; visual \`strict-complete\` |
+| 2026-05-07T12:23:00Z | Obsidian | \`md.obsidian\` | \`obsidian-long-note\` | 2 | \`floatingMirror\` | lines 40+ | lines 50-55 in \`$trace_path\`; visual \`strict-complete\` |
+MARKDOWN
+  fi
+}
+
 write_stale_trace() {
   local path="$1"
   : >"$path"
@@ -120,6 +212,7 @@ write_scorecard() {
 | App or surface | Grade | Evidence | What is good | What still needs work |
 | --- | ---: | --- | --- | --- |
 | TextEdit | 10/10 | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Good. | Done. |
+| Obsidian | 10/10 | [obsidian.png](visual-placement-screenshots/obsidian.png) | Good. | Done. |
 | Codex | 10/10 | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Good. | Done. |
 | Chrome chat-like composer | 10/10 | [chrome-chat-like.png](visual-placement-screenshots/chrome-chat-like.png) | Good. | Done. |
 | Missing | 10/10 | [missing-proof.png](visual-placement-screenshots/missing-proof.png) | Missing. | Done. |
@@ -135,6 +228,19 @@ write_app_proof_matrix() {
 | --- | --- | --- | --- | --- | --- |
 | TextEdit | A | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Complete. | Reference proof. | More variants. |
 | Obsidian | A- | [obsidian.png](visual-placement-screenshots/obsidian.png) | Partial. | Strong but variant-incomplete. | More variants. |
+| Codex | B- | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Partial. | Prompt proof missing. | No-submit proof. |
+MARKDOWN
+}
+
+write_complete_obsidian_app_proof_matrix() {
+  local path="$1"
+  cat >"$path" <<'MARKDOWN'
+# App Proof Matrix
+
+| Surface | Grade | Screenshot proof | Accept proof | Current read | Evidence gap |
+| --- | --- | --- | --- | --- | --- |
+| TextEdit | A | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Complete. | Reference proof. | More variants. |
+| Obsidian | A | [obsidian.png](visual-placement-screenshots/obsidian.png) | Complete. | Variant-complete proof. | None. |
 | Codex | B- | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Partial. | Prompt proof missing. | No-submit proof. |
 MARKDOWN
 }
@@ -167,6 +273,7 @@ write_manifest() {
   cat >"$path" <<JSON
 {
   "schemaVersion": 1,
+  "hostPolicy": $HOST_POLICY_JSON,
   "proofFingerprint": {
     "traceProofVersion": "$trace_proof_version",
     "placementProofVersion": "$PLACEMENT_PROOF_VERSION",
@@ -189,6 +296,183 @@ write_manifest() {
       ],
       "gaps": $gaps_json,
       "requirements": $requirements_json
+    }
+  ]
+}
+JSON
+}
+
+write_obsidian_required_manifest() {
+  local path="$1"
+  local status="${2:-complete}"
+  local gaps_json="[]"
+  local requirements_json="[]"
+  if [[ "$status" != "complete" ]]; then
+    gaps_json='["theme, pane, and long-note variants are still pending"]'
+    requirements_json='[
+        {
+          "id": "obsidian-theme-variants",
+          "status": "pending",
+          "summary": "Run one non-default Obsidian theme proof.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
+        },
+        {
+          "id": "obsidian-pane-variants",
+          "status": "pending",
+          "summary": "Run split or side-pane Obsidian proof.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
+        },
+        {
+          "id": "obsidian-long-note-variants",
+          "status": "pending",
+          "summary": "Run long scrolled Obsidian note proof.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
+        }
+      ]'
+  fi
+
+  cat >"$path" <<JSON
+{
+  "schemaVersion": 1,
+  "hostPolicy": $HOST_POLICY_JSON,
+  "proofFingerprint": {
+    "traceProofVersion": "$TRACE_PROOF_VERSION",
+    "placementProofVersion": "$PLACEMENT_PROOF_VERSION",
+    "keyCaptureProofVersion": "$KEY_CAPTURE_PROOF_VERSION",
+    "runtimeProofVersion": "$RUNTIME_PROOF_VERSION"
+  },
+  "surfaces": [
+    {
+      "surface": "Obsidian",
+      "status": "$status",
+      "manualSmoke": {
+        "app": "Obsidian",
+        "bundle": "md.obsidian",
+        "proof": "default",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      "requiredManualSmokes": [
+        {
+          "id": "obsidian-theme",
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-theme",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "id": "obsidian-pane",
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-pane",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "id": "obsidian-long-note",
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-long-note",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        }
+      ],
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/obsidian.png"
+      ],
+      "gaps": $gaps_json,
+      "requirements": $requirements_json
+    }
+  ]
+}
+JSON
+}
+
+write_variant_manifest() {
+  local path="$1"
+  cat >"$path" <<JSON
+{
+  "schemaVersion": 1,
+  "hostPolicy": $HOST_POLICY_JSON,
+  "proofFingerprint": {
+    "traceProofVersion": "$TRACE_PROOF_VERSION",
+    "placementProofVersion": "$PLACEMENT_PROOF_VERSION",
+    "keyCaptureProofVersion": "$KEY_CAPTURE_PROOF_VERSION",
+    "runtimeProofVersion": "$RUNTIME_PROOF_VERSION"
+  },
+  "surfaces": [
+    {
+      "surface": "TextEdit",
+      "status": "complete",
+      "manualSmokeVariants": [
+        {
+          "app": "TextEdit",
+          "bundle": "com.apple.TextEdit",
+          "proof": "default",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "app": "TextEdit",
+          "bundle": "com.apple.TextEdit",
+          "proof": "default",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        }
+      ],
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/textedit-inline.png"
+      ],
+      "gaps": []
+    }
+  ]
+}
+JSON
+}
+
+write_requirement_manifest() {
+  local path="$1"
+  cat >"$path" <<JSON
+{
+  "schemaVersion": 1,
+  "hostPolicy": $HOST_POLICY_JSON,
+  "proofFingerprint": {
+    "traceProofVersion": "$TRACE_PROOF_VERSION",
+    "placementProofVersion": "$PLACEMENT_PROOF_VERSION",
+    "keyCaptureProofVersion": "$KEY_CAPTURE_PROOF_VERSION",
+    "runtimeProofVersion": "$RUNTIME_PROOF_VERSION"
+  },
+  "surfaces": [
+    {
+      "surface": "TextEdit",
+      "status": "complete",
+      "manualSmoke": {
+        "app": "TextEdit",
+        "bundle": "com.apple.TextEdit",
+        "proof": "undo",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      "screenshots": [
+        "docs/product/visual-placement-screenshots/textedit-inline.png"
+      ],
+      "gaps": [],
+      "requirements": [
+        {
+          "id": "same-slice-undo-proof",
+          "status": "complete",
+          "summary": "Prove same-slice accepted insertion undo.",
+          "manualSmoke": {
+            "app": "TextEdit",
+            "bundle": "com.apple.TextEdit",
+            "proof": "undo",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true,
+            "requiresUndo": true
+          }
+        }
+      ]
     }
   ]
 }
@@ -236,6 +520,41 @@ write_profile_manifest() {
   cat >"$path" <<JSON
 {
   "schemaVersion": 1,
+  "hostPolicy": {
+    "policyVersion": "$HOST_POLICY_VERSION",
+    "source": "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift",
+    "entries": [
+      {
+        "bundle": "com.apple.TextEdit",
+        "displayName": "TextEdit",
+        "versionState": "pending",
+        "versionReason": "Fixture profile.",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "complete",
+        "killSwitch": "perHostDisable",
+        "proofArtifacts": [
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/textedit-inline.png"
+          }
+        ],
+        "notes": "Fixture host policy row."
+      },
+      {
+        "bundle": "com.openai.codex",
+        "displayName": "Codex",
+        "versionState": "pending",
+        "versionReason": "Fixture profile.",
+        "safetyMode": "notPrompt",
+        "runtimeState": "diagnosticsOnly",
+        "proofState": "partial",
+        "killSwitch": "diagnosticsOnly",
+        "proofArtifacts": [],
+        "notes": "Fixture host policy row."
+      }
+    ]
+  },
   "proofFingerprint": {
     "traceProofVersion": "$TRACE_PROOF_VERSION",
     "placementProofVersion": "$PLACEMENT_PROOF_VERSION",
@@ -276,13 +595,19 @@ JSON
 MANUAL_SMOKE="$TMP_DIR/manual-smoke-runs.md"
 UNBOUNDED_MANUAL_SMOKE="$TMP_DIR/manual-smoke-runs-unbounded.md"
 TRACE_FILE="$TMP_DIR/traces.jsonl"
+OBSIDIAN_TRACE_FILE="$TMP_DIR/obsidian-traces.jsonl"
+UNDO_TRACE_FILE="$TMP_DIR/undo-traces.jsonl"
 CODEX_PROMPT_TRACE_FILE="$TMP_DIR/codex-prompt-traces.jsonl"
 CODEX_FULL_ACCEPT_TRACE_FILE="$TMP_DIR/codex-full-accept-traces.jsonl"
 CHROME_CHAT_SUBMIT_TRACE_FILE="$TMP_DIR/chrome-chat-submit-traces.jsonl"
 STALE_TRACE_FILE="$TMP_DIR/stale-traces.jsonl"
 SCORECARD="$TMP_DIR/scorecard.md"
 APP_PROOF_MATRIX="$TMP_DIR/app-proof-matrix.md"
+OBSIDIAN_APP_PROOF_MATRIX="$TMP_DIR/obsidian-app-proof-matrix.md"
 PASS_MANIFEST="$TMP_DIR/pass.json"
+VARIANT_MANIFEST="$TMP_DIR/variant-pass.json"
+OBSIDIAN_REQUIRED_MANIFEST="$TMP_DIR/obsidian-required.json"
+OBSIDIAN_PARTIAL_MANIFEST="$TMP_DIR/obsidian-partial.json"
 PROMPT_PASS_MANIFEST="$TMP_DIR/prompt-pass.json"
 PROMPT_FULL_ACCEPT_MANIFEST="$TMP_DIR/prompt-full-accept.json"
 CHROME_CHAT_SUBMIT_MANIFEST="$TMP_DIR/chrome-chat-submit.json"
@@ -292,11 +617,14 @@ A_MINUS_COMPLETE_MANIFEST="$TMP_DIR/a-minus-complete.json"
 STALE_MANIFEST="$TMP_DIR/stale.json"
 MISSING_SMOKE_MANIFEST="$TMP_DIR/missing-smoke.json"
 MISSING_SCREENSHOT_MANIFEST="$TMP_DIR/missing-screenshot.json"
+REQUIREMENT_MANIFEST="$TMP_DIR/requirement.json"
 PROFILE_SOURCE="$TMP_DIR/CompatibilityProfile.swift"
 PROFILE_MANIFEST="$TMP_DIR/profile-pass.json"
 MISSING_PROFILE_MANIFEST="$TMP_DIR/profile-missing.json"
 
 write_trace "$TRACE_FILE"
+write_obsidian_trace "$OBSIDIAN_TRACE_FILE"
+write_undo_trace "$UNDO_TRACE_FILE"
 write_codex_prompt_trace "$CODEX_PROMPT_TRACE_FILE" acceptNextWord acceptNextWord 10s 10s
 write_codex_prompt_trace "$CODEX_FULL_ACCEPT_TRACE_FILE" acceptAllVisible acceptAllVisible 10s 10s
 write_chrome_chat_trace "$CHROME_CHAT_SUBMIT_TRACE_FILE" fieldSend field-send-finalized
@@ -305,7 +633,11 @@ write_manual_smoke "$MANUAL_SMOKE" "$TRACE_FILE"
 write_unbounded_manual_smoke "$UNBOUNDED_MANUAL_SMOKE" "$TRACE_FILE"
 write_scorecard "$SCORECARD"
 write_app_proof_matrix "$APP_PROOF_MATRIX"
+write_complete_obsidian_app_proof_matrix "$OBSIDIAN_APP_PROOF_MATRIX"
 write_manifest "$PASS_MANIFEST" complete "docs/product/visual-placement-screenshots/textedit-inline.png"
+write_variant_manifest "$VARIANT_MANIFEST"
+write_obsidian_required_manifest "$OBSIDIAN_REQUIRED_MANIFEST" complete
+write_obsidian_required_manifest "$OBSIDIAN_PARTIAL_MANIFEST" partial
 write_manifest "$PROMPT_PASS_MANIFEST" complete "docs/product/visual-placement-screenshots/codex-inline.png" "$TRACE_PROOF_VERSION" "Codex" "com.openai.codex" "default" 1
 write_manifest "$PROMPT_FULL_ACCEPT_MANIFEST" complete "docs/product/visual-placement-screenshots/codex-inline.png" "$TRACE_PROOF_VERSION" "Codex" "com.openai.codex" "default" 1
 write_manifest "$CHROME_CHAT_SUBMIT_MANIFEST" complete "docs/product/visual-placement-screenshots/chrome-chat-like.png" "$TRACE_PROOF_VERSION" "Chrome" "com.google.Chrome" "chat-like" 1 "Chrome chat-like composer"
@@ -315,6 +647,7 @@ write_manifest "$A_MINUS_COMPLETE_MANIFEST" complete "docs/product/visual-placem
 write_manifest "$STALE_MANIFEST" complete "docs/product/visual-placement-screenshots/textedit-inline.png" "old-proof"
 write_manifest "$MISSING_SMOKE_MANIFEST" complete "docs/product/visual-placement-screenshots/codex-inline.png" "$TRACE_PROOF_VERSION" "Codex" "com.openai.codex" "default" 2
 write_manifest "$MISSING_SCREENSHOT_MANIFEST" complete "docs/product/visual-placement-screenshots/missing-proof.png"
+write_requirement_manifest "$REQUIREMENT_MANIFEST"
 write_profile_source "$PROFILE_SOURCE"
 write_profile_manifest "$PROFILE_MANIFEST" yes
 write_profile_manifest "$MISSING_PROFILE_MANIFEST" no
@@ -334,6 +667,72 @@ if ! grep -F "Proof manifest verified." "$TMP_DIR/pass.out" >/dev/null; then
 fi
 
 script/check_proof_manifest.sh \
+  --manifest "$VARIANT_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --app-proof-matrix "$APP_PROOF_MATRIX" \
+  --skip-profile-coverage \
+  --strict >"$TMP_DIR/variant-pass.out"
+
+if ! grep -F "Verified trace slices: 2" "$TMP_DIR/variant-pass.out" >/dev/null; then
+  echo "proof manifest self-test did not verify multiple manual smoke variants" >&2
+  cat "$TMP_DIR/variant-pass.out" >&2
+  exit 1
+fi
+
+write_obsidian_required_manual_smoke "$MANUAL_SMOKE" "$OBSIDIAN_TRACE_FILE" no
+
+script/check_proof_manifest.sh \
+  --manifest "$OBSIDIAN_PARTIAL_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --app-proof-matrix "$APP_PROOF_MATRIX" \
+  --skip-profile-coverage \
+  --verify-trace-slices >"$TMP_DIR/obsidian-partial.out"
+
+if ! grep -F "Partial proof:" "$TMP_DIR/obsidian-partial.out" >/dev/null; then
+  echo "proof manifest self-test did not keep variant-incomplete Obsidian partial" >&2
+  cat "$TMP_DIR/obsidian-partial.out" >&2
+  exit 1
+fi
+
+if script/check_proof_manifest.sh \
+  --manifest "$OBSIDIAN_REQUIRED_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --app-proof-matrix "$OBSIDIAN_APP_PROOF_MATRIX" \
+  --skip-profile-coverage \
+  --verify-trace-slices >"$TMP_DIR/obsidian-missing-required.out" 2>&1; then
+  echo "proof manifest self-test expected complete Obsidian proof to require all variant lanes" >&2
+  cat "$TMP_DIR/obsidian-missing-required.out" >&2
+  exit 1
+fi
+
+if ! grep -F "missing required manual smoke obsidian-theme" "$TMP_DIR/obsidian-missing-required.out" >/dev/null; then
+  echo "proof manifest self-test did not explain missing Obsidian theme proof" >&2
+  cat "$TMP_DIR/obsidian-missing-required.out" >&2
+  exit 1
+fi
+
+write_obsidian_required_manual_smoke "$MANUAL_SMOKE" "$OBSIDIAN_TRACE_FILE" yes
+
+script/check_proof_manifest.sh \
+  --manifest "$OBSIDIAN_REQUIRED_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --app-proof-matrix "$OBSIDIAN_APP_PROOF_MATRIX" \
+  --skip-profile-coverage \
+  --strict >"$TMP_DIR/obsidian-required-pass.out"
+
+if ! grep -F "Verified trace slices: 4" "$TMP_DIR/obsidian-required-pass.out" >/dev/null; then
+  echo "proof manifest self-test did not verify all required Obsidian variant trace slices" >&2
+  cat "$TMP_DIR/obsidian-required-pass.out" >&2
+  exit 1
+fi
+
+write_manual_smoke "$MANUAL_SMOKE" "$TRACE_FILE"
+
+script/check_proof_manifest.sh \
   --manifest "$PASS_MANIFEST" \
   --manual-smoke "$MANUAL_SMOKE" \
   --scorecard "$SCORECARD" \
@@ -344,6 +743,42 @@ script/check_proof_manifest.sh \
 if ! grep -F "Verified trace slices: 1" "$TMP_DIR/pass-trace.out" >/dev/null; then
   echo "proof manifest self-test did not verify the trace slice" >&2
   cat "$TMP_DIR/pass-trace.out" >&2
+  exit 1
+fi
+
+write_undo_manual_smoke "$MANUAL_SMOKE" "$UNDO_TRACE_FILE"
+
+script/check_proof_manifest.sh \
+  --manifest "$REQUIREMENT_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --app-proof-matrix "$APP_PROOF_MATRIX" \
+  --skip-profile-coverage \
+  --strict >"$TMP_DIR/requirement-pass.out"
+
+if ! grep -F "Verified trace slices: 2" "$TMP_DIR/requirement-pass.out" >/dev/null; then
+  echo "proof manifest self-test did not verify requirement-level undo proof" >&2
+  cat "$TMP_DIR/requirement-pass.out" >&2
+  exit 1
+fi
+
+write_undo_manual_smoke "$MANUAL_SMOKE" "$TRACE_FILE"
+
+if script/check_proof_manifest.sh \
+  --manifest "$REQUIREMENT_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --app-proof-matrix "$APP_PROOF_MATRIX" \
+  --skip-profile-coverage \
+  --strict >"$TMP_DIR/requirement-missing-undo.out" 2>&1; then
+  echo "proof manifest self-test expected missing requirement undo proof to fail" >&2
+  cat "$TMP_DIR/requirement-missing-undo.out" >&2
+  exit 1
+fi
+
+if ! grep -F "undo proof requires acceptanceRetentionCleared" "$TMP_DIR/requirement-missing-undo.out" >/dev/null; then
+  echo "proof manifest self-test did not explain missing requirement undo proof" >&2
+  cat "$TMP_DIR/requirement-missing-undo.out" >&2
   exit 1
 fi
 
