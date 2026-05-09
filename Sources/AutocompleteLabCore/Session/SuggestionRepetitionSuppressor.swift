@@ -46,6 +46,7 @@ public struct SuggestionRepetitionMissRecord: Equatable, Sendable {
 public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
     public let missThreshold: Int
     public let missHalfLifeSeconds: TimeInterval
+    private static let thresholdTolerance = 0.002
     private var missCounts: [String: SuggestionRepetitionMissBucket] = [:]
 
     public init(
@@ -228,7 +229,7 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
     }
 
     private func reachesThreshold(_ score: Double) -> Bool {
-        score + 0.0001 >= Double(missThreshold)
+        score + Self.thresholdTolerance >= Double(missThreshold)
     }
 }
 
