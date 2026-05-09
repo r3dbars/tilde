@@ -48,7 +48,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let acceptanceSafetyPolicy = AcceptanceSafetyPolicy()
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
     private let suggestionReplacementVisibilityPolicy = SuggestionReplacementVisibilityPolicy()
-    private let suggestionPresentationTracePayloadBuilder = SuggestionPresentationTracePayloadBuilder()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private lazy var suggestionOrchestrator = SuggestionOrchestrator(
         engine: engine,
@@ -76,6 +75,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private let suggestionPanel = SuggestionPanelController()
     private let fieldStatusIndicator = FieldStatusIndicatorController()
+    private lazy var suggestionPresentationDelivery = SuggestionPresentationDelivery(
+        panelPresenter: { [suggestionPanel] text, anchorRect, textLineRect, clippingRect, textStyle, renderMode in
+            suggestionPanel.show(
+                text: text,
+                near: anchorRect,
+                alignedTo: textLineRect,
+                boundedBy: clippingRect,
+                style: textStyle,
+                renderMode: renderMode
+            )
+        },
+        fieldStatusPresenter: { [weak self] context in
+            self?.showFieldStatusIndicator(.shown, context: context)
+        }
+    )
     private lazy var focusedTextReader = SerialFocusedTextAXReader(accessibilityClient: accessibilityClient)
     private let diagnosticsWindow = DiagnosticsWindowController()
     private let appProofCommandCoordinator = AppProofCommandCoordinator()
@@ -4479,15 +4493,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastRenderMode = placement.renderMode
         lastCompatibilityLearningTrustContext = visualTrustContext
         cancelKeyboardEventTapIdleStop()
-        guard let panelRect = suggestionPanel.show(
-            text: suggestion.visibleText,
-            near: placement.anchorRect,
-            alignedTo: placement.renderMode == .inlineAdjacent ? placement.textLineRect : nil,
-            boundedBy: placement.clippingRect,
-            style: context.textStyle,
-            renderMode: placement.renderMode
-        ) else {
-            let reason = "panel-frame-unusable"
+        let presentationDeliveryRequest = SuggestionPresentationDeliveryRequest(
+            suggestion: suggestion,
+            suggestionID: suggestionID,
+            completionRequest: request,
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            placement: placement,
+            latencyMilliseconds: latencyMilliseconds,
+            requestMetadata: traceRequestMetadata(request: request, context: context),
+            geometryMetadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode),
+            learningMetadata: learningAdjustment.metadata,
+            candidateSelectionMetadata: candidateSelectionMetadata,
+            displayScoreMetadata: displayScoreMetadata,
+            replacementMetadata: replacementMetadata
+        )
+        let panelRect: CGRect
+        switch suggestionPresentationDelivery.deliver(presentationDeliveryRequest) {
+        case let .success(delivery):
+            panelRect = delivery.panelRect
+        case let .failure(failure):
+            let reason = failure.reason
             setSuggestionDecision("Blocked: \(reason)")
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
@@ -4527,7 +4554,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        showFieldStatusIndicator(.shown, context: context)
         suggestionSession.present(suggestion)
         setSuggestionDecision("Shown: \(triggerReason) \(latencyMilliseconds)ms")
         currentSuggestionID = suggestionID
@@ -4578,25 +4604,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: profile.bundleIdentifier,
             reason: "suggestion-presented"
         )
-        let presentationTracePayload = suggestionPresentationTracePayloadBuilder.presented(
-            suggestionID: suggestionID,
-            requestMode: request.mode.rawValue,
-            renderMode: placement.renderMode.rawValue,
-            visibleText: suggestion.visibleText,
-            visibleWordCount: suggestion.visibleWordCount,
-            latencyMilliseconds: latencyMilliseconds,
-            anchorRect: placement.anchorRect,
-            textLineRect: placement.textLineRect,
+        let presentationTracePayload = suggestionPresentationDelivery.tracePayload(
+            for: presentationDeliveryRequest,
             panelRect: panelRect,
-            clippingRect: placement.clippingRect,
-            screenshotCaptureRect: screenshotCapture.rectDescription,
-            requestMetadata: traceRequestMetadata(request: request, context: context),
-            geometryMetadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode),
-            learningMetadata: learningAdjustment.metadata,
-            placementMetadata: placement.metadata,
-            candidateSelectionMetadata: candidateSelectionMetadata,
-            displayScoreMetadata: displayScoreMetadata,
-            replacementMetadata: replacementMetadata
+            screenshotCapture: screenshotCapture
         )
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionPresented,
