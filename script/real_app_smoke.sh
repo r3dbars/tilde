@@ -760,6 +760,23 @@ assert_frontmost_app() {
 activate_app_by_process_name() {
   local process_name="$1"
 
+  swift - "$process_name" <<'SWIFT' >/dev/null 2>&1 || true
+import AppKit
+
+guard CommandLine.arguments.count == 2 else {
+    exit(1)
+}
+
+let processName = CommandLine.arguments[1]
+guard let app = NSWorkspace.shared.runningApplications.first(where: {
+    $0.localizedName == processName || $0.bundleURL?.lastPathComponent == "\(processName).app"
+}) else {
+    exit(1)
+}
+
+app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+SWIFT
+
   osascript - "$process_name" <<'APPLESCRIPT' >/dev/null 2>&1 || true
 set processName to item 1 of argv
 tell application "System Events"
@@ -6219,6 +6236,39 @@ append_obsidian_smoke_note_file_text() {
   printf '%s' "$fragment" >>"$smoke_file"
 }
 
+wait_for_obsidian_smoke_note_file_suffix() {
+  local expected_suffix="$1"
+  local timeout_seconds="${2:-5}"
+  local smoke_file deadline current_suffix
+  smoke_file="$(obsidian_smoke_file_path)"
+  deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    current_suffix="$(tail -c "${#expected_suffix}" "$smoke_file" 2>/dev/null || true)"
+    if [[ "$current_suffix" == "$expected_suffix" ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for Obsidian smoke note to end with expected disposable text." >&2
+  echo "Expected suffix: $expected_suffix" >&2
+  echo "Current tail:" >&2
+  tail -c 240 "$smoke_file" >&2 || true
+  echo >&2
+  exit 3
+}
+
+obsidian_smoke_note_file_char_count() {
+  LC_ALL=C wc -m <"$(obsidian_smoke_file_path)" | tr -d ' '
+}
+
+activate_neutral_smoke_setup_app() {
+  open -a Finder >/dev/null 2>&1 || true
+  wait_for_frontmost_app "Finder" 3 || true
+  sleep 0.2
+}
+
 open_obsidian_smoke_note_if_configured() {
   local smoke_uri="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI:-}"
   if [[ -n "$smoke_uri" ]]; then
@@ -6242,7 +6292,7 @@ run_obsidian() {
   local manual_app
   manual_app="$(obsidian_session_app)"
 
-  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line obsidian_marker first_fragment
+  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line obsidian_marker first_fragment long_note_expected_before_chars
   runtime_start_line="$(line_count "$LOG_PATH")"
   obsidian_marker="$(obsidian_smoke_marker_text "$manual_app")"
   first_fragment="Smoke proof feels"
@@ -6289,34 +6339,46 @@ run_obsidian() {
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian first verified insertion"
 
-  second_start_line="$(line_count "$LOG_PATH")"
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
+    press_key_code 53
+    sleep 0.2
+    activate_neutral_smoke_setup_app
+    wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels instant" 5
+    append_obsidian_smoke_note_file_text " and stays inst"
+    long_note_expected_before_chars="$(obsidian_smoke_note_file_char_count)"
     open_obsidian_smoke_note_if_configured
     wait_for_frontmost_app "Obsidian" 8
     move_obsidian_caret_to_document_end
-  fi
-  assert_obsidian_smoke_target "Smoke proof feels instant"
-  if [[ "$manual_app" == "obsidian-pane" ]]; then
-    move_obsidian_caret_to_line_end
-  fi
-  if [[ "$manual_app" == "obsidian-long-note" ]]; then
-    append_obsidian_smoke_note_file_text " and stays"
-    open_obsidian_smoke_note_if_configured
-    wait_for_frontmost_app "Obsidian" 8
-    move_obsidian_caret_to_document_end
+    assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
+    second_start_line="$(line_count "$LOG_PATH")"
   else
+    second_start_line="$(line_count "$LOG_PATH")"
+    assert_obsidian_smoke_target "Smoke proof feels instant"
+    if [[ "$manual_app" == "obsidian-pane" ]]; then
+      move_obsidian_caret_to_line_end
+    fi
     type_obsidian_raw_smoke_text " and stays"
   fi
-  wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"
+  if [[ "$manual_app" == "obsidian-long-note" ]]; then
+    wait_for_log_fields "$second_start_line" "Obsidian second suggestion" 12 \
+      "suggestion-presented" \
+      "app=md.obsidian" \
+      "beforeChars=$long_note_expected_before_chars" \
+      "afterChars=0"
+  else
+    wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"
+  fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     sleep 0.15
+    activate_obsidian_for_smoke
+    assert_frontmost_app "Obsidian" "Obsidian"
     full_start_line="$(line_count "$LOG_PATH")"
-    press_key_code 48
-    wait_for_log_fields "$full_start_line" "Obsidian long-note second Tab acceptance" 12 \
+    press_accept_all_shortcut
+    wait_for_log_fields "$full_start_line" "Obsidian long-note full acceptance" 12 \
       "keyboard-action" \
       "app=md.obsidian" \
-      "key=tab" \
-      "action=acceptNextWord" \
+      "key=$full_accept_key" \
+      "action=acceptAllVisible" \
       "handled=true"
     wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian long-note second verified insertion"
     wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"

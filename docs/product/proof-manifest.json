@@ -118,7 +118,7 @@
             "reference": "docs/product/visual-placement-screenshots/obsidian.png"
           }
         ],
-        "notes": "Real CodeMirror proof exists, but theme, pane, and long-note variants remain open."
+        "notes": "Real CodeMirror proof exists for default, theme, and split-pane lanes; the long-note variant remains open."
       },
       {
         "bundle": "com.apple.mail",
@@ -599,7 +599,7 @@
         "docs/product/visual-placement-screenshots/obsidian.png"
       ],
       "gaps": [
-        "More vault themes, panes, long notes, and hidden-caret variants are still required before green support."
+        "Long scrolled notes and hidden-caret variants are still required before green support."
       ],
     "requirements": [
         {
