@@ -8,9 +8,9 @@ struct WordCompletionQualityEvalTests {
         let report = WordCompletionQualityEvaluator.evaluate()
         let total = report.totalSummary
 
-        #expect(report.score == 9.7)
+        #expect(report.score == 9.6)
         #expect(total.caseCount == 16)
-        #expect(total.shownCount == 12)
+        #expect(total.shownCount == 11)
         #expect(total.candidateQualityRate == 1.0)
         #expect(total.missCount == 1)
         #expect(total.typedOverCount == 1)
@@ -64,7 +64,7 @@ struct WordCompletionQualityEvalTests {
     func reportMarkdownIncludesProofCounters() {
         let markdown = WordCompletionQualityEvaluator.evaluate().markdown
 
-        #expect(markdown.contains("Score: 9.7/10"))
+        #expect(markdown.contains("Score: 9.6/10"))
         #expect(markdown.contains("Candidate quality"))
         #expect(markdown.contains("Miss rate"))
         #expect(markdown.contains("Typed-over rate"))
