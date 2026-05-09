@@ -570,6 +570,25 @@ Time: 2026-05-09T00:36:00Z
 - Public contenteditable evidence: diagnostics lines 245659-245733 and trace lines 61929-61947; build `commit:d38038e9361f`, app SHA `98458971bcbcffb2c6e2214b8f5ad36c142c167ab5de92c3bf287e6c56cf9a72`.
 - Gate movement: `script/manual_smoke_status.sh --require-all` still fails correctly, but public Chrome textarea and contenteditable are now green. Remaining required target-app proof gaps dropped from 17 to 15: Obsidian default refresh/variants, default-Chrome real-editor AX, Claude Code, and Claude desktop layout lanes.
 
+2026-05-09T05:34Z heartbeat follow-up: refreshed current-build native, Chrome, and Codex proof after tuning typed-over recovery.
+
+- Finding: the first current-build Notes checklist rerun exposed a real aggressiveness miss. A normal typed-through suggestion started a 5s prefix-family cooldown, which blocked the next useful checklist suggestion and made the app feel too conservative while typing.
+- Fix: ordinary typed-over cooldown is now 750ms instead of 5s, while repeated typed-over still escalates to 5s. Escape, deletion, and accepted-then-deleted safety cooldowns stay unchanged.
+- Validation: `swift test --filter PrefixFamilyCooldownPolicyTests` passed.
+- Current PR #35 proof refreshes on `qwen3-0.6b`: Chrome `--fixture all`, Chrome `--fixture production-text-fields`, TextEdit, Notes title, Notes body, Notes checklist, and Codex one-word no-submit all passed with strict screenshot-backed visual evidence.
+- Current proof evidence: Chrome local fixtures use diagnostics lines 245823-246521 and trace lines 61975-62201; public Chrome text fields use diagnostics lines 246534-246674 and trace lines 62204-62235; TextEdit uses diagnostics lines 246718-246764 and trace lines 62239-62248; Notes title/body/checklist use diagnostics lines 246804-247053 and trace lines 62258-62314; Codex uses diagnostics lines 247077-247140 and trace lines 62319-62332.
+- Cleanup: cleared the disposable `AUTOCOMPLETE_LAB_CODEX_PROOF` marker from the Codex composer after proof.
+- Gate movement: `script/manual_smoke_status.sh --require-all` still fails correctly with 15 proof gaps: Obsidian default/variants, default-Chrome real-editor AX lanes, Claude Code, and Claude desktop layout lanes. TextEdit, Notes title/body/checklist, local Chrome, public Chrome text fields, real Chrome Monaco/ProseMirror forced AX, Chrome chat-like, and Codex are green on current PR #35 rows.
+
+2026-05-09T05:55Z heartbeat follow-up: fixed a second real aggressiveness stall exposed by Notes checklist.
+
+- Finding: shortening typed-over cooldown to 750ms was not enough by itself. A live Notes checklist run showed the app could enter `Ready: waiting for text change` after the cooldown expired, which meant it stayed quiet until the user typed again. That made the suggestion feel like it disappeared instead of persistently recovering.
+- Fix: `AppDelegate` now schedules a prefix-cooldown retry. When a prefix cooldown expires and the field/text snapshot is still unchanged, it clears the last snapshot/request marker and re-arms the next poll so the app can ask again without waiting for another keystroke.
+- Validation: `swift test --filter SuggestionOrchestratorTests` passed, then full `swift test` passed 1040 tests in 151 suites.
+- Current-commit proof: after committing the retry fix as `025399a9`, `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate` passed with 2 accepted insertions and strict screenshot-backed visual evidence.
+- Current-commit evidence: Notes checklist diagnostics lines 249341-249402 and trace lines 62761-62780; build `commit:025399a9c2fb`, app SHA `ae947470b6f56c0de02c0d95357eafe89c3a7e10d2e3f949a3e7e31e8fc98914`.
+- Honest gate status: `script/manual_smoke_status.sh --require-all` now fails with 29 target-app proof gaps because the source retry commit made the earlier Chrome/TextEdit/Notes title/body/Codex rows stale. The important behavior fix is proven in Notes checklist on the current commit, but the next loop needs to refresh the broad proof matrix again instead of counting old rows as current.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
