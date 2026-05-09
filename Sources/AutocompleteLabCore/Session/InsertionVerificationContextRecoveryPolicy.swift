@@ -37,15 +37,39 @@ public struct InsertionVerificationContextRecoveryPolicy: Equatable, Sendable {
     public init() {}
 
     public func canRecover(_ input: InsertionVerificationContextRecoveryInput) -> Bool {
-        guard input.profile.bundleIdentifier == "md.obsidian",
-              input.frontmostBundleIdentifier == input.profile.bundleIdentifier,
+        guard input.frontmostBundleIdentifier == input.profile.bundleIdentifier,
               input.frontmostProcessIdentifier == input.expectedFieldIdentity.processIdentifier,
               input.verificationResult.isVerified else {
             return false
         }
 
+        if input.profile.bundleIdentifier == "md.obsidian" {
+            return canRecoverObsidianCodeMirrorSwap(input)
+        }
+
+        if input.profile.appFamily == .chromium {
+            return canRecoverChromiumTargetFingerprintChurn(input)
+        }
+
+        return false
+    }
+
+    private func canRecoverObsidianCodeMirrorSwap(_ input: InsertionVerificationContextRecoveryInput) -> Bool {
         switch normalizedRole(input.contextRole) {
         case "axtextarea", "axwebarea":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func canRecoverChromiumTargetFingerprintChurn(_ input: InsertionVerificationContextRecoveryInput) -> Bool {
+        guard input.mismatch == .targetFingerprint else {
+            return false
+        }
+
+        switch normalizedRole(input.contextRole) {
+        case "axtextarea", "axtextfield":
             return true
         default:
             return false

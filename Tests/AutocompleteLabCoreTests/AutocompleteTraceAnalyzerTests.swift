@@ -628,7 +628,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.acceptedAndKeptRateByRenderMode["inlineAdjacent"] == 1.0)
         #expect(summary.acceptedAndKeptRateByRenderMode["floatingMirror"] == 0.0)
         #expect(summary.acceptedAndKeptRateByInsertionMode["axSelectedText"] == 1.0)
-        #expect(summary.acceptedAndKeptRateByInsertionMode["axThenKeyEvents"] == 0.0)
+        #expect(summary.acceptedAndKeptRateByInsertionMode["axValueReplacement"] == 0.0)
         #expect(summary.acceptedAndKeptRateByRequestMode["wordCompletion"] == 1.0)
         #expect(summary.acceptedAndKeptRateByRequestMode["phraseContinuation"] == 0.0)
         #expect(summary.acceptedAndKeptRateByModel["qwen35-4b"] == 0.5)
