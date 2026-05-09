@@ -71,7 +71,7 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
             : rows.map { row in
                 let rate = percent(row.caretFailureRate)
                 let offset = row.latestOffset ?? "none"
-                return "\(row.appBundleIdentifier) / \(row.renderMode): shown=\(row.shown) caretFailures=\(row.caretFailures) failureRate=\(rate) missingCaret=\(row.missingCaretRectPresentations) flicker=\(row.flickerCount) learningApplied=\(row.learningAppliedCount) latestOffset=\(offset)"
+                return "\(row.appBundleIdentifier) / \(row.renderMode): shown=\(row.shown) caretFailures=\(row.caretFailures) failureRate=\(rate) missingCaret=\(row.missingCaretRectPresentations) flicker=\(row.flickerCount) learningApplied=\(row.learningAppliedCount) latestOffset=\(offset) trustedCorrection=applied:\(row.trustedCorrectionAppliedCount) refused:\(row.trustedCorrectionRefusedCount) refusedReasons=\(row.trustedCorrectionRefusedReasons)"
             }.joined(separator: "\n")
 
         return """
@@ -250,13 +250,15 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
               <td>\(row.flickerCount)</td>
               <td>\(row.learningAppliedCount)</td>
               <td>\(escape(row.latestOffset ?? "none"))</td>
+              <td>applied \(row.trustedCorrectionAppliedCount), refused \(row.trustedCorrectionRefusedCount)</td>
+              <td>\(escape(row.trustedCorrectionRefusedReasons))</td>
             </tr>
             """
         }.joined(separator: "\n")
 
         return """
         <table>
-          <thead><tr><th>App</th><th>Render</th><th>Shown</th><th>Caret failures</th><th>Failure rate</th><th>Missing caret rect</th><th>Flicker</th><th>Learning applied</th><th>Latest offset</th></tr></thead>
+          <thead><tr><th>App</th><th>Render</th><th>Shown</th><th>Caret failures</th><th>Failure rate</th><th>Missing caret rect</th><th>Flicker</th><th>Learning applied</th><th>Latest offset</th><th>Trusted correction</th><th>Refusal reason</th></tr></thead>
           <tbody>\(body)</tbody>
         </table>
         """
@@ -285,6 +287,18 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
                    let yOffset = event.metadata["learningYOffset"] {
                     buckets[key, default: VisualCalibrationAccumulator()].latestOffset = "(\(xOffset), \(yOffset))"
                 }
+                let trustStatus = event.metadata["learningVisualOffsetStatus"]
+                    ?? legacyTrustStatus(from: event.metadata["learningVisualOffsetTrusted"])
+                switch trustStatus {
+                case CompatibilityLearningVisualOffsetTrustStatus.applied.rawValue:
+                    buckets[key, default: VisualCalibrationAccumulator()].trustedCorrectionAppliedCount += 1
+                case CompatibilityLearningVisualOffsetTrustStatus.refused.rawValue:
+                    buckets[key, default: VisualCalibrationAccumulator()].trustedCorrectionRefusedCount += 1
+                    let reason = event.metadata["learningVisualOffsetReason"] ?? "unknown"
+                    buckets[key, default: VisualCalibrationAccumulator()].trustedCorrectionRefusedReasons[reason, default: 0] += 1
+                default:
+                    break
+                }
 
             case .caretGeometryFailed:
                 let key = visualKey(for: event)
@@ -312,7 +326,10 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
                     missingCaretRectPresentations: value.missingCaretRectPresentations,
                     flickerCount: value.flickerCount,
                     learningAppliedCount: value.learningAppliedCount,
-                    latestOffset: value.latestOffset
+                    latestOffset: value.latestOffset,
+                    trustedCorrectionAppliedCount: value.trustedCorrectionAppliedCount,
+                    trustedCorrectionRefusedCount: value.trustedCorrectionRefusedCount,
+                    trustedCorrectionRefusedReasons: reasonSummary(value.trustedCorrectionRefusedReasons)
                 )
             }
             .sorted { lhs, rhs in
@@ -333,6 +350,34 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
             appBundleIdentifier: event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier,
             renderMode: event.metadata["effectiveRenderMode"] ?? event.metadata["renderMode"] ?? "unknown"
         )
+    }
+
+    private func legacyTrustStatus(from value: String?) -> String {
+        switch value {
+        case "true":
+            CompatibilityLearningVisualOffsetTrustStatus.applied.rawValue
+        case "false":
+            CompatibilityLearningVisualOffsetTrustStatus.refused.rawValue
+        default:
+            CompatibilityLearningVisualOffsetTrustStatus.none.rawValue
+        }
+    }
+
+    private func reasonSummary(_ reasons: [String: Int]) -> String {
+        guard !reasons.isEmpty else {
+            return "none"
+        }
+
+        return reasons
+            .sorted {
+                if $0.value == $1.value {
+                    return $0.key < $1.key
+                }
+
+                return $0.value > $1.value
+            }
+            .map { "\($0.key):\($0.value)" }
+            .joined(separator: ",")
     }
 
     private func sortedCountList(_ buckets: [String: Int]) -> String {
@@ -414,6 +459,9 @@ private struct VisualCalibrationAccumulator {
     var flickerCount = 0
     var learningAppliedCount = 0
     var latestOffset: String?
+    var trustedCorrectionAppliedCount = 0
+    var trustedCorrectionRefusedCount = 0
+    var trustedCorrectionRefusedReasons: [String: Int] = [:]
 }
 
 private struct VisualCalibrationRow {
@@ -425,6 +473,9 @@ private struct VisualCalibrationRow {
     let flickerCount: Int
     let learningAppliedCount: Int
     let latestOffset: String?
+    let trustedCorrectionAppliedCount: Int
+    let trustedCorrectionRefusedCount: Int
+    let trustedCorrectionRefusedReasons: String
 
     var caretFailureRate: Double {
         let denominator = shown + caretFailures
