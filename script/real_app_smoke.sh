@@ -4028,6 +4028,7 @@ run_codex() {
   seed_codex_proof_prompt "$proof_text"
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex" "Codex proof suggestion" 20
   wait_for_screenshot_capture_if_enabled "$start_line" "com.openai.codex" "Codex proof"
+  seed_codex_proof_prompt "$proof_text"
   assert_frontmost_app "Codex" "Codex proof"
   press_key_code 48
   wait_for_log_fields "$start_line" "Codex Tab acceptance" 12 \

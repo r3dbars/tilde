@@ -279,6 +279,15 @@ Time: 2026-05-09T00:36:00Z
 - Fix: `manual_smoke_status.sh` and `manual_proof_refresh.sh` now accept a current app binary fingerprint for app-behavior proof, so docs-only commits do not make a valid current binary pass look stale.
 - Validation: manual smoke self-tests, proof refresh self-tests, and the live Notes body smoke passed. The model stayed `qwen3-0.6b`.
 
+2026-05-09T03:07Z heartbeat follow-up: Codex one-word no-submit proof now passes on the current fast model.
+
+- First rerun exposed the real failure: Codex showed a valid marked composer suggestion, but the focused AX element could drift to a nearby button at the Tab moment, so the app safely passed Tab through instead of accepting.
+- Fix: Codex proof mode now rechecks the marked `AUTOCOMPLETE_LAB_CODEX_PROOF` text area directly before one-word Tab accept, then verifies the marked text area after direct AX insertion instead of trusting transient focused-element state.
+- Harness fix: the Codex smoke reseeds/refocuses the disposable composer after screenshot capture and before Tab, so the bounded slice tests the prompt at the exact accept moment.
+- Live proof: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate` passed with exactly 1 accepted insertion, strict visual trace evidence, marker still present after Tab, and prompt no-submit confirmed.
+- Evidence: diagnostics lines 240276-240307, trace lines 61052-61056, manual smoke row `2026-05-09T03:06:50Z`, app binary SHA `a780dc9ffd0ba3bd42dddfc43acbf5fdfb28a8646f1062e2bdf40d95063effa8`.
+- Validation: `script/real_app_smoke_self_test.sh`, `swift test --filter AcceptanceSurvivalCheckerTests`, `git diff --check`, and the live Codex smoke passed. The model stayed `qwen3-0.6b`.
+
 ## 100 Test Situations
 
 | # | App | Situation | Target behavior | Score |
