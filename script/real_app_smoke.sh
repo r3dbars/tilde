@@ -2779,19 +2779,54 @@ SWIFT
 textedit_frontmost_window_is() {
   local window_title="$1"
 
-  osascript - "$window_title" <<'APPLESCRIPT' 2>/dev/null || true
-on run argv
-  set targetTitle to item 1 of argv
-  tell application "System Events"
-    set frontProcesses to application processes whose frontmost is true
-    if (count of frontProcesses) is 0 then return "0"
-    set frontProc to item 1 of frontProcesses
-    if name of frontProc is not "TextEdit" then return "0"
-    if exists window targetTitle of frontProc then return "1"
-  end tell
-  return "0"
-end run
-APPLESCRIPT
+  swift - "$window_title" <<'SWIFT' 2>/dev/null || true
+import AppKit
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 2 else {
+    print("0")
+    exit(0)
+}
+
+let targetTitle = CommandLine.arguments[1]
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+guard let frontmost = NSWorkspace.shared.frontmostApplication,
+      frontmost.bundleIdentifier == "com.apple.TextEdit" else {
+    print("0")
+    exit(0)
+}
+
+let appElement = AXUIElementCreateApplication(frontmost.processIdentifier)
+AXUIElementSetMessagingTimeout(appElement, 0.5)
+
+for attribute in [kAXFocusedWindowAttribute, kAXMainWindowAttribute] {
+    if let window = copyAttribute(appElement, attribute) as? AXUIElement {
+        if (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+            print("1")
+            exit(0)
+        }
+    }
+}
+
+if let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] {
+    for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+        print("1")
+        exit(0)
+    }
+}
+
+print("0")
+SWIFT
 }
 
 wait_for_textedit_frontmost_window() {
