@@ -231,15 +231,12 @@ Pass 1 shipped these improvements:
   forced, strict screenshot evidence, Tab accept, Option-Tab full accept, and
   two verified insertions. This closes the hidden lookalike-only gap, but
   production editor variants are still open.
-- Chrome smoke now has an explicit `--chrome-accessibility default` proof lane
-  for the real Monaco/ProseMirror fixtures. Fresh 2026-05-08 runs passed for
-  `monaco-real-default` and `prosemirror-real-default` with strict screenshot
-  evidence, Tab accept, Option-Tab full accept, two verified insertions, and
-  current proof fingerprints. The latest 2026-05-08 runs also show
-  `effectiveRenderMode=inlineAdjacent`, `placementAnchorSource=synthetic-caret`,
-  `placementHealthReason=healthy`, and a concrete text-line rect through a
-  proof-gated Chrome trust path. The remaining Chrome editor gap is production
-  editor variants, not default AX absence or local real-editor caret quality.
+- Chrome smoke has an explicit `--chrome-accessibility default` proof lane for
+  the real Monaco/ProseMirror fixtures, but it is currently blocked on this
+  machine: the latest 2026-05-09 rerun exposed only browser chrome through AX
+  and failed before typing. Treat older 2026-05-08 default-Chrome proof as
+  historical, not current. Current reliable real-engine proof is the isolated
+  forced-renderer Chrome lane.
 - Stable-bounds field identity now uses a deterministic privacy-safe hash over
   normalized AX role, fingerprint metadata, and rounded geometry instead of
   Swift's process-random `Hasher`, so trace/proof field IDs for hard editor
@@ -284,10 +281,10 @@ Remaining high-impact gaps:
   proof in one current real-app pass.
 - Cross-app proof rows still need a screenshot-backed one-word no-submit
   acceptance slice for Codex.
-- Real Chrome editor-engine proof now passes under isolated forced-renderer AX
-  and default Chrome AX with proof-gated inline synthetic-caret placement, but
-  still needs production editor variants before the browser-editor scores can
-  reach target.
+- Real Chrome editor-engine proof now passes under isolated forced-renderer AX,
+  but default Chrome AX is currently blocked by missing page-editor exposure and
+  production editor variants still need bounded proof before browser-editor
+  scores can reach target.
 
 ## Research Bar
 
@@ -380,7 +377,7 @@ Weighted total: **80.9/100**, rounded to **81/100**.
 | Style memory | 92 | Durable local style memory stores aggregate accepted-kept length, punctuation, casing, question rates, short-suffix rate, and average final-token length with 14-day half-life and no raw accepted text. Prompt guidance uses the sketch when enough samples exist, Settings can clear it, and Diagnostics exposes the trace-safe aggregate sketch. | Add tuning controls and fresh real-app trace validation. |
 | Annoyance index | 91 | AppDelegate records annoyance signals, queries `AnnoyanceSuppressorActor`, quiets field/app/global scopes, exposes current-field/session silence and quiet/normal/eager aggressiveness in Settings, records manual field pauses as scoped trace events, records placement uncertainty as caret-geometry failures, and Diagnostics now exposes annoyance score, active quiet-mode scope, and signal counts from trace summaries. | Prove thresholds with fresh traces and show active quiet-mode scope in real-app proof. |
 | Replay-first test rig | 88 | Trace replay now gates trigger delay coverage, display score metadata, candidate-selection metadata, proof-fingerprint freshness, placement metadata, trusted caret placement, accepted insertion verification, stale cancellation, kept horizon, latency slices, annoyance signals, and redacted trace compatibility. It can replay fresh line-bounded trace slices, including a `smoke-slice` profile that passes current Chrome Monaco/ProseMirror bounded real-app proof while keeping the default full gate strict. Full replay can now count trace-safe deterministic fast-word candidate metadata on presented events, not only MLX `modelResult` rows. The proof manifest parses matched manual-smoke trace slices, requires bounded proof ranges, verifies accepts plus insertion verification, checks screenshot-backed strict visual trace events, and rejects stale proof fingerprints. | Replay recorded real app sessions with screenshots, accepts, final kept horizon, stale cancellation, annoyance, model candidate metadata, fast-word candidate metadata, and latency after every app/runtime change. |
-| Cross-app proof honesty | 99 | App proof matrix explicitly keeps failing rows non-A until evidence exists, unsupported/sensitive apps expose an intentional off or copy-only stance instead of silent breakage, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, stable-bounds field identity is deterministic for proof traces, and the proof manifest now verifies TextEdit, Chrome chat-like, real Monaco/ProseMirror under forced renderer AX and default Chrome AX with proof-gated inline synthetic-caret placement, Obsidian, Apple Notes title/body/checklist, Claude Code, and Claude desktop with bounded current-fingerprint traces while requiring every compatibility profile to have owner/safety coverage. Chrome-hosted Google Docs, Notion, Slack, and Discord now have a trace-safe unsupported-surface block until proof exists. Strict mode still fails on Codex and production-editor variant gaps. | Close every pending proof row. |
+| Cross-app proof honesty | 99 | App proof matrix explicitly keeps failing rows non-A until evidence exists, unsupported/sensitive apps expose an intentional off or copy-only stance instead of silent breakage, replay makes stale placement/key/runtime proof fail through trace proof fingerprints, stable-bounds field identity is deterministic for proof traces, and the proof manifest now verifies TextEdit, Chrome chat-like, and real Monaco/ProseMirror under forced renderer AX while keeping default Chrome AX as a blocked proof gap. Obsidian, Apple Notes title/body/checklist, Claude Code, and Claude desktop have bounded historical proof but still need current-build refresh rows. Chrome-hosted Google Docs, Notion, Slack, and Discord now have a trace-safe unsupported-surface block until proof exists. Strict mode still fails on Codex and production-editor variant gaps. | Close every pending proof row. |
 
 ## Baseline Evidence Notes
 
