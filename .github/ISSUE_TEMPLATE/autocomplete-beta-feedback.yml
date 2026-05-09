@@ -3,6 +3,7 @@ description: Report a private beta issue without sharing private typed text.
 title: "[Beta] "
 labels:
   - beta feedback
+  - needs triage
 body:
   - type: markdown
     attributes:
@@ -61,6 +62,23 @@ body:
         - High: repeated interruption or broken core flow
         - Medium: confusing or annoying behavior
         - Low: docs, copy, or polish
+    validations:
+      required: true
+  - type: dropdown
+    id: stop-condition
+    attributes:
+      label: Stop condition triggered?
+      description: Pick the first hard stop that fits. Use No stop condition for normal feedback.
+      options:
+        - No stop condition
+        - Wrong app, wrong field, wrong spot, duplicate insertion, or focus steal
+        - Prompt or chat app submitted unexpectedly
+        - Suggestion appeared in search, login, payment, address, URL, private, or secure field
+        - Tab felt unreliable or surprising
+        - Accepted text was deleted within 2 seconds repeatedly
+        - Mock fallback, manual model server, Ollama, llama.cpp, Python, or shell setup was needed
+        - Redacted report export failed or asked for private content
+        - Packet checksum looked stale for the tester artifact
     validations:
       required: true
   - type: textarea

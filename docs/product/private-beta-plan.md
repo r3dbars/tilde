@@ -19,14 +19,26 @@ That must create and verify:
 - `dist/AutocompleteLab.zip`
 - `dist/private-beta/README.md`
 - `dist/private-beta/install-checklist.md`
+- `dist/private-beta/daily-tester-checklist.md`
+- `dist/private-beta/redacted-report-export-flow.md`
 - `dist/private-beta/feedback-log.md`
+- `dist/private-beta/feedback-triage.md`
+- `dist/private-beta/stop-condition-dashboard.md`
+- `dist/private-beta/issue-template-validation.md`
+- `dist/private-beta/beta-readiness-summary.md`
 - `dist/private-beta/session-report.md`
 - `dist/private-beta/privacy-status.md`
+- `dist/private-beta/tester-docs/PRIVACY-BETA.md`
+- `dist/private-beta/tester-docs/KNOWN-LIMITATIONS.md`
+- `dist/private-beta/tester-docs/UNINSTALL-DELETE-DATA.md`
+- `dist/private-beta/tester-docs/DIAGNOSTIC-EXPORT.md`
+- `dist/private-beta/tester-docs/private-beta-ops-loop.md`
 - `dist/private-beta/checksums.txt`
 
 Also read:
 
 - `docs/product/beta-readiness-checklist.md`
+- `docs/product/private-beta-ops-loop.md`
 - `docs/product/compatibility-matrix.md`
 - `docs/product/privacy-and-controls.md`
 
@@ -92,6 +104,9 @@ Ask once per day:
 - Did anything appear in search, login, payment, address, or other sensitive
   fields?
 
+Use `dist/private-beta/daily-tester-checklist.md` for the exact daily tester
+flow. It is the tester-facing version of this plan.
+
 ## Forced Edge Cases
 
 Each tester should try these once during the beta:
@@ -141,6 +156,10 @@ Stop the beta immediately if any of these happen:
 - tester must manually start or manage a model server,
 - model asset setup requires tester-side Python or shell steps.
 
+Track these in `dist/private-beta/stop-condition-dashboard.md`. Each stop row
+must point to a proof command, the redacted report, or an app removal decision
+before it can be closed.
+
 ## After Each Session
 
 Record one lightweight row in:
@@ -162,11 +181,22 @@ Do not paste raw typed text, prompts, screenshots, document names, URLs,
 recipients, subject lines, or trace excerpts into beta feedback. Use short
 labels like `wrong app`, `late`, `too much`, or `good word finish`.
 
+If feedback needs a GitHub issue, use the menu bar `Submit Feedback...` item or
+the structured issue form:
+
+```text
+.github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml
+```
+
+Every issue starts with `beta feedback` and `needs triage`. Add `beta stop`
+for hard stop conditions. Ask only for the redacted Privacy Bundle by default.
+
 Run the trace checker before trusting the session:
 
 ```bash
 ./script/check_trace_eval.sh
 ./script/model_latency_report.py --default-model-proof
+./script/validate_beta_issue_template.sh
 ```
 
 Fix the top repeated trust miss before inviting another tester.

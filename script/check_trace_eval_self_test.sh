@@ -8,7 +8,7 @@ trap 'rm -f "$TRACE_FILE" "$CLAUDE_CODE_TRACE_FILE"' EXIT
 cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionRequested","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion"}
 {"type":"modelResult","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":42,"metadata":{"cleanedWordCount":"1","firstTokenLatencyMilliseconds":"17","totalGenerationLatencyMilliseconds":"42"}}
-{"type":"suggestionPresented","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"fieldKind":"multilineCompose","effectiveRenderMode":"inlineAdjacent","insertionMode":"axSelectedText","model":"mlx-qwen3","anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
+{"type":"suggestionPresented","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"fieldKind":"multilineCompose","anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
 {"type":"suggestionAccepted","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at"}
 {"type":"insertionVerified","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at","metadata":{"insertionMode":"axSelectedText"}}
 {"type":"acceptedInsertionUndone","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","outcome":"acceptNextWord","reason":"accepted-insertion-undone","metadata":{"acceptMode":"acceptNextWord","undoMechanism":"nativeSingleEdit","sameSliceUndoProof":"true","restoredOriginalTarget":"true"}}
@@ -120,55 +120,6 @@ fi
 
 if ! grep -F "Accepted-and-kept shown rate: 9%" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not report accepted-and-kept shown rate" >&2
-  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
-  exit 1
-fi
-
-if ! grep -F "Accepted-and-kept rate by app:" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null ||
-   ! grep -F "com.apple.TextEdit: 100% (1/1)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
-  echo "trace eval self-test did not report accepted-and-kept app rates" >&2
-  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
-  exit 1
-fi
-
-if ! grep -F "Accepted-and-kept rate by field kind:" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null ||
-   ! grep -F "multilineCompose: 100% (1/1)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
-  echo "trace eval self-test did not report accepted-and-kept field-kind rates" >&2
-  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
-  exit 1
-fi
-
-if ! grep -F "Accepted-and-kept rate by request mode:" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null ||
-   ! grep -F "wordCompletion: 25% (1/4)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
-  echo "trace eval self-test did not report accepted-and-kept request-mode rates" >&2
-  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
-  exit 1
-fi
-
-if ! grep -F "Accepted-and-kept rate by render mode:" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null ||
-   ! grep -F "inlineAdjacent: 100% (1/1)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
-  echo "trace eval self-test did not report accepted-and-kept render-mode rates" >&2
-  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
-  exit 1
-fi
-
-if ! grep -F "Accepted-and-kept rate by insertion mode:" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null ||
-   ! grep -F "axSelectedText: 100% (1/1)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
-  echo "trace eval self-test did not report accepted-and-kept insertion-mode rates" >&2
-  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
-  exit 1
-fi
-
-if ! grep -F "Accepted-and-kept rate by model:" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null ||
-   ! grep -F "mlx-qwen3: 100% (1/1)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
-  echo "trace eval self-test did not report accepted-and-kept model rates" >&2
-  cat /tmp/autocomplete-trace-eval-self-test.txt >&2
-  exit 1
-fi
-
-if ! grep -F "Accepted-and-kept rate by experiment arm:" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null ||
-   ! grep -F "length_1_word: 25% (1/4)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
-  echo "trace eval self-test did not report accepted-and-kept experiment-arm rates" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
   exit 1
 fi

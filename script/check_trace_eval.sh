@@ -130,14 +130,6 @@ def render_mode(event):
     metadata = event.get("metadata") or {}
     return metadata.get("effectiveRenderMode") or metadata.get("renderMode") or "unknown"
 
-def insertion_mode(event):
-    metadata = event.get("metadata") or {}
-    return metadata.get("insertionMode") or "unknown"
-
-def model_name(event):
-    metadata = event.get("metadata") or {}
-    return metadata.get("model") or metadata.get("modelOverride") or metadata.get("asset") or "unknown"
-
 presented_field_kinds = Counter(field_kind(event) for event in presented_by_id.values())
 accepted_and_kept_field_kinds = Counter(
     field_kind(event)
@@ -1079,33 +1071,6 @@ for suggestion_id in useful_suggestion_ids:
         useful_by_app[event.get("appBundleIdentifier") or "unknown"][0] += 1
         useful_by_experiment_arm[experiment_arm(event)][0] += 1
 
-def kept_rate_buckets(key_func):
-    buckets = defaultdict(lambda: [0, 0])
-    for event in presented_by_id.values():
-        buckets[key_func(event)][1] += 1
-    for suggestion_id in accepted_and_kept_suggestion_ids.intersection(presented_by_id.keys()):
-        event = presented_by_id.get(suggestion_id)
-        if event:
-            buckets[key_func(event)][0] += 1
-    return buckets
-
-accepted_and_kept_by_app_rate = kept_rate_buckets(lambda event: event.get("appBundleIdentifier") or "unknown")
-accepted_and_kept_by_field_kind_rate = kept_rate_buckets(field_kind)
-accepted_and_kept_by_request_mode_rate = kept_rate_buckets(lambda event: event.get("requestMode") or "unknown")
-accepted_and_kept_by_render_mode_rate = kept_rate_buckets(render_mode)
-accepted_and_kept_by_insertion_mode_rate = kept_rate_buckets(insertion_mode)
-accepted_and_kept_by_model_rate = kept_rate_buckets(model_name)
-accepted_and_kept_by_experiment_arm_rate = kept_rate_buckets(experiment_arm)
-
-def print_rate_section(title, buckets):
-    print(title)
-    if buckets:
-        for key, (kept_count, shown_count) in sorted(buckets.items()):
-            rate = 0 if shown_count == 0 else round((kept_count / shown_count) * 100)
-            print(f"  {key}: {rate}% ({kept_count}/{shown_count})")
-    else:
-        print("  none")
-
 def normalized_suggestion(text):
     return " ".join((text or "").lower().split()).strip()
 
@@ -1320,13 +1285,6 @@ print(f"Useful rate: {useful_rate}%")
 print(f"Accepted and kept: {len(accepted_and_kept_event_ids)}")
 print(f"Accepted-and-kept shown rate: {accepted_and_kept_rate_shown}%")
 print(f"Accepted-and-kept accepted rate: {accepted_and_kept_rate_accepted}%")
-print_rate_section("Accepted-and-kept rate by app:", accepted_and_kept_by_app_rate)
-print_rate_section("Accepted-and-kept rate by field kind:", accepted_and_kept_by_field_kind_rate)
-print_rate_section("Accepted-and-kept rate by request mode:", accepted_and_kept_by_request_mode_rate)
-print_rate_section("Accepted-and-kept rate by render mode:", accepted_and_kept_by_render_mode_rate)
-print_rate_section("Accepted-and-kept rate by insertion mode:", accepted_and_kept_by_insertion_mode_rate)
-print_rate_section("Accepted-and-kept rate by model:", accepted_and_kept_by_model_rate)
-print_rate_section("Accepted-and-kept rate by experiment arm:", accepted_and_kept_by_experiment_arm_rate)
 print(f"Tab accept share: {tab_accept_share}%")
 print(f"Full accept share: {full_accept_share}%")
 print(f"Visible acceptance slice proof: {len(acceptance_slice_proof)}/{len(accepted)} ({acceptance_slice_proof_rate}%)")

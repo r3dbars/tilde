@@ -71,6 +71,35 @@ check_clipboard_fallback_disabled() {
   echo "clipboard fallback insertion disabled"
 }
 
+check_notarized_install_proof() {
+  local proof_dir="$ROOT_DIR/dist/release-proof"
+  local blocker_path="$proof_dir/notarization-blocker.txt"
+  local failed=0
+
+  if [[ -s "$blocker_path" ]]; then
+    cat "$blocker_path"
+    return 1
+  fi
+
+  for path in \
+    "$proof_dir/notarytool-submit.txt" \
+    "$proof_dir/stapler-validate.txt" \
+    "$proof_dir/spctl-dmg.txt" \
+    "$proof_dir/spctl-installed-app.txt" \
+    "$proof_dir/fresh-install-gatekeeper-proof.md"; do
+    if [[ ! -s "$path" ]]; then
+      echo "missing release proof: $path"
+      failed=1
+    fi
+  done
+
+  if ((failed > 0)); then
+    return 1
+  fi
+
+  echo "notarization, stapling, and fresh-install proof files are present"
+}
+
 if [[ "$MODE" == "check-only" ]]; then
   failures=0
 
@@ -81,6 +110,7 @@ if [[ "$MODE" == "check-only" ]]; then
     ./script/check_diagnostics_log.sh || failures=$((failures + 1))
   run_check "Latency beta gate" ./script/latency_benchmark_report.py --beta-gate || failures=$((failures + 1))
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
+  run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
   run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh || failures=$((failures + 1))
   run_check "Manual app proof" ./script/manual_smoke_status.sh --require-all || failures=$((failures + 1))
@@ -91,6 +121,7 @@ if [[ "$MODE" == "check-only" ]]; then
   echo "== Private beta archive =="
   if [[ -s "$ROOT_DIR/dist/AutocompleteLab.zip" ]]; then
     echo "Private beta archive: OK"
+    run_check "Notarized install proof" check_notarized_install_proof || failures=$((failures + 1))
   else
     echo "Private beta archive: blocked"
     echo "missing archive: $ROOT_DIR/dist/AutocompleteLab.zip"
@@ -136,6 +167,10 @@ echo "== Latency beta gate =="
 echo
 echo "== Redacted report export =="
 ./script/check_redacted_report_export.sh
+
+echo
+echo "== Issue template validation =="
+./script/validate_beta_issue_template.sh
 
 echo
 echo "== Clipboard fallback disabled =="

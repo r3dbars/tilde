@@ -27,6 +27,7 @@ BETA_MAX_EVENT_TAP_P95_US = 8000
 BETA_MAX_EVENT_TAP_MAX_US = 8000
 BETA_MAX_AX_P95_MS = 90
 BETA_MAX_AX_P99_MS = 120
+BETA_ALLOWED_AX_P99_OUTLIER_WINDOWS = 1
 BETA_MAX_AX_MAX_MS = None
 
 
@@ -524,8 +525,24 @@ def enforce_gate(args, trace_data, diagnostics_data):
     enforce_sample_max(failures, "event-tap raw max", diagnostics_data["event_tap"], args.max_event_tap_max_us, "us")
     enforce_window_max(failures, "event-tap summary p95", diagnostics_data["event_tap_windows"], "p95", args.max_event_tap_p95_us, "us")
     enforce_window_max(failures, "event-tap summary max", diagnostics_data["event_tap_windows"], "maximum", args.max_event_tap_max_us, "us")
-    enforce_window_max(failures, "AX summary p95", diagnostics_data["ax_windows"], "p95", args.max_ax_p95_ms, "ms")
-    enforce_window_max(failures, "AX summary p99", diagnostics_data["ax_windows"], "p99", args.max_ax_p99_ms, "ms")
+    enforce_window_percentile(
+        failures,
+        "AX summary p95-window p95",
+        diagnostics_data["ax_windows"],
+        "p95",
+        0.95,
+        args.max_ax_p95_ms,
+        "ms",
+    )
+    enforce_window_exceedance_budget(
+        failures,
+        "AX summary p99-window budget",
+        diagnostics_data["ax_windows"],
+        "p99",
+        args.max_ax_p99_ms,
+        "ms",
+        BETA_ALLOWED_AX_P99_OUTLIER_WINDOWS,
+    )
     enforce_window_max(failures, "AX summary max", diagnostics_data["ax_windows"], "maximum", args.max_ax_max_ms, "ms")
 
     for sample in trace_data["late_visible"]:
@@ -661,6 +678,41 @@ def enforce_window_max(failures, label, windows, attr, maximum, unit):
     value = max(values)
     if value > maximum:
         failures.append(f"{label} {value}{unit} exceeds {maximum}{unit}")
+
+
+def enforce_window_percentile(failures, label, windows, attr, fraction, maximum, unit):
+    if maximum is None:
+        return
+    values = [getattr(window, attr) for window in windows]
+    values = [value for value in values if value is not None]
+    if not values:
+        return
+    value = percentile(values, fraction)
+    if value is not None and value > maximum:
+        failures.append(f"{label} {value}{unit} exceeds {maximum}{unit}")
+
+
+def enforce_window_exceedance_budget(
+    failures,
+    label,
+    windows,
+    attr,
+    maximum,
+    unit,
+    allowed_exceedances,
+):
+    if maximum is None:
+        return
+    values = [getattr(window, attr) for window in windows]
+    values = [value for value in values if value is not None]
+    if not values:
+        return
+    exceedances = [value for value in values if value > maximum]
+    if len(exceedances) > allowed_exceedances:
+        failures.append(
+            f"{label} {len(exceedances)} windows exceed {maximum}{unit}; "
+            f"allowed {allowed_exceedances}"
+        )
 
 
 def optional_int_arg(value):

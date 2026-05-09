@@ -286,6 +286,26 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Fast word selection can opt into predictive fallback")
+    func fastWordSelectionPredictiveFallback() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+
+        let quietSelection = orchestrator.fastWordSelection(
+            for: "Smoke proof feels",
+            recentWords: []
+        )
+        let proactiveSelection = orchestrator.fastWordSelection(
+            for: "Smoke proof feels",
+            recentWords: [],
+            allowPredictiveFallback: true
+        )
+
+        #expect(quietSelection.suggestion == nil)
+        #expect(proactiveSelection.suggestion?.visibleText == " instant")
+        #expect(proactiveSelection.traceMetadata["candidateSelectionSource"] == "predictive-word-fallback")
+    }
+
+    @MainActor
     @Test("App model result metadata is trace safe")
     func appModelResultMetadataIsTraceSafe() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
@@ -344,7 +364,6 @@ struct SuggestionOrchestratorTests {
         #expect(abs(score.risk - 0.12) < 0.001)
         #expect(abs(score.repetition - 0.05) < 0.001)
         #expect(abs(score.instability - 0.05) < 0.001)
-        #expect(score.learningRestraint == 0)
         #expect(score.acceptedAndKeptSampleCount == 0)
     }
 
@@ -391,52 +410,7 @@ struct SuggestionOrchestratorTests {
         #expect(score.userAffinity > 0.15)
         #expect(abs(score.repetition - 0.90) < 0.001)
         #expect(abs(score.instability - 0.50) < 0.001)
-        #expect(score.learningRestraint == 0)
         #expect(score.acceptedAndKeptSampleCount == 6)
-    }
-
-    @MainActor
-    @Test("Display score applies accepted-kept restraint after deletion and typed-over proof")
-    func displayScoreAppliesAcceptedKeptRestraintAfterDeletionAndTypedOverProof() throws {
-        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
-        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
-        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
-        let request = CompletionRequest(
-            textBeforeCursor: "Can we",
-            textAfterCursor: "",
-            appBundleIdentifier: profile.bundleIdentifier,
-            fieldKind: classification.kind,
-            behaviorProfileID: .docsProse,
-            maxVisibleWords: 4,
-            mode: .phraseContinuation,
-            suggestionID: "score-restraint"
-        )
-        let key = acceptedAndKeptKey(
-            request: request,
-            fieldKind: classification.kind,
-            profile: profile
-        )
-        var store = AcceptedAndKeptLearningStore(priorWeight: 1)
-        _ = store.record(.immediateDeletion, key: key, normalizedEditDistance: 1.0)
-        _ = store.record(.typedOver, key: key)
-        _ = store.record(.rejected, key: key, normalizedEditDistance: 0.7)
-        let signal = store.record(.kept, key: key, normalizedEditDistance: 0.2)
-
-        let score = orchestrator.displayScore(
-            suggestion: CompletionSuggestion(text: " make this easier", maxVisibleWords: 4),
-            request: request,
-            context: makeContext(textBeforeCursor: "Can we", textAfterCursor: ""),
-            fieldClassification: classification,
-            profile: profile,
-            triggerReason: "model-result",
-            latencyMilliseconds: 400,
-            acceptedAndKeptSignal: signal,
-            isRepeatedMiss: false
-        )
-
-        #expect(score.learningRestraint > 0)
-        #expect(score.finalScore < score.rawScore + score.learningRestraint)
-        #expect(score.traceMetadata["displayScoreLearningRestraint"] != "0.00")
     }
 
     @MainActor
