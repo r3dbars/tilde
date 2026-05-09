@@ -454,6 +454,19 @@ Time: 2026-05-09T00:36:00Z
 - ProseMirror-like evidence: diagnostics lines 241915-241986 and trace lines 61327-61349; build `commit:93ea467e77cb`, app SHA `8b6dabf20483d58e5a0b956e0950bb53865d70f6853e004eb32f96c3321f712e`.
 - Gate movement: Chrome local textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like are now green; remaining target-app proof gaps dropped from 28 to 25.
 
+2026-05-09T03:57Z heartbeat follow-up: refreshed Chrome chat-like no-submit and real Chrome editor proofs with the current fast model.
+
+- Chat-like run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture chat-like`.
+- Chat-like result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, strict screenshot-backed visual evidence, and the local no-submit fixture lane stayed green.
+- Chat-like evidence: diagnostics lines 242017-242095 and trace lines 61353-61374; build `commit:401023aaaf99`, app SHA `f0958f4fc779e7037f4cf1205fb83586e5b24347b4ae8d4fb9446b4e16f437ec`.
+- Real Monaco run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-real`.
+- Real Monaco result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- Real Monaco evidence: diagnostics lines 242122-242194 and trace lines 61378-61397; build `commit:401023aaaf99`, app SHA `ba702d02c27f88ed77b544d4d114dbbb0a170b02422d1e6fbf6df6d9259e63ca`.
+- Real ProseMirror run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-real`.
+- Real ProseMirror result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- Real ProseMirror evidence: diagnostics lines 242221-242309 and trace lines 61401-61426; build `commit:401023aaaf99`, app SHA `93879cb846a80b116ceff010a18c657782ac17a568e4b31b608a464727d87149`.
+- Gate movement: Chrome chat-like no-submit, real Monaco, and real ProseMirror are now green; remaining target-app proof gaps dropped from 25 to 22.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
