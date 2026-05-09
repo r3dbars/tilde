@@ -6,6 +6,8 @@ public enum TextContextRepairReason: String, Equatable, Sendable {
     case obsidianCodeMirrorTrailingCharacter = "obsidian-codemirror-trailing-character"
     case obsidianCodeMirrorTrailingScaffolding = "obsidian-codemirror-trailing-scaffolding"
     case obsidianCodeMirrorHiddenSpacerLine = "obsidian-codemirror-hidden-spacer-line"
+    case obsidianCodeMirrorStalePreviousLine = "obsidian-codemirror-stale-previous-line"
+    case obsidianCodeMirrorTextAfterGrowth = "obsidian-codemirror-text-after-growth"
     case obsidianCodeMirrorLineDrift = "obsidian-codemirror-line-drift"
 }
 
@@ -68,6 +70,12 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
             return obsidianRepair
         }
         if let obsidianRepair = obsidianCodeMirrorHiddenSpacerLineRepair(input) {
+            return obsidianRepair
+        }
+        if let obsidianRepair = obsidianCodeMirrorStalePreviousLineRepair(input) {
+            return obsidianRepair
+        }
+        if let obsidianRepair = obsidianCodeMirrorTextAfterGrowthRepair(input) {
             return obsidianRepair
         }
         if let obsidianRepair = obsidianCodeMirrorLineDriftRepair(input) {
@@ -206,6 +214,85 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         )
     }
 
+    private func obsidianCodeMirrorStalePreviousLineRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
+        guard input.bundleIdentifier == "md.obsidian",
+              input.role == "AXTextArea",
+              input.selectedTextLength == 0,
+              let newlineIndex = input.textAfterCursor.firstIndex(where: \.isNewline) else {
+            return nil
+        }
+
+        let staleLineSuffix = String(input.textAfterCursor[..<newlineIndex])
+        guard !staleLineSuffix.isEmpty,
+              staleLineSuffix.count <= 40,
+              !staleLineSuffix.contains(where: \.isWhitespace) else {
+            return nil
+        }
+
+        let activeLineStart = input.textAfterCursor.index(after: newlineIndex)
+        let remainingAfterStaleLine = String(input.textAfterCursor[activeLineStart...])
+        let activeLine = firstLine(in: remainingAfterStaleLine)
+        guard activeLine.count <= 100,
+              isPlausibleActiveTypingLine(activeLine) else {
+            return nil
+        }
+
+        let repairedTextBeforeCursor = input.textBeforeCursor
+            + staleLineSuffix
+            + String(input.textAfterCursor[newlineIndex])
+            + activeLine
+        return TextContextRepairResult(
+            textBeforeCursor: repairedTextBeforeCursor,
+            textAfterCursor: String(remainingAfterStaleLine.dropFirst(activeLine.count)),
+            reason: .obsidianCodeMirrorStalePreviousLine
+        )
+    }
+
+    private func obsidianCodeMirrorTextAfterGrowthRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
+        guard input.bundleIdentifier == "md.obsidian",
+              input.role == "AXTextArea",
+              input.selectedTextLength == 0,
+              let previousTextBeforeCursor = input.previousTextBeforeCursor,
+              let previousTextAfterCursor = input.previousTextAfterCursor else {
+            return nil
+        }
+
+        if !previousTextAfterCursor.isEmpty {
+            guard previousTextBeforeCursor == input.textBeforeCursor,
+                  input.textAfterCursor.hasPrefix(previousTextAfterCursor),
+                  input.textAfterCursor.count > previousTextAfterCursor.count else {
+                return nil
+            }
+        } else {
+            guard !previousTextBeforeCursor.isEmpty,
+                  input.textBeforeCursor.hasPrefix(previousTextBeforeCursor),
+                  input.textBeforeCursor.count > previousTextBeforeCursor.count,
+                  input.textBeforeCursor.count <= previousTextBeforeCursor.count + 8,
+                  input.textAfterCursor.count >= 2 else {
+                return nil
+            }
+
+            let driftPrefix = String(input.textBeforeCursor.dropFirst(previousTextBeforeCursor.count))
+            guard driftPrefix.allSatisfy(\.isLetter) else {
+                return nil
+            }
+        }
+
+        let lineAfterCursor = firstLine(in: input.textAfterCursor)
+        let repairedTextBeforeCursor = input.textBeforeCursor + lineAfterCursor
+        let repairedTextAfterCursor = String(input.textAfterCursor.dropFirst(lineAfterCursor.count))
+        let repairedCurrentLine = currentLine(in: repairedTextBeforeCursor)
+        guard isPlausibleActiveTypingLine(repairedCurrentLine) else {
+            return nil
+        }
+
+        return TextContextRepairResult(
+            textBeforeCursor: repairedTextBeforeCursor,
+            textAfterCursor: repairedTextAfterCursor,
+            reason: .obsidianCodeMirrorTextAfterGrowth
+        )
+    }
+
     private func obsidianCodeMirrorLineDriftRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
         guard input.bundleIdentifier == "md.obsidian",
               input.role == "AXTextArea",
@@ -215,7 +302,7 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
 
         let currentLineBefore = currentLine(in: input.textBeforeCursor)
         let lineAfterCursor = firstLine(in: input.textAfterCursor)
-        guard currentLineBefore.count >= 2,
+        guard currentLineBefore.count >= 1,
               currentLineBefore.count <= 24,
               lineAfterCursor.count >= 2,
               lineAfterCursor.count <= 80,

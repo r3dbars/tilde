@@ -1063,6 +1063,7 @@ obsidian_smoke_marker_text() {
       printf 'Autocomplete Lab Obsidian scroll filler line %02d\n' "$line"
     done
     printf '%s\n' "$marker"
+    printf 'S\n'
     return 0
   fi
 
@@ -5637,6 +5638,65 @@ APPLESCRIPT
   sleep 0.15
 }
 
+set_obsidian_caret_to_value_end() {
+  activate_obsidian_for_smoke
+  swift - <<'SWIFT' >/dev/null
+import AppKit
+import ApplicationServices
+import Foundation
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
+}
+
+func focusedElement(from element: AXUIElement) -> AXUIElement? {
+    var focusedValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(
+        element,
+        kAXFocusedUIElementAttribute as CFString,
+        &focusedValue
+    ) == .success,
+          let focusedValue else {
+        return nil
+    }
+
+    return (focusedValue as! AXUIElement)
+}
+
+guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "md.obsidian",
+      let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
+    exit(3)
+}
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+AXUIElementSetMessagingTimeout(appElement, 1.0)
+let systemWide = AXUIElementCreateSystemWide()
+AXUIElementSetMessagingTimeout(systemWide, 1.0)
+
+guard let editor = focusedElement(from: appElement) ?? focusedElement(from: systemWide) else {
+    exit(3)
+}
+
+AXUIElementSetMessagingTimeout(editor, 1.0)
+let text = copyAttribute(editor, kAXValueAttribute) as? String ?? ""
+var endRange = CFRange(location: text.utf16.count, length: 0)
+guard let rangeValue = AXValueCreate(.cfRange, &endRange) else {
+    exit(3)
+}
+
+AXUIElementSetAttributeValue(editor, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+guard AXUIElementSetAttributeValue(
+    editor,
+    kAXSelectedTextRangeAttribute as CFString,
+    rangeValue
+) == .success else {
+    exit(3)
+}
+SWIFT
+  sleep 0.15
+}
+
 move_obsidian_caret_to_document_end() {
   activate_obsidian_for_smoke
   osascript <<'APPLESCRIPT'
@@ -5645,6 +5705,7 @@ tell application "System Events"
   key code 125 using command down
 end tell
 APPLESCRIPT
+  set_obsidian_caret_to_value_end
   sleep 0.25
 }
 
@@ -5708,6 +5769,52 @@ tell application "System Events"
   key code 36
 end tell
 APPLESCRIPT
+  set_obsidian_caret_to_value_end
+}
+
+obsidian_smoke_file_path() {
+  local configured="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_FILE:-}"
+  if [[ -n "$configured" ]]; then
+    printf '%s\n' "$configured"
+    return 0
+  fi
+
+  printf '%s\n' "$HOME/Library/Application Support/AutocompleteLab/ObsidianProofVault/Proof/placement-proof.md"
+}
+
+reset_obsidian_smoke_note_file() {
+  local marker="$1"
+  local smoke_file
+  smoke_file="$(obsidian_smoke_file_path)"
+
+  case "$smoke_file" in
+    "$HOME/Library/Application Support/AutocompleteLab/ObsidianProofVault/"*.md)
+      ;;
+    *)
+      echo "Refusing file reset outside the disposable Autocomplete Lab Obsidian proof vault: $smoke_file" >&2
+      exit 3
+      ;;
+  esac
+
+  mkdir -p "$(dirname "$smoke_file")"
+  printf '%s' "$marker" >"$smoke_file"
+}
+
+append_obsidian_smoke_note_file_text() {
+  local fragment="$1"
+  local smoke_file
+  smoke_file="$(obsidian_smoke_file_path)"
+
+  case "$smoke_file" in
+    "$HOME/Library/Application Support/AutocompleteLab/ObsidianProofVault/"*.md)
+      ;;
+    *)
+      echo "Refusing file append outside the disposable Autocomplete Lab Obsidian proof vault: $smoke_file" >&2
+      exit 3
+      ;;
+  esac
+
+  printf '%s' "$fragment" >>"$smoke_file"
 }
 
 open_obsidian_smoke_note_if_configured() {
@@ -5733,9 +5840,13 @@ run_obsidian() {
   local manual_app
   manual_app="$(obsidian_session_app)"
 
-  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line obsidian_marker
+  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line obsidian_marker first_fragment
   runtime_start_line="$(line_count "$LOG_PATH")"
   obsidian_marker="$(obsidian_smoke_marker_text "$manual_app")"
+  first_fragment="Smoke proof feels"
+  if [[ "$manual_app" == "obsidian-long-note" ]]; then
+    first_fragment="moke proof feels"
+  fi
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT="$obsidian_marker"
 
@@ -5747,15 +5858,22 @@ run_obsidian() {
 
   open_obsidian_smoke_note_if_configured
   wait_for_frontmost_app "Obsidian" 8
+  if [[ "$manual_app" == "obsidian-long-note" ]]; then
+    reset_obsidian_smoke_note_file "$obsidian_marker"
+    open_obsidian_smoke_note_if_configured
+    wait_for_frontmost_app "Obsidian" 8
+  fi
   prepare_obsidian_variant_state "$manual_app"
   assert_obsidian_smoke_target
-  reset_obsidian_smoke_note
+  if [[ "$manual_app" != "obsidian-long-note" ]]; then
+    reset_obsidian_smoke_note
+  fi
   prepare_obsidian_variant_state "$manual_app"
 
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  type_obsidian_raw_smoke_text "Smoke proof feels"
+  type_obsidian_raw_smoke_text "$first_fragment"
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "md.obsidian" "Obsidian"
   activate_obsidian_for_smoke
@@ -5770,24 +5888,50 @@ run_obsidian() {
   wait_for_log_pattern "$start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian first verified insertion"
 
   second_start_line="$(line_count "$LOG_PATH")"
+  if [[ "$manual_app" == "obsidian-long-note" ]]; then
+    open_obsidian_smoke_note_if_configured
+    wait_for_frontmost_app "Obsidian" 8
+    move_obsidian_caret_to_document_end
+  fi
   assert_obsidian_smoke_target "Smoke proof feels instant"
   if [[ "$manual_app" == "obsidian-pane" ]]; then
     move_obsidian_caret_to_line_end
   fi
-  type_obsidian_raw_smoke_text " and stays"
+  if [[ "$manual_app" == "obsidian-long-note" ]]; then
+    append_obsidian_smoke_note_file_text " and stays"
+    open_obsidian_smoke_note_if_configured
+    wait_for_frontmost_app "Obsidian" 8
+    move_obsidian_caret_to_document_end
+  else
+    type_obsidian_raw_smoke_text " and stays"
+  fi
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"
-  wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
-  activate_obsidian_for_smoke
-  assert_frontmost_app "Obsidian" "Obsidian"
-  full_start_line="$(line_count "$LOG_PATH")"
-  press_accept_all_shortcut
-  wait_for_log_fields "$full_start_line" "Obsidian full acceptance" 12 \
-    "keyboard-action" \
-    "app=md.obsidian" \
-    "key=$full_accept_key" \
-    "action=acceptAllVisible" \
-    "handled=true"
-  wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian full verified insertion"
+  if [[ "$manual_app" == "obsidian-long-note" ]]; then
+    sleep 0.15
+    full_start_line="$(line_count "$LOG_PATH")"
+    press_key_code 48
+    wait_for_log_fields "$full_start_line" "Obsidian long-note second Tab acceptance" 12 \
+      "keyboard-action" \
+      "app=md.obsidian" \
+      "key=tab" \
+      "action=acceptNextWord" \
+      "handled=true"
+    wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian long-note second verified insertion"
+    wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
+  else
+    wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
+    activate_obsidian_for_smoke
+    assert_frontmost_app "Obsidian" "Obsidian"
+    full_start_line="$(line_count "$LOG_PATH")"
+    press_accept_all_shortcut
+    wait_for_log_fields "$full_start_line" "Obsidian full acceptance" 12 \
+      "keyboard-action" \
+      "app=md.obsidian" \
+      "key=$full_accept_key" \
+      "action=acceptAllVisible" \
+      "handled=true"
+    wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian full verified insertion"
+  fi
 
   sleep 1
   local manual_check_args=("$manual_app" --check)
