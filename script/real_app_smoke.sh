@@ -715,6 +715,25 @@ assert_frontmost_app() {
   fi
 }
 
+activate_app_by_process_name() {
+  local process_name="$1"
+
+  osascript - "$process_name" <<'APPLESCRIPT' >/dev/null 2>&1 || true
+set processName to item 1 of argv
+tell application "System Events"
+  if exists application process processName then
+    tell application process processName
+      set frontmost to true
+    end tell
+  end if
+end tell
+APPLESCRIPT
+}
+
+activate_obsidian_for_smoke() {
+  activate_app_by_process_name "Obsidian"
+}
+
 frontmost_process_id() {
   swift - <<'SWIFT'
 import AppKit
@@ -1031,6 +1050,114 @@ Required Obsidian proof lanes:
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate
 EOF
+}
+
+obsidian_smoke_marker_text() {
+  local manual_app="$1"
+  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
+
+  if [[ "$manual_app" == "obsidian-long-note" ]]; then
+    printf '%s\n' "$marker"
+    local line
+    for line in $(seq 1 90); do
+      printf 'Autocomplete Lab Obsidian scroll filler line %02d\n' "$line"
+    done
+    printf '%s\n' "$marker"
+    return 0
+  fi
+
+  printf '%s\n' "$marker"
+}
+
+obsidian_marker_text_area_count() {
+  swift - <<'SWIFT'
+import AppKit
+import ApplicationServices
+import Foundation
+
+let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "Autocomplete Lab Obsidian proof"
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func countMarkerTextAreas(in element: AXUIElement, depth: Int = 0) -> Int {
+    if depth > 24 {
+        return 0
+    }
+
+    let role = copyAttribute(element, kAXRoleAttribute) as? String
+    let value = copyAttribute(element, kAXValueAttribute) as? String ?? ""
+    var count = (role == kAXTextAreaRole as String && value.contains(marker)) ? 1 : 0
+    for child in children(of: element) {
+        count += countMarkerTextAreas(in: child, depth: depth + 1)
+    }
+    return count
+}
+
+guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
+    print(0)
+    exit(0)
+}
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+AXUIElementSetMessagingTimeout(appElement, 1.0)
+print(countMarkerTextAreas(in: appElement))
+SWIFT
+}
+
+prepare_obsidian_pane_variant_if_needed() {
+  activate_obsidian_for_smoke
+  local pane_count
+  pane_count="$(obsidian_marker_text_area_count 2>/dev/null || echo 0)"
+  if (( pane_count >= 2 )); then
+    return 0
+  fi
+
+  osascript <<'APPLESCRIPT' >/dev/null
+tell application "System Events"
+  tell application process "Obsidian"
+    set frontmost to true
+    click menu item "Split Right" of menu "View" of menu bar item "View" of menu bar 1
+  end tell
+end tell
+APPLESCRIPT
+  sleep 0.8
+  activate_obsidian_for_smoke
+
+  pane_count="$(obsidian_marker_text_area_count 2>/dev/null || echo 0)"
+  if (( pane_count < 2 )); then
+    echo "Could not verify two Obsidian editor panes for pane proof." >&2
+    exit 3
+  fi
+}
+
+prepare_obsidian_variant_state() {
+  local manual_app="$1"
+
+  case "$manual_app" in
+    obsidian-pane)
+      prepare_obsidian_pane_variant_if_needed
+      ;;
+    obsidian-theme)
+      # The smoke lane must be run in a vault/theme setup that visibly differs
+      # from the default Obsidian editor. The proof vault used by this project
+      # carries the Autocomplete Lab Proof theme.
+      activate_obsidian_for_smoke
+      ;;
+    obsidian-long-note)
+      activate_obsidian_for_smoke
+      move_obsidian_caret_to_document_end
+      ;;
+    obsidian)
+      activate_obsidian_for_smoke
+      ;;
+  esac
 }
 
 press_key_code() {
@@ -5267,6 +5394,7 @@ SWIFT
 }
 
 assert_obsidian_smoke_target() {
+  activate_obsidian_for_smoke
   AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX="${1:-}" swift - <<'SWIFT'
 import AppKit
 import ApplicationServices
@@ -5419,9 +5547,76 @@ APPLESCRIPT
 type_obsidian_raw_smoke_text() {
   local text="$1"
 
+  activate_obsidian_for_smoke
+  if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE:-0}" == "1" ]] &&
+    AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT="$text" swift - <<'SWIFT' >/dev/null 2>&1; then
+import AppKit
+import ApplicationServices
+import Foundation
+
+let fragment = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT"] ?? ""
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
+}
+
+func focusedElement(from element: AXUIElement) -> AXUIElement? {
+    var focusedValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(
+        element,
+        kAXFocusedUIElementAttribute as CFString,
+        &focusedValue
+    ) == .success,
+          let focusedValue else {
+        return nil
+    }
+
+    return (focusedValue as! AXUIElement)
+}
+
+guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "md.obsidian",
+      let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
+    exit(3)
+}
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+AXUIElementSetMessagingTimeout(appElement, 1.0)
+let systemWide = AXUIElementCreateSystemWide()
+AXUIElementSetMessagingTimeout(systemWide, 1.0)
+
+guard let editor = focusedElement(from: appElement) ?? focusedElement(from: systemWide) else {
+    exit(3)
+}
+
+AXUIElementSetMessagingTimeout(editor, 1.0)
+let role = copyAttribute(editor, kAXRoleAttribute) as? String
+guard role == kAXTextAreaRole as String || role == "AXWebArea" else {
+    exit(3)
+}
+
+let text = copyAttribute(editor, kAXValueAttribute) as? String ?? ""
+var endRange = CFRange(location: text.utf16.count, length: 0)
+guard let rangeValue = AXValueCreate(.cfRange, &endRange) else {
+    exit(3)
+}
+AXUIElementSetAttributeValue(editor, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+AXUIElementSetAttributeValue(editor, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+guard AXUIElementSetAttributeValue(
+    editor,
+    kAXSelectedTextAttribute as CFString,
+    fragment as CFTypeRef
+) == .success else {
+    exit(3)
+}
+SWIFT
+    return 0
+  fi
+
   AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT="$text" osascript <<'APPLESCRIPT'
 set rawText to system attribute "AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT"
 tell application "System Events"
+  tell application process "Obsidian" to set frontmost to true
   set frontApp to first application process whose frontmost is true
   if bundle identifier of frontApp is not "md.obsidian" then
     error "Obsidian is not frontmost for smoke-note setup."
@@ -5431,9 +5626,32 @@ end tell
 APPLESCRIPT
 }
 
-reset_obsidian_smoke_note() {
-  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER:-Autocomplete Lab Obsidian proof}"
+move_obsidian_caret_to_line_end() {
+  activate_obsidian_for_smoke
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  tell application process "Obsidian" to set frontmost to true
+  key code 124 using command down
+end tell
+APPLESCRIPT
+  sleep 0.15
+}
 
+move_obsidian_caret_to_document_end() {
+  activate_obsidian_for_smoke
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  tell application process "Obsidian" to set frontmost to true
+  key code 125 using command down
+end tell
+APPLESCRIPT
+  sleep 0.25
+}
+
+reset_obsidian_smoke_note() {
+  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT:-${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER:-Autocomplete Lab Obsidian proof}}"
+
+  activate_obsidian_for_smoke
   AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT="$marker" swift - <<'SWIFT'
 import AppKit
 import ApplicationServices
@@ -5477,8 +5695,10 @@ if let rangeValue = AXValueCreate(.cfRange, &endRange) {
 }
 SWIFT
 
+  activate_obsidian_for_smoke
   osascript <<'APPLESCRIPT'
 tell application "System Events"
+  tell application process "Obsidian" to set frontmost to true
   set frontApp to first application process whose frontmost is true
   if bundle identifier of frontApp is not "md.obsidian" then
     error "Obsidian is not frontmost for smoke-note reset."
@@ -5495,10 +5715,13 @@ open_obsidian_smoke_note_if_configured() {
   if [[ -n "$smoke_uri" ]]; then
     open "$smoke_uri"
     sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI_WAIT_SECONDS:-2}"
+    activate_obsidian_for_smoke
     return 0
   fi
 
   open -a Obsidian
+  sleep 0.2
+  activate_obsidian_for_smoke
 }
 
 run_obsidian() {
@@ -5509,13 +5732,12 @@ run_obsidian() {
 
   local manual_app
   manual_app="$(obsidian_session_app)"
-  if [[ "$manual_app" != "obsidian" ]]; then
-    run_manual_gated
-    return 0
-  fi
 
-  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line
+  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line obsidian_marker
   runtime_start_line="$(line_count "$LOG_PATH")"
+  obsidian_marker="$(obsidian_smoke_marker_text "$manual_app")"
+  export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
+  export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT="$obsidian_marker"
 
   prepare_temporary_app_enablement
   build_if_needed
@@ -5525,8 +5747,10 @@ run_obsidian() {
 
   open_obsidian_smoke_note_if_configured
   wait_for_frontmost_app "Obsidian" 8
+  prepare_obsidian_variant_state "$manual_app"
   assert_obsidian_smoke_target
   reset_obsidian_smoke_note
+  prepare_obsidian_variant_state "$manual_app"
 
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
@@ -5534,6 +5758,7 @@ run_obsidian() {
   type_obsidian_raw_smoke_text "Smoke proof feels"
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "md.obsidian" "Obsidian"
+  activate_obsidian_for_smoke
   assert_frontmost_app "Obsidian" "Obsidian"
   press_key_code 48
   wait_for_log_fields "$start_line" "Obsidian Tab acceptance" 12 \
@@ -5546,9 +5771,13 @@ run_obsidian() {
 
   second_start_line="$(line_count "$LOG_PATH")"
   assert_obsidian_smoke_target "Smoke proof feels instant"
+  if [[ "$manual_app" == "obsidian-pane" ]]; then
+    move_obsidian_caret_to_line_end
+  fi
   type_obsidian_raw_smoke_text " and stays"
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
+  activate_obsidian_for_smoke
   assert_frontmost_app "Obsidian" "Obsidian"
   full_start_line="$(line_count "$LOG_PATH")"
   press_accept_all_shortcut
@@ -5561,7 +5790,7 @@ run_obsidian() {
   wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian full verified insertion"
 
   sleep 1
-  local manual_check_args=(obsidian --check)
+  local manual_check_args=("$manual_app" --check)
   if screenshot_trace_requested; then
     manual_check_args+=(--visual)
   fi

@@ -523,18 +523,18 @@
         "More vault themes, panes, long notes, and hidden-caret variants are still required before green support."
       ],
     "requirements": [
-      {
-        "id": "obsidian-theme-variants",
-        "status": "pending",
-        "summary": "Add bounded proof across at least one non-default vault theme.",
-        "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
-      },
-      {
-        "id": "obsidian-pane-variants",
-        "status": "pending",
-        "summary": "Add bounded proof with split panes or side panes visible.",
-        "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
-      },
+        {
+          "id": "obsidian-theme-variants",
+          "status": "complete",
+          "summary": "Add bounded proof across at least one non-default vault theme.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
+        },
+        {
+          "id": "obsidian-pane-variants",
+          "status": "complete",
+          "summary": "Add bounded proof with split panes or side panes visible.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
+        },
       {
         "id": "obsidian-long-note-variants",
         "status": "pending",
