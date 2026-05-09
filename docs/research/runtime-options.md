@@ -94,6 +94,29 @@ The directory should contain at least:
 
 The default model repo is `mlx-community/Qwen3.5-4B-MLX-4bit`.
 
+## Runtime Readiness Evidence
+
+The beta runtime gate is intentionally tied to the latest app launch, not old
+diagnostic strings. Before beta, run:
+
+```bash
+AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
+AUTOCOMPLETE_LAB_EXPECTED_ASSET=Qwen3.5-4B-4bit \
+./script/check_diagnostics_log.sh
+```
+
+That gate must find all of this in the latest launch slice:
+
+- `launch accessibility=...`
+- `launch-health ... crashOrForceQuitSuspected=...`
+- `runtime-bootstrap activeCandidate=mlx ... nativeRuntimeAvailable=true`
+- `runtime-warm-succeeded candidate=mlx durationMilliseconds=...`
+- `runtime ... readinessAction=none readinessStage=ready state=ready (MLX)`
+
+It also rejects `activeCandidate=mock`, `candidate=mock`,
+`state=ready (mock)`, `fallbackReason=...`, user-managed servers, and the wrong
+model asset.
+
 ## Fallback Candidate: LiteRT-LM
 
 LiteRT-LM stays tracked as a future packaged runtime candidate, especially for

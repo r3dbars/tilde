@@ -28,6 +28,7 @@ swift test
 ./script/check_trace_eval_self_test.sh
 ./script/autocomplete_trace_replay_self_test.sh
 ./script/check_typing_performance_log_self_test.sh
+./script/check_diagnostics_log_self_test.sh
 ./script/typing_performance_soak_self_test.sh
 ./script/typing_performance_endurance_soak_self_test.sh
 ./script/model_latency_report_self_test.sh

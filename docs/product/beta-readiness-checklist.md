@@ -16,6 +16,8 @@ Use this before inviting private beta testers.
 
 - [ ] The menu bar or Diagnostics shows the model is ready.
 - [ ] The preferred asset is `Qwen3.5-4B-4bit`.
+- [ ] `AUTOCOMPLETE_LAB_REQUIRE_READY=1 AUTOCOMPLETE_LAB_EXPECTED_ASSET=Qwen3.5-4B-4bit ./script/check_diagnostics_log.sh`
+  passes on the latest launch slice.
 - [ ] Settings installs or repairs the local model without shell commands.
 - [ ] `./script/model_latency_report.py --default-model-proof` passes.
 - [ ] `./script/latency_benchmark_report.py --beta-gate` passes with current
@@ -23,7 +25,12 @@ Use this before inviting private beta testers.
   suppression numbers.
 
 - [ ] Suggestions stay off while the runtime warms or fails.
-- [ ] Mock fallback is not used for beta.
+- [ ] Mock fallback is not used for beta; the diagnostics gate must show
+  `activeCandidate=mlx`, `nativeRuntimeAvailable=true`, and
+  `readinessStage=ready state=ready (MLX)`.
+- [ ] Latest launch diagnostics include `launch-health` and
+  `runtime-warm-succeeded ... durationMilliseconds=...` so crashy relaunches
+  and slow warms are visible.
 - [ ] Missing or invalid model setup is handled by Settings `Install Model` or
   `Repair Model`.
 - [ ] Testers do not run Ollama, llama.cpp, Python, or a model server.
@@ -66,6 +73,12 @@ Use this before inviting private beta testers.
 Invite testers only when every applicable box is checked.
 
 ## Current Blockers - 2026-05-07
+
+- 2026-05-09 runtime update: the diagnostics checker now reads launch/runtime
+  facts from the latest launch slice instead of requiring `launch accessibility=`
+  inside the last 120 noisy log lines. `script/check_diagnostics_log_self_test.sh`
+  covers the stale-pattern failure and rejects mock fallback or the wrong model
+  asset.
 
 - Screenshot-backed proof now exists for Obsidian, Notes title, Notes body, and
   Notes checklist in `docs/product/visual-placement-screenshots/`, but rerun
