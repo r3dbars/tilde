@@ -16,6 +16,9 @@ struct MenuBarStatusItemConfiguration: Equatable {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private static let launchSessionActiveDefaultsKey = "AutocompleteLabLaunchSessionActive"
+    private static let launchSessionIDDefaultsKey = "AutocompleteLabLaunchSessionID"
+
     private let accessibilityClient = AccessibilityClient()
     private let startupOnboardingPolicy = StartupOnboardingPolicy()
     private let profileStore = CompatibilityProfileStore.mvp
@@ -202,6 +205,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastObservedSettingsApp: RunningApplicationInfo?
     private var lastFieldControlTarget: FieldControlTarget?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
+    private var currentLaunchSessionID = UUID().uuidString
+    private var runtimeWarmSequence = 0
     private var modelInstallTask: Task<Void, Never>?
     private var modelInstallStatusText: String?
     private var isModelInstallCancelRequested = false
@@ -233,6 +238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadProofModeOverrides()
         configureStatusItem()
         DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
+        recordLaunchHealth()
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
         if startupOnboardingPolicy.shouldRequestAccessibilityPromptOnLaunch(
             isTrusted: accessibilityClient.isTrusted
@@ -248,7 +254,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        DiagnosticsLog.shared.record("terminate")
+        UserDefaults.standard.set(false, forKey: Self.launchSessionActiveDefaultsKey)
+        DiagnosticsLog.shared.record(
+            "terminate",
+            metadata: ["launchID": currentLaunchSessionID]
+        )
         debounceTask?.cancel()
         pauseExpirationTask?.cancel()
         keyboardEventTapStopTask?.cancel()
@@ -261,6 +271,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stopWorkspaceFocusObservers()
         stopKeyboardEventTapNow(reason: "terminate")
         fieldStatusIndicator.hide()
+    }
+
+    private func recordLaunchHealth() {
+        let defaults = UserDefaults.standard
+        let previousLaunchWasActive = defaults.bool(forKey: Self.launchSessionActiveDefaultsKey)
+        let previousLaunchID = defaults.string(forKey: Self.launchSessionIDDefaultsKey)
+        currentLaunchSessionID = UUID().uuidString
+        defaults.set(true, forKey: Self.launchSessionActiveDefaultsKey)
+        defaults.set(currentLaunchSessionID, forKey: Self.launchSessionIDDefaultsKey)
+
+        DiagnosticsLog.shared.record(
+            "launch-health",
+            metadata: [
+                "launchID": currentLaunchSessionID,
+                "previousLaunchID": previousLaunchID ?? "",
+                "previousExit": previousLaunchWasActive ? "unclean" : "clean-or-first-launch",
+                "relaunch": String(previousLaunchID != nil),
+                "crashOrForceQuitSuspected": String(previousLaunchWasActive)
+            ]
+        )
     }
 
     private func startWorkspaceFocusObservers() {
@@ -405,18 +435,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func warmModelRuntime() {
         let candidate = modelRuntimeBundle.activeCandidate
         let runtime = modelRuntime
+        runtimeWarmSequence += 1
+        let warmSequence = runtimeWarmSequence
+        let warmID = String(warmSequence)
+        let warmStartedAt = Date()
 
         applyRuntimeState(.warming(candidate: candidate))
         DiagnosticsLog.shared.record(
             "runtime-warm-start",
             metadata: [
                 "candidate": candidate.rawValue,
-                "modelDirectory": modelRuntimeBundle.modelDirectoryURL.path
+                "modelDirectory": modelRuntimeBundle.modelDirectoryURL.path,
+                "warmID": warmID
             ]
         )
 
         runtimeWarmTask?.cancel()
-        runtimeWarmTask = Task { [weak self, runtime, candidate] in
+        runtimeWarmTask = Task { [weak self, runtime, candidate, warmID, warmStartedAt] in
             do {
                 try await runtime.warm()
             } catch {
@@ -425,7 +460,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "runtime-warm-failed",
                         metadata: [
                             "candidate": candidate.rawValue,
-                            "reason": error.localizedDescription
+                            "durationMilliseconds": String(Self.milliseconds(from: warmStartedAt, to: Date())),
+                            "reason": error.localizedDescription,
+                            "warmID": warmID
                         ]
                     )
                     self?.applyRuntimeState(.failed(candidate: candidate, reason: error.localizedDescription))
@@ -439,10 +476,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "runtime-warm-succeeded",
                     metadata: [
                         "candidate": candidate.rawValue,
-                        "state": state.statusSummary
+                        "durationMilliseconds": String(Self.milliseconds(from: warmStartedAt, to: Date())),
+                        "state": state.statusSummary,
+                        "warmID": warmID
                     ]
                 )
                 self?.applyRuntimeState(state)
+            }
+        }
+
+        Task { [weak self, candidate, warmSequence, warmID, warmStartedAt] in
+            try? await Task.sleep(nanoseconds: 30_000_000_000)
+            await MainActor.run {
+                guard let self,
+                      self.runtimeWarmSequence == warmSequence,
+                      case .warming = self.currentRuntimeState else {
+                    return
+                }
+
+                DiagnosticsLog.shared.record(
+                    "runtime-warm-still-running",
+                    metadata: [
+                        "candidate": candidate.rawValue,
+                        "elapsedMilliseconds": String(Self.milliseconds(from: warmStartedAt, to: Date())),
+                        "warmID": warmID
+                    ]
+                )
             }
         }
     }
@@ -473,6 +532,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "readinessAction": report.action.rawValue
             ]
         )
+    }
+
+    private static func milliseconds(from start: Date, to end: Date) -> Int {
+        max(0, Int(end.timeIntervalSince(start) * 1000))
     }
 
     private func rearmFocusedTextAfterRuntimeReady() {

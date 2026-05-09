@@ -147,12 +147,13 @@ Score movement: +10
 ### Runtime And Model Readiness
 
 - Weight: 20
-- Current score: 16/20
+- Current score: 18/20
 - Why this score: Local runtime ownership, model-asset checks, runtime readiness
   gating, insertion verification, stale request suppression, and key-path
-  diagnostics are strong. The remaining beta gaps are fresh production-runtime
-  proof, crash/hang readiness evidence, and proof that mock fallback cannot be
-  mistaken for beta readiness.
+  diagnostics are strong. The runtime production gate now reads the latest
+  launch slice, requires native MLX readiness for `Qwen3.5-4B-4bit`, rejects
+  mock fallback, and requires launch/warm diagnostics that make crashy
+  relaunches or slow warms visible.
 - Evidence found in repo: `Sources/AutocompleteLabApp/Runtime/AppModelRuntimeFactory.swift`,
   `Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swift`,
   `Sources/AutocompleteLabCore/Runtime/RuntimeReadinessGuidance.swift`,
@@ -161,9 +162,12 @@ Score movement: +10
   `Tests/AutocompleteLabCoreTests/RuntimePolicyTests.swift`,
   `Tests/AutocompleteLabCoreTests/InsertionVerificationTests.swift`,
   `script/check_model_asset.py`, `script/model_latency_report.py`,
-  `script/build_and_run.sh`, `script/build_and_run_self_test.sh`.
-- Missing evidence: MetricKit/crash-hang proof, fresh p95 typing-path proof for
-  this build, and a beta gate artifact proving no mock fallback.
+  `script/build_and_run.sh`, `script/build_and_run_self_test.sh`,
+  `script/check_diagnostics_log.sh`,
+  `script/check_diagnostics_log_self_test.sh`.
+- Missing evidence: MetricKit-level crash/hang aggregation, fresh p95
+  typing-path proof for this exact beta artifact, and longer sleep/wake or
+  multi-hour writing-session proof.
 - What would make it 100/100: Fresh build proof with native MLX ready, zero mock
   fallback, p95 under the target threshold, no typing hangs, crash/hang
   diagnostics verified after relaunch, and all insertion verification gates

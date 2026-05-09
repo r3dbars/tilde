@@ -67,6 +67,9 @@ Ending score after continuation loop: 75/100.
 Latency update: latency is 82/100 after the current benchmark gate added
 p50/p90/p95/p99 first-visible, first-token, total-generation, event-tap, AX,
 stale-late suppression, and default-runtime proof checks.
+Runtime readiness update: local model/runtime readiness is 76/100 after the
+diagnostics gate was tied to the latest launch slice and made to reject mock
+fallback.
 
 Release gate status: blocked. `Insertion safety`, `Privacy/trust`, and `Non-annoyance` must all be at least 80/100 with current proof before beta.
 
@@ -83,9 +86,9 @@ Release gate status: blocked. `Insertion safety`, `Privacy/trust`, and `Non-anno
 | Visual placement | 8 | 74 | 5.92 |
 | User control | 6 | 78 | 4.68 |
 | Recoverability | 4 | 68 | 2.72 |
-| Local model/runtime readiness | 2 | 64 | 1.28 |
+| Local model/runtime readiness | 2 | 76 | 1.52 |
 
-Weighted total: 76.90, rounded to 77/100.
+Weighted total: 77.14, rounded to 77/100.
 
 ### Insertion Safety
 
@@ -172,10 +175,21 @@ Weighted total: 76.90, rounded to 77/100.
 ### Local Model/Runtime Readiness
 
 - Weight: 2
-- Current score: 64/100
-- Why this score: The app owns an MLX runtime path and install/repair flow, but current live latency and hardware proof are incomplete.
-- Evidence found in repo: `Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift`, `Sources/AutocompleteLabApp/Runtime/ModelAssetInstaller.swift`, `docs/research/runtime-options.md`, `script/model_latency_report.py`, `Tests/AutocompleteLabCoreTests/RuntimePolicyTests.swift`, `Tests/AutocompleteLabAppTests/ModelAssetInstallerTests.swift`.
-- Missing evidence: Current default-model proof, minimum-hardware proof, memory/energy proof, sleep/wake proof, and beta packaging proof after any app change.
+- Current score: 76/100
+- Why this score: The app owns an MLX runtime path and install/repair flow, and
+  the production diagnostics gate now proves the latest launch is native MLX,
+  ready, using `Qwen3.5-4B-4bit`, not mock fallback, and carrying crash/relaunch
+  plus warm-duration diagnostics.
+- Evidence found in repo: `Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift`,
+  `Sources/AutocompleteLabApp/Runtime/ModelAssetInstaller.swift`,
+  `Sources/AutocompleteLabApp/App/AppDelegate.swift`,
+  `docs/research/runtime-options.md`, `script/check_diagnostics_log.sh`,
+  `script/check_diagnostics_log_self_test.sh`, `script/model_latency_report.py`,
+  `Tests/AutocompleteLabCoreTests/RuntimePolicyTests.swift`,
+  `Tests/AutocompleteLabAppTests/ModelAssetInstallerTests.swift`.
+- Missing evidence: Current default-model latency sample proof,
+  minimum-hardware proof, memory/energy proof, sleep/wake proof, and beta
+  packaging proof after any app change.
 - What would make it 100/100: Predictable app-owned local inference across the supported hardware matrix, no mock fallback for beta, and latency/energy budgets that stay green in long writing sessions.
 
 ## 0/100 Definition
