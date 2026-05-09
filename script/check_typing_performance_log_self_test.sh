@@ -303,6 +303,49 @@ if ! grep -F "event tap failed closed reason=timeout" "$TMP_DIR/failed-closed.tx
 fi
 
 cat >"$LOG_PATH" <<'EOF'
+2026-05-06T10:00:00Z keyboard-event-tap-latency decision=consume durationMicros=70 key=tab
+2026-05-06T10:00:00Z keyboard-event-tap-replayed-captured-key key=tab reason=focus-changed diagnosticLayer=keyCapture safetyFailure=false
+2026-05-06T10:00:01Z focused-text-poll-latency-summary count=60 maxMilliseconds=140 p50Milliseconds=12 p95Milliseconds=90
+EOF
+
+AUTOCOMPLETE_LAB_LOG="$LOG_PATH" script/check_typing_performance_log.sh >"$TMP_DIR/replayed-captured-key.txt"
+
+if ! grep -F "Captured key recovery events: replayed=1 dropped=0" "$TMP_DIR/replayed-captured-key.txt" >/dev/null; then
+  echo "typing performance self-test did not summarize replayed captured keys" >&2
+  cat "$TMP_DIR/replayed-captured-key.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "focused text poll p95 90ms exceeds 80ms" "$TMP_DIR/replayed-captured-key.txt" >/dev/null; then
+  echo "typing performance self-test did not keep AX warnings separate from replayed captured keys" >&2
+  cat "$TMP_DIR/replayed-captured-key.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Typing performance log verified." "$TMP_DIR/replayed-captured-key.txt" >/dev/null; then
+  echo "typing performance self-test should pass replayed captured keys" >&2
+  cat "$TMP_DIR/replayed-captured-key.txt" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
+2026-05-06T10:00:00Z keyboard-event-tap-latency decision=consume durationMicros=70 key=tab
+2026-05-06T10:00:00Z keyboard-event-tap-unhandled-consumed-key-dropped key=tab reason=acceptance-proof-failed diagnosticLayer=keyCapture safetyFailure=true
+EOF
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" script/check_typing_performance_log.sh >"$TMP_DIR/dropped-captured-key.txt" 2>&1; then
+  echo "typing performance self-test expected dropped captured keys to fail" >&2
+  cat "$TMP_DIR/dropped-captured-key.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "captured key dropped key=tab reason=acceptance-proof-failed" "$TMP_DIR/dropped-captured-key.txt" >/dev/null; then
+  echo "typing performance self-test did not catch dropped captured keys" >&2
+  cat "$TMP_DIR/dropped-captured-key.txt" >&2
+  exit 1
+fi
+
+cat >"$LOG_PATH" <<'EOF'
 2026-05-06T10:00:00Z keyboard-event-tap-disabled reason=timeout
 2026-05-06T10:00:01Z keyboard-event-tap-latency decision=consume durationMicros=500 key=tab
 EOF
