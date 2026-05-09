@@ -5,6 +5,7 @@ import Testing
 struct InsertionVerificationContextRecoveryPolicyTests {
     private let policy = InsertionVerificationContextRecoveryPolicy()
     private let obsidianProfile = CompatibilityProfileStore.mvp.profile(for: "md.obsidian")!
+    private let chromeProfile = CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome")!
     private let textEditProfile = CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit")!
     private let expectedField = FocusedFieldIdentity(
         bundleIdentifier: "md.obsidian",
@@ -21,6 +22,34 @@ struct InsertionVerificationContextRecoveryPolicyTests {
         )))
         #expect(policy.canRecover(input(
             contextRole: "AXTextArea",
+            verificationResult: .verified,
+            mismatch: .targetFingerprint
+        )))
+    }
+
+    @Test("Recovers Chromium target fingerprint churn only after verified insertion")
+    func recoversVerifiedChromiumTargetFingerprintChurn() {
+        #expect(policy.canRecover(input(
+            profile: chromeProfile,
+            frontmostBundleIdentifier: "com.google.Chrome",
+            expectedField: FocusedFieldIdentity(
+                bundleIdentifier: "com.google.Chrome",
+                processIdentifier: 42,
+                elementIdentifier: 99
+            ),
+            contextRole: "AXTextArea",
+            verificationResult: .verified,
+            mismatch: .targetFingerprint
+        )))
+        #expect(policy.canRecover(input(
+            profile: chromeProfile,
+            frontmostBundleIdentifier: "com.google.Chrome",
+            expectedField: FocusedFieldIdentity(
+                bundleIdentifier: "com.google.Chrome",
+                processIdentifier: 42,
+                elementIdentifier: 99
+            ),
+            contextRole: "AXTextField",
             verificationResult: .verified,
             mismatch: .targetFingerprint
         )))
@@ -51,12 +80,37 @@ struct InsertionVerificationContextRecoveryPolicyTests {
             verificationResult: .verified,
             mismatch: .fieldIdentity
         )))
+        #expect(!policy.canRecover(input(
+            profile: chromeProfile,
+            frontmostBundleIdentifier: "com.google.Chrome",
+            expectedField: FocusedFieldIdentity(
+                bundleIdentifier: "com.google.Chrome",
+                processIdentifier: 42,
+                elementIdentifier: 99
+            ),
+            contextRole: "AXTextArea",
+            verificationResult: .verified,
+            mismatch: .fieldIdentity
+        )))
+        #expect(!policy.canRecover(input(
+            profile: chromeProfile,
+            frontmostBundleIdentifier: "com.google.Chrome",
+            expectedField: FocusedFieldIdentity(
+                bundleIdentifier: "com.google.Chrome",
+                processIdentifier: 42,
+                elementIdentifier: 99
+            ),
+            contextRole: "AXTextArea",
+            verificationResult: .unchanged,
+            mismatch: .targetFingerprint
+        )))
     }
 
     private func input(
         profile: CompatibilityProfile? = nil,
         frontmostBundleIdentifier: String = "md.obsidian",
         frontmostProcessIdentifier: Int32 = 42,
+        expectedField: FocusedFieldIdentity? = nil,
         contextRole: String?,
         verificationResult: InsertionVerificationResult,
         mismatch: InsertionVerificationContextMismatch
@@ -65,7 +119,7 @@ struct InsertionVerificationContextRecoveryPolicyTests {
             profile: profile ?? obsidianProfile,
             frontmostBundleIdentifier: frontmostBundleIdentifier,
             frontmostProcessIdentifier: frontmostProcessIdentifier,
-            expectedFieldIdentity: expectedField,
+            expectedFieldIdentity: expectedField ?? self.expectedField,
             contextRole: contextRole,
             verificationResult: verificationResult,
             mismatch: mismatch

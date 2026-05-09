@@ -2121,6 +2121,7 @@ SWIFT
 focus_chrome_smoke_editor() {
   local fixture="${1:-$CHROME_FIXTURE}"
   local chrome_pid="${2:-}"
+  local expected_url="${3:-${CHROME_CURRENT_FIXTURE_URL:-}}"
   local click_x_offset click_y_offset
   read -r click_x_offset click_y_offset < <(chrome_fixture_click_offsets "$fixture")
 
@@ -2167,6 +2168,10 @@ APPLESCRIPT
     chrome_focus_official_demo_editor "$fixture"
     wait_for_frontmost_app "Google Chrome" 5
     return 0
+  fi
+
+  if [[ -n "$expected_url" ]]; then
+    focus_default_chrome_smoke_tab "$fixture" "$expected_url" >/dev/null
   fi
 
   osascript >/dev/null <<APPLESCRIPT
@@ -3093,6 +3098,51 @@ end tell
 APPLESCRIPT
 }
 
+focus_default_chrome_smoke_tab() {
+  local fixture="$1"
+  local expected_url="$2"
+  local expected_leaf=""
+
+  if [[ "$expected_url" == file://* ]]; then
+    expected_leaf="$(basename "${expected_url#file://}")"
+  fi
+
+  osascript - "$fixture" "$expected_url" "$expected_leaf" <<'APPLESCRIPT' 2>/dev/null || true
+on run argv
+  set fixtureName to item 1 of argv
+  set expectedURL to item 2 of argv
+  set expectedLeaf to item 3 of argv
+
+  tell application "Google Chrome"
+    try
+      activate
+      repeat with chromeWindow in windows
+        set tabIndex to 1
+        repeat with chromeTab in tabs of chromeWindow
+          set tabURL to URL of chromeTab
+          set tabTitle to title of chromeTab
+          set urlMatches to tabURL starts with expectedURL
+          set leafMatches to false
+          if expectedLeaf is not "" then
+            set leafMatches to tabURL contains expectedLeaf
+          end if
+          set titleMatches to tabTitle contains ("Autocomplete Lab Chrome") and tabTitle contains ("[ready=1]")
+          if urlMatches or leafMatches or titleMatches then
+            set active tab index of chromeWindow to tabIndex
+            set index of chromeWindow to 1
+            return "ok"
+          end if
+          set tabIndex to tabIndex + 1
+        end repeat
+      end repeat
+    end try
+  end tell
+
+  return "missing:" & fixtureName
+end run
+APPLESCRIPT
+}
+
 chrome_active_tab_url_for_pid() {
   local chrome_pid="$1"
 
@@ -3147,7 +3197,8 @@ assert_chrome_expected_tab() {
   if [[ -n "$chrome_pid" ]]; then
     active_url="$(chrome_active_tab_url_for_pid "$chrome_pid")"
   else
-  active_url="$(chrome_active_tab_url)"
+    focus_default_chrome_smoke_tab "$fixture" "$expected_url" >/dev/null
+    active_url="$(chrome_active_tab_url)"
   fi
   if [[ -z "$active_url" ]]; then
     echo "Chrome $fixture smoke refused to type during $label: no active Chrome tab URL." >&2
@@ -5862,6 +5913,7 @@ run_chrome_fixture() {
 
   local chrome_url
   chrome_url="$(chrome_fixture_url "$fixture" "$html_file")"
+  CHROME_CURRENT_FIXTURE_URL="$chrome_url"
   local click_x_offset click_y_offset
   read -r click_x_offset click_y_offset < <(chrome_fixture_click_offsets "$fixture")
   local chrome_pid=""
@@ -5896,6 +5948,7 @@ tell application "System Events"
   end tell
 end tell
 APPLESCRIPT
+    focus_default_chrome_smoke_tab "$fixture" "$chrome_url" >/dev/null
   fi
 
   if [[ -n "$chrome_pid" ]]; then
@@ -5904,7 +5957,7 @@ APPLESCRIPT
     wait_for_frontmost_app "Google Chrome" 5
   fi
   wait_for_chrome_smoke_ready "$fixture" 20 "$chrome_pid"
-  focus_chrome_smoke_editor "$fixture" "$chrome_pid"
+  focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
   require_default_chrome_web_accessibility "$fixture"
 
   type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "first fragment" "Smoke proof feels inst"
@@ -5912,7 +5965,7 @@ APPLESCRIPT
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.google.Chrome" "Chrome $fixture"
   if [[ -z "$chrome_pid" ]]; then
-    focus_chrome_smoke_editor "$fixture"
+    focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
   fi
   if [[ -n "$chrome_pid" ]]; then
     assert_frontmost_process_id "$chrome_pid" "Chrome $fixture"
@@ -5961,14 +6014,14 @@ APPLESCRIPT
   second_start_line="$(line_count "$LOG_PATH")"
 
   if [[ -z "$chrome_pid" ]]; then
-    focus_chrome_smoke_editor "$fixture"
+    focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
   fi
   type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "second fragment" " and stays inst"
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.google.Chrome" "Chrome $fixture second"
   if [[ -z "$chrome_pid" ]]; then
-    focus_chrome_smoke_editor "$fixture"
+    focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
   fi
   if [[ -n "$chrome_pid" ]]; then
     assert_frontmost_process_id "$chrome_pid" "Chrome $fixture"
