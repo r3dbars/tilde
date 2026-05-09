@@ -168,15 +168,19 @@
         "versionSource": "/Applications/Codex.app",
         "safetyMode": "wordOnly",
         "runtimeState": "userToggleAllowed",
-        "proofState": "partial",
+        "proofState": "complete",
         "killSwitch": "proofModeRequired",
         "proofArtifacts": [
           {
             "kind": "screenshot",
             "reference": "docs/product/visual-placement-screenshots/codex-inline.png"
+          },
+          {
+            "kind": "manual-smoke",
+            "reference": "Codex/default"
           }
         ],
-        "notes": "Dogfood prompt support is word-only; full accept and direct proof insertion require proof mode."
+        "notes": "Dogfood prompt support has same-slice screenshot, one-word accept, and no-submit proof. Full accept stays disabled until separate no-submit proof exists."
       },
       {
         "bundle": "com.anthropic.claude-code",
@@ -490,19 +494,33 @@
     },
     {
       "surface": "Codex",
-      "status": "partial",
+      "status": "complete",
+      "manualSmoke": {
+        "app": "Codex",
+        "bundle": "com.openai.codex",
+        "proof": "default",
+        "minVerifiedAccepts": 1,
+        "maxVerifiedAccepts": 1,
+        "requiresVisualStrictComplete": true
+      },
       "screenshots": [
         "docs/product/visual-placement-screenshots/codex-inline.png"
       ],
-      "gaps": [
-        "Needs one strict trace slice that proves screenshot, one-word Tab accept, and no prompt submit together."
-      ],
+      "gaps": [],
       "requirements": [
         {
           "id": "codex-same-slice-no-submit",
-          "status": "pending",
+          "status": "complete",
           "summary": "Prove screenshot, one-word Tab accept, and no prompt submit in one bounded strict trace slice.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate",
+          "manualSmoke": {
+            "app": "Codex",
+            "bundle": "com.openai.codex",
+            "proof": "default",
+            "minVerifiedAccepts": 1,
+            "maxVerifiedAccepts": 1,
+            "requiresVisualStrictComplete": true
+          }
         }
       ]
     },
@@ -826,9 +844,9 @@
       "displayName": "Codex",
       "supportLevel": "yellow",
       "surface": "Codex",
-      "status": "partial",
+      "status": "complete",
       "owner": "prompt-app proof lane",
-      "safetyNote": "Screenshot proof exists, but support must stay yellow until one trace slice proves one-word accept with no prompt submit."
+      "safetyNote": "Same-slice screenshot, one-word Tab accept, verified insertion, and no-submit proof exists. Full accept stays disabled until separate no-submit proof exists."
     },
     {
       "bundle": "com.anthropic.claude-code",
