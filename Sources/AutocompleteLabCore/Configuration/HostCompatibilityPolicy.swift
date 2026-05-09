@@ -213,12 +213,13 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             hostVersion: .exact(shortVersion: "26.506.21252", build: "2575", source: "/Applications/Codex.app"),
             safetyMode: .wordOnly,
             runtimeState: .userToggleAllowed,
-            proofState: .partial,
+            proofState: .complete,
             killSwitch: .proofModeRequired,
             proofArtifacts: [
-                HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/codex-inline.png")
+                HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/codex-inline.png"),
+                HostProofArtifact(kind: "manual-smoke", reference: "Codex/default")
             ],
-            notes: "Dogfood prompt support is word-only; full accept and direct proof insertion require proof mode."
+            notes: "Dogfood prompt support has same-slice screenshot, one-word accept, and no-submit proof. Full accept stays disabled until separate no-submit proof exists."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.anthropic.claude-code",

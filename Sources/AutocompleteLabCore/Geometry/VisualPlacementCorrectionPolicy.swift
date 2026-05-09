@@ -16,6 +16,34 @@ public enum VisualPlacementCorrectionReason: String, Equatable, Sendable {
     case excessiveOutlier = "excessive-outlier"
 }
 
+public enum VisualPlacementCorrectionProofOutcome: String, Equatable, Sendable {
+    case improved
+    case refused
+    case unchanged
+}
+
+public struct VisualPlacementCorrectionProof: Equatable, Sendable {
+    public let outcome: VisualPlacementCorrectionProofOutcome
+    public let beforeDistance: CGFloat
+    public let afterDistance: CGFloat
+    public let improvement: CGFloat
+    public let privacyBoundary: String
+
+    public init(
+        outcome: VisualPlacementCorrectionProofOutcome,
+        beforeDistance: CGFloat,
+        afterDistance: CGFloat,
+        improvement: CGFloat,
+        privacyBoundary: String = "geometry-only"
+    ) {
+        self.outcome = outcome
+        self.beforeDistance = beforeDistance
+        self.afterDistance = afterDistance
+        self.improvement = improvement
+        self.privacyBoundary = privacyBoundary
+    }
+}
+
 public struct VisualPlacementCorrection: Equatable, Sendable {
     public let dx: CGFloat
     public let dy: CGFloat
@@ -44,6 +72,41 @@ public struct VisualPlacementCorrection: Equatable, Sendable {
         }
 
         return rect.offsetBy(dx: dx, dy: dy)
+    }
+
+    public func proof(
+        measuredDX: CGFloat,
+        measuredDY: CGFloat
+    ) -> VisualPlacementCorrectionProof {
+        guard measuredDX.isFinite, measuredDY.isFinite else {
+            return VisualPlacementCorrectionProof(
+                outcome: .refused,
+                beforeDistance: 0,
+                afterDistance: 0,
+                improvement: 0
+            )
+        }
+
+        let before = CGFloat(Foundation.hypot(Double(measuredDX), Double(measuredDY)))
+        guard isApplied else {
+            return VisualPlacementCorrectionProof(
+                outcome: .refused,
+                beforeDistance: before,
+                afterDistance: before,
+                improvement: 0
+            )
+        }
+
+        let residualDX = measuredDX - dx
+        let residualDY = measuredDY - dy
+        let after = CGFloat(Foundation.hypot(Double(residualDX), Double(residualDY)))
+        let improvement = max(0, before - after)
+        return VisualPlacementCorrectionProof(
+            outcome: improvement > 0 ? .improved : .unchanged,
+            beforeDistance: before,
+            afterDistance: after,
+            improvement: improvement
+        )
     }
 }
 

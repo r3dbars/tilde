@@ -183,6 +183,28 @@ struct FocusedFieldIdentityPolicyTests {
         #expect(!before.matches(movedWindow))
     }
 
+    @Test("Post insertion scope can allow rich editor height reflow without ignoring target movement")
+    func postInsertionScopeAllowsRichEditorHeightReflow() {
+        let before = targetFingerprint(
+            elementRect: CGRect(x: 100, y: 500, width: 800, height: 90),
+            caretRect: CGRect(x: 120, y: 520, width: 1, height: 20),
+            textBeforeCursor: "hello"
+        ).postInsertionScope
+        let reflowed = targetFingerprint(
+            elementRect: CGRect(x: 100, y: 500, width: 800, height: 62),
+            caretRect: CGRect(x: 180, y: 520, width: 1, height: 20),
+            textBeforeCursor: "hello there"
+        ).postInsertionScope
+        let moved = targetFingerprint(
+            elementRect: CGRect(x: 120, y: 500, width: 800, height: 62),
+            caretRect: CGRect(x: 180, y: 520, width: 1, height: 20),
+            textBeforeCursor: "hello there"
+        ).postInsertionScope
+
+        #expect(before.matchesPostInsertionScopeAllowingElementHeightChange(reflowed))
+        #expect(!before.matchesPostInsertionScopeAllowingElementHeightChange(moved))
+    }
+
     private func input(
         elementIdentifier: Int = 1,
         role: String? = "AXTextArea",

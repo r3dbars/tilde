@@ -181,13 +181,38 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
         visualTrustContext: CompatibilityLearningVisualTrustContext?,
         allowsLearningCorrection: Bool
     ) -> [String: String] {
-        guard let detection,
-              detection.isDetected else {
-            return ["screenshotOffsetCorrection": "not-detected"]
+        guard let detection else {
+            return [
+                "screenshotOffsetCorrection": "not-detected",
+                "screenshotOffsetProof": VisualPlacementCorrectionProofOutcome.refused.rawValue,
+                "screenshotOffsetProofPrivacy": "geometry-only"
+            ]
+        }
+
+        guard detection.isDetected else {
+            return [
+                "screenshotOffsetCorrection": "not-detected",
+                "screenshotOffsetProof": VisualPlacementCorrectionProofOutcome.refused.rawValue,
+                "screenshotOffsetProofPrivacy": "geometry-only",
+                "screenshotOffsetBadDetection": detection.reason.rawValue
+            ]
         }
 
         guard allowsLearningCorrection else {
-            return ["screenshotOffsetCorrection": "diagnostics-only"]
+            let proof = VisualPlacementCorrection(
+                dx: 0,
+                dy: 0,
+                decision: .rejected,
+                reason: .insufficientEvidence
+            ).proof(measuredDX: detection.dx, measuredDY: detection.dy)
+            return [
+                "screenshotOffsetCorrection": "diagnostics-only",
+                "screenshotOffsetProof": proof.outcome.rawValue,
+                "screenshotOffsetBeforeDistance": Self.format(proof.beforeDistance),
+                "screenshotOffsetAfterDistance": Self.format(proof.afterDistance),
+                "screenshotOffsetImprovement": Self.format(proof.improvement),
+                "screenshotOffsetProofPrivacy": proof.privacyBoundary
+            ]
         }
 
         let profile = CompatibilityLearningStore.shared.profile(for: bundleIdentifier)
@@ -198,13 +223,19 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
             observations: observations,
             confidence: detection.confidence
         )
+        let proof = correction.proof(measuredDX: detection.dx, measuredDY: detection.dy)
 
         var metadata = [
             "screenshotOffsetCorrection": correction.decision.rawValue,
             "screenshotOffsetCorrectionReason": correction.reason.rawValue,
             "screenshotOffsetCorrectionObservations": String(observations),
             "screenshotOffsetAppliedDX": String(format: "%.1f", Double(correction.dx)),
-            "screenshotOffsetAppliedDY": String(format: "%.1f", Double(correction.dy))
+            "screenshotOffsetAppliedDY": String(format: "%.1f", Double(correction.dy)),
+            "screenshotOffsetProof": proof.outcome.rawValue,
+            "screenshotOffsetBeforeDistance": Self.format(proof.beforeDistance),
+            "screenshotOffsetAfterDistance": Self.format(proof.afterDistance),
+            "screenshotOffsetImprovement": Self.format(proof.improvement),
+            "screenshotOffsetProofPrivacy": proof.privacyBoundary
         ]
 
         guard correction.isApplied else {
@@ -307,6 +338,10 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
 
     private static func milliseconds(from start: Date, to end: Date) -> Int {
         max(0, Int(end.timeIntervalSince(start) * 1000))
+    }
+
+    private static func format(_ value: CGFloat) -> String {
+        String(format: "%.1f", Double(value))
     }
 
     private static func compactRectDescription(_ rect: CGRect) -> String {

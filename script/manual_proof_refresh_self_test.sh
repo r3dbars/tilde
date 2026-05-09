@@ -90,15 +90,15 @@ cat >>"$STALE_REPORT" <<EOF
 | 2026-05-09T00:00:00Z | TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-2 in \`/tmp/diagnostics.log\` | lines 1-2 in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; build \`commit:deadbeef0000,app-sha256:$APP_SHA\` |
 EOF
 
-if AUTOCOMPLETE_LAB_APP_BINARY="$APP_BINARY" \
+if ! AUTOCOMPLETE_LAB_APP_BINARY="$APP_BINARY" \
   AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$STALE_REPORT" \
   script/manual_proof_refresh.sh --verify-target textedit >"$OUTPUT" 2>&1; then
-  echo "manual proof refresh self-test should not let current app sha mask stale commit proof" >&2
+  echo "manual proof refresh self-test should accept current app binary proof after docs-only commits" >&2
   exit 1
 fi
 
-if ! grep -F "stale commit fingerprint" "$OUTPUT" >/dev/null; then
-  echo "manual proof refresh self-test did not flag stale commit masked by app sha" >&2
+if ! grep -F "TextEdit: current proof recorded" "$OUTPUT" >/dev/null; then
+  echo "manual proof refresh self-test did not accept current app binary proof" >&2
   exit 1
 fi
 
@@ -181,7 +181,8 @@ if ! grep -F "# status: pending - missing prompt no-submit confirmation" "$OUTPU
   exit 1
 fi
 
-script/manual_proof_refresh.sh --print >"$OUTPUT"
+AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$NO_FINGERPRINT_REPORT" \
+  script/manual_proof_refresh.sh --print >"$OUTPUT"
 for expected in \
   "# textedit - TextEdit" \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit" \
