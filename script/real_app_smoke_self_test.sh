@@ -218,7 +218,10 @@ fi
 LOCK_DIR="$TMP_DIR/smoke.lock"
 mkdir -p "$LOCK_DIR"
 echo "$$" >"$LOCK_DIR/pid"
-if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST="" AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$LOCK_DIR" AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/lock-fail.txt"; then
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST="" \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$LOCK_DIR" \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 \
+  script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/lock-fail.txt"; then
   echo "real app smoke self-test expected concurrent smoke lock to fail" >&2
   exit 1
 fi
@@ -438,7 +441,9 @@ if ! grep -F "private Obsidian vault" "$TMP_DIR/obsidian-fail.txt" >/dev/null; t
   exit 1
 fi
 
-if script/real_app_smoke.sh obsidian-theme >/dev/null 2>"$TMP_DIR/obsidian-theme-fail.txt"; then
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'1 1 1 launchd\n' \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$TMP_DIR/obsidian-theme-safety.lock" \
+  script/real_app_smoke.sh obsidian-theme >/dev/null 2>"$TMP_DIR/obsidian-theme-fail.txt"; then
   echo "real app smoke self-test expected Obsidian variants to require --manual-gate" >&2
   exit 1
 fi
@@ -460,7 +465,9 @@ if ! grep -F "requires --manual-gate" "$TMP_DIR/claude-fail.txt" >/dev/null; the
   exit 1
 fi
 
-if script/real_app_smoke.sh claude-empty >/dev/null 2>"$TMP_DIR/claude-empty-fail.txt"; then
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'1 1 1 launchd\n' \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$TMP_DIR/claude-empty-safety.lock" \
+  script/real_app_smoke.sh claude-empty >/dev/null 2>"$TMP_DIR/claude-empty-fail.txt"; then
   echo "real app smoke self-test expected Claude layout variants to require --manual-gate" >&2
   exit 1
 fi
