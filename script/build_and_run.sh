@@ -23,6 +23,18 @@ LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchS
 
 cd "$ROOT_DIR"
 
+SWIFT_SCRATCH_ARGS=()
+SWIFT_JOB_ARGS=()
+
+if [[ -n "${AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH:-}" ]]; then
+  mkdir -p "$AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH"
+  SWIFT_SCRATCH_ARGS+=(--scratch-path "$AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH")
+fi
+
+if [[ -n "${AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS:-}" ]]; then
+  SWIFT_JOB_ARGS+=(--jobs "$AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS")
+fi
+
 running_app_pids() {
   local app_process_pattern
   app_process_pattern="/[${APP_NAME:0:1}]${APP_NAME:1}.app/Contents/MacOS/$APP_NAME"
@@ -166,10 +178,37 @@ find_signing_identity() {
   echo "$identity"
 }
 
-swift package resolve
+run_swift_package_resolve() {
+  if ((${#SWIFT_SCRATCH_ARGS[@]})); then
+    swift package "${SWIFT_SCRATCH_ARGS[@]}" resolve
+  else
+    swift package resolve
+  fi
+}
+
+run_swift_build() {
+  local args=(-c "$BUILD_CONFIGURATION" --product "$APP_NAME")
+  if ((${#SWIFT_JOB_ARGS[@]})); then
+    args=("${SWIFT_JOB_ARGS[@]}" "${args[@]}")
+  fi
+  if ((${#SWIFT_SCRATCH_ARGS[@]})); then
+    args=("${SWIFT_SCRATCH_ARGS[@]}" "${args[@]}")
+  fi
+  swift build "${args[@]}"
+}
+
+swift_build_bin_path() {
+  local args=(-c "$BUILD_CONFIGURATION" --show-bin-path)
+  if ((${#SWIFT_SCRATCH_ARGS[@]})); then
+    args=("${SWIFT_SCRATCH_ARGS[@]}" "${args[@]}")
+  fi
+  swift build "${args[@]}"
+}
+
+run_swift_package_resolve
 ./script/patch_mlx_swift_lm.sh
-swift build -c "$BUILD_CONFIGURATION" --product "$APP_NAME"
-BUILD_BINARY="$(swift build -c "$BUILD_CONFIGURATION" --show-bin-path)/$APP_NAME"
+run_swift_build
+BUILD_BINARY="$(swift_build_bin_path)/$APP_NAME"
 
 build_mlx_metallib_if_needed() {
   if [[ -f "$MLX_METALLIB" ]]; then
