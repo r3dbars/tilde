@@ -41,7 +41,7 @@ if ! grep -F "requires Chrome to expose a focused editable web text target" "$TM
   echo "real app smoke self-test did not explain the Chrome focused editable guard" >&2
   exit 1
 fi
-if ! grep -F "Chrome setup text is sent to the Chrome process and verified through the focused AX editor" "$TMP_DIR/chrome.txt" >/dev/null; then
+if ! grep -F "Chrome setup text first uses process-targeted events, then a guarded System Events fallback" "$TMP_DIR/chrome.txt" >/dev/null; then
   echo "real app smoke self-test did not explain targeted Chrome setup insertion" >&2
   exit 1
 fi

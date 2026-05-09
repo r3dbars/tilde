@@ -410,6 +410,16 @@ Time: 2026-05-09T00:36:00Z
 - Build: `commit:80c01a3da37d`, app SHA `88f8339c77b20376476e66e4ac2b7c8900e87518954ec7900476a9558e5e275c`.
 - Next useful proof gap: keep burning down stale/pending variants in the full matrix without changing off `qwen3-0.6b`.
 
+2026-05-09T03:22Z heartbeat follow-up: refreshed native TextEdit proof and re-refreshed Notes body on the current PR commit with the current fast model.
+
+- TextEdit run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit --manual-gate`.
+- TextEdit result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- TextEdit evidence: diagnostics lines 240430-240485 and trace lines 61079-61093; build `commit:ac3ab7fce7f6`, app SHA `a994f83859b4aa6544184d1f79cef207240b390b9cbf458e33c1a478b6d20d1b`.
+- Notes body rerun: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- Notes body evidence: diagnostics lines 240533-240578 and trace lines 61103-61116; build `commit:ac3ab7fce7f6`, app SHA `2d176190653001b7d07b1c65930f60616a76a2b13ad7b4063f5e41a272e5b20c`.
+- Gate movement: `manual_smoke_status.sh --require-all` now reports TextEdit and Notes body as passed on the current PR commit, reducing the remaining target-app proof gaps from 29 to 28.
+- Chrome follow-up: attempted `chrome --fixture textarea` with forced renderer accessibility and then default Chrome AX. Forced mode landed on `chrome://newtab/` instead of the disposable fixture, and default mode exposed only browser chrome. The harness now rechecks the expected URL for pid-based Chrome runs and has a guarded System Events setup fallback after AX insertion fails, but Chrome textarea is still not counted as proof.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
