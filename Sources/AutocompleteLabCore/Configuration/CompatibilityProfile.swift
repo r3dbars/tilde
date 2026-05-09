@@ -348,7 +348,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportLevel: .yellow,
             supportReason: "Electron editors can hide caret bounds, so this uses floating or synthetic placement.",
             renderMode: .floatingMirror,
-            insertionMode: .axThenKeyEvents,
+            insertionMode: .axValueReplacement,
             fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .keyEvents,
             fieldIdentityMode: .stableBounds,
@@ -358,9 +358,10 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             allowsWindowAnchor: false,
             requiresValidatedCaret: true,
             suppressesAfterInsertionFailure: false,
+            allowsDescendantTextFallback: true,
             allowsDetachedSuggestions: false,
             allowsSyntheticCaretPlacement: true,
-            notes: "Yellow Electron target. Prefer capability probing, synthetic text-area caret placement, and verified AX before synthetic key insertion. Do not show detached suggestions when CodeMirror hides usable caret bounds."
+            notes: "Yellow Electron target. Prefer capability probing, descendant text fallback for empty CodeMirror web areas, synthetic text-area caret placement, and exact AX value replacement because CodeMirror can report a stale AX selected range near the visual caret. Do not show detached suggestions when CodeMirror hides usable caret bounds."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.apple.mail",
@@ -453,13 +454,13 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportLevel: .yellow,
             supportReason: "Browser editors vary; display can fall back to floating and insertion can fall back to AX.",
             renderMode: .inlineAdjacent,
-            insertionMode: .keyEvents,
+            insertionMode: .axThenKeyEvents,
             fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .axValueReplacement,
             anchorLadder: [.caret, .field],
             knownFailureModes: ["textarea support differs from rich editors", "zero-height caret bounds can occur"],
             allowsDescendantTextFallback: true,
-            notes: "Yellow browser target. Prefer proof-gated synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback for unreadable or detached surfaces. Prefer key-event insertion across textarea and contenteditable surfaces because rich browser editors can report AX replacement success without keeping cursor verification stable."
+            notes: "Yellow browser target. Prefer proof-gated synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback for unreadable or detached surfaces. Prefer AX selected-text insertion and hardware key events first, then verified AX value replacement when public browser editors report selected-text success without changing value."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.openai.codex",

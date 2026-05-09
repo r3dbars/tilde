@@ -41,7 +41,7 @@ if ! grep -F "requires Chrome to expose a focused editable web text target" "$TM
   echo "real app smoke self-test did not explain the Chrome focused editable guard" >&2
   exit 1
 fi
-if ! grep -F "Chrome setup text is sent to the Chrome process and verified through the focused AX editor" "$TMP_DIR/chrome.txt" >/dev/null; then
+if ! grep -F "Chrome setup text first uses process-targeted events, then a guarded System Events fallback" "$TMP_DIR/chrome.txt" >/dev/null; then
   echo "real app smoke self-test did not explain targeted Chrome setup insertion" >&2
   exit 1
 fi
@@ -53,24 +53,32 @@ if ! grep -F "disposable Chrome contenteditable fixture" "$TMP_DIR/chrome-conten
 fi
 
 script/real_app_smoke.sh chrome --fixture textarea-public --dry-run >"$TMP_DIR/chrome-textarea-public.txt"
-if ! grep -F "public W3Schools textarea-public demo page" "$TMP_DIR/chrome-textarea-public.txt" >/dev/null; then
+if ! grep -F "public top-level textarea-public demo page" "$TMP_DIR/chrome-textarea-public.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome public textarea dry-run plan" >&2
   exit 1
 fi
-if ! grep -F "Allow JavaScript from Apple Events" "$TMP_DIR/chrome-textarea-public.txt" >/dev/null; then
-  echo "real app smoke self-test did not print the Chrome public textarea JavaScript preflight requirement" >&2
+if ! grep -F "JavaScript-from-Apple-Events is not required" "$TMP_DIR/chrome-textarea-public.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Chrome public textarea AX proof path" >&2
   exit 1
 fi
 
 script/real_app_smoke.sh chrome --fixture contenteditable-public --dry-run >"$TMP_DIR/chrome-contenteditable-public.txt"
-if ! grep -F "public W3Schools contenteditable-public demo page" "$TMP_DIR/chrome-contenteditable-public.txt" >/dev/null; then
+if ! grep -F "public top-level contenteditable-public demo page" "$TMP_DIR/chrome-contenteditable-public.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome public contenteditable dry-run plan" >&2
+  exit 1
+fi
+if ! grep -F "JavaScript-from-Apple-Events is not required" "$TMP_DIR/chrome-contenteditable-public.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Chrome public contenteditable AX proof path" >&2
   exit 1
 fi
 
 script/real_app_smoke.sh chrome --fixture production-text-fields --dry-run >"$TMP_DIR/chrome-production-text-fields.txt"
 if ! grep -F "bounded public Chrome textarea and contenteditable proof" "$TMP_DIR/chrome-production-text-fields.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome production text fields dry-run plan" >&2
+  exit 1
+fi
+if ! grep -F "JavaScript-from-Apple-Events is not required" "$TMP_DIR/chrome-production-text-fields.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Chrome production text fields AX proof path" >&2
   exit 1
 fi
 
@@ -180,9 +188,9 @@ fi
 
 for notes_surface in notes-title notes-body notes-checklist notes-title-undo notes-body-undo notes-checklist-undo; do
   script/real_app_smoke.sh "$notes_surface" --dry-run >"$TMP_DIR/$notes_surface.txt"
-  if [[ "$notes_surface" == "notes-body" ]]; then
-    if ! grep -F "guarded Apple Notes body proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
-      echo "real app smoke self-test did not print the guarded Notes body proof plan" >&2
+  if [[ "$notes_surface" == "notes-title" || "$notes_surface" == "notes-body" || "$notes_surface" == "notes-checklist" ]]; then
+    if ! grep -F "guarded Apple Notes ${notes_surface#notes-} proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
+      echo "real app smoke self-test did not print the guarded $notes_surface proof plan" >&2
       exit 1
     fi
   elif ! grep -F "manual-gated Apple Notes ${notes_surface#notes-} proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
@@ -190,6 +198,32 @@ for notes_surface in notes-title notes-body notes-checklist notes-title-undo not
     exit 1
   fi
 done
+
+if ! grep -F "bodyText.utf16.count" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "kAXSelectedTextRangeAttribute" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Notes body proof to move the caret to the end of the disposable note" >&2
+  exit 1
+fi
+if ! grep -F "kAXFocusedUIElementAttribute" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "Focused Notes element is not the body text view" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Notes body proof to validate the focused text view without walking the Notes AX tree" >&2
+  exit 1
+fi
+if ! grep -F "Refusing Notes title proof because the fresh title line is not blank" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "ensure_notes_title_smoke_note" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Notes title proof to guard a fresh blank title line before typing" >&2
+  exit 1
+fi
+if ! grep -F "Refusing Notes checklist proof because the focused note does not start with the expected disposable checklist prefix" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'click menu item "Checklist"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Notes checklist proof to guard a disposable checklist note before typing" >&2
+  exit 1
+fi
+if ! grep -F 'system attribute "AUTOCOMPLETE_LAB_NOTES_RAW_TEXT"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "keystroke rawText" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Notes body setup to type through System Events" >&2
+  exit 1
+fi
 
 script/real_app_smoke.sh obsidian --dry-run >"$TMP_DIR/obsidian.txt"
 if ! grep -F "manual-gated disposable Obsidian default-note smoke" "$TMP_DIR/obsidian.txt" >/dev/null; then
@@ -199,6 +233,12 @@ fi
 
 if ! grep -F "script/real_app_smoke.sh obsidian-theme --manual-gate" "$TMP_DIR/obsidian.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Obsidian theme command" >&2
+  exit 1
+fi
+
+if ! grep -F "markerText.utf16.count" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian reset to move the AX selected range to the end of the disposable note" >&2
   exit 1
 fi
 
@@ -305,6 +345,18 @@ if ! grep -F "backs it up privately and restores it after the no-submit proof" "
 fi
 if ! grep -F "Proof mode bundle(s): com.openai.codex" "$TMP_DIR/codex.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Codex proof mode bundle" >&2
+  exit 1
+fi
+if [[ "$(grep -F "seed_codex_proof_prompt" script/real_app_smoke.sh | wc -l | tr -d ' ')" -lt 2 ]]; then
+  echo "real app smoke self-test expected Codex proof to refocus the seeded composer before Tab" >&2
+  exit 1
+fi
+if ! grep -F "codex-proof-snapshot-fast-path" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected proof-only Codex snapshot fast path diagnostics" >&2
+  exit 1
+fi
+if ! grep -F "codex-proof-insert-verification-fast-path" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected proof-only Codex insertion verification fast path diagnostics" >&2
   exit 1
 fi
 

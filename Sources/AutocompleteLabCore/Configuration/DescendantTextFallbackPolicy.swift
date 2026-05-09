@@ -15,6 +15,9 @@ public struct DescendantTextFallbackPolicy: Equatable, Sendable {
         }
 
         switch bundleIdentifier {
+        case "md.obsidian":
+            return true
+
         case "com.apple.mail":
             return windowTitle == "New Message"
 
