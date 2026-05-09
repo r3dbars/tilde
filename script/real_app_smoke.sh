@@ -37,8 +37,8 @@ usage() {
   cat <<'EOF'
 Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|chrome|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
-Runs a real app smoke pass where it is safe to automate. Notes body proof has
-a guarded disposable-note driver; other Notes surfaces, Obsidian, Codex,
+Runs a real app smoke pass where it is safe to automate. Notes title/body proof
+has guarded disposable-note drivers; other Notes surfaces, Obsidian, Codex,
 Claude Code, and Claude desktop are manual-gated so this script never types
 into private notes, vaults, terminal prompts, or agent prompts by surprise.
 The Codex lane uses a targeted disposable proof helper after the manual gate:
@@ -4091,7 +4091,9 @@ describe_plan() {
       local notes_app notes_surface
       if notes_app="$(notes_session_app)"; then
         notes_surface="${notes_app#notes-}"
-        if [[ "$notes_app" == "notes-body" ]]; then
+        if [[ "$notes_app" == "notes-title" ]]; then
+          echo "Plan: guarded Apple Notes title proof. The script creates a fresh blank note, verifies the focused title line is blank, types smoke fragments, then validates logs and traces."
+        elif [[ "$notes_app" == "notes-body" ]]; then
           echo "Plan: guarded Apple Notes body proof. The script verifies the open note body contains the disposable marker, appends smoke fragments, then validates logs and traces."
         else
           echo "Plan: manual-gated Apple Notes $notes_surface proof. The script validates only that surface after you run it."
@@ -4350,6 +4352,103 @@ print("Notes body smoke target confirmed")
 SWIFT
 }
 
+assert_notes_title_smoke_target() {
+  AUTOCOMPLETE_LAB_NOTES_EXPECTED_PREFIX="${1:-}" swift - <<'SWIFT'
+import AppKit
+import ApplicationServices
+import Foundation
+
+let expectedPrefix = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_NOTES_EXPECTED_PREFIX"] ?? ""
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Notes" else {
+    fputs("Notes is not frontmost for the Notes title smoke target.\n", stderr)
+    exit(3)
+}
+
+guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.Notes" }) else {
+    fputs("Apple Notes is not running. Open the disposable Autocomplete smoke note first.\n", stderr)
+    exit(3)
+}
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+AXUIElementSetMessagingTimeout(appElement, 1.0)
+let systemWide = AXUIElementCreateSystemWide()
+AXUIElementSetMessagingTimeout(systemWide, 1.0)
+
+func focusedElement(from element: AXUIElement) -> AXUIElement? {
+    var focusedValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(
+        element,
+        kAXFocusedUIElementAttribute as CFString,
+        &focusedValue
+    ) == .success,
+          let focusedValue else {
+        return nil
+    }
+
+    return (focusedValue as! AXUIElement)
+}
+
+guard let title = focusedElement(from: appElement) ?? focusedElement(from: systemWide) else {
+    fputs("Could not read the focused Notes title text view.\n", stderr)
+    exit(3)
+}
+
+AXUIElementSetMessagingTimeout(title, 1.0)
+let role = copyAttribute(title, kAXRoleAttribute) as? String
+guard role == kAXTextAreaRole as String else {
+    fputs("Focused Notes element is not the title text view.\n", stderr)
+    exit(3)
+}
+
+let titleText = copyAttribute(title, kAXValueAttribute) as? String ?? ""
+guard !titleText.contains("\n") else {
+    fputs("Refusing Notes title proof because the focused editor already spans multiple lines.\n", stderr)
+    exit(3)
+}
+
+if expectedPrefix.isEmpty {
+    guard titleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        fputs("Refusing Notes title proof because the fresh title line is not blank.\n", stderr)
+        exit(3)
+    }
+} else {
+    guard titleText.hasPrefix(expectedPrefix) else {
+        fputs("Refusing Notes title proof because the focused title does not start with the expected disposable text.\n", stderr)
+        exit(3)
+    }
+}
+
+AXUIElementSetAttributeValue(title, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+var endRange = CFRange(location: titleText.utf16.count, length: 0)
+if let rangeValue = AXValueCreate(.cfRange, &endRange) {
+    AXUIElementSetAttributeValue(title, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+}
+print("Notes title smoke target confirmed")
+SWIFT
+}
+
+ensure_notes_title_smoke_note() {
+  open -a Notes
+  wait_for_frontmost_app "Notes" 8
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  keystroke "n" using command down
+end tell
+delay 0.4
+APPLESCRIPT
+  assert_notes_title_smoke_target
+}
+
 ensure_notes_body_smoke_note() {
   local smoke_title="${AUTOCOMPLETE_LAB_NOTES_SMOKE_TITLE:-Autocomplete Lab Smoke}"
   local smoke_marker="${AUTOCOMPLETE_LAB_NOTES_SMOKE_MARKER:-Autocomplete smoke}"
@@ -4394,7 +4493,7 @@ run_notes() {
     exit 2
   fi
 
-  if [[ "$manual_app" != "notes-body" ]]; then
+  if [[ "$manual_app" != "notes-title" && "$manual_app" != "notes-body" ]]; then
     run_manual_gated
     return 0
   fi
@@ -4405,9 +4504,56 @@ run_notes() {
   prepare_temporary_app_enablement
   build_if_needed
   wait_for_runtime_ready "$runtime_start_line" "Notes runtime readiness" 60 "$SKIP_BUILD"
-  ensure_notes_body_smoke_note
 
   full_accept_key="$(accept_all_shortcut)"
+
+  if [[ "$manual_app" == "notes-title" ]]; then
+    ensure_notes_title_smoke_note
+    start_line="$(line_count "$LOG_PATH")"
+    trace_start_line="$(line_count "$TRACE_PATH")"
+
+    assert_notes_title_smoke_target
+    type_notes_raw_smoke_text "Smoke proof feels"
+    wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes title suggestion"
+    wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes title"
+    assert_frontmost_app "Notes" "Notes title"
+    press_key_code 48
+    wait_for_log_fields "$start_line" "Notes title Tab acceptance" 12 \
+      "keyboard-action" \
+      "app=com.apple.Notes" \
+      "key=tab" \
+      "action=acceptNextWord" \
+      "handled=true"
+    wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.Notes .*result=verified" "Notes title first verified insertion"
+
+    second_start_line="$(line_count "$LOG_PATH")"
+    assert_notes_title_smoke_target "Smoke proof feels instant"
+    type_notes_raw_smoke_text " and stays"
+    wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes title second suggestion"
+    wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes title second"
+    assert_frontmost_app "Notes" "Notes title"
+    full_start_line="$(line_count "$LOG_PATH")"
+    press_accept_all_shortcut
+    wait_for_log_fields "$full_start_line" "Notes title full acceptance" 12 \
+      "keyboard-action" \
+      "app=com.apple.Notes" \
+      "key=$full_accept_key" \
+      "action=acceptAllVisible" \
+      "handled=true"
+
+    sleep 1
+    local manual_check_args=(notes-title --check)
+    if screenshot_trace_requested; then
+      manual_check_args+=(--visual)
+    fi
+    AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
+      AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
+      AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+      ./script/manual_smoke_session.sh "${manual_check_args[@]}"
+    return 0
+  fi
+
+  ensure_notes_body_smoke_note
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 

@@ -180,9 +180,9 @@ fi
 
 for notes_surface in notes-title notes-body notes-checklist notes-title-undo notes-body-undo notes-checklist-undo; do
   script/real_app_smoke.sh "$notes_surface" --dry-run >"$TMP_DIR/$notes_surface.txt"
-  if [[ "$notes_surface" == "notes-body" ]]; then
-    if ! grep -F "guarded Apple Notes body proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
-      echo "real app smoke self-test did not print the guarded Notes body proof plan" >&2
+  if [[ "$notes_surface" == "notes-title" || "$notes_surface" == "notes-body" ]]; then
+    if ! grep -F "guarded Apple Notes ${notes_surface#notes-} proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
+      echo "real app smoke self-test did not print the guarded $notes_surface proof plan" >&2
       exit 1
     fi
   elif ! grep -F "manual-gated Apple Notes ${notes_surface#notes-} proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
@@ -199,6 +199,11 @@ fi
 if ! grep -F "kAXFocusedUIElementAttribute" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "Focused Notes element is not the body text view" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Notes body proof to validate the focused text view without walking the Notes AX tree" >&2
+  exit 1
+fi
+if ! grep -F "Refusing Notes title proof because the fresh title line is not blank" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "ensure_notes_title_smoke_note" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Notes title proof to guard a fresh blank title line before typing" >&2
   exit 1
 fi
 if ! grep -F 'system attribute "AUTOCOMPLETE_LAB_NOTES_RAW_TEXT"' script/real_app_smoke.sh >/dev/null ||
