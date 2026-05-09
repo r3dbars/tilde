@@ -201,6 +201,18 @@ Time: 2026-05-09T00:17:00Z
 - Result: failed before typing because normal Chrome exposed only browser chrome through Accessibility, not an editable `AXWebArea` / `AXTextArea` editor tree.
 - Decision: keep default-Chrome real Monaco/ProseMirror as pending proof, despite older historical scorecard rows. Current reliable Chrome proof is the isolated forced-renderer lane.
 
+## Latest Notes Probe and Baseline Refresh
+
+Time: 2026-05-09T00:36:00Z
+
+- Tried to refresh the Notes body lane on the current fast model without changing models.
+- Result: no Notes proof was recorded. Computer Use edited the note in the background, which does not exercise Autocomplete Lab's foreground event-tap path. A foreground CGEvent probe produced real Notes screenshot/insertion evidence, but focus moved before a clean Tab accept could be captured, so it is not a valid manual smoke pass.
+- Decision: keep Notes title/body/checklist pending until a human foreground pass or a purpose-built Notes smoke driver can prove Tab accept plus full accept in one stable slice.
+- Because the Notes probe rebuilt the app, refreshed the fully automated baseline on the same current binary afterward: TextEdit plus Chrome `textarea`, `contenteditable`, `editor-like`, `monaco-like`, `prosemirror-like`, `monaco-real`, `prosemirror-real`, and `chat-like` all passed with strict screenshot-backed visual evidence.
+- Current refreshed build proof: `commit:6a887c649db7` and app binary SHA `891c92d2aeb6d3428a66fc6359b04aa9fa6cfde2444c5b8520ca9eda84e95a6b`.
+- New trace slices: Chrome textarea 60130-60154, contenteditable 60155-60177, editor-like 60178-60202, monaco-like 60203-60235, prosemirror-like 60236-60260, monaco-real 60261-60296, prosemirror-real 60297-60326, chat-like 60327-60351, TextEdit 60361-60370.
+- Remaining proof gaps are unchanged in shape: Notes title/body/checklist, Obsidian, default-Chrome real Monaco/ProseMirror AX, Codex same-slice no-submit, Claude Code, and Claude desktop.
+
 ## 100 Test Situations
 
 | # | App | Situation | Target behavior | Score |
