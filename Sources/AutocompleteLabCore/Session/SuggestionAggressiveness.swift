@@ -98,6 +98,11 @@ public struct SuggestionTuning: Equatable, Sendable {
     public static let minimumAggressivenessLevel = 1
     public static let maximumAggressivenessLevel = 5
     public static let defaultAggressivenessLevel = SuggestionAggressiveness.normal.defaultTuningLevel
+    public static let predictiveFallbackWritingApps: Set<String> = [
+        "com.apple.TextEdit",
+        "com.apple.Notes",
+        "md.obsidian"
+    ]
 
     public let aggressivenessLevel: Int
     public let maxVisibleWords: Int
@@ -272,6 +277,23 @@ public struct SuggestionTuning: Equatable, Sendable {
         default:
             return SuggestionTriggerPolicy(pace: supportPace)
         }
+    }
+
+    public func allowsModelWordCompletionFallback(
+        visiblePageContextAvailable: Bool
+    ) -> Bool {
+        aggressivenessLevel >= 4 || visiblePageContextAvailable
+    }
+
+    public func allowsPredictiveWordFallback(
+        appBundleIdentifier: String,
+        visiblePageContextAvailable: Bool
+    ) -> Bool {
+        if allowsModelWordCompletionFallback(visiblePageContextAvailable: visiblePageContextAvailable) {
+            return true
+        }
+
+        return Self.predictiveFallbackWritingApps.contains(appBundleIdentifier)
     }
 
     public var traceMetadata: [String: String] {
