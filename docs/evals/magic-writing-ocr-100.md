@@ -490,6 +490,15 @@ Time: 2026-05-09T00:36:00Z
 - Status fix: `manual_smoke_status.sh` now treats older proof rows as source-compatible when app/runtime source (`Package.swift`, `Package.resolved`, `Sources`) is unchanged, so safer proof-driver edits do not mark unrelated app proofs stale.
 - Gate movement: Notes title, Notes body, and TextEdit are now fresh green; remaining target-app proof gaps dropped from 20 to 19. `script/manual_smoke_status.sh --require-all` still fails correctly because those 19 proof gaps are real.
 
+2026-05-09T04:15Z heartbeat follow-up: made Notes checklist proof scriptable and refreshed it on PR #35.
+
+- Fix: `notes-checklist` now has a guarded disposable-note driver too. It creates a fresh Notes item, types a disposable checklist title, toggles `Format > Checklist`, verifies the focused `AXTextArea` starts with the expected disposable prefix, moves the selection to the end, and uses the proactive next-word setup (`Smoke proof feels`) that avoids Apple's native `inst` completion.
+- Harness validation: `bash -n script/real_app_smoke.sh script/manual_smoke_session.sh script/real_app_smoke_self_test.sh script/manual_smoke_self_test.sh`, `script/real_app_smoke_self_test.sh`, and `script/manual_smoke_self_test.sh` passed.
+- Live run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate`.
+- Result: Notes checklist passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- Evidence: diagnostics lines 242835-242879 and trace lines 61514-61523; build `commit:496e338b69c7`, app SHA `f1a8530ad7b1354aa936840bc3f4f476885f75906039d21423cbc83b2b77dfb3`.
+- Gate movement: Notes title, body, and checklist are now green together; remaining target-app proof gaps dropped from 19 to 18. `script/manual_smoke_status.sh --require-all` still fails correctly because the remaining gaps are real app/proof lanes.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
