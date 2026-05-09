@@ -39,4 +39,14 @@ public struct SuggestionPauseSchedulePolicy: Equatable, Sendable {
             pausedUntil: now.addingTimeInterval(max(1, durationSeconds))
         )
     }
+
+    public func pauseUntilTomorrow(
+        now: Date,
+        calendar: Calendar = .current
+    ) -> SuggestionPauseScheduleState {
+        let startOfToday = calendar.startOfDay(for: now)
+        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)
+            ?? now.addingTimeInterval(24 * 60 * 60)
+        return SuggestionPauseScheduleState(isPaused: true, pausedUntil: startOfTomorrow)
+    }
 }

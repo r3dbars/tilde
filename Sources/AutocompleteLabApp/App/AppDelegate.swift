@@ -103,6 +103,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleSuggestionsPaused: { [weak self] in
             self?.togglePauseSuggestions()
         },
+        pauseSuggestionsFor15Minutes: { [weak self] in
+            self?.pauseSuggestionsFor15Minutes()
+        },
+        pauseSuggestionsFor1Hour: { [weak self] in
+            self?.pauseSuggestionsFor1Hour()
+        },
+        pauseSuggestionsUntilTomorrow: { [weak self] in
+            self?.pauseSuggestionsUntilTomorrowFromControl()
+        },
         silenceCurrentField: { [weak self] in
             self?.silenceCurrentField()
         },
@@ -138,6 +147,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         clearLearningData: { [weak self] in
             self?.clearLearningData()
+        },
+        exportPrivacyBundle: { [weak self] in
+            self?.exportTraceReport()
         },
         cycleAcceptAllShortcut: { [weak self] in
             self?.cycleAcceptAllShortcut()
@@ -340,12 +352,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let pauseItem = NSMenuItem(title: pauseSuggestionsTitle, action: #selector(togglePauseSuggestions), keyEquivalent: "p")
         let pause15Item = NSMenuItem(title: "Pause for 15 Minutes", action: #selector(pauseSuggestionsFor15Minutes), keyEquivalent: "")
         let pause1HourItem = NSMenuItem(title: "Pause for 1 Hour", action: #selector(pauseSuggestionsFor1Hour), keyEquivalent: "")
+        let pauseUntilTomorrowItem = NSMenuItem(
+            title: "Pause Until Tomorrow",
+            action: #selector(pauseSuggestionsUntilTomorrowFromControl),
+            keyEquivalent: ""
+        )
         let silenceFieldItem = NSMenuItem(
             title: "Silence This Field",
             action: #selector(silenceCurrentField),
             keyEquivalent: "s"
         )
-        let toggleItem = NSMenuItem(title: "Toggle Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
+        let toggleItem = NSMenuItem(title: "Pause Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
         let debugMenuItem = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         let debugMenu = NSMenu()
 
@@ -356,6 +373,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(pauseItem)
         menu.addItem(pause15Item)
         menu.addItem(pause1HourItem)
+        menu.addItem(pauseUntilTomorrowItem)
         menu.addItem(silenceFieldItem)
         menu.addItem(toggleItem)
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
@@ -514,6 +532,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,
                 suggestionsPaused: suggestionsPaused,
+                suggestionsPausedUntil: suggestionsPausedUntil,
                 runtimeReport: runtimeReadinessReport,
                 runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath,
@@ -650,7 +669,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var settingsKeyboardShortcutState: SettingsKeyboardShortcutState {
         SettingsKeyboardShortcutState(
-            acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut
+            acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut,
+            currentApp: settingsCurrentAppState
         )
     }
 
@@ -671,21 +691,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var pauseSuggestionsTitle: String {
-        suggestionControlState.toggleTitle
+        pauseControlState.toggleTitle
     }
 
     private var pauseStatusTitle: String {
-        guard let suggestionsPausedUntil,
-              suggestionsPausedUntil > Date() else {
-            return "Paused"
-        }
+        pauseControlState.menuPausedTitle
+    }
 
-        let time = DateFormatter.localizedString(
-            from: suggestionsPausedUntil,
-            dateStyle: .none,
-            timeStyle: .short
+    private var pauseControlState: ControlPauseState {
+        expireTimedPauseIfNeeded(now: Date())
+        return ControlPauseState(
+            isPaused: suggestionsPaused,
+            pausedUntil: suggestionsPausedUntil
         )
-        return "Paused until \(time)"
     }
 
     private var suggestionControlState: SuggestionControlState {
@@ -3374,6 +3392,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 requestMode: baseline.requestMode?.rawValue ?? "",
                 acceptMode: baseline.acceptMode,
                 acceptedText: acceptedText,
+                textBeforeCursorAtAccept: baseline.previousTextBeforeCursor,
                 expectedInsertionUTF16Offset: baseline.previousTextBeforeCursor.utf16.count,
                 acceptedAt: baseline.acceptedAt,
                 profile: baseline.profile,
@@ -3627,6 +3646,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let learningSignal = recordAcceptedAndKeptLearningIfNeeded(result) {
             metadata.merge(learningSignal.traceMetadata) { current, _ in current }
         }
+        if result.shouldRecordAcceptedThenDeleted {
+            metadata.merge(recordAcceptedThenDeletedCooldown(for: result.tracker)) { current, _ in current }
+        }
         if let finishReason = result.finishReason {
             metadata["finishReason"] = finishReason
         }
@@ -3678,6 +3700,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private func recordAcceptedThenDeletedCooldown(
+        for tracker: AcceptanceSurvivalTracker
+    ) -> [String: String] {
+        recordPrefixFamilyCooldown(
+            .acceptedThenDeleted,
+            input: PrefixFamilyCooldownInput(
+                appBundleIdentifier: tracker.appBundleIdentifier,
+                fieldIdentifier: tracker.fieldIdentity.traceDescription,
+                requestMode: CompletionRequestMode(rawValue: tracker.requestMode),
+                textBeforeCursor: tracker.textBeforeCursorAtAccept
+            )
+        )
+    }
+
     private func recordAcceptedAndKeptLearningIfNeeded(
         _ result: AcceptanceSurvivalCheckResult
     ) -> AcceptedAndKeptLearningSignal? {
@@ -3687,7 +3723,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let outcome: AcceptedAndKeptLearningOutcome
         if result.shouldRecordAcceptedThenDeleted {
-            outcome = .immediateDeletion
+            outcome = .rejected
         } else if result.measurement.checkpoint.isFinalMetricCheckpoint,
                   !result.measurement.deletedWithinTwoSeconds {
             outcome = result.measurement.isFinalAcceptedAndKept ? .kept : .rejected
@@ -3695,17 +3731,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
-        let signal = recordAcceptedAndKeptLearningOutcome(
+        let signal = acceptedAndKeptLearning.record(
             outcome,
-            appBundleIdentifier: result.tracker.appBundleIdentifier,
-            fieldKind: result.tracker.fieldKind,
-            requestMode: requestMode,
-            behaviorProfileID: result.tracker.behaviorProfileID,
-            normalizedEditDistance: result.measurement.normalizedEditDistance
+            key: AcceptedAndKeptLearningKey(
+                appBundleIdentifier: result.tracker.appBundleIdentifier,
+                fieldKind: result.tracker.fieldKind,
+                requestMode: requestMode,
+                behaviorProfileID: result.tracker.behaviorProfileID
+            )
         )
-        guard let signal else {
-            return nil
-        }
         if outcome == .kept {
             acceptedTextStyleMemory.recordKeptText(
                 result.tracker.acceptedText,
@@ -3717,31 +3751,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             persistAcceptedTextStyleMemory()
         }
-        return signal
-    }
-
-    private func recordAcceptedAndKeptLearningOutcome(
-        _ outcome: AcceptedAndKeptLearningOutcome,
-        appBundleIdentifier: String,
-        fieldKind: AXFieldKind,
-        requestMode: CompletionRequestMode?,
-        behaviorProfileID: AutocompleteBehaviorProfileID?,
-        normalizedEditDistance: Double? = nil
-    ) -> AcceptedAndKeptLearningSignal? {
-        guard let requestMode, let behaviorProfileID else {
-            return nil
-        }
-
-        let signal = acceptedAndKeptLearning.record(
-            outcome,
-            key: AcceptedAndKeptLearningKey(
-                appBundleIdentifier: appBundleIdentifier,
-                fieldKind: fieldKind,
-                requestMode: requestMode,
-                behaviorProfileID: behaviorProfileID
-            ),
-            normalizedEditDistance: normalizedEditDistance
-        )
         persistAcceptedAndKeptLearning()
         return signal
     }
@@ -5797,22 +5806,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textBeforeCursor: newTextBeforeCursor
             )
         )) { current, _ in current }
-        let fieldKind = currentSuggestionFieldClassification?.kind ?? .unknown
-        let behaviorProfileID = suggestionOrchestrator.currentRequest?.behaviorProfile.id
-            ?? AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
-                appBundleIdentifier: profile.bundleIdentifier,
-                fieldKind: fieldKind,
-                currentLineStructure: CurrentLineStructure.from(textBeforeCursor: originalTextBeforeCursor)
-            )).id
-        if let learningSignal = recordAcceptedAndKeptLearningOutcome(
-            .typedOver,
-            appBundleIdentifier: profile.bundleIdentifier,
-            fieldKind: fieldKind,
-            requestMode: currentSuggestionRequestMode,
-            behaviorProfileID: behaviorProfileID
-        ) {
-            metadata.merge(learningSignal.traceMetadata) { current, _ in current }
-        }
         metadata.merge(currentSuggestionLifetimeMetadata()) { current, _ in current }
 
         RawAutocompleteTraceLog.shared.record(
@@ -6085,13 +6078,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         silenceFieldMenuItem?.title = fieldControlState.buttonTitle
         silenceFieldMenuItem?.isEnabled = fieldControlState.canSilence
         silenceFieldMenuItem?.toolTip = fieldControlState.detailText
-        toggleAppMenuItem?.title = appControlState?.menuToggleTitle ?? "Toggle Current App"
+        toggleAppMenuItem?.title = appControlState?.menuToggleTitle ?? "Pause Current App"
         toggleAppMenuItem?.isEnabled = appControlState?.canToggle ?? false
         toggleAppMenuItem?.toolTip = appControlState?.fallbackText
         if settingsWindow.isShowing {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,
                 suggestionsPaused: suggestionsPaused,
+                suggestionsPausedUntil: suggestionsPausedUntil,
                 runtimeReport: runtimeReadinessReport,
                 runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath,
@@ -6483,6 +6477,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
             suggestionsPaused: suggestionsPaused,
+            suggestionsPausedUntil: suggestionsPausedUntil,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
@@ -6513,6 +6508,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.show(
             isTrusted: accessibilityClient.isTrusted,
             suggestionsPaused: suggestionsPaused,
+            suggestionsPausedUntil: suggestionsPausedUntil,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
@@ -6689,6 +6685,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastSuggestionDecision: lastSuggestionDecision,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
+            pauseControl: pauseControlState,
             modelDirectoryPath: modelDirectoryPath,
             recentEvents: DiagnosticsLog.shared.recentLines(limit: 24),
             traceSummary: RawAutocompleteTraceLog.shared.summary(),
@@ -7490,25 +7487,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pauseSuggestions(for: 60 * 60, label: "1 hour")
     }
 
+    @objc
+    private func pauseSuggestionsUntilTomorrowFromControl() {
+        let state = suggestionPauseSchedulePolicy.pauseUntilTomorrow(now: Date())
+        applyScheduledPause(
+            state: state,
+            decisionText: "Paused until tomorrow",
+            reason: "pause-until-tomorrow",
+            metadata: ["duration": "until-tomorrow"]
+        )
+    }
+
     private func pauseSuggestions(for durationSeconds: TimeInterval, label: String) {
         let state = suggestionPauseSchedulePolicy.timedPause(
             now: Date(),
             durationSeconds: durationSeconds
         )
+        applyScheduledPause(
+            state: state,
+            decisionText: "Paused for \(label)",
+            reason: "timed-pause",
+            metadata: ["durationSeconds": String(Int(durationSeconds))]
+        )
+    }
+
+    private func applyScheduledPause(
+        state: SuggestionPauseScheduleState,
+        decisionText: String,
+        reason: String,
+        metadata: [String: String]
+    ) {
         suggestionsPaused = state.isPaused
         suggestionsPausedUntil = state.pausedUntil
-        setSuggestionDecision("Paused for \(label)")
-        clearFocusedFieldState(hideReason: "timed-pause")
-        stopKeyboardEventTapNow(reason: "timed-pause")
+        setSuggestionDecision(decisionText)
+        clearFocusedFieldState(hideReason: reason)
+        stopKeyboardEventTapNow(reason: reason)
         persistPauseState()
         schedulePauseExpiration()
         DiagnosticsLog.shared.record(
             "suggestions-control",
-            metadata: [
+            metadata: metadata.merging([
                 "paused": String(suggestionsPaused),
-                "durationSeconds": String(Int(durationSeconds)),
                 "pausedUntil": suggestionsPausedUntil.map { ISO8601DateFormatter().string(from: $0) } ?? ""
-            ]
+            ]) { current, _ in current }
         )
         let frontmostApp = targetAppForControls()
         updateStatusMenu(

@@ -171,6 +171,22 @@ struct PrefixFamilyCooldownPolicyTests {
         #expect(policy.decision(for: input, now: now.addingTimeInterval(0.3)) == .allowed)
     }
 
+    @Test("Accepted then deleted starts a long prefix cooldown")
+    func acceptedThenDeletedStartsLongPrefixCooldown() throws {
+        var policy = PrefixFamilyCooldownPolicy()
+        let now = Date(timeIntervalSince1970: 1_000)
+        let input = input(textBeforeCursor: "I think this works")
+
+        let recordedCooldown = policy.record(.acceptedThenDeleted, input: input, now: now)
+        let cooldown = try #require(recordedCooldown)
+
+        #expect(cooldown.reason == .acceptedThenDeleted)
+        #expect(cooldown.durationMilliseconds == 60_000)
+        #expect(cooldown.metadata["prefixCooldownReason"] == "acceptedThenDeleted")
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(59.9)).canRequest == false)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(60.1)) == .allowed)
+    }
+
     @Test("Cooldowns are scoped by app field mode and prefix family")
     func scopedByAppFieldModeAndPrefixFamily() {
         var policy = PrefixFamilyCooldownPolicy()
