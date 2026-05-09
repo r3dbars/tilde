@@ -467,6 +467,18 @@ Time: 2026-05-09T00:36:00Z
 - Real ProseMirror evidence: diagnostics lines 242221-242309 and trace lines 61401-61426; build `commit:401023aaaf99`, app SHA `93879cb846a80b116ceff010a18c657782ac17a568e4b31b608a464727d87149`.
 - Gate movement: Chrome chat-like no-submit, real Monaco, and real ProseMirror are now green; remaining target-app proof gaps dropped from 25 to 22.
 
+2026-05-09T04:04Z heartbeat follow-up: refreshed native TextEdit and Notes body proof on PR #35 without changing the fast model.
+
+- Notes title attempt: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate` stopped at the manual instruction gate; title/checklist still need either a human recorder pass or a safer guarded driver like Notes body.
+- Notes body run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate`.
+- Notes body result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- Notes body evidence: diagnostics lines 242357-242395 and trace lines 61439-61448; build `commit:c1acb381020b`, app SHA `95661ae0b892f14d6365e98a3332c80b73bc8bcc3a84cf78e5f6d396d059b272`.
+- TextEdit run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit`.
+- TextEdit result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- TextEdit evidence: diagnostics lines 242451-242496 and trace lines 61454-61463; build `commit:c1acb381020b`, app SHA `465b78bba454f1b33452955391c68664e05c4d34560ddb84eb6d60d396b01894`.
+- Chrome production textarea attempt: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public` failed closed before typing because Chrome's `View > Developer > Allow JavaScript from Apple Events` setting is off, so the harness cannot focus or verify the public demo field.
+- Default Chrome real Monaco attempt: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-real --chrome-accessibility default` failed closed because normal Chrome exposed only browser chrome through macOS Accessibility, not the page editor content.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
