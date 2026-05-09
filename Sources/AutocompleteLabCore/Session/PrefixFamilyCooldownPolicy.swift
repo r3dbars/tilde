@@ -4,6 +4,7 @@ public enum PrefixFamilyCooldownReason: String, Codable, Equatable, Sendable {
     case typedOver
     case escapeDismissal
     case deletion
+    case acceptedThenDeleted
 }
 
 public struct PrefixFamilyCooldownInput: Equatable, Sendable {
@@ -101,6 +102,8 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
     public let escapeCooldownMilliseconds: Int
     public let repeatedEscapeCooldownMilliseconds: Int
     public let deletionCooldownMilliseconds: Int
+    public let acceptedThenDeletedCooldownMilliseconds: Int
+    public let repeatedAcceptedThenDeletedCooldownMilliseconds: Int
     public let prefixFamilyTokenLimit: Int
     public let typedOverEagernessThreshold: Double
     public let typedOverEagernessHalfLifeSeconds: TimeInterval
@@ -115,6 +118,8 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
         escapeCooldownMilliseconds: Int = 15_000,
         repeatedEscapeCooldownMilliseconds: Int = 60_000,
         deletionCooldownMilliseconds: Int = 250,
+        acceptedThenDeletedCooldownMilliseconds: Int = 60_000,
+        repeatedAcceptedThenDeletedCooldownMilliseconds: Int = 120_000,
         prefixFamilyTokenLimit: Int = 3,
         typedOverEagernessThreshold: Double = 1.5,
         typedOverEagernessHalfLifeSeconds: TimeInterval = 20 * 60,
@@ -128,6 +133,11 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
         self.escapeCooldownMilliseconds = max(0, escapeCooldownMilliseconds)
         self.repeatedEscapeCooldownMilliseconds = max(self.escapeCooldownMilliseconds, repeatedEscapeCooldownMilliseconds)
         self.deletionCooldownMilliseconds = max(0, deletionCooldownMilliseconds)
+        self.acceptedThenDeletedCooldownMilliseconds = max(0, acceptedThenDeletedCooldownMilliseconds)
+        self.repeatedAcceptedThenDeletedCooldownMilliseconds = max(
+            self.acceptedThenDeletedCooldownMilliseconds,
+            repeatedAcceptedThenDeletedCooldownMilliseconds
+        )
         self.prefixFamilyTokenLimit = max(1, prefixFamilyTokenLimit)
         self.typedOverEagernessThreshold = max(1, typedOverEagernessThreshold)
         self.typedOverEagernessHalfLifeSeconds = max(1, typedOverEagernessHalfLifeSeconds)
@@ -215,6 +225,8 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
             escapeCooldownMilliseconds
         case .deletion:
             deletionCooldownMilliseconds
+        case .acceptedThenDeleted:
+            acceptedThenDeletedCooldownMilliseconds
         }
     }
 
@@ -226,6 +238,8 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
             repeatedEscapeCooldownMilliseconds
         case .deletion:
             deletionCooldownMilliseconds
+        case .acceptedThenDeleted:
+            repeatedAcceptedThenDeletedCooldownMilliseconds
         }
     }
 
@@ -240,7 +254,7 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
         }
 
         switch reason {
-        case .typedOver, .escapeDismissal:
+        case .typedOver, .escapeDismissal, .acceptedThenDeleted:
             return true
         case .deletion:
             return false

@@ -42,6 +42,7 @@ def metric_line(label, values):
         f"p50={percentile(values, 0.50)}ms "
         f"p90={percentile(values, 0.90)}ms "
         f"p95={percentile(values, 0.95)}ms "
+        f"p99={percentile(values, 0.99)}ms "
         f"max={max(values)}ms"
     )
 

@@ -83,4 +83,35 @@ struct AutocompleteKeyMapperTests {
         #expect(AcceptAllShortcut.optionTab.next == .disabled)
         #expect(AcceptAllShortcut.disabled.next == .backtick)
     }
+
+    @Test("Shortcut conflict policy reflects per-app full accept profiles")
+    func shortcutConflictPolicyReflectsPerAppFullAcceptProfiles() {
+        let policy = KeyboardShortcutConflictPolicy()
+        let textEdit = KeyboardShortcutConflictContext(
+            appDisplayName: "TextEdit",
+            isAppEnabled: true,
+            canPresentSuggestions: true,
+            supportsFullAcceptance: true
+        )
+        let codex = KeyboardShortcutConflictContext(
+            appDisplayName: "Codex",
+            isAppEnabled: true,
+            canPresentSuggestions: true,
+            supportsFullAcceptance: false
+        )
+
+        let safe = policy.evaluation(acceptAllShortcut: .backtick, context: textEdit)
+        #expect(safe.level == .none)
+        #expect(safe.statusText == "Conflict check: no known conflict in TextEdit")
+        #expect(safe.perAppProfileText == "Per-app profile: TextEdit allows Tab next word and full accept.")
+
+        let blocked = policy.evaluation(acceptAllShortcut: .backtick, context: codex)
+        #expect(blocked.level == .blocked)
+        #expect(blocked.statusText == "Conflict check: full accept is off in Codex")
+        #expect(blocked.perAppProfileText == "Per-app profile: Codex allows Tab next word only.")
+
+        let warning = policy.evaluation(acceptAllShortcut: .optionTab, context: textEdit)
+        #expect(warning.level == .warning)
+        #expect(warning.statusText == "Conflict check: Option-Tab may overlap app shortcuts")
+    }
 }

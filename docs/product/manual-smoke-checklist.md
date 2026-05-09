@@ -197,9 +197,12 @@ Recorder:
 
 ```bash
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host terminal --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host iterm2 --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host ghostty --manual-gate
 ```
 
-- Use a supported terminal host: Terminal, iTerm2, Warp, Ghostty, kitty, or Alacritty.
+- Use a supported terminal host: Terminal, iTerm2, Warp, Ghostty, kitty, Alacritty, or WezTerm.
 - Include `AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF` in the prompt or terminal title.
 - Focus a disposable Claude Code prompt without submitting.
 - Type a harmless local test fragment like `Can we make this`.

@@ -724,6 +724,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         "com.mitchellh.ghostty",
         "net.kovidgoyal.kitty",
         "org.alacritty",
+        "com.github.wez.wezterm",
         "com.apple.keychainaccess",
         "com.apple.Passwords",
         "com.1password.1password",

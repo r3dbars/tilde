@@ -150,6 +150,7 @@ struct AcceptanceSurvivalTracker: Equatable, Sendable {
     let requestMode: String
     let acceptMode: String
     let acceptedText: String
+    let textBeforeCursorAtAccept: String
     let expectedInsertionUTF16Offset: Int
     let acceptedAt: Date
     let profile: CompatibilityProfile
@@ -166,6 +167,7 @@ struct AcceptanceSurvivalTracker: Equatable, Sendable {
         requestMode: String,
         acceptMode: String = "acceptNextWord",
         acceptedText: String,
+        textBeforeCursorAtAccept: String = "",
         expectedInsertionUTF16Offset: Int,
         acceptedAt: Date,
         profile: CompatibilityProfile,
@@ -181,6 +183,7 @@ struct AcceptanceSurvivalTracker: Equatable, Sendable {
         self.requestMode = requestMode
         self.acceptMode = acceptMode
         self.acceptedText = acceptedText
+        self.textBeforeCursorAtAccept = textBeforeCursorAtAccept
         self.expectedInsertionUTF16Offset = expectedInsertionUTF16Offset
         self.acceptedAt = acceptedAt
         self.profile = profile

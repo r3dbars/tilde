@@ -98,7 +98,7 @@ Research-backed caret-locking work now lives in
   - [x] Obsidian one-word accept and full accept.
   - [x] Chrome text field and local editor fixture one-word and full accept.
   - [ ] Codex one-word no-submit accept; full accept stays disabled until separately proven.
-  - [ ] Claude Code terminal-host adapter plus one-word no-submit accept; direct `com.anthropic.claude-code` bundle proof is diagnostics-only.
+  - [ ] Claude Code terminal-host adapter plus one-word no-submit accept; Terminal has historical proof, iTerm2/Ghostty need host-labeled rows, and direct `com.anthropic.claude-code` bundle proof is diagnostics-only.
   - [x] Claude desktop one-word no-submit accept; full accept stays disabled until separately proven.
 
 - [x] Build the local eval loop.

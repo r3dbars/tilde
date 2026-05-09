@@ -85,6 +85,7 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
         forRedactedEvents events: [AutocompleteTraceEvent],
         summary: AutocompleteTraceSummary
     ) -> String {
+        let nonAnnoyance = AutocompleteNonAnnoyanceReporter().reportForRedactedEvents(events)
         let rows = events.suffix(200).reversed().map { event in
             """
             <tr>
@@ -139,6 +140,7 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
             <div class="metric"><b>\(summary.acceptedCount)</b>accepted</div>
             <div class="metric"><b>\(summary.acceptanceRetentionClearedCount)</b>retention cleared</div>
             <div class="metric"><b>\(summary.suppressedCount)</b>suppressed</div>
+            <div class="metric"><b>\(summary.sensitiveSuppressedByCategory.values.reduce(0, +))</b>sensitive suppressed</div>
             <div class="metric"><b>\(percent(summary.acceptRate))</b>accept rate</div>
             <div class="metric"><b>\(percent(summary.usefulRate))</b>useful rate</div>
             <div class="metric"><b>\(percent(summary.tabAcceptShare))</b>Tab accept share</div>
@@ -175,9 +177,16 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
           <h2>Visual calibration, no screenshots</h2>
           <p>This section uses redacted caret and panel metadata only. Screenshot paths are not included.</p>
           \(visualCalibrationHTMLTable(from: events))
+          <h2>Non-annoyance gate</h2>
+          <p>This gate uses the default redacted trace. Raw typed text, model text, accepted text, screenshots, and screenshot paths are not included.</p>
+          \(nonAnnoyanceHTML(nonAnnoyance))
           <h2>Do-not-ship blockers</h2>
           <p>These are hard trust failures. A beta proof run should keep every counter at zero.</p>
           <ul>\(sortedCountList(summary.doNotShipCounters))</ul>
+          <h2>Sensitive-field silence</h2>
+          <p>Categories are redacted proof labels only. Raw typed text, URLs, titles, field values, and fixture contents are not included.</p>
+          <h3>Suppressed</h3><ul>\(sortedCountList(summary.sensitiveSuppressedByCategory))</ul>
+          <h3>Presented</h3><ul>\(sortedCountList(summary.sensitivePresentedByCategory))</ul>
           <h2>Recommended next fix</h2>
           <ol>\(recommendedFixList(summary.recommendedFixes))</ol>
           <h2>Support state by app</h2>
@@ -194,6 +203,28 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
           </table>
         </body>
         </html>
+        """
+    }
+
+    private func nonAnnoyanceHTML(_ report: AutocompleteNonAnnoyanceReport) -> String {
+        let gateLabel = report.gatePassed ? "pass" : "fail"
+        let failures = report.gateFailures.isEmpty
+            ? "<li>none</li>"
+            : report.gateFailures.map { "<li>\(escape($0))</li>" }.joined(separator: "\n")
+
+        return """
+        <div class="grid">
+          <div class="metric"><b>\(escape(gateLabel))</b>gate</div>
+          <div class="metric"><b>\(String(format: "%.2f", report.shownPerActiveMinute))</b>shown / active min</div>
+          <div class="metric"><b>\(percent(report.dismissalsPerShown))</b>dismissals / shown</div>
+          <div class="metric"><b>\(percent(report.typedOverWithinOneSecondRate))</b>typed-over &lt;1s</div>
+          <div class="metric"><b>\(report.acceptedThenDeleted)</b>accepted then deleted</div>
+          <div class="metric"><b>\(report.immediateResurfacing)</b>immediate resurfacing</div>
+          <div class="metric"><b>\(percent(report.lateSuggestionsHiddenRate))</b>late hidden</div>
+          <div class="metric"><b>\(percent(report.pauseDisablePerShown))</b>pause+disable / shown</div>
+          <div class="metric"><b>\(percent(report.severeSuppressionRate))</b>severe suppression</div>
+        </div>
+        <ul>\(failures)</ul>
         """
     }
 
