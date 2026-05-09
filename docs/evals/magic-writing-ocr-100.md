@@ -420,6 +420,16 @@ Time: 2026-05-09T00:36:00Z
 - Gate movement: `manual_smoke_status.sh --require-all` now reports TextEdit and Notes body as passed on the current PR commit, reducing the remaining target-app proof gaps from 29 to 28.
 - Chrome follow-up: attempted `chrome --fixture textarea` with forced renderer accessibility and then default Chrome AX. Forced mode landed on `chrome://newtab/` instead of the disposable fixture, and default mode exposed only browser chrome. The harness now rechecks the expected URL for pid-based Chrome runs and has a guarded System Events setup fallback after AX insertion fails, but Chrome textarea is still not counted as proof.
 
+2026-05-09T03:42Z heartbeat follow-up: fixed the Chrome textarea proof blocker and refreshed Chrome textarea with the current fast model.
+
+- Finding: the isolated Chrome fixture now opens and focuses correctly, but accepted suggestions verified `unchanged` because Chrome swallowed the app's Unicode CGEvent insertion path.
+- Fix: Chrome now uses `axThenKeyEvents` at the profile level and Chromium key-event insertion falls back to hardware key-code events for plain prose, while the smoke harness opens a pid-targeted isolated Chrome window instead of mutating the user's default Chrome session.
+- Run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea`.
+- Result: Chrome textarea passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- Evidence: diagnostics lines 241297-241368 and trace lines 61172-61187 in the local AutocompleteLab logs.
+- Build: `commit:32ea5b6f9513`, app SHA `65260876a55f50c440f56d63fe70797ada90d19c51905075f300ec352d65de6b`.
+- Gate movement: Chrome textarea is now green on the current build proof; `manual_smoke_status.sh --require-all` still reports 29 remaining target-app proof gaps because the broader matrix has stale or pending rows.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:

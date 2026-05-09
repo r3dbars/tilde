@@ -372,6 +372,7 @@ declare -a SMOKE_HTTP_PIDS=()
 CHROME_FIXTURE_ASSET_URL=""
 CHROME_FIXTURE_SCRIPT_URL=""
 CHROME_FIXTURE_SERVER_URL=""
+CHROME_LAST_LAUNCHED_PID=""
 SMOKE_LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-real-app-smoke.lock}"
 SMOKE_LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS:-300}"
 SMOKE_LOCK_HELD=0
@@ -1533,25 +1534,49 @@ launch_isolated_chrome_fixture() {
   local chrome_url="$1"
   local tmp_dir="$2"
   local profile_dir="$tmp_dir/chrome-profile"
-  local chrome_binary="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
-  if [[ ! -x "$chrome_binary" ]]; then
-    echo "Google Chrome binary is missing: $chrome_binary" >&2
+  if [[ ! -d "/Applications/Google Chrome.app" ]]; then
+    echo "Google Chrome app is missing: /Applications/Google Chrome.app" >&2
     exit 1
   fi
 
-  "$chrome_binary" \
+  open -na "Google Chrome" --args \
     --user-data-dir="$profile_dir" \
     --force-renderer-accessibility \
     --no-first-run \
     --no-default-browser-check \
     --disable-default-apps \
     --disable-sync \
-    --new-window "$chrome_url" >/dev/null 2>&1 &
+    --new-window "$chrome_url" >/dev/null 2>&1
 
-  local chrome_pid="$!"
+  local chrome_pid
+  chrome_pid="$(wait_for_isolated_chrome_pid "$profile_dir" 10)"
   SMOKE_CHROME_PIDS+=("$chrome_pid")
-  printf '%s\n' "$chrome_pid"
+  CHROME_LAST_LAUNCHED_PID="$chrome_pid"
+}
+
+wait_for_isolated_chrome_pid() {
+  local profile_dir="$1"
+  local timeout_seconds="${2:-10}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    local pid
+    pid="$(ps -axo pid=,command= | awk -v profile="$profile_dir" '
+      /Contents\/MacOS\/Google Chrome/ && index($0, "--user-data-dir=" profile) {
+        print $1
+        exit
+      }
+    ')"
+    if [[ -n "$pid" ]]; then
+      printf '%s\n' "$pid"
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for isolated Chrome profile process: $profile_dir" >&2
+  exit 1
 }
 
 focus_chrome_process_window() {
@@ -1609,8 +1634,19 @@ let appElement = AXUIElementCreateApplication(pid)
 AXUIElementSetMessagingTimeout(appElement, 0.5)
 
 guard let windowValue = copyAttribute(appElement, kAXFocusedWindowAttribute),
-      let windowBounds = bounds(for: windowValue as! AXUIElement),
       let source = CGEventSource(stateID: .hidSystemState) else {
+    exit(1)
+}
+
+let focusedWindow = windowValue as! AXUIElement
+let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] ?? []
+let smokeWindow = windows.first {
+    (copyAttribute($0, "AXDocument") as? String ?? "").contains("autocomplete-lab-chrome-")
+}
+let windowElement = smokeWindow ?? focusedWindow
+AXUIElementPerformAction(windowElement, kAXRaiseAction as CFString)
+
+guard let windowBounds = bounds(for: windowElement) else {
     exit(1)
 }
 
@@ -2607,35 +2643,102 @@ end tell
 APPLESCRIPT
 }
 
+chrome_active_tab_url_for_pid() {
+  local chrome_pid="$1"
+
+  swift - "$chrome_pid" <<'SWIFT'
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 2,
+      let rawPID = Int32(CommandLine.arguments[1]) else {
+    exit(2)
+}
+
+let appElement = AXUIElementCreateApplication(pid_t(rawPID))
+AXUIElementSetMessagingTimeout(appElement, 0.5)
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+let focusedWindow: AXUIElement?
+if let focusedWindowValue = copyAttribute(appElement, kAXFocusedWindowAttribute) {
+    focusedWindow = (focusedWindowValue as! AXUIElement)
+} else {
+    focusedWindow = nil
+}
+let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] ?? []
+let smokeWindow = windows.first {
+    (copyAttribute($0, "AXDocument") as? String ?? "").contains("autocomplete-lab-chrome-")
+}
+let firstWindow = windows.first
+guard let window = smokeWindow ?? focusedWindow ?? firstWindow else {
+    print("")
+    exit(1)
+}
+
+print(copyAttribute(window, "AXDocument") as? String ?? "")
+SWIFT
+}
+
 assert_chrome_expected_tab() {
   local fixture="$1"
   local expected_url="$2"
   local label="$3"
+  local chrome_pid="${4:-}"
   local active_url
 
+  if [[ -n "$chrome_pid" ]]; then
+    active_url="$(chrome_active_tab_url_for_pid "$chrome_pid")"
+  else
   active_url="$(chrome_active_tab_url)"
+  fi
   if [[ -z "$active_url" ]]; then
     echo "Chrome $fixture smoke refused to type during $label: no active Chrome tab URL." >&2
-    exit 1
+    return 1
   fi
 
   if chrome_fixture_is_official_demo "$fixture"; then
     if [[ "$active_url" != "$expected_url"* ]]; then
       echo "Chrome $fixture smoke refused to type during $label: expected official demo URL '$expected_url', got '$active_url'." >&2
-      exit 1
+      return 1
     fi
     return 0
   fi
 
   if [[ "$expected_url" == file://* && "$active_url" != file://*autocomplete-lab-chrome-"$fixture"-smoke.html* ]]; then
     echo "Chrome $fixture smoke refused to type during $label: expected local smoke fixture, got '$active_url'." >&2
-    exit 1
+    return 1
   fi
 
   if [[ "$expected_url" == http://127.0.0.1:* && "$active_url" != "$expected_url"* ]]; then
     echo "Chrome $fixture smoke refused to type during $label: expected bounded local harness '$expected_url', got '$active_url'." >&2
-    exit 1
+    return 1
   fi
+}
+
+wait_for_chrome_expected_tab() {
+  local fixture="$1"
+  local expected_url="$2"
+  local label="$3"
+  local chrome_pid="${4:-}"
+  local timeout_seconds="${5:-10}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    if assert_chrome_expected_tab "$fixture" "$expected_url" "$label" "$chrome_pid" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  assert_chrome_expected_tab "$fixture" "$expected_url" "$label" "$chrome_pid"
 }
 
 assert_chrome_focused_editable_ax() {
@@ -3042,7 +3145,7 @@ assert_chrome_ready_for_input() {
 
   if [[ -n "$chrome_pid" ]]; then
     assert_frontmost_process_id "$chrome_pid" "Chrome $fixture $label"
-    assert_chrome_expected_tab "$fixture" "$expected_url" "$label"
+    assert_chrome_expected_tab "$fixture" "$expected_url" "$label" "$chrome_pid"
     assert_chrome_focused_editable_ax "$fixture" "$chrome_pid" "$label"
     return 0
   fi
@@ -4544,16 +4647,9 @@ run_chrome_fixture() {
   echo "Running Chrome fixture: $fixture"
 
   if chrome_fixture_uses_isolated_accessibility_chrome "$fixture"; then
-    chrome_pid="$(launch_isolated_chrome_fixture "$chrome_url" "$tmp_dir")"
-    sleep 2.2
-    osascript >/dev/null <<APPLESCRIPT
-tell application "Google Chrome"
-  activate
-  if not (exists window 1) then make new window
-  set URL of active tab of front window to "$chrome_url"
-end tell
-delay 1.2
-APPLESCRIPT
+    launch_isolated_chrome_fixture "$chrome_url" "$tmp_dir"
+    chrome_pid="$CHROME_LAST_LAUNCHED_PID"
+    wait_for_chrome_expected_tab "$fixture" "$chrome_url" "initial isolated fixture load" "$chrome_pid" 12
     focus_chrome_smoke_editor "$fixture" "$chrome_pid"
   else
     osascript >/dev/null <<APPLESCRIPT

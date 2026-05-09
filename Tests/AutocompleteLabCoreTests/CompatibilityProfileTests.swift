@@ -60,8 +60,8 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.google.Chrome")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.google.Chrome")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackRenderMode == .floatingMirror)
-        #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .keyEvents)
-        #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .axValueReplacement)
+        #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .axThenKeyEvents)
+        #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "com.google.Chrome")?.allowsDescendantTextFallback == true)
         #expect(store.profile(for: "com.google.Chrome")?.allowsSyntheticCaretPlacement == false)
         #expect(store.profile(for: "com.openai.codex")?.displayName == "Codex")
@@ -255,9 +255,9 @@ struct CompatibilityProfileTests {
         #expect(profile.debugSummary.contains("primary render=inlineAdjacent"))
         #expect(profile.debugSummary.contains("support=yellow"))
         #expect(profile.debugSummary.contains("family=chromium"))
-        #expect(profile.debugSummary.contains("insert=keyEvents"))
+        #expect(profile.debugSummary.contains("insert=axThenKeyEvents"))
         #expect(profile.debugSummary.contains("fallback render=floatingMirror"))
-        #expect(profile.debugSummary.contains("insert=axValueReplacement"))
+        #expect(profile.debugSummary.contains("insert=keyEvents"))
         #expect(profile.debugSummary.contains("field=accessibilityElement"))
         #expect(profile.debugSummary.contains("anchors=caret>field"))
     }
@@ -274,7 +274,7 @@ struct CompatibilityProfileTests {
 
         #expect(InsertionModePlan.modes(for: textEdit) == [.axSelectedText, .axValueReplacement])
         #expect(InsertionModePlan.modes(for: notes) == [.axThenKeyEvents, .keyEvents])
-        #expect(InsertionModePlan.modes(for: chrome) == [.keyEvents, .axValueReplacement])
+        #expect(InsertionModePlan.modes(for: chrome) == [.axThenKeyEvents, .keyEvents])
         #expect(InsertionModePlan.modes(for: codex) == [.axValueReplacement])
         #expect(InsertionModePlan.modes(for: claudeCode) == [])
         #expect(InsertionModePlan.modes(for: claude) == [.axValueReplacement])
@@ -393,8 +393,8 @@ struct CompatibilityProfileTests {
 
         #expect(InsertionModePlan.modes(for: notes, skipping: [.axThenKeyEvents]) == [.keyEvents])
         #expect(InsertionModePlan.modes(for: notes, skipping: [.axThenKeyEvents, .keyEvents]) == [])
-        #expect(InsertionModePlan.modes(for: chrome, skipping: [.keyEvents]) == [.axValueReplacement])
-        #expect(InsertionModePlan.modes(for: chrome, skipping: [.keyEvents, .axValueReplacement]) == [])
+        #expect(InsertionModePlan.modes(for: chrome, skipping: [.axThenKeyEvents]) == [.keyEvents])
+        #expect(InsertionModePlan.modes(for: chrome, skipping: [.axThenKeyEvents, .keyEvents]) == [])
     }
 
     @Test("Notes insertion can fall back while still failing closed after verification")
