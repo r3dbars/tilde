@@ -86,6 +86,7 @@ recipients, subject lines, or trace excerpts into the report.
 
 ```bash
 ./script/check_trace_eval.sh
+./script/latency_benchmark_report.py --beta-gate
 ./script/model_latency_report.py --latest
 ./script/model_latency_report.py --latest --require-shown-samples 5
 ./script/check_redacted_report_export.sh
@@ -424,6 +425,7 @@ Useful commands:
 ./script/manual_smoke_status.sh --require-all
 ./script/manual_proof_queue.sh --print
 ./script/check_trace_eval.sh
+./script/latency_benchmark_report.py --beta-gate
 ./script/model_latency_report.py --latest
 ./script/check_redacted_report_export.sh
 open "\$HOME/Library/Logs/AutocompleteLab"

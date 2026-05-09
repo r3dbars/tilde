@@ -18,6 +18,7 @@ struct AXFieldClassifierTests {
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXSearchField")) == .search)
         #expect(classifier.classify(AXFieldClassifierInput(placeholder: "Search messages")) == .search)
         #expect(classifier.classify(AXFieldClassifierInput(title: "Address Bar")) == .url)
+        #expect(classifier.classify(AXFieldClassifierInput(identifier: "omnibox")) == .url)
         #expect(AXFieldKind.search.suppressesSuggestionsByDefault)
         #expect(AXFieldKind.url.suppressesSuggestionsByDefault)
     }
@@ -25,6 +26,8 @@ struct AXFieldClassifierTests {
     @Test("Classifies form fields")
     func classifiesFormFields() {
         #expect(classifier.classify(AXFieldClassifierInput(placeholder: "Email address")) == .form)
+        #expect(classifier.classify(AXFieldClassifierInput(description: "Payment cardholder name")) == .form)
+        #expect(classifier.classify(AXFieldClassifierInput(help: "Use this field to sign in")) == .form)
         #expect(classifier.classify(AXFieldClassifierInput(title: "Credit card number")) == .form)
         #expect(classifier.classify(AXFieldClassifierInput(windowTitle: "Login")) == .form)
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextField")) == .form)

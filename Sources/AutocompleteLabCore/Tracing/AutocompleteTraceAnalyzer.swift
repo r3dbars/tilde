@@ -250,6 +250,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let acceptedAndKeptByFieldKind: [String: Int]
     public let suppressedByFieldKind: [String: Int]
     public let suppressedByReason: [String: Int]
+    public let sensitiveSuppressedByCategory: [String: Int]
+    public let sensitivePresentedByCategory: [String: Int]
     public let suppressedByApp: [String: Int]
     public let suppressedByMode: [String: Int]
     public let actionableSuppressedByApp: [String: Int]
@@ -345,6 +347,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         acceptedAndKeptByFieldKind: [String: Int] = [:],
         suppressedByFieldKind: [String: Int] = [:],
         suppressedByReason: [String: Int] = [:],
+        sensitiveSuppressedByCategory: [String: Int] = [:],
+        sensitivePresentedByCategory: [String: Int] = [:],
         suppressedByApp: [String: Int] = [:],
         suppressedByMode: [String: Int] = [:],
         actionableSuppressedByApp: [String: Int] = [:],
@@ -439,6 +443,8 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.acceptedAndKeptByFieldKind = acceptedAndKeptByFieldKind
         self.suppressedByFieldKind = suppressedByFieldKind
         self.suppressedByReason = suppressedByReason
+        self.sensitiveSuppressedByCategory = sensitiveSuppressedByCategory
+        self.sensitivePresentedByCategory = sensitivePresentedByCategory
         self.suppressedByApp = suppressedByApp
         self.suppressedByMode = suppressedByMode
         self.actionableSuppressedByApp = actionableSuppressedByApp
@@ -477,6 +483,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let hiddenIgnored = events.filter { $0.type == .suggestionHidden && $0.outcome == "ignored" }
         let suppressed = events.filter { $0.type == .suggestionSuppressed }
         let actionableSuppressed = suppressed.filter { isActionableSuppression($0) }
+        let sensitiveSuppressed = suppressed.filter { sensitiveCategory($0) != nil }
         let insertionFailures = events.filter { $0.type == .insertionFailed }
         let insertionVerified = events.filter { $0.type == .insertionVerified }
         let caretGeometryFailures = events.filter { $0.type == .caretGeometryFailed }
@@ -706,6 +713,11 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             ),
             suppressedByFieldKind: counts(suppressed, key: fieldKind),
             suppressedByReason: countsByReason(suppressed),
+            sensitiveSuppressedByCategory: counts(sensitiveSuppressed, key: sensitiveSuppressionCategory),
+            sensitivePresentedByCategory: counts(
+                Array(firstPresentedByID.values).filter { sensitivePresentationCategory($0) != nil },
+                key: sensitivePresentationCategory
+            ),
             suppressedByApp: counts(suppressed, key: \.appBundleIdentifier),
             suppressedByMode: counts(suppressed, key: \.requestMode),
             actionableSuppressedByApp: counts(actionableSuppressed, key: \.appBundleIdentifier),
@@ -751,6 +763,24 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     private func fieldKind(_ event: AutocompleteTraceEvent) -> String {
         let kind = event.metadata["fieldKind"] ?? ""
         return kind.isEmpty ? "unknown" : kind
+    }
+
+    private func sensitiveCategory(_ event: AutocompleteTraceEvent) -> String? {
+        event.metadata["sensitiveSuppressionCategory"]
+            ?? event.metadata["sensitiveFieldCategory"]
+    }
+
+    private func sensitiveSuppressionCategory(_ event: AutocompleteTraceEvent) -> String {
+        sensitiveCategory(event) ?? "unknown"
+    }
+
+    private func sensitivePresentationCategory(_ event: AutocompleteTraceEvent) -> String {
+        sensitiveCategory(event) ?? (isSensitiveFieldKind(event) ? fieldKind(event) : "unknown")
+    }
+
+    private func isSensitiveFieldKind(_ event: AutocompleteTraceEvent) -> Bool {
+        ["search", "form", "url", "secure", "password", "unprovenSurface"]
+            .contains(event.metadata["fieldKind"] ?? "")
     }
 
     private func experimentArm(_ event: AutocompleteTraceEvent) -> String {
@@ -1846,6 +1876,16 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             }
 
             if event.type == .suggestionPresented,
+               isSensitiveFieldKind(event) {
+                increment("sensitive-field-suggestion")
+            }
+
+            if event.type == .suggestionPresented,
+               sensitiveCategory(event) != nil {
+                increment("sensitive-category-suggestion")
+            }
+
+            if event.type == .suggestionPresented,
                event.metadata["supportState"] == "unsupported" {
                 increment("unsupported-app-presentation")
             }
@@ -1864,6 +1904,23 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                !(event.type == .suggestionSuppressed && event.reason == "wrong-app-or-field-before-accept") {
                 increment(event.reason.isEmpty ? "do-not-ship" : event.reason)
             }
+        }
+
+        let promptMetrics = PromptAppNoSubmitMetricsAnalyzer().metrics(from: events)
+        if promptMetrics.accidentalSubmitCount > 0 {
+            counters["prompt-accidental-submit"] = promptMetrics.accidentalSubmitCount
+        }
+        if promptMetrics.sendKeyCollisionCount > 0 {
+            counters["prompt-send-key-collision"] = promptMetrics.sendKeyCollisionCount
+        }
+        if promptMetrics.promptMutationWithoutUserIntentCount > 0 {
+            counters["prompt-mutation-without-user-intent"] = promptMetrics.promptMutationWithoutUserIntentCount
+        }
+        if promptMetrics.wrongContextInsertionCount > 0 {
+            counters["prompt-wrong-context-insertion"] = promptMetrics.wrongContextInsertionCount
+        }
+        if promptMetrics.suggestionContentViolationCount > 0 {
+            counters["prompt-suggestion-content-violation"] = promptMetrics.suggestionContentViolationCount
         }
 
         return counters
@@ -1888,7 +1945,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     private func searchOrFormLeakageCount(in events: [AutocompleteTraceEvent]) -> Int {
         events.filter { event in
             event.type == .suggestionPresented
-                && ["search", "form", "url", "secure", "unprovenSurface"].contains(event.metadata["fieldKind"] ?? "")
+                && (isSensitiveFieldKind(event) || sensitiveCategory(event) != nil)
         }.count
     }
 

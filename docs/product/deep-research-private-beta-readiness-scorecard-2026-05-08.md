@@ -18,13 +18,16 @@ The current repo has serious trust machinery: local MLX runtime policy, secure
 field blocking, accept-time focus guards, redacted tracing, manual smoke
 recorders, screenshot proof gates, and private beta packet scripts. This pass
 added preferred DMG packaging, a saved release-proof checklist, required beta
-docs, a structured feedback issue form, and a generated private beta packet.
-This ops pass adds a privacy-safe menu feedback path, triage labels,
+docs, a structured feedback issue form, and a generated private beta packet. It
+also reconciled the default proof manifest with the scorecard so completed
+Notes and Obsidian screenshots are no longer treated as unreferenced. This ops
+and privacy pass adds a privacy-safe menu feedback path, triage labels,
 issue-template validation, a daily tester checklist, a redacted export flow, a
-stop dashboard, and a generated readiness summary artifact. The app is still
-not private-beta ready because the current checkout has no fresh notarized
-artifact, no fresh VM/install proof, and no safe same-slice prompt-app
-no-submit proof.
+stop dashboard, a generated readiness summary artifact, the dependency/SDK
+inventory, the field-level data checklist, and current-build redacted export
+proof. The app is still not private-beta ready because the current checkout has
+no fresh notarized artifact, no fresh VM/install proof, and no safe same-slice
+prompt-app no-submit proof.
 
 ## Product Standard
 
@@ -83,12 +86,17 @@ Current local evidence:
   raw text and screenshots by default.
 - `script/private_beta_packet.sh` creates local feedback/checksum/privacy packet
   files and now points at the required beta docs and issue form.
+- `script/check_dependency_inventory.sh` verifies package pins, bundled code,
+  app permissions, and script egress paths for the current app build.
+- `script/check_current_build_privacy_export.sh` runs the built app binary in
+  proof mode and verifies a redacted privacy bundle from synthetic private
+  sentinels.
 
 ## Score
 
 Starting score before this ops pass: 80/100
 
-Current score after this ops pass: 84/100
+Current score after this ops and privacy pass: 84/100
 
 Score movement: +4
 
@@ -117,6 +125,13 @@ Score movement: +4
   tracked Notes and Obsidian screenshot proof. The default proof manifest check
   now passes, while the strict visual proof gate still blocks on prompt-app
   evidence.
+- Added `docs/product/dependency-sdk-data-inventory.md`,
+  `docs/product/beta-privacy-data-checklist.md`,
+  `script/check_dependency_inventory.sh`, and
+  `script/check_current_build_privacy_export.sh`.
+- Added app-binary redacted export proof mode plus tests proving the default
+  export strips typed text, prompts, model output, accepted text, screenshot
+  paths, URLs, document titles, recipients, and subject lines.
 - Added `docs/product/private-beta-ops-loop.md`, generated packet files for the
   daily tester checklist, redacted report flow, triage labels, stop-condition
   dashboard, issue-template validation, and beta readiness summary.
@@ -182,12 +197,13 @@ Score movement: +4
 ### Privacy
 
 - Weight: 20
-- Current score: 18/20
+- Current score: 20/20
 - Why this score: Defaults are local-first and redacted. Raw trace and
   screenshot capture are opt-in. Diagnostics export avoids raw text by default.
-  This pass added beta privacy and diagnostic export docs. The missing pieces
-  are a deeper SDK/dependency data inventory and fresh exported bundle proof
-  from the exact beta artifact.
+  The repo now has beta privacy docs, diagnostic export docs, a dependency/SDK
+  inventory, a field-level data checklist, redaction coverage for
+  URL/title/recipient/subject metadata, and a current-build export proof command
+  that runs from the app binary.
 - Evidence found in repo: `docs/product/privacy-and-controls.md`,
   `Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift`,
   `Sources/AutocompleteLabCore/Text/DiagnosticsMetadataRedactor.swift`,
@@ -197,9 +213,15 @@ Score movement: +4
   `Tests/AutocompleteLabAppTests/RawTraceReportExportTests.swift`,
   `script/check_redacted_report_export.sh`, `PRIVACY-BETA.md`,
   `DIAGNOSTIC-EXPORT.md`,
-  `script/delete_local_traces.sh`.
-- Missing evidence: deeper third-party SDK/dependency data collection
-  inventory and fresh exported bundle proof from the exact beta artifact.
+  `script/delete_local_traces.sh`,
+  `docs/product/dependency-sdk-data-inventory.md`,
+  `docs/product/beta-privacy-data-checklist.md`,
+  `Sources/AutocompleteLabApp/App/PrivacyExportProofCommand.swift`,
+  `Tests/AutocompleteLabAppTests/PrivacyExportProofCommandTests.swift`,
+  `script/check_dependency_inventory.sh`,
+  `script/check_current_build_privacy_export.sh`.
+- Missing evidence: none for the beta privacy story. Runtime packet capture and
+  onboarding comprehension still matter to broader product trust.
 - What would make it 100/100: Versioned privacy docs that match the build,
   explicit dependency/SDK inventory, verified redacted export contents, clear
   opt-in paths, and proof that no raw typed text leaves the device by default.
@@ -342,6 +364,10 @@ bugs.
 - `./script/package_release.sh notarize` records notary, staple, and Gatekeeper
   proof for the exact artifact.
 - `./script/private_beta_packet.sh --check` verifies packet checksums.
+- `./script/check_dependency_inventory.sh` verifies the dependency/SDK privacy
+  inventory against the current app bundle.
+- `./script/check_current_build_privacy_export.sh` verifies a redacted privacy
+  export from the current app build.
 - `./script/check_proof_manifest.sh --require-all --require-current-commit`
   passes before external beta.
 - `./script/manual_smoke_status.sh --strict` passes for every claimed surface.
@@ -414,6 +440,24 @@ bugs.
   Accessibility grant/deny, offline launch, uninstall/delete-data.
 - Risk level: Medium.
 - Expected score impact: +8 to +12.
+
+### 6. Finish Beta Privacy Story - Completed This Pass
+
+- Objective: Give beta testers and reviewers a complete map of what data exists
+  and why.
+- Files involved: `PRIVACY-BETA.md`, `DIAGNOSTIC-EXPORT.md`,
+  `docs/product/dependency-sdk-data-inventory.md`,
+  `docs/product/beta-privacy-data-checklist.md`,
+  `Sources/AutocompleteLabApp/App/PrivacyExportProofCommand.swift`,
+  `Sources/AutocompleteLabCore/Text/DiagnosticsMetadataRedactor.swift`,
+  `script/check_dependency_inventory.sh`,
+  `script/check_current_build_privacy_export.sh`.
+- Tests added/updated: redacted export tests, metadata redaction tests, and
+  current-build proof command tests.
+- Proof required: dependency inventory check, current-build privacy export
+  proof, redacted export self-test, delete-local-traces self-test, and
+  `swift test`.
+- Result: Beta privacy is now 20/20.
 
 ## Codex Execution Goal
 

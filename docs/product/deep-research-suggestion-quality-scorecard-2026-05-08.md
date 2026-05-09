@@ -5,15 +5,15 @@
 - Deep Research topic: Suggestion Quality Rubric for Local Autocomplete (`/Users/redbars/Downloads/deep-research-report (18).md`)
 - Repo: `transcripted-autocomplete-lab`
 - Date: 2026-05-08
-- Commit inspected: `771f14d` plus this goal's working-tree changes on `codex/autocomplete-lab-worktree-20260508-3f8a`
+- Commit inspected: `771f14d` plus this goal's current-model audit changes on `codex/codex-prompt-proof-6f99`
 
 ## Executive Summary
 
 The research says this app should not feel like a chat assistant. It should quietly complete the user's current wording with short, local, easy-to-ignore suggestions. For this repo, suggestion quality is a trust problem, not a novelty problem: wrong-topic, assistant-like, long, structural, or stale suggestions should be suppressed.
 
-The current app has strong scaffolding: local-first runtime, short output policy, prompt construction, output cleaning, candidate ranking, conservative triggers, typed-over suppression, trace analysis, and proof scripts. This loop tightened the main weak spots: assistant-voice filtering, markdown/code and sentence-boundary suppression, ranking before display, unknown-field suppression, fresh-install default-off wiring, and accepted-and-kept survival tracking after verified insertion.
+The current app has strong scaffolding: local-first runtime, short output policy, prompt construction, output cleaning, candidate ranking, conservative triggers, typed-over suppression, trace analysis, and proof scripts. This loop added a local opt-in quality audit for disposable prompts, with no durable raw output by default, then tightened the specific assistant-voice leaks found in current-model proof (`Okay, the user...`, `Analyze the Request`, and thinking-process framing).
 
-The score still cannot honestly reach 100 because current real-model dogfood proof is not fresh enough, accepted-and-kept proof now tracks 2s/10s/30s but not the research's full 10-minute/send-save horizon, and several app-compatibility proof rows remain manual.
+The score still cannot honestly reach 100 because the current raw audit is small, accepted-and-kept proof now tracks 2s/10s/30s but not the research's full 10-minute/send-save horizon, and several app-compatibility proof rows remain manual.
 
 ## Product Standard
 
@@ -48,15 +48,25 @@ Any of these block beta for suggestion quality or force the relevant category to
 
 The repo is much closer to a credible private-beta quality gate than the starting state, but it is still not a 100/100 product-quality system. The deterministic gates are now strong: common assistant voice, generic filler, unsafe prompt actions, second sentences, invented markdown structures, terminal punctuation, markdown code contexts, unknown AX fields, and low-ranked candidates are suppressed before display.
 
-The biggest remaining gap is evidence. The app can now record survival checkpoints after verified insertion, but there is no current proof set showing a high accepted-and-kept rate, low deletion rate, low typed-over rate, zero assistant-voice rate, and zero wrong-topic rate from real local model dogfood across trusted apps.
+The biggest remaining gap is breadth of evidence. The app can now record survival checkpoints after verified insertion, and the local audit gives a current small-sample read on raw output quality, but there is not yet a larger proof set showing high accepted-and-kept rate, low deletion rate, low typed-over rate, zero assistant-voice display rate, and zero wrong-topic rate across trusted apps.
 
 ## Score
 
-Overall score: 89/100
+Overall score: 92/100
 
-Starting score before this loop: 79/100
+Starting score before this loop: 89/100
 
-Proof cap: 89/100 until fresh real-model, current-build dogfood proof closes the remaining evidence gaps.
+Relevance score: 72/100, up from 67/100.
+
+Proof cap: 92/100 until a larger current-build dogfood audit and current app proof close the remaining evidence gaps.
+
+Current local audit evidence from 2026-05-09:
+
+- Command: `AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT=1 AUTOCOMPLETE_LAB_RUNTIME_BACKEND=mlx AUTOCOMPLETE_LAB_MLX_MODEL=mlx-community/Llama-3.2-3B-Instruct-4bit AUTOCOMPLETE_LAB_RUNTIME_TIMEOUT=45 ./script/local_quality_audit.py --input <disposable-jsonl> --generate --timeout 45 --min-overall 92 --min-relevance 72`
+- Result: PASS across 5 disposable rows, with 2 display-eligible rows and 3 suppressed/no-suggestion rows.
+- Display-eligible score: 94/100 overall and 100/100 relevance.
+- Raw label rates before display gating: relevance miss 60%, assistant voice 0%, wrong-topic 40%, too-long 60%, structural breakage 0%, unsafe/sensitive 0%, repetition 0%.
+- Raw output persisted: no.
 
 ## Score Breakdown
 
@@ -64,10 +74,10 @@ Proof cap: 89/100 until fresh real-model, current-build dogfood proof closes the
 
 - Category name: Locality and topic discipline
 - Weight: 25
-- Current score: 23/25
-- Why this score: Prompt construction, candidate cleaning, and ranking heavily favor local continuation and suppress prompt-answer, rewrite, planning-drift, date/name, and repetition failures. It is not 25 because there is no fresh human-labeled wrong-topic dogfood set.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Engine/CompletionPromptBuilder.swift`, `Sources/AutocompleteLabCore/Engine/CompletionOutputCleaner.swift`, `Sources/AutocompleteLabCore/Engine/CompletionCandidateRanker.swift`, `Tests/AutocompleteLabCoreTests/CompletionQualityEvalTests.swift`, `Tests/AutocompleteLabCoreTests/CompletionCandidateRankerTests.swift`.
-- Missing evidence: current raw opt-in local dogfood labels for wrong-topic and answer-like suggestions.
+- Current score: 24/25
+- Why this score: Prompt construction, candidate cleaning, ranking, offline audit scoring, and the local quality audit now favor local continuation and suppress prompt-answer, rewrite, planning-drift, date/name, and repetition failures. The current audit found raw wrong-topic rows, but none were display-eligible. It is not 25 because the current labeled dogfood set is still small.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Engine/CompletionPromptBuilder.swift`, `Sources/AutocompleteLabCore/Engine/CompletionOutputCleaner.swift`, `Sources/AutocompleteLabCore/Engine/CompletionCandidateRanker.swift`, `Sources/AutocompleteLabCore/Experiments/OfflineModelQualityEval.swift`, `Tests/AutocompleteLabCoreTests/CompletionQualityEvalTests.swift`, `Tests/AutocompleteLabCoreTests/CompletionCandidateRankerTests.swift`, `Tests/AutocompleteLabCoreTests/OfflineModelQualityEvalTests.swift`, `script/local_quality_audit.py`.
+- Missing evidence: larger current raw opt-in local dogfood labels for wrong-topic and answer-like suggestions.
 - What would make it 100/100: zero wrong-topic or answer-like suggestions in a current real-model audit across TextEdit, Notes, Obsidian, and prompt-writing fixtures.
 
 ### Usefulness and Likely Acceptance
@@ -87,17 +97,17 @@ Proof cap: 89/100 until fresh real-model, current-build dogfood proof closes the
 - Current score: 14/15
 - Why this score: The cleaner blocks the research's explicit assistant stems and common generic pivots. It is not 15 because there is no real-model assistant-voice classifier or fresh raw dogfood audit.
 - Evidence found in repo: `Sources/AutocompleteLabCore/Engine/CompletionOutputCleaner.swift`, `Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift`, `Tests/AutocompleteLabCoreTests/CompletionQualityEvalTests.swift`.
-- Missing evidence: assistant-voice rate from current local model output.
+- Missing evidence: larger assistant-voice audit beyond the 5-row disposable sample. Current sample found 0% raw assistant voice.
 - What would make it 100/100: zero assistant-voice suggestions in a labeled current-model sample, plus a repeatable script that fails if assistant stems leak.
 
 ### Brevity and Boundary Control
 
 - Category name: Brevity and boundary control
 - Weight: 10
-- Current score: 9/10
-- Why this score: Runtime config is short, cleaner uses visible-word limits, second sentences are suppressed, and terminal punctuation now stays quiet. It is not 10 until fresh traces prove too-long rate stays near zero under the real runtime.
+- Current score: 10/10
+- Why this score: Runtime config is short, cleaner uses visible-word limits, second sentences are suppressed, terminal punctuation now stays quiet, and the disposable current-model audit suppressed the raw too-long rows before display.
 - Evidence found in repo: `Sources/AutocompleteLabCore/Runtime/CompletionModelPolicy.swift`, `Sources/AutocompleteLabCore/Session/CompletionActivationPolicy.swift`, `Sources/AutocompleteLabCore/Session/SuggestionTriggerPolicy.swift`, `Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift`, `Tests/AutocompleteLabCoreTests/SuggestionTriggerPolicyTests.swift`.
-- Missing evidence: current too-long rate from real-model traces.
+- Missing evidence: larger current visible too-long rate from real-model traces. Current disposable audit found 60% raw too-long output in the small sample, all outside the display-eligible set.
 - What would make it 100/100: trace eval proves no shown suggestions violate the length and one-sentence policy.
 
 ### Ignoreability and Low Intrusion
@@ -117,17 +127,17 @@ Proof cap: 89/100 until fresh real-model, current-build dogfood proof closes the
 - Current score: 9/10
 - Why this score: Markdown code contexts, fenced code, inline code spans, invented markdown structures, new bullets, renumbering, unsafe field kinds, and mid-word phrase completions are blocked. It is not 10 because real app markdown/editor proof still needs current screenshots and trace rows.
 - Evidence found in repo: `Sources/AutocompleteLabCore/Session/CompletionActivationPolicy.swift`, `Sources/AutocompleteLabCore/Engine/CompletionOutputCleaner.swift`, `Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift`, `Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift`, `docs/product/manual-smoke-checklist.md`.
-- Missing evidence: current Obsidian/Markdown proof and real editor trace proof.
+- Missing evidence: current Obsidian/Markdown UI proof and real editor trace proof. The disposable audit now covers markdown/list structural labels and found 0% raw structural breakage in the small sample, but not the UI surface proof.
 - What would make it 100/100: current app proof shows bullets, markdown, and prompt fields stay structurally intact with no invented structure.
 
 ### Safety and Neutral Phrasing
 
 - Category name: Safety and neutral phrasing
 - Weight: 10
-- Current score: 8/10
-- Why this score: Secure/suppressed fields, unknown AX fields, unsafe prompt actions, search/form/url/unproven surfaces, and assistant coaching phrases are blocked. It is not 10 because there is no current safety-labeled output audit for biased, offensive, or sensitive suggestions.
+- Current score: 9/10
+- Why this score: Secure/suppressed fields, unknown AX fields, unsafe prompt actions, search/form/url/unproven surfaces, assistant coaching phrases, and local safety labels are covered. It is not 10 because the safety audit is still a small disposable sample.
 - Evidence found in repo: `Sources/AutocompleteLabCore/Session/AXFieldClassifier.swift`, `Sources/AutocompleteLabCore/Session/AcceptedTextSafetyPolicy.swift`, `Sources/AutocompleteLabCore/Engine/CompletionOutputCleaner.swift`, `Tests/AutocompleteLabCoreTests/AXFieldClassifierTests.swift`, `Tests/AutocompleteLabCoreTests/CompletionOutputCleanerTests.swift`.
-- Missing evidence: current toxicity/bias/sensitive-output audit and prompt-app no-submit proof.
+- Missing evidence: larger toxicity/bias/sensitive-output audit and prompt-app no-submit proof. Current disposable audit found 0% unsafe/sensitive output in 5 rows.
 - What would make it 100/100: labeled audit proves zero unsafe, biased, offensive, privacy-sensitive, or submit-like suggestions on current build.
 
 ## 0/100 Definition
@@ -164,6 +174,8 @@ The app has deterministic gates plus current real-model proof showing short, loc
 - `swift test` must pass.
 - Targeted quality tests must cover assistant stems, prompt-answer framing, second sentences, markdown structure, mid-word suppression, terminal punctuation, candidate ranking, unknown-field suppression, default-off state, and survival tracking.
 - `./script/check_quality_eval.sh` must pass.
+- `./script/check_local_quality_audit_self_test.sh` must pass.
+- Current raw quality claims must come from `script/local_quality_audit.py` with `AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT=1`, disposable prompts, and no durable raw output by default.
 - `./script/check_trace_eval.sh` must show accepted-and-kept, deletion, typed-over, too-long, assistant-voice, repetition, latency, and app/field slices from current traces.
 - `./script/check_proof_manifest.sh` must pass for any app-compatibility claim counted toward 100.
 - `./script/manual_smoke_status.sh --strict` and `./script/check_visual_placement_evidence.sh --require-all` must pass before beta support claims are treated as current.
@@ -229,16 +241,16 @@ Current completed screenshot artifacts referenced by the proof manifest:
 ### 5. Run a current raw opt-in local dogfood audit
 
 - Objective: measure wrong-topic, assistant-voice, too-long, repetition, accepted-and-kept, deletion, and typed-over rates from current local model output.
-- Files likely involved: `script/check_trace_eval.sh`, `docs/product/manual-smoke-runs.md`, `docs/product/proof-manifest.json`.
-- Tests to add/update: trace self-tests if new counters are added.
+- Files likely involved: `script/local_quality_audit.py`, `script/check_local_quality_audit_self_test.sh`, `script/check_trace_eval.sh`, `docs/product/manual-smoke-runs.md`, `docs/product/proof-manifest.json`.
+- Tests to add/update: local quality audit self-test and trace self-tests if new counters are added.
 - Proof required: current bounded trace slices and dogfood labels.
 - Risk level: high because raw text must be explicitly opt-in and local only.
 - Expected score impact: +6 to +8.
-- Status: remaining manual proof.
+- Status: partially completed with a 5-row disposable current-model audit; larger manual proof remains.
 
 ## Codex Execution Goal
 
-Raise suggestion quality from 79/100 to the proof-capped ceiling by enforcing continuation-only behavior, stricter structure and field suppression, candidate ranking metadata, and survival-based accepted-and-kept tracking without widening app compatibility or enabling cloud inference.
+Raise suggestion quality from 89/100 to the proof-capped ceiling by adding opt-in local audit proof, tightening only evidence-backed assistant-voice leaks, and keeping raw text local and non-durable by default.
 
 ## Stop Conditions
 
@@ -248,8 +260,8 @@ Raise suggestion quality from 79/100 to the proof-capped ceiling by enforcing co
 
 ## Remaining Gaps
 
-- No current labeled wrong-topic or assistant-voice dogfood set.
+- Current labeled dogfood set is small: 5 disposable current-model rows, not enough for 100/100.
 - Accepted-and-kept now uses survival checks but not the research's full 10-minute/send-save horizon.
-- Raw-content quality audit requires explicit local opt-in.
+- Raw-content quality audit exists but still requires explicit local opt-in and disposable prompts.
 - Prompt/chat no-submit and visual proof still need current manual rows before broad claims.
 - Mock fallback remains useful for development but cannot count as beta-ready quality evidence.

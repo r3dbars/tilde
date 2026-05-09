@@ -173,6 +173,7 @@ Compare local model latency after a trial launch:
 
 ```bash
 script/model_latency_report.py --default-model-proof
+script/latency_benchmark_report.py --beta-gate
 AUTOCOMPLETE_LAB_MODEL=qwen35-9b ./script/build_and_run.sh --verify
 ```
 
@@ -195,6 +196,47 @@ After a manual model trial, require enough samples before trusting the result:
 ```bash
 script/model_latency_report.py --latest --require-timing-samples 5 --require-shown-samples 5
 script/model_latency_report.py --default-model-proof
+script/latency_benchmark_report.py --beta-gate
+```
+
+## Local Quality Audit
+
+Raw content quality audits are local opt-in only. Use disposable prompts, and do
+not use real private writing unless you explicitly choose to debug that text on
+this machine.
+
+Run the current local model against a JSONL prompt set:
+
+```bash
+AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT=1 \
+AUTOCOMPLETE_LAB_RUNTIME_BACKEND=mlx \
+  ./script/local_quality_audit.py \
+    --input /path/to/disposable-prompts.jsonl \
+    --generate \
+    --min-overall 92 \
+    --min-relevance 72
+```
+
+The default report prints aggregate labels and row ids only. It scores
+relevance, literal continuation, assistant voice, wrong topic, too long,
+structural breakage, unsafe or sensitive content, and repetition. It does not
+persist raw prompt text or raw model output by default.
+
+Only include raw output for a short local debug session with disposable prompts:
+
+```bash
+AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT=1 \
+AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT_INCLUDE_RAW=1 \
+  ./script/local_quality_audit.py \
+    --input /path/to/disposable-prompts.jsonl \
+    --generate \
+    --include-raw-output
+```
+
+Self-test the audit harness with fixtures:
+
+```bash
+./script/check_local_quality_audit_self_test.sh
 ```
 
 For a clean app-specific slice:

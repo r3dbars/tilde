@@ -72,6 +72,43 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.annoyanceSignalCounts["focusMismatch"] == 1)
     }
 
+    @Test("surfaces prompt and browser chat no-submit metrics as do-not-ship counters")
+    func surfacesPromptAndBrowserChatNoSubmitMetricsAsDoNotShipCounters() {
+        let events = [
+            event(
+                .acceptedTextEdited,
+                suggestionID: "submit",
+                appBundleIdentifier: "com.google.Chrome",
+                reason: "field-send-finalized",
+                metadata: [
+                    "checkpoint": "fieldSend",
+                    "browserSurface": "chatgpt",
+                    "browserSurfaceSafetyClass": "browser-chat"
+                ]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "collision",
+                appBundleIdentifier: "com.google.Chrome",
+                reason: "send-key-collision",
+                metadata: ["browserChatProofSurface": "browser-chat-harness"]
+            ),
+            event(
+                .insertionFailed,
+                suggestionID: "mutation",
+                appBundleIdentifier: "com.openai.codex",
+                reason: "prompt-mutation-outside-accepted-span",
+                metadata: ["promptMutationWithoutUserIntent": "true"]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.doNotShipCounters["prompt-accidental-submit"] == 1)
+        #expect(summary.doNotShipCounters["prompt-send-key-collision"] == 1)
+        #expect(summary.doNotShipCounters["prompt-mutation-without-user-intent"] == 1)
+    }
+
     @Test("Streaming updates count as one shown suggestion")
     func streamingUpdatesCountAsOneShownSuggestion() {
         let events = [
@@ -770,6 +807,48 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.modelFirstVisibleLatencyBuckets["51-100ms"] == 1)
         #expect(summary.modelTotalGenerationLatencyBuckets["101-250ms"] == 1)
         #expect(summary.modelTotalGenerationLatencyBuckets["501-1000ms"] == 1)
+    }
+
+    @Test("summarizes sensitive suppression categories and leaks")
+    func summarizesSensitiveSuppressionCategoriesAndLeaks() {
+        let events = [
+            event(
+                .suggestionSuppressed,
+                suggestionID: "password",
+                reason: "sensitive-field",
+                metadata: [
+                    "sensitiveSuppressionCategory": "password",
+                    "sensitiveSuppressionDecision": "blocked",
+                    "fieldKind": "secure"
+                ]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "otp",
+                reason: "sensitive-field",
+                metadata: [
+                    "sensitiveSuppressionCategory": "otp",
+                    "sensitiveSuppressionDecision": "blocked",
+                    "fieldKind": "form"
+                ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "leak",
+                metadata: [
+                    "sensitiveSuppressionCategory": "payment",
+                    "fieldKind": "form"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.sensitiveSuppressedByCategory["password"] == 1)
+        #expect(summary.sensitiveSuppressedByCategory["otp"] == 1)
+        #expect(summary.sensitivePresentedByCategory["payment"] == 1)
+        #expect(summary.doNotShipCounters["sensitive-category-suggestion"] == 1)
+        #expect(summary.doNotShipCounters["sensitive-field-suggestion"] == 1)
     }
 
     private func event(

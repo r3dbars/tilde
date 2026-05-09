@@ -22,9 +22,19 @@ public enum DiagnosticsMetadataRedactor {
             "prompt",
             "output",
             "completion",
+            "document",
+            "email",
+            "filename",
+            "fileurl",
+            "path",
+            "recipient",
             "suggestion",
             "selected",
+            "subject",
+            "title",
             "typed",
+            "url",
+            "uri",
             "value"
         ].contains { normalized.contains($0) }
     }
