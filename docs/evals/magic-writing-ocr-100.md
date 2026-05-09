@@ -235,6 +235,14 @@ Time: 2026-05-09T00:36:00Z
 - Validation: `bash -n script/build_and_run.sh script/real_app_smoke.sh script/build_and_run_self_test.sh script/real_app_smoke_self_test.sh`, `script/build_and_run_self_test.sh`, `script/real_app_smoke_self_test.sh`, and `git diff --check` pass.
 - Live Notes proof is still queued behind another already-running pre-fix smoke process; retry `notes-body` after that lock clears.
 
+2026-05-09T00:59Z follow-up: simplified the Notes body driver again.
+
+- Result: the direct-launch path built the current app and skipped the stale scan, but the live Notes proof still did not record a valid pass.
+- Finding: the AX selected-range reset in the Notes proof driver appeared to move the caret back into existing note text, causing `middleOfLine`/empty-suggestion blocks instead of a clean end-of-note fragment.
+- Fix: removed the AX range-writing path for proof typing. The harness now creates/focuses the disposable note, verifies the `Autocomplete smoke` marker is in the Notes body, and then types the proof fragments with plain key events from the current caret.
+- Added a post-launch current-bundle check so a smoke run fails if another worktree's `AutocompleteLab.app` is the running process.
+- Validation: `bash -n script/real_app_smoke.sh script/real_app_smoke_self_test.sh`, `script/real_app_smoke_self_test.sh`, and `git diff --check` pass.
+
 ## 100 Test Situations
 
 | # | App | Situation | Target behavior | Score |
