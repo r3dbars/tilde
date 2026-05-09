@@ -3042,7 +3042,7 @@ open_textedit_smoke_document() {
   local file_path="$1"
   local window_title="$2"
 
-  open -F -n -a TextEdit "$file_path"
+  open -F -a TextEdit "$file_path"
   if wait_for_textedit_document_open "$window_title" 8; then
     return 0
   fi
