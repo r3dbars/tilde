@@ -225,6 +225,16 @@ Time: 2026-05-09T00:36:00Z
 - Live Notes proof is still pending because another real-app smoke run is currently compiling a Metal runtime in a different worktree; rerun `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate` when that clears.
 - Post-commit strict gate on `afbedc5`: `./script/check_score_targets.sh` still fails with 68 issues. The immediate current-commit blocker is stale real-app proof after the harness commit; the biggest product blockers remain Codex same-slice no-submit proof, production Chrome editor variants, and deeper Notes/Obsidian/Claude variants.
 
+## Latest Smoke Orchestration Fix
+
+2026-05-09T00:57Z pass: fixed a harness bottleneck exposed by overlapping heartbeat smoke runs.
+
+- Problem: real-app smokes were repeatedly blocked by another runner sitting in `build_and_run.sh`'s global stale-bundle scan across every Codex worktree.
+- Fix: real-app smoke now direct-launches the built app and sets `AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1`, avoiding the LaunchServices stale-bundle scan during proof runs.
+- Safety: the normal build script still keeps stale-bundle quarantine by default; only smoke launches opt into the faster direct-launch path.
+- Validation: `bash -n script/build_and_run.sh script/real_app_smoke.sh script/build_and_run_self_test.sh script/real_app_smoke_self_test.sh`, `script/build_and_run_self_test.sh`, `script/real_app_smoke_self_test.sh`, and `git diff --check` pass.
+- Live Notes proof is still queued behind another already-running pre-fix smoke process; retry `notes-body` after that lock clears.
+
 ## 100 Test Situations
 
 | # | App | Situation | Target behavior | Score |

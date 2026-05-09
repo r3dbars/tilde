@@ -2550,7 +2550,9 @@ build_if_needed() {
     return 0
   fi
 
-  ./script/build_and_run.sh run
+  AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1 \
+    AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 \
+    ./script/build_and_run.sh run
 }
 
 run_manual_gated() {

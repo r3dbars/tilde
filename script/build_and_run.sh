@@ -133,7 +133,15 @@ print_running_apps() {
   done < <(running_app_pids)
 }
 
-quarantine_stale_app_bundles
+skip_stale_app_bundle_scan() {
+  [[ "${AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN:-}" =~ ^(1|true|yes|on)$ ]]
+}
+
+if skip_stale_app_bundle_scan; then
+  echo "Skipping stale app bundle scan because AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN is enabled." >&2
+else
+  quarantine_stale_app_bundles
+fi
 stop_running_apps
 
 find_signing_identity() {
