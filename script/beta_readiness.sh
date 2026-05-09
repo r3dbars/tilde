@@ -79,6 +79,7 @@ if [[ "$MODE" == "check-only" ]]; then
     AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
     AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
     ./script/check_diagnostics_log.sh || failures=$((failures + 1))
+  run_check "Latency beta gate" ./script/latency_benchmark_report.py --beta-gate || failures=$((failures + 1))
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
   run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh || failures=$((failures + 1))
@@ -127,6 +128,10 @@ echo "== Runtime production gate =="
 AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
   AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
   ./script/check_diagnostics_log.sh
+echo
+echo "== Latency beta gate =="
+./script/latency_benchmark_report.py --beta-gate
+
 
 echo
 echo "== Redacted report export =="

@@ -59,11 +59,14 @@ The next automatable gap was accepted-survival proof. Before the continuation lo
 
 ## Score
 
-Overall score: 75/100
+Overall score: 77/100
 
 Starting score before this implementation loop: 73/100.
 Score after first implementation loop: 74/100.
 Ending score after continuation loop: 75/100.
+Latency update: latency is 82/100 after the current benchmark gate added
+p50/p90/p95/p99 first-visible, first-token, total-generation, event-tap, AX,
+stale-late suppression, and default-runtime proof checks.
 
 Release gate status: blocked. `Insertion safety`, `Privacy/trust`, and `Non-annoyance` must all be at least 80/100 with current proof before beta.
 
@@ -74,7 +77,7 @@ Release gate status: blocked. `Insertion safety`, `Privacy/trust`, and `Non-anno
 | Insertion safety | 18 | 81 | 14.58 |
 | Privacy and trust | 16 | 84 | 13.44 |
 | Non-annoyance | 14 | 76 | 10.64 |
-| Latency | 12 | 69 | 8.28 |
+| Latency | 12 | 82 | 9.84 |
 | Suggestion relevance | 10 | 67 | 6.70 |
 | App compatibility | 10 | 71 | 7.10 |
 | Visual placement | 8 | 74 | 5.92 |
@@ -82,7 +85,7 @@ Release gate status: blocked. `Insertion safety`, `Privacy/trust`, and `Non-anno
 | Recoverability | 4 | 68 | 2.72 |
 | Local model/runtime readiness | 2 | 64 | 1.28 |
 
-Weighted total: 75.34, rounded to 75/100.
+Weighted total: 76.90, rounded to 77/100.
 
 ### Insertion Safety
 
@@ -114,10 +117,11 @@ Weighted total: 75.34, rounded to 75/100.
 ### Latency
 
 - Weight: 12
-- Current score: 69/100
-- Why this score: Instrumentation and scripts exist, and display now fails closed after the 750 ms first-visible budget. The score is still capped because live runtime proof is not current and the private-beta latency target is still looser than the research ideal.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Runtime/CompletionRuntimeBenchmark.swift`, `Sources/AutocompleteLabApp/Mac/KeyboardEventTap.swift`, `script/check_typing_performance_log.sh`, `script/model_latency_report.py`, `Tests/AutocompleteLabCoreTests/RuntimePolicyTests.swift`.
-- Missing evidence: Current p50/p90/p95/p99 keystroke-to-visible metrics by app and current default-model proof on this machine.
+- Current score: 82/100
+- Exact metric change: 69/100 -> 82/100 (+13).
+- Why this score: Latency is now measurable by current numbers instead of vibes. The new benchmark reports first-visible/keystroke-to-visible, first-token, total-generation, event-tap, AX read, and stale-late suppression percentiles by app/profile, and the beta gate fails if late suggestions are shown or the default runtime proof is missing. Current log-window metrics show first-visible p50 0 ms, p90 263 ms, p95 280 ms, p99 426 ms; first-token p95 270 ms; total-generation p95 357 ms; event-tap p95 84 us; and zero late shown suggestions. The score is still capped because fresh bounded shown-suggestion proof is not complete for every target app after each relaunch.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Runtime/CompletionRuntimeBenchmark.swift`, `Sources/AutocompleteLabCore/Session/FocusedTextPollLatencyStats.swift`, `Sources/AutocompleteLabApp/Mac/KeyboardEventTap.swift`, `script/check_typing_performance_log.sh`, `script/latency_benchmark_report.py`, `script/latency_benchmark_report_self_test.sh`, `script/model_latency_report.py`, `Tests/AutocompleteLabCoreTests/RuntimePolicyTests.swift`, `Tests/AutocompleteLabCoreTests/FocusedTextPollLatencyStatsTests.swift`.
+- Missing evidence: Fresh bounded p50/p90/p95/p99 shown-suggestion slices for every target app after the same default-model relaunch, plus long-session memory/energy proof.
 - What would make it 100/100: Warm-path p50 under 90 ms, p90 under 150 ms, p95 under 180 ms, no event-tap jank, and no stale late suggestions shown.
 
 ### Suggestion Relevance

@@ -1629,7 +1629,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "count": String(summary.count),
                     "p50Milliseconds": String(summary.p50Milliseconds),
+                    "p90Milliseconds": String(summary.p90Milliseconds),
                     "p95Milliseconds": String(summary.p95Milliseconds),
+                    "p99Milliseconds": String(summary.p99Milliseconds),
                     "maxMilliseconds": String(summary.maxMilliseconds)
                 ]
             )
