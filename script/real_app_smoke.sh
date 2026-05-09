@@ -2776,6 +2776,56 @@ exit(1)
 SWIFT
 }
 
+textedit_frontmost_window_is() {
+  local window_title="$1"
+
+  osascript - "$window_title" <<'APPLESCRIPT' 2>/dev/null || true
+on run argv
+  set targetTitle to item 1 of argv
+  tell application "System Events"
+    set frontProcesses to application processes whose frontmost is true
+    if (count of frontProcesses) is 0 then return "0"
+    set frontProc to item 1 of frontProcesses
+    if name of frontProc is not "TextEdit" then return "0"
+    if exists window targetTitle of frontProc then return "1"
+  end tell
+  return "0"
+end run
+APPLESCRIPT
+}
+
+wait_for_textedit_frontmost_window() {
+  local window_title="$1"
+  local target_pid="$2"
+  local timeout_seconds="${3:-8}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    if [[ -n "$target_pid" ]]; then
+      activate_process_id "$target_pid"
+    fi
+    if [[ "$(textedit_frontmost_window_is "$window_title")" == "1" ]]; then
+      return 0
+    fi
+    sleep 0.25
+  done
+
+  echo "Timed out waiting for TextEdit smoke window '$window_title' to become frontmost." >&2
+  exit 1
+}
+
+assert_textedit_frontmost_window() {
+  local window_title="$1"
+  local label="$2"
+
+  if [[ "$(textedit_frontmost_window_is "$window_title")" != "1" ]]; then
+    local frontmost
+    frontmost="$(osascript -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
+    echo "$label lost focus before accept. Expected frontmost TextEdit window '$window_title', got frontmost app '${frontmost:-unknown}'." >&2
+    exit 1
+  fi
+}
+
 focus_textedit_smoke_editor() {
   local window_title="${1:-}"
 
@@ -2787,7 +2837,7 @@ focus_textedit_smoke_editor() {
       return 1
     fi
     activate_process_id "$target_pid"
-    wait_for_frontmost_process_id "$target_pid" 5 "TextEdit smoke window"
+    wait_for_textedit_frontmost_window "$window_title" "$target_pid" 8
   else
     osascript >/dev/null <<'APPLESCRIPT'
 tell application "System Events"
@@ -2811,7 +2861,7 @@ click_textedit_smoke_editor() {
       return 1
     fi
     activate_process_id "$target_pid"
-    wait_for_frontmost_process_id "$target_pid" 5 "TextEdit smoke window"
+    wait_for_textedit_frontmost_window "$window_title" "$target_pid" 8
   else
     osascript >/dev/null <<'APPLESCRIPT'
 tell application "System Events"
@@ -6507,8 +6557,8 @@ APPLESCRIPT
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
-  assert_frontmost_app "TextEdit" "TextEdit"
   focus_textedit_smoke_editor "$textedit_window_title"
+  assert_textedit_frontmost_window "$textedit_window_title" "TextEdit"
   local before_one_word_accept_text
   before_one_word_accept_text="$(textedit_document_text "$textedit_window_title")"
   press_key_code 48
@@ -6546,8 +6596,8 @@ APPLESCRIPT
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.TextEdit" "TextEdit second"
-  assert_frontmost_app "TextEdit" "TextEdit"
   focus_textedit_smoke_editor "$textedit_window_title"
+  assert_textedit_frontmost_window "$textedit_window_title" "TextEdit"
   local before_full_accept_text
   before_full_accept_text="$(textedit_document_text "$textedit_window_title")"
   full_start_line="$(line_count "$LOG_PATH")"
