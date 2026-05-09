@@ -2439,7 +2439,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: action
         )
         guard focusedFieldMatchesCurrentSuggestion(
-            allowTerminalHostProofSnapshotFastPath: action == .acceptNextWord
+            allowTerminalHostProofSnapshotFastPath: action == .acceptNextWord,
+            allowCodexProofSnapshotFastPath: action == .acceptNextWord
         ) else {
             setSuggestionDecision("Blocked: focus changed")
             hideSuggestion(reason: "focus-changed")
@@ -2812,10 +2813,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func focusedFieldMatchesCurrentSuggestion(
-        allowTerminalHostProofSnapshotFastPath: Bool = false
+        allowTerminalHostProofSnapshotFastPath: Bool = false,
+        allowCodexProofSnapshotFastPath: Bool = false
     ) -> Bool {
         if allowTerminalHostProofSnapshotFastPath,
            terminalHostProofSnapshotMatchesCurrentSuggestion() {
+            return true
+        }
+        if allowCodexProofSnapshotFastPath,
+           codexProofSnapshotMatchesCurrentSuggestion() {
             return true
         }
 
@@ -2915,6 +2921,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                 "host": frontmostApp.bundleIdentifier,
                 "requestMode": currentSuggestionRequestMode?.rawValue ?? "unknown"
+            ]
+        )
+        return true
+    }
+
+    private func codexProofSnapshotMatchesCurrentSuggestion() -> Bool {
+        let bundleIdentifier = "com.openai.codex"
+        let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+        guard currentSuggestionAppBundleIdentifier == bundleIdentifier,
+              currentSuggestionRequestMode == .wordCompletion,
+              let currentProfile,
+              currentProfile.bundleIdentifier == bundleIdentifier,
+              currentProfile.supportsOneWordAcceptance,
+              !currentProfile.supportsFullAcceptance,
+              currentProfile.requiresNoSubmitAcceptanceProof,
+              currentProfile.insertionMode == .axValueReplacement,
+              activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+              let currentSuggestionFieldIdentity,
+              let lastTextSnapshot,
+              lastTextSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
+              lastTextSnapshot.textBeforeCursor.contains(marker),
+              lastTextSnapshot.textAfterCursor.isEmpty,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostAppMatchesSuggestion(
+                  frontmostApp,
+                  expectedBundleIdentifier: bundleIdentifier,
+                  profile: currentProfile
+              ) else {
+            return false
+        }
+
+        let previousText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        guard Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: previousText,
+            containing: marker,
+            maxDepth: 32
+        ) != nil else {
+            return false
+        }
+
+        DiagnosticsLog.shared.record(
+            "codex-proof-focus-fast-path",
+            metadata: [
+                "app": bundleIdentifier,
+                "fieldIdentity": currentSuggestionFieldIdentity.traceDescription,
+                "requestMode": currentSuggestionRequestMode?.rawValue ?? "",
+                "promptSafetyMode": currentProfile.promptAppSafetyMode.rawValue
             ]
         )
         return true
