@@ -45,6 +45,9 @@ require_pattern "Tests/AutocompleteLabCoreTests/ModelPolicyTests.swift" "app-own
 require_file "Tests/AutocompleteLabCoreTests/CompatibilityProfileTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/CompatibilityProfileTests.swift" "MVP target apps are explicitly profiled" "target app profile coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/CompatibilityProfileTests.swift" "Denylisted apps are never allowed" "denylist coverage"
+require_file "Tests/AutocompleteLabCoreTests/HostCompatibilityPolicyTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/HostCompatibilityPolicyTests.swift" "Host policy covers every compatibility profile" "host policy profile coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/HostCompatibilityPolicyTests.swift" "Prompt hosts have exact version or blocked-state proof policy" "host policy version/proof coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/PlacementHealthTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/PlacementHealthTests.swift" "Falls back when caret is outside focused bounds" "placement self-healing coverage"
@@ -108,5 +111,9 @@ require_file "script/check_local_only_network_surface_self_test.sh"
 
 require_file "Tests/AutocompleteLabCoreTests/WordCompletionCandidateRankerTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/WordCompletionCandidateRankerTests.swift" "suppresses tiny recent suffixes until the fragment is strong" "recent-word completion quality coverage"
+
+require_file "Tests/AutocompleteLabAppTests/SuggestionPresentationDeliveryTests.swift"
+require_pattern "Tests/AutocompleteLabAppTests/SuggestionPresentationDeliveryTests.swift" "Shows the panel and field status before trace recording" "presentation delivery side-effect coverage"
+require_pattern "Tests/AutocompleteLabAppTests/SuggestionPresentationDeliveryTests.swift" "Does not mark field shown when the panel frame is unusable" "presentation delivery failure coverage"
 
 echo "Test coverage manifest verified."
