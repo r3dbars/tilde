@@ -5619,12 +5619,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            lastTextSnapshot.fieldIdentity == currentFieldIdentity,
            let currentSuggestionAcceptanceSnapshot {
             currentSuggestionTextBeforeCursor = lastTextSnapshot.textBeforeCursor
-            self.currentSuggestionAcceptanceSnapshot = SuggestionAcceptanceSnapshot(
-                fieldIdentity: lastTextSnapshot.fieldIdentity,
-                targetFingerprint: currentSuggestionAcceptanceSnapshot.targetFingerprint.advancingTextRevision(
-                    textBeforeCursor: lastTextSnapshot.textBeforeCursor,
-                    textAfterCursor: lastTextSnapshot.textAfterCursor
-                ),
+            self.currentSuggestionAcceptanceSnapshot = currentSuggestionAcceptanceSnapshot.advancingTextRevision(
                 textBeforeCursor: lastTextSnapshot.textBeforeCursor,
                 textAfterCursor: lastTextSnapshot.textAfterCursor,
                 selectedTextLength: 0
@@ -5636,12 +5631,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let advancedTextBeforeCursor = currentSuggestionTextBeforeCursor + acceptedText
             self.currentSuggestionTextBeforeCursor = advancedTextBeforeCursor
             if let currentSuggestionAcceptanceSnapshot {
-                self.currentSuggestionAcceptanceSnapshot = SuggestionAcceptanceSnapshot(
-                    fieldIdentity: currentSuggestionAcceptanceSnapshot.fieldIdentity,
-                    targetFingerprint: currentSuggestionAcceptanceSnapshot.targetFingerprint.advancingTextRevision(
-                        textBeforeCursor: advancedTextBeforeCursor,
-                        textAfterCursor: currentSuggestionAcceptanceSnapshot.textAfterCursor
-                    ),
+                self.currentSuggestionAcceptanceSnapshot = currentSuggestionAcceptanceSnapshot.advancingTextRevision(
                     textBeforeCursor: advancedTextBeforeCursor,
                     textAfterCursor: currentSuggestionAcceptanceSnapshot.textAfterCursor,
                     selectedTextLength: 0
@@ -5777,6 +5767,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastTextSnapshot = snapshot
             invalidatePendingSuggestionRequest()
             currentSuggestionTextBeforeCursor = context.textBeforeCursor
+            if let currentSuggestionAcceptanceSnapshot {
+                self.currentSuggestionAcceptanceSnapshot = currentSuggestionAcceptanceSnapshot.advancingTextRevision(
+                    textBeforeCursor: context.textBeforeCursor,
+                    textAfterCursor: context.textAfterCursor,
+                    selectedTextLength: context.selectedTextLength
+                )
+            }
             currentSuggestionInvalidatedByUserKeyDown = false
             setSuggestionDecision(hasRemainingSuggestion ? "Shown: typing through suggestion" : "Queued: refreshing after typed suggestion")
             recordSuggestionEvent(

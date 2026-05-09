@@ -83,6 +83,23 @@ public struct SuggestionAcceptanceSnapshot: Equatable, Sendable {
             textAfterCursor: textAfterCursor
         )
     }
+
+    public func advancingTextRevision(
+        textBeforeCursor: String,
+        textAfterCursor: String,
+        selectedTextLength: Int = 0
+    ) -> SuggestionAcceptanceSnapshot {
+        SuggestionAcceptanceSnapshot(
+            fieldIdentity: fieldIdentity,
+            targetFingerprint: targetFingerprint.advancingTextRevision(
+                textBeforeCursor: textBeforeCursor,
+                textAfterCursor: textAfterCursor
+            ),
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: textAfterCursor,
+            selectedTextLength: selectedTextLength
+        )
+    }
 }
 
 public struct SuggestionAcceptanceGuard: Equatable, Sendable {
