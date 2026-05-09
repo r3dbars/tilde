@@ -645,3 +645,10 @@ Target real dogfood score: 92/100 or higher with no wrong-field insertions and n
 - Evidence: new manual smoke rows from `2026-05-09T06:58:40Z` through `2026-05-09T07:03:21Z`; every refreshed row has strict screenshot-backed visual trace evidence and the model stayed `qwen3-0.6b`.
 - Gate movement: `script/manual_smoke_status.sh --require-all` now reports the main native/editor/prompt lanes green and fails honestly with 14 remaining target-app proof gaps.
 - Remaining gaps: `obsidian-theme`, `obsidian-pane`, `obsidian-long-note`, default-Chrome real Monaco/ProseMirror AX, Claude Code, and Claude desktop layout variants.
+
+2026-05-09T07:10Z heartbeat follow-up: investigated the Obsidian long-note gap, but did not claim proof.
+
+- Attempt: tried to automate `obsidian-long-note` by seeding a disposable 90-line note, moving to the bottom, and running the same two-accept proof path on `qwen3-0.6b`.
+- Finding: CodeMirror/AX kept placing the real typing cursor before the final filler line. The app correctly blocked suggestions with `reason=middleOfLine` and `afterChars=90`, then a trim attempt exposed an even worse stale-selection shape with `beforeChars=0` and `afterChars=500`.
+- Decision: backed out the experimental harness change instead of committing a flaky or dishonest proof path. No green row was recorded.
+- Next fix target: build a safer long-note setup that can prove the actual focused AX selected range is at the visible document end before typing, or add a separate product rule only if the current-line suffix is provably empty/newline-delimited rather than real same-line text.
