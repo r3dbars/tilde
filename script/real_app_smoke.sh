@@ -5215,6 +5215,83 @@ print("Notes checklist smoke target confirmed")
 SWIFT
 }
 
+assert_obsidian_smoke_target() {
+  AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX="${1:-}" swift - <<'SWIFT'
+import AppKit
+import ApplicationServices
+import Foundation
+
+let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "Autocomplete Lab Obsidian proof"
+let expectedSuffix = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX"] ?? ""
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "md.obsidian" else {
+    fputs("Obsidian is not frontmost for the Obsidian smoke target.\n", stderr)
+    exit(3)
+}
+
+guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
+    fputs("Obsidian is not running. Open a disposable smoke note first.\n", stderr)
+    exit(3)
+}
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+AXUIElementSetMessagingTimeout(appElement, 1.0)
+let systemWide = AXUIElementCreateSystemWide()
+AXUIElementSetMessagingTimeout(systemWide, 1.0)
+
+func focusedElement(from element: AXUIElement) -> AXUIElement? {
+    var focusedValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(
+        element,
+        kAXFocusedUIElementAttribute as CFString,
+        &focusedValue
+    ) == .success,
+          let focusedValue else {
+        return nil
+    }
+
+    return (focusedValue as! AXUIElement)
+}
+
+guard let editor = focusedElement(from: appElement) ?? focusedElement(from: systemWide) else {
+    fputs("Could not read the focused Obsidian editor.\n", stderr)
+    exit(3)
+}
+
+AXUIElementSetMessagingTimeout(editor, 1.0)
+let role = copyAttribute(editor, kAXRoleAttribute) as? String
+guard role == kAXTextAreaRole as String || role == "AXWebArea" else {
+    fputs("Focused Obsidian element is not a CodeMirror text surface.\n", stderr)
+    exit(3)
+}
+
+let text = copyAttribute(editor, kAXValueAttribute) as? String ?? ""
+guard text.localizedCaseInsensitiveContains(marker) else {
+    fputs("Refusing to type in Obsidian because the focused note does not contain the disposable smoke marker.\n", stderr)
+    exit(3)
+}
+
+if !expectedSuffix.isEmpty {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.hasSuffix(expectedSuffix) else {
+        fputs("Refusing Obsidian proof because the focused smoke note does not end with the expected disposable text.\n", stderr)
+        exit(3)
+    }
+}
+
+print("Obsidian smoke target confirmed")
+SWIFT
+}
+
 ensure_notes_title_smoke_note() {
   open -a Notes
   wait_for_frontmost_app "Notes" 8
@@ -5281,6 +5358,155 @@ tell application "System Events"
   keystroke rawText
 end tell
 APPLESCRIPT
+}
+
+type_obsidian_raw_smoke_text() {
+  local text="$1"
+
+  AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT="$text" osascript <<'APPLESCRIPT'
+set rawText to system attribute "AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT"
+tell application "System Events"
+  set frontApp to first application process whose frontmost is true
+  if bundle identifier of frontApp is not "md.obsidian" then
+    error "Obsidian is not frontmost for smoke-note setup."
+  end if
+  keystroke rawText
+end tell
+APPLESCRIPT
+}
+
+reset_obsidian_smoke_note() {
+  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER:-Autocomplete Lab Obsidian proof}"
+
+  AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT="$marker" swift - <<'SWIFT'
+import AppKit
+import ApplicationServices
+import Foundation
+
+let markerText = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT"] ?? "Autocomplete Lab Obsidian proof"
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
+}
+
+guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "md.obsidian",
+      let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
+    fputs("Obsidian is not frontmost for smoke-note reset.\n", stderr)
+    exit(3)
+}
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+AXUIElementSetMessagingTimeout(appElement, 1.0)
+guard let focusedValue = copyAttribute(appElement, kAXFocusedUIElementAttribute) else {
+    fputs("Could not read focused Obsidian editor for smoke-note reset.\n", stderr)
+    exit(3)
+}
+
+let focused = (focusedValue as! AXUIElement)
+AXUIElementSetMessagingTimeout(focused, 1.0)
+guard AXUIElementSetAttributeValue(
+    focused,
+    kAXValueAttribute as CFString,
+    markerText as CFTypeRef
+) == .success else {
+    fputs("Could not reset the disposable Obsidian smoke note text.\n", stderr)
+    exit(3)
+}
+SWIFT
+
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  set frontApp to first application process whose frontmost is true
+  if bundle identifier of frontApp is not "md.obsidian" then
+    error "Obsidian is not frontmost for smoke-note reset."
+  end if
+  key code 124 using command down
+  delay 0.2
+  key code 36
+end tell
+APPLESCRIPT
+}
+
+open_obsidian_smoke_note_if_configured() {
+  local smoke_uri="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI:-}"
+  if [[ -n "$smoke_uri" ]]; then
+    open "$smoke_uri"
+    sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI_WAIT_SECONDS:-2}"
+    return 0
+  fi
+
+  open -a Obsidian
+}
+
+run_obsidian() {
+  if [[ "$MANUAL_GATE" != "1" ]]; then
+    echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
+    exit 2
+  fi
+
+  local manual_app
+  manual_app="$(obsidian_session_app)"
+  if [[ "$manual_app" != "obsidian" ]]; then
+    run_manual_gated
+    return 0
+  fi
+
+  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line
+  runtime_start_line="$(line_count "$LOG_PATH")"
+
+  prepare_temporary_app_enablement
+  build_if_needed
+  wait_for_runtime_ready "$runtime_start_line" "Obsidian runtime readiness" 60 "$SKIP_BUILD"
+
+  full_accept_key="$(accept_all_shortcut)"
+
+  open_obsidian_smoke_note_if_configured
+  wait_for_frontmost_app "Obsidian" 8
+  assert_obsidian_smoke_target
+  reset_obsidian_smoke_note
+
+  start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
+
+  type_obsidian_raw_smoke_text "Smoke proof feels"
+  wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"
+  wait_for_screenshot_capture_if_enabled "$start_line" "md.obsidian" "Obsidian"
+  assert_frontmost_app "Obsidian" "Obsidian"
+  press_key_code 48
+  wait_for_log_fields "$start_line" "Obsidian Tab acceptance" 12 \
+    "keyboard-action" \
+    "app=md.obsidian" \
+    "key=tab" \
+    "action=acceptNextWord" \
+    "handled=true"
+  wait_for_log_pattern "$start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian first verified insertion"
+
+  second_start_line="$(line_count "$LOG_PATH")"
+  assert_obsidian_smoke_target "Smoke proof feels instant"
+  type_obsidian_raw_smoke_text " and stays"
+  wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"
+  wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
+  assert_frontmost_app "Obsidian" "Obsidian"
+  full_start_line="$(line_count "$LOG_PATH")"
+  press_accept_all_shortcut
+  wait_for_log_fields "$full_start_line" "Obsidian full acceptance" 12 \
+    "keyboard-action" \
+    "app=md.obsidian" \
+    "key=$full_accept_key" \
+    "action=acceptAllVisible" \
+    "handled=true"
+  wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian full verified insertion"
+
+  sleep 1
+  local manual_check_args=(obsidian --check)
+  if screenshot_trace_requested; then
+    manual_check_args+=(--visual)
+  fi
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
+    AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
+    AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+    ./script/manual_smoke_session.sh "${manual_check_args[@]}"
 }
 
 run_notes() {
@@ -5839,7 +6065,10 @@ case "$APP" in
   notes)
     run_notes
     ;;
-  obsidian|claude-code|claude)
+  obsidian)
+    run_obsidian
+    ;;
+  claude-code|claude)
     run_manual_gated
     ;;
 esac
