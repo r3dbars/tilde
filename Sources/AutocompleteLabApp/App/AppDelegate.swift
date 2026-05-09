@@ -1484,6 +1484,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 hostBundleIdentifier: app.bundleIdentifier,
                 windowTitle: context.fingerprint.windowTitle ?? "",
                 focusedText: focusedLine,
+                rawTextBeforeCursor: context.textBeforeCursor,
+                rawTextAfterCursor: context.textAfterCursor,
                 proofModeEnabled: activeAppProofBundleIdentifiers.contains(
                     ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
                 )
@@ -5002,6 +5004,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
+        let acceptedTextDecision = acceptedTextSafetyPolicy.decision(
+            acceptedText: acceptedText,
+            profile: profile
+        )
+        if let blockReason = acceptedTextDecision.blockReason {
+            setSuggestionDecision("Blocked: unsafe accepted text")
+            DiagnosticsLog.shared.record(
+                "insert-blocked",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "reason": blockReason,
+                    "acceptedChars": String(acceptedText.count),
+                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue
+                ]
+            )
+            RawAutocompleteTraceLog.shared.record(
+                type: .insertionFailed,
+                suggestionID: currentSuggestionID ?? "",
+                appBundleIdentifier: currentSuggestionAppBundleIdentifier ?? profile.bundleIdentifier,
+                fieldIdentity: currentSuggestionFieldIdentity?.traceDescription
+                    ?? currentFieldIdentity?.traceDescription
+                    ?? "",
+                requestMode: currentSuggestionRequestMode?.rawValue ?? "",
+                acceptedText: acceptedText,
+                reason: blockReason,
+                metadata: [
+                    "safetyGate": "acceptedText",
+                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue
+                ]
+            )
+            hideSuggestion(reason: "insert-unsafe-accepted-text")
+            return false
+        }
+
         keyboardEventTap?.suppressPassthroughObservation(
             until: Date().addingTimeInterval(
                 shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile)
@@ -5201,6 +5237,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                     "posted": "false",
                     "reason": "target-recheck-failed"
+                ]
+            )
+            return false
+        }
+        if let blockReason = currentSuggestionAcceptanceDecision().blockReason {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "acceptance-recheck-failed",
+                    "blockReason": blockReason.rawValue
                 ]
             )
             return false
