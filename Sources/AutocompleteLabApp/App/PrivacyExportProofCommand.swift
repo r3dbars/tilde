@@ -99,7 +99,7 @@ enum PrivacyExportProofCommand {
                 suggestionID: "privacy-proof-one",
                 type: .suggestionPresented,
                 appBundleIdentifier: "com.apple.TextEdit",
-                fieldIdentity: "proof-private-field-redbars",
+                fieldIdentity: "com.apple.TextEdit|pid:123|element:456",
                 requestMode: "wordCompletion",
                 triggerReason: "privacy-proof",
                 textBeforeCursor: "proof-private-before-redbars",
