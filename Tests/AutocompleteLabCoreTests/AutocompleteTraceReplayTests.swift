@@ -598,6 +598,7 @@ struct AutocompleteTraceReplayTests {
             "displayScoreRisk": "0.05",
             "displayScoreRepetition": "0.05",
             "displayScoreInstability": "0.05",
+            "displayScoreLearningRestraint": "0.00",
             "displayScoreFinal": "1.65",
             "displayScoreAcceptedAndKeptProbability": "0.340",
             "displayScoreAcceptedAndKeptSamples": "0"

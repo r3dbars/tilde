@@ -3671,7 +3671,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let outcome: AcceptedAndKeptLearningOutcome
         if result.shouldRecordAcceptedThenDeleted {
-            outcome = .rejected
+            outcome = .immediateDeletion
         } else if result.measurement.checkpoint.isFinalMetricCheckpoint,
                   !result.measurement.deletedWithinTwoSeconds {
             outcome = result.measurement.isFinalAcceptedAndKept ? .kept : .rejected
@@ -3679,15 +3679,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
-        let signal = acceptedAndKeptLearning.record(
+        let signal = recordAcceptedAndKeptLearningOutcome(
             outcome,
-            key: AcceptedAndKeptLearningKey(
-                appBundleIdentifier: result.tracker.appBundleIdentifier,
-                fieldKind: result.tracker.fieldKind,
-                requestMode: requestMode,
-                behaviorProfileID: result.tracker.behaviorProfileID
-            )
+            appBundleIdentifier: result.tracker.appBundleIdentifier,
+            fieldKind: result.tracker.fieldKind,
+            requestMode: requestMode,
+            behaviorProfileID: result.tracker.behaviorProfileID,
+            normalizedEditDistance: result.measurement.normalizedEditDistance
         )
+        guard let signal else {
+            return nil
+        }
         if outcome == .kept {
             acceptedTextStyleMemory.recordKeptText(
                 result.tracker.acceptedText,
@@ -3699,6 +3701,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             persistAcceptedTextStyleMemory()
         }
+        return signal
+    }
+
+    private func recordAcceptedAndKeptLearningOutcome(
+        _ outcome: AcceptedAndKeptLearningOutcome,
+        appBundleIdentifier: String,
+        fieldKind: AXFieldKind,
+        requestMode: CompletionRequestMode?,
+        behaviorProfileID: AutocompleteBehaviorProfileID?,
+        normalizedEditDistance: Double? = nil
+    ) -> AcceptedAndKeptLearningSignal? {
+        guard let requestMode, let behaviorProfileID else {
+            return nil
+        }
+
+        let signal = acceptedAndKeptLearning.record(
+            outcome,
+            key: AcceptedAndKeptLearningKey(
+                appBundleIdentifier: appBundleIdentifier,
+                fieldKind: fieldKind,
+                requestMode: requestMode,
+                behaviorProfileID: behaviorProfileID
+            ),
+            normalizedEditDistance: normalizedEditDistance
+        )
         persistAcceptedAndKeptLearning()
         return signal
     }
@@ -5711,6 +5738,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textBeforeCursor: newTextBeforeCursor
             )
         )) { current, _ in current }
+        let fieldKind = currentSuggestionFieldClassification?.kind ?? .unknown
+        let behaviorProfileID = suggestionOrchestrator.currentRequest?.behaviorProfile.id
+            ?? AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
+                appBundleIdentifier: profile.bundleIdentifier,
+                fieldKind: fieldKind,
+                currentLineStructure: CurrentLineStructure.from(textBeforeCursor: originalTextBeforeCursor)
+            )).id
+        if let learningSignal = recordAcceptedAndKeptLearningOutcome(
+            .typedOver,
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: fieldKind,
+            requestMode: currentSuggestionRequestMode,
+            behaviorProfileID: behaviorProfileID
+        ) {
+            metadata.merge(learningSignal.traceMetadata) { current, _ in current }
+        }
         metadata.merge(currentSuggestionLifetimeMetadata()) { current, _ in current }
 
         RawAutocompleteTraceLog.shared.record(

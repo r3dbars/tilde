@@ -64,6 +64,7 @@ Overall score: 77/100
 Starting score before this implementation loop: 73/100.
 Score after first implementation loop: 74/100.
 Ending score after continuation loop: 75/100.
+Accepted-kept restraint update: suggestion relevance is 75/100 after deletion, typed-over, and edit-distance outcomes started lowering future display scores.
 Latency update: latency is 82/100 after the current benchmark gate added
 p50/p90/p95/p99 first-visible, first-token, total-generation, event-tap, AX,
 stale-late suppression, and default-runtime proof checks.
@@ -78,7 +79,7 @@ Release gate status: blocked. `Insertion safety`, `Privacy/trust`, and `Non-anno
 | Privacy and trust | 16 | 84 | 13.44 |
 | Non-annoyance | 14 | 76 | 10.64 |
 | Latency | 12 | 82 | 9.84 |
-| Suggestion relevance | 10 | 67 | 6.70 |
+| Suggestion relevance | 10 | 75 | 7.50 |
 | App compatibility | 10 | 71 | 7.10 |
 | Visual placement | 8 | 74 | 5.92 |
 | User control | 6 | 78 | 4.68 |
@@ -127,10 +128,11 @@ Weighted total: 76.90, rounded to 77/100.
 ### Suggestion Relevance
 
 - Weight: 10
-- Current score: 67/100
-- Why this score: Output cleaning, ranking, request modes, and accepted-and-kept concepts exist, and the app now emits accepted-survival checkpoints for future replay. Fresh model proof and real post-accept edit-distance proof are still incomplete.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Engine/CompletionOutputCleaner.swift`, `Sources/AutocompleteLabCore/Engine/CompletionCandidateRanker.swift`, `Sources/AutocompleteLabCore/Session/AcceptedAndKeptLearning.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalChecker.swift`, `Tests/AutocompleteLabCoreTests/CompletionQualityEvalTests.swift`, `Tests/AutocompleteLabAppTests/AcceptanceSurvivalCheckerTests.swift`, `script/check_quality_eval.sh`.
-- Missing evidence: Fresh replay slices showing accepted-and-kept improvement, partial accept rate, early undo/delete rate, post-accept edit distance, and style match.
+- Current score: 75/100
+- Exact metric change: 67/100 -> 75/100 (+8).
+- Why this score: Output cleaning, ranking, request modes, and accepted-and-kept concepts exist. Accepted-kept is now a restraint signal: immediate deletion, typed-over, and high post-accept edit distance lower future display scoring after sample guardrails, while tiny samples only report directional metadata.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Engine/CompletionOutputCleaner.swift`, `Sources/AutocompleteLabCore/Engine/CompletionCandidateRanker.swift`, `Sources/AutocompleteLabCore/Session/AcceptedAndKeptLearning.swift`, `Sources/AutocompleteLabCore/Session/DisplayScorePolicy.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalChecker.swift`, `Tests/AutocompleteLabCoreTests/AcceptedAndKeptLearningTests.swift`, `Tests/AutocompleteLabAppTests/SuggestionOrchestratorTests.swift`, `script/check_trace_eval.sh`, `script/experiment_report.py`.
+- Missing evidence: Fresh real-model replay slices showing accepted-and-kept improvement, partial accept rate, early undo/delete rate, post-accept edit distance, and style match across every supported app.
 - What would make it 100/100: Suggestions are short, locally relevant, style-compatible, accepted often, and rarely edited away after acceptance.
 
 ### App Compatibility
@@ -258,6 +260,16 @@ The app is shippable and deeply trusted: every supported surface has current pro
 - Risk level: Medium.
 - Expected score impact: +1 overall now, with more available after real-app proof.
 - Result: Verified insertions now start RAM-only accepted-survival tracking. The app schedules 2s, 10s, and 30s checks, finalizes on blur, records redacted `acceptedTextEdited` and `acceptanceRetentionCleared` events, adds current proof metadata to emitted trace events, uses `acceptanceID` to separate partial accepts, and records accepted-then-deleted annoyance only after survival proof instead of treating every verified insert as accepted-and-kept.
+
+### 3b. Turn Accepted-Kept Into Safe Display Restraint - Completed In This Loop
+
+- Objective: Stop treating accepted-kept as only a dashboard metric.
+- Files involved: `Sources/AutocompleteLabCore/Session/AcceptedAndKeptLearning.swift`, `Sources/AutocompleteLabCore/Session/DisplayScorePolicy.swift`, `Sources/AutocompleteLabApp/App/SuggestionOrchestrator.swift`, `Sources/AutocompleteLabApp/App/AppDelegate.swift`, `script/check_trace_eval.sh`, `script/experiment_report.py`.
+- Tests added/updated: `Tests/AutocompleteLabCoreTests/AcceptedAndKeptLearningTests.swift`, `Tests/AutocompleteLabAppTests/SuggestionOrchestratorTests.swift`, `Tests/AutocompleteLabCoreTests/AutocompleteTraceReplayTests.swift`, `script/check_trace_eval_self_test.sh`, `script/experiment_report_self_test.sh`.
+- Proof required: Fresh trace slice showing `acceptedAndKeptLearningRestraint`, typed-over/deletion/edit-distance counts, and later display suppression or lower display score in the same app/field/mode bucket.
+- Risk level: Medium.
+- Expected score impact: suggestion relevance +8 now, with more available after real-model replay proof.
+- Result: Immediate deletion, typed-over, and high normalized edit distance now feed the local accepted-kept learner. The learner keeps text private, reports only counts/rates, applies zero score adjustment for tiny samples, and subtracts a bounded learning-restraint component from future display score.
 
 ### 4. Add Local-Only Network Egress Proof - Partially Completed In Continuation Loop
 

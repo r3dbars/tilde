@@ -3,6 +3,8 @@ import Foundation
 public enum AcceptedAndKeptLearningOutcome: String, Codable, Equatable, Sendable {
     case kept
     case rejected
+    case immediateDeletion
+    case typedOver
 }
 
 public struct AcceptedAndKeptLearningKey: Codable, Equatable, Hashable, Sendable {
@@ -32,10 +34,16 @@ public struct AcceptedAndKeptLearningSignal: Equatable, Sendable {
     public let priorProbability: Double
     public let userAffinityAdjustment: Double
     public let utilityAdjustment: Double
+    public let learningRestraint: Double
     public let decayFactor: Double
+    public let immediateDeletionCount: Int
+    public let typedOverCount: Int
+    public let highEditDistanceCount: Int
+    public let averageNormalizedEditDistance: Double?
+    public let tinySampleGuardrailActive: Bool
 
     public var traceMetadata: [String: String] {
-        [
+        var metadata = [
             "acceptedAndKeptProbability": Self.format(probability),
             "acceptedAndKeptSamples": String(sampleCount),
             "acceptedAndKeptKept": String(keptCount),
@@ -43,8 +51,17 @@ public struct AcceptedAndKeptLearningSignal: Equatable, Sendable {
             "acceptedAndKeptPrior": Self.format(priorProbability),
             "acceptedAndKeptAffinityAdjustment": Self.format(userAffinityAdjustment),
             "acceptedAndKeptUtilityAdjustment": Self.format(utilityAdjustment),
-            "acceptedAndKeptDecayFactor": Self.format(decayFactor)
+            "acceptedAndKeptLearningRestraint": Self.format(learningRestraint),
+            "acceptedAndKeptDecayFactor": Self.format(decayFactor),
+            "acceptedAndKeptImmediateDeletion": String(immediateDeletionCount),
+            "acceptedAndKeptTypedOver": String(typedOverCount),
+            "acceptedAndKeptHighEditDistance": String(highEditDistanceCount),
+            "acceptedAndKeptTinySampleGuardrail": String(tinySampleGuardrailActive)
         ]
+        if let averageNormalizedEditDistance {
+            metadata["acceptedAndKeptAverageEditDistance"] = Self.format(averageNormalizedEditDistance)
+        }
+        return metadata
     }
 
     static func format(_ value: Double) -> String {
@@ -83,6 +100,7 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
     public mutating func record(
         _ outcome: AcceptedAndKeptLearningOutcome,
         key: AcceptedAndKeptLearningKey,
+        normalizedEditDistance: Double? = nil,
         now: Date = Date()
     ) -> AcceptedAndKeptLearningSignal {
         var bucket = buckets[key] ?? AcceptedAndKeptLearningBucket()
@@ -91,6 +109,20 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
             bucket.keptCount += 1
         case .rejected:
             bucket.rejectedCount += 1
+        case .immediateDeletion:
+            bucket.rejectedCount += 1
+            bucket.immediateDeletionCount += 1
+        case .typedOver:
+            bucket.rejectedCount += 1
+            bucket.typedOverCount += 1
+        }
+        if let normalizedEditDistance {
+            let safeEditDistance = Self.bounded(normalizedEditDistance, to: 0...1)
+            bucket.editDistanceTotal += safeEditDistance
+            bucket.editDistanceSampleCount += 1
+            if safeEditDistance >= 0.45 {
+                bucket.highEditDistanceCount += 1
+            }
         }
         bucket.lastUpdatedSequence = nextSequence()
         bucket.lastUpdatedAt = now
@@ -108,10 +140,18 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
         let samples = bucket.sampleCount
         let decayFactor = self.decayFactor(for: bucket, now: now)
         let keptWeight = Double(bucket.keptCount) * decayFactor
-        let rejectedWeight = Double(bucket.rejectedCount) * decayFactor
+        let rejectedWeight = (
+            Double(bucket.rejectedCount)
+                + Double(bucket.immediateDeletionCount) * 0.75
+                + Double(bucket.typedOverCount) * 0.55
+                + Double(bucket.highEditDistanceCount) * 0.35
+        ) * decayFactor
         let probability = (keptWeight + prior * priorWeight)
             / max(1, keptWeight + rejectedWeight + priorWeight)
-        let adjustmentScale = min(1, Double(samples) / 6)
+        let tinySampleGuardrailActive = samples < 3
+        let adjustmentScale = tinySampleGuardrailActive
+            ? 0
+            : min(1, Double(samples) / 8)
         let adjustment = Self.bounded(
             (probability - prior) * 0.45 * adjustmentScale,
             to: -0.14...0.18
@@ -119,6 +159,18 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
         let utilityAdjustment = Self.bounded(
             (probability - prior) * 0.35 * adjustmentScale,
             to: -0.10...0.12
+        )
+        let averageEditDistance = bucket.averageNormalizedEditDistance
+        let negativeSignalCount = bucket.immediateDeletionCount
+            + bucket.typedOverCount
+            + bucket.highEditDistanceCount
+        let negativeSignalRate = samples == 0
+            ? 0
+            : Double(negativeSignalCount) / Double(samples)
+        let editDistancePressure = max(0, (averageEditDistance ?? 0) - 0.35)
+        let learningRestraint = Self.bounded(
+            (negativeSignalRate * 0.35 + editDistancePressure * 0.25) * adjustmentScale,
+            to: 0...0.35
         )
 
         return AcceptedAndKeptLearningSignal(
@@ -129,7 +181,13 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
             priorProbability: prior,
             userAffinityAdjustment: adjustment,
             utilityAdjustment: utilityAdjustment,
-            decayFactor: decayFactor
+            learningRestraint: learningRestraint,
+            decayFactor: decayFactor,
+            immediateDeletionCount: bucket.immediateDeletionCount,
+            typedOverCount: bucket.typedOverCount,
+            highEditDistanceCount: bucket.highEditDistanceCount,
+            averageNormalizedEditDistance: averageEditDistance,
+            tinySampleGuardrailActive: tinySampleGuardrailActive
         )
     }
 
@@ -196,10 +254,51 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
 private struct AcceptedAndKeptLearningBucket: Codable, Equatable, Sendable {
     var keptCount: Int = 0
     var rejectedCount: Int = 0
+    var immediateDeletionCount: Int = 0
+    var typedOverCount: Int = 0
+    var highEditDistanceCount: Int = 0
+    var editDistanceTotal: Double = 0
+    var editDistanceSampleCount: Int = 0
     var lastUpdatedSequence: UInt64 = 0
     var lastUpdatedAt: Date = Date(timeIntervalSince1970: 0)
 
     var sampleCount: Int {
         keptCount + rejectedCount
+    }
+
+    var averageNormalizedEditDistance: Double? {
+        guard editDistanceSampleCount > 0 else {
+            return nil
+        }
+
+        return editDistanceTotal / Double(editDistanceSampleCount)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case keptCount
+        case rejectedCount
+        case immediateDeletionCount
+        case typedOverCount
+        case highEditDistanceCount
+        case editDistanceTotal
+        case editDistanceSampleCount
+        case lastUpdatedSequence
+        case lastUpdatedAt
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        keptCount = try container.decodeIfPresent(Int.self, forKey: .keptCount) ?? 0
+        rejectedCount = try container.decodeIfPresent(Int.self, forKey: .rejectedCount) ?? 0
+        immediateDeletionCount = try container.decodeIfPresent(Int.self, forKey: .immediateDeletionCount) ?? 0
+        typedOverCount = try container.decodeIfPresent(Int.self, forKey: .typedOverCount) ?? 0
+        highEditDistanceCount = try container.decodeIfPresent(Int.self, forKey: .highEditDistanceCount) ?? 0
+        editDistanceTotal = try container.decodeIfPresent(Double.self, forKey: .editDistanceTotal) ?? 0
+        editDistanceSampleCount = try container.decodeIfPresent(Int.self, forKey: .editDistanceSampleCount) ?? 0
+        lastUpdatedSequence = try container.decodeIfPresent(UInt64.self, forKey: .lastUpdatedSequence) ?? 0
+        lastUpdatedAt = try container.decodeIfPresent(Date.self, forKey: .lastUpdatedAt)
+            ?? Date(timeIntervalSince1970: 0)
     }
 }
