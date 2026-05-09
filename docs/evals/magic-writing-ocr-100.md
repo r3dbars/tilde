@@ -243,6 +243,13 @@ Time: 2026-05-09T00:36:00Z
 - Added a post-launch current-bundle check so a smoke run fails if another worktree's `AutocompleteLab.app` is the running process.
 - Validation: `bash -n script/real_app_smoke.sh script/real_app_smoke_self_test.sh`, `script/real_app_smoke_self_test.sh`, and `git diff --check` pass.
 
+2026-05-09T01:59Z PR follow-up: added a proactive next-word fallback for the Notes miss.
+
+- Result: the live Notes body slice still showed typed context reaching the app, but the fast ranker had zero candidates and the current fast model returned empty `wordCompletion` results.
+- Fix: max-aggressive / OCR-context runs can now use a trace-safe predictive word fallback for strong local phrases such as `feels` and `stays`, so the app can show ` instant` before the user types `inst`.
+- Harness update: Notes body smoke now proves proactive next-word prediction from `Smoke proof feels` and `and stays` instead of only proving the old partial-word `inst` suffix path.
+- Validation: focused word-ranker and orchestrator tests cover the new fallback source and preserve quiet-mode behavior.
+
 ## 100 Test Situations
 
 | # | App | Situation | Target behavior | Score |

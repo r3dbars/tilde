@@ -201,11 +201,11 @@ case "$APP" in
         if (( REQUIRES_UNDO_ACCEPT == 1 )); then
           PROOF_LABEL="notes-body-undo"
           SESSION_NAME="Notes body undo"
-          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put `Autocomplete smoke` on the first body line.\n- Put the caret on the next body line and type `Smoke proof feels inst`.\n- Press Tab once and expect `instant`.\n- Press Command-Z and confirm only the accepted `ant` suffix is removed.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put `Autocomplete smoke` on the first body line.\n- Put the caret on the next body line and type `Smoke proof feels`.\n- Press Tab once and expect ` instant`.\n- Press Command-Z and confirm only the accepted ` instant` insertion is removed.\n- Type ` and stays`.\n- Press the configured full-accept shortcut and expect another ` instant` prediction.\n- Use --visual when screenshot-backed placement must be proven.'
         else
           PROOF_LABEL="notes-body"
           SESSION_NAME="Notes body"
-          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put `Autocomplete smoke` on the first body line.\n- Put the caret on the next body line and type `Smoke proof feels inst`.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put `Autocomplete smoke` on the first body line.\n- Put the caret on the next body line and type `Smoke proof feels`.\n- Press Tab once and expect ` instant`.\n- Type ` and stays`.\n- Press the configured full-accept shortcut and expect another ` instant` prediction.\n- Use --visual when screenshot-backed placement must be proven.'
         fi
         ;;
       checklist)
