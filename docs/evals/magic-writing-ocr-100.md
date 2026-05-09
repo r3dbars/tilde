@@ -674,3 +674,11 @@ Target real dogfood score: 92/100 or higher with no wrong-field insertions and n
 - Live proof refresh: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-real --chrome-accessibility default` passed with 2 accepted insertions and strict visual trace evidence.
 - Evidence: manual smoke rows `2026-05-09T07:31:56Z` and `2026-05-09T07:33:21Z`, both on `commit:834dd2843b6a`. The model stayed `qwen3-0.6b`.
 - Status: `script/manual_smoke_status.sh --require-all` now reports both default-Chrome real-editor AX lanes passed on current PR head. The strict gate still fails honestly because older broad rows are stale after the source commit and the Obsidian variant / Claude proof gaps remain.
+
+2026-05-09T07:41Z heartbeat follow-up: refreshed the safe broad proof matrix on PR #35 head `8928086dca3a`.
+
+- Scope: reran only disposable/safe lanes: TextEdit, Notes title/body/checklist, Chrome textarea/contenteditable/editor-like/Monaco-like/ProseMirror-like, Chrome real Monaco/ProseMirror under isolated renderer accessibility, public Chrome textarea/contenteditable, and Chrome chat-like no-submit.
+- Result: all 14 refreshed lanes passed with 2 accepted insertions and strict visual trace evidence. The model stayed `qwen3-0.6b`.
+- Evidence: manual smoke rows from `2026-05-09T07:36:50Z` through `2026-05-09T07:41:15Z`, all on `commit:8928086dca3a`.
+- Gate movement: `script/manual_smoke_status.sh --require-all` now reports TextEdit, Notes title/body/checklist, every required Chrome fixture/public/default-AX lane, and Chrome chat-like as current. It still fails honestly with 14 proof gaps: default Obsidian refresh plus Obsidian theme/pane/long-note, Codex prompt refresh, Claude Code, and Claude desktop layout variants.
+- Safety note: I did not rerun Codex, Obsidian, Claude Code, or Claude desktop in this unattended pass because those can touch active prompt/private-vault surfaces.
