@@ -3302,7 +3302,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            let verificationContextRead = focusedInsertionVerificationContext(for: baseline)
+            let verificationContextRead = focusedInsertionVerificationContext(
+                for: baseline,
+                acceptedText: acceptedText
+            )
             guard case let .ready(context: verificationContext) = verificationContextRead else {
                 recordInsertionVerificationContextFailure(
                     verificationContextRead,
@@ -3345,7 +3348,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
 
-                if case let .ready(context: recheckContext) = focusedInsertionVerificationContext(for: baseline) {
+                if case let .ready(context: recheckContext) = focusedInsertionVerificationContext(
+                    for: baseline,
+                    acceptedText: acceptedText
+                ) {
                     context = recheckContext
                     result = insertionVerification.verify(
                         previousTextBeforeCursor: baseline.previousTextBeforeCursor,
@@ -3581,7 +3587,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func focusedInsertionVerificationContext(
-        for baseline: InsertionVerificationBaseline
+        for baseline: InsertionVerificationBaseline,
+        acceptedText: String? = nil
     ) -> FocusedInsertionVerificationContext {
         guard let frontmostApp = accessibilityClient.frontmostApplication(),
               let context = accessibilityClient.focusedTextContext(
@@ -3608,6 +3615,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: baseline.profile
         )
 
+        if let acceptedText,
+           codexProofInsertionVerificationContextIsReady(
+               baseline: baseline,
+               acceptedText: acceptedText,
+               frontmostApp: frontmostApp,
+               context: adjustedContext
+           ) {
+            return .ready(context: adjustedContext)
+        }
+
         guard currentIdentity == baseline.fieldIdentity else {
             return .fieldChanged
         }
@@ -3618,6 +3635,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return .ready(context: adjustedContext)
+    }
+
+    private func codexProofInsertionVerificationContextIsReady(
+        baseline: InsertionVerificationBaseline,
+        acceptedText: String,
+        frontmostApp: RunningApplicationInfo,
+        context: FocusedTextContext
+    ) -> Bool {
+        let bundleIdentifier = "com.openai.codex"
+        let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+        let replacementText = baseline.previousTextBeforeCursor + acceptedText + baseline.previousTextAfterCursor
+        guard !acceptedText.isEmpty,
+              baseline.profile.bundleIdentifier == bundleIdentifier,
+              baseline.requestMode == .wordCompletion,
+              baseline.profile.supportsOneWordAcceptance,
+              !baseline.profile.supportsFullAcceptance,
+              baseline.profile.requiresNoSubmitAcceptanceProof,
+              baseline.profile.insertionMode == .axValueReplacement,
+              activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+              frontmostAppMatchesSuggestion(
+                  frontmostApp,
+                  expectedBundleIdentifier: bundleIdentifier,
+                  profile: baseline.profile
+              ),
+              baseline.previousTextBeforeCursor.contains(marker),
+              baseline.previousTextAfterCursor.isEmpty,
+              context.textBeforeCursor == baseline.previousTextBeforeCursor + acceptedText,
+              context.textAfterCursor == baseline.previousTextAfterCursor,
+              context.selectedTextLength == 0,
+              !context.isSecure else {
+            return false
+        }
+
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        guard Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: replacementText,
+            containing: marker,
+            maxDepth: 32
+        ) != nil else {
+            return false
+        }
+
+        DiagnosticsLog.shared.record(
+            "codex-proof-verification-fast-path",
+            metadata: [
+                "app": bundleIdentifier,
+                "acceptedChars": String(acceptedText.count),
+                "currentBeforeChars": String(context.textBeforeCursor.count),
+                "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                "requestMode": baseline.requestMode?.rawValue ?? ""
+            ]
+        )
+        return true
     }
 
     private func startAcceptanceSurvivalTracking(_ tracker: AcceptanceSurvivalTracker) {
