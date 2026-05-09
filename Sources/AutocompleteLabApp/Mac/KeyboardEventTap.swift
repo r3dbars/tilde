@@ -3,7 +3,7 @@ import AutocompleteLabCore
 import Foundation
 
 final class KeyboardEventTap: @unchecked Sendable {
-    typealias Handler = @MainActor @Sendable (AutocompleteKey, Bool, Bool) -> Bool
+    typealias Handler = @MainActor @Sendable (AutocompleteKey, Bool, Bool) -> KeyboardEventTapHandlingResult
     typealias PassthroughKeyDownObserver = @MainActor @Sendable () -> Void
     typealias DisabledObserver = @MainActor @Sendable (_ reason: String) -> Void
 
@@ -12,6 +12,7 @@ final class KeyboardEventTap: @unchecked Sendable {
     private let disabledObserver: DisabledObserver?
     private let keyMapper = AutocompleteKeyMapper()
     private let consumptionPolicy = KeyboardEventTapConsumptionPolicy()
+    private let repeatSuppressionPolicy = KeyboardCaptureRepeatSuppressionPolicy()
     private let lifecycleLock = NSLock()
     private let snapshotLock = NSLock()
     private let passthroughLock = NSLock()
@@ -29,7 +30,6 @@ final class KeyboardEventTap: @unchecked Sendable {
     private var pendingReplayedKeyDowns: [KeyboardEventReplay: KeyboardEventReplayState] = [:]
     private var latencyStats = KeyboardEventTapLatencyStats()
     private let slowEventTapLatencyMicros = 8_000
-    private let keySuppressDurationNanos: UInt64 = 250_000_000
     private let replayExpirationNanos: UInt64 = 1_000_000_000
 
     init(
@@ -200,7 +200,9 @@ final class KeyboardEventTap: @unchecked Sendable {
             DiagnosticsLog.shared.record(
                 "keyboard-event-tap-disabled",
                 metadata: [
-                    "reason": type == .tapDisabledByTimeout ? "timeout" : "user-input"
+                    "reason": type == .tapDisabledByTimeout ? "timeout" : "user-input",
+                    "diagnosticLayer": "keyCapture",
+                    "safetyFailure": "true"
                 ]
             )
 
@@ -289,15 +291,29 @@ final class KeyboardEventTap: @unchecked Sendable {
         }
 
         Task { @MainActor in
-            let handled = handler(key, isAutorepeat, hadPassthroughKeyDown)
-            if !handled,
-               consumptionPolicy.shouldReplayUnhandledConsumedKey(key) {
+            let result = handler(key, isAutorepeat, hadPassthroughKeyDown)
+            switch result {
+            case .handled:
+                break
+            case let .replayOriginalKey(reason):
+                DiagnosticsLog.shared.record(
+                    "keyboard-event-tap-replayed-captured-key",
+                    metadata: [
+                        "key": key.diagnosticName,
+                        "reason": reason.rawValue,
+                        "diagnosticLayer": "keyCapture",
+                        "safetyFailure": "false"
+                    ]
+                )
                 replayKey(replay)
-            } else if !handled {
+            case let .dropOriginalKey(reason):
                 DiagnosticsLog.shared.record(
                     "keyboard-event-tap-unhandled-consumed-key-dropped",
                     metadata: [
-                        "key": key.diagnosticName
+                        "key": key.diagnosticName,
+                        "reason": reason.rawValue,
+                        "diagnosticLayer": "keyCapture",
+                        "safetyFailure": "true"
                     ]
                 )
             }
@@ -372,6 +388,7 @@ final class KeyboardEventTap: @unchecked Sendable {
                 "reason": reason,
                 "count": String(summary.count),
                 "p50Micros": String(summary.p50Micros),
+                "p90Micros": String(summary.p90Micros),
                 "p95Micros": String(summary.p95Micros),
                 "p99Micros": String(summary.p99Micros),
                 "maxMicros": String(summary.maxMicros)
@@ -398,9 +415,12 @@ final class KeyboardEventTap: @unchecked Sendable {
             return false
         }
 
-        if isAutorepeat,
-           let suppressUntil = suppressKeyUntilNanos[key],
-           suppressUntil > nowNanos {
+        if repeatSuppressionPolicy.shouldSuppressAutorepeat(
+            key: key,
+            isAutorepeat: isAutorepeat,
+            suppressedUntilNanos: suppressKeyUntilNanos[key],
+            nowNanos: nowNanos
+        ) {
             snapshotLock.unlock()
             return true
         }
@@ -416,8 +436,12 @@ final class KeyboardEventTap: @unchecked Sendable {
             acceptAllShortcut: snapshot.acceptAllShortcut
         ))
 
-        if shouldConsume, !isAutorepeat {
-            suppressKeyUntilNanos[key] = nowNanos + keySuppressDurationNanos
+        if let deadline = repeatSuppressionPolicy.suppressionDeadline(
+            shouldConsume: shouldConsume,
+            isAutorepeat: isAutorepeat,
+            nowNanos: nowNanos
+        ) {
+            suppressKeyUntilNanos[key] = deadline
         }
         snapshotLock.unlock()
         return shouldConsume
@@ -589,6 +613,7 @@ private struct KeyboardEventTapLatencyStats: Sendable {
         let summary = KeyboardEventTapLatencySummary(
             count: sorted.count,
             p50Micros: percentile(0.50, in: sorted),
+            p90Micros: percentile(0.90, in: sorted),
             p95Micros: percentile(0.95, in: sorted),
             p99Micros: percentile(0.99, in: sorted),
             maxMicros: sorted.last ?? 0
@@ -610,6 +635,7 @@ private struct KeyboardEventTapLatencyStats: Sendable {
 private struct KeyboardEventTapLatencySummary: Sendable {
     let count: Int
     let p50Micros: Int
+    let p90Micros: Int
     let p95Micros: Int
     let p99Micros: Int
     let maxMicros: Int

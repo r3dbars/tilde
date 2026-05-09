@@ -21,8 +21,15 @@ release archive checksum in the trace slice.
 For the full remaining manual beta proof sequence, run:
 
 ```bash
+script/manual_proof_refresh.sh --print
 script/manual_proof_queue.sh --print
 ```
+
+Use `script/manual_proof_refresh.sh --run --target textedit` for one focused
+refresh at a time. It prints the exact recorder command, runs it, then refuses
+the row unless the latest report includes the current commit or archive
+fingerprint. This keeps old app binary hashes from making stale source proof
+look current.
 
 Use `script/manual_proof_queue.sh --run` only when you are ready to walk
 through each manual-gated recorder with disposable content. The queue verifies
@@ -190,9 +197,12 @@ Recorder:
 
 ```bash
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host terminal --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host iterm2 --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host ghostty --manual-gate
 ```
 
-- Use a supported terminal host: Terminal, iTerm2, Warp, Ghostty, kitty, or Alacritty.
+- Use a supported terminal host: Terminal, iTerm2, Warp, Ghostty, kitty, Alacritty, or WezTerm.
 - Include `AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF` in the prompt or terminal title.
 - Focus a disposable Claude Code prompt without submitting.
 - Type a harmless local test fragment like `Can we make this`.

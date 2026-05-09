@@ -123,6 +123,70 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.shellPromptDetected))
     }
 
+    @Test("Terminal-host proof rejects command-shaped Claude prompt text")
+    func terminalHostProofRejectsCommandShapedClaudePromptText() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code",
+            focusedText: "❯ AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF git status",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.shellCommandDetected))
+    }
+
+    @Test("Terminal-host proof rejects active Claude output lines")
+    func terminalHostProofRejectsActiveClaudeOutputLines() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF",
+            focusedText: "● Running Bash(git status)",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.activeAgentOutputDetected))
+    }
+
+    @Test("Terminal-host proof rejects active Claude output even when output echoes marker")
+    func terminalHostProofRejectsActiveClaudeOutputEvenWhenOutputEchoesMarker() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code",
+            focusedText: "● AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF Running Bash(git status)",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.activeAgentOutputDetected))
+    }
+
+    @Test("Terminal-host proof rejects stale marked multiline buffers from scrollback")
+    func terminalHostProofRejectsStaleMarkedMultilineBuffersFromScrollback() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code",
+            focusedText: "Can we make this",
+            rawTextBeforeCursor: "❯ AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF old prompt\nCan we make",
+            rawTextAfterCursor: " this",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.multilineCommandDetected))
+    }
+
+    @Test("Terminal-host proof rejects marked multiline buffers after the cursor")
+    func terminalHostProofRejectsMarkedMultilineBuffersAfterCursor() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code",
+            focusedText: "Can we make this",
+            rawTextBeforeCursor: "❯ AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF Can we make",
+            rawTextAfterCursor: " this\nnext terminal row",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.multilineCommandDetected))
+    }
+
     @Test("Unsupported terminal hosts remain blocked")
     func unsupportedTerminalHostsRemainBlocked() {
         let context = ClaudeCodeTerminalHostProofContext(
@@ -148,6 +212,22 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(profile.insertionMode == .clipboardFallbackOptIn)
         #expect(profile.anchorLadder == [.caret])
         #expect(!profile.allowsDetachedSuggestions)
+        #expect(profile.promptAppSafetyMode == .wordOnly)
+    }
+
+    @Test("Terminal-host proof exposes named host variants")
+    func terminalHostProofExposesNamedHostVariants() {
+        let variants = ClaudeCodeTerminalHostProofPolicy.supportedHostVariants
+        let byID = Dictionary(uniqueKeysWithValues: variants.map { ($0.id, $0) })
+
+        #expect(byID["terminal"]?.bundleIdentifier == "com.apple.Terminal")
+        #expect(byID["iterm2"]?.bundleIdentifier == "com.googlecode.iterm2")
+        #expect(byID["warp"]?.bundleIdentifier == "dev.warp.Warp")
+        #expect(byID["ghostty"]?.bundleIdentifier == "com.mitchellh.ghostty")
+        #expect(byID["kitty"]?.bundleIdentifier == "net.kovidgoyal.kitty")
+        #expect(byID["alacritty"]?.bundleIdentifier == "org.alacritty")
+        #expect(byID["wezterm"]?.bundleIdentifier == "com.github.wez.wezterm")
+        #expect(ClaudeCodeTerminalHostProofPolicy.hostVariant(for: "com.googlecode.iterm2")?.proofLabel == "claude-code-iterm2")
     }
 
     @Test("Terminal-host proof extracts the current input line from scrollback")

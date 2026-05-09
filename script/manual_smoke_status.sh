@@ -32,6 +32,7 @@ docs/product/manual-smoke-runs.md and lists remaining sub-10 scorecard gaps.
 It separates insertion proof from screenshot-backed visual placement proof so
 real-app visual gaps stay visible after insertion passes.
 Notes title, body, and checklist are separate proof targets.
+Obsidian default, theme, pane, and long-note lanes are separate proof targets.
 
 Use --require-all or --strict when you want the command to fail until every
 target app has a recorded pass and every visual audit row has screenshot-backed
@@ -46,8 +47,13 @@ declare -a APPS=(
   "Notes body|Notes|com.apple.Notes|full|notes-body|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate"
   "Notes checklist|Notes|com.apple.Notes|full|notes-checklist|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate"
   "Obsidian|Obsidian|md.obsidian|full|default|script/manual_smoke_session.sh obsidian --visual"
+  "Obsidian theme|Obsidian|md.obsidian|full|obsidian-theme|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
+  "Obsidian panes|Obsidian|md.obsidian|full|obsidian-pane|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
+  "Obsidian long note|Obsidian|md.obsidian|full|obsidian-long-note|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
   "Chrome textarea|Chrome|com.google.Chrome|full|textarea|script/manual_smoke_session.sh chrome --visual"
   "Chrome contenteditable|Chrome|com.google.Chrome|full|contenteditable|AUTOCOMPLETE_LAB_CHROME_FIXTURE=contenteditable script/manual_smoke_session.sh chrome --visual"
+  "Chrome production textarea|Chrome|com.google.Chrome|full|textarea-public|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public"
+  "Chrome production contenteditable|Chrome|com.google.Chrome|full|contenteditable-public|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable-public"
   "Chrome editor-like|Chrome|com.google.Chrome|full|editor-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=editor-like script/manual_smoke_session.sh chrome --visual"
   "Chrome Monaco-like|Chrome|com.google.Chrome|full|monaco-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=monaco-like script/manual_smoke_session.sh chrome --visual"
   "Chrome ProseMirror-like|Chrome|com.google.Chrome|full|prosemirror-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=prosemirror-like script/manual_smoke_session.sh chrome --visual"
@@ -59,6 +65,13 @@ declare -a APPS=(
   "Codex|Codex|com.openai.codex|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
   "Claude Code|Claude Code|com.anthropic.claude-code|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
   "Claude desktop|Claude|com.anthropic.claudefordesktop|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
+  "Claude desktop empty composer|Claude|com.anthropic.claudefordesktop|one-word|claude-empty|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-empty --manual-gate"
+  "Claude desktop long prompt|Claude|com.anthropic.claudefordesktop|one-word|claude-long|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-long --manual-gate"
+  "Claude desktop wrapped prompt|Claude|com.anthropic.claudefordesktop|one-word|claude-wrapped|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-wrapped --manual-gate"
+  "Claude desktop narrow window|Claude|com.anthropic.claudefordesktop|one-word|claude-narrow|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-narrow --manual-gate"
+  "Claude desktop context layout|Claude|com.anthropic.claudefordesktop|one-word|claude-context|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-context --manual-gate"
+  "Claude desktop light appearance|Claude|com.anthropic.claudefordesktop|one-word|claude-light|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-light --manual-gate"
+  "Claude desktop dark appearance|Claude|com.anthropic.claudefordesktop|one-word|claude-dark|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-dark --manual-gate"
 )
 
 trim() {
@@ -69,6 +82,8 @@ trim() {
 }
 
 declare -a CURRENT_BUILD_PROOFS=()
+CURRENT_COMMIT_PROOF=""
+CURRENT_ARCHIVE_PROOF=""
 
 collect_current_build_proofs() {
   if [[ -n "${AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF:-}" ]]; then
@@ -78,7 +93,8 @@ collect_current_build_proofs() {
   local commit
   commit="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
   if [[ -n "$commit" ]]; then
-    CURRENT_BUILD_PROOFS+=("commit:$commit")
+    CURRENT_COMMIT_PROOF="commit:$commit"
+    CURRENT_BUILD_PROOFS+=("$CURRENT_COMMIT_PROOF")
   fi
 
   local app_binary="${AUTOCOMPLETE_LAB_APP_BINARY:-dist/AutocompleteLab.app/Contents/MacOS/AutocompleteLab}"
@@ -95,7 +111,8 @@ collect_current_build_proofs() {
     local archive_sha
     archive_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
     if [[ -n "$archive_sha" ]]; then
-      CURRENT_BUILD_PROOFS+=("archive-sha256:$archive_sha")
+      CURRENT_ARCHIVE_PROOF="archive-sha256:$archive_sha"
+      CURRENT_BUILD_PROOFS+=("$CURRENT_ARCHIVE_PROOF")
     fi
   fi
 }
@@ -112,12 +129,23 @@ current_build_proof_summary() {
 
 line_has_current_build_proof() {
   local line="$1"
-  local proof
-  for proof in "${CURRENT_BUILD_PROOFS[@]}"; do
-    if [[ "$line" == *"$proof"* ]]; then
-      return 0
-    fi
-  done
+
+  if [[ "$line" == *"archive-sha256:"* ]]; then
+    [[ -n "$CURRENT_ARCHIVE_PROOF" && "$line" == *"$CURRENT_ARCHIVE_PROOF"* ]] || return 1
+    return 0
+  fi
+
+  if [[ "$line" == *"commit:"* ]]; then
+    [[ -n "$CURRENT_COMMIT_PROOF" && "$line" == *"$CURRENT_COMMIT_PROOF"* ]] || return 1
+  fi
+
+  if [[ -n "$CURRENT_COMMIT_PROOF" && "$line" == *"$CURRENT_COMMIT_PROOF"* ]]; then
+    return 0
+  fi
+
+  if [[ -n "$CURRENT_ARCHIVE_PROOF" && "$line" == *"$CURRENT_ARCHIVE_PROOF"* ]]; then
+    return 0
+  fi
 
   return 1
 }

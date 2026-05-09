@@ -6,17 +6,20 @@ cd "$ROOT_DIR"
 
 DEFAULT_DEEP_DIVE_PATH="docs/product/deep-dive-scorecard-2026-05-06.md"
 DEFAULT_DEEP_RESEARCH_PATH="docs/product/deep-research-autocomplete-scorecard-2026-05-07.md"
+DEFAULT_OVERALL_EXCELLENCE_PATH="docs/product/deep-research-overall-excellence-scorecard-2026-05-08.md"
 DEFAULT_APPLE_NATIVE_PATH="docs/product/apple-native-experience-checklist.md"
 DEFAULT_APP_PROOF_PATH="docs/product/app-proof-matrix.md"
 
 DEEP_DIVE_PATH="${AUTOCOMPLETE_LAB_DEEP_DIVE_SCORECARD:-$DEFAULT_DEEP_DIVE_PATH}"
 DEEP_RESEARCH_PATH="${AUTOCOMPLETE_LAB_DEEP_RESEARCH_SCORECARD:-$DEFAULT_DEEP_RESEARCH_PATH}"
+OVERALL_EXCELLENCE_PATH="${AUTOCOMPLETE_LAB_OVERALL_EXCELLENCE_SCORECARD:-$DEFAULT_OVERALL_EXCELLENCE_PATH}"
 APPLE_NATIVE_PATH="${AUTOCOMPLETE_LAB_APPLE_NATIVE_CHECKLIST:-$DEFAULT_APPLE_NATIVE_PATH}"
 APP_PROOF_PATH="${AUTOCOMPLETE_LAB_APP_PROOF_MATRIX:-$DEFAULT_APP_PROOF_PATH}"
 STRICT_PROOF_GATES="${AUTOCOMPLETE_LAB_SCORE_TARGET_STRICT_PROOF_GATES:-auto}"
 MANUAL_SMOKE_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_MANUAL_SMOKE_GATE_SCRIPT:-./script/manual_smoke_status.sh}"
 VISUAL_EVIDENCE_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_VISUAL_EVIDENCE_GATE_SCRIPT:-./script/check_visual_placement_evidence.sh}"
 PROOF_MANIFEST_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_PROOF_MANIFEST_GATE_SCRIPT:-./script/check_proof_manifest.sh}"
+PROMPT_APP_PROOF_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_PROMPT_APP_PROOF_GATE_SCRIPT:-./script/check_prompt_app_proof.sh}"
 
 ISSUES=0
 LIVE_PROMPT_PROOF_ISSUES=0
@@ -107,7 +110,7 @@ print_blocker_summary() {
     echo "- Release and architecture polish: $RELEASE_ARCHITECTURE_ISSUES issue(s). Keep aggregate scores below target until proof gates and shared orchestration gaps close."
   fi
   if ((STRICT_PROOF_GATE_ISSUES > 0)); then
-    echo "- Strict proof gates: $STRICT_PROOF_GATE_ISSUES issue(s). Do not allow Markdown scores to reach target until manual smoke, visual evidence, and proof manifest gates pass."
+    echo "- Strict proof gates: $STRICT_PROOF_GATE_ISSUES issue(s). Do not allow Markdown scores to reach target until manual smoke, visual evidence, proof manifest, and prompt-app proof gates pass."
   fi
 }
 
@@ -146,6 +149,18 @@ check_deep_research() {
       local status="${BASH_REMATCH[1]}"
       if [[ "$status" != "complete" ]]; then
         record_issue "$path" "Proof status" "$status" "complete"
+      fi
+    fi
+  done <"$path"
+}
+
+check_overall_excellence() {
+  local path="$1"
+
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^Overall[[:space:]]score:[[:space:]]*([0-9]+)/100[[:space:]]*$ ]]; then
+      if [[ "${BASH_REMATCH[1]}" != "100" ]]; then
+        record_issue "$path" "Overall excellence score" "${BASH_REMATCH[1]}/100" "100/100"
       fi
     fi
   done <"$path"
@@ -218,6 +233,7 @@ should_run_strict_proof_gates() {
     auto)
       [[ "$DEEP_DIVE_PATH" == "$DEFAULT_DEEP_DIVE_PATH" \
         && "$DEEP_RESEARCH_PATH" == "$DEFAULT_DEEP_RESEARCH_PATH" \
+        && "$OVERALL_EXCELLENCE_PATH" == "$DEFAULT_OVERALL_EXCELLENCE_PATH" \
         && "$APPLE_NATIVE_PATH" == "$DEFAULT_APPLE_NATIVE_PATH" \
         && "$APP_PROOF_PATH" == "$DEFAULT_APP_PROOF_PATH" ]]
       return
@@ -259,22 +275,26 @@ check_strict_proof_gates() {
   run_strict_proof_gate "manual smoke status" "$MANUAL_SMOKE_GATE_SCRIPT" --require-all
   run_strict_proof_gate "visual placement evidence" "$VISUAL_EVIDENCE_GATE_SCRIPT" --require-all
   run_strict_proof_gate "proof manifest" "$PROOF_MANIFEST_GATE_SCRIPT" --require-all
+  run_strict_proof_gate "prompt app proof" "$PROMPT_APP_PROOF_GATE_SCRIPT"
 }
 
 require_file "$DEEP_DIVE_PATH"
 require_file "$DEEP_RESEARCH_PATH"
+require_file "$OVERALL_EXCELLENCE_PATH"
 require_file "$APPLE_NATIVE_PATH"
 require_file "$APP_PROOF_PATH"
 
 echo "Score target status"
 echo "Deep dive: $DEEP_DIVE_PATH"
 echo "Deep research: $DEEP_RESEARCH_PATH"
+echo "Overall excellence: $OVERALL_EXCELLENCE_PATH"
 echo "Apple-native checklist: $APPLE_NATIVE_PATH"
 echo "App proof matrix: $APP_PROOF_PATH"
 echo
 
 check_deep_dive "$DEEP_DIVE_PATH"
 check_deep_research "$DEEP_RESEARCH_PATH"
+check_overall_excellence "$OVERALL_EXCELLENCE_PATH"
 check_apple_native "$APPLE_NATIVE_PATH"
 check_app_proof "$APP_PROOF_PATH"
 check_strict_proof_gates

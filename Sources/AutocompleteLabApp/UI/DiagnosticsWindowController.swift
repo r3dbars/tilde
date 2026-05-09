@@ -8,6 +8,7 @@ struct DiagnosticsInspectorState: Equatable {
     let lastSuggestionDecision: String
     let runtimeReport: RuntimeReadinessReport
     let runtimeTargetSummary: String
+    var pauseControl: ControlPauseState = ControlPauseState(isPaused: false, pausedUntil: nil)
     let tracePath: String
     let tracingPaused: Bool
     let screenshotTracingEnabled: Bool
@@ -19,6 +20,7 @@ struct DiagnosticsInspectorState: Equatable {
         Current state:
           Accessibility: \(appTrusted ? "allowed" : "needed")
           Suggestions: \(lastSuggestionDecision)
+          \(pauseControl.statusText)
           App: \(compatibilityStatus.userFacingSummary), \(appEnabled ? "allowed" : "blocked")
           Mode: \(Self.modeText(for: compatibilityStatus))
           Local model: \(runtimeReport.summary)
@@ -173,6 +175,7 @@ final class DiagnosticsWindowController {
         lastSuggestionDecision: String,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
+        pauseControl: ControlPauseState = ControlPauseState(isPaused: false, pausedUntil: nil),
         modelDirectoryPath: String,
         recentEvents: [String],
         traceSummary: AutocompleteTraceSummary,
@@ -206,6 +209,7 @@ final class DiagnosticsWindowController {
             lastSuggestionDecision: lastSuggestionDecision,
             runtimeReport: runtimeReport,
             runtimeTargetSummary: runtimeTargetSummary,
+            pauseControl: pauseControl,
             compatibilityStatus: compatibilityStatus,
             diagnostics: diagnostics,
             traceSummary: traceSummary,
@@ -466,6 +470,7 @@ struct DiagnosticsOverviewState: Equatable {
     let accessibilityText: String
     let suggestionText: String
     let localModelText: String
+    let pauseText: String
     let currentAppText: String
     let tracingText: String
 
@@ -475,6 +480,7 @@ struct DiagnosticsOverviewState: Equatable {
         lastSuggestionDecision: String,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
+        pauseControl: ControlPauseState = ControlPauseState(isPaused: false, pausedUntil: nil),
         compatibilityStatus: CompatibilitySupportStatus,
         diagnostics: FocusedTextDiagnostics?,
         traceSummary: AutocompleteTraceSummary,
@@ -487,6 +493,7 @@ struct DiagnosticsOverviewState: Equatable {
             "\(runtimeReport.summary) | stage \(runtimeReport.stage.rawValue) | action \(runtimeReport.action.displayName) | target \(runtimeTargetSummary)",
             maxLength: 140
         )
+        pauseText = pauseControl.statusText
 
         let appName = diagnostics?.localizedAppName ?? "No focused app"
         let bundle = diagnostics?.bundleIdentifier.map { " (\($0))" } ?? ""
@@ -506,6 +513,7 @@ struct DiagnosticsOverviewState: Equatable {
             "Overview",
             "Accessibility: \(accessibilityText)",
             "Suggestion: \(suggestionText)",
+            "Suggestions control: \(pauseText)",
             "Local model: \(localModelText)",
             "Current app: \(currentAppText)",
             "Tracing: \(tracingText)"
@@ -1103,6 +1111,8 @@ struct DiagnosticsTypingHealth {
     private var disabledKeyEvents = 0
     private var startFailedKeyEvents = 0
     private var failedClosedKeyEvents = 0
+    private var replayedCapturedKeyEvents = 0
+    private var droppedCapturedKeyEvents = 0
 
     private var axSummarySamples = 0
     private var axP95Milliseconds: Int?
@@ -1134,6 +1144,10 @@ struct DiagnosticsTypingHealth {
             return "needs attention - slow key capture \(slowKeyMarkers)x"
         }
 
+        if droppedCapturedKeyEvents > 0 {
+            return "needs attention - captured key dropped \(droppedCapturedKeyEvents)x"
+        }
+
         if keySamples + keySummarySamples == 0 {
             return "no recent key samples"
         }
@@ -1142,7 +1156,7 @@ struct DiagnosticsTypingHealth {
     }
 
     var keySampleDescription: String {
-        "raw=\(keySamples), summary=\(keySummarySamples), p95=\(microseconds(keyP95Micros)), max=\(microseconds(keyMaxMicros))"
+        "raw=\(keySamples), summary=\(keySummarySamples), p95=\(microseconds(keyP95Micros)), max=\(microseconds(keyMaxMicros)), replayed=\(replayedCapturedKeyEvents), dropped=\(droppedCapturedKeyEvents)"
     }
 
     var axPollingStatus: String {
@@ -1191,6 +1205,10 @@ struct DiagnosticsTypingHealth {
             startFailedKeyEvents += 1
         case "keyboard-event-tap-failed-closed":
             failedClosedKeyEvents += 1
+        case "keyboard-event-tap-replayed-captured-key":
+            replayedCapturedKeyEvents += 1
+        case "keyboard-event-tap-unhandled-consumed-key-dropped":
+            droppedCapturedKeyEvents += 1
         case "focused-text-poll-latency-summary":
             axSummarySamples += fields.intValue(for: "count") ?? 0
             axP95Milliseconds = maxOptional(axP95Milliseconds, fields.intValue(for: "p95Milliseconds"))

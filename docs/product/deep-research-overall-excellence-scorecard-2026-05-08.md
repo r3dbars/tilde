@@ -12,7 +12,7 @@
 
 The research says this app wins only if it is boringly trustworthy: fast enough to stay out of the user's way, quiet when uncertain, explicit about every insert, local-first by default, and honest about which apps are actually proven.
 
-The repo has serious safety architecture: focused-field identity checks, selected-text blocking, secure-field suppression, redacted tracing, default-off app selection, local model readiness gates, and real smoke/proof scripts. The current score is still capped because strict manual proof is stale or inconsistent across docs, prompt-app no-submit proof is incomplete, no current network-egress proof exists for local-only mode, and the newly wired accepted-survival runtime path still needs fresh real-app trace proof.
+The repo has serious safety architecture: focused-field identity checks, selected-text blocking, secure-field suppression, redacted tracing, default-off app selection, local model readiness gates, and real smoke/proof scripts. The privacy story now has a dependency/SDK inventory, field-level data checklist, and current-build redacted export proof. The current score is still capped because strict manual proof is stale or inconsistent across docs, prompt-app no-submit proof is incomplete, no current runtime packet-capture proof exists for local-only mode, and the newly wired accepted-survival runtime path still needs fresh real-app trace proof.
 
 ## Product Standard
 
@@ -59,11 +59,19 @@ The next automatable gap was accepted-survival proof. Before the continuation lo
 
 ## Score
 
-Overall score: 75/100
+Overall score: 79/100
 
 Starting score before this implementation loop: 73/100.
 Score after first implementation loop: 74/100.
 Ending score after continuation loop: 75/100.
+Non-annoyance gate update: non-annoyance is 82/100 after real-rate gates for
+shown/min, dismissals/shown, typed-over-within-1s, accepted-then-deleted,
+immediate resurfacing, late suggestions, and pause/disable rates landed.
+Latency update: latency is 82/100 after the current benchmark gate added
+p50/p90/p95/p99 first-visible, first-token, total-generation, event-tap, AX,
+stale-late suppression, and default-runtime proof checks.
+Privacy story update: privacy/trust is 88/100 after the dependency inventory,
+field checklist, metadata redaction, and current-build export proof landed.
 
 Release gate status: blocked. `Insertion safety`, `Privacy/trust`, and `Non-annoyance` must all be at least 80/100 with current proof before beta.
 
@@ -72,17 +80,17 @@ Release gate status: blocked. `Insertion safety`, `Privacy/trust`, and `Non-anno
 | Category | Weight | Current score | Weighted |
 | --- | ---: | ---: | ---: |
 | Insertion safety | 18 | 81 | 14.58 |
-| Privacy and trust | 16 | 84 | 13.44 |
-| Non-annoyance | 14 | 76 | 10.64 |
-| Latency | 12 | 69 | 8.28 |
+| Privacy and trust | 16 | 88 | 14.08 |
+| Non-annoyance | 14 | 82 | 11.48 |
+| Latency | 12 | 82 | 9.84 |
 | Suggestion relevance | 10 | 67 | 6.70 |
 | App compatibility | 10 | 71 | 7.10 |
 | Visual placement | 8 | 74 | 5.92 |
-| User control | 6 | 78 | 4.68 |
+| User control | 6 | 86 | 5.16 |
 | Recoverability | 4 | 68 | 2.72 |
 | Local model/runtime readiness | 2 | 64 | 1.28 |
 
-Weighted total: 75.34, rounded to 75/100.
+Weighted total: 78.86, rounded to 79/100.
 
 ### Insertion Safety
 
@@ -96,28 +104,29 @@ Weighted total: 75.34, rounded to 75/100.
 ### Privacy And Trust
 
 - Weight: 16
-- Current score: 84/100
-- Why this score: Local-first defaults, redacted traces, raw/screenshot opt-in, pause, per-app disable, delete traces, RAM-only accepted-survival retention, and a source-level local-only network surface check are present. Runtime packet-capture proof is still missing.
-- Evidence found in repo: `docs/product/privacy-and-controls.md`, `Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift`, `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalTraceMetadata.swift`, `Sources/AutocompleteLabCore/Tracing/TracePrivacyFingerprint.swift`, `Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift`, `Tests/AutocompleteLabAppTests/RawTracePrivacyExpiryTests.swift`, `Tests/AutocompleteLabAppTests/RawTraceReportExportTests.swift`, `Tests/AutocompleteLabAppTests/AcceptanceSurvivalCheckerTests.swift`, `script/delete_local_traces.sh`, `script/check_local_only_network_surface.sh`, `script/check_local_only_network_surface_self_test.sh`.
+- Current score: 88/100
+- Why this score: Local-first defaults, redacted traces, raw/screenshot opt-in, pause, per-app disable, delete traces, RAM-only accepted-survival retention, source-level local-only network checks, dependency/SDK inventory, field-level privacy checklist, and current-build redacted export proof are present. Runtime packet-capture proof is still missing.
+- Evidence found in repo: `docs/product/privacy-and-controls.md`, `docs/product/dependency-sdk-data-inventory.md`, `docs/product/beta-privacy-data-checklist.md`, `PRIVACY-BETA.md`, `DIAGNOSTIC-EXPORT.md`, `Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift`, `Sources/AutocompleteLabCore/Text/DiagnosticsMetadataRedactor.swift`, `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift`, `Sources/AutocompleteLabApp/Mac/LocalReportExporter.swift`, `Sources/AutocompleteLabApp/App/PrivacyExportProofCommand.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalTraceMetadata.swift`, `Sources/AutocompleteLabCore/Tracing/TracePrivacyFingerprint.swift`, `Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift`, `Tests/AutocompleteLabCoreTests/DiagnosticValueRedactorTests.swift`, `Tests/AutocompleteLabAppTests/RawTracePrivacyExpiryTests.swift`, `Tests/AutocompleteLabAppTests/RawTraceReportExportTests.swift`, `Tests/AutocompleteLabAppTests/PrivacyExportProofCommandTests.swift`, `Tests/AutocompleteLabAppTests/AcceptanceSurvivalCheckerTests.swift`, `script/delete_local_traces.sh`, `script/check_dependency_inventory.sh`, `script/check_current_build_privacy_export.sh`, `script/check_local_only_network_surface.sh`, `script/check_local_only_network_surface_self_test.sh`.
 - Missing evidence: Packet-capture or network assertion showing no unexpected egress in a running local-only typing session, and a current onboarding proof that a new user can explain the privacy model.
-- What would make it 100/100: Local-only egress tests, clear in-product privacy status, current redacted export proof, and opt-in debug flows that expire and are easy to revoke.
+- What would make it 100/100: Runtime local-only egress proof, clear in-product privacy status in the first-run flow, and opt-in debug flows proven to expire and be easy to revoke.
 
 ### Non-Annoyance
 
 - Weight: 14
-- Current score: 76/100
-- Why this score: Burst suppression, cooldowns, confidence gating, display scoring, typed-over handling, slow-display suppression, and accepted-then-deleted runtime signaling exist. The score is still capped because long-session annoyance proof and real trace-based suppression proof are incomplete.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Session/TypingBurstPolicy.swift`, `Sources/AutocompleteLabCore/Session/DisplayScorePolicy.swift`, `Sources/AutocompleteLabCore/Session/CompletionConfidencePolicy.swift`, `Sources/AutocompleteLabCore/Session/PrefixFamilyCooldownPolicy.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalChecker.swift`, `Tests/AutocompleteLabCoreTests/TypingBurstPolicyTests.swift`, `Tests/AutocompleteLabCoreTests/DisplayScorePolicyTests.swift`, `Tests/AutocompleteLabAppTests/AcceptanceSurvivalCheckerTests.swift`.
-- Missing evidence: Long-session annoyance proof, current show-rate/dismiss-rate/resurfacing metrics, and fresh real-app proof that accepted-then-deleted signals suppress future similar suggestions.
-- What would make it 100/100: Low show density in real sessions, no immediate resurfacing after dismiss, no mid-word phrase spam, late suggestions hidden, and accepted-then-deleted signals wired into future suppression.
+- Current score: 82/100
+- Why this score: Burst suppression, cooldowns, confidence gating, display scoring, typed-over handling, slow-display suppression, accepted-then-deleted runtime signaling, and a redacted non-annoyance report/gate now exist. The score is still capped because long-session dogfood proof is not fresh enough across real app surfaces.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Session/TypingBurstPolicy.swift`, `Sources/AutocompleteLabCore/Session/DisplayScorePolicy.swift`, `Sources/AutocompleteLabCore/Session/CompletionConfidencePolicy.swift`, `Sources/AutocompleteLabCore/Session/PrefixFamilyCooldownPolicy.swift`, `Sources/AutocompleteLabCore/Tracing/AutocompleteNonAnnoyanceReport.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalChecker.swift`, `script/non_annoyance_report.py`, `script/non_annoyance_report_self_test.sh`, `Tests/AutocompleteLabCoreTests/AutocompleteNonAnnoyanceReportTests.swift`, `Tests/AutocompleteLabCoreTests/PrefixFamilyCooldownPolicyTests.swift`, `Tests/AutocompleteLabAppTests/AcceptanceSurvivalCheckerTests.swift`.
+- Missing evidence: Fresh long-session dogfood traces proving the new gate stays green in TextEdit, Notes, Chrome, and Obsidian, plus pause/resume uplift from real use.
+- What would make it 100/100: Low show density in real sessions, no immediate resurfacing after dismiss, no mid-word phrase spam, late suggestions hidden, and accepted-then-deleted signals suppressing future same-prefix suggestions in real dogfood traces.
 
 ### Latency
 
 - Weight: 12
-- Current score: 69/100
-- Why this score: Instrumentation and scripts exist, and display now fails closed after the 750 ms first-visible budget. The score is still capped because live runtime proof is not current and the private-beta latency target is still looser than the research ideal.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Runtime/CompletionRuntimeBenchmark.swift`, `Sources/AutocompleteLabApp/Mac/KeyboardEventTap.swift`, `script/check_typing_performance_log.sh`, `script/model_latency_report.py`, `Tests/AutocompleteLabCoreTests/RuntimePolicyTests.swift`.
-- Missing evidence: Current p50/p90/p95/p99 keystroke-to-visible metrics by app and current default-model proof on this machine.
+- Current score: 82/100
+- Exact metric change: 69/100 -> 82/100 (+13).
+- Why this score: Latency is now measurable by current numbers instead of vibes. The new benchmark reports first-visible/keystroke-to-visible, first-token, total-generation, event-tap, AX read, and stale-late suppression percentiles by app/profile, and the beta gate fails if late suggestions are shown or the default runtime proof is missing. Current log-window metrics show first-visible p50 0 ms, p90 263 ms, p95 280 ms, p99 426 ms; first-token p95 270 ms; total-generation p95 357 ms; event-tap p95 84 us; and zero late shown suggestions. The score is still capped because fresh bounded shown-suggestion proof is not complete for every target app after each relaunch.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Runtime/CompletionRuntimeBenchmark.swift`, `Sources/AutocompleteLabCore/Session/FocusedTextPollLatencyStats.swift`, `Sources/AutocompleteLabApp/Mac/KeyboardEventTap.swift`, `script/check_typing_performance_log.sh`, `script/latency_benchmark_report.py`, `script/latency_benchmark_report_self_test.sh`, `script/model_latency_report.py`, `Tests/AutocompleteLabCoreTests/RuntimePolicyTests.swift`, `Tests/AutocompleteLabCoreTests/FocusedTextPollLatencyStatsTests.swift`.
+- Missing evidence: Fresh bounded p50/p90/p95/p99 shown-suggestion slices for every target app after the same default-model relaunch, plus long-session memory/energy proof.
 - What would make it 100/100: Warm-path p50 under 90 ms, p90 under 150 ms, p95 under 180 ms, no event-tap jank, and no stale late suggestions shown.
 
 ### Suggestion Relevance
@@ -150,10 +159,10 @@ Weighted total: 75.34, rounded to 75/100.
 ### User Control
 
 - Weight: 6
-- Current score: 78/100
-- Why this score: Pause, per-app disable, trace pause/delete, forced mirror, proof commands, and full-accept shortcut settings exist. Shortcut conflict detection and language/personalization controls are not complete.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Session/SuggestionControlPolicy.swift`, `Sources/AutocompleteLabCore/Configuration/DisabledAppSelection.swift`, `Sources/AutocompleteLabApp/UI/SettingsWindowController.swift`, `Tests/AutocompleteLabCoreTests/SuggestionControlPolicyTests.swift`, `Tests/AutocompleteLabCoreTests/DisabledAppSelectionTests.swift`.
-- Missing evidence: Shortcut conflict detection, per-app shortcut profiles, language preference, personal dictionary, and explicit feedback controls.
+- Current score: 86/100
+- Why this score: Global pause, 15-minute pause, 1-hour pause, pause-until-tomorrow, current-app pause wording, current-field silence, trace pause/delete, forced mirror, proof commands, full-accept shortcut settings, shortcut conflict copy, per-app shortcut profile copy, and redacted feedback export control exist.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Session/SuggestionControlPolicy.swift`, `Sources/AutocompleteLabCore/Session/SuggestionPauseSchedulePolicy.swift`, `Sources/AutocompleteLabCore/Session/KeyboardAction.swift`, `Sources/AutocompleteLabCore/Configuration/DisabledAppSelection.swift`, `Sources/AutocompleteLabApp/UI/ControlSurfaceState.swift`, `Sources/AutocompleteLabApp/UI/SettingsWindowController.swift`, `Sources/AutocompleteLabApp/UI/DiagnosticsWindowController.swift`, `Tests/AutocompleteLabCoreTests/SuggestionControlPolicyTests.swift`, `Tests/AutocompleteLabCoreTests/SuggestionPauseSchedulePolicyTests.swift`, `Tests/AutocompleteLabCoreTests/AutocompleteKeyMapperTests.swift`, `Tests/AutocompleteLabCoreTests/DisabledAppSelectionTests.swift`, `Tests/AutocompleteLabAppTests/SettingsWindowControllerStateTests.swift`, `Tests/AutocompleteLabAppTests/DiagnosticsWindowControllerStateTests.swift`.
+- Missing evidence: Language preference, personal dictionary, and fresh manual proof that Settings, menu, and Diagnostics cannot disagree during pause/resume.
 - What would make it 100/100: Clear defaults for normal users and deep per-app control for power users without making setup noisy.
 
 ### Recoverability
@@ -222,6 +231,9 @@ The app is shippable and deeply trusted: every supported surface has current pro
 - Network-egress proof for local-only mode.
 - Runtime proof from `script/model_latency_report.py --default-model-proof`.
 - Redacted report export proof and local trace deletion proof.
+- Dependency/SDK inventory proof from `script/check_dependency_inventory.sh`.
+- Current-build privacy export proof from
+  `script/check_current_build_privacy_export.sh`.
 
 ## Implementation Queue
 
@@ -274,9 +286,26 @@ The app is shippable and deeply trusted: every supported surface has current pro
 - Risk level: High because it touches live prompt surfaces.
 - Expected score impact: +3 to +6 overall.
 
+### 6. Finish Beta Privacy Story - Completed In This Loop
+
+- Objective: Make the default privacy/export story auditable by a tester or
+  reviewer without asking them to trust broad local-first claims.
+- Files involved: `PRIVACY-BETA.md`, `DIAGNOSTIC-EXPORT.md`,
+  `docs/product/dependency-sdk-data-inventory.md`,
+  `docs/product/beta-privacy-data-checklist.md`,
+  `Sources/AutocompleteLabApp/App/PrivacyExportProofCommand.swift`,
+  `Sources/AutocompleteLabCore/Text/DiagnosticsMetadataRedactor.swift`,
+  `script/check_dependency_inventory.sh`,
+  `script/check_current_build_privacy_export.sh`.
+- Tests added/updated: `DiagnosticValueRedactorTests`,
+  `RawTraceReportExportTests`, and `PrivacyExportProofCommandTests`.
+- Proof required: redacted export check, delete-local-traces check, dependency
+  inventory check, current-build export proof, and `swift test`.
+- Result: privacy/trust moved from 84/100 to 88/100.
+
 ## Codex Execution Goal
 
-Implemented in this pass: make late suggestions fail closed before display, reconcile the non-strict proof manifest screenshot references for existing Obsidian and Notes proof, and wire RAM-only accepted-survival runtime checks after verified insertion.
+Implemented in this pass: make late suggestions fail closed before display, reconcile the non-strict proof manifest screenshot references for existing Obsidian and Notes proof, wire RAM-only accepted-survival runtime checks after verified insertion, and finish the beta privacy proof story.
 
 ## Stop Conditions
 

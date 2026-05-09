@@ -26,6 +26,9 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manua
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate
@@ -37,8 +40,9 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gat
   Use the disposable autocomplete smoke note and run title, body, and checklist
   as separate proof labels. A generic `notes` run does not count.
 - Obsidian: automation must not open or scan a private vault. Use a disposable
-  note and treat detached-suggestion suppression as safety evidence, not a full
-  placement pass.
+  proof vault and keep default, non-default theme, split/side pane, and long
+  scrolled-note proof rows separate. Detached-suggestion suppression is safety
+  evidence, not a full placement pass.
 - Chrome real editor fixtures: `monaco-real` and `prosemirror-real` install
   pinned npm packages into a temp folder and use an isolated Chrome process with
   renderer accessibility forced. Only add screenshots from a bounded strict

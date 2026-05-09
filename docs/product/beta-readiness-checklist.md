@@ -18,6 +18,10 @@ Use this before inviting private beta testers.
 - [ ] The preferred asset is `Qwen3.5-4B-4bit`.
 - [ ] Settings installs or repairs the local model without shell commands.
 - [ ] `./script/model_latency_report.py --default-model-proof` passes.
+- [ ] `./script/latency_benchmark_report.py --beta-gate` passes with current
+  first-visible, first-token, total-generation, AX, event-tap, and stale-late
+  suppression numbers.
+
 - [ ] Suggestions stay off while the runtime warms or fails.
 - [ ] Mock fallback is not used for beta.
 - [ ] Missing or invalid model setup is handled by Settings `Install Model` or
@@ -47,6 +51,26 @@ Use this before inviting private beta testers.
 - [ ] The tester knows how to delete traces.
 - [x] A redacted report export works through
   `./script/check_redacted_report_export.sh`.
+- [x] Dependency/SDK inventory works through
+  `./script/check_dependency_inventory.sh`.
+- [x] Current app build redacted export proof works through
+  `./script/check_current_build_privacy_export.sh`.
+
+## Feedback Ops Gate
+
+- [x] `./script/validate_beta_issue_template.sh` passes.
+- [x] The menu bar `Submit Feedback...` path opens the structured beta issue
+  form without attaching diagnostics or typed content automatically.
+- [x] `.github/labels.yml` defines `beta feedback`, `needs triage`,
+  `beta stop`, `beta trust blocker`, `beta high`, `beta needs report`,
+  `beta docs`, and `beta ready to close`.
+- [x] `docs/product/private-beta-ops-loop.md` ties the daily checklist,
+  redacted export, triage labels, stop dashboard, and readiness summary
+  together.
+- [ ] `dist/private-beta/beta-readiness-summary.md` is regenerated from the
+  exact tester archive after the next app-code change.
+- [ ] The first real tester feedback issue has been triaged with the new labels
+  and a redacted report, or there are no tester issues yet.
 
 ## Trust Gate
 

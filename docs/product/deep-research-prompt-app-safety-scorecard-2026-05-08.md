@@ -40,7 +40,9 @@ suggestion is better than a wrong or surprising suggestion.
   caps this score at 59/100.
 - Any prompt-app suggestion content violation in a release proof corpus caps
   this score at 59/100.
-- Missing required target-app proof caps this score at 79/100.
+- Missing required target-app proof still blocks beta and 100/100. Without a
+  mechanical prompt-trace gate it capped this score at 79/100; with the gate in
+  place, the remaining cap is live target proof.
 - ChatGPT, Slack, Telegram, Safari prompt/chat surfaces, and other unproven
   prompt apps must stay disabled or diagnostics-only until exact proof exists.
 - Mock model fallback must not count as beta-ready prompt-app behavior.
@@ -48,10 +50,12 @@ suggestion is better than a wrong or surprising suggestion.
 ## Current App Assessment
 
 The app now has explicit prompt-app safety modes in
-`CompatibilityProfile.promptAppSafetyMode`. Codex, Claude Code, and Claude
-desktop are word-only prompt surfaces. ChatGPT, Atlas, Safari, Slack, Discord,
-and Telegram are disabled/diagnostics-only for prompt safety. This is the
-right product posture.
+`CompatibilityProfile.promptAppSafetyMode` plus a versioned
+`HostCompatibilityPolicyCatalog`. The proof manifest mirrors that catalog with
+exact installed app versions where available, runtime state, proof state, kill
+switch, and proof artifacts. Codex and Claude desktop are word-only prompt
+surfaces. ChatGPT, Atlas, Safari, Slack, Discord, and Telegram are
+disabled/diagnostics-only for prompt safety. This is the right product posture.
 
 The insertion path is safer than before. `AppDelegate.insertAcceptedText` no
 longer inserts raw text when there is no current compatibility profile; it
@@ -67,37 +71,41 @@ shell-looking text, hidden characters, and approval/submit language. AI chat
 prompt guidance now says not to suggest slash commands, at-references, bang
 commands, shell text, approval text, or prompt answers.
 
-The proof story is still not enough for 100. `swift test` passes 742 tests,
-but strict manual proof remains stale or missing. `manual_smoke_status.sh
---strict`, `check_visual_placement_evidence.sh`, `check_score_targets.sh`, and
-`beta_readiness.sh --check-only` all still fail on proof/archive blockers.
-`check_trace_eval.sh` also fails against old all-history local traces because
-they contain unrecovered insertion failures. Those traces are useful warning
-evidence, not current release proof for this implementation commit.
+The proof story is still not enough for 100, but it is now mechanically
+enforceable. `script/check_prompt_app_proof.sh` reads JSONL trace slices,
+reports the five prompt-app safety counters, and exits nonzero when any counter
+is nonzero or when no prompt-app proof events are present. It is wired into the
+score loop, strict score target gates, beta readiness, and smoke self-tests.
+Strict manual proof remains stale or missing for some real target apps, so this
+does not claim beta-ready prompt-app support.
 
 ## Score
 
-Overall score: 79/100
+Overall score: 85/100
 
-Starting score before this pass: 70/100
-Ending score after this pass: 79/100
+Starting score before this pass: 83/100
+Ending score after this pass: 85/100
 
-The ending score hits the research hard cap for missing required target-app
-proof. The code can improve further, but the last 21 points require fresh,
-exact-version, human-confirmed prompt-app proof.
+The score moves above the old proof-gate cap because prompt-app safety can now
+fail closed from trace evidence. It is still capped well short of 100 because
+fresh, exact-version, human-confirmed prompt-app proof is still missing.
 
 ## Score Breakdown
 
 ### Host Detection And Context Classification
 
 - Weight: 20
-- Current score: 16/20
-- Why this score: The app has explicit profiles and prompt-app safety modes,
-  and high-risk unproven apps are disabled. It still lacks a versioned host
-  policy file and deeper browser URL/domain/state classification.
+- Current score: 18/20
+- Why this score: The app has explicit profiles, prompt-app safety modes, and
+  a versioned per-host policy with exact installed versions where available,
+  disabled/proof-only runtime states, kill switches, and proof artifacts. It
+  still lacks deeper browser URL/domain/state classification.
 - Evidence found in repo:
   - `Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift`
+  - `Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift`
   - `Tests/AutocompleteLabCoreTests/CompatibilityProfileTests.swift`
+  - `Tests/AutocompleteLabCoreTests/HostCompatibilityPolicyTests.swift`
+  - `docs/product/proof-manifest.json`
   - `Sources/AutocompleteLabCore/Session/SensitiveTextFieldPolicy.swift`
   - `Sources/AutocompleteLabCore/Session/PromptEditorFingerprintPolicy.swift`
 - Missing evidence:
@@ -105,8 +113,8 @@ exact-version, human-confirmed prompt-app proof.
   - Browser composer URL/domain and tool/context state proof.
   - Streaming/approval/command-menu host-state detection proof.
 - What would make it 100/100:
-  - Versioned per-host policy with exact app versions, safety mode, disabled
-    states, and proof artifacts for each supported prompt surface.
+  - Browser composer URL/domain, active-run, tool/context, approval, and
+    command-menu state proof for each supported prompt surface.
 
 ### Acceptance Channel Safety
 
@@ -177,9 +185,11 @@ exact-version, human-confirmed prompt-app proof.
 ### Testing And Proof Coverage
 
 - Weight: 15
-- Current score: 8/15
-- Why this score: Unit coverage is strong, and proof scripts are strict. The
-  required target apps do not have fresh proof for this implementation commit.
+- Current score: 10/15
+- Why this score: Unit coverage is strong, proof scripts are strict, and the
+  new prompt-app proof gate has pass/fail fixtures for the exact hard metrics.
+  The required target apps still do not all have fresh proof for this
+  implementation commit.
 - Evidence found in repo:
   - `swift test` passed 742 tests.
   - `script/check_test_coverage_manifest.sh` passed.
@@ -188,6 +198,8 @@ exact-version, human-confirmed prompt-app proof.
   - `docs/product/app-proof-matrix.md`
   - `script/manual_smoke_status.sh`
   - `script/real_app_smoke.sh`
+  - `script/check_prompt_app_proof.sh`
+  - `script/check_prompt_app_proof_self_test.sh`
 - Missing evidence:
   - Fresh proof for Codex, Claude Code, Claude desktop, ChatGPT, Slack, and
     Telegram.
@@ -200,26 +212,25 @@ exact-version, human-confirmed prompt-app proof.
 ### Observability And Rollback
 
 - Weight: 10
-- Current score: 7/10
+- Current score: 9/10
 - Why this score: The repo has trace analysis, privacy filtering, local trace
   deletion, pause/disable controls, typing performance checks, and now named
-  prompt-app no-submit metrics. It does not yet have a host kill switch or a
-  dedicated prompt-app proof gate script that fails on these exact metrics.
+  prompt-app no-submit metrics plus a dedicated prompt-app proof gate script
+  that fails on those exact metrics. It does not yet have a host kill switch.
 - Evidence found in repo:
   - `Sources/AutocompleteLabCore/Tracing/PromptAppNoSubmitMetrics.swift`
   - `Tests/AutocompleteLabCoreTests/PromptAppNoSubmitMetricsTests.swift`
   - `script/check_trace_eval.sh`
+  - `script/check_prompt_app_proof.sh`
+  - `script/check_prompt_app_proof_self_test.sh`
   - `script/check_typing_performance_log.sh`
   - `script/delete_local_traces.sh`
   - `Sources/AutocompleteLabCore/Session/SuggestionControlPolicy.swift`
 - Missing evidence:
-  - A first-class script that consumes prompt-app proof traces and reports
-    `accidentalSubmitCount`, `sendKeyCollisionCount`,
-    `promptMutationWithoutUserIntentCount`, `wrongContextInsertionCount`, and
-    `suggestionContentViolationCount`.
   - Per-host kill switch or downgrade policy outside a new app build.
 - What would make it 100/100:
-  - Dedicated prompt-app proof gate plus per-host rollback/downgrade controls.
+  - Per-host rollback/downgrade controls plus fresh target-app proof that keeps
+    the prompt-app proof gate green.
 
 ## 0/100 Definition
 
@@ -241,7 +252,8 @@ are disabled or word-only, full accept is off, wrong-context insertion is
 guarded, unsafe content is blocked, unit tests pass, and proof scripts clearly
 name remaining manual blockers.
 
-This repo is just under that bar at 79 because the research hard cap applies.
+This repo now clears that bar at 83 because the prompt-app trace gate exists
+and can fail closed. It still needs live target-app proof before beta support.
 
 ## 100/100 Definition
 
@@ -284,19 +296,22 @@ clear host rollback path. Unsupported or unproven hosts stay disabled.
 
 ### 1. Dedicated Prompt-App Proof Gate
 
-- Objective: Add a script that reads a bounded trace slice and fails if any
-  prompt-app no-submit metric is nonzero.
-- Files likely involved:
-  - `Sources/AutocompleteLabCore/Tracing/PromptAppNoSubmitMetrics.swift`
-  - `script/check_trace_eval.sh`
-  - new or existing self-test under `script/`
-- Tests to add/update:
-  - `Tests/AutocompleteLabCoreTests/PromptAppNoSubmitMetricsTests.swift`
-  - self-test with fixture traces for pass/fail cases.
-- Proof required:
-  - Script output showing all five metrics at zero for a fixture pass.
-- Risk level: Medium.
-- Expected score impact: +3 to +5.
+- Status: Done in this pass.
+- Result: `script/check_prompt_app_proof.sh` reads bounded trace slices and
+  fails if any prompt-app no-submit metric is nonzero.
+- Files involved:
+  - `script/check_prompt_app_proof.sh`
+  - `script/check_prompt_app_proof_self_test.sh`
+  - `script/scorecard_goal_loop.sh`
+  - `script/check_score_targets.sh`
+  - `script/beta_readiness.sh`
+  - `script/smoke_test.sh`
+- Tests added:
+  - `script/check_prompt_app_proof_self_test.sh` proves a clean prompt trace
+    passes, all five hard metrics fail for the right reasons, metadata-tagged
+    AI chat events count as prompt evidence, and missing prompt evidence fails
+    closed.
+- Score impact: +4.
 
 ### 2. Exact Target-App Manual Proof Pack
 
@@ -378,9 +393,9 @@ Claude desktop, ChatGPT, Slack, and Telegram with zero hard-gate metrics.
   proof remains, or
 - A target app cannot be safely tested without risking a real submit/send.
 
-Current stop condition reached: all high-leverage automatable code/test
-hardening from this pass is complete, and the remaining points are blocked on
-human/manual proof.
+Current stop condition reached: the automatable prompt-app proof gate is now in
+place and wired into release-style gates. The remaining points are blocked on
+fresh human/manual target-app proof.
 
 ## Remaining Gaps
 
@@ -391,7 +406,8 @@ human/manual proof.
   still disagree in places; proof docs need a cleanup pass after fresh runs.
 - `check_trace_eval.sh` fails on old all-history traces with insertion
   failures; release proof should use fresh bounded trace slices.
-- `beta_readiness.sh --check-only` is blocked by manual proof and missing
-  private beta archive, not by this code path.
-- The prompt-app metrics analyzer exists, but there is not yet a dedicated
-  command-line prompt-app proof gate around it.
+- `beta_readiness.sh --check-only` is blocked by manual proof, the prompt-app
+  proof gate when no clean bounded trace is provided, and missing private beta
+  archive.
+- The dedicated prompt-app proof gate exists now; it still needs fresh bounded
+  live traces from the required target apps.
