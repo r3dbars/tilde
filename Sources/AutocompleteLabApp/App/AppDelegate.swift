@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var engine: any CompletionEngine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
     private let keyboardCapturePolicy = KeyboardCapturePolicy()
+    private let keyboardCaptureSafetyPolicy = KeyboardCaptureSafetyPolicy()
     private let keyboardEventTapIdleStopPolicy = KeyboardEventTapIdleStopPolicy()
     private let insertionVerification = InsertionVerification()
     private let insertionRetryPolicy = InsertionRetryPolicy()
@@ -2227,7 +2228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     key,
                     isAutorepeat: isAutorepeat,
                     didObservePassthroughKeyDown: didObservePassthroughKeyDown
-                ) ?? false
+                ) ?? .replayOriginalKey(.noVisibleSuggestion)
             },
             passthroughKeyDownObserver: { [weak self] in
                 self?.observePassthroughTypingKeyDown()
@@ -2240,11 +2241,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if eventTap.start() {
             keyboardEventTap = eventTap
-            DiagnosticsLog.shared.record("keyboard-event-tap-started")
+            DiagnosticsLog.shared.record(
+                "keyboard-event-tap-started",
+                metadata: [
+                    "diagnosticLayer": "keyCapture"
+                ]
+            )
             return true
         }
 
-        DiagnosticsLog.shared.record("keyboard-event-tap-start-failed")
+        DiagnosticsLog.shared.record(
+            "keyboard-event-tap-start-failed",
+            metadata: [
+                "diagnosticLayer": "keyCapture",
+                "safetyFailure": "true"
+            ]
+        )
         return false
     }
 
@@ -2272,7 +2284,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.record(
             "keyboard-event-tap-failed-closed",
             metadata: [
-                "reason": reason
+                "reason": reason,
+                "diagnosticLayer": "keyCapture",
+                "safetyFailure": "true"
             ]
         )
     }
@@ -2345,7 +2359,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ key: AutocompleteKey,
         isAutorepeat: Bool = false,
         didObservePassthroughKeyDown: Bool = false
-    ) -> Bool {
+    ) -> KeyboardEventTapHandlingResult {
         if didObservePassthroughKeyDown {
             currentSuggestionInvalidatedByUserKeyDown = true
             clearPendingAcceptedInsertionUndo(reason: "typing")
@@ -2368,12 +2382,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 handled: handled,
                 reason: handled ? "accepted-insertion-undone" : "undo-unavailable"
             )
-            return handled
+            return handled ? .handled : .replayOriginalKey(.undoUnavailable)
         }
 
         guard suggestionSession.hasVisibleSuggestion else {
             suppressKeyUntil[key] = nil
-            return false
+            return .replayOriginalKey(.noVisibleSuggestion)
         }
 
         recordClaudeCodeTerminalHostProofKeyboardProgress(
@@ -2392,7 +2406,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 handled: false,
                 reason: "focus-changed"
             )
-            return false
+            return .replayOriginalKey(.focusChanged)
         }
         recordClaudeCodeTerminalHostProofKeyboardProgress(
             stage: "focus-check-passed",
@@ -2414,7 +2428,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 handled: false,
                 reason: "stale-after-keydown"
             )
-            return false
+            return .replayOriginalKey(.staleAfterTyping)
         }
 
         if shouldSuppressKey(key, isAutorepeat: isAutorepeat) {
@@ -2424,12 +2438,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 action: action
             )
             recordKeyboardAction(key: key, action: .passThrough, handled: true, reason: "suppressed-autorepeat")
-            return true
+            return .handled
         }
 
         switch action {
         case .undoAcceptedInsertion:
-            return false
+            return .replayOriginalKey(.undoUnavailable)
 
         case .acceptNextWord:
             recordClaudeCodeTerminalHostProofKeyboardProgress(
@@ -2439,14 +2453,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             guard currentProfile?.supportsOneWordAcceptance == true else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-one-word")
-                return false
+                return .replayOriginalKey(.unsupportedAction)
             }
             if let blockReason = currentSuggestionAcceptanceDecision().blockReason {
                 recordAcceptanceGuardBlock(reason: blockReason)
                 setSuggestionDecision("Blocked: \(blockReason.rawValue)")
                 hideSuggestion(reason: blockReason.rawValue)
                 recordKeyboardAction(key: key, action: action, handled: false, reason: blockReason.rawValue)
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceBlock: blockReason)
             }
 
             let acceptanceID = UUID().uuidString
@@ -2466,7 +2480,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             guard let acceptedText = suggestionSession.nextWordAcceptance() else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "missing-accepted-text")
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .missingAcceptedText)
             }
             recordClaudeCodeTerminalHostProofKeyboardProgress(
                 stage: "accept-next-word-text-ready",
@@ -2478,7 +2492,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             guard let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "acceptance-proof-failed")
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .acceptanceProofFailed)
             }
             recordClaudeCodeTerminalHostProofKeyboardProgress(
                 stage: "accept-next-word-proof-ready",
@@ -2493,7 +2507,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             guard insertAcceptedText(acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
             }
             recordClaudeCodeTerminalHostProofKeyboardProgress(
                 stage: "accept-next-word-insert-succeeded",
@@ -2531,19 +2545,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
-            return true
+            return .handled
 
         case .acceptAllVisible:
             guard currentProfile?.supportsFullAcceptance == true else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-full")
-                return false
+                return .replayOriginalKey(.unsupportedAction)
             }
             if let blockReason = currentSuggestionAcceptanceDecision().blockReason {
                 recordAcceptanceGuardBlock(reason: blockReason)
                 setSuggestionDecision("Blocked: \(blockReason.rawValue)")
                 hideSuggestion(reason: blockReason.rawValue)
                 recordKeyboardAction(key: key, action: action, handled: false, reason: blockReason.rawValue)
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceBlock: blockReason)
             }
 
             let acceptanceID = UUID().uuidString
@@ -2555,15 +2569,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             guard let acceptedText = suggestionSession.allVisibleAcceptance() else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "missing-accepted-text")
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .missingAcceptedText)
             }
             guard let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "acceptance-proof-failed")
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .acceptanceProofFailed)
             }
             guard insertAcceptedText(acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
             }
 
             armAcceptedInsertionUndo(
@@ -2595,7 +2609,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
-            return true
+            return .handled
 
         case .dismiss:
             var metadata = currentSuggestionLifetimeMetadata()
@@ -2621,13 +2635,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "dismissed")
-            return true
+            return .handled
 
         case .passThrough:
             if key != .other {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "pass-through")
             }
-            return false
+            return .replayOriginalKey(.passThroughAction)
         }
     }
 

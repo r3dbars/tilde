@@ -109,6 +109,12 @@ line_count() {
   fi
 }
 
+textedit_is_disabled_by_defaults() {
+  local disabled_bundles
+  disabled_bundles="$(defaults read "$DEFAULTS_DOMAIN" DisabledBundleIdentifiers 2>/dev/null || true)"
+  printf '%s\n' "$disabled_bundles" | grep -F "com.apple.TextEdit" >/dev/null
+}
+
 wait_for_focused_text_poll_summary_after_line() {
   local start_line="$1"
   local timeout_seconds="${2:-15}"
@@ -588,6 +594,12 @@ describe_plan() {
     echo "AX warnings: separate non-fatal lane"
   fi
   echo "AX sample proof: require at least $MIN_AX_SAMPLES focused-text poll samples"
+  echo "Primer: require a TextEdit suggestion before long typing"
+  if textedit_is_disabled_by_defaults; then
+    echo "TextEdit enablement: would temporarily allow TextEdit before relaunch"
+  else
+    echo "TextEdit enablement: already allowed"
+  fi
 }
 
 type_textedit_fixture() {
@@ -750,6 +762,11 @@ fi
 
 if ((CHUNK_SIZE > 80)); then
   echo "--chunk-size must be 80 or lower so the soak stays typing-like." >&2
+  exit 2
+fi
+
+if textedit_is_disabled_by_defaults && [[ "$SKIP_BUILD" == "1" ]]; then
+  echo "--skip-build cannot refresh the running app state while TextEdit is disabled; run without --skip-build so the proof app can relaunch with temporary TextEdit enablement." >&2
   exit 2
 fi
 
