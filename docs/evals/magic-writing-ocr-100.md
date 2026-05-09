@@ -169,6 +169,18 @@ Time: 2026-05-09T00:03:04Z
 - Refreshed Chrome `textarea` on the same app binary too: 2 accepted insertions, strict screenshot-backed visual evidence, trace lines 59590-59610, diagnostics lines 220808-220881.
 - Build proof in the smoke rows: `commit:baf734c266f5` and app binary SHA `c0469310beba47cf2bd44d2dbe10571405fa1602d37a744a60ab01ccd06a8c02`.
 
+## Latest Chrome Editor Proof Pass
+
+Time: 2026-05-09T00:10:00Z
+
+- Refreshed six Chrome editor/chat lanes on the current `qwen3-0.6b` app binary: `editor-like`, `monaco-like`, `prosemirror-like`, `chat-like`, `monaco-real`, and `prosemirror-real`.
+- Result: each lane produced 2 accepted insertions with strict screenshot-backed visual evidence; the chat-like lane also kept the submit counter at zero during Tab and full-visible accept.
+- Harness fix: ProseMirror-like and chat-like were failing before typing because the proof click landed on `AXWebArea` instead of the editable composer. Their click targets now land inside the editor body/composer.
+- Harness fix: ProseMirror-like replaces its initial blank paragraph marker when setup text is typed, so setup-text verification now accepts the expected text being present instead of requiring append-only character growth.
+- Trace slices: editor-like lines 59613-59634, monaco-like 59637-59663, prosemirror-like 59680-59698, chat-like 59703-59724, monaco-real 59727-59749, prosemirror-real 59752-59774.
+- Diagnostics slices: editor-like lines 221795-221874, monaco-like 221906-221995, prosemirror-like 222399-222465, chat-like 222672-222749, monaco-real 222839-222924, prosemirror-real 222957-223048.
+- Remaining Chrome proof gap: default Chrome still exposes only browser chrome, not the editor AX tree, for `monaco-real --chrome-accessibility default`; keep the default-Chrome variants pending until renderer accessibility is enabled or another safe proof path exists.
+
 ## 100 Test Situations
 
 | # | App | Situation | Target behavior | Score |
