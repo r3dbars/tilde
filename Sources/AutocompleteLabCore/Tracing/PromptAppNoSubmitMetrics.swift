@@ -55,6 +55,15 @@ public struct PromptAppNoSubmitMetricsAnalyzer: Equatable, Sendable {
         promptAppBundleIdentifiers.contains(event.appBundleIdentifier)
             || event.metadata["promptSafetyMode"] != nil
             || event.metadata["behaviorProfile"] == AutocompleteBehaviorProfileID.aiChat.rawValue
+            || isBrowserChatEvent(event)
+    }
+
+    private func isBrowserChatEvent(_ event: AutocompleteTraceEvent) -> Bool {
+        event.metadata["browserSurfaceSafetyClass"] == "browser-chat"
+            || event.metadata["promptSafetyMetricSurface"] == "browser-chat"
+            || event.metadata["browserChatSurface"] != nil
+            || event.metadata["browserChatProofSurface"] != nil
+            || Self.browserChatSurfaceIdentifiers.contains(event.metadata["browserSurface"] ?? "")
     }
 
     private func isAccidentalSubmit(_ event: AutocompleteTraceEvent) -> Bool {
@@ -99,6 +108,19 @@ public struct PromptAppNoSubmitMetricsAnalyzer: Equatable, Sendable {
         "com.openai.ChatGPT",
         "com.openai.atlas",
         "com.tinyspeck.slackmacgap",
+        "com.hnc.Discord",
+        "com.hnc.DiscordPTB",
+        "com.hnc.DiscordCanary",
         "ru.keepcoder.Telegram"
+    ]
+
+    public static let browserChatSurfaceIdentifiers: Set<String> = [
+        "chatgpt",
+        "slack",
+        "discord",
+        "discord-ptb",
+        "discord-canary",
+        "browser-chat-harness",
+        "real-browser-chat-harness"
     ]
 }
