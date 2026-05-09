@@ -76,9 +76,9 @@ The remaining gaps are material but narrower:
 
 Starting score: 67/100
 
-Current score after implementation pass: 87/100
+Current score after sensitive-field proof pass: 90/100
 
-Overall score: 87/100
+Overall score: 90/100
 
 ## Score Breakdown
 
@@ -94,10 +94,10 @@ Overall score: 87/100
 ### Sensitive-context blocking
 
 - Weight: 20
-- Current score: 17/20
-- Why this score: Secure subroles, protected content, password/token-like fingerprints, unhinted browser web areas, password managers, and Terminal are blocked or suppressed. Browser login/payment/OTP proof is still mostly heuristic.
-- Evidence found in repo: `SensitiveTextFieldPolicy`, `AXFieldClassifier`, `AccessibilityClient.isSensitiveTextElement`, `CompatibilityProfileStore.defaultDenylist`, `SensitiveTextFieldPolicyTests`, `AXFieldClassifierTests`.
-- Missing evidence: Real browser password/OTP/payment proof and proof that uncertain browser sensitive semantics always fail closed.
+- Current score: 19/20
+- Why this score: Secure subroles, protected content, password/token-like fingerprints, unhinted browser web areas, password managers, Terminal, OTP, payment, login, search, URL/address, API-key-like text, and private prompt/search fields now block or suppress through policy plus a redacted proof harness. Browser-only proof is bounded instead of fully real-app-current.
+- Evidence found in repo: `SensitiveTextFieldPolicy`, `SensitiveFieldProofHarness`, `AXFieldClassifier`, `CompletionActivationPolicy`, `AccessibilityClient.isSensitiveTextElement`, `CompatibilityProfileStore.defaultDenylist`, `SensitiveTextFieldPolicyTests`, `AXFieldClassifierTests`, `script/check_sensitive_field_proof.sh`, `script/check_sensitive_field_proof_self_test.sh`.
+- Missing evidence: Current real-app Chrome/Safari password, OTP, payment, and password-manager proof beyond safe local fixtures and bounded AX/browser semantics.
 - What would make it 100/100: Current real-app blocked-context proof for native secure fields, browser passwords, OTPs, payment fields, password managers, and private prompt/search fields.
 
 ### No-submit and no-overwrite guarantees
@@ -130,9 +130,9 @@ Overall score: 87/100
 ### Tests, telemetry, and proof artifacts
 
 - Weight: 10
-- Current score: 8/10
-- Why this score: This is one of the repo's strongest areas. There are many unit tests, trace analyzers, smoke scripts, visual screenshots, and a proof manifest. The remaining gap is current proof for high-risk prompt and browser production surfaces.
-- Evidence found in repo: `Tests/AutocompleteLabCoreTests`, `Tests/AutocompleteLabAppTests`, `script/check_proof_manifest.sh`, `script/check_trace_eval.sh`, `script/check_visual_placement_evidence.sh`, `script/beta_readiness.sh`, `docs/product/proof-manifest.json`.
+- Current score: 9/10
+- Why this score: This is one of the repo's strongest areas. There are many unit tests, trace analyzers, smoke scripts, visual screenshots, a proof manifest, and now a sensitive-field proof gate that reports redacted suppression categories. The remaining gap is current proof for high-risk prompt and browser production surfaces.
+- Evidence found in repo: `Tests/AutocompleteLabCoreTests`, `Tests/AutocompleteLabAppTests`, `script/check_sensitive_field_proof.sh`, `script/check_sensitive_field_proof_self_test.sh`, `script/check_proof_manifest.sh`, `script/check_trace_eval.sh`, `script/check_visual_placement_evidence.sh`, `script/beta_readiness.sh`, `docs/product/proof-manifest.json`.
 - Missing evidence: Current same-slice no-submit proof for Codex, Claude Code, Claude desktop, and production browser editors.
 - What would make it 100/100: Release gates fail every unsupported or stale proof row automatically and all shipped app/path rows have current artifacts.
 
@@ -188,11 +188,17 @@ Completed in this pass:
 - Post-write verification now checks a post-insertion target scope.
 - Clipboard insertion fallback is hard-disabled and beta readiness gates it.
 - Generic browser `AXWebArea` fields without a compose hint now suppress as unproven surfaces.
+- Sensitive-field assessment now records safe categories for password, OTP, payment, login, search, URL/address, API-key-like text, password-manager, private prompt, and private search contexts.
+- The sensitive proof harness uses safe local fixtures plus bounded native/browser-style metadata to prove silence without storing raw field text.
+- Trace analysis and HTML reports now show sensitive suppression and presentation categories without raw typed text, URLs, titles, or field values.
+- `script/check_sensitive_field_proof.sh` and `script/check_sensitive_field_proof_self_test.sh` gate required categories, blocked decisions, proof levels, and raw fixture leaks.
+- `./script/check_sensitive_field_proof_self_test.sh` passes.
 - `swift test` passes: 737 tests.
 - `git diff --check` and `./script/check_test_coverage_manifest.sh` pass.
 
 Current blockers from live proof scripts:
 
+- This pass could not complete a fresh full `swift test` run because inherited SwiftPM jobs repeatedly held or recreated `.build` locks in this checkout. The focused sensitive proof shell gate did complete.
 - `./script/check_proof_manifest.sh --require-all` fails because Chrome text fields, browser editor fixtures, Chrome chat-like composer, Codex, and Claude desktop are still partial, and Claude Code is pending.
 - `./script/check_visual_placement_evidence.sh --require-all` fails on Claude Code, Claude desktop, and stale same-slice Codex visual/no-submit proof.
 - `./script/manual_smoke_status.sh --strict` fails because 16 target app passes need current commit/archive proof.
@@ -276,6 +282,7 @@ Keep tightening insertion safety until the only remaining 100/100 blockers are r
 
 - AX window identity is captured, but target-provided monotonic revision is not implemented yet.
 - Chrome still needs production proof beyond local fixtures.
+- The exact remaining sensitive-field proof gap is real current-build Chrome/Safari password, OTP, payment, and password-manager AX traces beyond the bounded safe fixtures.
 - Exact-once insertion transaction and undo-as-one-edit proof are still missing.
 - Manual real-app proof is still needed for prompt/chat apps if support is ever restored.
 - A real app-specific bridge would be needed for high-confidence browser rich editors, Obsidian, and prompt/chat apps.

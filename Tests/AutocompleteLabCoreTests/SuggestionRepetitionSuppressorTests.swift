@@ -42,6 +42,28 @@ struct SuggestionRepetitionSuppressorTests {
         #expect(suppressor.shouldSuppress("tation", mode: .wordCompletion))
     }
 
+    @Test("suppresses repeated word completion misses across short intervals")
+    func suppressesRepeatedWordCompletionMissesAcrossShortIntervals() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        var suppressor = SuggestionRepetitionSuppressor(
+            missThreshold: 2,
+            missHalfLifeSeconds: 600
+        )
+
+        suppressor.recordMiss("umentary", mode: .wordCompletion, now: start)
+        suppressor.recordMiss(
+            "umentary",
+            mode: .wordCompletion,
+            now: start.addingTimeInterval(1)
+        )
+
+        #expect(suppressor.shouldSuppress(
+            "umentary",
+            mode: .wordCompletion,
+            now: start.addingTimeInterval(1)
+        ))
+    }
+
     @Test("does not suppress invalid word completion text")
     func doesNotSuppressInvalidWordCompletionText() {
         var suppressor = SuggestionRepetitionSuppressor(missThreshold: 1)

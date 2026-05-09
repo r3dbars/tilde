@@ -53,6 +53,11 @@ Open `Show Diagnostics` from the menu bar item.
 Open Settings to see the current sharing status. If raw text or screenshots are
 enabled for debugging, Settings says to share only the redacted privacy bundle.
 
+For the full field map, see
+[`beta-privacy-data-checklist.md`](beta-privacy-data-checklist.md). For the
+SDK/dependency inventory, see
+[`dependency-sdk-data-inventory.md`](dependency-sdk-data-inventory.md).
+
 The command-line delete path is:
 
 ```bash

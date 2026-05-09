@@ -34,8 +34,14 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(block.surface == .notion)
     }
 
-    @Test("Browser Slack and Discord are blocked until no-submit proof exists")
+    @Test("Browser ChatGPT, Slack, and Discord are blocked until no-submit proof exists")
     func blocksBrowserChatSurfaces() throws {
+        let chatGPTDecision = policy.decision(
+            bundleIdentifier: "com.google.Chrome",
+            fingerprint: FocusedElementFingerprint(
+                windowTitle: "ChatGPT"
+            )
+        )
         let slackDecision = policy.decision(
             bundleIdentifier: "com.google.Chrome",
             fingerprint: FocusedElementFingerprint(
@@ -49,6 +55,7 @@ struct BrowserHostedSurfacePolicyTests {
             )
         )
 
+        #expect(try #require(blockedSurface(from: chatGPTDecision)).surface == .chatGPT)
         #expect(try #require(blockedSurface(from: slackDecision)).surface == .slack)
         #expect(try #require(blockedSurface(from: discordDecision)).surface == .discord)
     }
@@ -96,8 +103,24 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(metadata["browserSurface"] == "google-docs")
         #expect(metadata["browserSurfaceDecision"] == "blocked")
         #expect(metadata["browserSurfaceReason"] == "unsupported-surface-needs-proof")
+        #expect(metadata["browserSurfaceSafetyClass"] == "browser-editor")
         #expect(!metadata.values.contains(secretTitle))
         #expect(!metadata.values.contains("https://docs.google.com/document/d/private-id/edit"))
+    }
+
+    @Test("Browser chat blocks are tagged for no-submit metrics")
+    func browserChatBlocksAreTaggedForNoSubmitMetrics() throws {
+        let decision = policy.decision(
+            bundleIdentifier: "com.google.Chrome",
+            fingerprint: FocusedElementFingerprint(windowTitle: "Transcripted - Slack")
+        )
+
+        let block = try #require(blockedSurface(from: decision))
+        let metadata = block.traceMetadata
+
+        #expect(metadata["browserSurface"] == "slack")
+        #expect(metadata["browserSurfaceSafetyClass"] == "browser-chat")
+        #expect(metadata["promptSafetyMetricSurface"] == "browser-chat")
     }
 
     private func blockedSurface(

@@ -50,10 +50,12 @@ suggestion is better than a wrong or surprising suggestion.
 ## Current App Assessment
 
 The app now has explicit prompt-app safety modes in
-`CompatibilityProfile.promptAppSafetyMode`. Codex, Claude Code, and Claude
-desktop are word-only prompt surfaces. ChatGPT, Atlas, Safari, Slack, Discord,
-and Telegram are disabled/diagnostics-only for prompt safety. This is the
-right product posture.
+`CompatibilityProfile.promptAppSafetyMode` plus a versioned
+`HostCompatibilityPolicyCatalog`. The proof manifest mirrors that catalog with
+exact installed app versions where available, runtime state, proof state, kill
+switch, and proof artifacts. Codex and Claude desktop are word-only prompt
+surfaces. ChatGPT, Atlas, Safari, Slack, Discord, and Telegram are
+disabled/diagnostics-only for prompt safety. This is the right product posture.
 
 The insertion path is safer than before. `AppDelegate.insertAcceptedText` no
 longer inserts raw text when there is no current compatibility profile; it
@@ -79,10 +81,10 @@ does not claim beta-ready prompt-app support.
 
 ## Score
 
-Overall score: 83/100
+Overall score: 85/100
 
-Starting score before this pass: 79/100
-Ending score after this pass: 83/100
+Starting score before this pass: 83/100
+Ending score after this pass: 85/100
 
 The score moves above the old proof-gate cap because prompt-app safety can now
 fail closed from trace evidence. It is still capped well short of 100 because
@@ -93,13 +95,17 @@ fresh, exact-version, human-confirmed prompt-app proof is still missing.
 ### Host Detection And Context Classification
 
 - Weight: 20
-- Current score: 16/20
-- Why this score: The app has explicit profiles and prompt-app safety modes,
-  and high-risk unproven apps are disabled. It still lacks a versioned host
-  policy file and deeper browser URL/domain/state classification.
+- Current score: 18/20
+- Why this score: The app has explicit profiles, prompt-app safety modes, and
+  a versioned per-host policy with exact installed versions where available,
+  disabled/proof-only runtime states, kill switches, and proof artifacts. It
+  still lacks deeper browser URL/domain/state classification.
 - Evidence found in repo:
   - `Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift`
+  - `Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift`
   - `Tests/AutocompleteLabCoreTests/CompatibilityProfileTests.swift`
+  - `Tests/AutocompleteLabCoreTests/HostCompatibilityPolicyTests.swift`
+  - `docs/product/proof-manifest.json`
   - `Sources/AutocompleteLabCore/Session/SensitiveTextFieldPolicy.swift`
   - `Sources/AutocompleteLabCore/Session/PromptEditorFingerprintPolicy.swift`
 - Missing evidence:
@@ -107,8 +113,8 @@ fresh, exact-version, human-confirmed prompt-app proof is still missing.
   - Browser composer URL/domain and tool/context state proof.
   - Streaming/approval/command-menu host-state detection proof.
 - What would make it 100/100:
-  - Versioned per-host policy with exact app versions, safety mode, disabled
-    states, and proof artifacts for each supported prompt surface.
+  - Browser composer URL/domain, active-run, tool/context, approval, and
+    command-menu state proof for each supported prompt surface.
 
 ### Acceptance Channel Safety
 

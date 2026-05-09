@@ -112,6 +112,120 @@ public struct KeyboardShortcutConfiguration: Equatable, Sendable {
     }
 }
 
+public struct KeyboardShortcutConflictContext: Equatable, Sendable {
+    public let appDisplayName: String
+    public let isAppEnabled: Bool
+    public let canPresentSuggestions: Bool
+    public let supportsFullAcceptance: Bool
+
+    public init(
+        appDisplayName: String,
+        isAppEnabled: Bool,
+        canPresentSuggestions: Bool,
+        supportsFullAcceptance: Bool
+    ) {
+        self.appDisplayName = appDisplayName
+        self.isAppEnabled = isAppEnabled
+        self.canPresentSuggestions = canPresentSuggestions
+        self.supportsFullAcceptance = supportsFullAcceptance
+    }
+}
+
+public enum KeyboardShortcutConflictLevel: String, Equatable, Sendable {
+    case none
+    case warning
+    case blocked
+}
+
+public struct KeyboardShortcutConflictEvaluation: Equatable, Sendable {
+    public let level: KeyboardShortcutConflictLevel
+    public let statusText: String
+    public let detailText: String
+    public let perAppProfileText: String
+
+    public init(
+        level: KeyboardShortcutConflictLevel,
+        statusText: String,
+        detailText: String,
+        perAppProfileText: String
+    ) {
+        self.level = level
+        self.statusText = statusText
+        self.detailText = detailText
+        self.perAppProfileText = perAppProfileText
+    }
+}
+
+public struct KeyboardShortcutConflictPolicy: Equatable, Sendable {
+    public init() {}
+
+    public func evaluation(
+        acceptAllShortcut: AcceptAllShortcut,
+        context: KeyboardShortcutConflictContext?
+    ) -> KeyboardShortcutConflictEvaluation {
+        guard acceptAllShortcut != .disabled else {
+            return KeyboardShortcutConflictEvaluation(
+                level: .none,
+                statusText: "Conflict check: full accept is off",
+                detailText: "Tab still accepts the next word when suggestions are visible.",
+                perAppProfileText: "Per-app profile: full accept is disabled."
+            )
+        }
+
+        guard let context else {
+            return KeyboardShortcutConflictEvaluation(
+                level: .warning,
+                statusText: "Conflict check: choose an app",
+                detailText: "Open a writing app to check the shortcut against that app profile.",
+                perAppProfileText: "Per-app profile: choose an app to check full accept."
+            )
+        }
+
+        guard context.isAppEnabled else {
+            return KeyboardShortcutConflictEvaluation(
+                level: .blocked,
+                statusText: "Conflict check: \(context.appDisplayName) is paused",
+                detailText: "Full accept will not run while this app is paused.",
+                perAppProfileText: "Per-app profile: \(context.appDisplayName) is paused."
+            )
+        }
+
+        guard context.canPresentSuggestions else {
+            return KeyboardShortcutConflictEvaluation(
+                level: .blocked,
+                statusText: "Conflict check: suggestions are off here",
+                detailText: "This app profile does not allow visible suggestions.",
+                perAppProfileText: "Per-app profile: \(context.appDisplayName) does not allow suggestions."
+            )
+        }
+
+        guard context.supportsFullAcceptance else {
+            return KeyboardShortcutConflictEvaluation(
+                level: .blocked,
+                statusText: "Conflict check: full accept is off in \(context.appDisplayName)",
+                detailText: "Tab next word is allowed, but full accept stays off for this app.",
+                perAppProfileText: "Per-app profile: \(context.appDisplayName) allows Tab next word only."
+            )
+        }
+
+        if acceptAllShortcut == .optionTab {
+            return KeyboardShortcutConflictEvaluation(
+                level: .warning,
+                statusText: "Conflict check: Option-Tab may overlap app shortcuts",
+                detailText: "Backtick is quieter if Option-Tab already means something in this app.",
+                perAppProfileText: "Per-app profile: \(context.appDisplayName) allows Tab next word and full accept."
+            )
+        }
+
+        return KeyboardShortcutConflictEvaluation(
+            level: .none,
+            statusText: "Conflict check: no known conflict in \(context.appDisplayName)",
+            detailText: "Full accept is checked against the current app profile before it can run.",
+            perAppProfileText: "Per-app profile: \(context.appDisplayName) allows Tab next word and full accept."
+        )
+    }
+}
+
 public enum AutocompletePhysicalKey: Equatable, Sendable {
     case tab
     case backtick
