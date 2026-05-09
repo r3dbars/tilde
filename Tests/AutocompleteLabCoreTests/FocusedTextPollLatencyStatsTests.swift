@@ -16,7 +16,9 @@ struct FocusedTextPollLatencyStatsTests {
 
         #expect(summary?.count == 5)
         #expect(summary?.p50Milliseconds == 4)
+        #expect(summary?.p90Milliseconds == 50)
         #expect(summary?.p95Milliseconds == 50)
+        #expect(summary?.p99Milliseconds == 50)
         #expect(summary?.maxMilliseconds == 50)
     }
 
@@ -38,7 +40,9 @@ struct FocusedTextPollLatencyStatsTests {
         let summary = stats.record(-10)
 
         #expect(summary?.p50Milliseconds == 0)
+        #expect(summary?.p90Milliseconds == 0)
         #expect(summary?.p95Milliseconds == 0)
+        #expect(summary?.p99Milliseconds == 0)
         #expect(summary?.maxMilliseconds == 0)
     }
 

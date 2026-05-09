@@ -165,6 +165,7 @@ for line_number, line in selected:
             "reason": fields.get("reason", "unknown"),
             "count": count or 0,
             "p50": int_field(fields, "p50Micros"),
+            "p90": int_field(fields, "p90Micros"),
             "p95": p95,
             "p99": int_field(fields, "p99Micros"),
             "max": max_micros,
@@ -219,7 +220,9 @@ for line_number, line in selected:
                 "line": line_number,
                 "count": count or 0,
                 "p50": int_field(fields, "p50Milliseconds"),
+                "p90": int_field(fields, "p90Milliseconds"),
                 "p95": p95,
+                "p99": int_field(fields, "p99Milliseconds"),
                 "max": max_milliseconds,
             }
         )
@@ -274,9 +277,11 @@ print(
     f"n={len(summaries)} samples={summary_sample_count}"
 )
 if summaries:
+    summary_p90 = [item["p90"] for item in summaries if item["p90"] is not None]
     summary_p95 = [item["p95"] for item in summaries if item["p95"] is not None]
     summary_p99 = [item["p99"] for item in summaries if item["p99"] is not None]
     summary_max = [item["max"] for item in summaries if item["max"] is not None]
+    print(f"Summary p90 max: {max(summary_p90) if summary_p90 else 'n/a'}us")
     print(f"Summary p95 max: {max(summary_p95) if summary_p95 else 'n/a'}us")
     print(f"Summary p99 max: {max(summary_p99) if summary_p99 else 'n/a'}us")
     print(f"Summary max: {max(summary_max) if summary_max else 'n/a'}us")
@@ -292,9 +297,13 @@ print(
     f"n={len(poll_summaries)} samples={poll_summary_sample_count}"
 )
 if poll_summaries:
+    poll_p90 = [item["p90"] for item in poll_summaries if item["p90"] is not None]
     poll_p95 = [item["p95"] for item in poll_summaries if item["p95"] is not None]
+    poll_p99 = [item["p99"] for item in poll_summaries if item["p99"] is not None]
     poll_max = [item["max"] for item in poll_summaries if item["max"] is not None]
+    print(f"Focused text poll p90 max: {max(poll_p90) if poll_p90 else 'n/a'}ms")
     print(f"Focused text poll p95 max: {max(poll_p95) if poll_p95 else 'n/a'}ms")
+    print(f"Focused text poll p99 max: {max(poll_p99) if poll_p99 else 'n/a'}ms")
     print(f"Focused text poll max: {max(poll_max) if poll_max else 'n/a'}ms")
 print(f"Focused text poll slow markers: {len(poll_slow_markers)}")
 print(

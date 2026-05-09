@@ -372,6 +372,7 @@ final class KeyboardEventTap: @unchecked Sendable {
                 "reason": reason,
                 "count": String(summary.count),
                 "p50Micros": String(summary.p50Micros),
+                "p90Micros": String(summary.p90Micros),
                 "p95Micros": String(summary.p95Micros),
                 "p99Micros": String(summary.p99Micros),
                 "maxMicros": String(summary.maxMicros)
@@ -589,6 +590,7 @@ private struct KeyboardEventTapLatencyStats: Sendable {
         let summary = KeyboardEventTapLatencySummary(
             count: sorted.count,
             p50Micros: percentile(0.50, in: sorted),
+            p90Micros: percentile(0.90, in: sorted),
             p95Micros: percentile(0.95, in: sorted),
             p99Micros: percentile(0.99, in: sorted),
             maxMicros: sorted.last ?? 0
@@ -610,6 +612,7 @@ private struct KeyboardEventTapLatencyStats: Sendable {
 private struct KeyboardEventTapLatencySummary: Sendable {
     let count: Int
     let p50Micros: Int
+    let p90Micros: Int
     let p95Micros: Int
     let p99Micros: Int
     let maxMicros: Int

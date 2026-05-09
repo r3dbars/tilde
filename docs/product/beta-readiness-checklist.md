@@ -18,6 +18,10 @@ Use this before inviting private beta testers.
 - [ ] The preferred asset is `Qwen3.5-4B-4bit`.
 - [ ] Settings installs or repairs the local model without shell commands.
 - [ ] `./script/model_latency_report.py --default-model-proof` passes.
+- [ ] `./script/latency_benchmark_report.py --beta-gate` passes with current
+  first-visible, first-token, total-generation, AX, event-tap, and stale-late
+  suppression numbers.
+
 - [ ] Suggestions stay off while the runtime warms or fails.
 - [ ] Mock fallback is not used for beta.
 - [ ] Missing or invalid model setup is handled by Settings `Install Model` or
