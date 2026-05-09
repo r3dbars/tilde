@@ -36,7 +36,7 @@ TEXTEDIT_PREVIOUS_DARK_MODE=""
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|chrome|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
+Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|chrome|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
 Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
@@ -51,7 +51,7 @@ notes-*-undo variants. A generic notes run only prints the surface picker and
 does not record proof.
 
 TextEdit proof can use textedit-light, textedit-dark, textedit-long-wrap,
-textedit-narrow, textedit-selected-suppression, textedit-undo-one-word,
+textedit-narrow, textedit-scrolled, textedit-selected-suppression, textedit-undo-one-word,
 textedit-undo-full, or textedit-fast-typing. These are still narrow TextEdit
 lanes, not a generic native-app claim. The TextEdit undo lanes automatically
 use native single-edit Command-Z proof.
@@ -181,6 +181,10 @@ case "$APP" in
   textedit-narrow)
     APP="textedit"
     TEXTEDIT_VARIANT="narrow"
+    ;;
+  textedit-scrolled)
+    APP="textedit"
+    TEXTEDIT_VARIANT="scrolled"
     ;;
   textedit-selected-suppression)
     APP="textedit"
@@ -3391,6 +3395,13 @@ textedit_first_fragment() {
   esac
 }
 
+textedit_scrolled_prefill() {
+  local index
+  for index in $(seq 1 80); do
+    printf 'Scrolled placement proof line %02d in this disposable TextEdit document.\n' "$index"
+  done
+}
+
 set_textedit_appearance() {
   local desired="$1"
 
@@ -6554,7 +6565,7 @@ run_textedit() {
   sleep 0.8
 
   case "$TEXTEDIT_VARIANT" in
-    long-wrap|narrow)
+    long-wrap|narrow|scrolled)
       set_textedit_window_frame "$textedit_window_title" 120 120 420 420
       sleep 0.3
       ;;
@@ -6572,6 +6583,16 @@ end tell
 delay 0.4
 APPLESCRIPT
   click_textedit_smoke_editor "$textedit_window_title"
+
+  if [[ "$TEXTEDIT_VARIANT" == "scrolled" ]]; then
+    local scrolled_prefill
+    scrolled_prefill="$(textedit_scrolled_prefill)"
+    insert_textedit_smoke_fragment "$textedit_window_title" "$scrolled_prefill"
+    wait_for_textedit_document_fragment "$textedit_window_title" "Scrolled placement proof line 80" "scrolled prefill" 8
+    focus_textedit_smoke_editor "$textedit_window_title"
+    click_textedit_smoke_editor "$textedit_window_title"
+    sleep 0.4
+  fi
 
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"

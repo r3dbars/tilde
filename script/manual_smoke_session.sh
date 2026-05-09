@@ -25,7 +25,7 @@ CLAUDE_CODE_HOST_VARIANT="${AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_VARIANT:-auto}"
 
 usage() {
   cat <<'EOF'
-Usage: script/manual_smoke_session.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|notes|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|chrome|codex|claude-code|claude> [--print|--check] [--visual]
+Usage: script/manual_smoke_session.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|notes|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|chrome|codex|claude-code|claude> [--print|--check] [--visual]
 
 Default mode prints the local manual steps, records the current diagnostics log
 line, waits for Enter, validates the new diagnostics for that app, then appends
@@ -66,6 +66,10 @@ case "$APP" in
   textedit-narrow)
     APP="textedit"
     TEXTEDIT_VARIANT="narrow"
+    ;;
+  textedit-scrolled)
+    APP="textedit"
+    TEXTEDIT_VARIANT="scrolled"
     ;;
   textedit-selected-suppression)
     APP="textedit"
@@ -311,6 +315,11 @@ case "$APP" in
         PROOF_LABEL="textedit-narrow"
         SESSION_NAME="TextEdit narrow window"
         STEPS=$'- Open a disposable narrow TextEdit document.\n- Type `Smoke proof feels inst`.\n- Wait for a suggestion.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.'
+        ;;
+      scrolled)
+        PROOF_LABEL="textedit-scrolled"
+        SESSION_NAME="TextEdit scrolled document"
+        STEPS=$'- Open a disposable narrow TextEdit document prefilled with enough lines to scroll.\n- Move the caret to the bottom and type `Smoke proof feels inst`.\n- Wait for a suggestion at the scrolled caret.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.'
         ;;
       selected-suppression)
         PROOF_LABEL="textedit-selected-suppression"
