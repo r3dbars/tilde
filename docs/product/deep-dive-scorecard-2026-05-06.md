@@ -59,8 +59,8 @@ should stay lower until those rows are closed.
 | Keyboard capture safety | 9.8/10 | Capture starts only after a suggestion panel frame is actually usable, passes ordinary typing through, blocks selected-text replacement, fails closed if macOS disables the tap, reports event-tap start and failed-closed markers as hard key-capture failures instead of AX warnings, and replays accept keys when focus moves to a protected field. |
 | Acceptance reliability | 9.7/10 | TextEdit, core Chrome fixtures, Chrome chat-like, Obsidian, Apple Notes title/body/checklist, Claude Code, and Claude desktop verify accept paths. Prompt-app full accept is intentionally disabled until separate full-accept no-submit proof exists, and a profile-aware safety gate now blocks no-submit profiles from full accept, multiword accepted text, non-visible accepted text, and newline/tab/control accepted text before insertion. Selected text is blocked before suggestions/acceptance, AX insertion is faster, full accept now has a trace-safe exact-visible-text proof, Tab accept is traced as a visible-prefix accept, after-cursor drift fails verification, and missing/changed post-write verification targets are recorded as insertion failures instead of disappearing. Claude Code now has a proof-only terminal-host adapter that rechecks the focused prompt and inserts one-word text through the terminal host's own Paste menu, but Codex still needs same-slice one-word no-submit proof before prompt-app support can score as complete. |
 | Visual caret alignment | 9.75/10 | TextEdit, core Chrome fixtures, Chrome chat-like, real Monaco/ProseMirror under isolated forced-renderer Chrome, Obsidian, Apple Notes title/body/checklist, a disposable Codex prompt, Claude Code, and Claude desktop now have screenshot-backed proof. Stale line rects are dropped, vertical clipping is enforced, too-narrow inline space suppresses display instead of showing a sliver, async suggestions refresh current geometry before display, and low-confidence mirror fallback is now suppressed for untrusted yellow profiles instead of showing detached element/window ghosts. Current default-Chrome real-editor proof is blocked because normal Chrome exposed only browser chrome in the latest rerun. Claude Code's terminal-host proof now has strict visual evidence and verified one-word no-submit insertion. Codex still needs same-slice accept/no-submit proof, and more prompt/editor layouts remain open. |
-| Self-healing behavior | 9.5/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, applies only explicit trusted visual offsets, manual nudges move the visible ghost immediately, untrusted placement suppression now hides any stale ghost, and trusted visual offsets expire when the target app version, screen, or field shape changes. A unit-tested pixel detector can now identify screenshot offset from synthetic pixels, screenshot capture logs offset metadata, and per-app screenshot tracing can write trusted scoped corrections through the existing trust gate. Fresh real-app screenshot proof still needs to prove this before it can count as complete. |
-| Screenshot tracing | 9.5/10 | Screen Recording is preflighted, capture runs off the hot path, screenshots include editor bounds plus ghost text, traces/logs include capture rect plus rendered panel rect, and capture has a backlog guard plus timeout. Fresh stable-build TextEdit and forced-Chrome traces prove screenshot-backed placement; default-Chrome real-editor traces are not current because the latest normal-Chrome AX probe exposed only browser chrome. |
+| Self-healing behavior | 10/10 | The app falls back from inline to mirror, learns compatibility observations, captures screenshots when enabled, records placement evidence, applies only explicit trusted visual offsets, manual nudges move the visible ghost immediately, untrusted placement suppression hides stale ghosts, and trusted visual offsets expire when the target app version, screen, or field shape changes. The latest proof adds explicit applied/refused trust reasons, geometry-only correction proof, and a fresh TextEdit screenshot trace where trusted correction improved measured placement. This proves the scoped self-healing lane, not broad support for every app. |
+| Screenshot tracing | 10/10 | Screen Recording is preflighted, capture runs off the hot path, screenshots include editor bounds plus ghost text, traces/logs include capture rect plus rendered panel rect, and capture has a backlog guard plus timeout. Fresh stable-build TextEdit and forced-Chrome traces prove screenshot-backed placement, and the 2026-05-09 TextEdit lane records applied screenshot correction proof without raw text or screenshot-path leakage in the report. Default-Chrome real-editor traces are still separate app-support work because the latest normal-Chrome AX probe exposed only browser chrome. |
 | TextEdit support | 9.75/10 | Fresh bounded screenshot-backed run at 2026-05-08T09:16:49Z shows ghost text aligned after the caret, two verified accepts, accepted-insertion undo proof, and current proof fingerprints. The smoke harness now respects the active full-accept shortcut, opens a unique disposable file through a fresh TextEdit instance, targets that exact AX window/title even when old TextEdit windows are restored, seeds only that disposable text area, and dismisses TextEdit's native inline completion before waiting for Autocomplete Lab. |
 | Notes support | 9.15/10 | Profile is safer than before, and title, body, and checklist fields now have bounded strict visual proof with two verified accepts each. Notes now tries verified AX insertion before key fallback, uses a slower read-only verification recheck for Notes AX lag, repairs stale Notes text-after-cursor reads before display/verification, and still fails closed if accepted text is unchanged. More list lengths, checked items, and undo variants are still needed. |
 | Chrome textarea support | 9/10 | Fresh local full-frame screenshot and two verified accepts. The bounded production path is now `textarea-public` on the public W3Schools textarea demo, but it still needs a strict screenshot-backed trace row before this can score as production Chrome text-field proof. |
@@ -314,6 +314,11 @@ should stay lower until those rows are closed.
   trace-level full-accept or field-send finalization signals.
 - `swift test --filter CompatibilityLearningTests`: passed, covering trusted manual visual offsets and untrusted stale-offset rejection.
 - `swift test --filter 'PlacementHealthTests|CompatibilityLearningTests|VisualPlacementGeometryCorrectionPolicyTests'`: passed after synthetic caret confidence and visual-offset trust hardening.
+- `swift test`: passed on the visual self-healing proof branch with 982 tests.
+- `./script/visual_calibration_report_self_test.sh`: passed, including applied/refused correction reasons, geometry-only screenshot correction proof, and raw-text/screenshot-path leak checks.
+- `./script/check_visual_placement_evidence.sh`: passed with 16 verified screenshot-backed rows.
+- `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD=1 ./script/real_app_smoke.sh textedit --skip-build`: passed at 2026-05-09T02:09:53Z with two verified accepts and strict visual trace evidence.
+- `./script/visual_calibration_report.py --start-line 60617 --diagnostics-start-line 235335 --require-app com.apple.TextEdit`: reported `Screenshot correction proof: com.apple.TextEdit: applied=3 refused=1 improved=3 bestImprovement=13.5 ... privacy=geometry-only:4`.
 - `./script/check_trace_eval_self_test.sh`: passed, including strict visual-evidence guardrails for screenshot path, anchor rect, rendered panel rect, capture rect, and placement confidence.
 - `git diff --check`: passed.
 - `swift build`: passed after the screenshot trace capture-rect changes.
@@ -362,6 +367,12 @@ should stay lower until those rows are closed.
 - Per-app screenshot tracing now lets high-confidence detector output write a
   trusted scoped correction through `VisualPlacementCorrectionPolicy`; global
   screenshot tracing remains diagnostics-only.
+- Trusted corrections now carry explicit `applied`, `refused`, or `none`
+  status plus refusal reasons for app-version, screen, field-shape, missing
+  context, missing scope, and insufficient evidence.
+- Screenshot correction proof now records before/after distance, improvement,
+  and the `geometry-only` privacy boundary, so reports can explain when a
+  correction helped and when it was refused without leaking raw content.
 - Screenshot traces now carry the capture rect in trace metadata and diagnostics.
 - Suggestion presentation traces now carry the rendered panel rect, and
   diagnostics keep geometry-shaped keys readable instead of redacting them as
@@ -532,14 +543,12 @@ should stay lower until those rows are closed.
    slice. Claude Code and Claude desktop now have one-word no-submit proof, but
    still need more prompt-layout and full-accept no-submit coverage before broad
    prompt support can be considered done.
-2. Prove automatic screenshot-driven self-healing in real apps: rerun smoke
-   after a trusted scoped correction is written, and keep the proof.
-3. Test real production Monaco, ProseMirror, and CodeMirror apps, not just local
+2. Test real production Monaco, ProseMirror, and CodeMirror apps, not just local
    fixtures.
-4. Add more first-run proof coverage beyond TextEdit and Chrome so setup can
+3. Add more first-run proof coverage beyond TextEdit and Chrome so setup can
    steer users away from unsupported or still-unproven apps before they try
    them.
-5. Add a fuller shortcut editor if beta users need more than Tab plus the
+4. Add a fuller shortcut editor if beta users need more than Tab plus the
    current full-accept toggle in proven apps.
 6. Keep focused-text polling on the serial AX reader and collect live long-form
    typing proof in the worst real apps.

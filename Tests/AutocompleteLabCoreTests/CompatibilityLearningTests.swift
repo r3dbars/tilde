@@ -99,6 +99,8 @@ struct CompatibilityLearningTests {
         #expect(adjustment.metadata["learningXOffset"] == "0.0")
         #expect(adjustment.metadata["learningYOffset"] == "0.0")
         #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "false")
+        #expect(adjustment.metadata["learningVisualOffsetStatus"] == "refused")
+        #expect(adjustment.metadata["learningVisualOffsetReason"] == "unsupported-reason")
     }
 
     @Test("Learning keeps manual visual nudges for synthetic caret apps")
@@ -127,6 +129,8 @@ struct CompatibilityLearningTests {
 
         #expect(adjustment.adjusted(rect) == CGRect(x: 106, y: 196, width: 0, height: 20))
         #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "true")
+        #expect(adjustment.metadata["learningVisualOffsetStatus"] == "applied")
+        #expect(adjustment.metadata["learningVisualOffsetReason"] == "scope-matched")
     }
 
     @Test("Learning ignores generic high confidence visual offsets")
@@ -149,6 +153,8 @@ struct CompatibilityLearningTests {
 
         #expect(adjustment.adjusted(rect) == rect)
         #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "false")
+        #expect(adjustment.metadata["learningVisualOffsetStatus"] == "refused")
+        #expect(adjustment.metadata["learningVisualOffsetReason"] == "unsupported-reason")
     }
 
     @Test("Learning keeps screenshot visual corrections")
@@ -177,6 +183,8 @@ struct CompatibilityLearningTests {
 
         #expect(adjustment.adjusted(rect) == CGRect(x: 97, y: 208, width: 0, height: 20))
         #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "true")
+        #expect(adjustment.metadata["learningVisualOffsetStatus"] == "applied")
+        #expect(adjustment.metadata["learningVisualOffsetReason"] == "scope-matched")
     }
 
     @Test("Learning ignores unscoped screenshot visual corrections")
@@ -199,6 +207,8 @@ struct CompatibilityLearningTests {
 
         #expect(adjustment.adjusted(rect) == rect)
         #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "false")
+        #expect(adjustment.metadata["learningVisualOffsetStatus"] == "refused")
+        #expect(adjustment.metadata["learningVisualOffsetReason"] == "insufficient-evidence")
     }
 
     @Test("Learning expires trusted visual offsets when visual scope changes")
@@ -236,6 +246,8 @@ struct CompatibilityLearningTests {
         #expect(matchingAdjustment.metadata["learningVisualOffsetTrusted"] == "true")
         #expect(changedAdjustment.adjusted(rect) == rect)
         #expect(changedAdjustment.metadata["learningVisualOffsetTrusted"] == "false")
+        #expect(changedAdjustment.metadata["learningVisualOffsetStatus"] == "refused")
+        #expect(changedAdjustment.metadata["learningVisualOffsetReason"] == "app-version-changed")
     }
 
     @Test("Learning expires trusted visual offsets when current visual scope is missing")
@@ -263,6 +275,7 @@ struct CompatibilityLearningTests {
         #expect(adjustment.adjusted(rect) == rect)
         #expect(adjustment.metadata["learningXOffset"] == "0.0")
         #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "false")
+        #expect(adjustment.metadata["learningVisualOffsetReason"] == "missing-current-context")
     }
 
     @Test("Unscoped trusted visual offsets do not apply in scoped live mode")
@@ -288,6 +301,7 @@ struct CompatibilityLearningTests {
 
         #expect(adjustment.adjusted(rect) == rect)
         #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "false")
+        #expect(adjustment.metadata["learningVisualOffsetReason"] == "insufficient-evidence")
     }
 
     @Test("Learning keeps screenshot visual corrections from detector")
@@ -325,6 +339,7 @@ struct CompatibilityLearningTests {
         #expect(correction.decision == .accepted)
         #expect(adjustment.adjusted(rect) == CGRect(x: 104, y: 194, width: 0, height: 20))
         #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "true")
+        #expect(adjustment.metadata["learningVisualOffsetReason"] == "legacy-high-confidence")
         #expect(adjustment.metadata["learningConfidence"] == "0.91")
     }
 
@@ -367,10 +382,11 @@ struct CompatibilityLearningTests {
         #expect(trusted.metadata["learningVisualOffsetTrusted"] == "true")
         #expect(expired.adjusted(rect) == rect)
         #expect(expired.metadata["learningVisualOffsetTrusted"] == "false")
+        #expect(expired.metadata["learningVisualOffsetReason"] == "screen-changed")
     }
 
-    @Test("Legacy visual offsets stay trusted until resaved with context")
-    func legacyVisualOffsetsStayTrustedUntilResavedWithContext() {
+    @Test("Legacy low confidence visual offsets are refused in scoped live mode")
+    func legacyLowConfidenceVisualOffsetsAreRefusedInScopedLiveMode() {
         let profile = CompatibilityLearningProfile(
             bundleIdentifier: "md.obsidian",
             xOffset: 2,
@@ -391,8 +407,64 @@ struct CompatibilityLearningTests {
         ).trustedVisualOffsetOnly(context: context)
 
         #expect(adjustment.adjusted(CGRect(x: 100, y: 200, width: 0, height: 20))
-            == CGRect(x: 102, y: 203, width: 0, height: 20))
-        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "true")
+            == CGRect(x: 100, y: 200, width: 0, height: 20))
+        #expect(adjustment.metadata["learningVisualOffsetTrusted"] == "false")
+        #expect(adjustment.metadata["learningVisualOffsetStatus"] == "refused")
+        #expect(adjustment.metadata["learningVisualOffsetReason"] == "insufficient-evidence")
+    }
+
+    @Test("Learning expires visual offsets when app version changes")
+    func expiresVisualOffsetsWhenAppVersionChanges() {
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "md.obsidian",
+            xOffset: 7,
+            yOffset: -5,
+            visualAppVersion: "1.2.3",
+            visualScreenFingerprint: "screen-a",
+            visualFieldShapeFingerprint: "field-a",
+            observations: 4,
+            confidence: 0.8,
+            lastReason: "screenshot-visual-correction"
+        )
+        let context = CompatibilityLearningVisualTrustContext(
+            appVersion: "1.2.4",
+            screenFingerprint: "screen-a",
+            fieldShapeFingerprint: "field-a"
+        )
+        let adjustment = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+            .adjustment(for: "md.obsidian", profileRenderMode: .inlineAdjacent)
+            .trustedVisualOffsetOnly(context: context)
+
+        #expect(adjustment.adjusted(CGRect(x: 100, y: 200, width: 0, height: 20))
+            == CGRect(x: 100, y: 200, width: 0, height: 20))
+        #expect(adjustment.metadata["learningVisualOffsetReason"] == "app-version-changed")
+    }
+
+    @Test("Learning expires visual offsets when field shape changes")
+    func expiresVisualOffsetsWhenFieldShapeChanges() {
+        let profile = CompatibilityLearningProfile(
+            bundleIdentifier: "md.obsidian",
+            xOffset: 7,
+            yOffset: -5,
+            visualAppVersion: "1.2.3",
+            visualScreenFingerprint: "screen-a",
+            visualFieldShapeFingerprint: "field-a",
+            observations: 4,
+            confidence: 0.8,
+            lastReason: "screenshot-visual-correction"
+        )
+        let context = CompatibilityLearningVisualTrustContext(
+            appVersion: "1.2.3",
+            screenFingerprint: "screen-a",
+            fieldShapeFingerprint: "field-b"
+        )
+        let adjustment = CompatibilityLearningEngine(profiles: [profile.bundleIdentifier: profile])
+            .adjustment(for: "md.obsidian", profileRenderMode: .inlineAdjacent)
+            .trustedVisualOffsetOnly(context: context)
+
+        #expect(adjustment.adjusted(CGRect(x: 100, y: 200, width: 0, height: 20))
+            == CGRect(x: 100, y: 200, width: 0, height: 20))
+        #expect(adjustment.metadata["learningVisualOffsetReason"] == "field-shape-changed")
     }
 
     @Test("Missing learning profile leaves geometry alone")
