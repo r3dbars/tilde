@@ -3397,8 +3397,8 @@ textedit_first_fragment() {
 
 textedit_scrolled_prefill() {
   local index
-  for index in $(seq 1 80); do
-    printf 'Scrolled placement proof line %02d in this disposable TextEdit document.\n' "$index"
+  for index in $(seq 1 45); do
+    printf 'Scroll line %02d.\n' "$index"
   done
 }
 
@@ -6588,7 +6588,7 @@ APPLESCRIPT
     local scrolled_prefill
     scrolled_prefill="$(textedit_scrolled_prefill)"
     insert_textedit_smoke_fragment "$textedit_window_title" "$scrolled_prefill"
-    wait_for_textedit_document_fragment "$textedit_window_title" "Scrolled placement proof line 80" "scrolled prefill" 8
+    wait_for_textedit_document_fragment "$textedit_window_title" "Scroll line 45" "scrolled prefill" 8
     focus_textedit_smoke_editor "$textedit_window_title"
     click_textedit_smoke_editor "$textedit_window_title"
     sleep 0.4
