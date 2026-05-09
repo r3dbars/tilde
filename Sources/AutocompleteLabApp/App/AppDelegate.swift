@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var engine: any CompletionEngine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
     private let keyboardCapturePolicy = KeyboardCapturePolicy()
+    private let keyboardCaptureSafetyPolicy = KeyboardCaptureSafetyPolicy()
     private let keyboardEventTapIdleStopPolicy = KeyboardEventTapIdleStopPolicy()
     private let insertionVerification = InsertionVerification()
     private let insertionRetryPolicy = InsertionRetryPolicy()
@@ -49,7 +50,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
     private let suggestionReplacementVisibilityPolicy = SuggestionReplacementVisibilityPolicy()
     private let visibleSuggestionPersistencePolicy = VisibleSuggestionPersistencePolicy()
-    private let suggestionPresentationTracePayloadBuilder = SuggestionPresentationTracePayloadBuilder()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private lazy var suggestionOrchestrator = SuggestionOrchestrator(
         engine: engine,
@@ -77,6 +77,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private let suggestionPanel = SuggestionPanelController()
     private let fieldStatusIndicator = FieldStatusIndicatorController()
+    private lazy var suggestionPresentationDelivery = SuggestionPresentationDelivery(
+        panelPresenter: { [suggestionPanel] text, anchorRect, textLineRect, clippingRect, textStyle, renderMode in
+            suggestionPanel.show(
+                text: text,
+                near: anchorRect,
+                alignedTo: textLineRect,
+                boundedBy: clippingRect,
+                style: textStyle,
+                renderMode: renderMode
+            )
+        },
+        fieldStatusPresenter: { [weak self] context in
+            self?.showFieldStatusIndicator(.shown, context: context)
+        }
+    )
     private lazy var focusedTextReader = SerialFocusedTextAXReader(accessibilityClient: accessibilityClient)
     private let diagnosticsWindow = DiagnosticsWindowController()
     private let appProofCommandCoordinator = AppProofCommandCoordinator()
@@ -89,6 +104,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         toggleSuggestionsPaused: { [weak self] in
             self?.togglePauseSuggestions()
+        },
+        pauseSuggestionsFor15Minutes: { [weak self] in
+            self?.pauseSuggestionsFor15Minutes()
+        },
+        pauseSuggestionsFor1Hour: { [weak self] in
+            self?.pauseSuggestionsFor1Hour()
+        },
+        pauseSuggestionsUntilTomorrow: { [weak self] in
+            self?.pauseSuggestionsUntilTomorrowFromControl()
         },
         silenceCurrentField: { [weak self] in
             self?.silenceCurrentField()
@@ -104,6 +128,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         startCurrentAppProof: { [weak self] in
             self?.startCurrentAppProof()
+        },
+        startTextEditPractice: { [weak self] in
+            self?.startTextEditPractice()
         },
         enableAllApps: { [weak self] in
             self?.enableAllDisabledApps()
@@ -125,6 +152,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         clearLearningData: { [weak self] in
             self?.clearLearningData()
+        },
+        exportPrivacyBundle: { [weak self] in
+            self?.exportTraceReport()
         },
         cycleAcceptAllShortcut: { [weak self] in
             self?.cycleAcceptAllShortcut()
@@ -327,12 +357,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let pauseItem = NSMenuItem(title: pauseSuggestionsTitle, action: #selector(togglePauseSuggestions), keyEquivalent: "p")
         let pause15Item = NSMenuItem(title: "Pause for 15 Minutes", action: #selector(pauseSuggestionsFor15Minutes), keyEquivalent: "")
         let pause1HourItem = NSMenuItem(title: "Pause for 1 Hour", action: #selector(pauseSuggestionsFor1Hour), keyEquivalent: "")
+        let pauseUntilTomorrowItem = NSMenuItem(
+            title: "Pause Until Tomorrow",
+            action: #selector(pauseSuggestionsUntilTomorrowFromControl),
+            keyEquivalent: ""
+        )
         let silenceFieldItem = NSMenuItem(
             title: "Silence This Field",
             action: #selector(silenceCurrentField),
             keyEquivalent: "s"
         )
-        let toggleItem = NSMenuItem(title: "Toggle Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
+        let toggleItem = NSMenuItem(title: "Pause Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
         let debugMenuItem = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         let debugMenu = NSMenu()
 
@@ -343,9 +378,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(pauseItem)
         menu.addItem(pause15Item)
         menu.addItem(pause1HourItem)
+        menu.addItem(pauseUntilTomorrowItem)
         menu.addItem(silenceFieldItem)
         menu.addItem(toggleItem)
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
+        let feedbackItem = NSMenuItem(
+            title: BetaFeedbackLink.menuTitle,
+            action: #selector(openFeedbackForm),
+            keyEquivalent: ""
+        )
+        feedbackItem.toolTip = BetaFeedbackLink.privacyNote
+        menu.addItem(feedbackItem)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Request Accessibility", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Open Accessibility Settings", action: #selector(openAccessibilitySettings), keyEquivalent: ""))
@@ -501,6 +544,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,
                 suggestionsPaused: suggestionsPaused,
+                suggestionsPausedUntil: suggestionsPausedUntil,
                 runtimeReport: runtimeReadinessReport,
                 runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath,
@@ -508,6 +552,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 isModelInstallInProgress: modelInstallTask != nil,
                 currentApp: settingsCurrentAppState,
                 fieldControl: settingsFieldControlState,
+                practice: settingsPracticeState,
                 privacy: settingsPrivacyState,
                 keyboardShortcuts: settingsKeyboardShortcutState,
                 suggestionAggressiveness: settingsSuggestionAggressivenessState,
@@ -561,6 +606,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hasFieldTarget: true,
             isCurrentField: target.fieldIdentity == currentFieldIdentity,
             isSilenced: suppressedFieldIdentities.contains(target.fieldIdentity)
+        )
+    }
+
+    private var settingsPracticeState: SettingsPracticeState {
+        SettingsPracticeState(
+            isTrusted: accessibilityClient.isTrusted,
+            suggestionsPaused: suggestionsPaused,
+            runtimeReport: runtimeReadinessReport,
+            isModelInstallInProgress: modelInstallTask != nil,
+            isTextEditEnabled: !disabledBundleIdentifiers.contains(Self.textEditPracticeBundleIdentifier)
         )
     }
 
@@ -637,7 +692,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var settingsKeyboardShortcutState: SettingsKeyboardShortcutState {
         SettingsKeyboardShortcutState(
-            acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut
+            acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut,
+            currentApp: settingsCurrentAppState
         )
     }
 
@@ -658,21 +714,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var pauseSuggestionsTitle: String {
-        suggestionControlState.toggleTitle
+        pauseControlState.toggleTitle
     }
 
     private var pauseStatusTitle: String {
-        guard let suggestionsPausedUntil,
-              suggestionsPausedUntil > Date() else {
-            return "Paused"
-        }
+        pauseControlState.menuPausedTitle
+    }
 
-        let time = DateFormatter.localizedString(
-            from: suggestionsPausedUntil,
-            dateStyle: .none,
-            timeStyle: .short
+    private var pauseControlState: ControlPauseState {
+        expireTimedPauseIfNeeded(now: Date())
+        return ControlPauseState(
+            isPaused: suggestionsPaused,
+            pausedUntil: suggestionsPausedUntil
         )
-        return "Paused until \(time)"
     }
 
     private var suggestionControlState: SuggestionControlState {
@@ -1505,6 +1559,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 hostBundleIdentifier: app.bundleIdentifier,
                 windowTitle: context.fingerprint.windowTitle ?? "",
                 focusedText: focusedLine,
+                rawTextBeforeCursor: context.textBeforeCursor,
+                rawTextAfterCursor: context.textAfterCursor,
                 proofModeEnabled: activeAppProofBundleIdentifiers.contains(
                     ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
                 )
@@ -1650,7 +1706,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "count": String(summary.count),
                     "p50Milliseconds": String(summary.p50Milliseconds),
+                    "p90Milliseconds": String(summary.p90Milliseconds),
                     "p95Milliseconds": String(summary.p95Milliseconds),
+                    "p99Milliseconds": String(summary.p99Milliseconds),
                     "maxMilliseconds": String(summary.maxMilliseconds)
                 ]
             )
@@ -2271,7 +2329,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     key,
                     isAutorepeat: isAutorepeat,
                     didObservePassthroughKeyDown: didObservePassthroughKeyDown
-                ) ?? false
+                ) ?? .replayOriginalKey(.noVisibleSuggestion)
             },
             passthroughKeyDownObserver: { [weak self] in
                 self?.observePassthroughTypingKeyDown()
@@ -2284,11 +2342,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if eventTap.start() {
             keyboardEventTap = eventTap
-            DiagnosticsLog.shared.record("keyboard-event-tap-started")
+            DiagnosticsLog.shared.record(
+                "keyboard-event-tap-started",
+                metadata: [
+                    "diagnosticLayer": "keyCapture"
+                ]
+            )
             return true
         }
 
-        DiagnosticsLog.shared.record("keyboard-event-tap-start-failed")
+        DiagnosticsLog.shared.record(
+            "keyboard-event-tap-start-failed",
+            metadata: [
+                "diagnosticLayer": "keyCapture",
+                "safetyFailure": "true"
+            ]
+        )
         return false
     }
 
@@ -2316,7 +2385,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.record(
             "keyboard-event-tap-failed-closed",
             metadata: [
-                "reason": reason
+                "reason": reason,
+                "diagnosticLayer": "keyCapture",
+                "safetyFailure": "true"
             ]
         )
     }
@@ -2389,7 +2460,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ key: AutocompleteKey,
         isAutorepeat: Bool = false,
         didObservePassthroughKeyDown: Bool = false
-    ) -> Bool {
+    ) -> KeyboardEventTapHandlingResult {
         if didObservePassthroughKeyDown {
             currentSuggestionInvalidatedByUserKeyDown = true
             clearPendingAcceptedInsertionUndo(reason: "typing")
@@ -2412,12 +2483,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 handled: handled,
                 reason: handled ? "accepted-insertion-undone" : "undo-unavailable"
             )
-            return handled
+            return handled ? .handled : .replayOriginalKey(.undoUnavailable)
         }
 
         guard suggestionSession.hasVisibleSuggestion else {
             suppressKeyUntil[key] = nil
-            return false
+            return .replayOriginalKey(.noVisibleSuggestion)
         }
 
         recordClaudeCodeTerminalHostProofKeyboardProgress(
@@ -2436,7 +2507,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 handled: false,
                 reason: "focus-changed"
             )
-            return false
+            return .replayOriginalKey(.focusChanged)
         }
         recordClaudeCodeTerminalHostProofKeyboardProgress(
             stage: "focus-check-passed",
@@ -2458,7 +2529,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 handled: false,
                 reason: "stale-after-keydown"
             )
-            return false
+            return .replayOriginalKey(.staleAfterTyping)
         }
 
         if shouldSuppressKey(key, isAutorepeat: isAutorepeat) {
@@ -2468,12 +2539,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 action: action
             )
             recordKeyboardAction(key: key, action: .passThrough, handled: true, reason: "suppressed-autorepeat")
-            return true
+            return .handled
         }
 
         switch action {
         case .undoAcceptedInsertion:
-            return false
+            return .replayOriginalKey(.undoUnavailable)
 
         case .acceptNextWord:
             recordClaudeCodeTerminalHostProofKeyboardProgress(
@@ -2483,14 +2554,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             guard currentProfile?.supportsOneWordAcceptance == true else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-one-word")
-                return false
+                return .replayOriginalKey(.unsupportedAction)
             }
             if let blockReason = currentSuggestionAcceptanceDecision().blockReason {
                 recordAcceptanceGuardBlock(reason: blockReason)
                 setSuggestionDecision("Blocked: \(blockReason.rawValue)")
                 hideSuggestion(reason: blockReason.rawValue)
                 recordKeyboardAction(key: key, action: action, handled: false, reason: blockReason.rawValue)
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceBlock: blockReason)
             }
 
             let acceptanceID = UUID().uuidString
@@ -2510,7 +2581,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             guard let acceptedText = suggestionSession.nextWordAcceptance() else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "missing-accepted-text")
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .missingAcceptedText)
             }
             recordClaudeCodeTerminalHostProofKeyboardProgress(
                 stage: "accept-next-word-text-ready",
@@ -2522,7 +2593,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             guard let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "acceptance-proof-failed")
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .acceptanceProofFailed)
             }
             recordClaudeCodeTerminalHostProofKeyboardProgress(
                 stage: "accept-next-word-proof-ready",
@@ -2537,7 +2608,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             guard insertAcceptedText(acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
             }
             recordClaudeCodeTerminalHostProofKeyboardProgress(
                 stage: "accept-next-word-insert-succeeded",
@@ -2575,19 +2646,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
-            return true
+            return .handled
 
         case .acceptAllVisible:
             guard currentProfile?.supportsFullAcceptance == true else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-full")
-                return false
+                return .replayOriginalKey(.unsupportedAction)
             }
             if let blockReason = currentSuggestionAcceptanceDecision().blockReason {
                 recordAcceptanceGuardBlock(reason: blockReason)
                 setSuggestionDecision("Blocked: \(blockReason.rawValue)")
                 hideSuggestion(reason: blockReason.rawValue)
                 recordKeyboardAction(key: key, action: action, handled: false, reason: blockReason.rawValue)
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceBlock: blockReason)
             }
 
             let acceptanceID = UUID().uuidString
@@ -2599,15 +2670,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             guard let acceptedText = suggestionSession.allVisibleAcceptance() else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "missing-accepted-text")
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .missingAcceptedText)
             }
             guard let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "acceptance-proof-failed")
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .acceptanceProofFailed)
             }
             guard insertAcceptedText(acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
-                return false
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
             }
 
             armAcceptedInsertionUndo(
@@ -2639,7 +2710,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
-            return true
+            return .handled
 
         case .dismiss:
             var metadata = currentSuggestionLifetimeMetadata()
@@ -2665,13 +2736,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "dismissed")
-            return true
+            return .handled
 
         case .passThrough:
             if key != .other {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "pass-through")
             }
-            return false
+            return .replayOriginalKey(.passThroughAction)
         }
     }
 
@@ -3400,6 +3471,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 requestMode: baseline.requestMode?.rawValue ?? "",
                 acceptMode: baseline.acceptMode,
                 acceptedText: acceptedText,
+                textBeforeCursorAtAccept: baseline.previousTextBeforeCursor,
                 expectedInsertionUTF16Offset: baseline.previousTextBeforeCursor.utf16.count,
                 acceptedAt: baseline.acceptedAt,
                 profile: baseline.profile,
@@ -3653,6 +3725,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let learningSignal = recordAcceptedAndKeptLearningIfNeeded(result) {
             metadata.merge(learningSignal.traceMetadata) { current, _ in current }
         }
+        if result.shouldRecordAcceptedThenDeleted {
+            metadata.merge(recordAcceptedThenDeletedCooldown(for: result.tracker)) { current, _ in current }
+        }
         if let finishReason = result.finishReason {
             metadata["finishReason"] = finishReason
         }
@@ -3701,6 +3776,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             outcome: result.measurement.survivalClass.rawValue,
             reason: "accepted-then-deleted",
             metadata: metadata
+        )
+    }
+
+    private func recordAcceptedThenDeletedCooldown(
+        for tracker: AcceptanceSurvivalTracker
+    ) -> [String: String] {
+        recordPrefixFamilyCooldown(
+            .acceptedThenDeleted,
+            input: PrefixFamilyCooldownInput(
+                appBundleIdentifier: tracker.appBundleIdentifier,
+                fieldIdentifier: tracker.fieldIdentity.traceDescription,
+                requestMode: CompletionRequestMode(rawValue: tracker.requestMode),
+                textBeforeCursor: tracker.textBeforeCursorAtAccept
+            )
         )
     }
 
@@ -4497,15 +4586,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastRenderMode = placement.renderMode
         lastCompatibilityLearningTrustContext = visualTrustContext
         cancelKeyboardEventTapIdleStop()
-        guard let panelRect = suggestionPanel.show(
-            text: suggestion.visibleText,
-            near: placement.anchorRect,
-            alignedTo: placement.renderMode == .inlineAdjacent ? placement.textLineRect : nil,
-            boundedBy: placement.clippingRect,
-            style: context.textStyle,
-            renderMode: placement.renderMode
-        ) else {
-            let reason = "panel-frame-unusable"
+        let presentationDeliveryRequest = SuggestionPresentationDeliveryRequest(
+            suggestion: suggestion,
+            suggestionID: suggestionID,
+            completionRequest: request,
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            placement: placement,
+            latencyMilliseconds: latencyMilliseconds,
+            requestMetadata: traceRequestMetadata(request: request, context: context),
+            geometryMetadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode),
+            learningMetadata: learningAdjustment.metadata,
+            candidateSelectionMetadata: candidateSelectionMetadata,
+            displayScoreMetadata: displayScoreMetadata,
+            replacementMetadata: replacementMetadata
+        )
+        let panelRect: CGRect
+        switch suggestionPresentationDelivery.deliver(presentationDeliveryRequest) {
+        case let .success(delivery):
+            panelRect = delivery.panelRect
+        case let .failure(failure):
+            let reason = failure.reason
             setSuggestionDecision("Blocked: \(reason)")
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
@@ -4545,7 +4647,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        showFieldStatusIndicator(.shown, context: context)
         suggestionSession.present(suggestion)
         setSuggestionDecision("Shown: \(triggerReason) \(latencyMilliseconds)ms")
         currentSuggestionID = suggestionID
@@ -4596,25 +4697,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: profile.bundleIdentifier,
             reason: "suggestion-presented"
         )
-        let presentationTracePayload = suggestionPresentationTracePayloadBuilder.presented(
-            suggestionID: suggestionID,
-            requestMode: request.mode.rawValue,
-            renderMode: placement.renderMode.rawValue,
-            visibleText: suggestion.visibleText,
-            visibleWordCount: suggestion.visibleWordCount,
-            latencyMilliseconds: latencyMilliseconds,
-            anchorRect: placement.anchorRect,
-            textLineRect: placement.textLineRect,
+        let presentationTracePayload = suggestionPresentationDelivery.tracePayload(
+            for: presentationDeliveryRequest,
             panelRect: panelRect,
-            clippingRect: placement.clippingRect,
-            screenshotCaptureRect: screenshotCapture.rectDescription,
-            requestMetadata: traceRequestMetadata(request: request, context: context),
-            geometryMetadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode),
-            learningMetadata: learningAdjustment.metadata,
-            placementMetadata: placement.metadata,
-            candidateSelectionMetadata: candidateSelectionMetadata,
-            displayScoreMetadata: displayScoreMetadata,
-            replacementMetadata: replacementMetadata
+            screenshotCapture: screenshotCapture
         )
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionPresented,
@@ -5022,6 +5108,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
+        let acceptedTextDecision = acceptedTextSafetyPolicy.decision(
+            acceptedText: acceptedText,
+            profile: profile
+        )
+        if let blockReason = acceptedTextDecision.blockReason {
+            setSuggestionDecision("Blocked: unsafe accepted text")
+            DiagnosticsLog.shared.record(
+                "insert-blocked",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "reason": blockReason,
+                    "acceptedChars": String(acceptedText.count),
+                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue
+                ]
+            )
+            RawAutocompleteTraceLog.shared.record(
+                type: .insertionFailed,
+                suggestionID: currentSuggestionID ?? "",
+                appBundleIdentifier: currentSuggestionAppBundleIdentifier ?? profile.bundleIdentifier,
+                fieldIdentity: currentSuggestionFieldIdentity?.traceDescription
+                    ?? currentFieldIdentity?.traceDescription
+                    ?? "",
+                requestMode: currentSuggestionRequestMode?.rawValue ?? "",
+                acceptedText: acceptedText,
+                reason: blockReason,
+                metadata: [
+                    "safetyGate": "acceptedText",
+                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue
+                ]
+            )
+            hideSuggestion(reason: "insert-unsafe-accepted-text")
+            return false
+        }
+
         keyboardEventTap?.suppressPassthroughObservation(
             until: Date().addingTimeInterval(
                 shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile)
@@ -5221,6 +5341,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                     "posted": "false",
                     "reason": "target-recheck-failed"
+                ]
+            )
+            return false
+        }
+        if let blockReason = currentSuggestionAcceptanceDecision().blockReason {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "acceptance-recheck-failed",
+                    "blockReason": blockReason.rawValue
                 ]
             )
             return false
@@ -6030,13 +6162,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         silenceFieldMenuItem?.title = fieldControlState.buttonTitle
         silenceFieldMenuItem?.isEnabled = fieldControlState.canSilence
         silenceFieldMenuItem?.toolTip = fieldControlState.detailText
-        toggleAppMenuItem?.title = appControlState?.menuToggleTitle ?? "Toggle Current App"
+        toggleAppMenuItem?.title = appControlState?.menuToggleTitle ?? "Pause Current App"
         toggleAppMenuItem?.isEnabled = appControlState?.canToggle ?? false
         toggleAppMenuItem?.toolTip = appControlState?.fallbackText
         if settingsWindow.isShowing {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,
                 suggestionsPaused: suggestionsPaused,
+                suggestionsPausedUntil: suggestionsPausedUntil,
                 runtimeReport: runtimeReadinessReport,
                 runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath,
@@ -6044,6 +6177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 isModelInstallInProgress: modelInstallTask != nil,
                 currentApp: settingsCurrentAppState,
                 fieldControl: settingsFieldControlState,
+                practice: settingsPracticeState,
                 privacy: settingsPrivacyState,
                 keyboardShortcuts: settingsKeyboardShortcutState,
                 suggestionAggressiveness: settingsSuggestionAggressivenessState,
@@ -6428,6 +6562,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.refresh(
             isTrusted: accessibilityClient.isTrusted,
             suggestionsPaused: suggestionsPaused,
+            suggestionsPausedUntil: suggestionsPausedUntil,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
@@ -6435,6 +6570,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isModelInstallInProgress: modelInstallTask != nil,
             currentApp: settingsCurrentAppState,
             fieldControl: settingsFieldControlState,
+            practice: settingsPracticeState,
             privacy: settingsPrivacyState,
             keyboardShortcuts: settingsKeyboardShortcutState,
             suggestionAggressiveness: settingsSuggestionAggressivenessState,
@@ -6453,11 +6589,114 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func startTextEditPractice() {
+        guard accessibilityClient.isTrusted else {
+            requestAccessibilityPermission()
+            return
+        }
+
+        guard runtimeReadinessReport.allowsSuggestions else {
+            setSuggestionDecision("Blocked: model not ready")
+            refreshRuntimeChrome()
+            showSettings()
+            return
+        }
+
+        disabledBundleIdentifiers.remove(Self.textEditPracticeBundleIdentifier)
+        markAppEnablementSetupCompleted()
+        persistDisabledApps()
+
+        if suggestionsPaused {
+            suggestionsPaused = false
+            suggestionsPausedUntil = nil
+            pauseExpirationTask?.cancel()
+            pauseExpirationTask = nil
+            persistPauseState()
+        }
+
+        setSuggestionDecision("Ready: TextEdit practice")
+        openTextEditPracticeDocument()
+        DiagnosticsLog.shared.record(
+            "textedit-practice-started",
+            metadata: [
+                "app": Self.textEditPracticeBundleIdentifier,
+                "model": runtimeReadinessReport.summary,
+                "textEditEnabled": String(!disabledBundleIdentifiers.contains(Self.textEditPracticeBundleIdentifier))
+            ]
+        )
+        refreshRuntimeChrome()
+    }
+
+    private func openTextEditPracticeDocument() {
+        do {
+            let documentURL = try writeTextEditPracticeDocument()
+            openTextEditPracticeDocument(at: documentURL)
+        } catch {
+            DiagnosticsLog.shared.record(
+                "textedit-practice-document-failed",
+                metadata: ["reason": error.localizedDescription]
+            )
+            openTextEditWithoutDocument()
+        }
+    }
+
+    private func writeTextEditPracticeDocument() throws -> URL {
+        let documentURL = Self.textEditPracticeDocumentURL
+        try FileManager.default.createDirectory(
+            at: documentURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Self.textEditPracticeDocumentText.write(to: documentURL, atomically: true, encoding: .utf8)
+        return documentURL
+    }
+
+    private func openTextEditPracticeDocument(at documentURL: URL) {
+        guard let appURL = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: Self.textEditPracticeBundleIdentifier
+        ) else {
+            NSWorkspace.shared.open(documentURL)
+            return
+        }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        NSWorkspace.shared.open(
+            [documentURL],
+            withApplicationAt: appURL,
+            configuration: configuration
+        ) { _, error in
+            if let error {
+                DiagnosticsLog.shared.record(
+                    "textedit-practice-open-failed",
+                    metadata: ["reason": error.localizedDescription]
+                )
+            }
+        }
+    }
+
+    private func openTextEditWithoutDocument() {
+        guard let appURL = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: Self.textEditPracticeBundleIdentifier
+        ) else {
+            return
+        }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
+            if let error {
+                DiagnosticsLog.shared.record(
+                    "textedit-open-failed",
+                    metadata: ["reason": error.localizedDescription]
+                )
+            }
+        }
+    }
+
     @objc
     private func showSettings() {
         settingsWindow.show(
             isTrusted: accessibilityClient.isTrusted,
             suggestionsPaused: suggestionsPaused,
+            suggestionsPausedUntil: suggestionsPausedUntil,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
@@ -6465,11 +6704,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isModelInstallInProgress: modelInstallTask != nil,
             currentApp: settingsCurrentAppState,
             fieldControl: settingsFieldControlState,
+            practice: settingsPracticeState,
             privacy: settingsPrivacyState,
             keyboardShortcuts: settingsKeyboardShortcutState,
             suggestionAggressiveness: settingsSuggestionAggressivenessState,
             lastSuggestionDecision: lastSuggestionDecision
         )
+    }
+
+    @objc
+    private func openFeedbackForm() {
+        let link = BetaFeedbackLink()
+        if NSWorkspace.shared.open(link.url) {
+            DiagnosticsLog.shared.record(
+                "feedback-form-opened",
+                metadata: ["destination": "github-beta-issue-template"]
+            )
+        } else {
+            DiagnosticsLog.shared.record(
+                "feedback-form-open-failed",
+                metadata: ["destination": "github-beta-issue-template"]
+            )
+        }
     }
 
     @objc
@@ -6634,6 +6890,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastSuggestionDecision: lastSuggestionDecision,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
+            pauseControl: pauseControlState,
             modelDirectoryPath: modelDirectoryPath,
             recentEvents: DiagnosticsLog.shared.recentLines(limit: 24),
             traceSummary: RawAutocompleteTraceLog.shared.summary(),
@@ -7447,25 +7704,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pauseSuggestions(for: 60 * 60, label: "1 hour")
     }
 
+    @objc
+    private func pauseSuggestionsUntilTomorrowFromControl() {
+        let state = suggestionPauseSchedulePolicy.pauseUntilTomorrow(now: Date())
+        applyScheduledPause(
+            state: state,
+            decisionText: "Paused until tomorrow",
+            reason: "pause-until-tomorrow",
+            metadata: ["duration": "until-tomorrow"]
+        )
+    }
+
     private func pauseSuggestions(for durationSeconds: TimeInterval, label: String) {
         let state = suggestionPauseSchedulePolicy.timedPause(
             now: Date(),
             durationSeconds: durationSeconds
         )
+        applyScheduledPause(
+            state: state,
+            decisionText: "Paused for \(label)",
+            reason: "timed-pause",
+            metadata: ["durationSeconds": String(Int(durationSeconds))]
+        )
+    }
+
+    private func applyScheduledPause(
+        state: SuggestionPauseScheduleState,
+        decisionText: String,
+        reason: String,
+        metadata: [String: String]
+    ) {
         suggestionsPaused = state.isPaused
         suggestionsPausedUntil = state.pausedUntil
-        setSuggestionDecision("Paused for \(label)")
-        clearFocusedFieldState(hideReason: "timed-pause")
-        stopKeyboardEventTapNow(reason: "timed-pause")
+        setSuggestionDecision(decisionText)
+        clearFocusedFieldState(hideReason: reason)
+        stopKeyboardEventTapNow(reason: reason)
         persistPauseState()
         schedulePauseExpiration()
         DiagnosticsLog.shared.record(
             "suggestions-control",
-            metadata: [
+            metadata: metadata.merging([
                 "paused": String(suggestionsPaused),
-                "durationSeconds": String(Int(durationSeconds)),
                 "pausedUntil": suggestionsPausedUntil.map { ISO8601DateFormatter().string(from: $0) } ?? ""
-            ]
+            ]) { current, _ in current }
         )
         let frontmostApp = targetAppForControls()
         updateStatusMenu(
@@ -7524,6 +7805,32 @@ private extension AppDelegate {
 
     static var proofModeBundleIDsEnvironmentKey: String {
         "AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS"
+    }
+
+    static var textEditPracticeBundleIdentifier: String {
+        "com.apple.TextEdit"
+    }
+
+    static var textEditPracticeDocumentURL: URL {
+        let supportDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return supportDirectory
+            .appendingPathComponent("AutocompleteLab", isDirectory: true)
+            .appendingPathComponent("TextEdit Practice.txt")
+    }
+
+    static var textEditPracticeDocumentText: String {
+        """
+        Autocomplete Lab practice
+
+        This is a disposable local TextEdit file.
+        Type one short sentence below.
+        When a suggestion appears, press Tab once to accept one word.
+        Type again, then press Esc to dismiss the next suggestion.
+        Return to Autocomplete Lab Settings to pause suggestions or delete traces.
+
+        Practice here:
+
+        """
     }
 
     static var acceptedAndKeptLearningDefaultsKey: String {

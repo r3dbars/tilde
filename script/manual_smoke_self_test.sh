@@ -112,11 +112,12 @@ write_one_word_log_with_runtime_warmup() {
 
 write_one_word_trace() {
   local bundle_id="$1"
+  local host_field_identity="${2:-$bundle_id|pid:1|element:1}"
 
   cat >"$TRACE_PATH" <<EOF
-{"type":"suggestionPresented","suggestionID":"one-word","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"anchorSource":"caret","anchorQuality":"trusted","anchorReason":"caretBoundsTrusted","anchorCanPresent":"true","anchorRect":"10,20,0,18","hasCaretRect":"true","hasTextLineRect":"true","hasElementRect":"true","hasWindowRect":"true","placementConfidenceBand":"high"}}
-{"type":"suggestionAccepted","suggestionID":"one-word","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","acceptedText":"make","metadata":{"acceptMode":"acceptNextWord"}}
-{"type":"insertionVerified","suggestionID":"one-word","appBundleIdentifier":"$bundle_id","requestMode":"wordCompletion","acceptedText":"make"}
+{"type":"suggestionPresented","suggestionID":"one-word","appBundleIdentifier":"$bundle_id","fieldIdentity":"$host_field_identity","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"anchorSource":"caret","anchorQuality":"trusted","anchorReason":"caretBoundsTrusted","anchorCanPresent":"true","anchorRect":"10,20,0,18","hasCaretRect":"true","hasTextLineRect":"true","hasElementRect":"true","hasWindowRect":"true","placementConfidenceBand":"high"}}
+{"type":"suggestionAccepted","suggestionID":"one-word","appBundleIdentifier":"$bundle_id","fieldIdentity":"$host_field_identity","requestMode":"wordCompletion","acceptedText":"make","metadata":{"acceptMode":"acceptNextWord"}}
+{"type":"insertionVerified","suggestionID":"one-word","appBundleIdentifier":"$bundle_id","fieldIdentity":"$host_field_identity","requestMode":"wordCompletion","acceptedText":"make"}
 EOF
 }
 
@@ -177,6 +178,7 @@ run_one_word_case() {
   local bundle_id="$4"
   local expected_render="$5"
   local observed_render="$6"
+  local proof_label="${7:-default}"
 
   write_one_word_log "$bundle_id" "$observed_render"
   write_one_word_trace "$bundle_id"
@@ -185,12 +187,13 @@ run_one_word_case() {
     AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
     AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
     AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+    AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL="$proof_label" \
     AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1 \
     AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1 \
     AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
     script/manual_smoke_session.sh "$app" --check >/dev/null
 
-  if ! grep -F "| $report_name | \`$bundle_id\` | \`default\` | 1 | \`$expected_render\` | lines 1-" "$REPORT_PATH" >/dev/null; then
+  if ! grep -F "| $report_name | \`$bundle_id\` | \`$proof_label\` | 1 | \`$expected_render\` | lines 1-" "$REPORT_PATH" >/dev/null; then
     echo "manual smoke self-test did not record one-word no-submit proof for $status_name" >&2
     exit 1
   fi
@@ -249,8 +252,13 @@ run_notes_undo_case notes-title-undo notes-title-undo
 run_notes_undo_case notes-body-undo notes-body-undo
 run_notes_undo_case notes-checklist-undo notes-checklist-undo
 run_passing_case obsidian Obsidian md.obsidian floatingMirror floatingMirror
+run_passing_case obsidian-theme Obsidian md.obsidian floatingMirror floatingMirror obsidian-theme
+run_passing_case obsidian-pane Obsidian md.obsidian floatingMirror floatingMirror obsidian-pane
+run_passing_case obsidian-long-note Obsidian md.obsidian floatingMirror floatingMirror obsidian-long-note
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent textarea
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent contenteditable
+run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent textarea-public
+run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent contenteditable-public
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent editor-like
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent monaco-like
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent prosemirror-like
@@ -278,6 +286,9 @@ fi
 
 run_one_word_case codex Codex Codex com.openai.codex 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_one_word_case claude "Claude desktop" Claude com.anthropic.claudefordesktop 'inlineAdjacent|floatingMirror' inlineAdjacent
+for claude_proof_label in claude-empty claude-long claude-wrapped claude-narrow claude-context claude-light claude-dark; do
+  run_one_word_case claude "Claude desktop $claude_proof_label" Claude com.anthropic.claudefordesktop 'inlineAdjacent|floatingMirror' inlineAdjacent "$claude_proof_label"
+done
 run_one_word_case claude-code "Claude Code" "Claude Code" com.anthropic.claude-code 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_strict_visual_case notes-title notes-title
 
@@ -294,6 +305,43 @@ AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
 
 if ! grep -F "| Claude Code | \`com.anthropic.claude-code\` | \`default\` | 1 | \`inlineAdjacent|floatingMirror\` | lines 1-" "$REPORT_PATH" >/dev/null; then
   echo "manual smoke self-test did not allow Claude Code runtime warmup before verified proof" >&2
+  exit 1
+fi
+
+write_one_word_log "com.anthropic.claude-code" "inlineAdjacent"
+write_one_word_trace "com.anthropic.claude-code" "com.apple.Terminal|pid:1|element:1"
+
+AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1 \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_VARIANT=terminal \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh claude-code --check >/dev/null
+
+if ! grep -F "| Claude Code | \`com.anthropic.claude-code\` | \`claude-code-terminal\` | 1 | \`inlineAdjacent|floatingMirror\` | lines 1-" "$REPORT_PATH" >/dev/null; then
+  echo "manual smoke self-test did not record the Claude Code Terminal host proof label" >&2
+  exit 1
+fi
+
+write_one_word_log "com.anthropic.claude-code" "inlineAdjacent"
+write_one_word_trace "com.anthropic.claude-code" "com.mitchellh.ghostty|pid:1|element:1"
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1 \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_VARIANT=iterm2 \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+  script/manual_smoke_session.sh claude-code --check >"$FAILURE_OUTPUT" 2>&1; then
+  echo "manual smoke self-test expected Claude Code host proof to reject the wrong terminal fieldIdentity" >&2
+  exit 1
+fi
+
+if ! grep -F "trace slice does not show host fieldIdentity com.googlecode.iterm2" "$FAILURE_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not explain the Claude Code wrong-host trace proof failure" >&2
   exit 1
 fi
 
@@ -427,7 +475,7 @@ if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
   exit 1
 fi
 
-if ! grep -F 'missing Notes body undo diagnostics: accepted insertion undo handled' "$FAILURE_OUTPUT" >/dev/null; then
+if ! grep -F 'missing Notes body undo diagnostics: accepted insertion undo proof' "$FAILURE_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not label missing Notes undo diagnostics" >&2
   exit 1
 fi
@@ -500,14 +548,14 @@ if ! grep -F "Insertion proof status: $REPORT_PATH" "$STATUS_OUTPUT" >/dev/null;
   exit 1
 fi
 
-for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" "Chrome textarea" "Chrome contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome real Monaco" "Chrome real ProseMirror" "Chrome real Monaco default AX" "Chrome real ProseMirror default AX" "Chrome chat-like no-submit" Codex "Claude Code" "Claude desktop"; do
+for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" Obsidian "Obsidian theme" "Obsidian panes" "Obsidian long note" "Chrome textarea" "Chrome contenteditable" "Chrome production textarea" "Chrome production contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome real Monaco" "Chrome real ProseMirror" "Chrome real Monaco default AX" "Chrome real ProseMirror default AX" "Chrome chat-like no-submit" Codex "Claude Code" "Claude desktop" "Claude desktop empty composer" "Claude desktop long prompt" "Claude desktop wrapped prompt" "Claude desktop narrow window" "Claude desktop context layout" "Claude desktop light appearance" "Claude desktop dark appearance"; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
     exit 1
   fi
 done
 
-for app_name in Codex "Claude Code" "Claude desktop"; do
+for app_name in Codex "Claude Code" "Claude desktop" "Claude desktop empty composer" "Claude desktop long prompt" "Claude desktop wrapped prompt" "Claude desktop narrow window" "Claude desktop context layout" "Claude desktop light appearance" "Claude desktop dark appearance"; do
   if ! grep -F -- "- $app_name: passed (one-word no-submit profile)" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not keep $app_name on one-word proof" >&2
     exit 1
@@ -638,6 +686,38 @@ if ! grep -F -- "Notes title: pending (run AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 s
   exit 1
 fi
 
+DEFAULT_OBSIDIAN_REPORT="$TMP_DIR/default-obsidian-manual-smoke-runs.md"
+CURRENT_COMMIT_PROOF="$(git rev-parse --short=12 HEAD)"
+cat >"$DEFAULT_OBSIDIAN_REPORT" <<EOF
+# Manual Smoke Runs
+
+| Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
+| --- | --- | --- | --- | ---: | --- | --- | --- |
+| 2026-04-26T08:00:00Z | Obsidian | \`md.obsidian\` | \`default\` | 2 | \`floatingMirror\` | lines 1+ in \`/tmp/diagnostics.log\` | lines 1+ in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; build \`commit:$CURRENT_COMMIT_PROOF\` |
+EOF
+
+AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$DEFAULT_OBSIDIAN_REPORT" \
+  AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
+  script/manual_smoke_status.sh >"$STATUS_OUTPUT"
+
+if ! grep -F -- "- Obsidian: passed" "$STATUS_OUTPUT" >/dev/null &&
+  ! grep -F -- "- Obsidian: stale pass" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not recognize the default Obsidian proof row" >&2
+  exit 1
+fi
+
+for app_name in "Obsidian theme" "Obsidian panes" "Obsidian long note"; do
+  if ! grep -F -- "- $app_name: pending" "$STATUS_OUTPUT" >/dev/null; then
+    echo "manual smoke self-test should not accept default Obsidian proof for $app_name" >&2
+    exit 1
+  fi
+done
+
+if ! grep -F -- "Obsidian theme: pending (run AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate)" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not print the explicit Obsidian theme proof command" >&2
+  exit 1
+fi
+
 LIMITED_REPORT="$TMP_DIR/limited-manual-smoke-runs.md"
 cat >"$LIMITED_REPORT" <<'EOF'
 # Manual Smoke Runs
@@ -660,6 +740,49 @@ if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$LIMITED_REPORT" \
   AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
   script/manual_smoke_status.sh --require-all >/dev/null 2>&1; then
   echo "manual smoke self-test expected --require-all to fail with only limited Obsidian proof" >&2
+  exit 1
+fi
+
+MASKED_STALE_REPORT="$TMP_DIR/masked-stale-manual-smoke-runs.md"
+FAKE_APP_BINARY="$TMP_DIR/current-app-binary"
+printf 'current app binary\n' >"$FAKE_APP_BINARY"
+FAKE_APP_SHA="$(shasum -a 256 "$FAKE_APP_BINARY" | awk '{print $1}')"
+cat >"$MASKED_STALE_REPORT" <<EOF
+# Manual Smoke Runs
+
+| Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
+| --- | --- | --- | --- | ---: | --- | --- | --- |
+| 2026-04-26T08:00:00Z | TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-2 in \`/tmp/diagnostics.log\` | lines 1-2 in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; build \`commit:deadbeef0000,app-sha256:$FAKE_APP_SHA\` |
+EOF
+
+AUTOCOMPLETE_LAB_APP_BINARY="$FAKE_APP_BINARY" \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$MASKED_STALE_REPORT" \
+  AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
+  script/manual_smoke_status.sh >"$STATUS_OUTPUT"
+
+if ! grep -F -- "- TextEdit: stale pass (needs current commit/archive proof; run" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test let a current app sha mask stale commit proof" >&2
+  exit 1
+fi
+
+FAKE_ARCHIVE="$TMP_DIR/current-archive.zip"
+printf 'current archive\n' >"$FAKE_ARCHIVE"
+FAKE_ARCHIVE_SHA="$(shasum -a 256 "$FAKE_ARCHIVE" | awk '{print $1}')"
+cat >"$MASKED_STALE_REPORT" <<EOF
+# Manual Smoke Runs
+
+| Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
+| --- | --- | --- | --- | ---: | --- | --- | --- |
+| 2026-04-26T08:00:00Z | TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-2 in \`/tmp/diagnostics.log\` | lines 1-2 in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; build \`commit:deadbeef0000,archive-sha256:$FAKE_ARCHIVE_SHA\` |
+EOF
+
+AUTOCOMPLETE_LAB_ARCHIVE_PATH="$FAKE_ARCHIVE" \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$MASKED_STALE_REPORT" \
+  AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
+  script/manual_smoke_status.sh >"$STATUS_OUTPUT"
+
+if ! grep -F -- "- TextEdit: passed" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test should accept current archive proof after docs commit" >&2
   exit 1
 fi
 

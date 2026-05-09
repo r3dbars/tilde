@@ -50,11 +50,15 @@ struct AutocompleteTraceReportGeneratorTests {
 
         #expect(html.contains("Autocomplete Lab Redacted Trace Report"))
         #expect(html.contains("Do-not-ship blockers"))
+        #expect(html.contains("Sensitive-field silence"))
         #expect(html.contains("RAM-only retention proof"))
         #expect(html.contains("Privacy checklist"))
         #expect(html.contains("Share only this redacted report for normal beta feedback."))
         #expect(html.contains("Accepted-and-kept survival slices"))
         #expect(html.contains("Visual calibration, no screenshots"))
+        #expect(html.contains("Trusted correction"))
+        #expect(html.contains("Refusal reason"))
+        #expect(html.contains("screen-changed"))
         #expect(html.contains("thirty-second-retention-expiry"))
         #expect(!html.contains("violet-draft"))
         #expect(!html.contains("violet-model-output"))
@@ -116,9 +120,11 @@ struct AutocompleteTraceReportGeneratorTests {
 
         #expect(report.contains("no screenshots required"))
         #expect(report.contains("com.apple.TextEdit / inlineAdjacent"))
-        #expect(report.contains("shown=1"))
+        #expect(report.contains("shown=2"))
         #expect(report.contains("caretFailures=1"))
         #expect(report.contains("latestOffset=(4.0, -2.0)"))
+        #expect(report.contains("trustedCorrection=applied:1 refused:1"))
+        #expect(report.contains("refusedReasons=screen-changed:1"))
         #expect(!report.contains("/tmp/violet-private.png"))
         #expect(!report.contains("violet-model-output"))
     }
@@ -139,7 +145,22 @@ struct AutocompleteTraceReportGeneratorTests {
                     "learningApplied": "true",
                     "learningXOffset": "4.0",
                     "learningYOffset": "-2.0",
+                    "learningVisualOffsetStatus": "applied",
+                    "learningVisualOffsetReason": "scope-matched",
                     "model": "qwen35-4b"
+                ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "refused",
+                textBeforeCursor: "violet-draft-before",
+                displayedText: "violet-model-output",
+                metadata: [
+                    "fieldKind": "multilineCompose",
+                    "effectiveRenderMode": "inlineAdjacent",
+                    "hasCaretRect": "true",
+                    "learningVisualOffsetStatus": "refused",
+                    "learningVisualOffsetReason": "screen-changed"
                 ]
             ),
             event(
@@ -192,6 +213,17 @@ struct AutocompleteTraceReportGeneratorTests {
                 metadata: [
                     "doNotShip": "true",
                     "severe": "true"
+                ]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "sensitive",
+                reason: "sensitive-field",
+                metadata: [
+                    "sensitiveSuppressionCategory": "password",
+                    "sensitiveSuppressionProof": "boundedNative",
+                    "sensitiveSuppressionDecision": "blocked",
+                    "fieldKind": "secure"
                 ]
             )
         ]

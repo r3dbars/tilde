@@ -51,6 +51,48 @@ struct ScreenshotPlacementOffsetDetectorTests {
         #expect(detection.reason == .lowContrast)
     }
 
+    @Test("Rejects invalid pixel buffers")
+    func rejectsInvalidPixelBuffers() {
+        let bitmap = ScreenshotPlacementPixelBuffer(
+            width: 4,
+            height: 4,
+            pixels: [.darkGray]
+        )
+
+        let detection = ScreenshotPlacementOffsetDetector()
+            .detection(in: bitmap, captureRect: captureRect, expectedSignalRect: CGRect(x: 120, y: 220, width: 12, height: 6))
+
+        #expect(!detection.isDetected)
+        #expect(detection.reason == .invalidInput)
+    }
+
+    @Test("Rejects expected signal outside capture")
+    func rejectsExpectedSignalOutsideCapture() {
+        let bitmap = bitmapWithSignal(
+            captureRect: captureRect,
+            signalRect: CGRect(x: 120, y: 220, width: 12, height: 6),
+            foreground: .darkGray
+        )
+
+        let detection = ScreenshotPlacementOffsetDetector()
+            .detection(in: bitmap, captureRect: captureRect, expectedSignalRect: CGRect(x: 300, y: 400, width: 12, height: 6))
+
+        #expect(!detection.isDetected)
+        #expect(detection.reason == .expectedRectOutsideCapture)
+    }
+
+    @Test("Rejects screenshots with no usable signal")
+    func rejectsScreenshotsWithNoUsableSignal() {
+        let expected = CGRect(x: 120, y: 220, width: 12, height: 6)
+        let bitmap = solidBitmap(width: 96, height: 64, color: ScreenshotPlacementPixel(red: 0, green: 0, blue: 0, alpha: 0))
+
+        let detection = ScreenshotPlacementOffsetDetector()
+            .detection(in: bitmap, captureRect: captureRect, expectedSignalRect: expected)
+
+        #expect(!detection.isDetected)
+        #expect(detection.reason == .insufficientSignal)
+    }
+
     @Test("Rejects excessive outlier offsets")
     func rejectsExcessiveOutlierOffsets() {
         let expected = CGRect(x: 112, y: 212, width: 10, height: 6)

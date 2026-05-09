@@ -41,9 +41,19 @@ def candidate_executable(env_key: str, names: list) -> Optional[str]:
 
 
 def prompt_text(payload: dict[str, str]) -> str:
-    system = payload.get("system", "").strip()
     user = payload.get("user", "").strip()
-    return f"{system}\n\nText before cursor:\n{user}\n\nReturn only the next words:"
+    return f"Before cursor:\n{user}\n\nNext words:"
+
+
+def system_prompt_text(payload: dict[str, str]) -> str:
+    system = payload.get("system", "").strip()
+    rules = [
+        "Return exactly the next few words after the Before cursor text.",
+        "No explanation, labels, quotes, reasoning, or mention of the user.",
+        "Never repeat the Before cursor text.",
+        "If unsure, return <NO_SUGGESTION>.",
+    ]
+    return "\n".join([system, *rules]).strip()
 
 
 def run_command(command: list[str], timeout: float) -> str:
@@ -69,7 +79,20 @@ def clean_runtime_stdout(output: str) -> str:
         stripped = line.strip()
         if not stripped:
             continue
+        lower = stripped.lower()
+        if set(stripped) == {"="}:
+            continue
         if stripped.startswith("Downloading ") and " from " in stripped:
+            continue
+        if lower.startswith((
+            "calling `python -m mlx_lm.generate",
+            "fetching ",
+            "generation:",
+            "peak memory:",
+            "prompt:",
+            "tokens per second:",
+            "warning:",
+        )):
             continue
         lines.append(stripped)
 
@@ -95,7 +118,7 @@ def run_litert(prompt: str, max_tokens: int, timeout: float) -> str:
     )
 
 
-def run_mlx(prompt: str, max_tokens: int, timeout: float) -> str:
+def run_mlx(prompt: str, system_prompt: str, max_tokens: int, timeout: float) -> str:
     executable = candidate_executable("AUTOCOMPLETE_LAB_MLX_BIN", ["mlx_lm.generate"])
     model = os.environ.get("AUTOCOMPLETE_LAB_MLX_MODEL", DEFAULT_MLX_MODEL)
 
@@ -106,10 +129,14 @@ def run_mlx(prompt: str, max_tokens: int, timeout: float) -> str:
             model,
             "--prompt",
             prompt,
+            "--system-prompt",
+            system_prompt,
             "--max-tokens",
             str(max_tokens),
             "--temp",
-            "0.2",
+            "0.0",
+            "--verbose",
+            "False",
         ]
     else:
         python = candidate_executable("AUTOCOMPLETE_LAB_PYTHON", ["python3"])
@@ -124,10 +151,14 @@ def run_mlx(prompt: str, max_tokens: int, timeout: float) -> str:
             model,
             "--prompt",
             prompt,
+            "--system-prompt",
+            system_prompt,
             "--max-tokens",
             str(max_tokens),
             "--temp",
-            "0.2",
+            "0.0",
+            "--verbose",
+            "False",
         ]
 
     return run_command(command, timeout=timeout)
@@ -148,6 +179,7 @@ def main() -> int:
         return 64
 
     prompt = prompt_text(payload)
+    system_prompt = system_prompt_text(payload)
     timeout = float(os.environ.get("AUTOCOMPLETE_LAB_RUNTIME_TIMEOUT", "8"))
     backend = os.environ.get("AUTOCOMPLETE_LAB_RUNTIME_BACKEND", "auto").lower()
 
@@ -159,7 +191,7 @@ def main() -> int:
                 print(run_litert(prompt, args.max_tokens, timeout))
                 return 0
             if candidate == "mlx":
-                print(run_mlx(prompt, args.max_tokens, timeout))
+                print(run_mlx(prompt, system_prompt, args.max_tokens, timeout))
                 return 0
             errors.append(f"{candidate}: unsupported backend")
         except Exception as error:

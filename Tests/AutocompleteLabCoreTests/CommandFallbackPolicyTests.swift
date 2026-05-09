@@ -31,7 +31,7 @@ struct CommandFallbackPolicyTests {
 
         #expect(disabled.availability == .unavailable)
         #expect(disabled.reason == .appDisabled)
-        #expect(disabled.statusText == "Fallback: off because this app is disabled.")
+        #expect(disabled.statusText == "Fallback: off while this app is paused.")
         #expect(unsupported.availability == .unavailable)
         #expect(unsupported.reason == .unsupportedApp)
         #expect(unsupported.statusText == "Fallback: unavailable until this app has a profile.")
