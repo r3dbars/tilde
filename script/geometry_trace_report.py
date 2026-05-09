@@ -12,6 +12,15 @@ from pathlib import Path
 DEFAULT_TRACE_PATH = Path.home() / "Library/Logs/AutocompleteLab/traces.jsonl"
 ANCHOR_SOURCES = ("caret", "synthetic-caret", "line", "field", "element", "window", "none")
 ANCHOR_QUALITIES = ("trusted", "usableFallback", "diagnosticsOnly", "invalid")
+REQUIRED_LAYOUT_LANES = (
+    "mirrored-display",
+    "vertical-multi-display",
+    "fullscreen-space",
+    "narrow-window",
+    "scrolled-text",
+    "wrapped-line",
+    "multiple-editables",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,6 +42,11 @@ def parse_args() -> argparse.Namespace:
         "--require-proof",
         action="store_true",
         help="Exit nonzero if any presented suggestion lacks safe geometry proof.",
+    )
+    parser.add_argument(
+        "--require-layout-lanes",
+        action="store_true",
+        help="Exit nonzero unless all weird desktop geometry proof lanes are present.",
     )
     return parser.parse_args()
 
@@ -135,6 +149,22 @@ def has_rect_metadata(event: dict) -> bool:
     return bool(value) and value != "none"
 
 
+def geometry_lanes(event: dict) -> set[str]:
+    lanes = set()
+    for key in ("geometryProofLane", "displayLayoutVariant"):
+        value = metadata_value(event, key)
+        if value and value != "standard":
+            lanes.add(value)
+
+    multi_value = metadata_value(event, "geometryProofLanes")
+    for lane in multi_value.replace(";", ",").split(","):
+        lane = lane.strip()
+        if lane:
+            lanes.add(lane)
+
+    return lanes
+
+
 def proof_failures(event: dict) -> list[str]:
     if event.get("type") != "suggestionPresented":
         return []
@@ -174,6 +204,14 @@ def proof_failures(event: dict) -> list[str]:
     if not has_rect_metadata(event):
         failures.append(f"{label}: missing anchorRect")
 
+    if metadata_value(event, "geometryInvalidated").lower() == "true":
+        reason = metadata_value(event, "geometryInvalidationReason") or "unknown"
+        failures.append(f"{label}: presented after geometry invalidation {reason}")
+
+    invalidation_reason = metadata_value(event, "geometryInvalidationReason")
+    if invalidation_reason and invalidation_reason != "none":
+        failures.append(f"{label}: presented with stale geometry reason {invalidation_reason}")
+
     if source in {"caret", "synthetic-caret"} and bool_metadata(event, "hasCaretRect") is not True:
         failures.append(f"{label}: {source} anchor without hasCaretRect")
     if source == "line" and bool_metadata(event, "hasTextLineRect") is not True:
@@ -198,9 +236,19 @@ def build_report(events: list[dict]) -> tuple[str, list[str]]:
     app_failure_counts: Counter = Counter()
     failures = []
     anchor_metadata_count = 0
+    layout_lanes_seen: Counter = Counter()
+    stale_geometry_suppression_counts: Counter = Counter()
 
     for event in events:
         app = event.get("appBundleIdentifier") or "unknown"
+        for lane in geometry_lanes(event):
+            layout_lanes_seen[lane] += 1
+
+        if event.get("type") == "suggestionHidden":
+            reason = event.get("reason") or metadata_value(event, "reason")
+            if reason.startswith("stale-geometry"):
+                stale_geometry_suppression_counts[reason] += 1
+
         if has_anchor_metadata(event):
             anchor_metadata_count += 1
             source = anchor_source(event) or "missing"
@@ -230,6 +278,8 @@ def build_report(events: list[dict]) -> tuple[str, list[str]]:
         f"- Anchor metadata events: {anchor_metadata_count}",
         f"- Presented suggestions: {sum(app_presented_counts.values())}",
         f"- Geometry proof failures: {len(failures)}",
+        f"- Layout proof lanes: {sorted_counter(layout_lanes_seen)}",
+        f"- Stale geometry suppressions: {sorted_counter(stale_geometry_suppression_counts)}",
         "",
         "## App Summary",
         "",
@@ -271,6 +321,19 @@ def main() -> int:
 
     if args.require_proof and failures:
         return 1
+
+    if args.require_layout_lanes:
+        lanes_seen = Counter()
+        for event in events:
+            for lane in geometry_lanes(event):
+                lanes_seen[lane] += 1
+        missing = [lane for lane in REQUIRED_LAYOUT_LANES if lane not in lanes_seen]
+        if missing:
+            print(
+                "missing required geometry layout lanes: " + ", ".join(missing),
+                file=sys.stderr,
+            )
+            return 1
 
     return 0
 

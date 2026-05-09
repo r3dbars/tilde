@@ -32,7 +32,7 @@ final class SuggestionPanelController {
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
         panel.animationBehavior = .none
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.collectionBehavior = OverlayDesktopBehavior.collectionBehavior
 
         let container = NSView(frame: panel.contentView?.bounds ?? .zero)
         container.autoresizingMask = [.width, .height]

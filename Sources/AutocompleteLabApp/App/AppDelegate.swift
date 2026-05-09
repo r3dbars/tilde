@@ -50,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let acceptanceSafetyPolicy = AcceptanceSafetyPolicy()
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
     private let suggestionReplacementVisibilityPolicy = SuggestionReplacementVisibilityPolicy()
+    private let suggestionGeometryChangePolicy = SuggestionGeometryChangePolicy()
     private let visibleSuggestionPersistencePolicy = VisibleSuggestionPersistencePolicy()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private lazy var suggestionOrchestrator = SuggestionOrchestrator(
@@ -178,6 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var silenceFieldMenuItem: NSMenuItem?
     private var toggleAppMenuItem: NSMenuItem?
     private var workspaceFocusObservers: [NSObjectProtocol] = []
+    private var screenGeometryObserver: NSObjectProtocol?
     private var pollTimer: Timer?
     private var keyboardEventTap: KeyboardEventTap?
     private var keyboardEventTapStopTask: Task<Void, Never>?
@@ -189,6 +191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastTextStyle: FocusedTextStyle?
     private var lastRenderMode: SuggestionRenderMode?
     private var lastCompatibilityLearningTrustContext: CompatibilityLearningVisualTrustContext?
+    private var lastVisibleSuggestionGeometrySnapshot: SuggestionGeometrySnapshot?
     private var currentFieldIdentity: FocusedFieldIdentity?
     private var currentProfile: CompatibilityProfile?
     private var lastTextSnapshot: FocusedTextSnapshot?
@@ -278,6 +281,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showSettings()
         }
         startWorkspaceFocusObservers()
+        startScreenGeometryObserver()
         startPolling()
     }
 
@@ -293,6 +297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modelRuntime.cancel()
         pollTimer?.invalidate()
         stopWorkspaceFocusObservers()
+        stopScreenGeometryObserver()
         stopKeyboardEventTapNow(reason: "terminate")
         fieldStatusIndicator.hide()
     }
@@ -329,6 +334,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let center = NSWorkspace.shared.notificationCenter
         workspaceFocusObservers.forEach { center.removeObserver($0) }
         workspaceFocusObservers.removeAll()
+    }
+
+    private func startScreenGeometryObserver() {
+        guard screenGeometryObserver == nil else {
+            return
+        }
+
+        screenGeometryObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleScreenGeometryChange()
+            }
+        }
+    }
+
+    private func stopScreenGeometryObserver() {
+        guard let observer = screenGeometryObserver else {
+            return
+        }
+
+        NotificationCenter.default.removeObserver(observer)
+        screenGeometryObserver = nil
+    }
+
+    private func handleScreenGeometryChange() {
+        let currentFingerprint = currentScreenLayoutFingerprint()
+        let shouldInvalidate = suggestionGeometryChangePolicy.shouldInvalidateSuggestionState(
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+            hasPendingSuggestionRequest: suggestionOrchestrator.currentRequest != nil,
+            previousScreenLayoutFingerprint: lastVisibleSuggestionGeometrySnapshot?.screenLayoutFingerprint,
+            currentScreenLayoutFingerprint: currentFingerprint
+        )
+
+        guard shouldInvalidate else {
+            return
+        }
+
+        invalidatePendingSuggestionRequest()
+        let metadata = SuggestionGeometryInvalidationDecision
+            .invalidate(.screenLayoutChanged)
+            .metadata
+            .merging(geometryTraceMetadata()) { current, _ in current }
+        hideSuggestion(reason: "stale-geometry-screen-layout-changed", metadata: metadata)
+        fieldStatusIndicator.hide()
+        DiagnosticsLog.shared.record(
+            "screen-geometry-changed",
+            metadata: metadata
+        )
     }
 
     private func handleWorkspaceFocusChange(reason: String) {
@@ -5155,6 +5211,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        lastVisibleSuggestionGeometrySnapshot = visibleGeometrySnapshot(
+            context: context,
+            fieldIdentity: fieldIdentity,
+            placement: placement
+        )
         suggestionSession.present(suggestion)
         setSuggestionDecision("Shown: \(triggerReason) \(latencyMilliseconds)ms")
         currentSuggestionID = suggestionID
@@ -5365,6 +5426,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ].map(String.init).joined(separator: "x")
     }
 
+    private func visibleGeometrySnapshot(
+        context: FocusedTextContext,
+        fieldIdentity: FocusedFieldIdentity?,
+        placement: PlacementHealthPresentation
+    ) -> SuggestionGeometrySnapshot {
+        SuggestionGeometrySnapshot(
+            fieldIdentity: fieldIdentity,
+            screenLayoutFingerprint: currentScreenLayoutFingerprint(),
+            caretRect: placement.anchorRect,
+            textLineRect: placement.textLineRect,
+            elementRect: context.elementRect,
+            windowRect: context.windowRect
+        )
+    }
+
+    private func geometryTraceMetadata() -> [String: String] {
+        [
+            "displayLayoutFingerprint": currentScreenLayoutFingerprint(),
+            "displayLayoutVariant": currentDisplayLayoutVariant(),
+            "overlayDesktopBehavior": OverlayDesktopBehavior.traceDescription
+        ]
+    }
+
+    private func currentScreenLayoutFingerprint() -> String {
+        NSScreen.screens
+            .map { screen in
+                let frame = screen.frame
+                let scale = Int((screen.backingScaleFactor * 100).rounded())
+                return [
+                    Int(frame.minX.rounded()),
+                    Int(frame.minY.rounded()),
+                    Int(frame.width.rounded()),
+                    Int(frame.height.rounded()),
+                    scale
+                ].map(String.init).joined(separator: "x")
+            }
+            .sorted()
+            .joined(separator: "|")
+    }
+
+    private func currentDisplayLayoutVariant() -> String {
+        let frames = NSScreen.screens.map(\.frame)
+        guard frames.count > 1 else {
+            return "single-display"
+        }
+
+        let duplicateFrameCount = Dictionary(grouping: frames.map { visualRectFingerprint($0) ?? "invalid" }) { $0 }
+            .values
+            .map(\.count)
+            .max() ?? 1
+        if duplicateFrameCount > 1 {
+            return "mirrored-display"
+        }
+
+        let hasVerticalOffset = frames.contains { frame in
+            abs(frame.minY) > 1 || abs(frame.maxY - (NSScreen.main?.frame.maxY ?? 0)) > 1
+        }
+
+        return hasVerticalOffset ? "vertical-multi-display" : "multi-display"
+    }
+
     private func traceGeometryMetadata(
         context: FocusedTextContext,
         renderMode: SuggestionRenderMode
@@ -5377,6 +5499,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "hasWindowRect": String(context.windowRect != nil),
             "canReadBounds": String(context.capabilities.canReadBoundsForRange)
         ]
+        .merging(geometryTraceMetadata()) { current, _ in current }
         .merging(traceFieldMetadata(context: context)) { current, _ in current }
     }
 
@@ -6400,12 +6523,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let currentGeometrySnapshot = visibleGeometrySnapshot(
+            context: context,
+            fieldIdentity: currentFieldIdentity,
+            placement: placement
+        )
+        let invalidation = suggestionGeometryChangePolicy.invalidationDecision(
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+            hasPendingSuggestionRequest: suggestionOrchestrator.currentRequest != nil,
+            previousSnapshot: lastVisibleSuggestionGeometrySnapshot,
+            currentSnapshot: currentGeometrySnapshot
+        )
+        if invalidation.shouldInvalidate {
+            let reason = invalidation.reason?.rawValue ?? "unknown"
+            invalidatePendingSuggestionRequest()
+            hideSuggestion(
+                reason: "stale-geometry-\(reason)",
+                metadata: invalidation.metadata
+                    .merging(geometryTraceMetadata()) { current, _ in current }
+            )
+            return
+        }
+
         lastCaretRect = placement.anchorRect
         lastTextLineRect = placement.textLineRect
         lastClippingRect = placement.clippingRect
         lastTextStyle = context.textStyle
         lastRenderMode = placement.renderMode
         lastCompatibilityLearningTrustContext = visualTrustContext
+        lastVisibleSuggestionGeometrySnapshot = currentGeometrySnapshot
         showFieldStatusIndicator(.shown, context: context)
         refreshVisibleSuggestion()
     }
@@ -6723,6 +6869,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextStyle = nil
         lastRenderMode = nil
         lastCompatibilityLearningTrustContext = nil
+        lastVisibleSuggestionGeometrySnapshot = nil
         suggestionPanel.hide()
         updateKeyboardEventTapSnapshot()
         scheduleKeyboardEventTapStopIfIdle()

@@ -135,6 +135,23 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(!SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(frame))
     }
 
+    @Test("Keeps inline ghost inside an upper vertical display")
+    func keepsInlineGhostInsideUpperVerticalDisplay() {
+        let upperDisplay = CGRect(x: 0, y: 982, width: 1920, height: 1080)
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            caretRect: CGRect(x: 620, y: 1_820, width: 0, height: 22),
+            textLineRect: CGRect(x: 420, y: 1_812, width: 200, height: 22),
+            textSize: CGSize(width: 220, height: 22),
+            screenFrame: upperDisplay,
+            clippingFrame: CGRect(x: 80, y: 1_060, width: 920, height: 820)
+        )
+
+        #expect(frame.minX == 620)
+        #expect(frame.minY >= upperDisplay.minY + 4)
+        #expect(frame.maxY <= upperDisplay.maxY - 4)
+        #expect(frame.maxX <= 992)
+    }
+
     @Test("Keeps inline panel valid inside cramped clipping bounds")
     func keepsInlinePanelValidInsideCrampedClippingBounds() {
         let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
@@ -334,6 +351,23 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(decision.frame.minX == 540)
         #expect(decision.frame.minY == 751)
         #expect(decision.strategy == .clippedCaretAnchored)
+    }
+
+    @Test("Wrapped line placement uses the current visual line")
+    func wrappedLinePlacementUsesCurrentVisualLine() {
+        let decision = SuggestionPanelFrameCalculator.inlineGhostPlacement(
+            appBundleIdentifier: "com.apple.Notes",
+            caretRect: CGRect(x: 540, y: 751, width: 0, height: 23),
+            textLineRect: CGRect(x: 520, y: 751, width: 20, height: 23),
+            boundaryFrame: CGRect(x: 500, y: 240, width: 820, height: 560),
+            textSize: CGSize(width: 120, height: 23),
+            screenFrame: CGRect(x: 0, y: 0, width: 1512, height: 982)
+        )
+
+        #expect(decision.lineRectStatus == .used)
+        #expect(decision.frame.minX == 540)
+        #expect(decision.frame.minY == 751)
+        #expect(decision.strategy == .clippedLineAnchored)
     }
 
     @Test("Ignores focused text boundaries when the caret is outside them")
