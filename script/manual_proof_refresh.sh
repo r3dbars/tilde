@@ -10,6 +10,7 @@ RUN_ALL=0
 declare -a SELECTED_TARGETS=()
 declare -a CURRENT_PROOFS=()
 CURRENT_COMMIT_PROOF=""
+CURRENT_APP_PROOF=""
 CURRENT_ARCHIVE_PROOF=""
 TARGET_STATUS=""
 TARGET_STATUS_REASON=""
@@ -114,6 +115,7 @@ done
 collect_current_proofs() {
   CURRENT_PROOFS=()
   CURRENT_COMMIT_PROOF=""
+  CURRENT_APP_PROOF=""
   CURRENT_ARCHIVE_PROOF=""
 
   local commit
@@ -128,7 +130,8 @@ collect_current_proofs() {
     local app_sha
     app_sha="$(shasum -a 256 "$app_binary" | awk '{print $1}')"
     if [[ -n "$app_sha" ]]; then
-      CURRENT_PROOFS+=("app-sha256:$app_sha")
+      CURRENT_APP_PROOF="app-sha256:$app_sha"
+      CURRENT_PROOFS+=("$CURRENT_APP_PROOF")
     fi
   fi
 
@@ -256,6 +259,12 @@ classify_current_commit_or_archive() {
     fi
     TARGET_STATUS="current"
     TARGET_STATUS_REASON="current archive fingerprint"
+    return 0
+  fi
+
+  if [[ -n "$CURRENT_APP_PROOF" && "$line" == *"$CURRENT_APP_PROOF"* ]]; then
+    TARGET_STATUS="current"
+    TARGET_STATUS_REASON="current app binary fingerprint"
     return 0
   fi
 

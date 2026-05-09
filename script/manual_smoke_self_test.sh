@@ -760,8 +760,8 @@ AUTOCOMPLETE_LAB_APP_BINARY="$FAKE_APP_BINARY" \
   AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
   script/manual_smoke_status.sh >"$STATUS_OUTPUT"
 
-if ! grep -F -- "- TextEdit: stale pass (needs current commit/archive proof; run" "$STATUS_OUTPUT" >/dev/null; then
-  echo "manual smoke self-test let a current app sha mask stale commit proof" >&2
+if ! grep -F -- "- TextEdit: passed" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test should accept current app binary proof after docs-only commits" >&2
   exit 1
 fi
 
@@ -784,6 +784,27 @@ AUTOCOMPLETE_LAB_ARCHIVE_PATH="$FAKE_ARCHIVE" \
 if ! grep -F -- "- TextEdit: passed" "$STATUS_OUTPUT" >/dev/null; then
   echo "manual smoke self-test should accept current archive proof after docs commit" >&2
   exit 1
+fi
+
+SOURCE_COMPAT_COMMIT="$(git rev-parse --short=12 HEAD~1 2>/dev/null || true)"
+if [[ -n "$SOURCE_COMPAT_COMMIT" ]]; then
+  cat >"$MASKED_STALE_REPORT" <<EOF
+# Manual Smoke Runs
+
+| Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
+| --- | --- | --- | --- | ---: | --- | --- | --- |
+| 2026-04-26T08:00:00Z | TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-2 in \`/tmp/diagnostics.log\` | lines 1-2 in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; build \`commit:$SOURCE_COMPAT_COMMIT,app-sha256:stale-app-binary\` |
+EOF
+
+  AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS="script/nonexistent-proof-source-path" \
+    AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$MASKED_STALE_REPORT" \
+    AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
+    script/manual_smoke_status.sh >"$STATUS_OUTPUT"
+
+  if ! grep -F -- "- TextEdit: passed" "$STATUS_OUTPUT" >/dev/null; then
+    echo "manual smoke self-test should accept older commit proof when watched app source paths are unchanged" >&2
+    exit 1
+  fi
 fi
 
 EMPTY_REPORT="$TMP_DIR/empty-manual-smoke-runs.md"
