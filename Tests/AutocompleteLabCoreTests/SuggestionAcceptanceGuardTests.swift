@@ -114,6 +114,25 @@ struct SuggestionAcceptanceGuardTests {
         #expect(guardPolicy.decision(shown: shown, current: current) == .allow)
     }
 
+    @Test("Advanced acceptance snapshots allow typed-through suggestion progress")
+    func advancedAcceptanceSnapshotAllowsTypedThroughSuggestionProgress() {
+        let shown = snapshot(textBeforeCursor: "Smoke proof feels inst")
+            .advancingTextRevision(
+                textBeforeCursor: "Smoke proof feels insta",
+                textAfterCursor: ""
+            )
+        let current = snapshot(
+            targetFingerprint: targetFingerprint(
+                caretRect: RoundedFocusedRect(x: 180, y: 52, width: 1, height: 20),
+                textBeforeCursor: "Smoke proof feels insta",
+                textAfterCursor: ""
+            ),
+            textBeforeCursor: "Smoke proof feels insta"
+        )
+
+        #expect(guardPolicy.decision(shown: shown, current: current) == .allow)
+    }
+
     @Test("Missing snapshots fail closed")
     func missingSnapshotsFailClosed() {
         let shown = snapshot()

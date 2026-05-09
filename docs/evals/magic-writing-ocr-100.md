@@ -42,6 +42,7 @@ This is not yet a 98/100 real human dogfood score. It means the prompt, OCR cont
 - Partial-word completion now reuses safe words from visible OCR context in the instant local ranker, so local terms like `Obsidian`, `Transcripted`, and `permission` can complete without waiting for the model.
 - Streaming model suggestions now persist when the final model result is empty, instead of blinking out after a useful partial suggestion is already visible.
 - Chrome forced-accessibility smoke now actually launches every local Chrome fixture in an isolated temp-profile Chrome, so the proof lane does not stall when normal Chrome exposes only browser chrome through AX.
+- Typed-through suggestion progress now advances the acceptance snapshot, so full accept does not reject the remaining suggestion after the user types one or more visible prefix characters.
 
 ## Latest Heartbeat Pass
 
@@ -154,6 +155,19 @@ Time: 2026-05-08T23:59:00Z
 - `./script/manual_smoke_status.sh` now recognizes the fresh Chrome textarea proof as current.
 - The broader score target gate is still not done: TextEdit, Notes, Obsidian, the other Chrome fixtures, Codex, Claude Code, and Claude desktop still need fresh current-build proof rows before the real dogfood score can replace the deterministic 98/100.
 - Biggest next product gap remains Codex same-slice no-submit proof, followed by real Notes/Obsidian variants and production Chrome editor/chat variants.
+
+## Latest Chrome Contenteditable Fix
+
+Time: 2026-05-09T00:03:04Z
+
+- Fresh Chrome `contenteditable` proof initially failed after Tab accept: the user/harness typed through one visible prefix character, then full accept hit `text-before-cursor-changed-before-accept`.
+- Root cause: typed-through progress updated the visible residual suggestion and `currentSuggestionTextBeforeCursor`, but did not advance `currentSuggestionAcceptanceSnapshot`.
+- Fix: add `SuggestionAcceptanceSnapshot.advancingTextRevision(...)` and use it when typing through a visible suggestion, so the guard still blocks real field/app changes while allowing natural typed-through prefix progress.
+- Verification: focused `SuggestionAcceptanceGuardTests` passed, then the rebuilt `qwen3-0.6b` app passed Chrome `contenteditable` smoke with 2 accepted insertions and strict screenshot-backed visual evidence.
+- Trace slice: lines 59561-59587 in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl`.
+- Diagnostics slice: lines 220171-220253 in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log`.
+- Refreshed Chrome `textarea` on the same app binary too: 2 accepted insertions, strict screenshot-backed visual evidence, trace lines 59590-59610, diagnostics lines 220808-220881.
+- Build proof in the smoke rows: `commit:baf734c266f5` and app binary SHA `c0469310beba47cf2bd44d2dbe10571405fa1602d37a744a60ab01ccd06a8c02`.
 
 ## 100 Test Situations
 
