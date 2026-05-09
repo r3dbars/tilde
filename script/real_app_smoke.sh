@@ -4246,7 +4246,7 @@ run_notes() {
   trace_start_line="$(line_count "$TRACE_PATH")"
 
   assert_notes_body_smoke_target
-  type_notes_raw_smoke_text $'\nSmoke proof feels inst'
+  type_notes_raw_smoke_text $'\nSmoke proof feels'
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes body"
   assert_frontmost_app "Notes" "Notes body"
@@ -4261,7 +4261,7 @@ run_notes() {
 
   second_start_line="$(line_count "$LOG_PATH")"
   assert_notes_body_smoke_target
-  type_notes_raw_smoke_text " and stays inst"
+  type_notes_raw_smoke_text " and stays"
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes body second"
   assert_frontmost_app "Notes" "Notes body"
