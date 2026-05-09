@@ -115,6 +115,12 @@ line_count() {
   fi
 }
 
+textedit_is_disabled_by_defaults() {
+  local disabled_bundles
+  disabled_bundles="$(defaults read "$DEFAULTS_DOMAIN" DisabledBundleIdentifiers 2>/dev/null || true)"
+  printf '%s\n' "$disabled_bundles" | grep -F "com.apple.TextEdit" >/dev/null
+}
+
 wait_for_focused_text_poll_summary_after_line() {
   local start_line="$1"
   local timeout_seconds="${2:-15}"

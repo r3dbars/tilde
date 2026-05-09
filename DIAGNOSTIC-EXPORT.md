@@ -41,7 +41,9 @@ without sharing what the tester typed.
 Open Diagnostics from the menu bar and use Export Report.
 
 For beta feedback, attach only that redacted Privacy Bundle. The structured
-feedback form does not need raw traces or screenshots by default.
+feedback form does not need raw traces or screenshots by default. The menu bar
+`Submit Feedback...` item opens that form, but it does not attach diagnostics
+automatically.
 
 For command-line checks, run:
 

@@ -119,6 +119,8 @@ poll_skip_summaries = []
 disabled_events = []
 start_failed_events = []
 failed_closed_events = []
+replayed_captured_key_events = []
+dropped_captured_key_events = []
 malformed_events = []
 
 for line_number, line in selected:
@@ -189,6 +191,22 @@ for line_number, line in selected:
         failed_closed_events.append(
             {
                 "line": line_number,
+                "reason": fields.get("reason", "unknown"),
+            }
+        )
+    elif event == "keyboard-event-tap-replayed-captured-key":
+        replayed_captured_key_events.append(
+            {
+                "line": line_number,
+                "key": fields.get("key", "unknown"),
+                "reason": fields.get("reason", "unknown"),
+            }
+        )
+    elif event == "keyboard-event-tap-unhandled-consumed-key-dropped":
+        dropped_captured_key_events.append(
+            {
+                "line": line_number,
+                "key": fields.get("key", "unknown"),
                 "reason": fields.get("reason", "unknown"),
             }
         )
@@ -291,6 +309,11 @@ print(
     "Key capture failure events: "
     f"startFailed={len(start_failed_events)} "
     f"failedClosed={len(failed_closed_events)}"
+)
+print(
+    "Captured key recovery events: "
+    f"replayed={len(replayed_captured_key_events)} "
+    f"dropped={len(dropped_captured_key_events)}"
 )
 print(
     "Focused text poll windows: "
@@ -409,6 +432,11 @@ for item in start_failed_events:
 for item in failed_closed_events:
     failures.append(
         f"{line_label(item)} event tap failed closed reason={item['reason']}"
+    )
+
+for item in dropped_captured_key_events:
+    failures.append(
+        f"{line_label(item)} captured key dropped key={item['key']} reason={item['reason']}"
     )
 
 if failures:
