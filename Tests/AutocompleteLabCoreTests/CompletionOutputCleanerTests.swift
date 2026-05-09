@@ -32,7 +32,13 @@ struct CompletionOutputCleanerTests {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
         #expect(cleaner.clean("Okay, let's see. The user is trying to") == nil)
+        #expect(cleaner.clean("Okay, the user wants the next few words") == nil)
         #expect(cleaner.clean("The user is trying to write a sentence") == nil)
+        #expect(cleaner.clean(
+            "1. **Analyze the Request",
+            after: "I am trying to say this in a way that feels"
+        ) == nil)
+        #expect(cleaner.clean("Thinking Process: analyze the request") == nil)
         #expect(cleaner.clean("As an AI, I can help with that") == nil)
         #expect(cleaner.clean("Here is a possible continuation") == nil)
         #expect(cleaner.clean("It sounds like you want to keep going") == nil)
