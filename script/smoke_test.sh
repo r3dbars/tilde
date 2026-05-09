@@ -25,6 +25,7 @@ swift test
 ./script/check_visual_placement_evidence_self_test.sh
 ./script/check_visual_placement_evidence.sh
 ./script/visual_calibration_report_self_test.sh
+./script/non_annoyance_report_self_test.sh
 ./script/check_trace_eval_self_test.sh
 ./script/autocomplete_trace_replay_self_test.sh
 ./script/check_typing_performance_log_self_test.sh

@@ -48,9 +48,9 @@ struct SettingsWindowControllerStateTests {
         #expect(allowed.copyProofCommandButtonTitle == "Copy Proof Command")
         #expect(allowed.canCopyProofCommand)
         #expect(allowed.proofButtonTitle == "Run TextEdit Proof")
-        #expect(allowed.toggleTitle == "Allow suggestions in this app")
-        #expect(allowed.menuToggleTitle == "Disable TextEdit")
-        #expect(allowed.blockedAppsText == "Blocked apps: none")
+        #expect(allowed.toggleTitle == "Suggestions in this app")
+        #expect(allowed.menuToggleTitle == "Pause in TextEdit")
+        #expect(allowed.blockedAppsText == "Paused apps: none")
         #expect(allowed.canToggle)
 
         let chrome = SettingsCurrentAppState(
@@ -77,18 +77,18 @@ struct SettingsWindowControllerStateTests {
         #expect(blocked.statusText == "Current app: Notes is yellow and off")
         #expect(
             blocked.detailText
-                == "Rich text can drift; display can fall back to floating, and insertion fails closed. Suggestions are off for this app. Turn them on only where you want to test."
+                == "Rich text can drift; display can fall back to floating, and insertion fails closed. Suggestions are paused in this app. Resume only where you want to test."
         )
         #expect(blocked.modeText == "Mode: inline, mirror fallback")
         #expect(blocked.acceptanceText == "Acceptance: Tab next word + full accept")
-        #expect(blocked.fallbackText == "Fallback: off because this app is disabled.")
+        #expect(blocked.fallbackText == "Fallback: off while this app is paused.")
         #expect(blocked.proofText == "Proof: turn on suggestions for this app first.")
         #expect(blocked.proofCommandText == nil)
         #expect(blocked.proofCommandClipboardText == nil)
         #expect(blocked.copyProofCommandButtonTitle == "No Proof Command")
         #expect(!blocked.canCopyProofCommand)
-        #expect(blocked.menuToggleTitle == "Enable Notes")
-        #expect(blocked.blockedAppsText == "Blocked apps: 2")
+        #expect(blocked.menuToggleTitle == "Resume in Notes")
+        #expect(blocked.blockedAppsText == "Paused apps: 2")
         #expect(blocked.canToggle)
 
         let enabledNotes = SettingsCurrentAppState(
@@ -176,7 +176,7 @@ struct SettingsWindowControllerStateTests {
         #expect(missing.proofCommandText == nil)
         #expect(missing.proofCommandClipboardText == nil)
         #expect(!missing.canCopyProofCommand)
-        #expect(missing.menuToggleTitle == "Toggle Current App")
+        #expect(missing.menuToggleTitle == "Pause Current App")
         #expect(!missing.canToggle)
     }
 
@@ -541,14 +541,86 @@ struct SettingsWindowControllerStateTests {
         let backtick = SettingsKeyboardShortcutState(acceptAllShortcut: .backtick)
 
         #expect(backtick.statusText == "Shortcuts: Tab next word | Backtick all")
+        #expect(backtick.conflictText == "Conflict check: choose an app")
+        #expect(backtick.perAppProfileText == "Per-app profile: choose an app to check full accept.")
         #expect(backtick.acceptAllPickerLabel == "Accept all:")
         #expect(backtick.cycleButtonTitle == "Use Option-Tab")
 
         let optionTab = SettingsKeyboardShortcutState(acceptAllShortcut: .optionTab)
 
         #expect(optionTab.statusText == "Shortcuts: Tab next word | Option-Tab all")
+        #expect(optionTab.conflictDetailText == "Open a writing app to check the shortcut against that app profile.")
         #expect(optionTab.acceptAllPickerLabel == "Accept all:")
         #expect(optionTab.cycleButtonTitle == "Use Backtick")
+
+        let store = CompatibilityProfileStore.mvp
+        let textEdit = SettingsKeyboardShortcutState(
+            acceptAllShortcut: .backtick,
+            currentApp: SettingsCurrentAppState(
+                displayName: "TextEdit",
+                bundleIdentifier: "com.apple.TextEdit",
+                supportStatus: store.supportStatus(for: "com.apple.TextEdit"),
+                isEnabled: true,
+                disabledAppCount: 0
+            )
+        )
+        #expect(textEdit.conflictText == "Conflict check: no known conflict in TextEdit")
+        #expect(textEdit.perAppProfileText == "Per-app profile: TextEdit allows Tab next word and full accept.")
+
+        let codex = SettingsKeyboardShortcutState(
+            acceptAllShortcut: .backtick,
+            currentApp: SettingsCurrentAppState(
+                displayName: "Codex",
+                bundleIdentifier: "com.openai.codex",
+                supportStatus: store.supportStatus(for: "com.openai.codex"),
+                isEnabled: true,
+                disabledAppCount: 0
+            )
+        )
+        #expect(codex.conflictText == "Conflict check: full accept is off in Codex")
+        #expect(codex.perAppProfileText == "Per-app profile: Codex allows Tab next word only.")
+    }
+
+    @Test("Pause state copy stays shared across surfaces")
+    func pauseStateCopyStaysSharedAcrossSurfaces() throws {
+        let ready = ControlPauseState(isPaused: false, pausedUntil: nil)
+
+        #expect(ready.statusName == "running")
+        #expect(ready.statusText == "Global pause: off")
+        #expect(ready.settingsSummaryText == "Suggestions: ready")
+        #expect(ready.settingsDetailText == "Global suggestions are on. You can still pause one app or one field.")
+        #expect(ready.toggleTitle == "Pause Suggestions")
+
+        let until = try #require(Calendar(identifier: .gregorian).date(from: DateComponents(
+            year: 2026,
+            month: 5,
+            day: 9,
+            hour: 9,
+            minute: 0
+        )))
+        let paused = ControlPauseState(
+            isPaused: true,
+            pausedUntil: until,
+            now: until.addingTimeInterval(-60)
+        )
+
+        #expect(paused.statusName == "paused")
+        #expect(paused.statusText.contains("Global pause: until"))
+        #expect(paused.settingsSummaryText.contains("Suggestions: paused until"))
+        #expect(paused.menuPausedTitle.contains("Paused until"))
+        #expect(paused.toggleTitle == "Resume Suggestions")
+    }
+
+    @Test("Feedback copy stays redacted for beta")
+    func feedbackCopyStaysRedactedForBeta() {
+        let feedback = SettingsFeedbackState()
+
+        #expect(feedback.statusText == "Feedback: redacted Privacy Bundle only")
+        #expect(
+            feedback.detailText
+                == "Use this for beta feedback. It excludes raw text, prompts, accepted text, and screenshots."
+        )
+        #expect(feedback.buttonTitle == "Export Privacy Bundle")
     }
 
     @Test("Suggestion tuning copy supports sliders")

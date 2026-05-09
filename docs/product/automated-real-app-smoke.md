@@ -42,6 +42,9 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-und
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host terminal --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host iterm2 --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host ghostty --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate
 ```
 
@@ -73,6 +76,9 @@ agent prompt pass. Codex, Claude Code, and Claude desktop require one-word
 no-submit proof before graduation.
 Prompt-app full accept stays disabled until separate full-accept no-submit proof
 exists.
+Claude Code host-specific proof commands record separate Terminal, iTerm2,
+Ghostty, Warp, kitty, Alacritty, and WezTerm lanes, and host-labeled checks
+require the trace field identity to match the requested terminal host.
 For Notes, `notes-title`, `notes-body`, `notes-checklist`, and the matching
 `notes-*-undo` lanes are separate proof targets. A generic `notes` run is only
 a picker and does not count. Undo lanes require `accepted-insertion-undone` in

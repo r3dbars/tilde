@@ -182,6 +182,13 @@ struct CompletionActivationPolicyTests {
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
         ) == .block(.sensitiveContent))
+        #expect(policy.decision(
+            textBeforeCursor: "Verification code: 123456",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.sensitiveContent))
     }
 
     @Test("Blocks very short context")

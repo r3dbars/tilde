@@ -4,17 +4,23 @@ public struct ClaudeCodeTerminalHostProofContext: Equatable, Sendable {
     public let hostBundleIdentifier: String
     public let windowTitle: String
     public let focusedText: String
+    public let rawTextBeforeCursor: String
+    public let rawTextAfterCursor: String
     public let proofModeEnabled: Bool
 
     public init(
         hostBundleIdentifier: String,
         windowTitle: String,
         focusedText: String,
+        rawTextBeforeCursor: String = "",
+        rawTextAfterCursor: String = "",
         proofModeEnabled: Bool
     ) {
         self.hostBundleIdentifier = hostBundleIdentifier
         self.windowTitle = windowTitle
         self.focusedText = focusedText
+        self.rawTextBeforeCursor = rawTextBeforeCursor
+        self.rawTextAfterCursor = rawTextAfterCursor
         self.proofModeEnabled = proofModeEnabled
     }
 }
@@ -29,22 +35,77 @@ public enum ClaudeCodeTerminalHostProofBlockReason: String, Equatable, Sendable 
     case proofModeRequired
     case missingProofMarker
     case shellPromptDetected
+    case shellCommandDetected
     case multilineCommandDetected
+    case activeAgentOutputDetected
+}
+
+public struct ClaudeCodeTerminalHostVariant: Equatable, Sendable {
+    public let id: String
+    public let displayName: String
+    public let bundleIdentifier: String
+
+    public init(id: String, displayName: String, bundleIdentifier: String) {
+        self.id = id
+        self.displayName = displayName
+        self.bundleIdentifier = bundleIdentifier
+    }
+
+    public var proofLabel: String {
+        "claude-code-\(id)"
+    }
 }
 
 public enum ClaudeCodeTerminalHostProofPolicy {
     public static let virtualBundleIdentifier = "com.anthropic.claude-code"
 
-    public static let supportedTerminalHosts: Set<String> = [
-        "com.apple.Terminal",
-        "com.googlecode.iterm2",
-        "dev.warp.Warp",
-        "com.mitchellh.ghostty",
-        "net.kovidgoyal.kitty",
-        "org.alacritty"
+    public static let supportedHostVariants: [ClaudeCodeTerminalHostVariant] = [
+        ClaudeCodeTerminalHostVariant(
+            id: "terminal",
+            displayName: "Terminal",
+            bundleIdentifier: "com.apple.Terminal"
+        ),
+        ClaudeCodeTerminalHostVariant(
+            id: "iterm2",
+            displayName: "iTerm2",
+            bundleIdentifier: "com.googlecode.iterm2"
+        ),
+        ClaudeCodeTerminalHostVariant(
+            id: "warp",
+            displayName: "Warp",
+            bundleIdentifier: "dev.warp.Warp"
+        ),
+        ClaudeCodeTerminalHostVariant(
+            id: "ghostty",
+            displayName: "Ghostty",
+            bundleIdentifier: "com.mitchellh.ghostty"
+        ),
+        ClaudeCodeTerminalHostVariant(
+            id: "kitty",
+            displayName: "kitty",
+            bundleIdentifier: "net.kovidgoyal.kitty"
+        ),
+        ClaudeCodeTerminalHostVariant(
+            id: "alacritty",
+            displayName: "Alacritty",
+            bundleIdentifier: "org.alacritty"
+        ),
+        ClaudeCodeTerminalHostVariant(
+            id: "wezterm",
+            displayName: "WezTerm",
+            bundleIdentifier: "com.github.wez.wezterm"
+        )
     ]
 
+    public static let supportedTerminalHosts: Set<String> = Set(
+        supportedHostVariants.map(\.bundleIdentifier)
+    )
+
     public static let proofMarker = "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF"
+
+    public static func hostVariant(for bundleIdentifier: String) -> ClaudeCodeTerminalHostVariant? {
+        supportedHostVariants.first { $0.bundleIdentifier == bundleIdentifier }
+    }
 
     public static var proofProfile: CompatibilityProfile {
         CompatibilityProfile(
@@ -72,7 +133,8 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             suppressesAfterInsertionFailure: true,
             allowsDetachedSuggestions: false,
             allowsSyntheticCaretPlacement: true,
-            notes: "Proof-only virtual Claude Code profile. It may be used only when a supported terminal host is frontmost, Claude Code proof mode is active, the proof marker is present, and the current input line is not a shell command. It uses clipboard paste insertion so Terminal accepts one-word completion text without submitting the prompt."
+            promptAppSafetyMode: .wordOnly,
+            notes: "Proof-only virtual Claude Code profile. It may be used only when a supported terminal host is frontmost, Claude Code proof mode is active, the proof marker is present, and the current input line is not shell or agent output. It uses clipboard paste insertion through the terminal host's own Paste menu so one-word completion text can be accepted without submitting the prompt."
         )
     }
 
@@ -85,6 +147,13 @@ public enum ClaudeCodeTerminalHostProofPolicy {
 
         guard context.proofModeEnabled else {
             return .blocked(.proofModeRequired)
+        }
+
+        if looksLikeMarkedMultilineBuffer(
+            textBeforeCursor: context.rawTextBeforeCursor,
+            textAfterCursor: context.rawTextAfterCursor
+        ) {
+            return .blocked(.multilineCommandDetected)
         }
 
         let searchableText = [
@@ -108,6 +177,16 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         if let line = nonEmptyLines.last,
            looksLikeShellPrompt(line, windowTitle: context.windowTitle) {
             return .blocked(.shellPromptDetected)
+        }
+
+        if let line = nonEmptyLines.last,
+           looksLikeActiveAgentOutput(line) {
+            return .blocked(.activeAgentOutputDetected)
+        }
+
+        if let line = nonEmptyLines.last,
+           looksLikeShellCommandInput(line) {
+            return .blocked(.shellCommandDetected)
         }
 
         return .eligible
@@ -185,6 +264,159 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         }
 
         return false
+    }
+
+    private static func looksLikeShellCommandInput(_ line: String) -> Bool {
+        guard let input = sanitizedProofInputLine(line) else {
+            return false
+        }
+
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = trimmed.lowercased()
+        guard !normalized.isEmpty else {
+            return false
+        }
+
+        if ["./", "../", "~/", "/", "$(", "`"].contains(where: { normalized.hasPrefix($0) }) {
+            return true
+        }
+
+        if [
+            " && ",
+            " || ",
+            " | ",
+            ";",
+            " >",
+            " <",
+            "$(",
+            "${"
+        ].contains(where: { normalized.contains($0) }) {
+            return true
+        }
+
+        let commandPrefixes = [
+            "awk",
+            "bash",
+            "brew",
+            "bun",
+            "cat",
+            "cd",
+            "chmod",
+            "chown",
+            "cmake",
+            "command",
+            "cp",
+            "curl",
+            "docker",
+            "env",
+            "exec",
+            "find",
+            "gh",
+            "git",
+            "grep",
+            "kubectl",
+            "make",
+            "mkdir",
+            "mv",
+            "node",
+            "npm",
+            "open",
+            "osascript",
+            "pnpm",
+            "python",
+            "python3",
+            "rm",
+            "rg",
+            "rsync",
+            "ruby",
+            "scp",
+            "sed",
+            "ssh",
+            "sudo",
+            "swift",
+            "time",
+            "touch",
+            "wget",
+            "xcodebuild",
+            "yarn"
+        ]
+
+        return commandPrefixes.contains { command in
+            normalized == command || normalized.hasPrefix("\(command) ")
+        }
+    }
+
+    private static func looksLikeActiveAgentOutput(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return false
+        }
+
+        let outputPrefixes = [
+            "●",
+            "⎿",
+            "╭",
+            "╰",
+            "│",
+            "┌",
+            "└",
+            "├",
+            "─",
+            "✻",
+            "✽",
+            "✶",
+            "✢",
+            "⏺"
+        ]
+        if outputPrefixes.contains(where: { trimmed.hasPrefix($0) }) {
+            return true
+        }
+
+        if trimmed.localizedCaseInsensitiveContains(proofMarker) {
+            return false
+        }
+
+        let lowered = trimmed.lowercased()
+        if [
+            "esc to interrupt",
+            "ctrl-c",
+            "ctrl+c",
+            "interrupt",
+            "thinking",
+            "running",
+            "tool use",
+            "tokens",
+            "context left"
+        ].contains(where: { lowered.contains($0) }) {
+            return true
+        }
+
+        let toolPrefixes = [
+            "bash(",
+            "edit(",
+            "grep(",
+            "glob(",
+            "ls(",
+            "read(",
+            "todowrite(",
+            "update("
+        ]
+        return toolPrefixes.contains { lowered.hasPrefix($0) }
+    }
+
+    private static func looksLikeMarkedMultilineBuffer(
+        textBeforeCursor: String,
+        textAfterCursor: String
+    ) -> Bool {
+        guard let markerRange = textBeforeCursor.range(
+            of: proofMarker,
+            options: [.caseInsensitive, .backwards]
+        ) else {
+            return false
+        }
+
+        return textBeforeCursor[markerRange.upperBound...].contains(where: \.isNewline)
+            || textAfterCursor.contains(where: \.isNewline)
     }
 
     private static func looksLikePlaceholderPrompt(_ line: String) -> Bool {

@@ -274,7 +274,9 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         return normalized.hasPrefix("okay, let's see")
+            || normalized.hasPrefix("okay, the user")
             || normalized.hasPrefix("let's see")
+            || normalized.hasPrefix("analyze the request")
             || normalized.hasPrefix("as an ai")
             || normalized.hasPrefix("happy to")
             || normalized.hasPrefix("here's")
@@ -296,6 +298,8 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("you might ")
             || normalized.hasPrefix("assistant:")
             || normalized.hasPrefix("system:")
+            || normalized.range(of: #"^\d+[\.\)]\s*[*_]*\s*analy[sz]e\b"#, options: .regularExpression) != nil
+            || normalized.hasPrefix("thinking process")
     }
 
     private func looksLikePromptInstructionEcho(_ text: String) -> Bool {
@@ -760,6 +764,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["a", "good", "way"],
         ["a", "better", "approach"],
         ["absolutely"],
+        ["analyze", "the", "request"],
         ["boost", "productivity"],
         ["drive", "better", "outcomes"],
         ["great", "question"],
@@ -795,6 +800,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["the", "best", "way"],
         ["the", "next", "step"],
         ["the", "best", "approach"],
+        ["the", "user", "wants"],
         ["this", "is", "a", "great"],
         ["this", "is", "exciting"],
         ["try", "saying"],
