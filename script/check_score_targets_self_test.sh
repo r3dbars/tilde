@@ -190,6 +190,7 @@ done
 for expected in \
   "Blocking themes" \
   "Live prompt proof: 1 issue(s)" \
+  "Finish remaining prompt-app layout and full-accept proof without counting stale trace history." \
   "Real-app variant proof: 2 issue(s)" \
   "Typing restraint and noise: 2 issue(s)" \
   "Release and architecture polish: 6 issue(s)"; do

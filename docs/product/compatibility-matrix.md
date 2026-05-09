@@ -8,17 +8,17 @@ the manual smoke status is refreshed from the current build.
 For screenshot-backed app-by-app grades and gaps, use
 [App Proof Matrix](app-proof-matrix.md).
 
-| App | Status | Render | Insert | Proof |
-| --- | --- | --- | --- | --- |
-| TextEdit | supported | inline, mirror fallback | AX selected text, value fallback | recorded manual smoke pass |
-| Notes | supported | inline, mirror fallback | verified AX first, delayed read-only recheck, key fallback | title, body, and checklist proof recorded as separate labels |
-| Obsidian | supported | synthetic caret mirror, no detached fallback | AX then key events, key fallback | recorded CodeMirror smoke pass with two verified accepts; detached whole-editor anchors stay suppressed |
-| Chrome | supported for local text fields and local editor fixtures; hosted Google Docs, Notion, Slack, and Discord are blocked until proof | synthetic inline, mirror fallback | key events, AX value fallback | repeatable textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture commands with screenshot-backed proof labels |
-| Codex | dogfood target | synthetic inline caret, no detached fallback | AX value replacement in proof mode | current strict visual one-word no-submit proof recorded; full accept stays disabled until separate full-accept no-submit proof exists |
-| Claude Code | proof-only terminal-host target | synthetic inline caret, no detached fallback | terminal host Paste menu through AX | current strict visual one-word no-submit proof recorded; direct `com.anthropic.claude-code` bundle remains diagnostics-only because real typing happens in a terminal host |
-| Claude desktop | dogfood target | synthetic inline caret, no detached fallback | AX value replacement | current same-baseline screenshot-backed one-word no-submit proof recorded; more prompt layouts pending |
-| Mail | diagnostics only | disabled | disabled | blocked until safe compose adapter exists |
-| Atlas | unsupported | disabled | disabled | blocked until focused AX element is reliable |
+| App | Status | Render | Insert | Undo/recoverability | Proof |
+| --- | --- | --- | --- | --- | --- |
+| TextEdit | supported | inline, mirror fallback | AX selected text, value fallback | native single-edit proof lane; app rollback is degraded fallback | recorded manual smoke pass |
+| Notes | supported | inline, mirror fallback | verified AX first, delayed read-only recheck, key fallback | degraded until title/body/checklist undo proof graduates beyond app rollback | title, body, and checklist proof recorded as separate labels |
+| Obsidian | supported | synthetic caret mirror, no detached fallback | AX then key events, key fallback | degraded until CodeMirror undo proof is native single-edit | recorded CodeMirror smoke pass with two verified accepts; detached whole-editor anchors stay suppressed |
+| Chrome | supported for local text fields and local editor fixtures; hosted Google Docs, Notion, Slack, and Discord are blocked until proof | synthetic inline, mirror fallback | key events, AX value fallback | native single-edit proof lane for local fixtures; hosted surfaces blocked | repeatable textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture commands with screenshot-backed proof labels |
+| Codex | dogfood target | synthetic inline caret, no detached fallback | AX value replacement, key fallback | degraded one-word only until no-submit undo proof exists | current strict visual one-word no-submit proof recorded; full accept stays disabled until separate full-accept no-submit proof exists |
+| Claude Code | proof-only terminal-host target | synthetic inline caret, no detached fallback | terminal host Paste menu through AX | unavailable for direct bundle; terminal-host proof needed | current strict visual one-word no-submit proof recorded; direct `com.anthropic.claude-code` bundle remains diagnostics-only because real typing happens in a terminal host |
+| Claude desktop | dogfood target | synthetic inline caret, no detached fallback | AX value replacement | degraded one-word only until no-submit undo proof exists | current same-baseline screenshot-backed one-word no-submit proof recorded; more prompt layouts pending |
+| Mail | diagnostics only | disabled | disabled | unavailable | blocked until safe compose adapter exists |
+| Atlas | unsupported | disabled | disabled | unavailable | blocked until focused AX element is reliable |
 
 Run:
 

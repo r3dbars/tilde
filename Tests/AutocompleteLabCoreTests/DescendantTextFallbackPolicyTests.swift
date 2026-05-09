@@ -37,6 +37,16 @@ struct DescendantTextFallbackPolicyTests {
         ))
     }
 
+    @Test("Allows Obsidian empty CodeMirror web areas")
+    func obsidianCodeMirrorWebAreasCanUseDescendantText() {
+        #expect(policy.allowsFallback(
+            bundleIdentifier: "md.obsidian",
+            role: "AXWebArea",
+            directText: "",
+            windowTitle: "Autocomplete Lab Proof"
+        ))
+    }
+
     @Test("Blocks broad Chrome production pages")
     func broadChromePagesStayBlocked() {
         #expect(!policy.allowsFallback(

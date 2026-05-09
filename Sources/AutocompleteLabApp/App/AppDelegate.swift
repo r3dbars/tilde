@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keyboardCaptureSafetyPolicy = KeyboardCaptureSafetyPolicy()
     private let keyboardEventTapIdleStopPolicy = KeyboardEventTapIdleStopPolicy()
     private let insertionVerification = InsertionVerification()
+    private let insertionVerificationContextRecoveryPolicy = InsertionVerificationContextRecoveryPolicy()
     private let insertionRetryPolicy = InsertionRetryPolicy()
     private let insertionVerificationTimingPolicy = InsertionVerificationTimingPolicy()
     private let suggestionAcceptanceProofPolicy = SuggestionAcceptanceProofPolicy()
@@ -49,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let acceptanceSafetyPolicy = AcceptanceSafetyPolicy()
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
     private let suggestionReplacementVisibilityPolicy = SuggestionReplacementVisibilityPolicy()
+    private let visibleSuggestionPersistencePolicy = VisibleSuggestionPersistencePolicy()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private lazy var suggestionOrchestrator = SuggestionOrchestrator(
         engine: engine,
@@ -179,6 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pollTimer: Timer?
     private var keyboardEventTap: KeyboardEventTap?
     private var keyboardEventTapStopTask: Task<Void, Never>?
+    private var prefixCooldownRetryTask: Task<Void, Never>?
     private var suggestionSession = SuggestionSession()
     private var lastCaretRect: CGRect?
     private var lastTextLineRect: CGRect?
@@ -223,6 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var pendingAcceptedInsertionUndo: AcceptedInsertionUndo?
     private var acceptedInsertionUndoExpirationTask: Task<Void, Never>?
+    private let acceptedInsertionUndoRecoveryMode = AcceptedInsertionUndoRecoveryMode.fromEnvironment()
     private var lastStatusLine: String?
     private var lastSuggestionDecision = "Starting"
     private var lastSyntheticCaretDiagnosticSignature: String?
@@ -523,6 +527,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        cancelPrefixCooldownRetry()
         lastTextSnapshot = nil
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
@@ -1214,6 +1219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if previousSnapshot != nil {
             lastFocusedTextChangeAt = Date()
         }
+        cancelPrefixCooldownRetry()
 
         recordTypedOverSuggestionIfNeeded(
             newTextBeforeCursor: context.textBeforeCursor,
@@ -1295,6 +1301,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard activationDecision.canSuggest else {
+            if shouldPreserveVisibleSuggestionAfterActivationBlock(
+                activationDecision: activationDecision,
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity
+            ) {
+                setSuggestionDecision("Shown: preserving current suggestion")
+                recordSuggestionEvent(
+                    "suggestion-preserved",
+                    context: context,
+                    profile: profile,
+                    metadata: [
+                        "reason": "transient-empty-context",
+                        "blockReason": activationDecision.blockReasonDescription,
+                        "fieldIdentity": fieldIdentity.traceDescription
+                    ]
+                )
+                return
+            }
+
             setSuggestionDecision("Blocked: \(activationDecision.blockReasonDescription)")
             showFieldStatusIndicator(.blocked, context: context)
             RawAutocompleteTraceLog.shared.record(
@@ -1338,10 +1364,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch suggestionOrchestrator.prefixCooldownDecision(for: prefixCooldownInput) {
         case .allowed:
+            cancelPrefixCooldownRetry()
             break
         case let .coolingDown(cooldown):
             setSuggestionDecision("Waiting: prefix \(cooldown.reason.rawValue)")
             showFieldStatusIndicator(.waiting, context: context)
+            schedulePrefixCooldownRetry(
+                for: snapshot,
+                cooldown: cooldown
+            )
             let metadata = fieldClassification.traceMetadata
                 .merging(cooldown.metadata) { current, _ in current }
                 .merging(["reason": "prefix-family-cooldown"]) { current, _ in current }
@@ -1804,6 +1835,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return max(0, Int(now.timeIntervalSince(currentSuggestionPresentedAt) * 1000))
+    }
+
+    private func shouldPreserveVisibleSuggestionAfterActivationBlock(
+        activationDecision: CompletionActivationDecision,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity
+    ) -> Bool {
+        guard case let .block(blockReason) = activationDecision else {
+            return false
+        }
+
+        return visibleSuggestionPersistencePolicy.shouldPreserveAfterActivationBlock(
+            blockReason: blockReason,
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+            currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
+            currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
+            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor
+        )
     }
 
     private func shouldSuppressDetachedSuggestion(
@@ -2578,7 +2632,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             armAcceptedInsertionUndo(
                 acceptedText: acceptedText,
                 acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt
+                acceptedAt: acceptedAt,
+                acceptMode: action.diagnosticName
             )
             suggestionSession.commitNextWordAcceptance(acceptedText, keepsResidual: false)
             recordAcceptedText(acceptedText)
@@ -2643,7 +2698,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             armAcceptedInsertionUndo(
                 acceptedText: acceptedText,
                 acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt
+                acceptedAt: acceptedAt,
+                acceptMode: action.diagnosticName
             )
             suggestionSession.commitAllVisibleAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
@@ -2969,19 +3025,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               lastTextSnapshot.textBeforeCursor.contains(marker),
               lastTextSnapshot.textAfterCursor.isEmpty,
               let frontmostApp = accessibilityClient.frontmostApplication(),
+              let profile = effectiveProfile(for: frontmostApp),
+              profile == currentProfile,
               frontmostAppMatchesSuggestion(
                   frontmostApp,
                   expectedBundleIdentifier: bundleIdentifier,
-                  profile: currentProfile
-              ) else {
+                  profile: profile
+              ),
+              frontmostApp.processIdentifier == currentSuggestionFieldIdentity.processIdentifier else {
             return false
         }
 
-        let previousText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
+        let expectedText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
         let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
         guard Self.axTextAreaDescendant(
             in: appElement,
-            matchingValue: previousText,
+            matchingValue: expectedText,
             containing: marker,
             maxDepth: 32
         ) != nil else {
@@ -3068,6 +3127,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func acceptedInsertionUndoIsActive(now: Date = Date()) -> Bool {
+        guard acceptedInsertionUndoRecoveryMode == .appRollback else {
+            return false
+        }
+
         guard let pendingAcceptedInsertionUndo else {
             return false
         }
@@ -3078,7 +3141,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func armAcceptedInsertionUndo(
         acceptedText: String,
         acceptanceID: String,
-        acceptedAt: Date
+        acceptedAt: Date,
+        acceptMode: String
     ) {
         guard let currentFieldIdentity,
               let lastTextSnapshot,
@@ -3096,6 +3160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: lastTextSnapshot.textBeforeCursor,
             textAfterCursor: lastTextSnapshot.textAfterCursor,
             acceptedTextLength: acceptedText.count,
+            acceptMode: acceptMode,
             acceptedAt: acceptedAt,
             expiresAt: expiresAt
         )
@@ -3105,6 +3170,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "acceptanceID": acceptanceID,
                 "app": appBundleIdentifier,
                 "fieldIdentity": currentFieldIdentity.traceDescription,
+                "acceptMode": acceptMode,
+                "undoMechanism": acceptedInsertionUndoRecoveryMode.traceMechanism.rawValue,
+                "nativeUndoProofMode": String(acceptedInsertionUndoRecoveryMode == .nativeProofOnly),
+                "appRollbackEnabled": String(acceptedInsertionUndoRecoveryMode == .appRollback),
                 "acceptedTextLength": String(acceptedText.count),
                 "previousBeforeLength": String(lastTextSnapshot.textBeforeCursor.count),
                 "previousAfterLength": String(lastTextSnapshot.textAfterCursor.count),
@@ -3143,7 +3212,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "accepted-insertion-undo-cleared",
             metadata: [
                 "acceptanceID": pendingAcceptedInsertionUndo.acceptanceID,
-                "reason": reason
+                "reason": reason,
+                "acceptMode": pendingAcceptedInsertionUndo.acceptMode,
+                "undoMechanism": acceptedInsertionUndoRecoveryMode.traceMechanism.rawValue
             ]
         )
         updateKeyboardEventTapSnapshot()
@@ -3213,6 +3284,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "acceptanceID": undo.acceptanceID,
                 "app": undo.appBundleIdentifier,
                 "fieldIdentity": undo.fieldIdentity.traceDescription,
+                "acceptMode": undo.acceptMode,
+                "undoMechanism": acceptedInsertionUndoRecoveryMode.traceMechanism.rawValue,
+                "sameSliceUndoProof": "true",
+                "restoredOriginalTarget": "true",
+                "acceptedTextLength": String(undo.acceptedTextLength),
+                "restoredTextLength": String(restoredText.count)
+            ]
+        )
+        RawAutocompleteTraceLog.shared.record(
+            type: .acceptedInsertionUndone,
+            suggestionID: "",
+            appBundleIdentifier: undo.appBundleIdentifier,
+            fieldIdentity: undo.fieldIdentity.traceDescription,
+            outcome: undo.acceptMode,
+            reason: "accepted-insertion-undone",
+            metadata: [
+                "acceptanceID": undo.acceptanceID,
+                "acceptMode": undo.acceptMode,
+                "undoMechanism": acceptedInsertionUndoRecoveryMode.traceMechanism.rawValue,
+                "sameSliceUndoProof": "true",
+                "restoredOriginalTarget": "true",
                 "acceptedTextLength": String(undo.acceptedTextLength),
                 "restoredTextLength": String(restoredText.count)
             ]
@@ -3247,6 +3339,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "acceptanceID": tracker.acceptanceID,
                     "acceptMode": tracker.acceptMode,
+                    "undoMechanism": self.acceptedInsertionUndoRecoveryMode.traceMechanism.rawValue,
+                    "sameSliceUndoProof": "true",
+                    "restoredOriginalTarget": "true",
                     "fieldKind": tracker.fieldKind.rawValue,
                     "fieldKindReason": tracker.fieldKindReason,
                     "behaviorProfile": tracker.behaviorProfileID.rawValue,
@@ -3441,7 +3536,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "result": String(describing: result),
                         "acceptedChars": String(acceptedText.count),
                         "retryCount": String(baseline.retryCount)
-                    ]
+                    ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
                 )
                 RawAutocompleteTraceLog.shared.record(
                     type: .insertionFailed,
@@ -3462,7 +3557,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "currentBeforeChars": String(context.textBeforeCursor.count),
                         "previousAfterChars": String(baseline.previousTextAfterCursor.count),
                         "currentAfterChars": String(context.textAfterCursor.count)
-                    ]
+                    ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
                 )
                 recordAnnoyanceSignal(
                     .wrongInsertion,
@@ -3556,7 +3651,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                 "previousAfterChars": String(baseline.previousTextAfterCursor.count),
                 "retryCount": String(baseline.retryCount)
-            ]
+            ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
         )
         RawAutocompleteTraceLog.shared.record(
             type: .insertionFailed,
@@ -3576,7 +3671,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                 "previousAfterChars": String(baseline.previousTextAfterCursor.count),
                 "retryCount": String(baseline.retryCount)
-            ]
+            ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
         )
         recordAnnoyanceSignal(
             .wrongInsertion,
@@ -3602,12 +3697,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func focusedInsertionVerificationContext(
         for baseline: InsertionVerificationBaseline,
-        acceptedText: String? = nil
+        acceptedText: String
     ) -> FocusedInsertionVerificationContext {
-        guard let frontmostApp = accessibilityClient.frontmostApplication(),
-              let context = accessibilityClient.focusedTextContext(
-                  allowDescendantTextFallback: baseline.profile.allowsDescendantTextFallback
-              ) else {
+        guard let frontmostApp = accessibilityClient.frontmostApplication() else {
+            if let context = codexProofInsertionVerificationContext(
+                baseline: baseline,
+                acceptedText: acceptedText,
+                frontmostApp: nil,
+                reason: "missing-frontmost-app"
+            ) {
+                return .ready(context: context)
+            }
+            return .missingContext
+        }
+
+        guard let context = accessibilityClient.focusedTextContext(
+            allowDescendantTextFallback: baseline.profile.allowsDescendantTextFallback
+        ) else {
+            if let context = obsidianDescendantInsertionVerificationContext(
+                baseline: baseline,
+                acceptedText: acceptedText,
+                frontmostApp: frontmostApp,
+                reason: "missing-focused-context"
+            ) {
+                return .ready(context: context)
+            }
+            if let context = codexProofInsertionVerificationContext(
+                baseline: baseline,
+                acceptedText: acceptedText,
+                frontmostApp: frontmostApp,
+                reason: "missing-focused-context"
+            ) {
+                return .ready(context: context)
+            }
             return .missingContext
         }
 
@@ -3629,23 +3751,94 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: baseline.profile
         )
 
-        if let acceptedText,
-           codexProofInsertionVerificationContextIsReady(
-               baseline: baseline,
-               acceptedText: acceptedText,
-               frontmostApp: frontmostApp,
-               context: adjustedContext
-           ) {
+        if codexProofInsertionVerificationContextIsReady(
+            baseline: baseline,
+            acceptedText: acceptedText,
+            frontmostApp: frontmostApp,
+            context: adjustedContext
+        ) {
             return .ready(context: adjustedContext)
         }
 
         guard currentIdentity == baseline.fieldIdentity else {
+            if let context = recoveredInsertionVerificationContext(
+                adjustedContext,
+                acceptedText: acceptedText,
+                baseline: baseline,
+                frontmostApp: frontmostApp,
+                mismatch: .fieldIdentity
+            ) {
+                return .ready(context: context)
+            }
+            if let context = obsidianDescendantInsertionVerificationContext(
+                baseline: baseline,
+                acceptedText: acceptedText,
+                frontmostApp: frontmostApp,
+                reason: "field-changed"
+            ) {
+                return .ready(context: context)
+            }
+            if let context = codexProofInsertionVerificationContext(
+                baseline: baseline,
+                acceptedText: acceptedText,
+                frontmostApp: frontmostApp,
+                reason: "field-changed"
+            ) {
+                return .ready(context: context)
+            }
             return .fieldChanged
         }
 
         let currentTargetFingerprint = targetFingerprint(context: adjustedContext).postInsertionScope
         guard baseline.targetFingerprint.matches(currentTargetFingerprint) else {
+            if baseline.profile.appFamily == .chromium,
+               baseline.fieldKind == .multilineCompose,
+               baseline.targetFingerprint.matchesPostInsertionScopeAllowingElementHeightChange(currentTargetFingerprint) {
+                DiagnosticsLog.shared.record(
+                    "insert-verification-target-resize-allowed",
+                    metadata: [
+                        "app": baseline.profile.bundleIdentifier,
+                        "fieldKind": baseline.fieldKind.rawValue,
+                        "reason": "chromium-rich-editor-height-reflow"
+                    ]
+                )
+                return .ready(context: adjustedContext)
+            }
+            if let context = recoveredInsertionVerificationContext(
+                adjustedContext,
+                acceptedText: acceptedText,
+                baseline: baseline,
+                frontmostApp: frontmostApp,
+                mismatch: .targetFingerprint
+            ) {
+                return .ready(context: context)
+            }
+            if let context = obsidianDescendantInsertionVerificationContext(
+                baseline: baseline,
+                acceptedText: acceptedText,
+                frontmostApp: frontmostApp,
+                reason: "target-fingerprint-changed"
+            ) {
+                return .ready(context: context)
+            }
+            if let context = codexProofInsertionVerificationContext(
+                baseline: baseline,
+                acceptedText: acceptedText,
+                frontmostApp: frontmostApp,
+                reason: "target-fingerprint-changed"
+            ) {
+                return .ready(context: context)
+            }
             return .targetFingerprintChanged
+        }
+
+        if let context = obsidianDescendantInsertionVerificationContext(
+            baseline: baseline,
+            acceptedText: acceptedText,
+            frontmostApp: frontmostApp,
+            reason: "same-field-stale-selection"
+        ) {
+            return .ready(context: context)
         }
 
         return .ready(context: adjustedContext)
@@ -3703,6 +3896,184 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         return true
+    }
+
+    private func recoveredInsertionVerificationContext(
+        _ context: FocusedTextContext,
+        acceptedText: String,
+        baseline: InsertionVerificationBaseline,
+        frontmostApp: RunningApplicationInfo,
+        mismatch: InsertionVerificationContextMismatch
+    ) -> FocusedTextContext? {
+        let result = insertionVerification.verify(
+            previousTextBeforeCursor: baseline.previousTextBeforeCursor,
+            acceptedText: acceptedText,
+            currentTextBeforeCursor: context.textBeforeCursor,
+            previousTextAfterCursor: baseline.previousTextAfterCursor,
+            currentTextAfterCursor: context.textAfterCursor
+        )
+        guard insertionVerificationContextRecoveryPolicy.canRecover(
+            InsertionVerificationContextRecoveryInput(
+                profile: baseline.profile,
+                frontmostBundleIdentifier: frontmostApp.bundleIdentifier,
+                frontmostProcessIdentifier: frontmostApp.processIdentifier,
+                expectedFieldIdentity: baseline.fieldIdentity,
+                contextRole: context.role,
+                verificationResult: result,
+                mismatch: mismatch
+            )
+        ) else {
+            return nil
+        }
+
+        DiagnosticsLog.shared.record(
+            "insert-verification-context-recovered",
+            metadata: [
+                "app": baseline.profile.bundleIdentifier,
+                "acceptedChars": String(acceptedText.count),
+                "mismatch": mismatch.rawValue,
+                "role": context.role ?? "unknown",
+                "result": String(describing: result)
+            ]
+        )
+        return context
+    }
+
+    private func obsidianDescendantInsertionVerificationContext(
+        baseline: InsertionVerificationBaseline,
+        acceptedText: String,
+        frontmostApp: RunningApplicationInfo,
+        reason: String
+    ) -> FocusedTextContext? {
+        let bundleIdentifier = "md.obsidian"
+        guard baseline.profile.bundleIdentifier == bundleIdentifier,
+              frontmostApp.bundleIdentifier == bundleIdentifier,
+              frontmostApp.processIdentifier == baseline.fieldIdentity.processIdentifier,
+              !acceptedText.isEmpty,
+              !baseline.previousTextBeforeCursor.isEmpty else {
+            return nil
+        }
+
+        let expectedText = baseline.previousTextBeforeCursor + acceptedText + baseline.previousTextAfterCursor
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        guard Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: expectedText,
+            containing: baseline.previousTextBeforeCursor,
+            maxDepth: 32
+        ) != nil else {
+            return nil
+        }
+
+        DiagnosticsLog.shared.record(
+            "obsidian-descendant-insert-verification-fast-path",
+            metadata: [
+                "app": bundleIdentifier,
+                "acceptedChars": String(acceptedText.count),
+                "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                "previousAfterChars": String(baseline.previousTextAfterCursor.count),
+                "reason": reason
+            ]
+        )
+        return FocusedTextContext(
+            elementIdentifier: baseline.fieldIdentity.elementIdentifier,
+            role: "AXTextArea",
+            subrole: nil,
+            fingerprint: FocusedElementFingerprint(),
+            textBeforeCursor: baseline.previousTextBeforeCursor + acceptedText,
+            textAfterCursor: baseline.previousTextAfterCursor,
+            selectedText: "",
+            selectedTextLength: 0,
+            caretRect: nil,
+            elementRect: nil,
+            windowRect: nil,
+            windowIdentifier: nil,
+            textLineRect: nil,
+            textStyle: nil,
+            isSecure: false,
+            fieldClassification: AXFieldClassification(kind: baseline.fieldKind, reason: baseline.fieldKindReason),
+            caretIsSynthetic: true,
+            capabilities: FocusedTextCapabilities(
+                canReadValue: true,
+                canReadSelectedTextRange: true,
+                canReadBoundsForRange: false,
+                canReadAttributedText: false,
+                canSetSelectedText: true
+            )
+        )
+    }
+
+    private func codexProofInsertionVerificationContext(
+        baseline: InsertionVerificationBaseline,
+        acceptedText: String,
+        frontmostApp providedFrontmostApp: RunningApplicationInfo?,
+        reason: String
+    ) -> FocusedTextContext? {
+        let bundleIdentifier = "com.openai.codex"
+        let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+        guard baseline.profile.bundleIdentifier == bundleIdentifier,
+              baseline.profile.requiresNoSubmitAcceptanceProof,
+              baseline.profile.insertionMode == .axValueReplacement,
+              activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+              baseline.previousTextBeforeCursor.contains(marker),
+              baseline.previousTextAfterCursor.isEmpty,
+              !acceptedText.isEmpty else {
+            return nil
+        }
+
+        let frontmostApp = providedFrontmostApp ?? accessibilityClient.frontmostApplication()
+        guard let frontmostApp,
+              frontmostApp.bundleIdentifier == bundleIdentifier,
+              frontmostApp.processIdentifier == baseline.fieldIdentity.processIdentifier else {
+            return nil
+        }
+
+        let expectedText = baseline.previousTextBeforeCursor + acceptedText + baseline.previousTextAfterCursor
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        guard Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: expectedText,
+            containing: marker,
+            maxDepth: 32
+        ) != nil else {
+            return nil
+        }
+
+        DiagnosticsLog.shared.record(
+            "codex-proof-insert-verification-fast-path",
+            metadata: [
+                "app": bundleIdentifier,
+                "acceptedChars": String(acceptedText.count),
+                "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                "reason": reason
+            ]
+        )
+        return FocusedTextContext(
+            elementIdentifier: baseline.fieldIdentity.elementIdentifier,
+            role: "AXTextArea",
+            subrole: nil,
+            fingerprint: FocusedElementFingerprint(),
+            textBeforeCursor: baseline.previousTextBeforeCursor + acceptedText,
+            textAfterCursor: baseline.previousTextAfterCursor,
+            selectedText: "",
+            selectedTextLength: 0,
+            caretRect: nil,
+            elementRect: nil,
+            windowRect: nil,
+            windowIdentifier: nil,
+            textLineRect: nil,
+            textStyle: nil,
+            isSecure: false,
+            fieldClassification: AXFieldClassification(kind: baseline.fieldKind, reason: baseline.fieldKindReason),
+            caretIsSynthetic: true,
+            capabilities: FocusedTextCapabilities(
+                canReadValue: true,
+                canReadSelectedTextRange: true,
+                canReadBoundsForRange: false,
+                canReadAttributedText: false,
+                canSetSelectedText: true
+            )
+        )
     }
 
     private func startAcceptanceSurvivalTracking(_ tracker: AcceptanceSurvivalTracker) {
@@ -3974,6 +4345,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
                     "previousAfterChars": String(baseline.previousTextAfterCursor.count)
                 ]) { current, _ in current }
+                .merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
         )
     }
 
@@ -3997,6 +4369,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         metadata["acceptedChars"] = String(acceptedText.count)
         metadata["retryCount"] = String(baseline.retryCount)
         metadata["result"] = reason.rawValue
+        metadata.merge(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
 
         DiagnosticsLog.shared.record(
             "insert-verification-final-failure",
@@ -4057,6 +4430,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return metadata
     }
 
+    private func insertionFailureRecoverabilityMetadata(
+        baseline: InsertionVerificationBaseline
+    ) -> [String: String] {
+        let rollbackAvailable = pendingAcceptedInsertionUndo?.acceptanceID == baseline.acceptanceID
+            && acceptedInsertionUndoIsActive()
+        return InsertionUndoRecoverabilityModel().failureMetadata(
+            profile: baseline.profile,
+            acceptMode: baseline.acceptMode,
+            rollbackAvailable: rollbackAvailable,
+            rollbackMechanism: rollbackAvailable
+                ? acceptedInsertionUndoRecoveryMode.traceMechanism
+                : nil
+        )
+    }
+
     private func scheduleSuggestion(
         context: FocusedTextContext,
         profile: CompatibilityProfile,
@@ -4068,6 +4456,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         requestMode: CompletionRequestMode,
         visiblePageContext: VisiblePageContext?
     ) {
+        cancelPrefixCooldownRetry()
         lastRequestedTextBeforeCursor = context.textBeforeCursor
 
         let acceptedTextStyleKey = suggestionOrchestrator.acceptedTextStyleKey(
@@ -4117,6 +4506,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let candidateWords = recentWordMemory.words(for: appBundleIdentifier)
                 + (visiblePageContext?.completionCandidateWords ?? [])
             let allowPredictiveFallback = shouldUsePredictiveWordFallback(
+                profile: profile,
                 visiblePageContext: visiblePageContext
             )
             let fastSelection = suggestionOrchestrator.fastWordSelection(
@@ -5263,7 +5653,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyboardEventTap?.suppressPassthroughObservation(
             until: Date().addingTimeInterval(
                 shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile)
-                    || shouldUseCodexProofDirectInsertion(profile: profile) ? 0.75 : 0.25
+                    || shouldUseCodexProofDirectInsertion(profile: profile)
+                    || shouldUseObsidianDirectValueInsertion(profile: profile) ? 0.75 : 0.25
             )
         )
 
@@ -5298,6 +5689,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "app": profile.bundleIdentifier,
                     "mode": InsertionMode.clipboardFallbackOptIn.rawValue,
+                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
+                    "success": String(succeeded),
+                    "skippedModes": skippedModes
+                        .map(\.rawValue)
+                        .sorted()
+                        .joined(separator: ",")
+                ]
+            )
+            if succeeded {
+                focusedTextPollingPause.pause(
+                    now: Date(),
+                    durationMilliseconds: postInsertionPollPauseMilliseconds
+                )
+            }
+            return succeeded
+        }
+
+        if shouldUseObsidianDirectValueInsertion(profile: profile) {
+            let succeeded = insertObsidianDirectValueText(acceptedText)
+            DiagnosticsLog.shared.record(
+                "insert",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "mode": InsertionMode.axValueReplacement.rawValue,
                     "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
                     "success": String(succeeded),
                     "skippedModes": skippedModes
@@ -5359,6 +5774,111 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && profile.insertionMode == .axValueReplacement
             && profile.requiresNoSubmitAcceptanceProof
             && activeAppProofBundleIdentifiers.contains("com.openai.codex")
+    }
+
+    private func shouldUseObsidianDirectValueInsertion(profile: CompatibilityProfile) -> Bool {
+        currentSuggestionAppBundleIdentifier == "md.obsidian"
+            && profile.bundleIdentifier == "md.obsidian"
+            && profile.insertionMode == .axValueReplacement
+    }
+
+    private func insertObsidianDirectValueText(_ acceptedText: String) -> Bool {
+        let bundleIdentifier = "md.obsidian"
+        guard !acceptedText.isEmpty,
+              let lastTextSnapshot,
+              !lastTextSnapshot.textBeforeCursor.isEmpty,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == bundleIdentifier else {
+            DiagnosticsLog.shared.record(
+                "obsidian-direct-value-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "precondition-failed"
+                ]
+            )
+            return false
+        }
+
+        let previousText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
+        let replacementText = lastTextSnapshot.textBeforeCursor + acceptedText + lastTextSnapshot.textAfterCursor
+        let cursorUTF16Offset = lastTextSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        guard let textArea = Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: previousText,
+            containing: lastTextSnapshot.textBeforeCursor,
+            maxDepth: 32
+        ) else {
+            DiagnosticsLog.shared.record(
+                "obsidian-direct-value-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "text-area-not-found"
+                ]
+            )
+            return false
+        }
+
+        guard AXUIElementSetAttributeValue(
+            textArea,
+            kAXValueAttribute as CFString,
+            replacementText as CFTypeRef
+        ) == .success else {
+            DiagnosticsLog.shared.record(
+                "obsidian-direct-value-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "value-set-failed"
+                ]
+            )
+            return false
+        }
+
+        var cursorRange = CFRange(location: cursorUTF16Offset, length: 0)
+        if let rangeValue = AXValueCreate(.cfRange, &cursorRange) {
+            _ = AXUIElementSetAttributeValue(
+                textArea,
+                kAXSelectedTextRangeAttribute as CFString,
+                rangeValue
+            )
+        }
+        moveFrontmostInsertionPointToLineEnd()
+
+        var succeeded = false
+        for _ in 0..<5 {
+            if Self.axStringAttribute(textArea, kAXValueAttribute) == replacementText {
+                succeeded = true
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        DiagnosticsLog.shared.record(
+            "obsidian-direct-value-insert",
+            metadata: [
+                "app": bundleIdentifier,
+                "success": String(succeeded),
+                "acceptedChars": String(acceptedText.count),
+                "previousBeforeChars": String(lastTextSnapshot.textBeforeCursor.count),
+                "previousAfterChars": String(lastTextSnapshot.textAfterCursor.count)
+            ]
+        )
+        return succeeded
+    }
+
+    private func moveFrontmostInsertionPointToLineEnd() {
+        guard let source = CGEventSource(stateID: .hidSystemState),
+              let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: false) else {
+            return
+        }
+
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
     }
 
     private func insertCodexProofText(_ acceptedText: String) -> Bool {
@@ -6505,6 +7025,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return cooldown.metadata
     }
 
+    private func schedulePrefixCooldownRetry(
+        for snapshot: FocusedTextSnapshot,
+        cooldown: PrefixFamilyCooldown
+    ) {
+        cancelPrefixCooldownRetry()
+        let delayMilliseconds = max(
+            0,
+            Int(cooldown.until.timeIntervalSinceNow * 1_000) + 25
+        )
+        let reason = cooldown.reason.rawValue
+        prefixCooldownRetryTask = Task { [weak self, snapshot, reason, delayMilliseconds] in
+            try? await Task.sleep(for: .milliseconds(delayMilliseconds))
+            guard !Task.isCancelled else {
+                return
+            }
+
+            await MainActor.run {
+                guard let self,
+                      self.lastTextSnapshot == snapshot,
+                      !self.suggestionSession.hasVisibleSuggestion else {
+                    return
+                }
+
+                self.lastTextSnapshot = nil
+                self.lastRequestedTextBeforeCursor = nil
+                self.suggestionBlockLogGate.reset()
+                self.setSuggestionDecision("Ready: prefix \(reason) expired")
+                DiagnosticsLog.shared.record(
+                    "prefix-family-cooldown-expired",
+                    metadata: [
+                        "reason": reason,
+                        "fieldIdentity": snapshot.fieldIdentity.traceDescription
+                    ]
+                )
+            }
+        }
+    }
+
+    private func cancelPrefixCooldownRetry() {
+        prefixCooldownRetryTask?.cancel()
+        prefixCooldownRetryTask = nil
+    }
+
     private func recordPlacementUncertainty(
         suggestionID: String,
         appBundleIdentifier: String,
@@ -6625,6 +7188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion(reason: "focus-changed")
         }
         invalidatePendingSuggestionRequest()
+        cancelPrefixCooldownRetry()
 
         if let currentFieldIdentity {
             suppressedFieldIdentities.remove(currentFieldIdentity)
@@ -6649,6 +7213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion(reason: hideReason)
         }
         invalidatePendingSuggestionRequest()
+        cancelPrefixCooldownRetry()
 
         if let currentFieldIdentity {
             suppressedFieldIdentities.remove(currentFieldIdentity)
@@ -7180,13 +7745,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func shouldAskModelForWordCompletionFallback(
         visiblePageContext: VisiblePageContext?
     ) -> Bool {
-        suggestionTuning.aggressivenessLevel >= 4 || visiblePageContext != nil
+        suggestionTuning.allowsModelWordCompletionFallback(
+            visiblePageContextAvailable: visiblePageContext != nil
+        )
     }
 
     private func shouldUsePredictiveWordFallback(
+        profile: CompatibilityProfile,
         visiblePageContext: VisiblePageContext?
     ) -> Bool {
-        suggestionTuning.aggressivenessLevel >= 4 || visiblePageContext != nil
+        suggestionTuning.allowsPredictiveWordFallback(
+            appBundleIdentifier: profile.bundleIdentifier,
+            visiblePageContextAvailable: visiblePageContext != nil
+        )
     }
 
     private func setAcceptAllShortcut(_ shortcut: AcceptAllShortcut) {
@@ -8259,8 +8830,34 @@ private struct AcceptedInsertionUndo: Equatable {
     let textBeforeCursor: String
     let textAfterCursor: String
     let acceptedTextLength: Int
+    let acceptMode: String
     let acceptedAt: Date
     let expiresAt: Date
+}
+
+private enum AcceptedInsertionUndoRecoveryMode: Equatable {
+    case appRollback
+    case nativeProofOnly
+
+    var traceMechanism: InsertionUndoRecoverabilityLevel {
+        switch self {
+        case .appRollback:
+            .appRollback
+        case .nativeProofOnly:
+            .nativeSingleEdit
+        }
+    }
+
+    static func fromEnvironment(
+        _ environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> AcceptedInsertionUndoRecoveryMode {
+        switch environment["AUTOCOMPLETE_LAB_ACCEPTED_INSERTION_UNDO_RECOVERY"]?.lowercased() {
+        case "native", "nativeonly", "native-proof", "nativeproofonly", "native-pass-through":
+            .nativeProofOnly
+        default:
+            .appRollback
+        }
+    }
 }
 
 private struct FieldControlTarget: Equatable {

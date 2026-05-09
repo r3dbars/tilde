@@ -180,7 +180,7 @@
             "reference": "Codex/default"
           }
         ],
-        "notes": "Dogfood prompt support has same-slice screenshot, one-word accept, and no-submit proof. Full accept stays disabled until separate no-submit proof exists."
+        "notes": "Dogfood prompt support is word-only; same-slice no-submit proof is green and full accept remains disabled."
       },
       {
         "bundle": "com.anthropic.claude-code",
@@ -352,23 +352,21 @@
     },
     {
       "surface": "Chrome text fields",
-      "status": "partial",
+      "status": "complete",
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-textarea.png",
         "docs/product/visual-placement-screenshots/chrome-contenteditable.png"
       ],
-      "gaps": [
-        "Production Chrome text-field proof is defined but still missing: run the bounded public W3Schools textarea/contenteditable lane with disposable text and strict screenshot tracing."
-      ],
+      "gaps": [],
       "requirements": [
         {
           "id": "production-chrome-text-fields",
-          "status": "pending",
-          "summary": "Run bounded screenshot-backed smoke proof for representative production Chrome text fields beyond local fixtures.",
+          "status": "passed",
+          "summary": "Bounded screenshot-backed smoke proof now covers representative production Chrome text fields beyond local fixtures.",
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture production-text-fields",
           "safePath": [
-            "textarea-public: https://www.w3schools.com/tags/tryit.asp?filename=tryhtml_textarea",
-            "contenteditable-public: https://www.w3schools.com/tags/tryit.asp?filename=tryhtml5_global_contenteditable"
+            "textarea-public: https://www.editpad.org/",
+            "contenteditable-public: https://yabwe.github.io/medium-editor/"
           ],
           "proofRows": [
             {
@@ -506,23 +504,7 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/codex-inline.png"
       ],
-      "gaps": [],
-      "requirements": [
-        {
-          "id": "codex-same-slice-no-submit",
-          "status": "complete",
-          "summary": "Prove screenshot, one-word Tab accept, and no prompt submit in one bounded strict trace slice.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate",
-          "manualSmoke": {
-            "app": "Codex",
-            "bundle": "com.openai.codex",
-            "proof": "default",
-            "minVerifiedAccepts": 1,
-            "maxVerifiedAccepts": 1,
-            "requiresVisualStrictComplete": true
-          }
-        }
-      ]
+      "gaps": []
     },
     {
       "surface": "Obsidian",
@@ -844,9 +826,9 @@
       "displayName": "Codex",
       "supportLevel": "yellow",
       "surface": "Codex",
-      "status": "complete",
+      "status": "partial",
       "owner": "prompt-app proof lane",
-      "safetyNote": "Same-slice screenshot, one-word Tab accept, verified insertion, and no-submit proof exists. Full accept stays disabled until separate no-submit proof exists."
+      "safetyNote": "Screenshot proof exists, but support must stay yellow until one trace slice proves one-word accept with no prompt submit."
     },
     {
       "bundle": "com.anthropic.claude-code",

@@ -83,6 +83,7 @@ trim() {
 
 declare -a CURRENT_BUILD_PROOFS=()
 CURRENT_COMMIT_PROOF=""
+CURRENT_APP_PROOF=""
 CURRENT_ARCHIVE_PROOF=""
 
 collect_current_build_proofs() {
@@ -102,7 +103,8 @@ collect_current_build_proofs() {
     local app_sha
     app_sha="$(shasum -a 256 "$app_binary" | awk '{print $1}')"
     if [[ -n "$app_sha" ]]; then
-      CURRENT_BUILD_PROOFS+=("app-sha256:$app_sha")
+      CURRENT_APP_PROOF="app-sha256:$app_sha"
+      CURRENT_BUILD_PROOFS+=("$CURRENT_APP_PROOF")
     fi
   fi
 
@@ -131,16 +133,21 @@ line_has_current_build_proof() {
   local line="$1"
 
   if [[ "$line" == *"archive-sha256:"* ]]; then
-    [[ -n "$CURRENT_ARCHIVE_PROOF" && "$line" == *"$CURRENT_ARCHIVE_PROOF"* ]] || return 1
+    if [[ -n "$CURRENT_ARCHIVE_PROOF" && "$line" == *"$CURRENT_ARCHIVE_PROOF"* ]]; then
+      return 0
+    fi
+  fi
+
+  if [[ -n "$CURRENT_APP_PROOF" && "$line" == *"$CURRENT_APP_PROOF"* ]]; then
     return 0
   fi
 
-  if [[ "$line" == *"commit:"* ]]; then
-    [[ -n "$CURRENT_COMMIT_PROOF" && "$line" == *"$CURRENT_COMMIT_PROOF"* ]] || return 1
+  if line_has_source_compatible_commit_proof "$line"; then
+    return 0
   fi
 
-  if [[ -n "$CURRENT_COMMIT_PROOF" && "$line" == *"$CURRENT_COMMIT_PROOF"* ]]; then
-    return 0
+  if [[ "$line" == *"commit:"* || "$line" == *"archive-sha256:"* || "$line" == *"app-sha256:"* ]]; then
+    return 1
   fi
 
   if [[ -n "$CURRENT_ARCHIVE_PROOF" && "$line" == *"$CURRENT_ARCHIVE_PROOF"* ]]; then
@@ -148,6 +155,42 @@ line_has_current_build_proof() {
   fi
 
   return 1
+}
+
+line_commit_proof_token() {
+  local line="$1"
+
+  if [[ "$line" =~ commit:([0-9a-fA-F]{7,40}) ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+  fi
+}
+
+line_has_source_compatible_commit_proof() {
+  local line="$1"
+  local proof_token
+  proof_token="$(line_commit_proof_token "$line")"
+  [[ -n "$proof_token" ]] || return 1
+
+  local proof_commit
+  proof_commit="$(git rev-parse --verify --quiet "$proof_token^{commit}" 2>/dev/null || true)"
+  [[ -n "$proof_commit" ]] || return 1
+
+  local current_commit
+  current_commit="$(git rev-parse --verify --quiet HEAD^{commit} 2>/dev/null || true)"
+  [[ -n "$current_commit" ]] || return 1
+
+  if [[ "$proof_commit" == "$current_commit" ]]; then
+    return 0
+  fi
+
+  # Proof rows should go stale when the app/runtime source changes, not when the
+  # proof driver gets safer for a different lane and app behavior is unchanged.
+  local source_paths_raw="${AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS:-Package.swift Package.resolved Sources}"
+  local -a source_paths=()
+  read -r -a source_paths <<<"$source_paths_raw"
+  (( ${#source_paths[@]} > 0 )) || return 1
+
+  git diff --quiet "$proof_commit".."$current_commit" -- "${source_paths[@]}"
 }
 
 matching_report_line() {
