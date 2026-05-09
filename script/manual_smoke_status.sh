@@ -69,6 +69,8 @@ trim() {
 }
 
 declare -a CURRENT_BUILD_PROOFS=()
+CURRENT_COMMIT_PROOF=""
+CURRENT_ARCHIVE_PROOF=""
 
 collect_current_build_proofs() {
   if [[ -n "${AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF:-}" ]]; then
@@ -78,7 +80,8 @@ collect_current_build_proofs() {
   local commit
   commit="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
   if [[ -n "$commit" ]]; then
-    CURRENT_BUILD_PROOFS+=("commit:$commit")
+    CURRENT_COMMIT_PROOF="commit:$commit"
+    CURRENT_BUILD_PROOFS+=("$CURRENT_COMMIT_PROOF")
   fi
 
   local app_binary="${AUTOCOMPLETE_LAB_APP_BINARY:-dist/AutocompleteLab.app/Contents/MacOS/AutocompleteLab}"
@@ -95,7 +98,8 @@ collect_current_build_proofs() {
     local archive_sha
     archive_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
     if [[ -n "$archive_sha" ]]; then
-      CURRENT_BUILD_PROOFS+=("archive-sha256:$archive_sha")
+      CURRENT_ARCHIVE_PROOF="archive-sha256:$archive_sha"
+      CURRENT_BUILD_PROOFS+=("$CURRENT_ARCHIVE_PROOF")
     fi
   fi
 }
@@ -112,12 +116,23 @@ current_build_proof_summary() {
 
 line_has_current_build_proof() {
   local line="$1"
-  local proof
-  for proof in "${CURRENT_BUILD_PROOFS[@]}"; do
-    if [[ "$line" == *"$proof"* ]]; then
-      return 0
-    fi
-  done
+
+  if [[ "$line" == *"archive-sha256:"* ]]; then
+    [[ -n "$CURRENT_ARCHIVE_PROOF" && "$line" == *"$CURRENT_ARCHIVE_PROOF"* ]] || return 1
+    return 0
+  fi
+
+  if [[ "$line" == *"commit:"* ]]; then
+    [[ -n "$CURRENT_COMMIT_PROOF" && "$line" == *"$CURRENT_COMMIT_PROOF"* ]] || return 1
+  fi
+
+  if [[ -n "$CURRENT_COMMIT_PROOF" && "$line" == *"$CURRENT_COMMIT_PROOF"* ]]; then
+    return 0
+  fi
+
+  if [[ -n "$CURRENT_ARCHIVE_PROOF" && "$line" == *"$CURRENT_ARCHIVE_PROOF"* ]]; then
+    return 0
+  fi
 
   return 1
 }

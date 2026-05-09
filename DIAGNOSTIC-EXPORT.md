@@ -38,6 +38,10 @@ without sharing what the tester typed.
 
 Open Diagnostics from the menu bar and use Export Report.
 
+For beta feedback, attach only that redacted Privacy Bundle. The menu bar
+`Submit Feedback...` item opens the structured issue form, but it does not
+attach diagnostics automatically.
+
 For command-line checks, run:
 
 ```bash

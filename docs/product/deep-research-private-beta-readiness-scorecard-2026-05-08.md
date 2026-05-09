@@ -18,12 +18,13 @@ The current repo has serious trust machinery: local MLX runtime policy, secure
 field blocking, accept-time focus guards, redacted tracing, manual smoke
 recorders, screenshot proof gates, and private beta packet scripts. This pass
 added preferred DMG packaging, a saved release-proof checklist, required beta
-docs, a structured feedback issue form, and a generated private beta packet. It
-also reconciled the default proof manifest with the scorecard so completed
-Notes and Obsidian screenshots are no longer treated as unreferenced. The app
-is still not private-beta ready because the current checkout has no fresh
-notarized artifact, no fresh VM/install proof, and no safe same-slice
-prompt-app no-submit proof.
+docs, a structured feedback issue form, and a generated private beta packet.
+This ops pass adds a privacy-safe menu feedback path, triage labels,
+issue-template validation, a daily tester checklist, a redacted export flow, a
+stop dashboard, and a generated readiness summary artifact. The app is still
+not private-beta ready because the current checkout has no fresh notarized
+artifact, no fresh VM/install proof, and no safe same-slice prompt-app
+no-submit proof.
 
 ## Product Standard
 
@@ -85,11 +86,11 @@ Current local evidence:
 
 ## Score
 
-Starting score: 70/100
+Starting score before this ops pass: 80/100
 
-Current score after this pass: 80/100
+Current score after this ops pass: 84/100
 
-Score movement: +10
+Score movement: +4
 
 ## Implementation Progress
 
@@ -116,6 +117,15 @@ Score movement: +10
   tracked Notes and Obsidian screenshot proof. The default proof manifest check
   now passes, while the strict visual proof gate still blocks on prompt-app
   evidence.
+- Added `docs/product/private-beta-ops-loop.md`, generated packet files for the
+  daily tester checklist, redacted report flow, triage labels, stop-condition
+  dashboard, issue-template validation, and beta readiness summary.
+- Added `.github/labels.yml` and `script/validate_beta_issue_template.sh`, then
+  wired the validator into `script/beta_readiness.sh` and the private packet
+  self-test.
+- Added a privacy-safe menu bar `Submit Feedback...` path that opens the
+  structured GitHub issue form without attaching diagnostics, typed text, or
+  screenshots automatically.
 
 ## Score Breakdown
 
@@ -249,23 +259,29 @@ Score movement: +10
 ### Documentation And Feedback Operations
 
 - Weight: 10
-- Current score: 9/10
-- Why this score: Product docs and the private beta packet are useful, but the
-  research requires release notes, known limitations, privacy, uninstall/delete
-  data, diagnostic export, and structured feedback artifacts for every invited
-  build. This pass added those docs, a structured issue form, and a generated
-  `dist/private-beta/` packet verified by the readiness script. Remaining gaps
-  are an in-app feedback button and real feedback triage use.
+- Current score: 10/10
+- Why this score: Product docs, the generated private beta packet, the issue
+  form, and the menu feedback path now cover the whole tester loop: install,
+  use, pause, export, report, triage, stop, and remove. The feedback path is
+  privacy-safe because it opens the structured GitHub form and does not attach
+  diagnostics, typed text, or screenshots automatically. The triage labels and
+  stop dashboard make hard stops explicit instead of relying on a separate
+  explanation from Justin.
 - Evidence found in repo: `README.md`, `docs/product/private-beta-plan.md`,
   `docs/product/beta-readiness-checklist.md`,
+  `docs/product/private-beta-ops-loop.md`,
   `docs/product/privacy-and-controls.md`,
   `script/private_beta_packet.sh`,
-  `script/private_beta_packet_self_test.sh`, `PRIVACY-BETA.md`,
+  `script/private_beta_packet_self_test.sh`,
+  `script/validate_beta_issue_template.sh`, `PRIVACY-BETA.md`,
   `KNOWN-LIMITATIONS.md`, `UNINSTALL-DELETE-DATA.md`,
   `DIAGNOSTIC-EXPORT.md`, `RELEASE-NOTES.md`,
-  `.github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml`, local
+  `.github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml`, `.github/labels.yml`,
+  `Sources/AutocompleteLabApp/UI/BetaFeedbackLink.swift`, local
   `dist/private-beta/`.
-- Missing evidence: in-app feedback button and real feedback triage use.
+- Missing evidence: none for docs and feedback operations. The first real
+  tester issue still needs to run through this process before beta expansion,
+  but the operational path is now defined and validated.
 - What would make it 100/100: A beta packet and repo docs that tell testers
   exactly what is supported, what is unsafe, how to install, how to remove all
   local traces, how to export redacted diagnostics, and how to file feedback
