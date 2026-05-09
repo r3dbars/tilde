@@ -120,6 +120,11 @@ local debug tracing is explicitly enabled.
 
 The headline product metric is accepted-and-kept, not raw accept rate. Accepted text is compared at 2s, 10s, 30s, and field blur. Durable checkpoint events store survival class, token recall, edit distance, accepted length, timing metadata, and redacted fingerprints. They should not need the current field text on disk.
 
+Accepted-and-kept is also a restraint signal. Immediate deletion, typed-over,
+and high post-accept edit distance stay as local counts and can lower future
+display scoring after enough samples. Tiny samples should only show directional
+metadata, not strong tuning.
+
 Acceptance events also carry log-safe proof that inserted text came from the
 visible suggestion slice: accepted character count, pre-accept visible character
 count, remaining visible character count, visible-prefix/full-visible match

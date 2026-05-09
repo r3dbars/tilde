@@ -52,11 +52,12 @@ The biggest remaining gap is evidence. The app can now record survival checkpoin
 
 ## Score
 
-Overall score: 89/100
+Overall score: 90/100
 
 Starting score before this loop: 79/100
+Accepted-kept restraint update: 89/100 -> 90/100 (+1).
 
-Proof cap: 89/100 until fresh real-model, current-build dogfood proof closes the remaining evidence gaps.
+Proof cap: 90/100 until fresh real-model, current-build dogfood proof closes the remaining evidence gaps.
 
 ## Score Breakdown
 
@@ -74,10 +75,11 @@ Proof cap: 89/100 until fresh real-model, current-build dogfood proof closes the
 
 - Category name: Usefulness and likely acceptance
 - Weight: 20
-- Current score: 17/20
-- Why this score: Ranking now chooses among cleaned candidates before display, and accepted-and-kept survival is tracked after verified insertion. It is not 20 because the proof horizon is 2s/10s/30s, not the research's ideal 10-minute/send-save horizon, and current accepted-and-kept proof is incomplete.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift`, `Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalChecker.swift`, `Sources/AutocompleteLabApp/App/AppDelegate.swift`, `Tests/AutocompleteLabAppTests/AcceptanceSurvivalCheckerTests.swift`, `script/check_trace_eval.sh`.
-- Missing evidence: current kept-after-10-minutes/send-save proof and real deletion/typed-over metrics.
+- Current score: 18/20
+- Exact metric change: 17/20 -> 18/20 (+1), moving overall suggestion quality 89/100 -> 90/100.
+- Why this score: Ranking now chooses among cleaned candidates before display, and accepted-and-kept survival is tracked after verified insertion. Immediate deletion, typed-over, and high normalized edit distance now feed bounded future display restraint with tiny-sample guardrails. It is not 20 because the proof horizon is 2s/10s/30s, not the research's ideal 10-minute/send-save horizon, and current real-model accepted-and-kept proof is still incomplete.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift`, `Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalChecker.swift`, `Sources/AutocompleteLabApp/App/AppDelegate.swift`, `Sources/AutocompleteLabCore/Session/AcceptedAndKeptLearning.swift`, `Sources/AutocompleteLabCore/Session/DisplayScorePolicy.swift`, `Tests/AutocompleteLabCoreTests/AcceptedAndKeptLearningTests.swift`, `Tests/AutocompleteLabAppTests/SuggestionOrchestratorTests.swift`, `script/check_trace_eval.sh`, `script/experiment_report.py`.
+- Missing evidence: current kept-after-10-minutes/send-save proof and real deletion/typed-over/edit-distance rates across trusted apps.
 - What would make it 100/100: accepted-and-kept beats the target on current-build dogfood, immediate deletion is near zero, and typed-over failures feed suppression without false positives.
 
 ### Voice Match and Non-Assistant Tone
