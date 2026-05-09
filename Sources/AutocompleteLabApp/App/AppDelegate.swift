@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keyboardCaptureSafetyPolicy = KeyboardCaptureSafetyPolicy()
     private let keyboardEventTapIdleStopPolicy = KeyboardEventTapIdleStopPolicy()
     private let insertionVerification = InsertionVerification()
+    private let insertionVerificationContextRecoveryPolicy = InsertionVerificationContextRecoveryPolicy()
     private let insertionRetryPolicy = InsertionRetryPolicy()
     private let insertionVerificationTimingPolicy = InsertionVerificationTimingPolicy()
     private let suggestionAcceptanceProofPolicy = SuggestionAcceptanceProofPolicy()
@@ -3668,6 +3669,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard currentIdentity == baseline.fieldIdentity else {
+            if let context = recoveredInsertionVerificationContext(
+                adjustedContext,
+                acceptedText: acceptedText,
+                baseline: baseline,
+                frontmostApp: frontmostApp,
+                mismatch: .fieldIdentity
+            ) {
+                return .ready(context: context)
+            }
             if let context = codexProofInsertionVerificationContext(
                 baseline: baseline,
                 acceptedText: acceptedText,
@@ -3694,6 +3704,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 return .ready(context: adjustedContext)
             }
+            if let context = recoveredInsertionVerificationContext(
+                adjustedContext,
+                acceptedText: acceptedText,
+                baseline: baseline,
+                frontmostApp: frontmostApp,
+                mismatch: .targetFingerprint
+            ) {
+                return .ready(context: context)
+            }
             if let context = codexProofInsertionVerificationContext(
                 baseline: baseline,
                 acceptedText: acceptedText,
@@ -3706,6 +3725,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return .ready(context: adjustedContext)
+    }
+
+    private func recoveredInsertionVerificationContext(
+        _ context: FocusedTextContext,
+        acceptedText: String,
+        baseline: InsertionVerificationBaseline,
+        frontmostApp: RunningApplicationInfo,
+        mismatch: InsertionVerificationContextMismatch
+    ) -> FocusedTextContext? {
+        let result = insertionVerification.verify(
+            previousTextBeforeCursor: baseline.previousTextBeforeCursor,
+            acceptedText: acceptedText,
+            currentTextBeforeCursor: context.textBeforeCursor,
+            previousTextAfterCursor: baseline.previousTextAfterCursor,
+            currentTextAfterCursor: context.textAfterCursor
+        )
+        guard insertionVerificationContextRecoveryPolicy.canRecover(
+            InsertionVerificationContextRecoveryInput(
+                profile: baseline.profile,
+                frontmostBundleIdentifier: frontmostApp.bundleIdentifier,
+                frontmostProcessIdentifier: frontmostApp.processIdentifier,
+                expectedFieldIdentity: baseline.fieldIdentity,
+                contextRole: context.role,
+                verificationResult: result,
+                mismatch: mismatch
+            )
+        ) else {
+            return nil
+        }
+
+        DiagnosticsLog.shared.record(
+            "insert-verification-context-recovered",
+            metadata: [
+                "app": baseline.profile.bundleIdentifier,
+                "acceptedChars": String(acceptedText.count),
+                "mismatch": mismatch.rawValue,
+                "role": context.role ?? "unknown",
+                "result": String(describing: result)
+            ]
+        )
+        return context
     }
 
     private func codexProofInsertionVerificationContext(

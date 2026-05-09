@@ -156,6 +156,23 @@ struct TextContextRepairPolicyTests {
         #expect(result.reason == .obsidianCodeMirrorHiddenSpacerLine)
     }
 
+    @Test("Repairs Obsidian CodeMirror trailing scaffold drift at visual line end")
+    func repairsObsidianCodeMirrorTrailingScaffolding() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof feels instan",
+            textAfterCursor: "\u{200B}\t\n\u{FFFC}",
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == "Smoke proof feels instan")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorTrailingScaffolding)
+    }
+
     @Test("Does not repair broad Obsidian middle-of-line text")
     func doesNotRepairBroadObsidianMiddleOfLineText() {
         let policy = TextContextRepairPolicy()
@@ -204,5 +221,14 @@ struct TextContextRepairPolicyTests {
             selectedTextLength: 0
         ))
         #expect(!hiddenSpacerBeforeMiddleText.wasRepaired)
+
+        let plainTrailingSpaces = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof feels instan",
+            textAfterCursor: "   ",
+            selectedTextLength: 0
+        ))
+        #expect(!plainTrailingSpaces.wasRepaired)
     }
 }

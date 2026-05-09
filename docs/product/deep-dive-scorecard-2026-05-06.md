@@ -568,3 +568,9 @@ should stay lower until those rows are closed.
     `./script/scorecard_goal_loop.sh --iterations 10` failing until every target
     row has real app proof, then raise scores only in the same commit as the
     proof.
+11. Obsidian now has repairs for trailing characters, spacer rows, trailing
+    hidden CodeMirror scaffolding, descendant `AXWebArea` text fallback, and
+    text-verified post-insert surface recovery. It still needs a deterministic
+    body harness or manual bounded proof because the current hand-driven note
+    can leave the caret before four real after-cursor chars and correctly blocks
+    as `middleOfLine`.
