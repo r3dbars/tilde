@@ -51,6 +51,10 @@ Use this before inviting private beta testers.
 - [ ] The tester knows how to delete traces.
 - [x] A redacted report export works through
   `./script/check_redacted_report_export.sh`.
+- [x] Dependency/SDK inventory works through
+  `./script/check_dependency_inventory.sh`.
+- [x] Current app build redacted export proof works through
+  `./script/check_current_build_privacy_export.sh`.
 
 ## Trust Gate
 

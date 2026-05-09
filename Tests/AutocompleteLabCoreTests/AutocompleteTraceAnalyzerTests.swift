@@ -809,6 +809,48 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.modelTotalGenerationLatencyBuckets["501-1000ms"] == 1)
     }
 
+    @Test("summarizes sensitive suppression categories and leaks")
+    func summarizesSensitiveSuppressionCategoriesAndLeaks() {
+        let events = [
+            event(
+                .suggestionSuppressed,
+                suggestionID: "password",
+                reason: "sensitive-field",
+                metadata: [
+                    "sensitiveSuppressionCategory": "password",
+                    "sensitiveSuppressionDecision": "blocked",
+                    "fieldKind": "secure"
+                ]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "otp",
+                reason: "sensitive-field",
+                metadata: [
+                    "sensitiveSuppressionCategory": "otp",
+                    "sensitiveSuppressionDecision": "blocked",
+                    "fieldKind": "form"
+                ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "leak",
+                metadata: [
+                    "sensitiveSuppressionCategory": "payment",
+                    "fieldKind": "form"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.sensitiveSuppressedByCategory["password"] == 1)
+        #expect(summary.sensitiveSuppressedByCategory["otp"] == 1)
+        #expect(summary.sensitivePresentedByCategory["payment"] == 1)
+        #expect(summary.doNotShipCounters["sensitive-category-suggestion"] == 1)
+        #expect(summary.doNotShipCounters["sensitive-field-suggestion"] == 1)
+    }
+
     private func event(
         _ type: AutocompleteTraceEventType,
         experimentArm: String = "length_3_word",

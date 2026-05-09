@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+PASS_TRACE="$TMP_DIR/pass.jsonl"
+FAIL_TRACE="$TMP_DIR/fail.jsonl"
+SUPPRESSED_TRACE="$TMP_DIR/suppressed.jsonl"
+
+cat >"$PASS_TRACE" <<'JSONL'
+{"timestamp":"2026-05-08T20:00:00Z","sessionID":"s","suggestionID":"p1","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","displayedText":"private shown"}
+{"timestamp":"2026-05-08T20:00:20Z","sessionID":"s","suggestionID":"p1","type":"suggestionHidden","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","reason":"escape-dismissed"}
+{"timestamp":"2026-05-08T20:01:10Z","sessionID":"s","suggestionID":"p2","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion"}
+{"timestamp":"2026-05-08T20:02:00Z","sessionID":"s","suggestionID":"p3","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion"}
+{"timestamp":"2026-05-08T20:02:30Z","sessionID":"s","suggestionID":"late1","type":"suggestionHidden","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","reason":"late-suggestion-hidden","latencyMilliseconds":950}
+{"timestamp":"2026-05-08T20:03:00Z","sessionID":"s","suggestionID":"p4","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion"}
+JSONL
+
+cat >"$FAIL_TRACE" <<'JSONL'
+{"timestamp":"2026-05-08T20:00:00Z","sessionID":"s","suggestionID":"n1","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion"}
+{"timestamp":"2026-05-08T20:00:01Z","sessionID":"s","suggestionID":"n1","type":"suggestionHidden","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","reason":"escape-dismissed"}
+{"timestamp":"2026-05-08T20:00:02Z","sessionID":"s","suggestionID":"n2","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion"}
+{"timestamp":"2026-05-08T20:00:02Z","sessionID":"s","suggestionID":"n2","type":"suggestionTypedOver","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion"}
+{"timestamp":"2026-05-08T20:00:03Z","sessionID":"s","suggestionID":"n3","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion"}
+{"timestamp":"2026-05-08T20:00:04Z","sessionID":"s","suggestionID":"n3","type":"acceptedTextEdited","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","outcome":"rejectedAfterAccept","reason":"accepted-then-deleted","metadata":{"acceptanceID":"a3"}}
+{"timestamp":"2026-05-08T20:00:05Z","sessionID":"s","suggestionID":"n4","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","latencyMilliseconds":900}
+{"timestamp":"2026-05-08T20:00:06Z","sessionID":"s","suggestionID":"","type":"appDisabled","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion"}
+JSONL
+
+cat >"$SUPPRESSED_TRACE" <<'JSONL'
+{"timestamp":"2026-05-08T20:00:00Z","sessionID":"s","suggestionID":"s1","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion"}
+{"timestamp":"2026-05-08T20:00:01Z","sessionID":"s","suggestionID":"s1","type":"acceptedTextEdited","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","outcome":"rejectedAfterAccept","reason":"accepted-then-deleted","metadata":{"acceptanceID":"a1","prefixCooldownReason":"acceptedThenDeleted"}}
+JSONL
+
+PASS_OUTPUT="$TMP_DIR/pass.out"
+FAIL_OUTPUT="$TMP_DIR/fail.out"
+SUPPRESSED_OUTPUT="$TMP_DIR/suppressed.out"
+
+"$ROOT_DIR/script/non_annoyance_report.py" "$PASS_TRACE" >"$PASS_OUTPUT"
+grep -q "Gate: pass" "$PASS_OUTPUT"
+grep -q "Shown/min: 1.33 (4 shown)" "$PASS_OUTPUT"
+grep -q "Dismissals/shown: 25% (1/4)" "$PASS_OUTPUT"
+grep -q "Late suggestions hidden: 1/1 (100%)" "$PASS_OUTPUT"
+if grep -q "private shown" "$PASS_OUTPUT"; then
+  echo "raw displayed text leaked into non-annoyance report" >&2
+  exit 1
+fi
+
+if "$ROOT_DIR/script/non_annoyance_report.py" "$FAIL_TRACE" >"$FAIL_OUTPUT" 2>&1; then
+  echo "expected noisy trace to fail non-annoyance gate" >&2
+  exit 1
+fi
+grep -q "Gate: fail" "$FAIL_OUTPUT"
+grep -q "Immediate resurfacing: 3" "$FAIL_OUTPUT"
+grep -q "Late suggestions shown: 1" "$FAIL_OUTPUT"
+grep -q "Severe suppression coverage: 0/1 (0%)" "$FAIL_OUTPUT"
+
+"$ROOT_DIR/script/non_annoyance_report.py" \
+  "$SUPPRESSED_TRACE" \
+  --max-accepted-then-deleted 1.0 \
+  >"$SUPPRESSED_OUTPUT"
+grep -q "Severe suppression coverage: 1/1 (100%)" "$SUPPRESSED_OUTPUT"
+grep -q "Gate: pass" "$SUPPRESSED_OUTPUT"
+
+echo "non_annoyance_report_self_test passed"
