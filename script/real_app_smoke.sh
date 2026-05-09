@@ -37,12 +37,13 @@ usage() {
   cat <<'EOF'
 Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|chrome|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
-Runs a real app smoke pass where it is safe to automate. Notes, Obsidian,
-Codex, Claude Code, and Claude desktop are manual-gated so this script never
-types into private notes, vaults, terminal prompts, or agent prompts by
-surprise. The Codex lane uses a targeted disposable proof helper after the
-manual gate: it seeds AUTOCOMPLETE_LAB_CODEX_PROOF text into a safe composer,
-presses Tab once, and never presses Enter.
+Runs a real app smoke pass where it is safe to automate. Notes body proof has
+a guarded disposable-note driver; other Notes surfaces, Obsidian, Codex,
+Claude Code, and Claude desktop are manual-gated so this script never types
+into private notes, vaults, terminal prompts, or agent prompts by surprise.
+The Codex lane uses a targeted disposable proof helper after the manual gate:
+it seeds AUTOCOMPLETE_LAB_CODEX_PROOF text into a safe composer, presses Tab
+once, and never presses Enter.
 
 Notes proof must use notes-title, notes-body, notes-checklist, or their
 notes-*-undo variants. A generic notes run only prints the surface picker and
@@ -372,7 +373,13 @@ CHROME_FIXTURE_ASSET_URL=""
 CHROME_FIXTURE_SCRIPT_URL=""
 CHROME_FIXTURE_SERVER_URL=""
 SMOKE_LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-real-app-smoke.lock}"
+SMOKE_LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS:-300}"
 SMOKE_LOCK_HELD=0
+
+if [[ ! "$SMOKE_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]]; then
+  echo "AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS must be a non-negative integer." >&2
+  exit 2
+fi
 
 cleanup_smoke_tmp_dirs() {
   if ((${#SMOKE_TMP_DIRS[@]})); then
@@ -455,38 +462,43 @@ APPLESCRIPT
 trap cleanup_smoke EXIT
 
 acquire_smoke_lock() {
-  if mkdir "$SMOKE_LOCK_DIR" >/dev/null 2>&1; then
-    SMOKE_LOCK_HELD=1
-    echo "$$" >"$SMOKE_LOCK_DIR/pid"
-    return 0
-  fi
+  local deadline=$((SECONDS + SMOKE_LOCK_WAIT_SECONDS))
+  local announced=0
 
-  local existing_pid=""
-  if [[ -f "$SMOKE_LOCK_DIR/pid" ]]; then
-    existing_pid="$(cat "$SMOKE_LOCK_DIR/pid" 2>/dev/null || true)"
-  fi
+  while true; do
+    if mkdir "$SMOKE_LOCK_DIR" >/dev/null 2>&1; then
+      SMOKE_LOCK_HELD=1
+      echo "$$" >"$SMOKE_LOCK_DIR/pid"
+      return 0
+    fi
 
-  if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" >/dev/null 2>&1; then
-    echo "Another real app smoke run is already active (pid $existing_pid)." >&2
-    echo "Refusing to run concurrently because smoke runs can type into frontmost apps." >&2
-    exit 1
-  fi
+    local existing_pid=""
+    if [[ -f "$SMOKE_LOCK_DIR/pid" ]]; then
+      existing_pid="$(cat "$SMOKE_LOCK_DIR/pid" 2>/dev/null || true)"
+    fi
 
-  rm -rf "$SMOKE_LOCK_DIR" >/dev/null 2>&1 || true
-  if mkdir "$SMOKE_LOCK_DIR" >/dev/null 2>&1; then
-    SMOKE_LOCK_HELD=1
-    echo "$$" >"$SMOKE_LOCK_DIR/pid"
-    return 0
-  fi
+    if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" >/dev/null 2>&1; then
+      if ((SECONDS >= deadline)); then
+        echo "Another real app smoke run is already active (pid $existing_pid)." >&2
+        echo "Timed out waiting for the real app smoke lock: $SMOKE_LOCK_DIR" >&2
+        exit 1
+      fi
+      if [[ "$announced" == "0" ]]; then
+        echo "Waiting for active real app smoke run to finish (pid $existing_pid)." >&2
+        announced=1
+      fi
+      sleep 2
+      continue
+    fi
 
-  echo "Could not acquire real app smoke lock: $SMOKE_LOCK_DIR" >&2
-  exit 1
+    rm -rf "$SMOKE_LOCK_DIR" >/dev/null 2>&1 || true
+  done
 }
 
 other_smoke_process_lines() {
   local process_list current_pgid
   current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ' || true)"
-  if [[ -n "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST:-}" ]]; then
+  if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST+x}" == "x" ]]; then
     process_list="$AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST"
   else
     process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
@@ -508,16 +520,30 @@ other_smoke_process_lines() {
 }
 
 refuse_other_smoke_processes() {
+  local deadline=$((SECONDS + SMOKE_LOCK_WAIT_SECONDS))
+  local announced=0
   local processes
-  processes="$(other_smoke_process_lines || true)"
-  if [[ -z "$processes" ]]; then
-    return 0
-  fi
 
-  echo "Another real app smoke process is already active." >&2
-  echo "Refusing to run concurrently because smoke runs can type into frontmost apps." >&2
-  echo "$processes" >&2
-  exit 1
+  while true; do
+    processes="$(other_smoke_process_lines || true)"
+    if [[ -z "$processes" ]]; then
+      return 0
+    fi
+
+    if ((SECONDS >= deadline)); then
+      echo "Another real app smoke process is already active." >&2
+      echo "Timed out waiting because smoke runs can type into frontmost apps." >&2
+      echo "$processes" >&2
+      exit 1
+    fi
+
+    if [[ "$announced" == "0" ]]; then
+      echo "Waiting for active real app smoke process to finish before starting this proof." >&2
+      echo "$processes" >&2
+      announced=1
+    fi
+    sleep 2
+  done
 }
 
 make_tmp_dir() {
@@ -3871,12 +3897,16 @@ describe_plan() {
       local notes_app notes_surface
       if notes_app="$(notes_session_app)"; then
         notes_surface="${notes_app#notes-}"
-        echo "Plan: manual-gated Apple Notes $notes_surface proof. The script validates only that surface after you run it."
+        if [[ "$notes_app" == "notes-body" ]]; then
+          echo "Plan: guarded Apple Notes body proof. The script verifies the open note body contains the disposable marker, appends smoke fragments, then validates logs and traces."
+        else
+          echo "Plan: manual-gated Apple Notes $notes_surface proof. The script validates only that surface after you run it."
+        fi
       else
         echo "Plan: choose a manual-gated Apple Notes surface before recording proof."
         print_notes_surface_commands
       fi
-      echo "Safety: pass --manual-gate to continue. Use only the disposable autocomplete smoke note."
+      echo "Safety: pass --manual-gate to continue. Use only the disposable autocomplete smoke note with body marker 'Autocomplete smoke'."
       ;;
     obsidian)
       local obsidian_app
@@ -3936,7 +3966,46 @@ build_if_needed() {
     return 0
   fi
 
-  ./script/build_and_run.sh run
+  AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1 \
+    AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 \
+    ./script/build_and_run.sh run
+  wait_for_current_autocomplete_lab_process
+}
+
+wait_for_current_autocomplete_lab_process() {
+  local expected_binary="$ROOT_DIR/dist/AutocompleteLab.app/Contents/MacOS/AutocompleteLab"
+  local deadline=$((SECONDS + 20))
+
+  while ((SECONDS <= deadline)); do
+    local found_current=0
+    local stale_processes=""
+    local pid command
+    while IFS= read -r pid; do
+      [[ -z "$pid" ]] && continue
+      command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+      [[ -z "$command" ]] && continue
+      if [[ "$command" == "$expected_binary" ]]; then
+        found_current=1
+      else
+        stale_processes+="${pid} ${command}"$'\n'
+      fi
+    done < <(pgrep -f "/[A]utocompleteLab.app/Contents/MacOS/AutocompleteLab" 2>/dev/null || true)
+
+    if [[ "$found_current" == "1" && -z "$stale_processes" ]]; then
+      return 0
+    fi
+    sleep 0.25
+  done
+
+  echo "AutocompleteLab smoke launch did not settle on this checkout's app bundle." >&2
+  echo "Expected binary: $expected_binary" >&2
+  echo "Running AutocompleteLab processes:" >&2
+  pgrep -f "/[A]utocompleteLab.app/Contents/MacOS/AutocompleteLab" 2>/dev/null |
+    while IFS= read -r pid; do
+      [[ -z "$pid" ]] && continue
+      ps -p "$pid" -o pid=,command= 2>/dev/null || true
+    done >&2
+  exit 1
 }
 
 run_codex() {
@@ -4011,6 +4080,209 @@ run_manual_gated() {
   AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL="$proof_label_env" \
   AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_VARIANT="$CLAUDE_CODE_HOST_VARIANT" \
     ./script/manual_smoke_session.sh "$manual_app"
+}
+
+assert_notes_body_smoke_target() {
+  swift - <<'SWIFT'
+import AppKit
+import ApplicationServices
+import Foundation
+
+let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_NOTES_SMOKE_MARKER"] ?? "Autocomplete smoke"
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    var result: [AXUIElement] = []
+    for attribute in [kAXChildrenAttribute, kAXContentsAttribute] {
+        if let values = copyAttribute(element, attribute) as? [AXUIElement] {
+            result.append(contentsOf: values)
+        }
+    }
+    return result
+}
+
+func noteBody(in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
+    guard depth <= 10 else {
+        return nil
+    }
+
+    let role = copyAttribute(element, kAXRoleAttribute) as? String
+    let description = copyAttribute(element, kAXDescriptionAttribute) as? String
+    let value = copyAttribute(element, kAXValueAttribute) as? String
+    if role == kAXTextAreaRole as String,
+       (description == "Note Body Text View" || value?.localizedCaseInsensitiveContains(marker) == true) {
+        return element
+    }
+
+    for child in children(of: element) {
+        if let found = noteBody(in: child, depth: depth + 1) {
+            return found
+        }
+    }
+
+    return nil
+}
+
+guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Notes" else {
+    fputs("Notes is not frontmost for the Notes body smoke target.\n", stderr)
+    exit(3)
+}
+
+guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.Notes" }) else {
+    fputs("Apple Notes is not running. Open the disposable Autocomplete smoke note first.\n", stderr)
+    exit(3)
+}
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+AXUIElementSetMessagingTimeout(appElement, 1.0)
+let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] ?? []
+
+guard let body = windows.lazy.compactMap({ noteBody(in: $0) }).first ?? noteBody(in: appElement) else {
+    fputs("Could not find a Notes body text view with the smoke marker.\n", stderr)
+    exit(3)
+}
+
+let bodyText = copyAttribute(body, kAXValueAttribute) as? String ?? ""
+guard bodyText.localizedCaseInsensitiveContains(marker) else {
+    fputs("Refusing to type in Notes because the open note body does not contain the marker '\(marker)'.\n", stderr)
+    exit(3)
+}
+
+AXUIElementSetAttributeValue(body, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+print("Notes body smoke target confirmed")
+SWIFT
+}
+
+ensure_notes_body_smoke_note() {
+  local smoke_title="${AUTOCOMPLETE_LAB_NOTES_SMOKE_TITLE:-Autocomplete Lab Smoke}"
+  local smoke_marker="${AUTOCOMPLETE_LAB_NOTES_SMOKE_MARKER:-Autocomplete smoke}"
+
+  open -a Notes
+  wait_for_frontmost_app "Notes" 8
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  keystroke "n" using command down
+end tell
+delay 0.4
+APPLESCRIPT
+  type_notes_raw_smoke_text "$smoke_title"$'\n'"$smoke_marker"
+  sleep 0.8
+}
+
+type_notes_raw_smoke_text() {
+  local text="$1"
+
+  AUTOCOMPLETE_LAB_NOTES_RAW_TEXT="$text" swift - <<'SWIFT'
+import AppKit
+import CoreGraphics
+import Foundation
+
+let text = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_NOTES_RAW_TEXT"] ?? ""
+
+guard NSWorkspace.shared.frontmostApplication?.localizedName == "Notes" else {
+    fputs("Notes is not frontmost for smoke-note setup.\n", stderr)
+    exit(1)
+}
+
+guard let source = CGEventSource(stateID: .hidSystemState) else {
+    fputs("Could not create a CGEvent source for Notes smoke-note setup.\n", stderr)
+    exit(1)
+}
+
+for scalar in text.unicodeScalars {
+    guard scalar.value <= UInt16.max else {
+        continue
+    }
+    var chars = [UniChar(scalar.value)]
+    guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+        exit(1)
+    }
+    keyDown.keyboardSetUnicodeString(stringLength: chars.count, unicodeString: &chars)
+    keyUp.keyboardSetUnicodeString(stringLength: chars.count, unicodeString: &chars)
+    keyDown.post(tap: .cghidEventTap)
+    keyUp.post(tap: .cghidEventTap)
+    Thread.sleep(forTimeInterval: 0.025)
+}
+SWIFT
+}
+
+run_notes() {
+  if [[ "$MANUAL_GATE" != "1" ]]; then
+    echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
+    exit 2
+  fi
+
+  local manual_app
+  if ! manual_app="$(notes_session_app)"; then
+    echo "Notes real smoke cannot record a generic Notes proof." >&2
+    print_notes_surface_commands >&2
+    exit 2
+  fi
+
+  if [[ "$manual_app" != "notes-body" ]]; then
+    run_manual_gated
+    return 0
+  fi
+
+  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line
+  runtime_start_line="$(line_count "$LOG_PATH")"
+
+  prepare_temporary_app_enablement
+  build_if_needed
+  wait_for_runtime_ready "$runtime_start_line" "Notes runtime readiness" 60 "$SKIP_BUILD"
+  ensure_notes_body_smoke_note
+
+  full_accept_key="$(accept_all_shortcut)"
+  start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
+
+  assert_notes_body_smoke_target
+  type_notes_raw_smoke_text $'\nSmoke proof feels'
+  wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body suggestion"
+  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes body"
+  assert_frontmost_app "Notes" "Notes body"
+  press_key_code 48
+  wait_for_log_fields "$start_line" "Notes body Tab acceptance" 12 \
+    "keyboard-action" \
+    "app=com.apple.Notes" \
+    "key=tab" \
+    "action=acceptNextWord" \
+    "handled=true"
+  wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.Notes .*result=verified" "Notes body first verified insertion"
+
+  second_start_line="$(line_count "$LOG_PATH")"
+  assert_notes_body_smoke_target
+  type_notes_raw_smoke_text " and stays"
+  wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body second suggestion"
+  wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes body second"
+  assert_frontmost_app "Notes" "Notes body"
+  full_start_line="$(line_count "$LOG_PATH")"
+  press_accept_all_shortcut
+  wait_for_log_fields "$full_start_line" "Notes body full acceptance" 12 \
+    "keyboard-action" \
+    "app=com.apple.Notes" \
+    "key=$full_accept_key" \
+    "action=acceptAllVisible" \
+    "handled=true"
+
+  sleep 1
+  local manual_check_args=(notes-body --check)
+  if screenshot_trace_requested; then
+    manual_check_args+=(--visual)
+  fi
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
+    AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
+    AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+    ./script/manual_smoke_session.sh "${manual_check_args[@]}"
 }
 
 run_claude_code_blocked() {
@@ -4400,7 +4672,10 @@ case "$APP" in
   codex)
     run_codex
     ;;
-  notes|obsidian|claude-code|claude)
+  notes)
+    run_notes
+    ;;
+  obsidian|claude-code|claude)
     run_manual_gated
     ;;
 esac

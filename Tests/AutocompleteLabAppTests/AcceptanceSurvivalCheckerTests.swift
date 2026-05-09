@@ -143,6 +143,7 @@ struct AcceptanceSurvivalCheckerTests {
             ),
             requestMode: requestMode.rawValue,
             acceptedText: acceptedText,
+            textBeforeCursorAtAccept: textBeforeCursor,
             expectedInsertionUTF16Offset: textBeforeCursor.utf16.count,
             acceptedAt: acceptedAt,
             profile: CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit")!,

@@ -368,21 +368,25 @@ final class SuggestionOrchestrator {
 
     nonisolated func fastWordSuggestion(
         for textBeforeCursor: String,
-        recentWords: [String]
+        recentWords: [String],
+        allowPredictiveFallback: Bool = false
     ) -> CompletionSuggestion? {
         fastWordSelection(
             for: textBeforeCursor,
-            recentWords: recentWords
+            recentWords: recentWords,
+            allowPredictiveFallback: allowPredictiveFallback
         ).suggestion
     }
 
     nonisolated func fastWordSelection(
         for textBeforeCursor: String,
-        recentWords: [String]
+        recentWords: [String],
+        allowPredictiveFallback: Bool = false
     ) -> WordCompletionCandidateSelection {
         wordCompletionRanker.selection(
             for: textBeforeCursor,
-            recentWords: recentWords
+            recentWords: recentWords,
+            allowPredictiveFallback: allowPredictiveFallback
         )
     }
 
@@ -442,7 +446,6 @@ final class SuggestionOrchestrator {
                 triggerReason: triggerReason,
                 latencyMilliseconds: latencyMilliseconds
             ),
-            learningRestraint: acceptedAndKeptSignal.learningRestraint,
             acceptedAndKeptProbability: acceptedAndKeptSignal.probability,
             acceptedAndKeptSampleCount: acceptedAndKeptSignal.sampleCount,
             acceptedAndKeptUtilityAdjustment: acceptedAndKeptSignal.utilityAdjustment

@@ -160,7 +160,8 @@ struct CompatibilityProfileTests {
             "dev.warp.Warp",
             "com.mitchellh.ghostty",
             "net.kovidgoyal.kitty",
-            "org.alacritty"
+            "org.alacritty",
+            "com.github.wez.wezterm"
         ]
 
         for bundleIdentifier in highRiskBundleIdentifiers {
