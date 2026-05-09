@@ -3040,6 +3040,22 @@ func children(of element: AXUIElement) -> [AXUIElement] {
     copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
 }
 
+func rect(for element: AXUIElement) -> CGRect? {
+    guard let positionValue = copyAttribute(element, kAXPositionAttribute),
+          let sizeValue = copyAttribute(element, kAXSizeAttribute) else {
+        return nil
+    }
+
+    var position = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+          AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else {
+        return nil
+    }
+
+    return CGRect(origin: position, size: size)
+}
+
 func setSelectedRange(_ element: AXUIElement, location: Int, length: Int) {
     var range = CFRange(location: location, length: length)
     guard let rangeValue = AXValueCreate(.cfRange, &range) else {
@@ -3078,6 +3094,32 @@ func postCommandRight(to pid: pid_t) {
     keyUp.flags = .maskCommand
     keyDown.postToPid(pid)
     keyUp.postToPid(pid)
+}
+
+func clickInside(_ frame: CGRect) {
+    guard let source = CGEventSource(stateID: .hidSystemState) else {
+        return
+    }
+
+    let x = min(frame.maxX - 16, max(frame.minX + 16, frame.minX + frame.width * 0.62))
+    let point = CGPoint(x: x, y: frame.midY)
+    guard let mouseDown = CGEvent(
+        mouseEventSource: source,
+        mouseType: .leftMouseDown,
+        mouseCursorPosition: point,
+        mouseButton: .left
+    ),
+    let mouseUp = CGEvent(
+        mouseEventSource: source,
+        mouseType: .leftMouseUp,
+        mouseCursorPosition: point,
+        mouseButton: .left
+    ) else {
+        return
+    }
+
+    mouseDown.post(tap: .cghidEventTap)
+    mouseUp.post(tap: .cghidEventTap)
 }
 
 func selectedRangeMatches(_ element: AXUIElement, location: Int, length: Int) -> Bool {
@@ -3433,6 +3475,10 @@ guard let target = markedTextAreas.first else {
 
 let text = stringAttribute(target, kAXValueAttribute)
 let cursorOffset = text.utf16.count
+if let frame = rect(for: target) {
+    clickInside(frame)
+    Thread.sleep(forTimeInterval: 0.12)
+}
 for _ in 0..<4 {
     AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBooleanTrue)
     setSelectedRange(target, location: cursorOffset, length: 0)
