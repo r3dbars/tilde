@@ -304,7 +304,7 @@ struct SettingsPermissionState: Equatable {
             return "Autocomplete Lab can see the focused text field, place suggestions at the cursor, and insert text only when you accept. Text stays on this Mac."
         }
 
-        return "Allow Accessibility in System Settings so Autocomplete Lab can see the focused text field, find the cursor, and insert text only when you accept. Text stays on this Mac."
+        return "Allow Accessibility in System Settings so Autocomplete Lab can see the focused text field, find the cursor, and insert text only when you accept. If you denied it, use Open Privacy Settings and turn Autocomplete Lab back on. Text stays on this Mac."
     }
 }
 
@@ -401,6 +401,114 @@ struct SettingsKeyboardShortcutState: Equatable {
 
     var acceptAllPickerLabel: String {
         "Accept all:"
+    }
+}
+
+enum SettingsPracticePrimaryAction: Equatable {
+    case requestAccessibility
+    case performRuntimeAction(RuntimeReadinessAction)
+    case openTextEditPractice
+    case none
+}
+
+struct SettingsPracticeState: Equatable {
+    let isTrusted: Bool
+    let suggestionsPaused: Bool
+    let runtimeReport: RuntimeReadinessReport
+    let isModelInstallInProgress: Bool
+    let isTextEditEnabled: Bool
+
+    static let preview = SettingsPracticeState(
+        isTrusted: true,
+        suggestionsPaused: false,
+        runtimeReport: RuntimeReadinessReport(
+            stage: .ready,
+            summary: "ready",
+            action: .none,
+            isReady: true
+        ),
+        isModelInstallInProgress: false,
+        isTextEditEnabled: true
+    )
+
+    var statusText: String {
+        if !isTrusted {
+            return "Practice: allow Accessibility first"
+        }
+
+        if !runtimeReport.allowsSuggestions {
+            return "Practice: local model not ready"
+        }
+
+        if suggestionsPaused {
+            return "Practice: ready, currently paused"
+        }
+
+        return "Practice: ready in TextEdit"
+    }
+
+    var detailText: String {
+        "Safe target: TextEdit. Start Practice enables TextEdit, opens a disposable local file, and does not ask for Screen Recording."
+    }
+
+    var modelText: String {
+        "Local model: \(runtimeReport.summary)"
+    }
+
+    var textEditText: String {
+        isTextEditEnabled
+            ? "TextEdit: enabled for suggestions"
+            : "TextEdit: will be enabled for this practice"
+    }
+
+    var stepsText: String {
+        "Try: press Tab once to accept one word, type again and press Esc to dismiss, then use Pause or Delete Traces before leaving."
+    }
+
+    var primaryAction: SettingsPracticePrimaryAction {
+        if !isTrusted {
+            return .requestAccessibility
+        }
+
+        if isModelInstallInProgress {
+            return .none
+        }
+
+        guard runtimeReport.allowsSuggestions else {
+            switch runtimeReport.action {
+            case .installModel, .repairModel, .revealModelFolder, .retry:
+                return .performRuntimeAction(runtimeReport.action)
+            default:
+                return .none
+            }
+        }
+
+        return .openTextEditPractice
+    }
+
+    var primaryButtonTitle: String {
+        switch primaryAction {
+        case .requestAccessibility:
+            return "Allow Accessibility"
+        case let .performRuntimeAction(action):
+            return action == .retry ? "Retry Model" : action.displayName
+        case .openTextEditPractice:
+            return "Start TextEdit Practice"
+        case .none:
+            return isModelInstallInProgress ? "Installing Model..." : "Practice Not Ready"
+        }
+    }
+
+    var isPrimaryButtonEnabled: Bool {
+        primaryAction != .none
+    }
+
+    var pauseButtonTitle: String {
+        suggestionsPaused ? "Resume Suggestions" : "Pause Suggestions"
+    }
+
+    var deleteTracesButtonTitle: String {
+        "Delete Traces"
     }
 }
 
@@ -513,6 +621,14 @@ final class SettingsWindowController: NSObject {
     private let runtimeTargetLabel = NSTextField(labelWithString: "")
     private let modelDirectoryLabel = NSTextField(labelWithString: "")
     private let modelInstallStatusLabel = NSTextField(labelWithString: "")
+    private let practiceLabel = NSTextField(labelWithString: "")
+    private let practiceDetailLabel = NSTextField(labelWithString: "")
+    private let practiceModelLabel = NSTextField(labelWithString: "")
+    private let practiceTextEditLabel = NSTextField(labelWithString: "")
+    private let practiceStepsLabel = NSTextField(labelWithString: "")
+    private let practicePrimaryButton = NSButton(title: "Start TextEdit Practice", target: nil, action: nil)
+    private let practicePauseButton = NSButton(title: "Pause Suggestions", target: nil, action: nil)
+    private let practiceDeleteTracesButton = NSButton(title: "Delete Traces", target: nil, action: nil)
     private let controlLabel = NSTextField(labelWithString: "")
     private let togglePauseButton = NSButton(checkboxWithTitle: "Suggestions", target: nil, action: nil)
     private let fieldControlLabel = NSTextField(labelWithString: "")
@@ -586,6 +702,7 @@ final class SettingsWindowController: NSObject {
     private let toggleCurrentApp: () -> Void
     private let toggleCurrentAppMirrorMode: () -> Void
     private let startCurrentAppProof: () -> Void
+    private let startTextEditPractice: () -> Void
     private let enableAllApps: () -> Void
     private let toggleTracingPaused: () -> Void
     private let toggleRawContentTracing: () -> Void
@@ -599,6 +716,7 @@ final class SettingsWindowController: NSObject {
     private let setSuggestionMaxVisibleWords: (Int) -> Void
     private let layoutStyle = SettingsLayoutStyle.nativeUtility
     private var currentRuntimeAction: RuntimeReadinessAction = .none
+    private var currentPracticePrimaryAction: SettingsPracticePrimaryAction = .none
     private var currentProofCommandClipboardText: String?
 
     init(
@@ -610,6 +728,7 @@ final class SettingsWindowController: NSObject {
         toggleCurrentApp: @escaping () -> Void,
         toggleCurrentAppMirrorMode: @escaping () -> Void,
         startCurrentAppProof: @escaping () -> Void,
+        startTextEditPractice: @escaping () -> Void = {},
         enableAllApps: @escaping () -> Void,
         toggleTracingPaused: @escaping () -> Void,
         toggleRawContentTracing: @escaping () -> Void,
@@ -630,6 +749,7 @@ final class SettingsWindowController: NSObject {
         self.toggleCurrentApp = toggleCurrentApp
         self.toggleCurrentAppMirrorMode = toggleCurrentAppMirrorMode
         self.startCurrentAppProof = startCurrentAppProof
+        self.startTextEditPractice = startTextEditPractice
         self.enableAllApps = enableAllApps
         self.toggleTracingPaused = toggleTracingPaused
         self.toggleRawContentTracing = toggleRawContentTracing
@@ -642,7 +762,7 @@ final class SettingsWindowController: NSObject {
         self.setSuggestionAggressivenessLevel = setSuggestionAggressivenessLevel
         self.setSuggestionMaxVisibleWords = setSuggestionMaxVisibleWords
 
-        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 850))
+        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 920))
         contentView.material = .contentBackground
         contentView.blendingMode = .behindWindow
         contentView.state = .active
@@ -655,7 +775,7 @@ final class SettingsWindowController: NSObject {
         window.title = "Autocomplete Lab"
         window.contentView = contentView
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 540, height: 780)
+        window.contentMinSize = NSSize(width: 540, height: 820)
         window.isMovableByWindowBackground = true
 
         super.init()
@@ -673,6 +793,7 @@ final class SettingsWindowController: NSObject {
         isModelInstallInProgress: Bool,
         currentApp: SettingsCurrentAppState,
         fieldControl: SettingsFieldControlState,
+        practice: SettingsPracticeState = .preview,
         privacy: SettingsPrivacyState,
         keyboardShortcuts: SettingsKeyboardShortcutState,
         suggestionAggressiveness: SettingsSuggestionAggressivenessState,
@@ -688,6 +809,7 @@ final class SettingsWindowController: NSObject {
             isModelInstallInProgress: isModelInstallInProgress,
             currentApp: currentApp,
             fieldControl: fieldControl,
+            practice: practice,
             privacy: privacy,
             keyboardShortcuts: keyboardShortcuts,
             suggestionAggressiveness: suggestionAggressiveness,
@@ -712,6 +834,7 @@ final class SettingsWindowController: NSObject {
         isModelInstallInProgress: Bool,
         currentApp: SettingsCurrentAppState,
         fieldControl: SettingsFieldControlState,
+        practice: SettingsPracticeState = .preview,
         privacy: SettingsPrivacyState,
         keyboardShortcuts: SettingsKeyboardShortcutState,
         suggestionAggressiveness: SettingsSuggestionAggressivenessState,
@@ -746,6 +869,16 @@ final class SettingsWindowController: NSObject {
         modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
         modelInstallStatusLabel.stringValue = modelInstallStatusText ?? ""
         modelInstallStatusLabel.isHidden = modelInstallStatusText == nil
+        practiceLabel.stringValue = practice.statusText
+        practiceDetailLabel.stringValue = practice.detailText
+        practiceModelLabel.stringValue = practice.modelText
+        practiceTextEditLabel.stringValue = practice.textEditText
+        practiceStepsLabel.stringValue = practice.stepsText
+        currentPracticePrimaryAction = practice.primaryAction
+        practicePrimaryButton.title = practice.primaryButtonTitle
+        practicePrimaryButton.isEnabled = practice.isPrimaryButtonEnabled
+        practicePauseButton.title = practice.pauseButtonTitle
+        practiceDeleteTracesButton.title = practice.deleteTracesButtonTitle
         currentAppLabel.stringValue = currentApp.statusText
         currentAppDetailLabel.stringValue = currentApp.detailText
         currentAppModeLabel.stringValue = currentApp.modeText
@@ -845,6 +978,11 @@ final class SettingsWindowController: NSObject {
         modelDirectoryLabel.maximumNumberOfLines = 1
         modelDirectoryLabel.preferredMaxLayoutWidth = 470
         configureSecondaryLabel(modelInstallStatusLabel)
+        practiceLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(practiceDetailLabel)
+        configureSecondaryLabel(practiceModelLabel)
+        configureSecondaryLabel(practiceTextEditLabel)
+        configureSecondaryLabel(practiceStepsLabel)
         controlLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         fieldControlLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(fieldControlDetailLabel)
@@ -897,6 +1035,15 @@ final class SettingsWindowController: NSObject {
         runtimeActionButton.target = self
         runtimeActionButton.action = #selector(runRuntimeAction)
         runtimeActionButton.bezelStyle = .rounded
+        practicePrimaryButton.target = self
+        practicePrimaryButton.action = #selector(runPracticePrimaryAction)
+        practicePrimaryButton.bezelStyle = .rounded
+        practicePauseButton.target = self
+        practicePauseButton.action = #selector(runPracticePauseAction)
+        practicePauseButton.bezelStyle = .rounded
+        practiceDeleteTracesButton.target = self
+        practiceDeleteTracesButton.action = #selector(runPracticeDeleteTracesAction)
+        practiceDeleteTracesButton.bezelStyle = .rounded
         toggleCurrentAppButton.target = self
         toggleCurrentAppButton.action = #selector(toggleCurrentAppControl)
         toggleCurrentAppButton.toolTip = "Adds or removes the current app from your blocked-app list."
@@ -973,6 +1120,17 @@ final class SettingsWindowController: NSObject {
                     modelInstallStatusLabel,
                     runtimeTargetLabel,
                     modelDirectoryLabel
+                ]
+            ),
+            makeSection(
+                title: "Practice",
+                views: [
+                    practiceLabel,
+                    practiceDetailLabel,
+                    practiceModelLabel,
+                    practiceTextEditLabel,
+                    practiceStepsLabel,
+                    makeButtonRow([practicePrimaryButton, practicePauseButton, practiceDeleteTracesButton])
                 ]
             ),
             makeSection(
@@ -1134,6 +1292,42 @@ final class SettingsWindowController: NSObject {
     @objc
     private func runRuntimeAction() {
         performRuntimeAction(currentRuntimeAction)
+    }
+
+    @objc
+    private func runPracticePrimaryAction() {
+        performPracticePrimaryAction()
+    }
+
+    func performPracticePrimaryAction() {
+        switch currentPracticePrimaryAction {
+        case .requestAccessibility:
+            requestPermission()
+        case let .performRuntimeAction(action):
+            performRuntimeAction(action)
+        case .openTextEditPractice:
+            startTextEditPractice()
+        case .none:
+            break
+        }
+    }
+
+    @objc
+    private func runPracticePauseAction() {
+        performPracticePauseAction()
+    }
+
+    func performPracticePauseAction() {
+        toggleSuggestionsPaused()
+    }
+
+    @objc
+    private func runPracticeDeleteTracesAction() {
+        performPracticeDeleteTracesAction()
+    }
+
+    func performPracticeDeleteTracesAction() {
+        deleteLocalLogs()
     }
 
     @objc
