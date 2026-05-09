@@ -32,6 +32,8 @@ UNDO_RECOVERY_LAUNCHCTL_WAS_PREPARED=0
 UNDO_RECOVERY_LAUNCHCTL_PREVIOUS=""
 TEXTEDIT_APPEARANCE_WAS_SET=0
 TEXTEDIT_PREVIOUS_DARK_MODE=""
+CODEX_DRAFT_BACKUP_PATH=""
+CODEX_DRAFT_BACKUP_ACTIVE=0
 
 usage() {
   cat <<'EOF'
@@ -408,6 +410,7 @@ cleanup_smoke_http_pids() {
 }
 
 cleanup_smoke() {
+  restore_codex_draft_if_needed
   cleanup_smoke_chrome_pids
   cleanup_smoke_http_pids
   cleanup_smoke_tmp_dirs
@@ -2984,18 +2987,20 @@ codex_proof_text() {
 
 seed_codex_proof_prompt() {
   local proof_text="$1"
+  local backup_path="$2"
 
-  swift - "$proof_text" <<'SWIFT'
+  swift - "$proof_text" "$backup_path" <<'SWIFT'
 import AppKit
 import ApplicationServices
 import Foundation
 
-guard CommandLine.arguments.count == 2 else {
+guard CommandLine.arguments.count == 3 else {
     fputs("missing Codex proof text\n", stderr)
     exit(2)
 }
 
 let proofText = CommandLine.arguments[1]
+let backupPath = CommandLine.arguments[2]
 let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
@@ -3111,11 +3116,17 @@ func collectTextAreas(in element: AXUIElement, depth: Int = 0, candidates: inout
             || value.contains(marker)
             || value.localizedCaseInsensitiveContains("Ask Codex anything")
             || value.localizedCaseInsensitiveContains("Describe a task or ask a question")
-        if looksDisposable {
-            let focused = boolAttribute(element, kAXFocusedAttribute)
+        let focused = boolAttribute(element, kAXFocusedAttribute)
+        let focusedDraftCanBeRestored = focused
+            && !value.isEmpty
+            && !value.contains(marker)
+        if looksDisposable || focusedDraftCanBeRestored {
             var score = frame.width
             if focused {
                 score += 1_000
+            }
+            if focusedDraftCanBeRestored {
+                score += 650
             }
             if value.contains(marker) {
                 score += 800
@@ -3161,8 +3172,18 @@ guard let candidate = candidates.sorted(by: { lhs, rhs in
     }
     return lhs.score > rhs.score
 }).first else {
-    fputs("Could not find a safe disposable Codex composer. Clear the prompt, open a new Codex start screen, or seed AUTOCOMPLETE_LAB_CODEX_PROOF manually.\n", stderr)
+    fputs("Could not find a safe Codex composer. Clear the prompt, open a new Codex start screen, or keep focus in the draft prompt so it can be backed up and restored.\n", stderr)
     exit(1)
+}
+
+let shouldRestoreDraft = !candidate.value.isEmpty && !candidate.value.contains(marker)
+if shouldRestoreDraft {
+    do {
+        try candidate.value.write(toFile: backupPath, atomically: true, encoding: .utf8)
+    } catch {
+        fputs("Could not back up the existing Codex draft before proof seeding: \(error.localizedDescription)\n", stderr)
+        exit(1)
+    }
 }
 
 AXUIElementSetAttributeValue(candidate.element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
@@ -3214,7 +3235,101 @@ guard focusedCursorAtEnd else {
 }
 
 print("Seeded Codex proof composer: chars=\(proofText.count) rect=x=\(Int(candidate.frame.minX)),y=\(Int(candidate.frame.minY)),w=\(Int(candidate.frame.width)),h=\(Int(candidate.frame.height))")
+if shouldRestoreDraft {
+    print("Backed up existing Codex draft for restoration after proof.")
+}
 SWIFT
+}
+
+restore_codex_draft_if_needed() {
+  if [[ -z "$CODEX_DRAFT_BACKUP_PATH" || ! -s "$CODEX_DRAFT_BACKUP_PATH" ]]; then
+    return 0
+  fi
+
+  swift - "$CODEX_DRAFT_BACKUP_PATH" <<'SWIFT' || true
+import AppKit
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 2 else {
+    exit(0)
+}
+
+let backupPath = CommandLine.arguments[1]
+let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+guard let restoreText = try? String(contentsOfFile: backupPath, encoding: .utf8) else {
+    fputs("Codex draft restore skipped: backup could not be read.\n", stderr)
+    exit(0)
+}
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String {
+    copyAttribute(element, attribute) as? String ?? ""
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func setSelectedRange(_ element: AXUIElement, location: Int, length: Int) {
+    var range = CFRange(location: location, length: length)
+    guard let rangeValue = AXValueCreate(.cfRange, &range) else {
+        return
+    }
+    AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+}
+
+func collectMarkedTextAreas(in element: AXUIElement, depth: Int = 0, results: inout [AXUIElement]) {
+    guard depth <= 32 else {
+        return
+    }
+
+    if stringAttribute(element, kAXRoleAttribute) == kAXTextAreaRole as String,
+       stringAttribute(element, kAXValueAttribute).contains(marker) {
+        results.append(element)
+    }
+
+    for child in children(of: element) {
+        collectMarkedTextAreas(in: child, depth: depth + 1, results: &results)
+    }
+}
+
+guard let app = NSRunningApplication.runningApplications(
+    withBundleIdentifier: "com.openai.codex"
+).first else {
+    exit(0)
+}
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+AXUIElementSetMessagingTimeout(appElement, 0.75)
+var markedTextAreas: [AXUIElement] = []
+collectMarkedTextAreas(in: appElement, results: &markedTextAreas)
+guard let target = markedTextAreas.first else {
+    fputs("Codex draft restore skipped: proof marker is no longer present.\n", stderr)
+    exit(0)
+}
+
+AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+let result = AXUIElementSetAttributeValue(target, kAXValueAttribute as CFString, restoreText as CFTypeRef)
+if result == .success {
+    setSelectedRange(target, location: restoreText.utf16.count, length: 0)
+    print("Restored existing Codex draft after proof: chars=\(restoreText.count)")
+} else {
+    fputs("Codex draft restore failed (AX result \(result.rawValue)).\n", stderr)
+}
+SWIFT
+
+  rm -f "$CODEX_DRAFT_BACKUP_PATH" >/dev/null 2>&1 || true
+  CODEX_DRAFT_BACKUP_PATH=""
+  CODEX_DRAFT_BACKUP_ACTIVE=0
 }
 
 assert_codex_prompt_retains_marker() {
@@ -3931,7 +4046,7 @@ describe_plan() {
     codex)
       echo "Plan: manual-gated Codex prompt smoke. The script seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text and validates one-word Tab accept without submit."
       echo "Safety: pass --manual-gate to continue. The helper never presses Enter; full accept waits for separate full-accept no-submit proof."
-      echo "Safety: the helper refuses to overwrite non-disposable prompt text unless it already contains the Codex proof marker."
+      echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof."
       ;;
     claude-code)
       local host_bundle host_name host_status proof_label
@@ -4014,9 +4129,13 @@ run_codex() {
     exit 2
   fi
 
-  local runtime_start_line start_line trace_start_line proof_text
+  local runtime_start_line start_line trace_start_line proof_text backup_dir
   runtime_start_line="$(line_count "$LOG_PATH")"
   proof_text="$(codex_proof_text)"
+  backup_dir="$(make_tmp_dir)"
+  CODEX_DRAFT_BACKUP_PATH="$backup_dir/codex-draft-backup.txt"
+  : >"$CODEX_DRAFT_BACKUP_PATH"
+  chmod 600 "$CODEX_DRAFT_BACKUP_PATH" >/dev/null 2>&1 || true
 
   prepare_temporary_app_enablement
   build_if_needed
@@ -4025,7 +4144,10 @@ run_codex() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  seed_codex_proof_prompt "$proof_text"
+  seed_codex_proof_prompt "$proof_text" "$CODEX_DRAFT_BACKUP_PATH"
+  if [[ -s "$CODEX_DRAFT_BACKUP_PATH" ]]; then
+    CODEX_DRAFT_BACKUP_ACTIVE=1
+  fi
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex" "Codex proof suggestion" 20
   wait_for_screenshot_capture_if_enabled "$start_line" "com.openai.codex" "Codex proof"
   assert_frontmost_app "Codex" "Codex proof"

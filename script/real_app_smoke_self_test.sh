@@ -299,8 +299,8 @@ if ! grep -F "seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text" "$TMP_DIR/code
   echo "real app smoke self-test did not explain the Codex targeted proof seed" >&2
   exit 1
 fi
-if ! grep -F "refuses to overwrite non-disposable prompt text" "$TMP_DIR/codex.txt" >/dev/null; then
-  echo "real app smoke self-test did not explain the Codex overwrite guard" >&2
+if ! grep -F "backs it up privately and restores it after the no-submit proof" "$TMP_DIR/codex.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Codex draft restore guard" >&2
   exit 1
 fi
 if ! grep -F "Proof mode bundle(s): com.openai.codex" "$TMP_DIR/codex.txt" >/dev/null; then
