@@ -2507,7 +2507,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: action
         )
         guard focusedFieldMatchesCurrentSuggestion(
-            allowTerminalHostProofSnapshotFastPath: action == .acceptNextWord
+            allowTerminalHostProofSnapshotFastPath: action == .acceptNextWord,
+            allowCodexProofSnapshotFastPath: action == .acceptNextWord
         ) else {
             setSuggestionDecision("Blocked: focus changed")
             hideSuggestion(reason: "focus-changed")
@@ -2566,7 +2567,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-one-word")
                 return .replayOriginalKey(.unsupportedAction)
             }
-            if let blockReason = currentSuggestionAcceptanceDecision().blockReason {
+            if let blockReason = currentSuggestionAcceptanceDecision(
+                allowCodexProofSnapshotFastPath: true
+            ).blockReason {
                 recordAcceptanceGuardBlock(reason: blockReason)
                 setSuggestionDecision("Blocked: \(blockReason.rawValue)")
                 hideSuggestion(reason: blockReason.rawValue)
@@ -2758,12 +2761,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func currentSuggestionAcceptanceDecision() -> SuggestionAcceptanceDecision {
+    private func currentSuggestionAcceptanceDecision(
+        allowCodexProofSnapshotFastPath: Bool = false
+    ) -> SuggestionAcceptanceDecision {
         guard let shownSnapshot = currentSuggestionAcceptanceSnapshot else {
             return .block(.missingShownSnapshot)
         }
 
-        if codexProofSnapshotMatchesCurrentSuggestion(stage: "acceptance") {
+        if allowCodexProofSnapshotFastPath,
+           codexProofAcceptanceSnapshotMatchesShown(shownSnapshot) {
+            recordCodexProofSnapshotFastPath(stage: "acceptance")
             return .allow
         }
 
@@ -2886,14 +2893,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func focusedFieldMatchesCurrentSuggestion(
-        allowTerminalHostProofSnapshotFastPath: Bool = false
+        allowTerminalHostProofSnapshotFastPath: Bool = false,
+        allowCodexProofSnapshotFastPath: Bool = false
     ) -> Bool {
         if allowTerminalHostProofSnapshotFastPath,
            terminalHostProofSnapshotMatchesCurrentSuggestion() {
             return true
         }
-        if allowTerminalHostProofSnapshotFastPath,
-           codexProofSnapshotMatchesCurrentSuggestion(stage: "focus") {
+        if allowCodexProofSnapshotFastPath,
+           codexProofSnapshotMatchesCurrentSuggestion() {
+            recordCodexProofSnapshotFastPath(stage: "focus")
             return true
         }
 
@@ -2998,7 +3007,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    private func codexProofSnapshotMatchesCurrentSuggestion(stage: String) -> Bool {
+    private func codexProofSnapshotMatchesCurrentSuggestion() -> Bool {
         let bundleIdentifier = "com.openai.codex"
         let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
         guard currentSuggestionAppBundleIdentifier == bundleIdentifier,
@@ -3038,15 +3047,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
+        return true
+    }
+
+    private func codexProofAcceptanceSnapshotMatchesShown(
+        _ shownSnapshot: SuggestionAcceptanceSnapshot
+    ) -> Bool {
+        guard codexProofSnapshotMatchesCurrentSuggestion(),
+              let currentSuggestionFieldIdentity,
+              let lastTextSnapshot,
+              shownSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
+              shownSnapshot.fieldIdentity == lastTextSnapshot.fieldIdentity,
+              shownSnapshot.textBeforeCursor == lastTextSnapshot.textBeforeCursor,
+              shownSnapshot.textAfterCursor == lastTextSnapshot.textAfterCursor,
+              shownSnapshot.selectedTextLength == 0 else {
+            return false
+        }
+
+        return true
+    }
+
+    private func recordCodexProofSnapshotFastPath(stage: String) {
+        guard let currentProfile,
+              let currentSuggestionFieldIdentity else {
+            return
+        }
+
         DiagnosticsLog.shared.record(
             "codex-proof-snapshot-fast-path",
             metadata: [
-                "app": bundleIdentifier,
-                "requestMode": currentSuggestionRequestMode?.rawValue ?? "unknown",
-                "stage": stage
+                "app": "com.openai.codex",
+                "stage": stage,
+                "fieldIdentity": currentSuggestionFieldIdentity.traceDescription,
+                "requestMode": currentSuggestionRequestMode?.rawValue ?? "",
+                "promptSafetyMode": currentProfile.promptAppSafetyMode.rawValue
             ]
         )
-        return true
     }
 
     private func recordKeyboardAction(
@@ -3715,6 +3751,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: baseline.profile
         )
 
+        if codexProofInsertionVerificationContextIsReady(
+            baseline: baseline,
+            acceptedText: acceptedText,
+            frontmostApp: frontmostApp,
+            context: adjustedContext
+        ) {
+            return .ready(context: adjustedContext)
+        }
+
         guard currentIdentity == baseline.fieldIdentity else {
             if let context = recoveredInsertionVerificationContext(
                 adjustedContext,
@@ -3797,6 +3842,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return .ready(context: adjustedContext)
+    }
+
+    private func codexProofInsertionVerificationContextIsReady(
+        baseline: InsertionVerificationBaseline,
+        acceptedText: String,
+        frontmostApp: RunningApplicationInfo,
+        context: FocusedTextContext
+    ) -> Bool {
+        let bundleIdentifier = "com.openai.codex"
+        let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+        let replacementText = baseline.previousTextBeforeCursor + acceptedText + baseline.previousTextAfterCursor
+        guard !acceptedText.isEmpty,
+              baseline.profile.bundleIdentifier == bundleIdentifier,
+              baseline.requestMode == .wordCompletion,
+              baseline.profile.supportsOneWordAcceptance,
+              !baseline.profile.supportsFullAcceptance,
+              baseline.profile.requiresNoSubmitAcceptanceProof,
+              baseline.profile.insertionMode == .axValueReplacement,
+              activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+              frontmostAppMatchesSuggestion(
+                  frontmostApp,
+                  expectedBundleIdentifier: bundleIdentifier,
+                  profile: baseline.profile
+              ),
+              baseline.previousTextBeforeCursor.contains(marker),
+              baseline.previousTextAfterCursor.isEmpty,
+              context.textBeforeCursor == baseline.previousTextBeforeCursor + acceptedText,
+              context.textAfterCursor == baseline.previousTextAfterCursor,
+              context.selectedTextLength == 0,
+              !context.isSecure else {
+            return false
+        }
+
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        guard Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: replacementText,
+            containing: marker,
+            maxDepth: 32
+        ) != nil else {
+            return false
+        }
+
+        DiagnosticsLog.shared.record(
+            "codex-proof-verification-fast-path",
+            metadata: [
+                "app": bundleIdentifier,
+                "acceptedChars": String(acceptedText.count),
+                "currentBeforeChars": String(context.textBeforeCursor.count),
+                "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                "requestMode": baseline.requestMode?.rawValue ?? ""
+            ]
+        )
+        return true
     }
 
     private func recoveredInsertionVerificationContext(

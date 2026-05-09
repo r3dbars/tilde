@@ -33,6 +33,8 @@ UNDO_RECOVERY_LAUNCHCTL_WAS_PREPARED=0
 UNDO_RECOVERY_LAUNCHCTL_PREVIOUS=""
 TEXTEDIT_APPEARANCE_WAS_SET=0
 TEXTEDIT_PREVIOUS_DARK_MODE=""
+CODEX_DRAFT_BACKUP_PATH=""
+CODEX_DRAFT_BACKUP_ACTIVE=0
 
 usage() {
   cat <<'EOF'
@@ -410,6 +412,7 @@ cleanup_smoke_http_pids() {
 }
 
 cleanup_smoke() {
+  restore_codex_draft_if_needed
   cleanup_smoke_chrome_pids
   cleanup_smoke_http_pids
   cleanup_smoke_tmp_dirs
@@ -564,6 +567,25 @@ line_count() {
   fi
 }
 
+log_since_matches() {
+  local start_line="$1"
+  local pattern="$2"
+
+  [[ -f "$LOG_PATH" ]] || return 1
+  awk -v start="$start_line" -v pattern="$pattern" '
+    NR > start && $0 ~ pattern {
+      found = 1
+      exit
+    }
+    END {
+      if (found) {
+        exit 0
+      }
+      exit 1
+    }
+  ' "$LOG_PATH" 2>/dev/null
+}
+
 wait_for_log_pattern() {
   local start_line="$1"
   local pattern="$2"
@@ -572,7 +594,7 @@ wait_for_log_pattern() {
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
-    if tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -E "$pattern" >/dev/null; then
+    if log_since_matches "$start_line" "$pattern"; then
       return 0
     fi
     sleep 0.2
@@ -627,7 +649,7 @@ wait_for_runtime_ready() {
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
-    if tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -E " runtime .*readinessStage=ready" >/dev/null; then
+    if log_since_matches "$start_line" " runtime .*readinessStage=ready"; then
       return 0
     fi
 
@@ -2345,7 +2367,7 @@ focus_textedit_smoke_editor() {
 
   if [[ -n "$window_title" ]]; then
     local target_pid
-    target_pid="$(raise_textedit_smoke_window "$window_title" | tr -d '\r\n')"
+    target_pid="$(raise_textedit_smoke_window "$window_title" | tr -d '\r\n' || true)"
     if [[ -z "$target_pid" ]]; then
       echo "Could not resolve TextEdit smoke window pid for '$window_title'." >&2
       return 1
@@ -2370,7 +2392,7 @@ click_textedit_smoke_editor() {
 
   if [[ -n "$window_title" ]]; then
     local target_pid
-    target_pid="$(click_textedit_smoke_window "$window_title" | tr -d '\r\n')"
+    target_pid="$(click_textedit_smoke_window "$window_title" | tr -d '\r\n' || true)"
     if [[ -z "$target_pid" ]]; then
       echo "Could not resolve TextEdit smoke window pid for '$window_title'." >&2
       return 1
@@ -3888,18 +3910,20 @@ codex_proof_text() {
 
 seed_codex_proof_prompt() {
   local proof_text="$1"
+  local backup_path="$2"
 
-  swift - "$proof_text" <<'SWIFT'
+  swift - "$proof_text" "$backup_path" <<'SWIFT'
 import AppKit
 import ApplicationServices
 import Foundation
 
-guard CommandLine.arguments.count == 2 else {
+guard CommandLine.arguments.count == 3 else {
     fputs("missing Codex proof text\n", stderr)
     exit(2)
 }
 
 let proofText = CommandLine.arguments[1]
+let backupPath = CommandLine.arguments[2]
 let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
@@ -4015,11 +4039,17 @@ func collectTextAreas(in element: AXUIElement, depth: Int = 0, candidates: inout
             || value.contains(marker)
             || value.localizedCaseInsensitiveContains("Ask Codex anything")
             || value.localizedCaseInsensitiveContains("Describe a task or ask a question")
-        if looksDisposable {
-            let focused = boolAttribute(element, kAXFocusedAttribute)
+        let focused = boolAttribute(element, kAXFocusedAttribute)
+        let focusedDraftCanBeRestored = focused
+            && !value.isEmpty
+            && !value.contains(marker)
+        if looksDisposable || focusedDraftCanBeRestored {
             var score = frame.width
             if focused {
                 score += 1_000
+            }
+            if focusedDraftCanBeRestored {
+                score += 650
             }
             if value.contains(marker) {
                 score += 800
@@ -4065,8 +4095,18 @@ guard let candidate = candidates.sorted(by: { lhs, rhs in
     }
     return lhs.score > rhs.score
 }).first else {
-    fputs("Could not find a safe disposable Codex composer. Clear the prompt, open a new Codex start screen, or seed AUTOCOMPLETE_LAB_CODEX_PROOF manually.\n", stderr)
+    fputs("Could not find a safe Codex composer. Clear the prompt, open a new Codex start screen, or keep focus in the draft prompt so it can be backed up and restored.\n", stderr)
     exit(1)
+}
+
+let shouldRestoreDraft = !candidate.value.isEmpty && !candidate.value.contains(marker)
+if shouldRestoreDraft {
+    do {
+        try candidate.value.write(toFile: backupPath, atomically: true, encoding: .utf8)
+    } catch {
+        fputs("Could not back up the existing Codex draft before proof seeding: \(error.localizedDescription)\n", stderr)
+        exit(1)
+    }
 }
 
 AXUIElementSetAttributeValue(candidate.element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
@@ -4118,6 +4158,268 @@ guard focusedCursorAtEnd else {
 }
 
 print("Seeded Codex proof composer: chars=\(proofText.count) rect=x=\(Int(candidate.frame.minX)),y=\(Int(candidate.frame.minY)),w=\(Int(candidate.frame.width)),h=\(Int(candidate.frame.height))")
+if shouldRestoreDraft {
+    print("Backed up existing Codex draft for restoration after proof.")
+}
+SWIFT
+}
+
+restore_codex_draft_if_needed() {
+  if [[ -z "$CODEX_DRAFT_BACKUP_PATH" || ! -s "$CODEX_DRAFT_BACKUP_PATH" ]]; then
+    return 0
+  fi
+
+  swift - "$CODEX_DRAFT_BACKUP_PATH" <<'SWIFT' || true
+import AppKit
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 2 else {
+    exit(0)
+}
+
+let backupPath = CommandLine.arguments[1]
+let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+guard let restoreText = try? String(contentsOfFile: backupPath, encoding: .utf8) else {
+    fputs("Codex draft restore skipped: backup could not be read.\n", stderr)
+    exit(0)
+}
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String {
+    copyAttribute(element, attribute) as? String ?? ""
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func setSelectedRange(_ element: AXUIElement, location: Int, length: Int) {
+    var range = CFRange(location: location, length: length)
+    guard let rangeValue = AXValueCreate(.cfRange, &range) else {
+        return
+    }
+    AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+}
+
+func collectMarkedTextAreas(in element: AXUIElement, depth: Int = 0, results: inout [AXUIElement]) {
+    guard depth <= 32 else {
+        return
+    }
+
+    if stringAttribute(element, kAXRoleAttribute) == kAXTextAreaRole as String,
+       stringAttribute(element, kAXValueAttribute).contains(marker) {
+        results.append(element)
+    }
+
+    for child in children(of: element) {
+        collectMarkedTextAreas(in: child, depth: depth + 1, results: &results)
+    }
+}
+
+guard let app = NSRunningApplication.runningApplications(
+    withBundleIdentifier: "com.openai.codex"
+).first else {
+    exit(0)
+}
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+AXUIElementSetMessagingTimeout(appElement, 0.75)
+var markedTextAreas: [AXUIElement] = []
+collectMarkedTextAreas(in: appElement, results: &markedTextAreas)
+guard let target = markedTextAreas.first else {
+    fputs("Codex draft restore skipped: proof marker is no longer present.\n", stderr)
+    exit(0)
+}
+
+AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+let result = AXUIElementSetAttributeValue(target, kAXValueAttribute as CFString, restoreText as CFTypeRef)
+if result == .success {
+    setSelectedRange(target, location: restoreText.utf16.count, length: 0)
+    print("Restored existing Codex draft after proof: chars=\(restoreText.count)")
+} else {
+    fputs("Codex draft restore failed (AX result \(result.rawValue)).\n", stderr)
+}
+SWIFT
+
+  rm -f "$CODEX_DRAFT_BACKUP_PATH" >/dev/null 2>&1 || true
+  CODEX_DRAFT_BACKUP_PATH=""
+  CODEX_DRAFT_BACKUP_ACTIVE=0
+}
+
+focus_codex_proof_prompt() {
+  swift - <<'SWIFT'
+import AppKit
+import ApplicationServices
+import Foundation
+
+let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String {
+    copyAttribute(element, attribute) as? String ?? ""
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func rect(for element: AXUIElement) -> CGRect? {
+    guard let positionValue = copyAttribute(element, kAXPositionAttribute),
+          let sizeValue = copyAttribute(element, kAXSizeAttribute) else {
+        return nil
+    }
+
+    var position = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+          AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else {
+        return nil
+    }
+
+    return CGRect(origin: position, size: size)
+}
+
+func setSelectedRange(_ element: AXUIElement, location: Int, length: Int) {
+    var range = CFRange(location: location, length: length)
+    guard let rangeValue = AXValueCreate(.cfRange, &range) else {
+        return
+    }
+    AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+}
+
+func postCommandRight(to pid: pid_t) {
+    guard let source = CGEventSource(stateID: .hidSystemState),
+          let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: true),
+          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: false) else {
+        return
+    }
+
+    keyDown.flags = .maskCommand
+    keyUp.flags = .maskCommand
+    keyDown.postToPid(pid)
+    keyUp.postToPid(pid)
+}
+
+func clickInside(_ frame: CGRect) {
+    guard let source = CGEventSource(stateID: .hidSystemState) else {
+        return
+    }
+
+    let x = min(frame.maxX - 16, max(frame.minX + 16, frame.minX + frame.width * 0.62))
+    let point = CGPoint(x: x, y: frame.midY)
+    guard let mouseDown = CGEvent(
+        mouseEventSource: source,
+        mouseType: .leftMouseDown,
+        mouseCursorPosition: point,
+        mouseButton: .left
+    ),
+    let mouseUp = CGEvent(
+        mouseEventSource: source,
+        mouseType: .leftMouseUp,
+        mouseCursorPosition: point,
+        mouseButton: .left
+    ) else {
+        return
+    }
+
+    mouseDown.post(tap: .cghidEventTap)
+    mouseUp.post(tap: .cghidEventTap)
+}
+
+func selectedRangeMatches(_ element: AXUIElement, location: Int, length: Int) -> Bool {
+    guard let rangeValue = copyAttribute(element, kAXSelectedTextRangeAttribute) else {
+        return false
+    }
+
+    var range = CFRange()
+    guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else {
+        return false
+    }
+    return range.location == location && range.length == length
+}
+
+func collectMarkedTextAreas(in element: AXUIElement, depth: Int = 0, results: inout [AXUIElement]) {
+    guard depth <= 32 else {
+        return
+    }
+
+    if stringAttribute(element, kAXRoleAttribute) == kAXTextAreaRole as String,
+       stringAttribute(element, kAXValueAttribute).contains(marker) {
+        results.append(element)
+    }
+
+    for child in children(of: element) {
+        collectMarkedTextAreas(in: child, depth: depth + 1, results: &results)
+    }
+}
+
+func focusedElement(in appElement: AXUIElement) -> AXUIElement? {
+    guard let focusedValue = copyAttribute(appElement, kAXFocusedUIElementAttribute) else {
+        return nil
+    }
+    return (focusedValue as! AXUIElement)
+}
+
+guard let app = NSRunningApplication.runningApplications(
+    withBundleIdentifier: "com.openai.codex"
+).first else {
+    fputs("Codex is not running.\n", stderr)
+    exit(1)
+}
+
+app.activate(options: [.activateAllWindows])
+Thread.sleep(forTimeInterval: 0.15)
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+AXUIElementSetMessagingTimeout(appElement, 0.75)
+var markedTextAreas: [AXUIElement] = []
+collectMarkedTextAreas(in: appElement, results: &markedTextAreas)
+guard let target = markedTextAreas.first else {
+    fputs("Could not refocus Codex proof prompt: marker text area not found.\n", stderr)
+    exit(1)
+}
+
+let text = stringAttribute(target, kAXValueAttribute)
+let cursorOffset = text.utf16.count
+if let frame = rect(for: target) {
+    clickInside(frame)
+    Thread.sleep(forTimeInterval: 0.12)
+}
+for _ in 0..<4 {
+    AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    setSelectedRange(target, location: cursorOffset, length: 0)
+    postCommandRight(to: app.processIdentifier)
+    Thread.sleep(forTimeInterval: 0.08)
+    if selectedRangeMatches(target, location: cursorOffset, length: 0) {
+        break
+    }
+}
+
+guard let focused = focusedElement(in: appElement),
+      stringAttribute(focused, kAXValueAttribute).contains(marker),
+      selectedRangeMatches(focused, location: cursorOffset, length: 0) else {
+    fputs("Could not keep Codex proof prompt focused at the end before Tab.\n", stderr)
+    exit(1)
+}
+
+print("Focused Codex proof composer before Tab: chars=\(text.count)")
 SWIFT
 }
 
@@ -4881,7 +5183,7 @@ describe_plan() {
     codex)
       echo "Plan: manual-gated Codex prompt smoke. The script seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text and validates one-word Tab accept without submit."
       echo "Safety: pass --manual-gate to continue. The helper never presses Enter; full accept waits for separate full-accept no-submit proof."
-      echo "Safety: the helper refuses to overwrite non-disposable prompt text unless it already contains the Codex proof marker."
+      echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof."
       ;;
     claude-code)
       local host_bundle host_name host_status proof_label
@@ -4912,14 +5214,13 @@ describe_plan() {
 }
 
 build_if_needed() {
-  if [[ "$SKIP_BUILD" == "1" ]]; then
-    return 0
+  if [[ "$SKIP_BUILD" != "1" ]]; then
+    AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 \
+      ./script/build_and_run.sh run
+    wait_for_current_autocomplete_lab_process
   fi
 
-  AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1 \
-    AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 \
-    ./script/build_and_run.sh run
-  wait_for_current_autocomplete_lab_process
+  refresh_build_archive_proof
 }
 
 wait_for_current_autocomplete_lab_process() {
@@ -4958,15 +5259,41 @@ wait_for_current_autocomplete_lab_process() {
   exit 1
 }
 
+refresh_build_archive_proof() {
+  local app_bundle="dist/AutocompleteLab.app"
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/AutocompleteLab.zip}"
+  local archive_dir archive_name archive_abs
+
+  [[ -d "$app_bundle" ]] || return 0
+
+  archive_dir="$(dirname "$archive_path")"
+  archive_name="$(basename "$archive_path")"
+  mkdir -p "$archive_dir"
+  archive_abs="$(cd "$archive_dir" && pwd)/$archive_name"
+
+  rm -f "$archive_abs"
+  (cd dist && ditto -c -k --keepParent "AutocompleteLab.app" "$archive_abs")
+
+  local archive_sha
+  archive_sha="$(shasum -a 256 "$archive_abs" | awk '{print $1}')"
+  if [[ -n "$archive_sha" ]]; then
+    echo "Archive proof: $archive_path archive-sha256:$archive_sha"
+  fi
+}
+
 run_codex() {
   if [[ "$MANUAL_GATE" != "1" ]]; then
     echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
     exit 2
   fi
 
-  local runtime_start_line start_line trace_start_line proof_text
+  local runtime_start_line start_line trace_start_line proof_text backup_dir
   runtime_start_line="$(line_count "$LOG_PATH")"
   proof_text="$(codex_proof_text)"
+  backup_dir="$(make_tmp_dir)"
+  CODEX_DRAFT_BACKUP_PATH="$backup_dir/codex-draft-backup.txt"
+  : >"$CODEX_DRAFT_BACKUP_PATH"
+  chmod 600 "$CODEX_DRAFT_BACKUP_PATH" >/dev/null 2>&1 || true
 
   prepare_temporary_app_enablement
   build_if_needed
@@ -4975,11 +5302,16 @@ run_codex() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  seed_codex_proof_prompt "$proof_text"
+  seed_codex_proof_prompt "$proof_text" "$CODEX_DRAFT_BACKUP_PATH"
+  if [[ -s "$CODEX_DRAFT_BACKUP_PATH" ]]; then
+    CODEX_DRAFT_BACKUP_ACTIVE=1
+  fi
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex" "Codex proof suggestion" 20
   wait_for_screenshot_capture_if_enabled "$start_line" "com.openai.codex" "Codex proof"
   seed_codex_proof_prompt "$proof_text"
   assert_frontmost_app "Codex" "Codex proof"
+  focus_codex_proof_prompt
+  sleep 0.2
   press_key_code 48
   wait_for_log_fields "$start_line" "Codex Tab acceptance" 12 \
     "keyboard-action" \
