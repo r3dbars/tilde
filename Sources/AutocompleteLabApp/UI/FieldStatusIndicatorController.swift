@@ -63,7 +63,7 @@ final class FieldStatusIndicatorController {
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
         panel.animationBehavior = .none
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.collectionBehavior = OverlayDesktopBehavior.collectionBehavior
         panel.contentView = badgeView
     }
 

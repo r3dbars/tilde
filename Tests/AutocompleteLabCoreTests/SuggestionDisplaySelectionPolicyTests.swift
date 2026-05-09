@@ -71,4 +71,53 @@ struct SuggestionDisplaySelectionPolicyTests {
 
         #expect(index == nil)
     }
+
+    @Test("Selects vertical displays above and below the main screen")
+    func selectsVerticalDisplaysAboveAndBelowMainScreen() {
+        let verticalScreens = [
+            CGRect(x: 0, y: -1080, width: 1920, height: 1080),
+            CGRect(x: 0, y: 0, width: 1512, height: 982),
+            CGRect(x: 0, y: 982, width: 1920, height: 1080)
+        ]
+        let lowerAnchor = AccessibilityCoordinateConverter.accessibilityRect(
+            fromAppKitRect: CGRect(x: 500, y: -600, width: 4, height: 22),
+            screenHeight: screenHeight
+        )
+        let upperAnchor = AccessibilityCoordinateConverter.accessibilityRect(
+            fromAppKitRect: CGRect(x: 500, y: 1_200, width: 4, height: 22),
+            screenHeight: screenHeight
+        )
+
+        #expect(SuggestionDisplaySelectionPolicy.selectedScreenIndex(
+            containingAccessibilityRect: lowerAnchor,
+            screenFrames: verticalScreens,
+            accessibilityScreenHeight: screenHeight
+        ) == 0)
+        #expect(SuggestionDisplaySelectionPolicy.selectedScreenIndex(
+            containingAccessibilityRect: upperAnchor,
+            screenFrames: verticalScreens,
+            accessibilityScreenHeight: screenHeight
+        ) == 2)
+    }
+
+    @Test("Suppresses ambiguous mirrored display frames instead of guessing")
+    func suppressesAmbiguousMirroredDisplayFrames() {
+        let mirroredFrames = [
+            CGRect(x: 0, y: 0, width: 1512, height: 982),
+            CGRect(x: 0, y: 0, width: 1512, height: 982)
+        ]
+        let appKitAnchor = CGRect(x: 420, y: 500, width: 4, height: 22)
+        let accessibilityAnchor = AccessibilityCoordinateConverter.accessibilityRect(
+            fromAppKitRect: appKitAnchor,
+            screenHeight: screenHeight
+        )
+
+        let index = SuggestionDisplaySelectionPolicy.selectedScreenIndex(
+            containingAccessibilityRect: accessibilityAnchor,
+            screenFrames: mirroredFrames,
+            accessibilityScreenHeight: screenHeight
+        )
+
+        #expect(index == nil)
+    }
 }

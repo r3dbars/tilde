@@ -23,16 +23,18 @@ public enum SuggestionDisplaySelectionPolicy {
         }
 
         let centroid = CGPoint(x: probeRect.midX, y: probeRect.midY)
-        if let centroidIndex = screenFrames.firstIndex(where: { screen in
+        let containingScreens = screenFrames.enumerated().filter { _, screen in
             screen.hasFiniteDisplayGeometry
                 && screen.width > 0
                 && screen.height > 0
                 && screen.contains(centroid)
-        }) {
-            return centroidIndex
         }
 
-        return nil
+        guard containingScreens.count == 1 else {
+            return nil
+        }
+
+        return containingScreens[0].offset
     }
 }
 
