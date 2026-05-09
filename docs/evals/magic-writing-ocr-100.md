@@ -213,6 +213,36 @@ Time: 2026-05-09T00:36:00Z
 - New trace slices: Chrome textarea 60130-60154, contenteditable 60155-60177, editor-like 60178-60202, monaco-like 60203-60235, prosemirror-like 60236-60260, monaco-real 60261-60296, prosemirror-real 60297-60326, chat-like 60327-60351, TextEdit 60361-60370.
 - Remaining proof gaps are unchanged in shape: Notes title/body/checklist, Obsidian, default-Chrome real Monaco/ProseMirror AX, Codex same-slice no-submit, Claude Code, and Claude desktop.
 
+## Latest Notes Body Harness Iteration
+
+2026-05-09T00:45Z pass: moved Notes body proof away from fragile hand setup.
+
+- Added a guarded `notes-body` path to `script/real_app_smoke.sh`.
+- The harness now creates a fresh disposable Notes note via UI events, types only the smoke title plus `Autocomplete smoke` marker, then refuses to continue unless the body text view contains that marker.
+- The earlier Notes probe failed safely when no marker-bearing note body was visible, before any typing happened.
+- A direct Notes AppleScript setup path was rejected because Notes scripting hung on this machine, so the harness now avoids scanning or scripting the user's existing notes.
+- Validation run so far: `bash -n script/real_app_smoke.sh`, `script/real_app_smoke.sh notes-body --dry-run --manual-gate`, and `git diff --check` pass.
+- Live Notes proof is still pending because another real-app smoke run is currently compiling a Metal runtime in a different worktree; rerun `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate` when that clears.
+- Post-commit strict gate on `afbedc5`: `./script/check_score_targets.sh` still fails with 68 issues. The immediate current-commit blocker is stale real-app proof after the harness commit; the biggest product blockers remain Codex same-slice no-submit proof, production Chrome editor variants, and deeper Notes/Obsidian/Claude variants.
+
+## Latest Smoke Orchestration Fix
+
+2026-05-09T00:57Z pass: fixed a harness bottleneck exposed by overlapping heartbeat smoke runs.
+
+- Problem: real-app smokes were repeatedly blocked by another runner sitting in `build_and_run.sh`'s global stale-bundle scan across every Codex worktree.
+- Fix: real-app smoke now direct-launches the built app and sets `AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1`, avoiding the LaunchServices stale-bundle scan during proof runs.
+- Safety: the normal build script still keeps stale-bundle quarantine by default; only smoke launches opt into the faster direct-launch path.
+- Validation: `bash -n script/build_and_run.sh script/real_app_smoke.sh script/build_and_run_self_test.sh script/real_app_smoke_self_test.sh`, `script/build_and_run_self_test.sh`, `script/real_app_smoke_self_test.sh`, and `git diff --check` pass.
+- Live Notes proof is still queued behind another already-running pre-fix smoke process; retry `notes-body` after that lock clears.
+
+2026-05-09T00:59Z follow-up: simplified the Notes body driver again.
+
+- Result: the direct-launch path built the current app and skipped the stale scan, but the live Notes proof still did not record a valid pass.
+- Finding: the AX selected-range reset in the Notes proof driver appeared to move the caret back into existing note text, causing `middleOfLine`/empty-suggestion blocks instead of a clean end-of-note fragment.
+- Fix: removed the AX range-writing path for proof typing. The harness now creates/focuses the disposable note, verifies the `Autocomplete smoke` marker is in the Notes body, and then types the proof fragments with plain key events from the current caret.
+- Added a post-launch current-bundle check so a smoke run fails if another worktree's `AutocompleteLab.app` is the running process.
+- Validation: `bash -n script/real_app_smoke.sh script/real_app_smoke_self_test.sh`, `script/real_app_smoke_self_test.sh`, and `git diff --check` pass.
+
 ## 100 Test Situations
 
 | # | App | Situation | Target behavior | Score |
