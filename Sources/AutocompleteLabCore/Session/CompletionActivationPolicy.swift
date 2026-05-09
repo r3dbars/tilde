@@ -392,6 +392,8 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
     private static let sensitiveLineHints = [
         "api key", "apikey", "access token", "auth token", "bearer token",
         "client secret", "private key", "secret key", "password", "passcode",
+        "otp", "one time code", "one time password", "verification code",
+        "authenticator", "2fa", "mfa", "expiration",
         "recovery code", "seed phrase", "social security", "ssn", "card number",
         "credit card", "debit card", "security code", "cvv", "cvc", "expiry",
         "routing number", "account number"

@@ -44,4 +44,32 @@ struct SuggestionPauseSchedulePolicyTests {
         #expect(state.isPaused)
         #expect(try #require(state.pausedUntil) == now.addingTimeInterval(900))
     }
+
+    @Test("Pause until tomorrow expires at the next local day")
+    func pauseUntilTomorrowExpiresAtNextLocalDay() throws {
+        let policy = SuggestionPauseSchedulePolicy()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = try #require(calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2023,
+            month: 12,
+            day: 8,
+            hour: 22,
+            minute: 45
+        )))
+        let expected = try #require(calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2023,
+            month: 12,
+            day: 9,
+            hour: 0,
+            minute: 0
+        )))
+
+        let state = policy.pauseUntilTomorrow(now: now, calendar: calendar)
+
+        #expect(state.isPaused)
+        #expect(try #require(state.pausedUntil) == expected)
+    }
 }

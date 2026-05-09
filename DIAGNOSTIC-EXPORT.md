@@ -21,6 +21,8 @@ without sharing what the tester typed.
 - redacted trace JSONL,
 - redacted HTML reports,
 - visual calibration reports.
+- `PRIVACY-CHECKLIST.md`, mapping each default field to retention, opt-in
+  state, and whether it can leave the Mac.
 
 ## What The Default Export Must Not Include
 
@@ -38,11 +40,18 @@ without sharing what the tester typed.
 
 Open Diagnostics from the menu bar and use Export Report.
 
+For beta feedback, attach only that redacted Privacy Bundle. The structured
+feedback form does not need raw traces or screenshots by default.
+
 For command-line checks, run:
 
 ```bash
 ./script/check_redacted_report_export.sh
+./script/check_current_build_privacy_export.sh
 ```
+
+The current-build check runs the built app binary against synthetic private
+sentinels and verifies the exported privacy bundle does not contain them.
 
 ## Raw Debug Sessions
 
