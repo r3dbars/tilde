@@ -663,6 +663,49 @@ if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$LIMITED_REPORT" \
   exit 1
 fi
 
+MASKED_STALE_REPORT="$TMP_DIR/masked-stale-manual-smoke-runs.md"
+FAKE_APP_BINARY="$TMP_DIR/current-app-binary"
+printf 'current app binary\n' >"$FAKE_APP_BINARY"
+FAKE_APP_SHA="$(shasum -a 256 "$FAKE_APP_BINARY" | awk '{print $1}')"
+cat >"$MASKED_STALE_REPORT" <<EOF
+# Manual Smoke Runs
+
+| Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
+| --- | --- | --- | --- | ---: | --- | --- | --- |
+| 2026-04-26T08:00:00Z | TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-2 in \`/tmp/diagnostics.log\` | lines 1-2 in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; build \`commit:deadbeef0000,app-sha256:$FAKE_APP_SHA\` |
+EOF
+
+AUTOCOMPLETE_LAB_APP_BINARY="$FAKE_APP_BINARY" \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$MASKED_STALE_REPORT" \
+  AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
+  script/manual_smoke_status.sh >"$STATUS_OUTPUT"
+
+if ! grep -F -- "- TextEdit: stale pass (needs current commit/archive proof; run" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test let a current app sha mask stale commit proof" >&2
+  exit 1
+fi
+
+FAKE_ARCHIVE="$TMP_DIR/current-archive.zip"
+printf 'current archive\n' >"$FAKE_ARCHIVE"
+FAKE_ARCHIVE_SHA="$(shasum -a 256 "$FAKE_ARCHIVE" | awk '{print $1}')"
+cat >"$MASKED_STALE_REPORT" <<EOF
+# Manual Smoke Runs
+
+| Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
+| --- | --- | --- | --- | ---: | --- | --- | --- |
+| 2026-04-26T08:00:00Z | TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-2 in \`/tmp/diagnostics.log\` | lines 1-2 in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; build \`commit:deadbeef0000,archive-sha256:$FAKE_ARCHIVE_SHA\` |
+EOF
+
+AUTOCOMPLETE_LAB_ARCHIVE_PATH="$FAKE_ARCHIVE" \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$MASKED_STALE_REPORT" \
+  AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
+  script/manual_smoke_status.sh >"$STATUS_OUTPUT"
+
+if ! grep -F -- "- TextEdit: passed" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test should accept current archive proof after docs commit" >&2
+  exit 1
+fi
+
 EMPTY_REPORT="$TMP_DIR/empty-manual-smoke-runs.md"
 cat >"$EMPTY_REPORT" <<'EOF'
 # Manual Smoke Runs

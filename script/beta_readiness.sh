@@ -80,7 +80,9 @@ if [[ "$MODE" == "check-only" ]]; then
     AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
     ./script/check_diagnostics_log.sh || failures=$((failures + 1))
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
+  run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
+  run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh || failures=$((failures + 1))
   run_check "Manual app proof" ./script/manual_smoke_status.sh --require-all || failures=$((failures + 1))
   run_check "Visual placement proof" ./script/check_visual_placement_evidence.sh --require-all || failures=$((failures + 1))
   run_check "Release package prerequisites" ./script/package_release.sh --check || failures=$((failures + 1))
@@ -132,8 +134,16 @@ echo "== Redacted report export =="
 ./script/check_redacted_report_export.sh
 
 echo
+echo "== Issue template validation =="
+./script/validate_beta_issue_template.sh
+
+echo
 echo "== Clipboard fallback disabled =="
 check_clipboard_fallback_disabled
+
+echo
+echo "== Prompt app proof gate =="
+./script/check_prompt_app_proof.sh
 
 echo
 echo "== Manual app proof =="
