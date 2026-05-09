@@ -96,7 +96,7 @@ Current local evidence:
 
 Starting score before this ops pass: 80/100
 
-Current score after this ops pass: 84/100
+Current score after this ops and privacy pass: 84/100
 
 Score movement: +4
 
