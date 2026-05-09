@@ -4,6 +4,7 @@ public enum TextContextRepairReason: String, Equatable, Sendable {
     case notesTextAfterCursorTyping = "notes-text-after-cursor-typing"
     case notesTextAfterCursorStable = "notes-text-after-cursor-stable"
     case obsidianCodeMirrorTrailingCharacter = "obsidian-codemirror-trailing-character"
+    case obsidianCodeMirrorTrailingScaffolding = "obsidian-codemirror-trailing-scaffolding"
     case obsidianCodeMirrorHiddenSpacerLine = "obsidian-codemirror-hidden-spacer-line"
     case obsidianCodeMirrorLineDrift = "obsidian-codemirror-line-drift"
 }
@@ -61,6 +62,9 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
 
     public func repair(_ input: TextContextRepairInput) -> TextContextRepairResult {
         if let obsidianRepair = obsidianCodeMirrorTrailingCharacterRepair(input) {
+            return obsidianRepair
+        }
+        if let obsidianRepair = obsidianCodeMirrorTrailingScaffoldingRepair(input) {
             return obsidianRepair
         }
         if let obsidianRepair = obsidianCodeMirrorHiddenSpacerLineRepair(input) {
@@ -154,6 +158,25 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
             textBeforeCursor: repairedTextBeforeCursor,
             textAfterCursor: repairedTextAfterCursor,
             reason: .obsidianCodeMirrorTrailingCharacter
+        )
+    }
+
+    private func obsidianCodeMirrorTrailingScaffoldingRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
+        guard input.bundleIdentifier == "md.obsidian",
+              input.role == "AXTextArea",
+              input.selectedTextLength == 0,
+              !input.textAfterCursor.isEmpty,
+              input.textAfterCursor.count <= 12,
+              input.textAfterCursor.containsCodeMirrorScaffolding,
+              input.textAfterCursor.trimmingCodeMirrorScaffolding().isEmpty,
+              isPlausibleActiveTypingLine(currentLine(in: input.textBeforeCursor)) else {
+            return nil
+        }
+
+        return TextContextRepairResult(
+            textBeforeCursor: input.textBeforeCursor,
+            textAfterCursor: "",
+            reason: .obsidianCodeMirrorTrailingScaffolding
         )
     }
 
@@ -312,9 +335,36 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
 }
 
 private extension String {
+    var containsCodeMirrorScaffolding: Bool {
+        unicodeScalars.contains(where: \.isCodeMirrorScaffoldingMarker)
+    }
+
     func trimmingCodeMirrorScaffolding() -> String {
         String(unicodeScalars.filter { scalar in
-            scalar.value != 0x200B && !CharacterSet.whitespacesAndNewlines.contains(scalar)
+            !scalar.isCodeMirrorScaffolding
         })
+    }
+}
+
+private extension Unicode.Scalar {
+    var isCodeMirrorScaffoldingMarker: Bool {
+        switch value {
+        case 0x0009, // tab
+             0x000A, // line feed
+             0x000D, // carriage return
+             0x200B, // zero-width space
+             0x200C, // zero-width non-joiner
+             0x200D, // zero-width joiner
+             0x2060, // word joiner
+             0xFEFF, // zero-width no-break space
+             0xFFFC: // object replacement character
+            return true
+        default:
+            return false
+        }
+    }
+
+    var isCodeMirrorScaffolding: Bool {
+        isCodeMirrorScaffoldingMarker || CharacterSet.whitespacesAndNewlines.contains(self)
     }
 }

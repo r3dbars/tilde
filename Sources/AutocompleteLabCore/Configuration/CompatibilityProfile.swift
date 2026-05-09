@@ -358,9 +358,10 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             allowsWindowAnchor: false,
             requiresValidatedCaret: true,
             suppressesAfterInsertionFailure: false,
+            allowsDescendantTextFallback: true,
             allowsDetachedSuggestions: false,
             allowsSyntheticCaretPlacement: true,
-            notes: "Yellow Electron target. Prefer capability probing, synthetic text-area caret placement, and verified AX before synthetic key insertion. Do not show detached suggestions when CodeMirror hides usable caret bounds."
+            notes: "Yellow Electron target. Prefer capability probing, descendant text fallback for empty CodeMirror web areas, synthetic text-area caret placement, and verified AX before synthetic key insertion. Do not show detached suggestions when CodeMirror hides usable caret bounds."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.apple.mail",
