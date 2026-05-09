@@ -21,8 +21,15 @@ release archive checksum in the trace slice.
 For the full remaining manual beta proof sequence, run:
 
 ```bash
+script/manual_proof_refresh.sh --print
 script/manual_proof_queue.sh --print
 ```
+
+Use `script/manual_proof_refresh.sh --run --target textedit` for one focused
+refresh at a time. It prints the exact recorder command, runs it, then refuses
+the row unless the latest report includes the current commit or archive
+fingerprint. This keeps old app binary hashes from making stale source proof
+look current.
 
 Use `script/manual_proof_queue.sh --run` only when you are ready to walk
 through each manual-gated recorder with disposable content. The queue verifies
