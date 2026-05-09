@@ -453,13 +453,13 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportLevel: .yellow,
             supportReason: "Browser editors vary; display can fall back to floating and insertion can fall back to AX.",
             renderMode: .inlineAdjacent,
-            insertionMode: .keyEvents,
+            insertionMode: .axThenKeyEvents,
             fallbackRenderMode: .floatingMirror,
-            fallbackInsertionMode: .axValueReplacement,
+            fallbackInsertionMode: .keyEvents,
             anchorLadder: [.caret, .field],
             knownFailureModes: ["textarea support differs from rich editors", "zero-height caret bounds can occur"],
             allowsDescendantTextFallback: true,
-            notes: "Yellow browser target. Prefer proof-gated synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback for unreadable or detached surfaces. Prefer key-event insertion across textarea and contenteditable surfaces because rich browser editors can report AX replacement success without keeping cursor verification stable."
+            notes: "Yellow browser target. Prefer proof-gated synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback for unreadable or detached surfaces. Prefer AX selected-text insertion for focused textarea surfaces that expose writable text, with key-event fallback for richer browser editors."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.openai.codex",
