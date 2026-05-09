@@ -18,6 +18,7 @@ CHROME_FIXTURE_WAS_SET=0
 CHROME_ACCESSIBILITY_MODE="${AUTOCOMPLETE_LAB_CHROME_ACCESSIBILITY_MODE:-forced}"
 CHROME_ACCESSIBILITY_MODE_WAS_SET=0
 CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF=0
+CHROME_REMOTE_DEBUGGING_PORT=""
 NATIVE_UNDO_PROOF="${AUTOCOMPLETE_LAB_NATIVE_UNDO_PROOF:-0}"
 CLAUDE_CODE_HOST_VARIANT="${AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_VARIANT:-auto}"
 CLAUDE_CODE_HOST_WAS_SET=0
@@ -72,7 +73,7 @@ Chrome window as an experimental default-AX exposure proof. Use
 --fixture codemirror-official, monaco-official, or prosemirror-official to run
 bounded proof against the public official editor demo pages in normal Chrome.
 Use --fixture textarea-public, contenteditable-public, or production-text-fields
-to run bounded proof against public W3Schools demo pages with disposable text.
+to run bounded proof against top-level public demo pages with disposable text.
 Use --fixture browser-chat-harness, or script/real_browser_chat_proof.sh, for a
 bounded HTTP browser-chat no-submit proof harness. That harness proves only the
 disposable harness surface, not Slack, Discord, ChatGPT, or broad chat support.
@@ -1047,6 +1048,16 @@ file_url() {
   printf 'file://%s\n' "$path"
 }
 
+allocate_local_port() {
+  python3 - <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+}
+
 chrome_fixture_is_official_demo() {
   case "$1" in
     textarea-public|contenteditable-public|codemirror-official|monaco-official|prosemirror-official)
@@ -1075,10 +1086,10 @@ chrome_fixture_url() {
 
   case "$fixture" in
     textarea-public)
-      printf '%s\n' "https://www.w3schools.com/tags/tryit.asp?filename=tryhtml_textarea"
+      printf '%s\n' "https://www.editpad.org/"
       ;;
     contenteditable-public)
-      printf '%s\n' "https://www.w3schools.com/tags/tryit.asp?filename=tryhtml5_global_contenteditable"
+      printf '%s\n' "https://yabwe.github.io/medium-editor/"
       ;;
     codemirror-official)
       printf '%s\n' "https://codemirror.net/try/"
@@ -1105,14 +1116,7 @@ chrome_fixture_url() {
 start_chrome_fixture_http_server() {
   local tmp_dir="$1"
   local port
-  port="$(python3 - <<'PY'
-import socket
-
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-    sock.bind(("127.0.0.1", 0))
-    print(sock.getsockname()[1])
-PY
-)"
+  port="$(allocate_local_port)"
 
   if [[ -z "$port" ]]; then
     echo "Could not allocate a local browser-chat proof port." >&2
@@ -1217,7 +1221,7 @@ wait_for_chrome_smoke_ready() {
 
   if chrome_fixture_is_official_demo "$fixture"; then
     if chrome_fixture_is_public_text_field_demo "$fixture"; then
-      # Public W3Schools text-field demos are proofed through URL loading,
+      # Public top-level text-field demos are proofed through URL loading,
       # guarded coordinate focus, and AX-focused-editor verification below.
       # They do not need Chrome's "Allow JavaScript from Apple Events" setting.
       sleep 1
@@ -1272,6 +1276,170 @@ APPLESCRIPT
   exit 1
 }
 
+chrome_public_setup_text_with_devtools() {
+  local fixture="$1"
+  local text="$2"
+
+  if [[ -z "$CHROME_REMOTE_DEBUGGING_PORT" ]]; then
+    return 1
+  fi
+
+  node - "$CHROME_REMOTE_DEBUGGING_PORT" "$fixture" "$text" <<'NODE'
+const port = process.argv[2];
+const fixture = process.argv[3];
+const text = process.argv[4];
+
+async function fetchJSON(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} for ${url}`);
+  }
+  return response.json();
+}
+
+async function tabWebSocketURL() {
+  const deadline = Date.now() + 8000;
+  while (Date.now() <= deadline) {
+    try {
+      const tabs = await fetchJSON(`http://127.0.0.1:${port}/json`);
+      const page = tabs.find((tab) => tab.type === "page" && !String(tab.url || "").startsWith("devtools://"));
+      if (page?.webSocketDebuggerUrl) {
+        return page.webSocketDebuggerUrl;
+      }
+    } catch {
+      // Chrome may still be bringing up the DevTools endpoint.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  throw new Error("Timed out waiting for Chrome DevTools page target.");
+}
+
+function expressionForFixture() {
+  const encodedText = JSON.stringify(text);
+  if (fixture === "textarea-public") {
+    return `(() => {
+      const text = ${encodedText};
+      const editors = Array.from(document.querySelectorAll('textarea'))
+        .filter((editor) => {
+          const rect = editor.getBoundingClientRect();
+          return rect.width >= 300 && rect.height >= 120;
+        })
+        .sort((a, b) => {
+          const ar = a.getBoundingClientRect();
+          const br = b.getBoundingClientRect();
+          return (br.width * br.height) - (ar.width * ar.height);
+        });
+      const editor = editors[0];
+      if (!editor) return { ok: false, reason: 'missing textarea' };
+      editor.focus();
+      const nextValue = String(editor.value || '') + text;
+      editor.value = nextValue;
+      editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+      editor.setSelectionRange(editor.value.length, editor.value.length);
+      return {
+        ok: true,
+        role: 'textarea',
+        valueLength: editor.value.length,
+        selectionStart: editor.selectionStart,
+        selectionEnd: editor.selectionEnd
+      };
+    })()`;
+  }
+
+  if (fixture === "contenteditable-public") {
+    return `(() => {
+      const text = ${encodedText};
+      const editors = Array.from(document.querySelectorAll('[contenteditable="true"], [role="textbox"]'))
+        .filter((editor) => {
+          const rect = editor.getBoundingClientRect();
+          return rect.width >= 300 && rect.height >= 60;
+        })
+        .sort((a, b) => {
+          const av = /dead simple inline editor/i.test(a.textContent || '') ? 1000000 : 0;
+          const bv = /dead simple inline editor/i.test(b.textContent || '') ? 1000000 : 0;
+          const ar = a.getBoundingClientRect();
+          const br = b.getBoundingClientRect();
+          return (bv + br.width * br.height) - (av + ar.width * ar.height);
+        });
+      const editor = editors[0];
+      if (!editor) return { ok: false, reason: 'missing contenteditable' };
+      editor.focus();
+      const current = String(editor.textContent || '');
+      const separator = current.length > 0 && !/\\s$/.test(current) && !/^\\s/.test(text) ? ' ' : '';
+      editor.textContent = current + separator + text;
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+      return {
+        ok: true,
+        role: 'contenteditable',
+        valueLength: editor.textContent.length,
+        selectionText: selection.toString()
+      };
+    })()`;
+  }
+
+  return `({ ok: false, reason: 'unsupported fixture' })`;
+}
+
+async function evaluateExpression(wsURL, expression) {
+  const socket = new WebSocket(wsURL);
+  await new Promise((resolve, reject) => {
+    socket.addEventListener("open", resolve, { once: true });
+    socket.addEventListener("error", reject, { once: true });
+  });
+
+  const id = 1;
+  const responsePromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("Timed out waiting for Runtime.evaluate.")), 8000);
+    socket.addEventListener("message", (event) => {
+      const message = JSON.parse(event.data);
+      if (message.id !== id) return;
+      clearTimeout(timeout);
+      resolve(message);
+    });
+  });
+
+  socket.send(JSON.stringify({
+    id,
+    method: "Runtime.evaluate",
+    params: {
+      expression,
+      awaitPromise: true,
+      returnByValue: true
+    }
+  }));
+
+  const message = await responsePromise;
+  socket.close();
+  if (message.error) {
+    throw new Error(message.error.message || "Runtime.evaluate failed.");
+  }
+  if (message.result?.exceptionDetails) {
+    throw new Error(message.result.exceptionDetails.text || "Runtime.evaluate exception.");
+  }
+  return message.result?.result?.value;
+}
+
+try {
+  const wsURL = await tabWebSocketURL();
+  const value = await evaluateExpression(wsURL, expressionForFixture());
+  if (!value?.ok) {
+    console.error(`Chrome ${fixture} DevTools setup failed: ${value?.reason || "unknown"}`);
+    process.exit(1);
+  }
+  console.log(`Chrome ${fixture} DevTools setup focused ${value.role} valueLength=${value.valueLength}`);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+NODE
+}
+
 chrome_active_tab_javascript() {
   local javascript="$1"
 
@@ -1320,10 +1488,10 @@ chrome_official_demo_ready() {
 
   case "$fixture" in
     textarea-public)
-      javascript="(() => { const frame = document.querySelector('#iframeResult'); const doc = frame && (frame.contentDocument || (frame.contentWindow && frame.contentWindow.document)); return Boolean(doc && doc.querySelector('textarea#w3review')); })()"
+      javascript="Boolean(document.querySelector('textarea'))"
       ;;
     contenteditable-public)
-      javascript="(() => { const frame = document.querySelector('#iframeResult'); const doc = frame && (frame.contentDocument || (frame.contentWindow && frame.contentWindow.document)); return Boolean(doc && doc.querySelector('[contenteditable=\"true\"]')); })()"
+      javascript="Boolean(document.querySelector('[contenteditable=\"true\"], [role=\"textbox\"]'))"
       ;;
     codemirror-official)
       javascript="Boolean(document.querySelector('.cm-content'))"
@@ -1349,10 +1517,10 @@ chrome_focus_official_demo_editor() {
 
   case "$fixture" in
     textarea-public)
-      javascript="(() => { const frame = document.querySelector('#iframeResult'); const doc = frame && (frame.contentDocument || (frame.contentWindow && frame.contentWindow.document)); const editor = doc && doc.querySelector('textarea#w3review'); if (!editor) return 'missing'; editor.value = ''; editor.setAttribute('aria-label', 'Public W3Schools textarea proof field'); editor.scrollIntoView({block: 'center', inline: 'center'}); editor.focus(); editor.setSelectionRange(editor.value.length, editor.value.length); return 'ok'; })()"
+      javascript="(() => { const editor = document.querySelector('textarea'); if (!editor) return 'missing'; editor.setAttribute('aria-label', 'Public textarea proof field'); editor.scrollIntoView({block: 'center', inline: 'center'}); editor.focus(); editor.setSelectionRange(editor.value.length, editor.value.length); return 'ok'; })()"
       ;;
     contenteditable-public)
-      javascript="(() => { const frame = document.querySelector('#iframeResult'); const doc = frame && (frame.contentDocument || (frame.contentWindow && frame.contentWindow.document)); const editor = doc && doc.querySelector('[contenteditable=\"true\"]'); if (!editor) return 'missing'; editor.textContent = ''; editor.setAttribute('aria-label', 'Public W3Schools contenteditable proof field'); editor.scrollIntoView({block: 'center', inline: 'center'}); editor.focus(); const range = doc.createRange(); range.selectNodeContents(editor); range.collapse(false); const selection = frame.contentWindow.getSelection(); selection.removeAllRanges(); selection.addRange(range); return 'ok'; })()"
+      javascript="(() => { const editor = document.querySelector('[contenteditable=\"true\"], [role=\"textbox\"]'); if (!editor) return 'missing'; editor.setAttribute('aria-label', 'Public contenteditable proof field'); editor.scrollIntoView({block: 'center', inline: 'center'}); editor.focus(); const range = document.createRange(); range.selectNodeContents(editor); range.collapse(false); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); return 'ok'; })()"
       ;;
     codemirror-official)
       javascript="(() => { const editor = document.querySelector('.cm-content'); if (!editor) return 'missing'; editor.scrollIntoView({block: 'center', inline: 'center'}); editor.focus(); const selection = window.getSelection(); const range = document.createRange(); range.selectNodeContents(editor); range.collapse(false); selection.removeAllRanges(); selection.addRange(range); return 'ok'; })()"
@@ -1548,14 +1716,23 @@ launch_isolated_chrome_fixture() {
     exit 1
   fi
 
-  open -na "Google Chrome" --args \
+  local chrome_args=(
     --user-data-dir="$profile_dir" \
     --force-renderer-accessibility \
     --no-first-run \
     --no-default-browser-check \
     --disable-default-apps \
-    --disable-sync \
-    --new-window "$chrome_url" >/dev/null 2>&1
+    --disable-sync
+  )
+  if [[ -n "$CHROME_REMOTE_DEBUGGING_PORT" ]]; then
+    chrome_args+=(
+      --remote-debugging-port="$CHROME_REMOTE_DEBUGGING_PORT"
+      --remote-allow-origins="http://127.0.0.1:$CHROME_REMOTE_DEBUGGING_PORT"
+    )
+  fi
+  chrome_args+=(--new-window "$chrome_url")
+
+  open -na "Google Chrome" --args "${chrome_args[@]}" >/dev/null 2>&1
 
   local chrome_pid
   chrome_pid="$(wait_for_isolated_chrome_pid "$profile_dir" 10)"
@@ -1786,8 +1963,24 @@ struct Candidate {
     let element: AXUIElement
     let role: String
     let title: String
+    let value: String
     let frame: CGRect
     let score: Double
+}
+
+func isExpectedPublicCandidate(_ candidate: Candidate) -> Bool {
+    switch fixture {
+    case "textarea-public":
+        return candidate.role == "AXTextArea"
+            && candidate.frame.width >= 300
+            && candidate.frame.height >= 120
+    case "contenteditable-public":
+        return candidate.role == "AXTextArea"
+            && candidate.frame.width >= 300
+            && candidate.frame.height >= 60
+    default:
+        return true
+    }
 }
 
 func collectCandidates(in element: AXUIElement, depth: Int = 0, candidates: inout [Candidate]) {
@@ -1803,13 +1996,18 @@ func collectCandidates(in element: AXUIElement, depth: Int = 0, candidates: inou
        frame.width >= 100,
        frame.height >= 20 {
         var score = frame.width * frame.height
-        if fixture == "textarea-public", title.localizedCaseInsensitiveContains("Review of W3Schools") {
+        let value = stringAttribute(element, kAXValueAttribute)
+        if fixture == "textarea-public", role == "AXTextArea", value.isEmpty, frame.height >= 120 {
             score += 1_000_000
         }
-        if fixture == "contenteditable-public", role == "AXTextArea" || role == "AXTextField" {
+        if fixture == "contenteditable-public",
+           role == "AXTextArea",
+           value.localizedCaseInsensitiveContains("dead simple inline editor") {
+            score += 1_000_000
+        } else if fixture == "contenteditable-public", role == "AXTextArea" || role == "AXTextField" {
             score += 100_000
         }
-        candidates.append(Candidate(element: element, role: role, title: title, frame: frame, score: score))
+        candidates.append(Candidate(element: element, role: role, title: title, value: value, frame: frame, score: score))
     }
 
     for child in children(of: element) {
@@ -1824,13 +2022,14 @@ var candidates: [Candidate] = []
 for _ in 0..<40 {
     candidates.removeAll(keepingCapacity: true)
     collectCandidates(in: appElement, candidates: &candidates)
-    if !candidates.isEmpty {
+    if candidates.contains(where: isExpectedPublicCandidate) {
         break
     }
     Thread.sleep(forTimeInterval: 0.2)
 }
 
-guard let candidate = candidates.max(by: { $0.score < $1.score }) else {
+let eligibleCandidates = candidates.filter(isExpectedPublicCandidate)
+guard let candidate = eligibleCandidates.max(by: { $0.score < $1.score }) else {
     fputs("Chrome \(fixture) public proof could not find a web-backed editable text target through AX.\n", stderr)
     exit(1)
 }
@@ -1894,7 +2093,11 @@ focus_chrome_smoke_editor() {
 
   if chrome_fixture_is_public_text_field_demo "$fixture"; then
     focus_chrome_public_text_field_editor "$fixture" "${chrome_pid:-0}"
-    wait_for_frontmost_app "Google Chrome" 5
+    if [[ -n "$chrome_pid" ]]; then
+      wait_for_frontmost_process_id "$chrome_pid" 5
+    else
+      wait_for_frontmost_app "Google Chrome" 5
+    fi
     return 0
   fi
 
@@ -3142,11 +3345,55 @@ func currentFocusedValue() -> String {
     copyAttribute(focusedElement, kAXValueAttribute) as? String ?? ""
 }
 
+func selectedTextRange() -> CFRange? {
+    guard let rangeValue = copyAttribute(focusedElement, kAXSelectedTextRangeAttribute) else {
+        return nil
+    }
+
+    var range = CFRange(location: 0, length: 0)
+    guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else {
+        return nil
+    }
+
+    return range
+}
+
+func setCursorToEnd(of value: String) {
+    var cursorRange = CFRange(location: value.utf16.count, length: 0)
+    if let rangeValue = AXValueCreate(.cfRange, &cursorRange) {
+        AXUIElementSetAttributeValue(
+            focusedElement,
+            kAXSelectedTextRangeAttribute as CFString,
+            rangeValue
+        )
+    }
+}
+
+func cursorIsAtEnd(of value: String) -> Bool {
+    guard let range = selectedTextRange() else {
+        return false
+    }
+
+    return range.location >= value.utf16.count && range.length == 0
+}
+
 func waitForInsertedText() -> Bool {
     for _ in 0..<30 {
         let currentValue = currentFocusedValue()
         if currentValue.contains(text)
             && (currentValue.count >= initialValue.count + text.count || currentValue.count >= text.count) {
+            return true
+        }
+        usleep(100_000)
+    }
+
+    return false
+}
+
+func waitForInsertedTextAtEnd(_ expectedValue: String) -> Bool {
+    for _ in 0..<30 {
+        let currentValue = currentFocusedValue()
+        if currentValue == expectedValue && cursorIsAtEnd(of: expectedValue) {
             return true
         }
         usleep(100_000)
@@ -3213,6 +3460,25 @@ func postPasteShortcut(destination: TextEventDestination) {
     }
 }
 
+func postCommandRight(destination: TextEventDestination) {
+    guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: true),
+          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: false) else {
+        fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): could not create cursor-end events.\n", stderr)
+        exit(1)
+    }
+
+    keyDown.flags = .maskCommand
+    keyUp.flags = .maskCommand
+    switch destination {
+    case .pid:
+        keyDown.postToPid(pid)
+        keyUp.postToPid(pid)
+    case .eventTap:
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+    }
+}
+
 postTextEvents(destination: .pid)
 if waitForInsertedText() {
     exit(0)
@@ -3225,6 +3491,23 @@ let selectedTextResult = AXUIElementSetAttributeValue(
 )
 if selectedTextResult == .success && waitForInsertedText() {
     exit(0)
+}
+
+let valueReplacement = initialValue + text
+let valueReplacementResult = AXUIElementSetAttributeValue(
+    focusedElement,
+    kAXValueAttribute as CFString,
+    valueReplacement as CFTypeRef
+)
+if valueReplacementResult == .success {
+    setCursorToEnd(of: valueReplacement)
+    postCommandRight(destination: .pid)
+    setCursorToEnd(of: valueReplacement)
+    postCommandRight(destination: .eventTap)
+    setCursorToEnd(of: valueReplacement)
+    if waitForInsertedTextAtEnd(valueReplacement) {
+        exit(0)
+    }
 }
 
 postTextEvents(destination: .eventTap)
@@ -3260,7 +3543,7 @@ if let previousPasteboardString {
 }
 
 let finalValue = currentFocusedValue()
-fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): targeted text events, AX selected-text fallback, and foreground text events did not update the focused Chrome editor (beforeChars=\(initialValue.count), afterChars=\(finalValue.count), selectedTextResult=\(selectedTextResult.rawValue)).\n", stderr)
+fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): targeted text events, AX selected-text fallback, AX value replacement, foreground text events, and guarded paste did not update the focused Chrome editor (beforeChars=\(initialValue.count), afterChars=\(finalValue.count), selectedTextResult=\(selectedTextResult.rawValue), valueReplacementResult=\(valueReplacementResult.rawValue)).\n", stderr)
 exit(1)
 SWIFT
 }
@@ -3730,6 +4013,12 @@ type_chrome_smoke_text() {
   local text="$5"
 
   assert_chrome_ready_for_input "$fixture" "$chrome_pid" "$expected_url" "$label"
+  if chrome_fixture_is_public_text_field_demo "$fixture" \
+    && chrome_public_setup_text_with_devtools "$fixture" "$text"; then
+    wait_for_chrome_focused_text_contains "$fixture" "$chrome_pid" "$text" "$label" 8
+    return 0
+  fi
+
   if insert_chrome_smoke_text_with_ax "$fixture" "$chrome_pid" "$label" "$text"; then
     return 0
   fi
@@ -4329,10 +4618,10 @@ describe_plan() {
           echo "Plan add-on: rerun real Monaco and real ProseMirror in default Chrome AX mode after the forced renderer lane."
         fi
       elif [[ "$CHROME_FIXTURE" == "production-text-fields" ]]; then
-        echo "Plan: build/relaunch AutocompleteLab, then run bounded public Chrome textarea and contenteditable proof on W3Schools demo pages with disposable text."
+        echo "Plan: build/relaunch AutocompleteLab, then run bounded public Chrome textarea and contenteditable proof on top-level demo pages with disposable text."
         echo "Proof path: production text-field lanes use public URLs plus guarded coordinate focus and AX verification; Chrome JavaScript-from-Apple-Events is not required for these two lanes."
       elif chrome_fixture_is_public_text_field_demo "$CHROME_FIXTURE"; then
-        echo "Plan: build/relaunch AutocompleteLab, open the public W3Schools $CHROME_FIXTURE demo page in Chrome, type a disposable test fragment, then validate logs and traces."
+        echo "Plan: build/relaunch AutocompleteLab, open the public top-level $CHROME_FIXTURE demo page in Chrome, type a disposable test fragment, then validate logs and traces."
         echo "Proof path: public text-field proof uses guarded coordinate focus and AX verification; Chrome JavaScript-from-Apple-Events is not required for this lane."
       elif chrome_fixture_is_official_demo "$CHROME_FIXTURE"; then
         echo "Plan: build/relaunch AutocompleteLab, open the public official $CHROME_FIXTURE demo page in Chrome, type a disposable test fragment, then validate logs and traces."
@@ -5207,6 +5496,11 @@ run_chrome_fixture() {
   echo "Running Chrome fixture: $fixture"
 
   if chrome_fixture_uses_isolated_accessibility_chrome "$fixture"; then
+    if chrome_fixture_is_public_text_field_demo "$fixture"; then
+      CHROME_REMOTE_DEBUGGING_PORT="$(allocate_local_port)"
+    else
+      CHROME_REMOTE_DEBUGGING_PORT=""
+    fi
     launch_isolated_chrome_fixture "$chrome_url" "$tmp_dir"
     chrome_pid="$CHROME_LAST_LAUNCHED_PID"
     wait_for_chrome_expected_tab "$fixture" "$chrome_url" "initial isolated fixture load" "$chrome_pid" 12

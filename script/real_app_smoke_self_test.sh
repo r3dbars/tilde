@@ -53,7 +53,7 @@ if ! grep -F "disposable Chrome contenteditable fixture" "$TMP_DIR/chrome-conten
 fi
 
 script/real_app_smoke.sh chrome --fixture textarea-public --dry-run >"$TMP_DIR/chrome-textarea-public.txt"
-if ! grep -F "public W3Schools textarea-public demo page" "$TMP_DIR/chrome-textarea-public.txt" >/dev/null; then
+if ! grep -F "public top-level textarea-public demo page" "$TMP_DIR/chrome-textarea-public.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome public textarea dry-run plan" >&2
   exit 1
 fi
@@ -63,7 +63,7 @@ if ! grep -F "JavaScript-from-Apple-Events is not required" "$TMP_DIR/chrome-tex
 fi
 
 script/real_app_smoke.sh chrome --fixture contenteditable-public --dry-run >"$TMP_DIR/chrome-contenteditable-public.txt"
-if ! grep -F "public W3Schools contenteditable-public demo page" "$TMP_DIR/chrome-contenteditable-public.txt" >/dev/null; then
+if ! grep -F "public top-level contenteditable-public demo page" "$TMP_DIR/chrome-contenteditable-public.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome public contenteditable dry-run plan" >&2
   exit 1
 fi

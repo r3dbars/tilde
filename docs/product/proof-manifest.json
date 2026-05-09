@@ -352,23 +352,21 @@
     },
     {
       "surface": "Chrome text fields",
-      "status": "partial",
+      "status": "complete",
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-textarea.png",
         "docs/product/visual-placement-screenshots/chrome-contenteditable.png"
       ],
-      "gaps": [
-        "Production Chrome text-field proof is defined but still missing: run the bounded public W3Schools textarea/contenteditable lane with disposable text and strict screenshot tracing."
-      ],
+      "gaps": [],
       "requirements": [
         {
           "id": "production-chrome-text-fields",
-          "status": "pending",
-          "summary": "Run bounded screenshot-backed smoke proof for representative production Chrome text fields beyond local fixtures.",
+          "status": "passed",
+          "summary": "Bounded screenshot-backed smoke proof now covers representative production Chrome text fields beyond local fixtures.",
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture production-text-fields",
           "safePath": [
-            "textarea-public: https://www.w3schools.com/tags/tryit.asp?filename=tryhtml_textarea",
-            "contenteditable-public: https://www.w3schools.com/tags/tryit.asp?filename=tryhtml5_global_contenteditable"
+            "textarea-public: https://www.editpad.org/",
+            "contenteditable-public: https://yabwe.github.io/medium-editor/"
           ],
           "proofRows": [
             {

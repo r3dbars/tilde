@@ -455,11 +455,11 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             renderMode: .inlineAdjacent,
             insertionMode: .axThenKeyEvents,
             fallbackRenderMode: .floatingMirror,
-            fallbackInsertionMode: .keyEvents,
+            fallbackInsertionMode: .axValueReplacement,
             anchorLadder: [.caret, .field],
             knownFailureModes: ["textarea support differs from rich editors", "zero-height caret bounds can occur"],
             allowsDescendantTextFallback: true,
-            notes: "Yellow browser target. Prefer proof-gated synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback for unreadable or detached surfaces. Prefer AX selected-text insertion for focused textarea surfaces that expose writable text, with key-event fallback for richer browser editors."
+            notes: "Yellow browser target. Prefer proof-gated synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback for unreadable or detached surfaces. Prefer AX selected-text insertion and hardware key events first, then verified AX value replacement when public browser editors report selected-text success without changing value."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.openai.codex",

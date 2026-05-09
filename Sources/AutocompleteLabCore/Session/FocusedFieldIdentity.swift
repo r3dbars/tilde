@@ -197,6 +197,33 @@ public struct FocusedTargetFingerprint: Equatable, Hashable, Sendable {
         return true
     }
 
+    public func matchesPostInsertionScopeAllowingElementHeightChange(
+        _ current: FocusedTargetFingerprint,
+        maxGeometryDelta: Int = 4
+    ) -> Bool {
+        let expected = postInsertionScope
+        let actual = current.postInsertionScope
+
+        guard expected.role == actual.role,
+              expected.subrole == actual.subrole,
+              expected.elementFingerprint == actual.elementFingerprint,
+              expected.windowIdentifier == actual.windowIdentifier,
+              expected.windowBounds == actual.windowBounds else {
+            return false
+        }
+
+        guard let expectedBounds = expected.elementBounds,
+              let actualBounds = actual.elementBounds else {
+            return expected.elementBounds == actual.elementBounds
+        }
+
+        return abs(expectedBounds.x - actualBounds.x) <= maxGeometryDelta
+            && abs(expectedBounds.y - actualBounds.y) <= maxGeometryDelta
+            && abs(expectedBounds.width - actualBounds.width) <= maxGeometryDelta
+            && expectedBounds.height > 0
+            && actualBounds.height > 0
+    }
+
     public var postInsertionScope: FocusedTargetFingerprint {
         FocusedTargetFingerprint(
             role: role,
