@@ -286,6 +286,26 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Fast word selection can opt into predictive fallback")
+    func fastWordSelectionPredictiveFallback() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+
+        let quietSelection = orchestrator.fastWordSelection(
+            for: "Smoke proof feels",
+            recentWords: []
+        )
+        let proactiveSelection = orchestrator.fastWordSelection(
+            for: "Smoke proof feels",
+            recentWords: [],
+            allowPredictiveFallback: true
+        )
+
+        #expect(quietSelection.suggestion == nil)
+        #expect(proactiveSelection.suggestion?.visibleText == " instant")
+        #expect(proactiveSelection.traceMetadata["candidateSelectionSource"] == "predictive-word-fallback")
+    }
+
+    @MainActor
     @Test("App model result metadata is trace safe")
     func appModelResultMetadataIsTraceSafe() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
