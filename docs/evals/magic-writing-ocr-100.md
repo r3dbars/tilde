@@ -213,6 +213,17 @@ Time: 2026-05-09T00:36:00Z
 - New trace slices: Chrome textarea 60130-60154, contenteditable 60155-60177, editor-like 60178-60202, monaco-like 60203-60235, prosemirror-like 60236-60260, monaco-real 60261-60296, prosemirror-real 60297-60326, chat-like 60327-60351, TextEdit 60361-60370.
 - Remaining proof gaps are unchanged in shape: Notes title/body/checklist, Obsidian, default-Chrome real Monaco/ProseMirror AX, Codex same-slice no-submit, Claude Code, and Claude desktop.
 
+## Latest Notes Body Harness Iteration
+
+2026-05-09T00:45Z pass: moved Notes body proof away from fragile hand setup.
+
+- Added a guarded `notes-body` path to `script/real_app_smoke.sh`.
+- The harness now creates a fresh disposable Notes note via UI events, types only the smoke title plus `Autocomplete smoke` marker, then refuses to continue unless the body text view contains that marker.
+- The earlier Notes probe failed safely when no marker-bearing note body was visible, before any typing happened.
+- A direct Notes AppleScript setup path was rejected because Notes scripting hung on this machine, so the harness now avoids scanning or scripting the user's existing notes.
+- Validation run so far: `bash -n script/real_app_smoke.sh`, `script/real_app_smoke.sh notes-body --dry-run --manual-gate`, and `git diff --check` pass.
+- Live Notes proof is still pending because another real-app smoke run is currently compiling a Metal runtime in a different worktree; rerun `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate` when that clears.
+
 ## 100 Test Situations
 
 | # | App | Situation | Target behavior | Score |
