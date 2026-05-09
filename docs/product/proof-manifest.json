@@ -28,11 +28,51 @@
             "reference": "docs/product/visual-placement-screenshots/textedit-inline.png"
           },
           {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/textedit-light.png"
+          },
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/textedit-dark.png"
+          },
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/textedit-long-wrap.png"
+          },
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/textedit-narrow.png"
+          },
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/textedit-scrolled.png"
+          },
+          {
             "kind": "manual-smoke",
             "reference": "TextEdit/default"
+          },
+          {
+            "kind": "manual-smoke",
+            "reference": "TextEdit/textedit-light"
+          },
+          {
+            "kind": "manual-smoke",
+            "reference": "TextEdit/textedit-dark"
+          },
+          {
+            "kind": "manual-smoke",
+            "reference": "TextEdit/textedit-long-wrap"
+          },
+          {
+            "kind": "manual-smoke",
+            "reference": "TextEdit/textedit-narrow"
+          },
+          {
+            "kind": "manual-smoke",
+            "reference": "TextEdit/textedit-scrolled"
           }
         ],
-        "notes": "Reference native target with current strict visual and insertion proof."
+        "notes": "Reference native target with current strict visual and insertion proof across default, light, dark, wrapped, narrow, and scrolled TextEdit lanes."
       },
       {
         "bundle": "com.apple.Notes",
@@ -346,7 +386,44 @@
         "requiresVisualStrictComplete": true
       },
       "screenshots": [
-        "docs/product/visual-placement-screenshots/textedit-inline.png"
+        "docs/product/visual-placement-screenshots/textedit-inline.png",
+        "docs/product/visual-placement-screenshots/textedit-light.png",
+        "docs/product/visual-placement-screenshots/textedit-dark.png",
+        "docs/product/visual-placement-screenshots/textedit-long-wrap.png",
+        "docs/product/visual-placement-screenshots/textedit-narrow.png",
+        "docs/product/visual-placement-screenshots/textedit-scrolled.png"
+      ],
+      "requirements": [
+        {
+          "id": "textedit-light",
+          "status": "complete",
+          "summary": "Current light-mode TextEdit placement proof with two verified accepts and strict screenshot trace evidence.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-light"
+        },
+        {
+          "id": "textedit-dark",
+          "status": "complete",
+          "summary": "Current dark-mode TextEdit placement proof with two verified accepts and strict screenshot trace evidence.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-dark"
+        },
+        {
+          "id": "textedit-long-wrap",
+          "status": "complete",
+          "summary": "Current wrapped-line TextEdit placement proof with two verified accepts and strict screenshot trace evidence.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-long-wrap"
+        },
+        {
+          "id": "textedit-narrow",
+          "status": "complete",
+          "summary": "Current narrow/resized-window TextEdit placement proof with two verified accepts and strict screenshot trace evidence.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-narrow"
+        },
+        {
+          "id": "textedit-scrolled",
+          "status": "complete",
+          "summary": "Current scrolled-document TextEdit placement proof with two verified accepts and strict screenshot trace evidence.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-scrolled"
+        }
       ],
       "gaps": []
     },

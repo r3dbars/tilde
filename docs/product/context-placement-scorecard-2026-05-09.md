@@ -4,9 +4,10 @@ Placement-only scorecard for Autocomplete Lab. This does not grade model
 quality, speed, copy quality, onboarding, design polish, or usefulness.
 
 Base commit checked: `e8d8fdc9`. Branch: `codex/context-placement-scorecard-9361`.
-Display state on this Mac: one main Retina display plus one online 2560x1440
-secondary display. Secondary-display placement remains a real proof gap unless
-a row below names current screenshot-backed proof for it.
+Display state on this Mac during the latest pass: `NSScreen.screens` reported
+one active display. Secondary-display placement is therefore not counted for
+surfaces refreshed after this note unless a later row says a second display was
+available.
 
 ## Gate Output Snapshot
 
@@ -21,6 +22,11 @@ Commands run in this pass:
 ./script/check_prompt_app_proof.sh
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh obsidian --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh codex --manual-gate --skip-build
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit-light
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit-dark
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit-long-wrap
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit-narrow
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh textedit-scrolled
 ```
 
 Results:
@@ -35,6 +41,7 @@ Results:
 - Codex live refresh: failed safely with `Could not find a safe disposable Codex composer.`
 - Chrome CodeMirror official live refresh: passed at 2026-05-09T12:02:35Z with 2 verified accepts, strict visual trace evidence, and screenshot `chrome-codemirror-official.png`.
 - Chrome Monaco official and ProseMirror official live refreshes: failed closed because this Chrome profile still rejects JavaScript from Apple Events and AX could not find a verified official editor target on those pages.
+- TextEdit variant refresh: light, dark, wrapped line, narrow window, and scrolled document all passed with 2 verified accepts each and strict screenshot trace evidence. During this pass, only one display was available.
 
 ## Scores
 
@@ -44,7 +51,7 @@ no stale visible suggestion, and no accidental submit.
 
 | Surface | Score | Current evidence | Missing proof or failure reason | Next action |
 | --- | ---: | --- | --- | --- |
-| TextEdit | 96 | Current strict visual/manual proof passes; screenshot `textedit-inline.png`; exact disposable window targeting exists. | Dark/light, secondary display, and more resize/multi-window variants are not fully proven in this scorecard. | Run `textedit-light`, `textedit-dark`, `textedit-long-wrap`, `textedit-narrow`, and secondary-display proof. |
+| TextEdit | 100 | Current strict visual/manual proof covers default, [light](visual-placement-screenshots/textedit-light.png), [dark](visual-placement-screenshots/textedit-dark.png), [wrapped line](visual-placement-screenshots/textedit-long-wrap.png), [narrow/resized window](visual-placement-screenshots/textedit-narrow.png), and [scrolled document](visual-placement-screenshots/textedit-scrolled.png). Each refreshed lane has 2 verified accepts into the exact TextEdit document. The harness targets the disposable AX window title while other TextEdit windows are present, and no secondary display was available in `NSScreen.screens` for this pass. | None for the currently available TextEdit placement cases. | Keep this green; rerun a secondary-display lane if a second display is connected later. |
 | Apple Notes title | 90 | Current manual gate passes; screenshot `notes-title.png`; title lane is separate. | More title lengths and same-slice undo/accept recovery proof are missing. | Run `notes-title-undo` and short/long title variants. |
 | Apple Notes body | 90 | Current manual gate passes; screenshot `notes-body.png`; body lane is separate. | More body lengths, scroll, and same-slice undo/accept recovery proof are missing. | Run `notes-body-undo` plus long/scrolled body proof. |
 | Apple Notes checklist | 88 | Current manual gate passes; screenshot `notes-checklist.png`; checklist lane is separate. | Checked rows, long rows, scroll, and undo proof are missing. | Run `notes-checklist-undo`, checked-row, and long-row variants. |
