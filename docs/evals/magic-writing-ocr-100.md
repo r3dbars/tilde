@@ -426,8 +426,8 @@ Time: 2026-05-09T00:36:00Z
 - Fix: Chrome now uses `axThenKeyEvents` at the profile level and Chromium key-event insertion falls back to hardware key-code events for plain prose, while the smoke harness opens a pid-targeted isolated Chrome window instead of mutating the user's default Chrome session.
 - Run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea`.
 - Result: Chrome textarea passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
-- Evidence: diagnostics lines 241297-241368 and trace lines 61172-61187 in the local AutocompleteLab logs.
-- Build: `commit:32ea5b6f9513`, app SHA `65260876a55f50c440f56d63fe70797ada90d19c51905075f300ec352d65de6b`.
+- Evidence: diagnostics lines 241391-241474 and trace lines 61189-61214 in the local AutocompleteLab logs.
+- Build: `commit:60fd4234083d`, app SHA `f4de1a5dd0a629f0b5d9fd78fd88831bf04d1e0b2ce0a81361acecb4ae97d90a`.
 - Gate movement: Chrome textarea is now green on the current build proof; `manual_smoke_status.sh --require-all` still reports 29 remaining target-app proof gaps because the broader matrix has stale or pending rows.
 
 ## Next Loop
