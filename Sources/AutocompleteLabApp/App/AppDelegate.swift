@@ -345,6 +345,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(silenceFieldItem)
         menu.addItem(toggleItem)
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
+        let feedbackItem = NSMenuItem(
+            title: BetaFeedbackLink.menuTitle,
+            action: #selector(openFeedbackForm),
+            keyEquivalent: ""
+        )
+        feedbackItem.toolTip = BetaFeedbackLink.privacyNote
+        menu.addItem(feedbackItem)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Request Accessibility", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Open Accessibility Settings", action: #selector(openAccessibilitySettings), keyEquivalent: ""))
@@ -6421,6 +6428,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionAggressiveness: settingsSuggestionAggressivenessState,
             lastSuggestionDecision: lastSuggestionDecision
         )
+    }
+
+    @objc
+    private func openFeedbackForm() {
+        let link = BetaFeedbackLink()
+        if NSWorkspace.shared.open(link.url) {
+            DiagnosticsLog.shared.record(
+                "feedback-form-opened",
+                metadata: ["destination": "github-beta-issue-template"]
+            )
+        } else {
+            DiagnosticsLog.shared.record(
+                "feedback-form-open-failed",
+                metadata: ["destination": "github-beta-issue-template"]
+            )
+        }
     }
 
     @objc
