@@ -16,6 +16,7 @@ DEFAULT_SCORECARD = ROOT_DIR / "docs/product/deep-dive-scorecard-2026-05-06.md"
 DEFAULT_APP_PROOF_MATRIX = ROOT_DIR / "docs/product/app-proof-matrix.md"
 DEFAULT_COMPATIBILITY_PROFILES = ROOT_DIR / "Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift"
 PROOF_METADATA_SOURCE = ROOT_DIR / "Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift"
+HOST_POLICY_SOURCE = ROOT_DIR / "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift"
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 TRACE_REFERENCE_PATTERN = re.compile(
     r"lines\s+(\d+)(?:\s*-\s*(\d+)|\+)?\s+in\s+`?([^`;\s]+)`?"
@@ -30,6 +31,7 @@ PROOF_EVENT_TYPES = {
     "insertionVerified",
     "insertionFailed",
     "acceptedTextEdited",
+    "acceptanceRetentionCleared",
     "caretGeometryFailed",
 }
 PROMPT_NO_SUBMIT_BUNDLES = {
@@ -97,6 +99,14 @@ def current_proof_versions() -> dict[str, str]:
     return versions
 
 
+def current_host_policy_version() -> str:
+    source = HOST_POLICY_SOURCE.read_text(encoding="utf-8")
+    match = re.search(r'currentPolicyVersion\s*=\s*"([^"]+)"', source)
+    if not match:
+        fail(f"could not find currentPolicyVersion in {HOST_POLICY_SOURCE}")
+    return match.group(1)
+
+
 def current_commit() -> str:
     try:
         return subprocess.check_output(
@@ -114,16 +124,22 @@ def compatibility_profiles(path: Path) -> dict[str, dict[str, str]]:
         fail(f"missing compatibility profile source {path}")
 
     source = path.read_text(encoding="utf-8")
-    pattern = re.compile(
-        r'CompatibilityProfile\(\s*bundleIdentifier:\s*"([^"]+)",\s*'
-        r'displayName:\s*"([^"]+)".*?supportLevel:\s*\.([A-Za-z0-9_]+)',
-        re.DOTALL,
-    )
+    starts = [match.start() for match in re.finditer(r"CompatibilityProfile\(", source)]
     profiles: dict[str, dict[str, str]] = {}
-    for bundle, display_name, support_level in pattern.findall(source):
+    for index, start in enumerate(starts):
+        end = starts[index + 1] if index + 1 < len(starts) else len(source)
+        block = source[start:end]
+        bundle_match = re.search(r'bundleIdentifier:\s*"([^"]+)"', block)
+        display_match = re.search(r'displayName:\s*"([^"]+)"', block)
+        support_match = re.search(r"supportLevel:\s*\.([A-Za-z0-9_]+)", block)
+        if not bundle_match or not display_match or not support_match:
+            continue
+        prompt_safety_match = re.search(r"promptAppSafetyMode:\s*\.([A-Za-z0-9_]+)", block)
+        bundle = bundle_match.group(1)
         profiles[bundle] = {
-            "displayName": display_name,
-            "supportLevel": support_level,
+            "displayName": display_match.group(1),
+            "supportLevel": support_match.group(1),
+            "promptAppSafetyMode": prompt_safety_match.group(1) if prompt_safety_match else "notPrompt",
         }
 
     if not profiles:
@@ -271,6 +287,34 @@ def validate_requirements(name: str, surface: dict, failures: list[str]) -> list
     return valid
 
 
+def validate_required_manual_smokes(name: str, surface: dict, failures: list[str]) -> list[dict]:
+    required_smokes = surface.get("requiredManualSmokes", [])
+    if required_smokes in (None, []):
+        return []
+    if not isinstance(required_smokes, list):
+        failures.append(f"{name}: requiredManualSmokes must be a list")
+        return []
+
+    valid: list[dict] = []
+    seen: set[str] = set()
+    for index, smoke in enumerate(required_smokes, start=1):
+        if not isinstance(smoke, dict):
+            failures.append(f"{name}: requiredManualSmokes entry {index} must be an object")
+            continue
+        smoke_id = str(smoke.get("id", "")).strip()
+        if not smoke_id:
+            failures.append(f"{name}: requiredManualSmokes entry {index} is missing id")
+        elif smoke_id in seen:
+            failures.append(f"{name}: duplicate required manual smoke id: {smoke_id}")
+        seen.add(smoke_id)
+
+        for field in ["app", "bundle", "proof"]:
+            if not str(smoke.get(field, "")).strip():
+                failures.append(f"{name}: required manual smoke {smoke_id or index} is missing {field}")
+        valid.append(smoke)
+    return valid
+
+
 def pending_requirement_labels(requirements: list[dict]) -> list[str]:
     return [
         requirement_label(requirement)
@@ -391,6 +435,18 @@ def is_full_accept_event(event: dict) -> bool:
     )
 
 
+def is_accepted_insertion_undo_event(event: dict) -> bool:
+    metadata = event.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    outcome = event.get("outcome") or metadata.get("outcome")
+    reason = event.get("reason") or metadata.get("reason")
+    return (
+        event.get("type") == "acceptanceRetentionCleared"
+        and outcome == "undone"
+        and reason == "accepted-insertion-undone"
+    )
+
+
 def is_prompt_no_submit_surface(name: str, claim: dict) -> bool:
     bundle = str(claim.get("bundle", "")).strip()
     proof = str(claim.get("proof", "")).strip().lower()
@@ -476,6 +532,14 @@ def verify_manual_trace_slice(
         if not screenshot_events:
             failures.append(f"{name}: strict visual proof requires screenshot-backed presented trace events")
 
+    if claim.get("requiresUndo") is True:
+        undo_events = [event for event in app_events if is_accepted_insertion_undo_event(event)]
+        if not undo_events:
+            failures.append(
+                f"{name}: undo proof requires acceptanceRetentionCleared "
+                "outcome=undone reason=accepted-insertion-undone"
+            )
+
     if require_prompt_no_submit and is_prompt_no_submit_surface(name, claim):
         submit_signals = [
             signal
@@ -518,6 +582,46 @@ def verify_manual_trace_slice(
     return failures, warnings, not failures
 
 
+def verify_manual_smoke_claim(
+    name: str,
+    claim: dict,
+    smoke_rows: list[dict[str, str]],
+    current_versions: dict[str, str],
+    verify_trace_slices: bool,
+    require_bounded_trace_slices: bool,
+    trace_window_lines: int,
+    require_prompt_no_submit: bool,
+    failures: list[str],
+    warnings: list[str],
+) -> int:
+    matched = find_manual_row(smoke_rows, claim)
+    if matched is None:
+        failures.append(
+            f"{name}: no manual smoke row for "
+            f"{claim.get('app')} {claim.get('bundle')} proof={claim.get('proof', 'default')}"
+        )
+        return 0
+
+    if claim.get("requiresVisualStrictComplete") is True and "strict-complete" not in matched["traceSlice"]:
+        failures.append(f"{name}: matched manual smoke row is missing visual strict-complete")
+
+    if not verify_trace_slices:
+        return 0
+
+    trace_failures, trace_warnings, trace_verified = verify_manual_trace_slice(
+        name,
+        claim,
+        matched,
+        current_versions,
+        require_bounded_trace_slices,
+        trace_window_lines,
+        require_prompt_no_submit,
+    )
+    failures.extend(trace_failures)
+    warnings.extend(trace_warnings)
+    return 1 if trace_verified else 0
+
+
 def referenced_scorecard_screenshots(path: Path) -> set[str]:
     if not path.exists():
         return set()
@@ -558,13 +662,15 @@ def verify_manifest(
     if manifest.get("schemaVersion") != 1:
         failures.append("schemaVersion must be 1")
 
+    expected_profiles = compatibility_profiles(compatibility_profiles_path)
     profile_coverage_count = 0
     if not skip_profile_coverage:
         profile_coverage_count = verify_profile_coverage(
             manifest,
-            compatibility_profiles(compatibility_profiles_path),
+            expected_profiles,
             failures,
         )
+    host_policy_count = verify_host_policy(manifest, expected_profiles, failures)
 
     proof_fingerprint = manifest.get("proofFingerprint", {})
     current_versions = current_proof_versions()
@@ -616,6 +722,7 @@ def verify_manifest(
 
         gaps = surface.get("gaps", [])
         requirements = validate_requirements(name, surface, failures)
+        required_manual_smokes = validate_required_manual_smokes(name, surface, failures)
         pending_requirements = pending_requirement_labels(requirements)
         if status == "complete":
             complete += 1
@@ -646,22 +753,73 @@ def verify_manifest(
             if not gaps and not pending_requirements:
                 failures.append(f"{name}: {status} surfaces must list at least one gap or pending requirement")
 
+        has_manual_smoke_claim = False
         manual_smoke = surface.get("manualSmoke")
-        if status == "complete" and not isinstance(manual_smoke, dict):
-            failures.append(f"{name}: complete proof requires manualSmoke")
-        elif isinstance(manual_smoke, dict):
-            matched = find_manual_row(smoke_rows, manual_smoke)
+        if isinstance(manual_smoke, dict):
+            has_manual_smoke_claim = True
+            verified_trace_slices += verify_manual_smoke_claim(
+                name,
+                manual_smoke,
+                smoke_rows,
+                current_versions,
+                verify_trace_slices,
+                require_bounded_trace_slices,
+                trace_window_lines,
+                require_all,
+                failures,
+                warnings,
+            )
+        elif manual_smoke is not None:
+            failures.append(f"{name}: manualSmoke must be an object")
+
+        manual_smoke_variants = surface.get("manualSmokeVariants")
+        if manual_smoke_variants is not None:
+            if not isinstance(manual_smoke_variants, list):
+                failures.append(f"{name}: manualSmokeVariants must be a list")
+            else:
+                for variant_index, variant in enumerate(manual_smoke_variants, start=1):
+                    if not isinstance(variant, dict):
+                        failures.append(
+                            f"{name}: manualSmokeVariants entry {variant_index} must be an object"
+                        )
+                        continue
+                    has_manual_smoke_claim = True
+                    variant_proof = str(variant.get("proof", "default")).strip() or "default"
+                    verified_trace_slices += verify_manual_smoke_claim(
+                        f"{name} proof={variant_proof}",
+                        variant,
+                        smoke_rows,
+                        current_versions,
+                        verify_trace_slices,
+                        require_bounded_trace_slices,
+                        trace_window_lines,
+                        require_all,
+                        failures,
+                        warnings,
+                    )
+
+        for required_smoke in required_manual_smokes:
+            has_manual_smoke_claim = True
+            required_smoke_id = str(required_smoke.get("id", "unnamed-required-smoke")).strip()
+            matched = find_manual_row(smoke_rows, required_smoke)
             if matched is None:
+                if status == "complete" or require_all:
+                    failures.append(
+                        f"{name}: missing required manual smoke {required_smoke_id}: "
+                        f"no manual smoke row for {required_smoke.get('app')} "
+                        f"{required_smoke.get('bundle')} proof={required_smoke.get('proof', 'default')}"
+                    )
+                continue
+
+            if required_smoke.get("requiresVisualStrictComplete") is True and "strict-complete" not in matched["traceSlice"]:
                 failures.append(
-                    f"{name}: no manual smoke row for "
-                    f"{manual_smoke.get('app')} {manual_smoke.get('bundle')} proof={manual_smoke.get('proof', 'default')}"
+                    f"{name}: required manual smoke {required_smoke_id} is missing visual strict-complete"
                 )
-            elif manual_smoke.get("requiresVisualStrictComplete") is True and "strict-complete" not in matched["traceSlice"]:
-                failures.append(f"{name}: matched manual smoke row is missing visual strict-complete")
-            elif verify_trace_slices:
+
+            if verify_trace_slices:
                 trace_failures, trace_warnings, trace_verified = verify_manual_trace_slice(
-                    name,
-                    manual_smoke,
+                    f"{name} required smoke {required_smoke_id}",
+                    required_smoke,
                     matched,
                     current_versions,
                     require_bounded_trace_slices,
@@ -672,6 +830,42 @@ def verify_manifest(
                 warnings.extend(trace_warnings)
                 if trace_verified:
                     verified_trace_slices += 1
+
+        if status == "complete" and not has_manual_smoke_claim:
+            failures.append(f"{name}: complete proof requires manualSmoke, manualSmokeVariants, or requiredManualSmokes")
+
+        for requirement in requirements:
+            requirement_status = str(requirement.get("status", "")).strip()
+            requirement_smoke = requirement.get("manualSmoke")
+            if requirement_smoke is None:
+                if (
+                    require_all
+                    and name.startswith("Apple Notes")
+                    and requirement_status == "complete"
+                ):
+                    failures.append(
+                        f"{name}: complete Notes requirement "
+                        f"{requirement.get('id', 'unnamed-requirement')} requires manualSmoke evidence"
+                    )
+                continue
+            if not isinstance(requirement_smoke, dict):
+                failures.append(
+                    f"{name}: requirement {requirement.get('id', 'unnamed-requirement')} manualSmoke must be an object"
+                )
+                continue
+            if requirement_status == "complete":
+                verified_trace_slices += verify_manual_smoke_claim(
+                    f"{name} requirement {requirement.get('id', 'unnamed-requirement')}",
+                    requirement_smoke,
+                    smoke_rows,
+                    current_versions,
+                    verify_trace_slices,
+                    require_bounded_trace_slices,
+                    trace_window_lines,
+                    require_all,
+                    failures,
+                    warnings,
+                )
 
         screenshots = surface.get("screenshots", [])
         if status == "complete" and not screenshots:
@@ -703,6 +897,7 @@ def verify_manifest(
     print(f"Pending surfaces: {len(pending)}")
     if not skip_profile_coverage:
         print(f"Profile coverage rows: {profile_coverage_count}")
+    print(f"Host policy rows: {host_policy_count}")
     if verify_trace_slices:
         print(f"Verified trace slices: {verified_trace_slices}")
     if partial:
@@ -797,6 +992,146 @@ def verify_profile_coverage(
     missing = sorted(set(expected_profiles) - set(seen))
     if missing:
         failures.append("profileCoverage missing bundle(s): " + ", ".join(missing))
+
+    return len(seen)
+
+
+def verify_host_policy(
+    manifest: dict,
+    expected_profiles: dict[str, dict[str, str]],
+    failures: list[str],
+) -> int:
+    host_policy = manifest.get("hostPolicy")
+    if not isinstance(host_policy, dict):
+        failures.append("hostPolicy must describe the versioned per-host safety policy")
+        return 0
+
+    policy_version = str(host_policy.get("policyVersion", "")).strip()
+    expected_policy_version = current_host_policy_version()
+    if policy_version != expected_policy_version:
+        failures.append(
+            f"hostPolicy.policyVersion is {policy_version!r}; expected {expected_policy_version!r}"
+        )
+
+    source = str(host_policy.get("source", "")).strip()
+    if source != "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift":
+        failures.append("hostPolicy.source must point at HostCompatibilityPolicy.swift")
+    elif not repo_path(source).exists():
+        failures.append(f"hostPolicy.source is missing: {source}")
+
+    entries = host_policy.get("entries")
+    if not isinstance(entries, list) or not entries:
+        failures.append("hostPolicy.entries must list every CompatibilityProfile bundle")
+        return 0
+
+    allowed_version_states = {"exact", "pending"}
+    allowed_runtime_states = {"userToggleAllowed", "proofModeOnly", "diagnosticsOnly", "disabled"}
+    allowed_proof_states = {"complete", "partial", "blocked", "pending"}
+    allowed_kill_switches = {
+        "none",
+        "perHostDisable",
+        "proofModeRequired",
+        "diagnosticsOnly",
+        "hardDisabled",
+    }
+    seen: dict[str, dict] = {}
+
+    for index, entry in enumerate(entries, start=1):
+        if not isinstance(entry, dict):
+            failures.append(f"hostPolicy entry {index} must be an object")
+            continue
+
+        bundle = str(entry.get("bundle", "")).strip()
+        if not bundle:
+            failures.append(f"hostPolicy entry {index} is missing bundle")
+            continue
+        if bundle in seen:
+            failures.append(f"hostPolicy duplicate bundle: {bundle}")
+        seen[bundle] = entry
+
+        if bundle not in expected_profiles:
+            failures.append(f"hostPolicy unknown bundle: {bundle}")
+            continue
+
+        expected = expected_profiles[bundle]
+        display_name = str(entry.get("displayName", "")).strip()
+        if display_name != expected["displayName"]:
+            failures.append(
+                f"hostPolicy {bundle}: displayName is {display_name!r}; expected {expected['displayName']!r}"
+            )
+
+        safety_mode = str(entry.get("safetyMode", "")).strip()
+        if safety_mode != expected["promptAppSafetyMode"]:
+            failures.append(
+                f"hostPolicy {bundle}: safetyMode is {safety_mode!r}; "
+                f"expected {expected['promptAppSafetyMode']!r}"
+            )
+
+        version_state = str(entry.get("versionState", "")).strip()
+        if version_state not in allowed_version_states:
+            failures.append(f"hostPolicy {bundle}: versionState must be exact or pending")
+        if version_state == "exact":
+            for key in ["hostVersion", "hostBuild", "versionSource"]:
+                if not str(entry.get(key, "")).strip():
+                    failures.append(f"hostPolicy {bundle}: exact version is missing {key}")
+        if version_state == "pending" and not str(entry.get("versionReason", "")).strip():
+            failures.append(f"hostPolicy {bundle}: pending version needs versionReason")
+
+        runtime_state = str(entry.get("runtimeState", "")).strip()
+        if runtime_state not in allowed_runtime_states:
+            failures.append(
+                f"hostPolicy {bundle}: runtimeState must be one of {', '.join(sorted(allowed_runtime_states))}"
+            )
+
+        proof_state = str(entry.get("proofState", "")).strip()
+        if proof_state not in allowed_proof_states:
+            failures.append(
+                f"hostPolicy {bundle}: proofState must be one of {', '.join(sorted(allowed_proof_states))}"
+            )
+
+        kill_switch = str(entry.get("killSwitch", "")).strip()
+        if kill_switch not in allowed_kill_switches:
+            failures.append(
+                f"hostPolicy {bundle}: killSwitch must be one of {', '.join(sorted(allowed_kill_switches))}"
+            )
+
+        if expected["supportLevel"] == "diagnosticsOnly" and runtime_state == "userToggleAllowed":
+            failures.append(f"hostPolicy {bundle}: diagnostics-only profiles cannot be user-toggle enabled")
+        if safety_mode == "disabled" and runtime_state not in {"disabled", "diagnosticsOnly", "proofModeOnly"}:
+            failures.append(f"hostPolicy {bundle}: disabled safety mode cannot allow normal suggestions")
+        if safety_mode == "wordOnly" and kill_switch != "proofModeRequired":
+            failures.append(f"hostPolicy {bundle}: word-only prompt hosts must have proofModeRequired kill switch")
+
+        artifacts = entry.get("proofArtifacts", [])
+        if artifacts is None:
+            artifacts = []
+        if not isinstance(artifacts, list):
+            failures.append(f"hostPolicy {bundle}: proofArtifacts must be a list")
+            artifacts = []
+        if proof_state == "complete" and not artifacts:
+            failures.append(f"hostPolicy {bundle}: complete proof needs proofArtifacts")
+        for artifact in artifacts:
+            if not isinstance(artifact, dict):
+                failures.append(f"hostPolicy {bundle}: proofArtifact must be an object")
+                continue
+            kind = str(artifact.get("kind", "")).strip()
+            reference = str(artifact.get("reference", "")).strip()
+            if not kind or not reference:
+                failures.append(f"hostPolicy {bundle}: proofArtifact needs kind and reference")
+                continue
+            if reference.startswith("docs/"):
+                artifact_path = repo_path(reference)
+                if not artifact_path.exists():
+                    failures.append(f"hostPolicy {bundle}: proof artifact missing: {reference}")
+                elif artifact_path.is_relative_to(ROOT_DIR) and not is_tracked(artifact_path):
+                    failures.append(f"hostPolicy {bundle}: proof artifact is not tracked: {reference}")
+
+        if not str(entry.get("notes", "")).strip():
+            failures.append(f"hostPolicy {bundle}: missing notes")
+
+    missing = sorted(set(expected_profiles) - set(seen))
+    if missing:
+        failures.append("hostPolicy missing bundle(s): " + ", ".join(missing))
 
     return len(seen)
 
