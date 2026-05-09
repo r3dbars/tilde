@@ -181,7 +181,8 @@ if ! grep -F "# status: pending - missing prompt no-submit confirmation" "$OUTPU
   exit 1
 fi
 
-script/manual_proof_refresh.sh --print >"$OUTPUT"
+AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$NO_FINGERPRINT_REPORT" \
+  script/manual_proof_refresh.sh --print >"$OUTPUT"
 for expected in \
   "# textedit - TextEdit" \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit" \

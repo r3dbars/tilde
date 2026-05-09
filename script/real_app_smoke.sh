@@ -1857,7 +1857,7 @@ focus_textedit_smoke_editor() {
 
   if [[ -n "$window_title" ]]; then
     local target_pid
-    target_pid="$(raise_textedit_smoke_window "$window_title" | tr -d '\r\n')"
+    target_pid="$(raise_textedit_smoke_window "$window_title" | tr -d '\r\n' || true)"
     if [[ -z "$target_pid" ]]; then
       echo "Could not resolve TextEdit smoke window pid for '$window_title'." >&2
       return 1
@@ -1882,7 +1882,7 @@ click_textedit_smoke_editor() {
 
   if [[ -n "$window_title" ]]; then
     local target_pid
-    target_pid="$(click_textedit_smoke_window "$window_title" | tr -d '\r\n')"
+    target_pid="$(click_textedit_smoke_window "$window_title" | tr -d '\r\n' || true)"
     if [[ -z "$target_pid" ]]; then
       echo "Could not resolve TextEdit smoke window pid for '$window_title'." >&2
       return 1
@@ -4245,14 +4245,14 @@ describe_plan() {
 }
 
 build_if_needed() {
-  if [[ "$SKIP_BUILD" == "1" ]]; then
-    return 0
+  if [[ "$SKIP_BUILD" != "1" ]]; then
+    AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1 \
+      AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 \
+      ./script/build_and_run.sh run
+    wait_for_current_autocomplete_lab_process
   fi
 
-  AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1 \
-    AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 \
-    ./script/build_and_run.sh run
-  wait_for_current_autocomplete_lab_process
+  refresh_build_archive_proof
 }
 
 wait_for_current_autocomplete_lab_process() {
@@ -4289,6 +4289,28 @@ wait_for_current_autocomplete_lab_process() {
       ps -p "$pid" -o pid=,command= 2>/dev/null || true
     done >&2
   exit 1
+}
+
+refresh_build_archive_proof() {
+  local app_bundle="dist/AutocompleteLab.app"
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/AutocompleteLab.zip}"
+  local archive_dir archive_name archive_abs
+
+  [[ -d "$app_bundle" ]] || return 0
+
+  archive_dir="$(dirname "$archive_path")"
+  archive_name="$(basename "$archive_path")"
+  mkdir -p "$archive_dir"
+  archive_abs="$(cd "$archive_dir" && pwd)/$archive_name"
+
+  rm -f "$archive_abs"
+  (cd dist && ditto -c -k --keepParent "AutocompleteLab.app" "$archive_abs")
+
+  local archive_sha
+  archive_sha="$(shasum -a 256 "$archive_abs" | awk '{print $1}')"
+  if [[ -n "$archive_sha" ]]; then
+    echo "Archive proof: $archive_path archive-sha256:$archive_sha"
+  fi
 }
 
 run_codex() {

@@ -49,7 +49,9 @@ running_app_services() {
 stale_app_bundles() {
   local search_root="$HOME/.codex/worktrees"
   [[ -d "$search_root" ]] || return 0
-  find "$search_root" -path "*/dist/$APP_NAME.app" -type d -prune 2>/dev/null || true
+  find "$search_root" \
+    \( -name .build -o -name .git -o -name .swiftpm -o -name node_modules -o -name DerivedData \) -type d -prune -o \
+    -path "*/dist/$APP_NAME.app" -type d -print 2>/dev/null || true
 }
 
 unregister_stale_app_bundles() {
