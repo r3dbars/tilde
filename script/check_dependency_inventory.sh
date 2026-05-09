@@ -46,7 +46,7 @@ for needle in \
   require_contains "$DOC" "$needle" "documented inventory item"
 done
 
-if rg -n 'Sentry|PostHog|Firebase|Amplitude|Mixpanel|Bugsnag|Crashlytics|TelemetryDeck' Package.swift Sources script >/tmp/autocomplete-dependency-forbidden-sdk.txt; then
+if rg -n 'Sentry|PostHog|Firebase|Amplitude|Mixpanel|Bugsnag|Crashlytics|TelemetryDeck' Package.swift Sources script --glob '!script/check_dependency_inventory.sh' >/tmp/autocomplete-dependency-forbidden-sdk.txt; then
   echo "unexpected analytics/crash SDK reference found" >&2
   cat /tmp/autocomplete-dependency-forbidden-sdk.txt >&2
   exit 1
