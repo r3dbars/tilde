@@ -33,7 +33,7 @@ A- rows as `partial`, even when they have a passing live smoke slice.
 | Chrome text fields | A- | [chrome-textarea.png](visual-placement-screenshots/chrome-textarea.png), [chrome-contenteditable.png](visual-placement-screenshots/chrome-contenteditable.png) | 2 verified accepts per local fixture in the manual smoke log. New production proof rows are `textarea-public` and `contenteditable-public`, covered by `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture production-text-fields`. | Local textarea and contenteditable fixtures are solid, and the bounded production path now uses disposable public W3Schools demo fields instead of private/random sites. Search, login, payment, and known hosted risky surfaces stay suppressed. | Needs the public W3Schools textarea/contenteditable run captured with strict screenshot-backed trace rows before this can become A. |
 | Browser editor fixtures | A- | [chrome-editor-like.png](visual-placement-screenshots/chrome-editor-like.png), [chrome-monaco-like.png](visual-placement-screenshots/chrome-monaco-like.png), [chrome-prosemirror-like.png](visual-placement-screenshots/chrome-prosemirror-like.png), [chrome-monaco-real.png](visual-placement-screenshots/chrome-monaco-real.png), [chrome-prosemirror-real.png](visual-placement-screenshots/chrome-prosemirror-real.png) | 2 verified accepts per fixture in the manual smoke log, including current stable-build `monaco-real` and `prosemirror-real` forced-renderer proof at 2026-05-09T00:14:44Z and 2026-05-09T00:14:58Z | Good proof for CodeMirror-like, Monaco-like, ProseMirror-like, real Monaco, and real ProseMirror under the isolated forced-renderer Chrome lane. Obsidian now has its own real CodeMirror row. The smoke harness now has guarded official-demo lanes for CodeMirror, Monaco, and ProseMirror. | Default Chrome AX currently exposes only browser chrome on this machine, and production editor variants are still missing until those official-demo lanes produce bounded screenshot-backed traces. |
 | Chrome chat-like composer | A | [chrome-chat-like.png](visual-placement-screenshots/chrome-chat-like.png) | Local chat-like fixture has 2 verified accepts with strict visual trace evidence and submit count zero; bounded HTTP browser-chat harness requires one-word Tab accept with submit, send-key collision, prompt mutation, and wrong-context counters at zero | This is now strong proof for the disposable local chat fixture plus the disposable HTTP browser-chat harness. It is not broad browser chat support. Browser-hosted ChatGPT, Slack, and Discord stay blocked by surface policy until exact real-service no-submit proof exists. | Broad chat apps still need their own exact proof before support. |
-| Codex | B- | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Prior verified accepts exist in the manual smoke log, but the current gate is one-word no-submit proof | Real dogfood screenshot exists, and insertion has passed separately. The profile stays diagnostics-only until one strict trace slice proves screenshot, one-word accept, and no prompt submit together. | Needs one strict visual trace slice that proves screenshot, one-word accept, and no prompt submit together. |
+| Codex | A | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Bounded strict visual smoke at 2026-05-09T02:45:42Z with exactly 1 verified one-word accept, strict screenshot evidence, and no prompt submit signal | Real dogfood proof now shows the ghost on the same line after the caret, backs up and restores any existing draft, accepts one word with Tab, verifies insertion in the composer, and records no submit-like trace signal. | Full accept stays disabled until a separate full-accept no-submit lane exists. |
 | Obsidian | A- | [obsidian.png](visual-placement-screenshots/obsidian.png) | Bounded strict visual smoke at 2026-05-07T21:15:51Z with 2 verified accepts and current proof fingerprints | Real CodeMirror proof now shows caret-bound synthetic mirror placement, strict screenshot evidence, Tab accept, and configured full accept in a disposable vault note. New proof lanes now separate default, non-default theme, split/side pane, and long scrolled note layouts. | Still partial until `obsidian-theme`, `obsidian-pane`, and `obsidian-long-note` each have bounded strict screenshot-backed trace rows. |
 | Apple Notes title | A- | [notes-title.png](visual-placement-screenshots/notes-title.png) | Bounded strict visual smoke at 2026-05-07T21:24:14Z with 2 verified accepts and current proof fingerprints | Title proof is now separate from generic Notes evidence. The ghost is inline after the title caret and insertion verifies in the same bounded trace slice. Undo remains degraded until `notes-title-undo` records same-slice proof. | More title lengths; run `notes-title-undo` for same-slice undo proof. |
 | Apple Notes body | A- | [notes-body.png](visual-placement-screenshots/notes-body.png) | Bounded strict visual smoke at 2026-05-07T23:33:48Z with 2 verified accepts and current proof fingerprints | Body proof is now separate from generic Notes evidence. The ghost is inline after the body caret, Option-Tab full accept verifies, and suffix retention no longer misclassifies `dictation` as deleted. Undo remains degraded until `notes-body-undo` records same-slice proof. | More body lengths; run `notes-body-undo` for same-slice undo proof. |
@@ -43,23 +43,22 @@ A- rows as `partial`, even when they have a passing live smoke slice.
 
 ## Required Next Proof
 
-1. Run `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate` with disposable prompt text containing `AUTOCOMPLETE_LAB_CODEX_PROOF`, then keep one trace slice that proves visual placement plus one-word accept without submit.
-2. Expand Obsidian coverage with the required lanes:
+1. Expand Obsidian coverage with the required lanes:
    `obsidian-theme`, `obsidian-pane`, and `obsidian-long-note`.
-3. Expand Claude desktop same-baseline proof across prompt layouts:
+2. Expand Claude desktop same-baseline proof across prompt layouts:
    `claude-empty`, `claude-long`, `claude-wrapped`, `claude-narrow`,
    `claude-context`, `claude-light`, and `claude-dark`.
-4. Run `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture production-text-fields` and keep strict rows for `textarea-public` and `contenteditable-public`.
-5. Refresh default-Chrome real-editor proof only after normal Chrome exposes the
+3. Run `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture production-text-fields` and keep strict rows for `textarea-public` and `contenteditable-public`.
+4. Refresh default-Chrome real-editor proof only after normal Chrome exposes the
    editor AX tree, or replace it with another bounded safe production proof path.
-6. Run the guarded official Chrome editor lanes: `codemirror-official`,
+5. Run the guarded official Chrome editor lanes: `codemirror-official`,
    `monaco-official`, and `prosemirror-official`. Keep them non-A until each
    lane has bounded screenshot-backed trace evidence. The smoke harness now
    refuses concurrent runs, checks the active Chrome URL, fails fast when
    Chrome's JavaScript-from-Apple-Events setting blocks official-demo focus,
    requires a focused editable web AX target, and verifies Chrome setup text
    against the focused editor value before proceeding.
-7. Add real production proof paths for Google Docs, Notion, browser ChatGPT,
+6. Add real production proof paths for Google Docs, Notion, browser ChatGPT,
    browser Slack, and browser Discord before removing their
    `unsupported-browser-surface` block.
 
