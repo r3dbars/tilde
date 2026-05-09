@@ -323,6 +323,18 @@ if ! grep -F "Proof mode bundle(s): com.openai.codex" "$TMP_DIR/codex.txt" >/dev
   echo "real app smoke self-test did not print the Codex proof mode bundle" >&2
   exit 1
 fi
+if [[ "$(grep -F "seed_codex_proof_prompt" script/real_app_smoke.sh | wc -l | tr -d ' ')" -lt 2 ]]; then
+  echo "real app smoke self-test expected Codex proof to refocus the seeded composer before Tab" >&2
+  exit 1
+fi
+if ! grep -F "codex-proof-snapshot-fast-path" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected proof-only Codex snapshot fast path diagnostics" >&2
+  exit 1
+fi
+if ! grep -F "codex-proof-insert-verification-fast-path" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected proof-only Codex insertion verification fast path diagnostics" >&2
+  exit 1
+fi
 
 script/real_app_smoke.sh claude-code --dry-run >"$TMP_DIR/claude-code.txt"
 if ! grep -F "one-word Tab accept without submit" "$TMP_DIR/claude-code.txt" >/dev/null; then

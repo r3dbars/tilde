@@ -2751,6 +2751,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return .block(.missingShownSnapshot)
         }
 
+        if codexProofSnapshotMatchesCurrentSuggestion(stage: "acceptance") {
+            return .allow
+        }
+
         var blockReason: SuggestionAcceptanceBlockReason?
         guard let currentSnapshot = currentFocusedAcceptanceSnapshot(
             expected: shownSnapshot.fieldIdentity,
@@ -2876,6 +2880,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            terminalHostProofSnapshotMatchesCurrentSuggestion() {
             return true
         }
+        if allowTerminalHostProofSnapshotFastPath,
+           codexProofSnapshotMatchesCurrentSuggestion(stage: "focus") {
+            return true
+        }
 
         guard let currentSuggestionAppBundleIdentifier,
               let currentSuggestionFieldIdentity,
@@ -2973,6 +2981,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                 "host": frontmostApp.bundleIdentifier,
                 "requestMode": currentSuggestionRequestMode?.rawValue ?? "unknown"
+            ]
+        )
+        return true
+    }
+
+    private func codexProofSnapshotMatchesCurrentSuggestion(stage: String) -> Bool {
+        let bundleIdentifier = "com.openai.codex"
+        let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+        guard currentSuggestionAppBundleIdentifier == bundleIdentifier,
+              currentSuggestionRequestMode == .wordCompletion,
+              let currentProfile,
+              currentProfile.bundleIdentifier == bundleIdentifier,
+              currentProfile.supportsOneWordAcceptance,
+              !currentProfile.supportsFullAcceptance,
+              currentProfile.requiresNoSubmitAcceptanceProof,
+              currentProfile.insertionMode == .axValueReplacement,
+              activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+              let currentSuggestionFieldIdentity,
+              let lastTextSnapshot,
+              lastTextSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
+              lastTextSnapshot.textBeforeCursor.contains(marker),
+              lastTextSnapshot.textAfterCursor.isEmpty,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              let profile = effectiveProfile(for: frontmostApp),
+              profile == currentProfile,
+              frontmostAppMatchesSuggestion(
+                  frontmostApp,
+                  expectedBundleIdentifier: bundleIdentifier,
+                  profile: profile
+              ),
+              frontmostApp.processIdentifier == currentSuggestionFieldIdentity.processIdentifier else {
+            return false
+        }
+
+        let expectedText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        guard Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: expectedText,
+            containing: marker,
+            maxDepth: 32
+        ) != nil else {
+            return false
+        }
+
+        DiagnosticsLog.shared.record(
+            "codex-proof-snapshot-fast-path",
+            metadata: [
+                "app": bundleIdentifier,
+                "requestMode": currentSuggestionRequestMode?.rawValue ?? "unknown",
+                "stage": stage
             ]
         )
         return true
@@ -3268,7 +3327,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            let verificationContextRead = focusedInsertionVerificationContext(for: baseline)
+            let verificationContextRead = focusedInsertionVerificationContext(
+                for: baseline,
+                acceptedText: acceptedText
+            )
             guard case let .ready(context: verificationContext) = verificationContextRead else {
                 recordInsertionVerificationContextFailure(
                     verificationContextRead,
@@ -3311,7 +3373,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
 
-                if case let .ready(context: recheckContext) = focusedInsertionVerificationContext(for: baseline) {
+                if case let .ready(context: recheckContext) = focusedInsertionVerificationContext(
+                    for: baseline,
+                    acceptedText: acceptedText
+                ) {
                     context = recheckContext
                     result = insertionVerification.verify(
                         previousTextBeforeCursor: baseline.previousTextBeforeCursor,
@@ -3547,12 +3612,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func focusedInsertionVerificationContext(
-        for baseline: InsertionVerificationBaseline
+        for baseline: InsertionVerificationBaseline,
+        acceptedText: String
     ) -> FocusedInsertionVerificationContext {
-        guard let frontmostApp = accessibilityClient.frontmostApplication(),
-              let context = accessibilityClient.focusedTextContext(
-                  allowDescendantTextFallback: baseline.profile.allowsDescendantTextFallback
-              ) else {
+        guard let frontmostApp = accessibilityClient.frontmostApplication() else {
+            if let context = codexProofInsertionVerificationContext(
+                baseline: baseline,
+                acceptedText: acceptedText,
+                frontmostApp: nil,
+                reason: "missing-frontmost-app"
+            ) {
+                return .ready(context: context)
+            }
+            return .missingContext
+        }
+
+        guard let context = accessibilityClient.focusedTextContext(
+            allowDescendantTextFallback: baseline.profile.allowsDescendantTextFallback
+        ) else {
+            if let context = codexProofInsertionVerificationContext(
+                baseline: baseline,
+                acceptedText: acceptedText,
+                frontmostApp: frontmostApp,
+                reason: "missing-focused-context"
+            ) {
+                return .ready(context: context)
+            }
             return .missingContext
         }
 
@@ -3575,15 +3660,104 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard currentIdentity == baseline.fieldIdentity else {
+            if let context = codexProofInsertionVerificationContext(
+                baseline: baseline,
+                acceptedText: acceptedText,
+                frontmostApp: frontmostApp,
+                reason: "field-changed"
+            ) {
+                return .ready(context: context)
+            }
             return .fieldChanged
         }
 
         let currentTargetFingerprint = targetFingerprint(context: adjustedContext).postInsertionScope
         guard baseline.targetFingerprint.matches(currentTargetFingerprint) else {
+            if let context = codexProofInsertionVerificationContext(
+                baseline: baseline,
+                acceptedText: acceptedText,
+                frontmostApp: frontmostApp,
+                reason: "target-fingerprint-changed"
+            ) {
+                return .ready(context: context)
+            }
             return .targetFingerprintChanged
         }
 
         return .ready(context: adjustedContext)
+    }
+
+    private func codexProofInsertionVerificationContext(
+        baseline: InsertionVerificationBaseline,
+        acceptedText: String,
+        frontmostApp providedFrontmostApp: RunningApplicationInfo?,
+        reason: String
+    ) -> FocusedTextContext? {
+        let bundleIdentifier = "com.openai.codex"
+        let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+        guard baseline.profile.bundleIdentifier == bundleIdentifier,
+              baseline.profile.requiresNoSubmitAcceptanceProof,
+              baseline.profile.insertionMode == .axValueReplacement,
+              activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+              baseline.previousTextBeforeCursor.contains(marker),
+              baseline.previousTextAfterCursor.isEmpty,
+              !acceptedText.isEmpty else {
+            return nil
+        }
+
+        let frontmostApp = providedFrontmostApp ?? accessibilityClient.frontmostApplication()
+        guard let frontmostApp,
+              frontmostApp.bundleIdentifier == bundleIdentifier,
+              frontmostApp.processIdentifier == baseline.fieldIdentity.processIdentifier else {
+            return nil
+        }
+
+        let expectedText = baseline.previousTextBeforeCursor + acceptedText + baseline.previousTextAfterCursor
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        guard Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: expectedText,
+            containing: marker,
+            maxDepth: 32
+        ) != nil else {
+            return nil
+        }
+
+        DiagnosticsLog.shared.record(
+            "codex-proof-insert-verification-fast-path",
+            metadata: [
+                "app": bundleIdentifier,
+                "acceptedChars": String(acceptedText.count),
+                "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                "reason": reason
+            ]
+        )
+        return FocusedTextContext(
+            elementIdentifier: baseline.fieldIdentity.elementIdentifier,
+            role: "AXTextArea",
+            subrole: nil,
+            fingerprint: FocusedElementFingerprint(),
+            textBeforeCursor: baseline.previousTextBeforeCursor + acceptedText,
+            textAfterCursor: baseline.previousTextAfterCursor,
+            selectedText: "",
+            selectedTextLength: 0,
+            caretRect: nil,
+            elementRect: nil,
+            windowRect: nil,
+            windowIdentifier: nil,
+            textLineRect: nil,
+            textStyle: nil,
+            isSecure: false,
+            fieldClassification: AXFieldClassification(kind: baseline.fieldKind, reason: baseline.fieldKindReason),
+            caretIsSynthetic: true,
+            capabilities: FocusedTextCapabilities(
+                canReadValue: true,
+                canReadSelectedTextRange: true,
+                canReadBoundsForRange: false,
+                canReadAttributedText: false,
+                canSetSelectedText: true
+            )
+        )
     }
 
     private func startAcceptanceSurvivalTracking(_ tracker: AcceptanceSurvivalTracker) {
