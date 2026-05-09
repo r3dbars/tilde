@@ -370,6 +370,7 @@ DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.autocomplete-lab}"
 declare -a SMOKE_TMP_DIRS=()
 declare -a SMOKE_CHROME_PIDS=()
 declare -a SMOKE_HTTP_PIDS=()
+declare -a SMOKE_TEXTEDIT_WINDOW_TITLES=()
 CHROME_FIXTURE_ASSET_URL=""
 CHROME_FIXTURE_SCRIPT_URL=""
 CHROME_FIXTURE_SERVER_URL=""
@@ -409,7 +410,28 @@ cleanup_smoke_http_pids() {
   fi
 }
 
+cleanup_smoke_textedit_windows() {
+  if ((${#SMOKE_TEXTEDIT_WINDOW_TITLES[@]})); then
+    osascript "${SMOKE_TEXTEDIT_WINDOW_TITLES[@]}" <<'APPLESCRIPT' >/dev/null 2>&1 || true
+on run argv
+  tell application "TextEdit"
+    repeat with targetTitle in argv
+      repeat with docRef in documents
+        try
+          if name of docRef is targetTitle then
+            close docRef saving no
+          end if
+        end try
+      end repeat
+    end repeat
+  end tell
+end run
+APPLESCRIPT
+  fi
+}
+
 cleanup_smoke() {
+  cleanup_smoke_textedit_windows
   cleanup_smoke_chrome_pids
   cleanup_smoke_http_pids
   cleanup_smoke_tmp_dirs
@@ -2610,7 +2632,14 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
     for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
         app.activate(options: [.activateAllWindows])
         AXUIElementPerformAction(window, kAXRaiseAction as CFString)
-        print(app.processIdentifier)
+        let deadline = Date().addingTimeInterval(2.0)
+        while Date() <= deadline {
+            if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.TextEdit" {
+                break
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        print(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? app.processIdentifier)
         exit(0)
     }
 }
@@ -2715,7 +2744,14 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
             }
             event.post(tap: .cghidEventTap)
         }
-        print(app.processIdentifier)
+        let deadline = Date().addingTimeInterval(2.0)
+        while Date() <= deadline {
+            if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.TextEdit" {
+                break
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        print(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? app.processIdentifier)
         exit(0)
     }
 }
@@ -2735,7 +2771,7 @@ focus_textedit_smoke_editor() {
       return 1
     fi
     activate_process_id "$target_pid"
-    wait_for_frontmost_app "TextEdit" 5
+    wait_for_frontmost_process_id "$target_pid" 5 "TextEdit smoke window"
   else
     osascript >/dev/null <<'APPLESCRIPT'
 tell application "System Events"
@@ -2744,9 +2780,8 @@ tell application "System Events"
   end tell
 end tell
 APPLESCRIPT
+    wait_for_frontmost_app "TextEdit" 5
   fi
-
-  wait_for_frontmost_app "TextEdit" 5
 }
 
 click_textedit_smoke_editor() {
@@ -2760,7 +2795,7 @@ click_textedit_smoke_editor() {
       return 1
     fi
     activate_process_id "$target_pid"
-    wait_for_frontmost_app "TextEdit" 5
+    wait_for_frontmost_process_id "$target_pid" 5 "TextEdit smoke window"
   else
     osascript >/dev/null <<'APPLESCRIPT'
 tell application "System Events"
@@ -2774,9 +2809,8 @@ tell application "System Events"
   end tell
 end tell
 APPLESCRIPT
+    wait_for_frontmost_app "TextEdit" 5
   fi
-
-  wait_for_frontmost_app "TextEdit" 5
 }
 
 textedit_document_text() {
@@ -6412,6 +6446,7 @@ run_textedit() {
   textedit_tmp_dir="$(make_tmp_dir)"
   textedit_file="$textedit_tmp_dir/textedit-smoke-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
   textedit_window_title="$(basename "$textedit_file")"
+  SMOKE_TEXTEDIT_WINDOW_TITLES+=("$textedit_window_title")
   : >"$textedit_file"
   open_textedit_smoke_document "$textedit_file" "$textedit_window_title"
   sleep 0.8
