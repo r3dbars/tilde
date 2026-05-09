@@ -430,6 +430,17 @@ Time: 2026-05-09T00:36:00Z
 - Build: `commit:60fd4234083d`, app SHA `f4de1a5dd0a629f0b5d9fd78fd88831bf04d1e0b2ce0a81361acecb4ae97d90a`.
 - Gate movement: Chrome textarea is now green on the current build proof; `manual_smoke_status.sh --require-all` still reports 29 remaining target-app proof gaps because the broader matrix has stale or pending rows.
 
+2026-05-09T03:47Z heartbeat follow-up: refreshed Chrome's second local text-field lane and fixed docs-only proof churn.
+
+- Contenteditable run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable`.
+- Contenteditable result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- Contenteditable evidence: diagnostics lines 241507-241583 and trace lines 61219-61240; build `commit:0263199b59ea`, app SHA `b2e4dd248fe5a5491920264587ad58d86cf10107e828295be9b788a621ddda45`.
+- Textarea rerun: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea`.
+- Textarea result: passed again with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- Textarea evidence: diagnostics lines 241613-241677 and trace lines 61244-61265; build `commit:0263199b59ea`, app SHA `4f407f42f7310e79c29a48f52b6fde4badab398965783e9902e5b36b968f0b84`.
+- Harness fix: `manual_smoke_status.sh` now accepts an older proof commit when no app/smoke source paths changed after that proof, so recording proof docs does not immediately make otherwise valid app proof stale.
+- Gate movement: Chrome textarea and Chrome contenteditable are both green; remaining target-app proof gaps dropped from 29 to 28.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
