@@ -181,6 +181,18 @@ Time: 2026-05-09T00:10:00Z
 - Diagnostics slices: editor-like lines 221795-221874, monaco-like 221906-221995, prosemirror-like 222399-222465, chat-like 222672-222749, monaco-real 222839-222924, prosemirror-real 222957-223048.
 - Remaining Chrome proof gap: default Chrome still exposes only browser chrome, not the editor AX tree, for `monaco-real --chrome-accessibility default`; keep the default-Chrome variants pending until renderer accessibility is enabled or another safe proof path exists.
 
+## Latest Stable-Build Proof Pass
+
+Time: 2026-05-09T00:15:12Z
+
+- Rebuilt and relaunched the current `qwen3-0.6b` app, then kept the binary stable while refreshing TextEdit plus every forced Chrome fixture.
+- Current build proof: `commit:6831b0291ae4` and app binary SHA `b1c3a97fb0c1a1dd9f30ce3f4d8817e395960ca90b7bcca02e97ca3aa2a083b7`.
+- TextEdit passed with 2 accepted insertions and strict screenshot evidence: diagnostics lines 223878-223924, trace lines 59778-59787.
+- Chrome passed on the same binary for `textarea`, `contenteditable`, `editor-like`, `monaco-like`, `prosemirror-like`, `monaco-real`, `prosemirror-real`, and `chat-like`.
+- Chrome trace slices: textarea 59794-59816, contenteditable 59817-59846, editor-like 59847-59867, monaco-like 59868-59891, prosemirror-like 59892-59930, monaco-real 59931-59955, prosemirror-real 59956-59978, chat-like 59979-59999.
+- Chrome diagnostics slices: textarea 223962-224031, contenteditable 224032-224124, editor-like 224125-224205, monaco-like 224206-224290, prosemirror-like 224291-224395, monaco-real 224396-224479, prosemirror-real 224480-224562, chat-like 224563-224641.
+- Manual smoke status now shows 9 remaining target gaps: Notes title/body/checklist, Obsidian, default-Chrome real Monaco/ProseMirror AX, Codex, Claude Code, and Claude desktop.
+
 ## 100 Test Situations
 
 | # | App | Situation | Target behavior | Score |
