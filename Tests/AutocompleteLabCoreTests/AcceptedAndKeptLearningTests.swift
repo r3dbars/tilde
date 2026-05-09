@@ -47,6 +47,7 @@ struct AcceptedAndKeptLearningTests {
         _ = store.record(.rejected, key: learningKey, now: now)
         _ = store.record(.rejected, key: learningKey, now: now)
         _ = store.record(.rejected, key: learningKey, now: now)
+        _ = store.record(.rejected, key: learningKey, now: now)
         let negative = store.signal(for: learningKey, now: now)
 
         #expect(negative.sampleCount == 11)
