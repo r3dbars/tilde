@@ -180,6 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pollTimer: Timer?
     private var keyboardEventTap: KeyboardEventTap?
     private var keyboardEventTapStopTask: Task<Void, Never>?
+    private var prefixCooldownRetryTask: Task<Void, Never>?
     private var suggestionSession = SuggestionSession()
     private var lastCaretRect: CGRect?
     private var lastTextLineRect: CGRect?
@@ -524,6 +525,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        cancelPrefixCooldownRetry()
         lastTextSnapshot = nil
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
@@ -1215,6 +1217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if previousSnapshot != nil {
             lastFocusedTextChangeAt = Date()
         }
+        cancelPrefixCooldownRetry()
 
         recordTypedOverSuggestionIfNeeded(
             newTextBeforeCursor: context.textBeforeCursor,
@@ -1359,10 +1362,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch suggestionOrchestrator.prefixCooldownDecision(for: prefixCooldownInput) {
         case .allowed:
+            cancelPrefixCooldownRetry()
             break
         case let .coolingDown(cooldown):
             setSuggestionDecision("Waiting: prefix \(cooldown.reason.rawValue)")
             showFieldStatusIndicator(.waiting, context: context)
+            schedulePrefixCooldownRetry(
+                for: snapshot,
+                cooldown: cooldown
+            )
             let metadata = fieldClassification.traceMetadata
                 .merging(cooldown.metadata) { current, _ in current }
                 .merging(["reason": "prefix-family-cooldown"]) { current, _ in current }
@@ -4136,6 +4144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         requestMode: CompletionRequestMode,
         visiblePageContext: VisiblePageContext?
     ) {
+        cancelPrefixCooldownRetry()
         lastRequestedTextBeforeCursor = context.textBeforeCursor
 
         let acceptedTextStyleKey = suggestionOrchestrator.acceptedTextStyleKey(
@@ -6574,6 +6583,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return cooldown.metadata
     }
 
+    private func schedulePrefixCooldownRetry(
+        for snapshot: FocusedTextSnapshot,
+        cooldown: PrefixFamilyCooldown
+    ) {
+        cancelPrefixCooldownRetry()
+        let delayMilliseconds = max(
+            0,
+            Int(cooldown.until.timeIntervalSinceNow * 1_000) + 25
+        )
+        let reason = cooldown.reason.rawValue
+        prefixCooldownRetryTask = Task { [weak self, snapshot, reason, delayMilliseconds] in
+            try? await Task.sleep(for: .milliseconds(delayMilliseconds))
+            guard !Task.isCancelled else {
+                return
+            }
+
+            await MainActor.run {
+                guard let self,
+                      self.lastTextSnapshot == snapshot,
+                      !self.suggestionSession.hasVisibleSuggestion else {
+                    return
+                }
+
+                self.lastTextSnapshot = nil
+                self.lastRequestedTextBeforeCursor = nil
+                self.suggestionBlockLogGate.reset()
+                self.setSuggestionDecision("Ready: prefix \(reason) expired")
+                DiagnosticsLog.shared.record(
+                    "prefix-family-cooldown-expired",
+                    metadata: [
+                        "reason": reason,
+                        "fieldIdentity": snapshot.fieldIdentity.traceDescription
+                    ]
+                )
+            }
+        }
+    }
+
+    private func cancelPrefixCooldownRetry() {
+        prefixCooldownRetryTask?.cancel()
+        prefixCooldownRetryTask = nil
+    }
+
     private func recordPlacementUncertainty(
         suggestionID: String,
         appBundleIdentifier: String,
@@ -6694,6 +6746,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion(reason: "focus-changed")
         }
         invalidatePendingSuggestionRequest()
+        cancelPrefixCooldownRetry()
 
         if let currentFieldIdentity {
             suppressedFieldIdentities.remove(currentFieldIdentity)
@@ -6718,6 +6771,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion(reason: hideReason)
         }
         invalidatePendingSuggestionRequest()
+        cancelPrefixCooldownRetry()
 
         if let currentFieldIdentity {
             suppressedFieldIdentities.remove(currentFieldIdentity)
