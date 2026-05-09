@@ -393,6 +393,15 @@ Time: 2026-05-09T00:36:00Z
 | 99 | ChatGPT | Partial word "Transcrip" with product name visible | Complete only the suffix. | 94 |
 | 100 | ChatGPT | Partial word "permis" with permission text visible | Complete only the suffix. | 94 |
 
+## Latest Gate Hygiene Follow-up
+
+2026-05-09T03:10Z heartbeat follow-up: prompt proof gating now checks bounded current slices.
+
+- Finding: `check_score_targets.sh` still failed the prompt-app proof gate by scanning the entire local trace file, so old Codex wrong-context failures stayed red even after the fresh bounded no-submit proof passed.
+- Fix: added `check_prompt_app_manifest_proof.sh`, which reads complete prompt-app proof claims from `proof-manifest.json`, finds the matching bounded strict manual-smoke row, and validates only that trace slice with `check_prompt_app_proof.sh`.
+- Validation: the new self-test proves a historical wrong-context event outside the bounded slice no longer poisons a current clean proof, while missing Codex no-submit labeling still fails closed.
+- Result: the prompt-app strict gate now passes for Codex lines 61052-61056, and the score target failure count dropped from 62 to 61. Remaining failures are real variant/stale full-matrix proof gaps, not the solved Codex same-slice no-submit lane.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
