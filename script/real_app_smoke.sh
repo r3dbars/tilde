@@ -2811,7 +2811,7 @@ wait_for_textedit_frontmost_window() {
   done
 
   echo "Timed out waiting for TextEdit smoke window '$window_title' to become frontmost." >&2
-  exit 1
+  return 1
 }
 
 assert_textedit_frontmost_window() {
