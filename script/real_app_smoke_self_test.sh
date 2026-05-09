@@ -213,7 +213,7 @@ fi
 LOCK_DIR="$TMP_DIR/smoke.lock"
 mkdir -p "$LOCK_DIR"
 echo "$$" >"$LOCK_DIR/pid"
-if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$LOCK_DIR" script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/lock-fail.txt"; then
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$LOCK_DIR" AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/lock-fail.txt"; then
   echo "real app smoke self-test expected concurrent smoke lock to fail" >&2
   exit 1
 fi
@@ -223,7 +223,7 @@ if ! grep -F "Another real app smoke run is already active" "$TMP_DIR/lock-fail.
 fi
 rm -rf "$LOCK_DIR"
 
-if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 999 bash ./script/real_app_smoke.sh chrome --fixture textarea\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/process-fail.txt"; then
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 999 bash ./script/real_app_smoke.sh chrome --fixture textarea\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/process-fail.txt"; then
   echo "real app smoke self-test expected concurrent process scan to fail" >&2
   exit 1
 fi
