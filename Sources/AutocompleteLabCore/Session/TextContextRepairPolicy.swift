@@ -4,6 +4,7 @@ public enum TextContextRepairReason: String, Equatable, Sendable {
     case notesTextAfterCursorTyping = "notes-text-after-cursor-typing"
     case notesTextAfterCursorStable = "notes-text-after-cursor-stable"
     case obsidianCodeMirrorTrailingCharacter = "obsidian-codemirror-trailing-character"
+    case obsidianCodeMirrorHiddenSpacerLine = "obsidian-codemirror-hidden-spacer-line"
     case obsidianCodeMirrorLineDrift = "obsidian-codemirror-line-drift"
 }
 
@@ -60,6 +61,9 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
 
     public func repair(_ input: TextContextRepairInput) -> TextContextRepairResult {
         if let obsidianRepair = obsidianCodeMirrorTrailingCharacterRepair(input) {
+            return obsidianRepair
+        }
+        if let obsidianRepair = obsidianCodeMirrorHiddenSpacerLineRepair(input) {
             return obsidianRepair
         }
         if let obsidianRepair = obsidianCodeMirrorLineDriftRepair(input) {
@@ -153,6 +157,32 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         )
     }
 
+    private func obsidianCodeMirrorHiddenSpacerLineRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
+        guard input.bundleIdentifier == "md.obsidian",
+              input.role == "AXTextArea",
+              input.selectedTextLength == 0,
+              currentLine(in: input.textBeforeCursor).trimmingCodeMirrorScaffolding().isEmpty else {
+            return nil
+        }
+
+        let skipped = leadingCodeMirrorSpacerPrefix(in: input.textAfterCursor)
+        guard !skipped.prefix.isEmpty else {
+            return nil
+        }
+
+        let activeLine = firstLine(in: skipped.remaining)
+        guard activeLine.count <= 100,
+              isPlausibleActiveTypingLine(activeLine) else {
+            return nil
+        }
+
+        return TextContextRepairResult(
+            textBeforeCursor: input.textBeforeCursor + activeLine,
+            textAfterCursor: String(skipped.remaining.dropFirst(activeLine.count)),
+            reason: .obsidianCodeMirrorHiddenSpacerLine
+        )
+    }
+
     private func obsidianCodeMirrorLineDriftRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
         guard input.bundleIdentifier == "md.obsidian",
               input.role == "AXTextArea",
@@ -227,6 +257,24 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         ).first.map(String.init) ?? ""
     }
 
+    private func leadingCodeMirrorSpacerPrefix(in text: String) -> (prefix: String, remaining: String) {
+        var prefix = ""
+        var remaining = text
+
+        while let newlineIndex = remaining.firstIndex(where: \.isNewline) {
+            let line = String(remaining[..<newlineIndex])
+            guard line.trimmingCodeMirrorScaffolding().isEmpty else {
+                break
+            }
+
+            let nextIndex = remaining.index(after: newlineIndex)
+            prefix += String(remaining[..<nextIndex])
+            remaining = String(remaining[nextIndex...])
+        }
+
+        return (prefix, remaining)
+    }
+
     private func isPlausibleActiveTypingLine(_ line: String) -> Bool {
         let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedLine.count >= 6,
@@ -260,5 +308,13 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
             .last
             .map(String.init)?
             .trimmingCharacters(in: .punctuationCharacters)
+    }
+}
+
+private extension String {
+    func trimmingCodeMirrorScaffolding() -> String {
+        String(unicodeScalars.filter { scalar in
+            scalar.value != 0x200B && !CharacterSet.whitespacesAndNewlines.contains(scalar)
+        })
     }
 }

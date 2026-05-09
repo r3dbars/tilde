@@ -609,3 +609,13 @@ Replace this deterministic score with real dogfood evidence:
 5. Edge cases: type 20 partial-word and short-line prompts.
 
 Target real dogfood score: 92/100 or higher with no wrong-field insertions and no submit-like suggestions.
+
+2026-05-09T06:22Z heartbeat follow-up: repaired the current Obsidian CodeMirror spacer blocker, but did not mark Obsidian green.
+
+- Finding: a live Obsidian disposable-note pass on `qwen3-0.6b` showed `suggestion-blocked reason=middleOfLine` even when the visible caret was at the end of `Smoke proof feels inst`. The AX value contained hidden CodeMirror spacer rows (`U+200B` plus tabs/newlines) before the visible line, so the app thought the user was typing in the middle of old text.
+- Fix: `TextContextRepairPolicy` now has an Obsidian-only `obsidian-codemirror-hidden-spacer-line` repair. It is scoped to `md.obsidian`, `AXTextArea`, no selected text, and only moves the first plausible active prose line after hidden spacer rows into `textBeforeCursor`.
+- Regression coverage: added a positive hidden-spacer repair test and a negative case that refuses to repair true middle-of-line text.
+- Validation: `swift test --filter TextContextRepairPolicyTests` passed on the current fast-model branch.
+- Live presentation evidence: after relaunching Autocomplete Lab with `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b`, `AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS=md.obsidian`, and screenshot tracing, diagnostics showed `text-context-repaired reason=obsidian-codemirror-hidden-spacer-line` at line 250881 and `suggestion-presented app=md.obsidian` at lines 250890, 250923, 250947, and 250977.
+- Live accept evidence: an activated System Events Tab produced `keyboard-action app=md.obsidian key=tab action=acceptNextWord handled=true` at line 251013, so the actual accept handler can fire. The same slice still failed verification with `insert-verification result=fieldChanged` because Obsidian/CodeMirror moved focus to an `AXWebArea`/new-tab surface after the synthetic accept path. That is not clean proof, so no manual smoke row was recorded.
+- Honest gate status: Obsidian default and variants remain proof gaps until a real manual keypress or a tighter Obsidian driver produces two verified accepts in one bounded visual slice. The current fix only closes the false `middleOfLine` presentation blocker.
