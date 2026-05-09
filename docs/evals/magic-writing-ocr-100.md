@@ -441,6 +441,19 @@ Time: 2026-05-09T00:36:00Z
 - Harness fix: `manual_smoke_status.sh` now accepts an older proof commit when no app/smoke source paths changed after that proof, so recording proof docs does not immediately make otherwise valid app proof stale.
 - Gate movement: Chrome textarea and Chrome contenteditable are both green; remaining target-app proof gaps dropped from 29 to 28.
 
+2026-05-09T03:52Z heartbeat follow-up: refreshed the remaining local Chrome editor fixtures with the current fast model.
+
+- Editor-like run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture editor-like`.
+- Editor-like result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- Editor-like evidence: diagnostics lines 241705-241788 and trace lines 61269-61295; build `commit:93ea467e77cb`, app SHA `e5b3a643ce59cc337aa93a7c4a4849441dbf43bef11763a960891f3d32769232`.
+- Monaco-like run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-like`.
+- Monaco-like result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- Monaco-like evidence: diagnostics lines 241814-241889 and trace lines 61299-61323; build `commit:93ea467e77cb`, app SHA `2034d5d53b9fa8fb6e6d222506c4c9a36dfe5c70b35f4fa5bb861c22db243b33`.
+- ProseMirror-like run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-like`.
+- ProseMirror-like result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- ProseMirror-like evidence: diagnostics lines 241915-241986 and trace lines 61327-61349; build `commit:93ea467e77cb`, app SHA `8b6dabf20483d58e5a0b956e0950bb53865d70f6853e004eb32f96c3321f712e`.
+- Gate movement: Chrome local textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like are now green; remaining target-app proof gaps dropped from 28 to 25.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
