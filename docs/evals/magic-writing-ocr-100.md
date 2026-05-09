@@ -682,3 +682,11 @@ Target real dogfood score: 92/100 or higher with no wrong-field insertions and n
 - Evidence: manual smoke rows from `2026-05-09T07:36:50Z` through `2026-05-09T07:41:15Z`, all on `commit:8928086dca3a`.
 - Gate movement: `script/manual_smoke_status.sh --require-all` now reports TextEdit, Notes title/body/checklist, every required Chrome fixture/public/default-AX lane, and Chrome chat-like as current. It still fails honestly with 14 proof gaps: default Obsidian refresh plus Obsidian theme/pane/long-note, Codex prompt refresh, Claude Code, and Claude desktop layout variants.
 - Safety note: I did not rerun Codex, Obsidian, Claude Code, or Claude desktop in this unattended pass because those can touch active prompt/private-vault surfaces.
+
+2026-05-09T07:43Z heartbeat follow-up: tightened the Obsidian disposable-note harness without touching a vault.
+
+- Finding: the Notes smoke drivers explicitly move the AX selected range to the end before typing, but the Obsidian reset path only rewrote the CodeMirror AX value and then relied on Command-Right/Return. That was too close to the long-note failure shape where AX/caret state drifted away from the visible end.
+- Harness fix: after Obsidian smoke-note reset or target confirmation, `real_app_smoke.sh` now focuses the CodeMirror element and attempts to set `kAXSelectedTextRangeAttribute` to the end of the disposable note text before any smoke typing.
+- Scope: this is proof-harness-only. It does not change the app model, prompt, cadence, or production insertion behavior.
+- Validation: `bash -n script/real_app_smoke.sh script/real_app_smoke_self_test.sh`, `script/real_app_smoke_self_test.sh`, and `git diff --check` passed.
+- Honest status: no Obsidian green row was claimed in this unattended heartbeat; the next proof pass still needs a disposable-vault foreground run.

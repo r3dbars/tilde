@@ -236,6 +236,12 @@ if ! grep -F "script/real_app_smoke.sh obsidian-theme --manual-gate" "$TMP_DIR/o
   exit 1
 fi
 
+if ! grep -F "markerText.utf16.count" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian reset to move the AX selected range to the end of the disposable note" >&2
+  exit 1
+fi
+
 for obsidian_variant in obsidian-theme obsidian-pane obsidian-long-note; do
   script/real_app_smoke.sh "$obsidian_variant" --dry-run >"$TMP_DIR/$obsidian_variant.txt"
   if ! grep -F "manual-gated Obsidian" "$TMP_DIR/$obsidian_variant.txt" >/dev/null; then

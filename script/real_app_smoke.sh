@@ -5339,6 +5339,11 @@ if !expectedSuffix.isEmpty {
     }
 }
 
+AXUIElementSetAttributeValue(editor, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+var endRange = CFRange(location: text.utf16.count, length: 0)
+if let rangeValue = AXValueCreate(.cfRange, &endRange) {
+    AXUIElementSetAttributeValue(editor, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+}
 print("Obsidian smoke target confirmed")
 SWIFT
 }
@@ -5463,6 +5468,12 @@ guard AXUIElementSetAttributeValue(
 ) == .success else {
     fputs("Could not reset the disposable Obsidian smoke note text.\n", stderr)
     exit(3)
+}
+
+AXUIElementSetAttributeValue(focused, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+var endRange = CFRange(location: markerText.utf16.count, length: 0)
+if let rangeValue = AXValueCreate(.cfRange, &endRange) {
+    AXUIElementSetAttributeValue(focused, kAXSelectedTextRangeAttribute as CFString, rangeValue)
 }
 SWIFT
 
