@@ -497,7 +497,7 @@ acquire_smoke_lock() {
 other_smoke_process_lines() {
   local process_list current_pgid
   current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ' || true)"
-  if [[ -n "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST:-}" ]]; then
+  if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST+x}" == "x" ]]; then
     process_list="$AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST"
   else
     process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
