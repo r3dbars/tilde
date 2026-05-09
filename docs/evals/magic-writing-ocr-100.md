@@ -402,6 +402,14 @@ Time: 2026-05-09T00:36:00Z
 - Validation: the new self-test proves a historical wrong-context event outside the bounded slice no longer poisons a current clean proof, while missing Codex no-submit labeling still fails closed.
 - Result: the prompt-app strict gate now passes for Codex lines 61052-61056, and the score target failure count dropped from 62 to 61. Remaining failures are real variant/stale full-matrix proof gaps, not the solved Codex same-slice no-submit lane.
 
+2026-05-09T03:16Z heartbeat follow-up: refreshed Notes body proof on the current PR head with the current fast model.
+
+- Run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate`.
+- Result: Notes body passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence.
+- Evidence: diagnostics lines 240338-240375 and trace lines 61064-61073 in the local AutocompleteLab logs.
+- Build: `commit:80c01a3da37d`, app SHA `88f8339c77b20376476e66e4ac2b7c8900e87518954ec7900476a9558e5e275c`.
+- Next useful proof gap: keep burning down stale/pending variants in the full matrix without changing off `qwen3-0.6b`.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
