@@ -31,6 +31,7 @@ struct DiagnosticsTypingHealthTests {
                 Current state:
                   Accessibility: allowed
                   Suggestions: Blocked: field quieted
+                  Global pause: off
                   App: Yellow: Notes, blocked
                   Mode: mirror
                   Local model: ready

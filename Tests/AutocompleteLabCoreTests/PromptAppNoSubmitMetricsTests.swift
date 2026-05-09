@@ -55,6 +55,28 @@ struct PromptAppNoSubmitMetricsTests {
         #expect(metrics.wrongContextInsertionCount == 1)
     }
 
+    @Test("Treats browser chat metadata as prompt no-submit evidence")
+    func treatsBrowserChatMetadataAsPromptNoSubmitEvidence() {
+        let metrics = PromptAppNoSubmitMetricsAnalyzer().metrics(from: [
+            event(
+                app: "com.google.Chrome",
+                reason: "send-key-collision",
+                metadata: [
+                    "browserSurface": "chatgpt",
+                    "browserSurfaceSafetyClass": "browser-chat"
+                ]
+            ),
+            event(
+                app: "com.google.Chrome",
+                reason: "prompt-mutation-outside-accepted-span",
+                metadata: ["browserChatProofSurface": "browser-chat-harness"]
+            )
+        ])
+
+        #expect(metrics.sendKeyCollisionCount == 1)
+        #expect(metrics.promptMutationWithoutUserIntentCount == 1)
+    }
+
     private func event(
         app: String,
         type: AutocompleteTraceEventType = .suggestionSuppressed,

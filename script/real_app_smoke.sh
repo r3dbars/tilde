@@ -373,7 +373,13 @@ CHROME_FIXTURE_ASSET_URL=""
 CHROME_FIXTURE_SCRIPT_URL=""
 CHROME_FIXTURE_SERVER_URL=""
 SMOKE_LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-real-app-smoke.lock}"
+SMOKE_LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS:-300}"
 SMOKE_LOCK_HELD=0
+
+if [[ ! "$SMOKE_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]]; then
+  echo "AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS must be a non-negative integer." >&2
+  exit 2
+fi
 
 cleanup_smoke_tmp_dirs() {
   if ((${#SMOKE_TMP_DIRS[@]})); then
@@ -456,38 +462,43 @@ APPLESCRIPT
 trap cleanup_smoke EXIT
 
 acquire_smoke_lock() {
-  if mkdir "$SMOKE_LOCK_DIR" >/dev/null 2>&1; then
-    SMOKE_LOCK_HELD=1
-    echo "$$" >"$SMOKE_LOCK_DIR/pid"
-    return 0
-  fi
+  local deadline=$((SECONDS + SMOKE_LOCK_WAIT_SECONDS))
+  local announced=0
 
-  local existing_pid=""
-  if [[ -f "$SMOKE_LOCK_DIR/pid" ]]; then
-    existing_pid="$(cat "$SMOKE_LOCK_DIR/pid" 2>/dev/null || true)"
-  fi
+  while true; do
+    if mkdir "$SMOKE_LOCK_DIR" >/dev/null 2>&1; then
+      SMOKE_LOCK_HELD=1
+      echo "$$" >"$SMOKE_LOCK_DIR/pid"
+      return 0
+    fi
 
-  if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" >/dev/null 2>&1; then
-    echo "Another real app smoke run is already active (pid $existing_pid)." >&2
-    echo "Refusing to run concurrently because smoke runs can type into frontmost apps." >&2
-    exit 1
-  fi
+    local existing_pid=""
+    if [[ -f "$SMOKE_LOCK_DIR/pid" ]]; then
+      existing_pid="$(cat "$SMOKE_LOCK_DIR/pid" 2>/dev/null || true)"
+    fi
 
-  rm -rf "$SMOKE_LOCK_DIR" >/dev/null 2>&1 || true
-  if mkdir "$SMOKE_LOCK_DIR" >/dev/null 2>&1; then
-    SMOKE_LOCK_HELD=1
-    echo "$$" >"$SMOKE_LOCK_DIR/pid"
-    return 0
-  fi
+    if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" >/dev/null 2>&1; then
+      if ((SECONDS >= deadline)); then
+        echo "Another real app smoke run is already active (pid $existing_pid)." >&2
+        echo "Timed out waiting for the real app smoke lock: $SMOKE_LOCK_DIR" >&2
+        exit 1
+      fi
+      if [[ "$announced" == "0" ]]; then
+        echo "Waiting for active real app smoke run to finish (pid $existing_pid)." >&2
+        announced=1
+      fi
+      sleep 2
+      continue
+    fi
 
-  echo "Could not acquire real app smoke lock: $SMOKE_LOCK_DIR" >&2
-  exit 1
+    rm -rf "$SMOKE_LOCK_DIR" >/dev/null 2>&1 || true
+  done
 }
 
 other_smoke_process_lines() {
   local process_list current_pgid
   current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ' || true)"
-  if [[ -n "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST:-}" ]]; then
+  if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST+x}" == "x" ]]; then
     process_list="$AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST"
   else
     process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
@@ -509,16 +520,30 @@ other_smoke_process_lines() {
 }
 
 refuse_other_smoke_processes() {
+  local deadline=$((SECONDS + SMOKE_LOCK_WAIT_SECONDS))
+  local announced=0
   local processes
-  processes="$(other_smoke_process_lines || true)"
-  if [[ -z "$processes" ]]; then
-    return 0
-  fi
 
-  echo "Another real app smoke process is already active." >&2
-  echo "Refusing to run concurrently because smoke runs can type into frontmost apps." >&2
-  echo "$processes" >&2
-  exit 1
+  while true; do
+    processes="$(other_smoke_process_lines || true)"
+    if [[ -z "$processes" ]]; then
+      return 0
+    fi
+
+    if ((SECONDS >= deadline)); then
+      echo "Another real app smoke process is already active." >&2
+      echo "Timed out waiting because smoke runs can type into frontmost apps." >&2
+      echo "$processes" >&2
+      exit 1
+    fi
+
+    if [[ "$announced" == "0" ]]; then
+      echo "Waiting for active real app smoke process to finish before starting this proof." >&2
+      echo "$processes" >&2
+      announced=1
+    fi
+    sleep 2
+  done
 }
 
 make_tmp_dir() {

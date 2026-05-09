@@ -25,26 +25,6 @@ def experiment_arm(event):
     return event.get("experimentArm") or metadata.get("experimentArm") or "unknown"
 
 
-def field_kind(event):
-    metadata = event.get("metadata") or {}
-    return metadata.get("fieldKind") or "unknown"
-
-
-def render_mode(event):
-    metadata = event.get("metadata") or {}
-    return metadata.get("effectiveRenderMode") or metadata.get("renderMode") or "unknown"
-
-
-def insertion_mode(event):
-    metadata = event.get("metadata") or {}
-    return metadata.get("insertionMode") or "unknown"
-
-
-def model_name(event):
-    metadata = event.get("metadata") or {}
-    return metadata.get("model") or metadata.get("modelOverride") or metadata.get("asset") or "unknown"
-
-
 def metadata_int(event, key):
     try:
         return int((event.get("metadata") or {}).get(key))
@@ -110,35 +90,6 @@ def first_events_by_suggestion(events, event_type):
         if suggestion_id and suggestion_id not in by_id:
             by_id[suggestion_id] = event
     return by_id
-
-
-def kept_rate_slices(events, key_func):
-    presented_by_id = first_events_by_suggestion(events, "suggestionPresented")
-    presented_ids = set(presented_by_id)
-    kept_ids = {
-        event.get("suggestionID")
-        for event in events
-        if event.get("type") == "acceptedTextEdited" and kept_event(event) and event.get("suggestionID") in presented_ids
-    }
-    buckets = defaultdict(lambda: [0, 0])
-    for event in presented_by_id.values():
-        buckets[key_func(event)][1] += 1
-    for suggestion_id in kept_ids:
-        event = presented_by_id.get(suggestion_id)
-        if event:
-            buckets[key_func(event)][0] += 1
-    return buckets
-
-
-def print_slice_section(title, buckets):
-    print(title)
-    if not buckets:
-        print("  none")
-        return
-
-    for label in sorted(buckets):
-        kept, shown = buckets[label]
-        print(f"  {label}: {percent(0 if shown == 0 else kept / shown)} ({kept}/{shown})")
 
 
 def arm_report(arm, events, min_shown):
@@ -300,22 +251,6 @@ def main():
             print("  guardrails: " + "; ".join(report["reasons"]))
         else:
             print("  guardrails: passed")
-
-    print()
-    print("Accepted-and-kept slices")
-    print_slice_section(
-        "  by app:",
-        kept_rate_slices(events, lambda event: event.get("appBundleIdentifier") or "unknown")
-    )
-    print_slice_section("  by field kind:", kept_rate_slices(events, field_kind))
-    print_slice_section(
-        "  by request mode:",
-        kept_rate_slices(events, lambda event: event.get("requestMode") or "unknown")
-    )
-    print_slice_section("  by render mode:", kept_rate_slices(events, render_mode))
-    print_slice_section("  by insertion mode:", kept_rate_slices(events, insertion_mode))
-    print_slice_section("  by model:", kept_rate_slices(events, model_name))
-    print_slice_section("  by experiment arm:", kept_rate_slices(events, experiment_arm))
 
 
 if __name__ == "__main__":

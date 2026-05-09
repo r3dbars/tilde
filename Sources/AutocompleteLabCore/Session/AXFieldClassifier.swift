@@ -45,7 +45,10 @@ public struct AXFieldClassification: Equatable, Sendable {
 public struct AXFieldClassifierInput: Equatable, Sendable {
     public let role: String?
     public let subrole: String?
+    public let identifier: String?
     public let title: String?
+    public let description: String?
+    public let help: String?
     public let placeholder: String?
     public let windowTitle: String?
     public let isSecure: Bool
@@ -57,7 +60,10 @@ public struct AXFieldClassifierInput: Equatable, Sendable {
     public init(
         role: String? = nil,
         subrole: String? = nil,
+        identifier: String? = nil,
         title: String? = nil,
+        description: String? = nil,
+        help: String? = nil,
         placeholder: String? = nil,
         windowTitle: String? = nil,
         isSecure: Bool = false,
@@ -68,7 +74,10 @@ public struct AXFieldClassifierInput: Equatable, Sendable {
     ) {
         self.role = role
         self.subrole = subrole
+        self.identifier = identifier
         self.title = title
+        self.description = description
+        self.help = help
         self.placeholder = placeholder
         self.windowTitle = windowTitle
         self.isSecure = isSecure
@@ -173,7 +182,10 @@ public struct AXFieldClassifier: Equatable, Sendable {
         [
             input.role,
             input.subrole,
+            input.identifier,
             input.title,
+            input.description,
+            input.help,
             input.placeholder,
             input.windowTitle
         ]
@@ -186,18 +198,32 @@ public struct AXFieldClassifier: Equatable, Sendable {
         "password",
         "passcode",
         "one-time code",
+        "one time code",
+        "one-time password",
+        "one time password",
+        "verification code",
+        "verification",
+        "authenticator",
+        "2fa",
+        "mfa",
+        "two factor",
         "otp",
         "secret",
         "security code",
         "cvv",
-        "cvc"
+        "cvc",
+        "private prompt",
+        "private browsing",
+        "incognito"
     ]
 
     private static let urlNeedles: [String] = [
         "axurlfield",
         "url",
         "address bar",
+        "address and search",
         "location bar",
+        "omnibox",
         "search or enter address",
         "website",
         "web address"
@@ -209,6 +235,7 @@ public struct AXFieldClassifier: Equatable, Sendable {
         "find",
         "filter",
         "query",
+        "search query",
         "spotlight"
     ]
 
@@ -222,12 +249,15 @@ public struct AXFieldClassifier: Equatable, Sendable {
         "postal",
         "credit card",
         "card number",
+        "cardholder",
         "expiration",
         "expiry",
         "name on card",
         "payment",
         "username",
         "login",
+        "sign in",
+        "signin",
         "account",
         "subject",
         "to:",
