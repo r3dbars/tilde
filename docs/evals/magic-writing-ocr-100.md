@@ -27,6 +27,8 @@ This is not yet a 98/100 real human dogfood score. It means the prompt, OCR cont
 - The prompt now tells the model to infer what the user is replying to from visible screen text.
 - Max aggression can trigger from a first useful letter or first word.
 - Word completion can fall back to the model when the fast local word list has no candidate.
+- Writing surfaces can now use the cheap predictive next-word fallback before OCR arrives, so Notes/TextEdit/Obsidian can show strong local next-word predictions without waiting on the model.
+- Fresh visible suggestions now survive a short transient empty AX snapshot, which fixes the Notes body case where `instant` appeared and then blinked away before Tab acceptance.
 - A 100-scenario Swift prompt/cadence harness was added.
 - The replacement gate now keeps a fresh visible long suggestion on screen instead of hiding it when a weaker replacement arrives.
 - Added a focused replacement-visibility test so long suggestions should persist while the next model result is being filtered.
@@ -249,6 +251,16 @@ Time: 2026-05-09T00:36:00Z
 - Fix: max-aggressive / OCR-context runs can now use a trace-safe predictive word fallback for strong local phrases such as `feels` and `stays`, so the app can show ` instant` before the user types `inst`.
 - Harness update: Notes body smoke now proves proactive next-word prediction from `Smoke proof feels` and `and stays` instead of only proving the old partial-word `inst` suffix path.
 - Validation: focused word-ranker and orchestrator tests cover the new fallback source and preserve quiet-mode behavior.
+
+2026-05-09T02:43Z follow-up: Notes body proof now passes on the current fast model.
+
+- First rerun exposed two real issues: the Notes caret had to be reset to the end of the disposable note, and Notes could emit a transient empty focused-text snapshot right after showing ` instant`.
+- Fix: the Notes body harness sets the body selected range to the end before typing, then uses the focused Notes body element for the second proof check instead of walking the whole Notes AX tree.
+- Fix: `SuggestionTuning` now allows the cheap predictive fallback for writing surfaces (`TextEdit`, `Notes`, `Obsidian`) even before OCR context is ready, while keeping model fallback gated by high aggression or OCR.
+- Fix: a fresh visible suggestion is preserved through a short same-field `tooLittleContext` / empty-context AX blip, so the suggestion does not disappear before Tab.
+- Live proof: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate` passed with 2 accepted insertions and strict visual trace evidence.
+- Evidence: diagnostics lines 239124-239180, trace lines 60891-60915, manual smoke row `2026-05-09T02:43:09Z`, app binary SHA `1ab7aa23cb7be2b2c17831e272a40c7083578116a43e5f17b911357529f6aaa6`.
+- Validation: `VisibleSuggestionPersistencePolicyTests`, `SuggestionAggressivenessTests`, `WordCompletionCandidateRankerTests`, `script/real_app_smoke_self_test.sh`, and the live Notes body smoke passed. The model stayed `qwen3-0.6b`.
 
 ## 100 Test Situations
 

@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let acceptanceSafetyPolicy = AcceptanceSafetyPolicy()
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
     private let suggestionReplacementVisibilityPolicy = SuggestionReplacementVisibilityPolicy()
+    private let visibleSuggestionPersistencePolicy = VisibleSuggestionPersistencePolicy()
     private let suggestionPresentationTracePayloadBuilder = SuggestionPresentationTracePayloadBuilder()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private lazy var suggestionOrchestrator = SuggestionOrchestrator(
@@ -1241,6 +1242,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard activationDecision.canSuggest else {
+            if shouldPreserveVisibleSuggestionAfterActivationBlock(
+                activationDecision: activationDecision,
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity
+            ) {
+                setSuggestionDecision("Shown: preserving current suggestion")
+                recordSuggestionEvent(
+                    "suggestion-preserved",
+                    context: context,
+                    profile: profile,
+                    metadata: [
+                        "reason": "transient-empty-context",
+                        "blockReason": activationDecision.blockReasonDescription,
+                        "fieldIdentity": fieldIdentity.traceDescription
+                    ]
+                )
+                return
+            }
+
             setSuggestionDecision("Blocked: \(activationDecision.blockReasonDescription)")
             showFieldStatusIndicator(.blocked, context: context)
             RawAutocompleteTraceLog.shared.record(
@@ -1746,6 +1767,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return max(0, Int(now.timeIntervalSince(currentSuggestionPresentedAt) * 1000))
+    }
+
+    private func shouldPreserveVisibleSuggestionAfterActivationBlock(
+        activationDecision: CompletionActivationDecision,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity
+    ) -> Bool {
+        guard case let .block(blockReason) = activationDecision else {
+            return false
+        }
+
+        return visibleSuggestionPersistencePolicy.shouldPreserveAfterActivationBlock(
+            blockReason: blockReason,
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+            currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
+            currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
+            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor
+        )
     }
 
     private func shouldSuppressDetachedSuggestion(
@@ -3865,6 +3909,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let candidateWords = recentWordMemory.words(for: appBundleIdentifier)
                 + (visiblePageContext?.completionCandidateWords ?? [])
             let allowPredictiveFallback = shouldUsePredictiveWordFallback(
+                profile: profile,
                 visiblePageContext: visiblePageContext
             )
             let fastSelection = suggestionOrchestrator.fastWordSelection(
@@ -6760,13 +6805,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func shouldAskModelForWordCompletionFallback(
         visiblePageContext: VisiblePageContext?
     ) -> Bool {
-        suggestionTuning.aggressivenessLevel >= 4 || visiblePageContext != nil
+        suggestionTuning.allowsModelWordCompletionFallback(
+            visiblePageContextAvailable: visiblePageContext != nil
+        )
     }
 
     private func shouldUsePredictiveWordFallback(
+        profile: CompatibilityProfile,
         visiblePageContext: VisiblePageContext?
     ) -> Bool {
-        suggestionTuning.aggressivenessLevel >= 4 || visiblePageContext != nil
+        suggestionTuning.allowsPredictiveWordFallback(
+            appBundleIdentifier: profile.bundleIdentifier,
+            visiblePageContextAvailable: visiblePageContext != nil
+        )
     }
 
     private func setAcceptAllShortcut(_ shortcut: AcceptAllShortcut) {
