@@ -1182,8 +1182,14 @@ chrome_fixture_click_offsets() {
     monaco-official)
       printf '560 430\n'
       ;;
+    prosemirror-like)
+      printf '180 260\n'
+      ;;
     prosemirror-real)
       printf '180 260\n'
+      ;;
+    chat-like)
+      printf '420 260\n'
       ;;
     prosemirror-official)
       printf '220 500\n'
@@ -2038,7 +2044,8 @@ for codeUnit in text.utf16 {
 
 for _ in 0..<30 {
     let currentValue = copyAttribute(focusedElement, kAXValueAttribute) as? String ?? ""
-    if currentValue.count >= initialValue.count + text.count && currentValue.contains(text) {
+    if currentValue.contains(text)
+        && (currentValue.count >= initialValue.count + text.count || currentValue.count >= text.count) {
         exit(0)
     }
     usleep(100_000)
