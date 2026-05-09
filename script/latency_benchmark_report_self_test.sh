@@ -91,6 +91,69 @@ if ! grep -F "Latency beta gate passed." <<<"$REPORT" >/dev/null; then
   exit 1
 fi
 
+{
+  echo "2026-05-09T10:10:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit"
+  for index in $(seq 1 100); do
+    echo "2026-05-09T10:10:${index}Z focused-text-poll-latency-summary count=60 maxMilliseconds=9 p50Milliseconds=4 p90Milliseconds=6 p95Milliseconds=8 p99Milliseconds=9"
+  done
+  echo "2026-05-09T10:12:00Z focused-text-poll-latency-summary count=60 maxMilliseconds=121 p50Milliseconds=4 p90Milliseconds=6 p95Milliseconds=8 p99Milliseconds=121"
+} >"$DIAGNOSTICS_LOG"
+
+REPORT="$(
+  script/latency_benchmark_report.py \
+    --diagnostics-log "$DIAGNOSTICS_LOG" \
+    --trace-log "$TRACE_LOG" \
+    --beta-gate \
+    --require-first-visible-samples 1 \
+    --require-model-samples 1 \
+    --require-ax-samples 1
+)"
+
+if ! grep -F "AX read latency summaries: windows=101" <<<"$REPORT" >/dev/null; then
+  echo "latency benchmark self-test did not keep AX summary-window evidence" >&2
+  echo "$REPORT" >&2
+  exit 1
+fi
+
+if ! grep -F "p99Max=121ms" <<<"$REPORT" >/dev/null; then
+  echo "latency benchmark self-test did not expose the AX outlier max" >&2
+  echo "$REPORT" >&2
+  exit 1
+fi
+
+if ! grep -F "Latency beta gate passed." <<<"$REPORT" >/dev/null; then
+  echo "latency benchmark self-test treated a single AX p99-window outlier as sustained p99 failure" >&2
+  echo "$REPORT" >&2
+  exit 1
+fi
+
+{
+  echo "2026-05-09T10:20:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit"
+  for index in $(seq 1 99); do
+    echo "2026-05-09T10:20:${index}Z focused-text-poll-latency-summary count=60 maxMilliseconds=9 p50Milliseconds=4 p90Milliseconds=6 p95Milliseconds=8 p99Milliseconds=9"
+  done
+  echo "2026-05-09T10:22:00Z focused-text-poll-latency-summary count=60 maxMilliseconds=121 p50Milliseconds=4 p90Milliseconds=6 p95Milliseconds=8 p99Milliseconds=121"
+  echo "2026-05-09T10:22:01Z focused-text-poll-latency-summary count=60 maxMilliseconds=122 p50Milliseconds=4 p90Milliseconds=6 p95Milliseconds=8 p99Milliseconds=122"
+} >"$DIAGNOSTICS_LOG"
+
+if script/latency_benchmark_report.py \
+  --diagnostics-log "$DIAGNOSTICS_LOG" \
+  --trace-log "$TRACE_LOG" \
+  --beta-gate \
+  --require-first-visible-samples 1 \
+  --require-model-samples 1 \
+  --require-ax-samples 1 >"$TMP_DIR/ax-p99.txt" 2>&1; then
+  echo "latency benchmark self-test expected sustained AX p99-window failures to fail" >&2
+  cat "$TMP_DIR/ax-p99.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "AX summary p99-window budget 2 windows exceed 120ms; allowed 1" "$TMP_DIR/ax-p99.txt" >/dev/null; then
+  echo "latency benchmark self-test did not explain sustained AX p99-window failure" >&2
+  cat "$TMP_DIR/ax-p99.txt" >&2
+  exit 1
+fi
+
 cat >"$TRACE_LOG" <<'LOG'
 {"timestamp":"2026-05-09T10:00:02Z","sessionID":"session","suggestionID":"late","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","latencyMilliseconds":900,"metadata":{"behaviorProfile":"notes"}}
 LOG
