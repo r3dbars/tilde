@@ -532,6 +532,20 @@ Time: 2026-05-09T00:36:00Z
 - Notes checklist evidence: diagnostics lines 244077-244117 and trace lines 61634-61643; build `commit:ecd0e7900798`, app SHA `eb3cde18e234be64e928cc6dbf5a23c9c17c7838886027c4ea135c114dcda166`.
 - Gate movement: after the source repair made older rows stale, strict status now has TextEdit plus all three Notes surfaces fresh green again. `script/manual_smoke_status.sh --require-all` still fails correctly with 26 target-app proof gaps: Obsidian acceptance/variants, Chrome refresh/production/default-AX lanes, Codex refresh, and Claude/Claude Code layout lanes.
 
+2026-05-09T04:49Z heartbeat follow-up: refreshed Chrome editor and Codex no-submit proof on PR #35 with the current fast model only.
+
+- Chrome local fixture runs: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea`, `contenteditable`, `editor-like`, `monaco-like`, `prosemirror-like`, and `chat-like`.
+- Chrome local fixture result: all six passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence on build `commit:1c1af632f34b`.
+- Chrome local fixture evidence: textarea diagnostics lines 244141-244219 / trace lines 61648-61675; contenteditable diagnostics 244244-244320 / traces 61680-61698; editor-like diagnostics 244349-244424 / traces 61705-61728; Monaco-like diagnostics 244455-244529 / traces 61735-61758; ProseMirror-like diagnostics 244558-244628 / traces 61763-61781; chat-like diagnostics 244656-244734 / traces 61788-61809.
+- Chrome real editor runs: `script/real_app_smoke.sh chrome --fixture monaco-real` and `script/real_app_smoke.sh chrome --fixture prosemirror-real`.
+- Chrome real editor result: both passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence on build `commit:1c1af632f34b`.
+- Chrome real editor evidence: real Monaco diagnostics lines 244761-244840 / trace lines 61816-61841; real ProseMirror diagnostics 244867-244947 / traces 61848-61870.
+- Codex run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate`.
+- Codex result: passed with 1 verified Tab insertion, `inlineAdjacent|floatingMirror`, strict screenshot-backed visual evidence, and prompt no-submit confirmation on build `commit:1c1af632f34b`.
+- Codex evidence: diagnostics lines 244978-245014 and trace lines 61877-61881; build app SHA `4214497ab3ee77ac1aae1278a1017f7285d1aa1a0b488cb2f254cff50c0874eb`.
+- Cleanup: cleared the disposable `AUTOCOMPLETE_LAB_CODEX_PROOF` marker from the Codex composer after the proof, guarded by the marker string.
+- Gate movement: strict status now has TextEdit, Notes title/body/checklist, all local Chrome fixtures, real Chrome Monaco/ProseMirror under isolated renderer accessibility, Chrome chat-like no-submit, and Codex fresh green on PR #35. `script/manual_smoke_status.sh --require-all` still fails correctly with 17 proof gaps: Obsidian acceptance/variants, public Chrome text fields, default-Chrome real-editor AX lanes, and Claude/Claude Code layout lanes.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
