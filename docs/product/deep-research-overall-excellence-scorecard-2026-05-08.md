@@ -59,11 +59,14 @@ The next automatable gap was accepted-survival proof. Before the continuation lo
 
 ## Score
 
-Overall score: 78/100
+Overall score: 79/100
 
 Starting score before this implementation loop: 73/100.
 Score after first implementation loop: 74/100.
 Ending score after continuation loop: 75/100.
+Non-annoyance gate update: non-annoyance is 82/100 after real-rate gates for
+shown/min, dismissals/shown, typed-over-within-1s, accepted-then-deleted,
+immediate resurfacing, late suggestions, and pause/disable rates landed.
 Latency update: latency is 82/100 after the current benchmark gate added
 p50/p90/p95/p99 first-visible, first-token, total-generation, event-tap, AX,
 stale-late suppression, and default-runtime proof checks.
@@ -78,7 +81,7 @@ Release gate status: blocked. `Insertion safety`, `Privacy/trust`, and `Non-anno
 | --- | ---: | ---: | ---: |
 | Insertion safety | 18 | 81 | 14.58 |
 | Privacy and trust | 16 | 88 | 14.08 |
-| Non-annoyance | 14 | 76 | 10.64 |
+| Non-annoyance | 14 | 82 | 11.48 |
 | Latency | 12 | 82 | 9.84 |
 | Suggestion relevance | 10 | 67 | 6.70 |
 | App compatibility | 10 | 71 | 7.10 |
@@ -87,7 +90,7 @@ Release gate status: blocked. `Insertion safety`, `Privacy/trust`, and `Non-anno
 | Recoverability | 4 | 68 | 2.72 |
 | Local model/runtime readiness | 2 | 64 | 1.28 |
 
-Weighted total: 78.02, rounded to 78/100.
+Weighted total: 78.86, rounded to 79/100.
 
 ### Insertion Safety
 
@@ -110,11 +113,11 @@ Weighted total: 78.02, rounded to 78/100.
 ### Non-Annoyance
 
 - Weight: 14
-- Current score: 76/100
-- Why this score: Burst suppression, cooldowns, confidence gating, display scoring, typed-over handling, slow-display suppression, and accepted-then-deleted runtime signaling exist. The score is still capped because long-session annoyance proof and real trace-based suppression proof are incomplete.
-- Evidence found in repo: `Sources/AutocompleteLabCore/Session/TypingBurstPolicy.swift`, `Sources/AutocompleteLabCore/Session/DisplayScorePolicy.swift`, `Sources/AutocompleteLabCore/Session/CompletionConfidencePolicy.swift`, `Sources/AutocompleteLabCore/Session/PrefixFamilyCooldownPolicy.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalChecker.swift`, `Tests/AutocompleteLabCoreTests/TypingBurstPolicyTests.swift`, `Tests/AutocompleteLabCoreTests/DisplayScorePolicyTests.swift`, `Tests/AutocompleteLabAppTests/AcceptanceSurvivalCheckerTests.swift`.
-- Missing evidence: Long-session annoyance proof, current show-rate/dismiss-rate/resurfacing metrics, and fresh real-app proof that accepted-then-deleted signals suppress future similar suggestions.
-- What would make it 100/100: Low show density in real sessions, no immediate resurfacing after dismiss, no mid-word phrase spam, late suggestions hidden, and accepted-then-deleted signals wired into future suppression.
+- Current score: 82/100
+- Why this score: Burst suppression, cooldowns, confidence gating, display scoring, typed-over handling, slow-display suppression, accepted-then-deleted runtime signaling, and a redacted non-annoyance report/gate now exist. The score is still capped because long-session dogfood proof is not fresh enough across real app surfaces.
+- Evidence found in repo: `Sources/AutocompleteLabCore/Session/TypingBurstPolicy.swift`, `Sources/AutocompleteLabCore/Session/DisplayScorePolicy.swift`, `Sources/AutocompleteLabCore/Session/CompletionConfidencePolicy.swift`, `Sources/AutocompleteLabCore/Session/PrefixFamilyCooldownPolicy.swift`, `Sources/AutocompleteLabCore/Tracing/AutocompleteNonAnnoyanceReport.swift`, `Sources/AutocompleteLabApp/App/AcceptanceSurvivalChecker.swift`, `script/non_annoyance_report.py`, `script/non_annoyance_report_self_test.sh`, `Tests/AutocompleteLabCoreTests/AutocompleteNonAnnoyanceReportTests.swift`, `Tests/AutocompleteLabCoreTests/PrefixFamilyCooldownPolicyTests.swift`, `Tests/AutocompleteLabAppTests/AcceptanceSurvivalCheckerTests.swift`.
+- Missing evidence: Fresh long-session dogfood traces proving the new gate stays green in TextEdit, Notes, Chrome, and Obsidian, plus pause/resume uplift from real use.
+- What would make it 100/100: Low show density in real sessions, no immediate resurfacing after dismiss, no mid-word phrase spam, late suggestions hidden, and accepted-then-deleted signals suppressing future same-prefix suggestions in real dogfood traces.
 
 ### Latency
 
