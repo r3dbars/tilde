@@ -113,8 +113,8 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
     private var typedOverEagernessBuckets: [PrefixFamilyCooldownKey: PrefixFamilyEagernessBucket] = [:]
 
     public init(
-        typedOverCooldownMilliseconds: Int = 5_000,
-        repeatedTypedOverCooldownMilliseconds: Int = 30_000,
+        typedOverCooldownMilliseconds: Int = 750,
+        repeatedTypedOverCooldownMilliseconds: Int = 5_000,
         escapeCooldownMilliseconds: Int = 15_000,
         repeatedEscapeCooldownMilliseconds: Int = 60_000,
         deletionCooldownMilliseconds: Int = 250,
