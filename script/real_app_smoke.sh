@@ -2632,38 +2632,6 @@ func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     return value
 }
 
-func children(of element: AXUIElement) -> [AXUIElement] {
-    var result: [AXUIElement] = []
-    for attribute in [kAXChildrenAttribute, kAXContentsAttribute] {
-        if let values = copyAttribute(element, attribute) as? [AXUIElement] {
-            result.append(contentsOf: values)
-        }
-    }
-    return result
-}
-
-func noteBody(in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
-    guard depth <= 10 else {
-        return nil
-    }
-
-    let role = copyAttribute(element, kAXRoleAttribute) as? String
-    let description = copyAttribute(element, kAXDescriptionAttribute) as? String
-    let value = copyAttribute(element, kAXValueAttribute) as? String
-    if role == kAXTextAreaRole as String,
-       (description == "Note Body Text View" || value?.localizedCaseInsensitiveContains(marker) == true) {
-        return element
-    }
-
-    for child in children(of: element) {
-        if let found = noteBody(in: child, depth: depth + 1) {
-            return found
-        }
-    }
-
-    return nil
-}
-
 guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Notes" else {
     fputs("Notes is not frontmost for the Notes body smoke target.\n", stderr)
     exit(3)
@@ -2676,10 +2644,32 @@ guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleI
 
 let appElement = AXUIElementCreateApplication(app.processIdentifier)
 AXUIElementSetMessagingTimeout(appElement, 1.0)
-let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] ?? []
+let systemWide = AXUIElementCreateSystemWide()
+AXUIElementSetMessagingTimeout(systemWide, 1.0)
 
-guard let body = windows.lazy.compactMap({ noteBody(in: $0) }).first ?? noteBody(in: appElement) else {
-    fputs("Could not find a Notes body text view with the smoke marker.\n", stderr)
+func focusedElement(from element: AXUIElement) -> AXUIElement? {
+    var focusedValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(
+        element,
+        kAXFocusedUIElementAttribute as CFString,
+        &focusedValue
+    ) == .success,
+          let focusedValue else {
+        return nil
+    }
+
+    return (focusedValue as! AXUIElement)
+}
+
+guard let body = focusedElement(from: appElement) ?? focusedElement(from: systemWide) else {
+    fputs("Could not read the focused Notes body text view.\n", stderr)
+    exit(3)
+}
+
+AXUIElementSetMessagingTimeout(body, 1.0)
+let role = copyAttribute(body, kAXRoleAttribute) as? String
+guard role == kAXTextAreaRole as String else {
+    fputs("Focused Notes element is not the body text view.\n", stderr)
     exit(3)
 }
 
@@ -2690,6 +2680,10 @@ guard bodyText.localizedCaseInsensitiveContains(marker) else {
 }
 
 AXUIElementSetAttributeValue(body, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+var endRange = CFRange(location: bodyText.utf16.count, length: 0)
+if let rangeValue = AXValueCreate(.cfRange, &endRange) {
+    AXUIElementSetAttributeValue(body, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+}
 print("Notes body smoke target confirmed")
 SWIFT
 }

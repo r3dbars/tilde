@@ -153,6 +153,17 @@ for notes_surface in notes-title notes-body notes-checklist notes-title-undo not
   fi
 done
 
+if ! grep -F "bodyText.utf16.count" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "kAXSelectedTextRangeAttribute" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Notes body proof to move the caret to the end of the disposable note" >&2
+  exit 1
+fi
+if ! grep -F "kAXFocusedUIElementAttribute" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "Focused Notes element is not the body text view" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Notes body proof to validate the focused text view without walking the Notes AX tree" >&2
+  exit 1
+fi
+
 script/real_app_smoke.sh obsidian --dry-run >"$TMP_DIR/obsidian.txt"
 if ! grep -F "manual-gated disposable Obsidian smoke" "$TMP_DIR/obsidian.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Obsidian manual gate" >&2

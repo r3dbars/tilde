@@ -102,6 +102,33 @@ struct SuggestionAggressivenessTests {
         ) == .allow(.phraseContinuation))
     }
 
+    @Test("predictive fallback stays on for writing surfaces before OCR arrives")
+    func predictiveFallbackStaysOnForWritingSurfaces() {
+        let normal = SuggestionTuning(aggressivenessLevel: 2)
+
+        #expect(normal.allowsPredictiveWordFallback(
+            appBundleIdentifier: "com.apple.Notes",
+            visiblePageContextAvailable: false
+        ))
+        #expect(normal.allowsPredictiveWordFallback(
+            appBundleIdentifier: "com.apple.TextEdit",
+            visiblePageContextAvailable: false
+        ))
+        #expect(normal.allowsPredictiveWordFallback(
+            appBundleIdentifier: "md.obsidian",
+            visiblePageContextAvailable: false
+        ))
+        #expect(!normal.allowsModelWordCompletionFallback(visiblePageContextAvailable: false))
+        #expect(!normal.allowsPredictiveWordFallback(
+            appBundleIdentifier: "com.apple.mail",
+            visiblePageContextAvailable: false
+        ))
+        #expect(normal.allowsPredictiveWordFallback(
+            appBundleIdentifier: "com.apple.mail",
+            visiblePageContextAvailable: true
+        ))
+    }
+
     @Test("parsing and cycling are stable")
     func parsingAndCyclingAreStable() {
         #expect(SuggestionAggressiveness.parsed(nil) == .normal)
