@@ -183,7 +183,9 @@ line_has_source_compatible_commit_proof() {
     return 0
   fi
 
-  local source_paths_raw="${AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS:-Package.swift Package.resolved Sources script/real_app_smoke.sh script/manual_smoke_session.sh}"
+  # Proof rows should go stale when the app/runtime source changes, not when the
+  # proof driver gets safer for a different lane and app behavior is unchanged.
+  local source_paths_raw="${AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS:-Package.swift Package.resolved Sources}"
   local -a source_paths=()
   read -r -a source_paths <<<"$source_paths_raw"
   (( ${#source_paths[@]} > 0 )) || return 1
