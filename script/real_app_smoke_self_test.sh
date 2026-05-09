@@ -201,6 +201,11 @@ if ! grep -F "kAXFocusedUIElementAttribute" script/real_app_smoke.sh >/dev/null 
   echo "real app smoke self-test expected Notes body proof to validate the focused text view without walking the Notes AX tree" >&2
   exit 1
 fi
+if ! grep -F 'system attribute "AUTOCOMPLETE_LAB_NOTES_RAW_TEXT"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "keystroke rawText" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Notes body setup to type through System Events" >&2
+  exit 1
+fi
 
 script/real_app_smoke.sh obsidian --dry-run >"$TMP_DIR/obsidian.txt"
 if ! grep -F "manual-gated disposable Obsidian default-note smoke" "$TMP_DIR/obsidian.txt" >/dev/null; then

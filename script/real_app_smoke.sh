@@ -4174,39 +4174,16 @@ APPLESCRIPT
 type_notes_raw_smoke_text() {
   local text="$1"
 
-  AUTOCOMPLETE_LAB_NOTES_RAW_TEXT="$text" swift - <<'SWIFT'
-import AppKit
-import CoreGraphics
-import Foundation
-
-let text = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_NOTES_RAW_TEXT"] ?? ""
-
-guard NSWorkspace.shared.frontmostApplication?.localizedName == "Notes" else {
-    fputs("Notes is not frontmost for smoke-note setup.\n", stderr)
-    exit(1)
-}
-
-guard let source = CGEventSource(stateID: .hidSystemState) else {
-    fputs("Could not create a CGEvent source for Notes smoke-note setup.\n", stderr)
-    exit(1)
-}
-
-for scalar in text.unicodeScalars {
-    guard scalar.value <= UInt16.max else {
-        continue
-    }
-    var chars = [UniChar(scalar.value)]
-    guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
-          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
-        exit(1)
-    }
-    keyDown.keyboardSetUnicodeString(stringLength: chars.count, unicodeString: &chars)
-    keyUp.keyboardSetUnicodeString(stringLength: chars.count, unicodeString: &chars)
-    keyDown.post(tap: .cghidEventTap)
-    keyUp.post(tap: .cghidEventTap)
-    Thread.sleep(forTimeInterval: 0.025)
-}
-SWIFT
+  AUTOCOMPLETE_LAB_NOTES_RAW_TEXT="$text" osascript <<'APPLESCRIPT'
+set rawText to system attribute "AUTOCOMPLETE_LAB_NOTES_RAW_TEXT"
+tell application "System Events"
+  set frontApp to first application process whose frontmost is true
+  if bundle identifier of frontApp is not "com.apple.Notes" then
+    error "Notes is not frontmost for smoke-note setup."
+  end if
+  keystroke rawText
+end tell
+APPLESCRIPT
 }
 
 run_notes() {
