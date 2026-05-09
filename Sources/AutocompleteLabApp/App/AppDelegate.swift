@@ -3864,9 +3864,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if requestMode == .wordCompletion {
             let candidateWords = recentWordMemory.words(for: appBundleIdentifier)
                 + (visiblePageContext?.completionCandidateWords ?? [])
+            let allowPredictiveFallback = shouldUsePredictiveWordFallback(
+                visiblePageContext: visiblePageContext
+            )
             let fastSelection = suggestionOrchestrator.fastWordSelection(
                 for: context.textBeforeCursor,
-                recentWords: candidateWords
+                recentWords: candidateWords,
+                allowPredictiveFallback: allowPredictiveFallback
             )
             let fastSelectionMetadata = fastSelection.traceMetadata
             if let fastSuggestion = fastSelection.suggestion {
@@ -6754,6 +6758,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func shouldAskModelForWordCompletionFallback(
+        visiblePageContext: VisiblePageContext?
+    ) -> Bool {
+        suggestionTuning.aggressivenessLevel >= 4 || visiblePageContext != nil
+    }
+
+    private func shouldUsePredictiveWordFallback(
         visiblePageContext: VisiblePageContext?
     ) -> Bool {
         suggestionTuning.aggressivenessLevel >= 4 || visiblePageContext != nil
