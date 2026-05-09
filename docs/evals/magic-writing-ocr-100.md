@@ -556,6 +556,20 @@ Time: 2026-05-09T00:36:00Z
 - Cleanup: killed only isolated temporary Chrome proof processes launched by the failed attempts; the user's normal Chrome profile was left alone.
 - Next fix target: either drive the public iframe through an isolated Chrome DevTools setup channel before proving Autocomplete Lab acceptance, or switch the production text-field lane to a top-level public page whose editable field accepts normal AX/keyboard setup. Until then, public Chrome textarea/contenteditable stay honest proof gaps.
 
+2026-05-09T05:20Z heartbeat follow-up: closed the public Chrome text-field proof gap with the current fast model only.
+
+- Fix: moved `textarea-public` from the W3Schools iframe to the top-level public EditPad textarea page, and moved `contenteditable-public` to the top-level public MediumEditor demo. The public lanes now launch isolated Chrome with a temporary DevTools port only for disposable setup text and DOM caret placement; Autocomplete Lab still has to present, accept, and verify insertion through the app path.
+- Chrome insertion hardening: Chrome now keeps `axThenKeyEvents` as the primary path and can fall back to verified AX value replacement after failed key-event verification. This covers public browser editors that report selected-text success without changing value.
+- Verification hardening: Chromium rich-editor contenteditable fields may change height after insertion. The verifier now allows same-role/same-window/same-fingerprint/same-x/y/width height reflow after insertion, while still rejecting target movement.
+- Validation: `bash -n script/real_app_smoke.sh script/real_app_smoke_self_test.sh`, `script/real_app_smoke_self_test.sh`, `swift test --filter CompatibilityProfileTests`, and `swift test --filter FocusedFieldIdentityPolicyTests` passed.
+- Public textarea run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public`.
+- Public textarea result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, and strict screenshot-backed visual evidence on the public EditPad page.
+- Public textarea evidence: diagnostics lines 245519-245582 and trace lines 61907-61918; build `commit:d38038e9361f`, app SHA `d267aae1d73d58c8984630a7f480c529aea241a394eb23ae4d16c7833d61bdb1`.
+- Public contenteditable run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable-public`.
+- Public contenteditable result: passed with 2 accepted insertions, `inlineAdjacent|floatingMirror`, strict screenshot-backed visual evidence, and `insert-verification-target-resize-allowed reason=chromium-rich-editor-height-reflow`.
+- Public contenteditable evidence: diagnostics lines 245659-245733 and trace lines 61929-61947; build `commit:d38038e9361f`, app SHA `98458971bcbcffb2c6e2214b8f5ad36c142c167ab5de92c3bf287e6c56cf9a72`.
+- Gate movement: `script/manual_smoke_status.sh --require-all` still fails correctly, but public Chrome textarea and contenteditable are now green. Remaining required target-app proof gaps dropped from 17 to 15: Obsidian default refresh/variants, default-Chrome real-editor AX, Claude Code, and Claude desktop layout lanes.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:

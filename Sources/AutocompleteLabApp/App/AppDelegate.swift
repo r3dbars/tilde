@@ -3673,6 +3673,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let currentTargetFingerprint = targetFingerprint(context: adjustedContext).postInsertionScope
         guard baseline.targetFingerprint.matches(currentTargetFingerprint) else {
+            if baseline.profile.appFamily == .chromium,
+               baseline.fieldKind == .multilineCompose,
+               baseline.targetFingerprint.matchesPostInsertionScopeAllowingElementHeightChange(currentTargetFingerprint) {
+                DiagnosticsLog.shared.record(
+                    "insert-verification-target-resize-allowed",
+                    metadata: [
+                        "app": baseline.profile.bundleIdentifier,
+                        "fieldKind": baseline.fieldKind.rawValue,
+                        "reason": "chromium-rich-editor-height-reflow"
+                    ]
+                )
+                return .ready(context: adjustedContext)
+            }
             if let context = codexProofInsertionVerificationContext(
                 baseline: baseline,
                 acceptedText: acceptedText,
