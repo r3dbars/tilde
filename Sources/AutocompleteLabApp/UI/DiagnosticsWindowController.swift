@@ -1103,6 +1103,8 @@ struct DiagnosticsTypingHealth {
     private var disabledKeyEvents = 0
     private var startFailedKeyEvents = 0
     private var failedClosedKeyEvents = 0
+    private var replayedCapturedKeyEvents = 0
+    private var droppedCapturedKeyEvents = 0
 
     private var axSummarySamples = 0
     private var axP95Milliseconds: Int?
@@ -1134,6 +1136,10 @@ struct DiagnosticsTypingHealth {
             return "needs attention - slow key capture \(slowKeyMarkers)x"
         }
 
+        if droppedCapturedKeyEvents > 0 {
+            return "needs attention - captured key dropped \(droppedCapturedKeyEvents)x"
+        }
+
         if keySamples + keySummarySamples == 0 {
             return "no recent key samples"
         }
@@ -1142,7 +1148,7 @@ struct DiagnosticsTypingHealth {
     }
 
     var keySampleDescription: String {
-        "raw=\(keySamples), summary=\(keySummarySamples), p95=\(microseconds(keyP95Micros)), max=\(microseconds(keyMaxMicros))"
+        "raw=\(keySamples), summary=\(keySummarySamples), p95=\(microseconds(keyP95Micros)), max=\(microseconds(keyMaxMicros)), replayed=\(replayedCapturedKeyEvents), dropped=\(droppedCapturedKeyEvents)"
     }
 
     var axPollingStatus: String {
@@ -1191,6 +1197,10 @@ struct DiagnosticsTypingHealth {
             startFailedKeyEvents += 1
         case "keyboard-event-tap-failed-closed":
             failedClosedKeyEvents += 1
+        case "keyboard-event-tap-replayed-captured-key":
+            replayedCapturedKeyEvents += 1
+        case "keyboard-event-tap-unhandled-consumed-key-dropped":
+            droppedCapturedKeyEvents += 1
         case "focused-text-poll-latency-summary":
             axSummarySamples += fields.intValue(for: "count") ?? 0
             axP95Milliseconds = maxOptional(axP95Milliseconds, fields.intValue(for: "p95Milliseconds"))

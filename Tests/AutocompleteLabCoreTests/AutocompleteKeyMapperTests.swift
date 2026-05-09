@@ -44,6 +44,17 @@ struct AutocompleteKeyMapperTests {
         #expect(mapper.key(physicalKey: .backtick, modifiers: [.command, .shift]) == .other)
     }
 
+    @Test("IME and dead-key modifier chords pass through")
+    func imeAndDeadKeyModifierChordsPassThrough() {
+        let mapper = AutocompleteKeyMapper()
+
+        #expect(mapper.key(physicalKey: .backtick, modifiers: [.option]) == .other)
+        #expect(mapper.key(physicalKey: .backtick, modifiers: [.option, .shift]) == .other)
+        #expect(mapper.key(physicalKey: .z, modifiers: [.option]) == .other)
+        #expect(mapper.key(physicalKey: .other, modifiers: [.option]) == .other)
+        #expect(mapper.key(physicalKey: .other, modifiers: [.option, .shift]) == .other)
+    }
+
     @Test("Command Z maps to accepted insertion undo")
     func commandZMapsToAcceptedInsertionUndo() {
         let mapper = AutocompleteKeyMapper()
