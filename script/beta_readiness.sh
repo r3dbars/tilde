@@ -81,6 +81,7 @@ if [[ "$MODE" == "check-only" ]]; then
     ./script/check_diagnostics_log.sh || failures=$((failures + 1))
   run_check "Latency beta gate" ./script/latency_benchmark_report.py --beta-gate || failures=$((failures + 1))
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
+  run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
   run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh || failures=$((failures + 1))
   run_check "Manual app proof" ./script/manual_smoke_status.sh --require-all || failures=$((failures + 1))
@@ -136,6 +137,10 @@ echo "== Latency beta gate =="
 echo
 echo "== Redacted report export =="
 ./script/check_redacted_report_export.sh
+
+echo
+echo "== Issue template validation =="
+./script/validate_beta_issue_template.sh
 
 echo
 echo "== Clipboard fallback disabled =="

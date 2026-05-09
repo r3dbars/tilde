@@ -57,9 +57,36 @@ struct DiagnosticsTypingHealthTests {
         ])
 
         #expect(health.keyCaptureStatus == "healthy")
-        #expect(health.keySampleDescription == "raw=1, summary=2, p95=96us, max=96us")
+        #expect(health.keySampleDescription == "raw=1, summary=2, p95=96us, max=96us, replayed=0, dropped=0")
         #expect(health.axPollingStatus == "warning - suggestions may lag, typing should pass through")
         #expect(health.axSampleDescription == "summary=60, p95=14ms, max=420ms, slow=1, skipped=3, cooldowns=0")
+    }
+
+    @Test("Replayed captured keys stay in key lane without making AX warnings fatal")
+    func replayedCapturedKeysStayInKeyLaneWithoutMakingAXWarningsFatal() {
+        let health = DiagnosticsTypingHealth(events: [
+            "2026-05-07T01:44:41Z keyboard-event-tap-latency decision=consume durationMicros=70 key=tab",
+            "2026-05-07T01:44:41Z keyboard-event-tap-replayed-captured-key key=tab reason=focus-changed diagnosticLayer=keyCapture safetyFailure=false",
+            "2026-05-07T01:44:45Z focused-text-ax-read-slow app=com.openai.codex hasContext=true readDurationMilliseconds=420"
+        ])
+
+        #expect(health.keyCaptureStatus == "healthy")
+        #expect(health.keySampleDescription == "raw=1, summary=0, p95=n/a, max=70us, replayed=1, dropped=0")
+        #expect(health.axPollingStatus == "warning - suggestions may lag, typing should pass through")
+        #expect(health.axSampleDescription == "summary=0, p95=n/a, max=420ms, slow=1, skipped=0, cooldowns=0")
+    }
+
+    @Test("Dropped captured keys are key capture failures separate from AX health")
+    func droppedCapturedKeysAreKeyCaptureFailuresSeparateFromAXHealth() {
+        let health = DiagnosticsTypingHealth(events: [
+            "2026-05-07T01:44:41Z keyboard-event-tap-latency decision=consume durationMicros=70 key=tab",
+            "2026-05-07T01:44:41Z keyboard-event-tap-unhandled-consumed-key-dropped key=tab reason=acceptance-proof-failed diagnosticLayer=keyCapture safetyFailure=true",
+            "2026-05-07T01:44:42Z focused-text-poll-latency-summary count=30 maxMilliseconds=12 p95Milliseconds=8"
+        ])
+
+        #expect(health.keyCaptureStatus == "needs attention - captured key dropped 1x")
+        #expect(health.keySampleDescription == "raw=1, summary=0, p95=n/a, max=70us, replayed=0, dropped=1")
+        #expect(health.axPollingStatus == "healthy")
     }
 
     @Test("Flags event tap disabled as key capture attention")
