@@ -223,6 +223,7 @@ Time: 2026-05-09T00:36:00Z
 - A direct Notes AppleScript setup path was rejected because Notes scripting hung on this machine, so the harness now avoids scanning or scripting the user's existing notes.
 - Validation run so far: `bash -n script/real_app_smoke.sh`, `script/real_app_smoke.sh notes-body --dry-run --manual-gate`, and `git diff --check` pass.
 - Live Notes proof is still pending because another real-app smoke run is currently compiling a Metal runtime in a different worktree; rerun `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate` when that clears.
+- Post-commit strict gate on `afbedc5`: `./script/check_score_targets.sh` still fails with 68 issues. The immediate current-commit blocker is stale real-app proof after the harness commit; the biggest product blockers remain Codex same-slice no-submit proof, production Chrome editor variants, and deeper Notes/Obsidian/Claude variants.
 
 ## 100 Test Situations
 
