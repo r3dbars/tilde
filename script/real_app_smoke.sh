@@ -565,6 +565,25 @@ line_count() {
   fi
 }
 
+log_since_matches() {
+  local start_line="$1"
+  local pattern="$2"
+
+  [[ -f "$LOG_PATH" ]] || return 1
+  awk -v start="$start_line" -v pattern="$pattern" '
+    NR > start && $0 ~ pattern {
+      found = 1
+      exit
+    }
+    END {
+      if (found) {
+        exit 0
+      }
+      exit 1
+    }
+  ' "$LOG_PATH" 2>/dev/null
+}
+
 wait_for_log_pattern() {
   local start_line="$1"
   local pattern="$2"
@@ -573,7 +592,7 @@ wait_for_log_pattern() {
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
-    if tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -E "$pattern" >/dev/null; then
+    if log_since_matches "$start_line" "$pattern"; then
       return 0
     fi
     sleep 0.2
@@ -628,7 +647,7 @@ wait_for_runtime_ready() {
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
-    if tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -E " runtime .*readinessStage=ready" >/dev/null; then
+    if log_since_matches "$start_line" " runtime .*readinessStage=ready"; then
       return 0
     fi
 
@@ -4246,8 +4265,7 @@ describe_plan() {
 
 build_if_needed() {
   if [[ "$SKIP_BUILD" != "1" ]]; then
-    AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1 \
-      AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 \
+    AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 \
       ./script/build_and_run.sh run
     wait_for_current_autocomplete_lab_process
   fi
