@@ -287,7 +287,7 @@ struct SettingsWindowControllerStateTests {
         #expect(needed.statusText == "Accessibility permission: needed")
         #expect(
             needed.detailText
-                == "Allow Accessibility in System Settings so Autocomplete Lab can see the focused text field, find the cursor, and insert text only when you accept. Text stays on this Mac."
+                == "Allow Accessibility in System Settings so Autocomplete Lab can see the focused text field, find the cursor, and insert text only when you accept. If you denied it, use Open Privacy Settings and turn Autocomplete Lab back on. Text stays on this Mac."
         )
 
         let allowed = SettingsPermissionState(isTrusted: true)
@@ -441,8 +441,57 @@ struct SettingsWindowControllerStateTests {
             )
         )
 
-        #expect(ready.text == "Ready: open TextEdit, turn on suggestions for TextEdit, type a short sentence, press Tab for one word, or Esc to dismiss.")
+        #expect(ready.text == "Ready: use Practice to open TextEdit, try Tab for one word, press Esc to dismiss, then pause or delete traces.")
         #expect(!ready.text.localizedCaseInsensitiveContains("Notes"))
+    }
+
+    @Test("Practice state guides safe TextEdit smoke")
+    func practiceStateGuidesSafeTextEditSmoke() {
+        let missingPermission = SettingsPracticeState(
+            isTrusted: false,
+            suggestionsPaused: false,
+            runtimeReport: readyRuntimeReport,
+            isModelInstallInProgress: false,
+            isTextEditEnabled: false
+        )
+
+        #expect(missingPermission.statusText == "Practice: allow Accessibility first")
+        #expect(missingPermission.primaryButtonTitle == "Allow Accessibility")
+        #expect(missingPermission.primaryAction == .requestAccessibility)
+        #expect(missingPermission.isPrimaryButtonEnabled)
+
+        let missingModel = SettingsPracticeState(
+            isTrusted: true,
+            suggestionsPaused: false,
+            runtimeReport: RuntimeReadinessReport(
+                stage: .downloadNeeded,
+                summary: "download needed",
+                action: .installModel,
+                isReady: false
+            ),
+            isModelInstallInProgress: false,
+            isTextEditEnabled: false
+        )
+
+        #expect(missingModel.statusText == "Practice: local model not ready")
+        #expect(missingModel.primaryAction == .performRuntimeAction(.installModel))
+        #expect(missingModel.primaryButtonTitle == "Install Local Model")
+
+        let ready = SettingsPracticeState(
+            isTrusted: true,
+            suggestionsPaused: false,
+            runtimeReport: readyRuntimeReport,
+            isModelInstallInProgress: false,
+            isTextEditEnabled: false
+        )
+
+        #expect(ready.statusText == "Practice: ready in TextEdit")
+        #expect(ready.textEditText == "TextEdit: will be enabled for this practice")
+        #expect(ready.primaryAction == .openTextEditPractice)
+        #expect(ready.primaryButtonTitle == "Start TextEdit Practice")
+        #expect(ready.detailText.localizedCaseInsensitiveContains("does not ask for Screen Recording"))
+        #expect(ready.stepsText.localizedCaseInsensitiveContains("Tab once"))
+        #expect(ready.stepsText.localizedCaseInsensitiveContains("Esc"))
     }
 
     @Test("Field control copy scopes silence to the current field")
@@ -520,6 +569,98 @@ struct SettingsWindowControllerStateTests {
         #expect(max.maxWordsText == "Words shown: 8")
         #expect(max.aggressivenessSliderValue == 5)
         #expect(max.maxWordsSliderValue == 8)
+    }
+
+    @MainActor
+    @Test("Settings practice actions dispatch safe TextEdit flow controls")
+    func settingsPracticeActionsDispatchSafeTextEditFlowControls() {
+        _ = NSApplication.shared
+        var permissionCount = 0
+        var runtimeActions: [RuntimeReadinessAction] = []
+        var practiceStartCount = 0
+        var pauseCount = 0
+        var deleteCount = 0
+        let controller = SettingsWindowController(
+            requestPermission: {
+                permissionCount += 1
+            },
+            openAccessibilitySettings: {},
+            toggleSuggestionsPaused: {
+                pauseCount += 1
+            },
+            silenceCurrentField: {},
+            performRuntimeAction: {
+                runtimeActions.append($0)
+            },
+            toggleCurrentApp: {},
+            toggleCurrentAppMirrorMode: {},
+            startCurrentAppProof: {},
+            startTextEditPractice: {
+                practiceStartCount += 1
+            },
+            enableAllApps: {},
+            toggleTracingPaused: {},
+            toggleRawContentTracing: {},
+            toggleScreenshotTracing: {},
+            toggleVisiblePageContext: {},
+            deleteLocalLogs: {
+                deleteCount += 1
+            },
+            clearLearningData: {},
+            cycleAcceptAllShortcut: {},
+            setAcceptAllShortcut: { _ in },
+            setSuggestionAggressivenessLevel: { _ in },
+            setSuggestionMaxVisibleWords: { _ in }
+        )
+
+        refreshPracticeController(
+            controller,
+            practice: SettingsPracticeState(
+                isTrusted: false,
+                suggestionsPaused: false,
+                runtimeReport: readyRuntimeReport,
+                isModelInstallInProgress: false,
+                isTextEditEnabled: false
+            )
+        )
+        controller.performPracticePrimaryAction()
+        #expect(permissionCount == 1)
+
+        refreshPracticeController(
+            controller,
+            practice: SettingsPracticeState(
+                isTrusted: true,
+                suggestionsPaused: false,
+                runtimeReport: RuntimeReadinessReport(
+                    stage: .downloadNeeded,
+                    summary: "download needed",
+                    action: .installModel,
+                    isReady: false
+                ),
+                isModelInstallInProgress: false,
+                isTextEditEnabled: false
+            )
+        )
+        controller.performPracticePrimaryAction()
+        #expect(runtimeActions == [.installModel])
+
+        refreshPracticeController(
+            controller,
+            practice: SettingsPracticeState(
+                isTrusted: true,
+                suggestionsPaused: false,
+                runtimeReport: readyRuntimeReport,
+                isModelInstallInProgress: false,
+                isTextEditEnabled: true
+            )
+        )
+        controller.performPracticePrimaryAction()
+        #expect(practiceStartCount == 1)
+
+        controller.performPracticePauseAction()
+        controller.performPracticeDeleteTracesAction()
+        #expect(pauseCount == 1)
+        #expect(deleteCount == 1)
     }
 
     @MainActor
@@ -603,4 +744,55 @@ struct SettingsWindowControllerStateTests {
                 == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit"
         )
     }
+
+    @MainActor
+    private func refreshPracticeController(
+        _ controller: SettingsWindowController,
+        practice: SettingsPracticeState
+    ) {
+        controller.refresh(
+            isTrusted: true,
+            suggestionsPaused: false,
+            runtimeReport: readyRuntimeReport,
+            runtimeTargetSummary: "Qwen local - short completions - normal",
+            modelDirectoryPath: "/tmp/AutocompleteLab/Models",
+            modelInstallStatusText: nil,
+            isModelInstallInProgress: false,
+            currentApp: SettingsCurrentAppState(
+                displayName: "TextEdit",
+                bundleIdentifier: "com.apple.TextEdit",
+                supportStatus: CompatibilityProfileStore.mvp.supportStatus(for: "com.apple.TextEdit"),
+                isEnabled: true,
+                disabledAppCount: 0
+            ),
+            fieldControl: SettingsFieldControlState(
+                appDisplayName: "TextEdit",
+                hasFieldTarget: true,
+                isCurrentField: true,
+                isSilenced: false
+            ),
+            practice: practice,
+            privacy: SettingsPrivacyState(
+                tracingPaused: false,
+                rawContentTracingEnabled: false,
+                rawContentTracingExpiresAt: nil,
+                screenshotTracingEnabled: false,
+                screenshotTracingExpiresAt: nil,
+                visiblePageContextEnabled: false,
+                screenCaptureAccessGranted: false,
+                diagnosticsPath: "/tmp/diagnostics.log",
+                tracePath: "/tmp/traces.jsonl"
+            ),
+            keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .backtick),
+            suggestionAggressiveness: SettingsSuggestionAggressivenessState(tuning: SuggestionTuning()),
+            lastSuggestionDecision: "Shown"
+        )
+    }
 }
+
+private let readyRuntimeReport = RuntimeReadinessReport(
+    stage: .ready,
+    summary: "ready",
+    action: .none,
+    isReady: true
+)
