@@ -262,6 +262,15 @@ Time: 2026-05-09T00:36:00Z
 - Evidence: diagnostics lines 239124-239180, trace lines 60891-60915, manual smoke row `2026-05-09T02:43:09Z`, app binary SHA `1ab7aa23cb7be2b2c17831e272a40c7083578116a43e5f17b911357529f6aaa6`.
 - Validation: `VisibleSuggestionPersistencePolicyTests`, `SuggestionAggressivenessTests`, `WordCompletionCandidateRankerTests`, `script/real_app_smoke_self_test.sh`, and the live Notes body smoke passed. The model stayed `qwen3-0.6b`.
 
+2026-05-09T02:52Z heartbeat follow-up: refreshed Notes body proof on PR #35 head.
+
+- Result: after merging `origin/main`, the strict proof gate correctly treated the older Notes body row as stale by commit id.
+- Finding: the Notes body setup could create a blank note but fail to type the disposable marker when using direct CGEvent Unicode input, so the smoke failed safely before touching an unmarked note.
+- Fix: the Notes body harness now types setup/proof text through `System Events` while still requiring Notes to be frontmost and the focused body to contain `Autocomplete smoke` before proof typing continues.
+- Live proof: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate` passed on branch head `54a039e80138` with 2 accepted insertions and strict visual trace evidence.
+- Evidence: diagnostics lines 239593-239630, trace lines 60979-60988, manual smoke row `2026-05-09T02:51:56Z`, app binary SHA `202a9170fee3b2f968d79beb836d6c7bdbba8233ae46168fbcf5ee0aa1e381a7`.
+- Validation: `script/real_app_smoke_self_test.sh` and the live Notes body smoke passed. The model stayed `qwen3-0.6b`.
+
 ## 100 Test Situations
 
 | # | App | Situation | Target behavior | Score |
