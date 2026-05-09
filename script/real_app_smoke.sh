@@ -1216,6 +1216,14 @@ wait_for_chrome_smoke_ready() {
   local deadline=$((SECONDS + timeout_seconds))
 
   if chrome_fixture_is_official_demo "$fixture"; then
+    if chrome_fixture_is_public_text_field_demo "$fixture"; then
+      # Public W3Schools text-field demos are proofed through URL loading,
+      # guarded coordinate focus, and AX-focused-editor verification below.
+      # They do not need Chrome's "Allow JavaScript from Apple Events" setting.
+      sleep 1
+      return 0
+    fi
+
     require_chrome_javascript_from_apple_events "$fixture"
     while ((SECONDS <= deadline)); do
       local ready
@@ -1373,7 +1381,7 @@ chrome_fixture_uses_isolated_accessibility_chrome() {
     return 1
   fi
 
-  if chrome_fixture_is_official_demo "$1"; then
+  if chrome_fixture_is_official_demo "$1" && ! chrome_fixture_is_public_text_field_demo "$1"; then
     return 1
   fi
 
@@ -1696,11 +1704,199 @@ chrome_fixture_click_offsets() {
   esac
 }
 
+focus_chrome_public_text_field_editor() {
+  local fixture="$1"
+  local chrome_pid="${2:-0}"
+
+  swift - "$fixture" "$chrome_pid" <<'SWIFT'
+import AppKit
+import ApplicationServices
+import CoreGraphics
+import Foundation
+
+guard CommandLine.arguments.count == 3,
+      let rawPID = Int32(CommandLine.arguments[2]) else {
+    exit(2)
+}
+
+let fixture = CommandLine.arguments[1]
+let pid: pid_t
+if rawPID > 0 {
+    pid = pid_t(rawPID)
+} else if let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+          let frontmost = NSWorkspace.shared.frontmostApplication,
+          frontmost.bundleIdentifier == "com.google.Chrome" || frontmost.localizedName == "Google Chrome" {
+    pid = frontmostPID
+} else {
+    fputs("Chrome \(fixture) public proof could not find a frontmost Chrome process.\n", stderr)
+    exit(1)
+}
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+
+    return value
+}
+
+func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String {
+    copyAttribute(element, attribute) as? String ?? ""
+}
+
+func rect(for element: AXUIElement) -> CGRect? {
+    guard let positionValue = copyAttribute(element, kAXPositionAttribute),
+          let sizeValue = copyAttribute(element, kAXSizeAttribute) else {
+        return nil
+    }
+
+    var position = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+          AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else {
+        return nil
+    }
+
+    return CGRect(origin: position, size: size)
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func hasWebAreaAncestor(_ element: AXUIElement) -> Bool {
+    var current = element
+    for _ in 0..<16 {
+        if stringAttribute(current, kAXRoleAttribute) == "AXWebArea" {
+            return true
+        }
+
+        guard let parentValue = copyAttribute(current, kAXParentAttribute) else {
+            return false
+        }
+        current = parentValue as! AXUIElement
+    }
+
+    return false
+}
+
+struct Candidate {
+    let element: AXUIElement
+    let role: String
+    let title: String
+    let frame: CGRect
+    let score: Double
+}
+
+func collectCandidates(in element: AXUIElement, depth: Int = 0, candidates: inout [Candidate]) {
+    guard depth <= 40 else {
+        return
+    }
+
+    let role = stringAttribute(element, kAXRoleAttribute)
+    let title = stringAttribute(element, kAXTitleAttribute)
+    if (role == "AXTextArea" || role == "AXTextField"),
+       hasWebAreaAncestor(element),
+       let frame = rect(for: element),
+       frame.width >= 100,
+       frame.height >= 20 {
+        var score = frame.width * frame.height
+        if fixture == "textarea-public", title.localizedCaseInsensitiveContains("Review of W3Schools") {
+            score += 1_000_000
+        }
+        if fixture == "contenteditable-public", role == "AXTextArea" || role == "AXTextField" {
+            score += 100_000
+        }
+        candidates.append(Candidate(element: element, role: role, title: title, frame: frame, score: score))
+    }
+
+    for child in children(of: element) {
+        collectCandidates(in: child, depth: depth + 1, candidates: &candidates)
+    }
+}
+
+let appElement = AXUIElementCreateApplication(pid)
+AXUIElementSetMessagingTimeout(appElement, 1.0)
+
+var candidates: [Candidate] = []
+for _ in 0..<40 {
+    candidates.removeAll(keepingCapacity: true)
+    collectCandidates(in: appElement, candidates: &candidates)
+    if !candidates.isEmpty {
+        break
+    }
+    Thread.sleep(forTimeInterval: 0.2)
+}
+
+guard let candidate = candidates.max(by: { $0.score < $1.score }) else {
+    fputs("Chrome \(fixture) public proof could not find a web-backed editable text target through AX.\n", stderr)
+    exit(1)
+}
+
+if let app = NSRunningApplication(processIdentifier: pid) {
+    app.activate(options: [.activateAllWindows])
+}
+
+if let focusedWindowValue = copyAttribute(appElement, kAXFocusedWindowAttribute) {
+    AXUIElementPerformAction((focusedWindowValue as! AXUIElement), kAXRaiseAction as CFString)
+}
+
+if let source = CGEventSource(stateID: .hidSystemState) {
+    let point = CGPoint(x: candidate.frame.midX, y: candidate.frame.midY)
+    for eventType in [CGEventType.leftMouseDown, .leftMouseUp] {
+        if let event = CGEvent(
+            mouseEventSource: source,
+            mouseType: eventType,
+            mouseCursorPosition: point,
+            mouseButton: .left
+        ) {
+            event.post(tap: .cghidEventTap)
+        }
+    }
+}
+
+Thread.sleep(forTimeInterval: 0.15)
+AXUIElementSetAttributeValue(candidate.element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+let value = stringAttribute(candidate.element, kAXValueAttribute)
+var range = CFRange(location: value.utf16.count, length: 0)
+if let rangeValue = AXValueCreate(.cfRange, &range) {
+    AXUIElementSetAttributeValue(candidate.element, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+}
+Thread.sleep(forTimeInterval: 0.15)
+
+guard let focusedValue = copyAttribute(appElement, kAXFocusedUIElementAttribute) else {
+    fputs("Chrome \(fixture) public proof could not verify focused AX element after focusing candidate.\n", stderr)
+    exit(1)
+}
+
+let focused = focusedValue as! AXUIElement
+let focusedRole = stringAttribute(focused, kAXRoleAttribute)
+let focusedWebBacked = hasWebAreaAncestor(focused)
+guard focusedRole == "AXTextArea" || (focusedRole == "AXTextField" && focusedWebBacked) else {
+    fputs(
+        "Chrome \(fixture) public proof focused candidate at x=\(Int(candidate.frame.midX)),y=\(Int(candidate.frame.midY)), but focused AX role is \(focusedRole.isEmpty ? "unknown" : focusedRole).\n",
+        stderr
+    )
+    exit(1)
+}
+
+print("Chrome \(fixture) public proof focused \(candidate.role) title=\(candidate.title.isEmpty ? "none" : candidate.title) frame=x=\(Int(candidate.frame.minX)),y=\(Int(candidate.frame.minY)),w=\(Int(candidate.frame.width)),h=\(Int(candidate.frame.height))")
+SWIFT
+}
+
 focus_chrome_smoke_editor() {
   local fixture="${1:-$CHROME_FIXTURE}"
   local chrome_pid="${2:-}"
   local click_x_offset click_y_offset
   read -r click_x_offset click_y_offset < <(chrome_fixture_click_offsets "$fixture")
+
+  if chrome_fixture_is_public_text_field_demo "$fixture"; then
+    focus_chrome_public_text_field_editor "$fixture" "${chrome_pid:-0}"
+    wait_for_frontmost_app "Google Chrome" 5
+    return 0
+  fi
 
   if [[ -n "$chrome_pid" ]]; then
     focus_chrome_process_window "$chrome_pid" "$click_x_offset" "$click_y_offset"
@@ -1708,6 +1904,24 @@ focus_chrome_smoke_editor() {
   fi
 
   if chrome_fixture_is_official_demo "$fixture"; then
+    if chrome_fixture_is_public_text_field_demo "$fixture"; then
+      osascript >/dev/null <<APPLESCRIPT
+tell application "Google Chrome"
+  activate
+end tell
+delay 0.2
+tell application "System Events"
+  tell process "Google Chrome"
+    set frontmost to true
+    set chromePosition to position of window 1
+    click at {(item 1 of chromePosition) + $click_x_offset, (item 2 of chromePosition) + $click_y_offset}
+  end tell
+end tell
+APPLESCRIPT
+      wait_for_frontmost_app "Google Chrome" 5
+      return 0
+    fi
+
     osascript >/dev/null <<'APPLESCRIPT'
 tell application "Google Chrome"
   activate
@@ -2980,6 +3194,25 @@ func postTextEvents(destination: TextEventDestination) {
     }
 }
 
+func postPasteShortcut(destination: TextEventDestination) {
+    guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
+          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
+        fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): could not create paste events.\n", stderr)
+        exit(1)
+    }
+
+    keyDown.flags = .maskCommand
+    keyUp.flags = .maskCommand
+    switch destination {
+    case .pid:
+        keyDown.postToPid(pid)
+        keyUp.postToPid(pid)
+    case .eventTap:
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+    }
+}
+
 postTextEvents(destination: .pid)
 if waitForInsertedText() {
     exit(0)
@@ -2997,6 +3230,33 @@ if selectedTextResult == .success && waitForInsertedText() {
 postTextEvents(destination: .eventTap)
 if waitForInsertedText() {
     exit(0)
+}
+
+let pasteboard = NSPasteboard.general
+let previousPasteboardString = pasteboard.string(forType: .string)
+pasteboard.clearContents()
+if pasteboard.setString(text, forType: .string) {
+    postPasteShortcut(destination: .pid)
+    if waitForInsertedText() {
+        pasteboard.clearContents()
+        if let previousPasteboardString {
+            pasteboard.setString(previousPasteboardString, forType: .string)
+        }
+        exit(0)
+    }
+
+    postPasteShortcut(destination: .eventTap)
+    if waitForInsertedText() {
+        pasteboard.clearContents()
+        if let previousPasteboardString {
+            pasteboard.setString(previousPasteboardString, forType: .string)
+        }
+        exit(0)
+    }
+}
+pasteboard.clearContents()
+if let previousPasteboardString {
+    pasteboard.setString(previousPasteboardString, forType: .string)
 }
 
 let finalValue = currentFocusedValue()
@@ -4070,10 +4330,10 @@ describe_plan() {
         fi
       elif [[ "$CHROME_FIXTURE" == "production-text-fields" ]]; then
         echo "Plan: build/relaunch AutocompleteLab, then run bounded public Chrome textarea and contenteditable proof on W3Schools demo pages with disposable text."
-        echo "Requirement: production text-field lanes need Chrome's View > Developer > Allow JavaScript from Apple Events setting so the script can focus and verify the public demo field."
+        echo "Proof path: production text-field lanes use public URLs plus guarded coordinate focus and AX verification; Chrome JavaScript-from-Apple-Events is not required for these two lanes."
       elif chrome_fixture_is_public_text_field_demo "$CHROME_FIXTURE"; then
         echo "Plan: build/relaunch AutocompleteLab, open the public W3Schools $CHROME_FIXTURE demo page in Chrome, type a disposable test fragment, then validate logs and traces."
-        echo "Requirement: production text-field lanes need Chrome's View > Developer > Allow JavaScript from Apple Events setting so the script can focus and verify the public demo field."
+        echo "Proof path: public text-field proof uses guarded coordinate focus and AX verification; Chrome JavaScript-from-Apple-Events is not required for this lane."
       elif chrome_fixture_is_official_demo "$CHROME_FIXTURE"; then
         echo "Plan: build/relaunch AutocompleteLab, open the public official $CHROME_FIXTURE demo page in Chrome, type a disposable test fragment, then validate logs and traces."
         echo "Requirement: official Chrome demo lanes need Chrome's View > Developer > Allow JavaScript from Apple Events setting so the script can focus and verify the editor."

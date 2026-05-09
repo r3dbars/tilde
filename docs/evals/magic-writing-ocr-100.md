@@ -546,6 +546,16 @@ Time: 2026-05-09T00:36:00Z
 - Cleanup: cleared the disposable `AUTOCOMPLETE_LAB_CODEX_PROOF` marker from the Codex composer after the proof, guarded by the marker string.
 - Gate movement: strict status now has TextEdit, Notes title/body/checklist, all local Chrome fixtures, real Chrome Monaco/ProseMirror under isolated renderer accessibility, Chrome chat-like no-submit, and Codex fresh green on PR #35. `script/manual_smoke_status.sh --require-all` still fails correctly with 17 proof gaps: Obsidian acceptance/variants, public Chrome text fields, default-Chrome real-editor AX lanes, and Claude/Claude Code layout lanes.
 
+2026-05-09T05:09Z heartbeat follow-up: narrowed the public Chrome textarea blocker without changing models.
+
+- Claude Code automation attempt: tried to start a fresh Terminal-hosted Claude Code proof without submitting an agent prompt, but Terminal hung on AppleScript responses and Computer Use is blocked from Terminal. I closed only the fresh Terminal process and did not claim proof. Claude Code remains a manual/host proof gap.
+- Harness fix: public W3Schools textarea/contenteditable lanes no longer fail closed just because Chrome's `View > Developer > Allow JavaScript from Apple Events` is off. The script now allows those two public text-field lanes to use isolated forced-renderer-accessibility Chrome, polls for a public web-backed editable AX target, focuses the real target by AX frame, and has a guarded paste fallback for disposable setup text with string clipboard restoration.
+- Validation: `bash -n script/real_app_smoke.sh script/real_app_smoke_self_test.sh` passed, and `script/real_app_smoke_self_test.sh` passed.
+- Live attempt: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public`.
+- Result: still no pass claimed. The old false blocker is gone: the run focused the real W3Schools `AXTextArea` titled `Review of W3Schools:` at `x=510,y=298,w=424,h=69`. The remaining blocker is deeper: Chrome did not apply setup text through process-targeted Unicode events, AX selected-text replacement, foreground Unicode events, or the guarded paste fallback inside that public iframe.
+- Cleanup: killed only isolated temporary Chrome proof processes launched by the failed attempts; the user's normal Chrome profile was left alone.
+- Next fix target: either drive the public iframe through an isolated Chrome DevTools setup channel before proving Autocomplete Lab acceptance, or switch the production text-field lane to a top-level public page whose editable field accepts normal AX/keyboard setup. Until then, public Chrome textarea/contenteditable stay honest proof gaps.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
