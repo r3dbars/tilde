@@ -2499,7 +2499,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-one-word")
                 return .replayOriginalKey(.unsupportedAction)
             }
-            if let blockReason = currentSuggestionAcceptanceDecision().blockReason {
+            if let blockReason = currentSuggestionAcceptanceDecision(
+                allowCodexProofSnapshotFastPath: true
+            ).blockReason {
                 recordAcceptanceGuardBlock(reason: blockReason)
                 setSuggestionDecision("Blocked: \(blockReason.rawValue)")
                 hideSuggestion(reason: blockReason.rawValue)
@@ -2689,9 +2691,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func currentSuggestionAcceptanceDecision() -> SuggestionAcceptanceDecision {
+    private func currentSuggestionAcceptanceDecision(
+        allowCodexProofSnapshotFastPath: Bool = false
+    ) -> SuggestionAcceptanceDecision {
         guard let shownSnapshot = currentSuggestionAcceptanceSnapshot else {
             return .block(.missingShownSnapshot)
+        }
+
+        if allowCodexProofSnapshotFastPath,
+           codexProofAcceptanceSnapshotMatchesShown(shownSnapshot) {
+            recordCodexProofSnapshotFastPath(stage: "acceptance")
+            return .allow
         }
 
         var blockReason: SuggestionAcceptanceBlockReason?
@@ -2822,6 +2832,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if allowCodexProofSnapshotFastPath,
            codexProofSnapshotMatchesCurrentSuggestion() {
+            recordCodexProofSnapshotFastPath(stage: "focus")
             return true
         }
 
@@ -2963,16 +2974,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
+        return true
+    }
+
+    private func codexProofAcceptanceSnapshotMatchesShown(
+        _ shownSnapshot: SuggestionAcceptanceSnapshot
+    ) -> Bool {
+        guard codexProofSnapshotMatchesCurrentSuggestion(),
+              let currentSuggestionFieldIdentity,
+              let lastTextSnapshot,
+              shownSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
+              shownSnapshot.fieldIdentity == lastTextSnapshot.fieldIdentity,
+              shownSnapshot.textBeforeCursor == lastTextSnapshot.textBeforeCursor,
+              shownSnapshot.textAfterCursor == lastTextSnapshot.textAfterCursor,
+              shownSnapshot.selectedTextLength == 0 else {
+            return false
+        }
+
+        return true
+    }
+
+    private func recordCodexProofSnapshotFastPath(stage: String) {
+        guard let currentProfile,
+              let currentSuggestionFieldIdentity else {
+            return
+        }
+
         DiagnosticsLog.shared.record(
-            "codex-proof-focus-fast-path",
+            "codex-proof-snapshot-fast-path",
             metadata: [
-                "app": bundleIdentifier,
+                "app": "com.openai.codex",
+                "stage": stage,
                 "fieldIdentity": currentSuggestionFieldIdentity.traceDescription,
                 "requestMode": currentSuggestionRequestMode?.rawValue ?? "",
                 "promptSafetyMode": currentProfile.promptAppSafetyMode.rawValue
             ]
         )
-        return true
     }
 
     private func recordKeyboardAction(
