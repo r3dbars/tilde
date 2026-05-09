@@ -5,3 +5,4 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 swift test --filter CompletionQualityEvalTests
+swift test --filter OfflineModelQualityEvalTests

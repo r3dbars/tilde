@@ -120,11 +120,6 @@ local debug tracing is explicitly enabled.
 
 The headline product metric is accepted-and-kept, not raw accept rate. Accepted text is compared at 2s, 10s, 30s, and field blur. Durable checkpoint events store survival class, token recall, edit distance, accepted length, timing metadata, and redacted fingerprints. They should not need the current field text on disk.
 
-Accepted-and-kept is also a restraint signal. Immediate deletion, typed-over,
-and high post-accept edit distance stay as local counts and can lower future
-display scoring after enough samples. Tiny samples should only show directional
-metadata, not strong tuning.
-
 Acceptance events also carry log-safe proof that inserted text came from the
 visible suggestion slice: accepted character count, pre-accept visible character
 count, remaining visible character count, visible-prefix/full-visible match
@@ -202,6 +197,46 @@ After a manual model trial, require enough samples before trusting the result:
 script/model_latency_report.py --latest --require-timing-samples 5 --require-shown-samples 5
 script/model_latency_report.py --default-model-proof
 script/latency_benchmark_report.py --beta-gate
+```
+
+## Local Quality Audit
+
+Raw content quality audits are local opt-in only. Use disposable prompts, and do
+not use real private writing unless you explicitly choose to debug that text on
+this machine.
+
+Run the current local model against a JSONL prompt set:
+
+```bash
+AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT=1 \
+AUTOCOMPLETE_LAB_RUNTIME_BACKEND=mlx \
+  ./script/local_quality_audit.py \
+    --input /path/to/disposable-prompts.jsonl \
+    --generate \
+    --min-overall 92 \
+    --min-relevance 72
+```
+
+The default report prints aggregate labels and row ids only. It scores
+relevance, literal continuation, assistant voice, wrong topic, too long,
+structural breakage, unsafe or sensitive content, and repetition. It does not
+persist raw prompt text or raw model output by default.
+
+Only include raw output for a short local debug session with disposable prompts:
+
+```bash
+AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT=1 \
+AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT_INCLUDE_RAW=1 \
+  ./script/local_quality_audit.py \
+    --input /path/to/disposable-prompts.jsonl \
+    --generate \
+    --include-raw-output
+```
+
+Self-test the audit harness with fixtures:
+
+```bash
+./script/check_local_quality_audit_self_test.sh
 ```
 
 For a clean app-specific slice:
