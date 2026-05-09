@@ -666,3 +666,11 @@ Target real dogfood score: 92/100 or higher with no wrong-field insertions and n
 - App fix: Chromium insertion verification can now recover target-fingerprint churn only when the field identity is still the same, the mismatch is target-fingerprint-only, and text verification already proves the exact insertion. This covered the real ProseMirror default-AX full-accept path without broadening field-identity swaps.
 - Validation: `swift test --filter InsertionVerificationContextRecoveryPolicyTests` passed, `script/real_app_smoke_self_test.sh` passed, `monaco-real --chrome-accessibility default` passed with 2 verified accepts and strict visual evidence, and `prosemirror-real --chrome-accessibility default` passed with 2 verified accepts and strict visual evidence. The model stayed `qwen3-0.6b`.
 - Gate movement: `script/manual_smoke_status.sh --require-all` now reports Chrome real Monaco default AX and Chrome real ProseMirror default AX as passed. Required gaps dropped from 14 to 12: Obsidian theme/pane/long-note, Claude Code, and Claude desktop layout variants.
+
+2026-05-09T07:35Z heartbeat follow-up: refreshed the default-Chrome real-editor rows after PR #35 moved to `834dd2843b6a`.
+
+- Reason: committing the Chrome default-AX fix made the older broad smoke matrix rows stale by source-proof rules, and the first Monaco/ProseMirror rows still referenced the pre-commit proof source.
+- Live proof refresh: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-real --chrome-accessibility default` passed with 2 accepted insertions and strict visual trace evidence.
+- Live proof refresh: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-real --chrome-accessibility default` passed with 2 accepted insertions and strict visual trace evidence.
+- Evidence: manual smoke rows `2026-05-09T07:31:56Z` and `2026-05-09T07:33:21Z`, both on `commit:834dd2843b6a`. The model stayed `qwen3-0.6b`.
+- Status: `script/manual_smoke_status.sh --require-all` now reports both default-Chrome real-editor AX lanes passed on current PR head. The strict gate still fails honestly because older broad rows are stale after the source commit and the Obsidian variant / Claude proof gaps remain.
