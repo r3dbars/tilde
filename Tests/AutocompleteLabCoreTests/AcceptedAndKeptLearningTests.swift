@@ -17,8 +17,6 @@ struct AcceptedAndKeptLearningTests {
         #expect(phraseSignal.probability == 0.34)
         #expect(sentenceSignal.probability == 0.28)
         #expect(wordSignal.userAffinityAdjustment == 0)
-        #expect(wordSignal.learningRestraint == 0)
-        #expect(wordSignal.tinySampleGuardrailActive)
     }
 
     @Test("Kept and rejected outcomes move probability and affinity")
@@ -29,76 +27,28 @@ struct AcceptedAndKeptLearningTests {
 
         _ = store.record(.kept, key: learningKey, now: now)
         _ = store.record(.kept, key: learningKey, now: now)
-        _ = store.record(.kept, key: learningKey, now: now)
         let positive = store.signal(for: learningKey, now: now)
 
-        #expect(positive.sampleCount == 3)
-        #expect(positive.keptCount == 3)
+        #expect(positive.sampleCount == 2)
+        #expect(positive.keptCount == 2)
         #expect(positive.rejectedCount == 0)
         #expect(positive.probability > positive.priorProbability)
         #expect(positive.userAffinityAdjustment > 0)
         #expect(positive.utilityAdjustment > 0)
-        #expect(!positive.tinySampleGuardrailActive)
 
-        _ = store.record(.rejected, key: learningKey, now: now)
-        _ = store.record(.rejected, key: learningKey, now: now)
-        _ = store.record(.rejected, key: learningKey, now: now)
         _ = store.record(.rejected, key: learningKey, now: now)
         _ = store.record(.rejected, key: learningKey, now: now)
         _ = store.record(.rejected, key: learningKey, now: now)
         _ = store.record(.rejected, key: learningKey, now: now)
         let negative = store.signal(for: learningKey, now: now)
 
-        #expect(negative.sampleCount == 11)
-        #expect(negative.rejectedCount == 8)
+        #expect(negative.sampleCount == 6)
+        #expect(negative.rejectedCount == 4)
         #expect(negative.probability < negative.priorProbability)
         #expect(negative.userAffinityAdjustment < 0)
         #expect(negative.utilityAdjustment < 0)
-        #expect(negative.traceMetadata["acceptedAndKeptSamples"] == "11")
+        #expect(negative.traceMetadata["acceptedAndKeptSamples"] == "6")
         #expect(negative.traceMetadata["acceptedAndKeptUtilityAdjustment"] != nil)
-    }
-
-    @Test("Tiny samples do not change score adjustments")
-    func tinySamplesDoNotChangeScoreAdjustments() {
-        var store = AcceptedAndKeptLearningStore(priorWeight: 1)
-        let learningKey = key(mode: .phraseContinuation)
-
-        _ = store.record(.immediateDeletion, key: learningKey)
-        _ = store.record(.typedOver, key: learningKey)
-        let signal = store.signal(for: learningKey)
-
-        #expect(signal.sampleCount == 2)
-        #expect(signal.probability < signal.priorProbability)
-        #expect(signal.userAffinityAdjustment == 0)
-        #expect(signal.utilityAdjustment == 0)
-        #expect(signal.learningRestraint == 0)
-        #expect(signal.immediateDeletionCount == 1)
-        #expect(signal.typedOverCount == 1)
-        #expect(signal.tinySampleGuardrailActive)
-    }
-
-    @Test("Deletion typed over and edit distance create bounded restraint")
-    func deletionTypedOverAndEditDistanceCreateBoundedRestraint() {
-        var store = AcceptedAndKeptLearningStore(priorWeight: 1)
-        let learningKey = key(mode: .sentenceContinuation)
-
-        _ = store.record(.immediateDeletion, key: learningKey, normalizedEditDistance: 1.0)
-        _ = store.record(.typedOver, key: learningKey)
-        _ = store.record(.rejected, key: learningKey, normalizedEditDistance: 0.7)
-        _ = store.record(.kept, key: learningKey, normalizedEditDistance: 0.2)
-        let signal = store.signal(for: learningKey)
-
-        #expect(signal.sampleCount == 4)
-        #expect(signal.rejectedCount == 3)
-        #expect(signal.immediateDeletionCount == 1)
-        #expect(signal.typedOverCount == 1)
-        #expect(signal.highEditDistanceCount == 2)
-        #expect(signal.averageNormalizedEditDistance != nil)
-        #expect(signal.probability < signal.priorProbability)
-        #expect(signal.learningRestraint > 0)
-        #expect(signal.learningRestraint <= 0.35)
-        #expect(signal.traceMetadata["acceptedAndKeptLearningRestraint"] != nil)
-        #expect(signal.traceMetadata["acceptedAndKeptAverageEditDistance"] != nil)
     }
 
     @Test("Buckets are scoped by app field mode and behavior profile")

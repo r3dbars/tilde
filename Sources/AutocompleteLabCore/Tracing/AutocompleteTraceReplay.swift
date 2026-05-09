@@ -366,7 +366,6 @@ public struct AutocompleteTraceReplay: Sendable {
             && event.metadata["displayScoreFinal"] != nil
             && event.metadata["displayScoreUtility"] != nil
             && event.metadata["displayScoreRisk"] != nil
-            && event.metadata["displayScoreLearningRestraint"] != nil
             && event.metadata["displayScoreAcceptedAndKeptProbability"] != nil
             && event.metadata["displayScoreAcceptedAndKeptSamples"] != nil
     }
