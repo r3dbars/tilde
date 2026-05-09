@@ -507,6 +507,15 @@ Time: 2026-05-09T00:36:00Z
 - Evidence: diagnostics lines 242903-242967 and trace lines 61528-61545; build `commit:ecd801103ced`, app SHA `c714dfebc75fcfcfaca685bd4ec9739e03f49d284a4208df5edc11e1abe06075`.
 - Gate movement: Codex is green again on the current PR branch; remaining target-app proof gaps should drop from 18 to 17 after the next strict status pass.
 
+2026-05-09T04:36Z heartbeat follow-up: repaired Obsidian CodeMirror AX cursor drift with the current fast model only.
+
+- Finding: Obsidian/CodeMirror can show the visual caret at the end of the live line while macOS AX reports either one trailing typed character after the cursor (`inst|a`) or a larger line split (`Smok|e proof feels inst`). That made Autocomplete Lab classify real end-of-line typing as `middleOfLine` and hide suggestions.
+- Fix: `TextContextRepairPolicy` now has Obsidian-only repairs for the one-character trailing drift and the broader same-line drift. Both are scoped to `md.obsidian`, `AXTextArea`, no selection, and plausible active prose lines.
+- Unit proof: `swift test --filter TextContextRepairPolicyTests` passed 8 tests, including both Obsidian drift repairs and non-repair middle-of-line guards.
+- Live suggestion proof: launched patched app with `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b`, `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1`, and Obsidian proof-mode allowlisting. Diagnostics showed `text-context-repaired reason=obsidian-codemirror-trailing-character` at line 243053 and `suggestion-presented app=md.obsidian` at line 243069. The broader line-drift repair then showed `text-context-repaired reason=obsidian-codemirror-line-drift` at lines 243193 and 243220, with `suggestion-presented app=md.obsidian` at lines 243210 and 243226.
+- Trace proof: trace lines 61564-61567 captured the patched Obsidian `suggestionRequested`/`suggestionPresented` events with screenshot paths for `9F414CA0...png` and `C35E4616...png`.
+- Honest gate status: Obsidian is still not re-marked green because the synthetic Tab events from Computer Use/System Events/CGEvent landed in Obsidian as indentation and did not produce `keyboard-action app=md.obsidian key=tab`. `script/manual_smoke_status.sh --require-all` still correctly reports 17 target-app proof gaps, with Obsidian default listed as stale until a real/manual keypress or better guarded driver proves acceptance on the current build.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
