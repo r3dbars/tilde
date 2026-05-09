@@ -499,6 +499,14 @@ Time: 2026-05-09T00:36:00Z
 - Evidence: diagnostics lines 242835-242879 and trace lines 61514-61523; build `commit:496e338b69c7`, app SHA `f1a8530ad7b1354aa936840bc3f4f476885f75906039d21423cbc83b2b77dfb3`.
 - Gate movement: Notes title, body, and checklist are now green together; remaining target-app proof gaps dropped from 19 to 18. `script/manual_smoke_status.sh --require-all` still fails correctly because the remaining gaps are real app/proof lanes.
 
+2026-05-09T04:18Z heartbeat follow-up: refreshed Codex one-word no-submit proof on PR #35.
+
+- Run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate`.
+- Result: Codex passed with 1 verified Tab insertion, `inlineAdjacent|floatingMirror`, strict screenshot-backed visual evidence, and prompt no-submit confirmation.
+- Safety: the helper seeded only disposable `AUTOCOMPLETE_LAB_CODEX_PROOF` text, rechecked the marked composer before accepting, confirmed the marker was still present after Tab, and never pressed Enter. I cleared the disposable marker from the composer after the proof.
+- Evidence: diagnostics lines 242903-242967 and trace lines 61528-61545; build `commit:ecd801103ced`, app SHA `c714dfebc75fcfcfaca685bd4ec9739e03f49d284a4208df5edc11e1abe06075`.
+- Gate movement: Codex is green again on the current PR branch; remaining target-app proof gaps should drop from 18 to 17 after the next strict status pass.
+
 ## Next Loop
 
 Replace this deterministic score with real dogfood evidence:
