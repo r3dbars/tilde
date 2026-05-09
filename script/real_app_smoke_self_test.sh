@@ -57,8 +57,8 @@ if ! grep -F "public W3Schools textarea-public demo page" "$TMP_DIR/chrome-texta
   echo "real app smoke self-test did not print the Chrome public textarea dry-run plan" >&2
   exit 1
 fi
-if ! grep -F "Allow JavaScript from Apple Events" "$TMP_DIR/chrome-textarea-public.txt" >/dev/null; then
-  echo "real app smoke self-test did not print the Chrome public textarea JavaScript preflight requirement" >&2
+if ! grep -F "JavaScript-from-Apple-Events is not required" "$TMP_DIR/chrome-textarea-public.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Chrome public textarea AX proof path" >&2
   exit 1
 fi
 
@@ -67,10 +67,18 @@ if ! grep -F "public W3Schools contenteditable-public demo page" "$TMP_DIR/chrom
   echo "real app smoke self-test did not print the Chrome public contenteditable dry-run plan" >&2
   exit 1
 fi
+if ! grep -F "JavaScript-from-Apple-Events is not required" "$TMP_DIR/chrome-contenteditable-public.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Chrome public contenteditable AX proof path" >&2
+  exit 1
+fi
 
 script/real_app_smoke.sh chrome --fixture production-text-fields --dry-run >"$TMP_DIR/chrome-production-text-fields.txt"
 if ! grep -F "bounded public Chrome textarea and contenteditable proof" "$TMP_DIR/chrome-production-text-fields.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome production text fields dry-run plan" >&2
+  exit 1
+fi
+if ! grep -F "JavaScript-from-Apple-Events is not required" "$TMP_DIR/chrome-production-text-fields.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Chrome production text fields AX proof path" >&2
   exit 1
 fi
 
