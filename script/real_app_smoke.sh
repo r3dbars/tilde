@@ -2810,7 +2810,8 @@ let appElement = AXUIElementCreateApplication(frontmost.processIdentifier)
 AXUIElementSetMessagingTimeout(appElement, 0.5)
 
 for attribute in [kAXFocusedWindowAttribute, kAXMainWindowAttribute] {
-    if let window = copyAttribute(appElement, attribute) as? AXUIElement {
+    if let rawWindow = copyAttribute(appElement, attribute) {
+        let window = rawWindow as! AXUIElement
         if (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
             print("1")
             exit(0)
