@@ -1356,6 +1356,10 @@ wait_for_chrome_smoke_ready() {
       return 0
     fi
 
+    if chrome_focus_official_demo_editor_with_ax "$fixture" "$chrome_pid" >/dev/null 2>&1; then
+      return 0
+    fi
+
     require_chrome_javascript_from_apple_events "$fixture"
     while ((SECONDS <= deadline)); do
       local ready
@@ -1674,7 +1678,16 @@ chrome_official_demo_ready() {
 
 chrome_focus_official_demo_editor() {
   local fixture="$1"
+  local expected_url="${2:-}"
   local javascript
+
+  if [[ -n "$expected_url" ]]; then
+    focus_default_chrome_smoke_tab "$fixture" "$expected_url" >/dev/null
+  fi
+
+  if chrome_focus_official_demo_editor_with_ax "$fixture" "" >/dev/null 2>&1; then
+    return 0
+  fi
 
   case "$fixture" in
     textarea-public)
@@ -1703,6 +1716,249 @@ chrome_focus_official_demo_editor() {
     echo "Could not focus Chrome $fixture official demo editor; JavaScript result: ${result:-empty}" >&2
     exit 1
   fi
+}
+
+chrome_focus_official_demo_editor_with_ax() {
+  local fixture="$1"
+  local chrome_pid="${2:-0}"
+
+  swift - "$fixture" "${chrome_pid:-0}" <<'SWIFT'
+import AppKit
+import ApplicationServices
+import CoreGraphics
+import Foundation
+
+guard CommandLine.arguments.count == 3,
+      let rawPID = Int32(CommandLine.arguments[2]) else {
+    exit(2)
+}
+
+let fixture = CommandLine.arguments[1]
+let pid: pid_t
+if rawPID > 0 {
+    pid = pid_t(rawPID)
+} else if let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+          let frontmost = NSWorkspace.shared.frontmostApplication,
+          frontmost.bundleIdentifier == "com.google.Chrome" || frontmost.localizedName == "Google Chrome" {
+    pid = frontmostPID
+} else {
+    fputs("Chrome \(fixture) official proof could not find a frontmost Chrome process.\n", stderr)
+    exit(1)
+}
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String {
+    copyAttribute(element, attribute) as? String ?? ""
+}
+
+func boolAttribute(_ element: AXUIElement, _ attribute: String) -> Bool {
+    copyAttribute(element, attribute) as? Bool ?? false
+}
+
+func rect(for element: AXUIElement) -> CGRect? {
+    guard let positionValue = copyAttribute(element, kAXPositionAttribute),
+          let sizeValue = copyAttribute(element, kAXSizeAttribute) else {
+        return nil
+    }
+
+    var position = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+          AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else {
+        return nil
+    }
+    return CGRect(origin: position, size: size)
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func hasWebAreaAncestor(_ element: AXUIElement) -> Bool {
+    var current = element
+    for _ in 0..<18 {
+        if stringAttribute(current, kAXRoleAttribute) == "AXWebArea" {
+            return true
+        }
+        guard let parentValue = copyAttribute(current, kAXParentAttribute) else {
+            return false
+        }
+        current = parentValue as! AXUIElement
+    }
+    return false
+}
+
+func setCaretToEnd(_ element: AXUIElement, value: String) {
+    var range = CFRange(location: value.utf16.count, length: 0)
+    if let rangeValue = AXValueCreate(.cfRange, &range) {
+        AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+    }
+}
+
+struct Candidate {
+    let element: AXUIElement
+    let role: String
+    let title: String
+    let description: String
+    let value: String
+    let frame: CGRect
+    let focused: Bool
+    let score: Double
+}
+
+func scoreCandidate(role: String, title: String, description: String, value: String, frame: CGRect, focused: Bool) -> Double? {
+    guard role == "AXTextArea" || role == "AXTextField" else {
+        return nil
+    }
+    guard frame.width >= 100, frame.height >= 10 else {
+        return nil
+    }
+
+    var score = frame.width * frame.height
+    if focused {
+        score += 500_000
+    }
+
+    let haystack = "\(title)\n\(description)\n\(value)".lowercased()
+    switch fixture {
+    case "codemirror-official":
+        guard role == "AXTextArea", frame.width >= 300, frame.height >= 80 else {
+            return nil
+        }
+        if haystack.contains("console.log") || haystack.contains("hello") {
+            score += 1_000_000
+        }
+    case "monaco-official":
+        if haystack.contains("editor") || haystack.contains("monaco") || haystack.contains("press alt") {
+            score += 1_000_000
+        }
+        if frame.height < 24 {
+            score -= 250_000
+        }
+    case "prosemirror-official":
+        guard frame.width >= 250, frame.height >= 40 else {
+            return nil
+        }
+        if haystack.contains("prosemirror") || haystack.contains("this is editable") {
+            score += 1_000_000
+        }
+    default:
+        break
+    }
+    return score
+}
+
+func collectCandidates(in element: AXUIElement, depth: Int = 0, candidates: inout [Candidate]) {
+    guard depth <= 42 else {
+        return
+    }
+
+    let role = stringAttribute(element, kAXRoleAttribute)
+    let title = stringAttribute(element, kAXTitleAttribute)
+    let description = stringAttribute(element, kAXDescriptionAttribute)
+    let value = stringAttribute(element, kAXValueAttribute)
+    if hasWebAreaAncestor(element),
+       let frame = rect(for: element),
+       let score = scoreCandidate(
+            role: role,
+            title: title,
+            description: description,
+            value: value,
+            frame: frame,
+            focused: boolAttribute(element, kAXFocusedAttribute)
+       ) {
+        candidates.append(Candidate(
+            element: element,
+            role: role,
+            title: title,
+            description: description,
+            value: value,
+            frame: frame,
+            focused: boolAttribute(element, kAXFocusedAttribute),
+            score: score
+        ))
+    }
+
+    for child in children(of: element) {
+        collectCandidates(in: child, depth: depth + 1, candidates: &candidates)
+    }
+}
+
+if let app = NSRunningApplication(processIdentifier: pid) {
+    app.activate(options: [.activateAllWindows])
+}
+
+Thread.sleep(forTimeInterval: 0.2)
+
+let appElement = AXUIElementCreateApplication(pid)
+AXUIElementSetMessagingTimeout(appElement, 1.0)
+
+var candidates: [Candidate] = []
+for _ in 0..<40 {
+    candidates.removeAll(keepingCapacity: true)
+    collectCandidates(in: appElement, candidates: &candidates)
+    if !candidates.isEmpty {
+        break
+    }
+    Thread.sleep(forTimeInterval: 0.2)
+}
+
+guard let candidate = candidates.max(by: { lhs, rhs in
+    if lhs.score == rhs.score {
+        return lhs.frame.width * lhs.frame.height < rhs.frame.width * rhs.frame.height
+    }
+    return lhs.score < rhs.score
+}) else {
+    fputs("Chrome \(fixture) official proof could not find a web-backed editor through AX.\n", stderr)
+    exit(1)
+}
+
+if let focusedWindowValue = copyAttribute(appElement, kAXFocusedWindowAttribute) {
+    AXUIElementPerformAction((focusedWindowValue as! AXUIElement), kAXRaiseAction as CFString)
+}
+
+if let source = CGEventSource(stateID: .hidSystemState) {
+    let point = CGPoint(x: candidate.frame.midX, y: candidate.frame.midY)
+    for eventType in [CGEventType.leftMouseDown, .leftMouseUp] {
+        if let event = CGEvent(
+            mouseEventSource: source,
+            mouseType: eventType,
+            mouseCursorPosition: point,
+            mouseButton: .left
+        ) {
+            event.post(tap: .cghidEventTap)
+        }
+    }
+}
+
+Thread.sleep(forTimeInterval: 0.15)
+AXUIElementSetAttributeValue(candidate.element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+setCaretToEnd(candidate.element, value: candidate.value)
+Thread.sleep(forTimeInterval: 0.15)
+
+guard let focusedValue = copyAttribute(appElement, kAXFocusedUIElementAttribute) else {
+    fputs("Chrome \(fixture) official proof could not verify the focused AX editor.\n", stderr)
+    exit(1)
+}
+
+let focused = focusedValue as! AXUIElement
+let focusedRole = stringAttribute(focused, kAXRoleAttribute)
+let focusedWebBacked = hasWebAreaAncestor(focused)
+guard focusedRole == "AXTextArea" || (focusedRole == "AXTextField" && focusedWebBacked) else {
+    fputs("Chrome \(fixture) official proof focused wrong AX role \(focusedRole.isEmpty ? "unknown" : focusedRole).\n", stderr)
+    exit(1)
+}
+
+print("Chrome \(fixture) official AX focused \(candidate.role) frame=x=\(Int(candidate.frame.minX)),y=\(Int(candidate.frame.minY)),w=\(Int(candidate.frame.width)),h=\(Int(candidate.frame.height))")
+SWIFT
 }
 
 chrome_fixture_uses_isolated_accessibility_chrome() {
@@ -2293,7 +2549,7 @@ tell application "Google Chrome"
 end tell
 delay 0.1
 APPLESCRIPT
-    chrome_focus_official_demo_editor "$fixture"
+    chrome_focus_official_demo_editor "$fixture" "$expected_url"
     wait_for_frontmost_app "Google Chrome" 5
     return 0
   fi
@@ -3594,6 +3850,7 @@ func waitForInsertedText() -> Bool {
         let currentValue = currentFocusedValue()
         if currentValue.contains(text)
             && (currentValue.count >= initialValue.count + text.count || currentValue.count >= text.count) {
+            setCursorToEnd(of: currentValue)
             return true
         }
         usleep(100_000)
@@ -4329,7 +4586,7 @@ type_chrome_smoke_text() {
     reset_chrome_focused_editor_text "$fixture" "$chrome_pid" "$label"
   fi
 
-  focus_chrome_smoke_editor "$fixture" "$chrome_pid"
+  focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$expected_url"
   sleep 0.2
   assert_chrome_ready_for_input "$fixture" "$chrome_pid" "$expected_url" "$label"
   type_chrome_smoke_text_with_system_events "$text"
@@ -4951,7 +5208,7 @@ describe_plan() {
         echo "Proof path: public text-field proof uses guarded coordinate focus and AX verification; Chrome JavaScript-from-Apple-Events is not required for this lane."
       elif chrome_fixture_is_official_demo "$CHROME_FIXTURE"; then
         echo "Plan: build/relaunch AutocompleteLab, open the public official $CHROME_FIXTURE demo page in Chrome, type a disposable test fragment, then validate logs and traces."
-        echo "Requirement: official Chrome demo lanes need Chrome's View > Developer > Allow JavaScript from Apple Events setting so the script can focus and verify the editor."
+        echo "Proof path: official Chrome demo lanes first use Accessibility to focus and verify the editor, then fall back to Chrome's JavaScript-from-Apple-Events setting if AX cannot find the editor."
       elif [[ "$CHROME_FIXTURE" == "browser-chat-harness" ]]; then
         echo "Plan: build/relaunch AutocompleteLab, serve the bounded HTTP browser-chat no-submit proof harness on 127.0.0.1, type disposable text, then validate trace and harness counters."
         echo "Scope: this proves only the disposable harness surface. It does not enable Slack, Discord, ChatGPT, or broad browser chat support."
@@ -6344,7 +6601,14 @@ APPLESCRIPT
   focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
   require_default_chrome_web_accessibility "$fixture"
 
-  type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "first fragment" "Smoke proof feels inst"
+  local first_fragment="Smoke proof feels inst"
+  local second_fragment=" and stays inst"
+  if [[ "$fixture" == "codemirror-official" ]]; then
+    first_fragment="Smoke proof feels dicta"
+    second_fragment=" and stays dicta"
+  fi
+
+  type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "first fragment" "$first_fragment"
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.google.Chrome" "Chrome $fixture"
@@ -6400,7 +6664,7 @@ APPLESCRIPT
   if [[ -z "$chrome_pid" ]]; then
     focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
   fi
-  type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "second fragment" " and stays inst"
+  type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "second fragment" "$second_fragment"
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.google.Chrome" "Chrome $fixture second"

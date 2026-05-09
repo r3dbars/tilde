@@ -392,13 +392,14 @@
       "status": "partial",
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-editor-like.png",
+        "docs/product/visual-placement-screenshots/chrome-codemirror-official.png",
         "docs/product/visual-placement-screenshots/chrome-monaco-like.png",
         "docs/product/visual-placement-screenshots/chrome-prosemirror-like.png",
         "docs/product/visual-placement-screenshots/chrome-monaco-real.png",
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Current default Chrome AX reruns expose only browser chrome on this machine, so default Chrome and broad production-site proof remain open."
+        "Official CodeMirror proof is now screenshot-backed in normal Chrome. Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced, but official Monaco and ProseMirror demos remain blocked because this Chrome profile rejects JavaScript from Apple Events and AX did not expose a verified editor target on those pages."
       ],
       "requirements": [
         {
@@ -413,8 +414,9 @@
         },
         {
           "id": "production-chrome-codemirror",
-          "status": "pending",
-          "summary": "Add bounded default-Chrome proof against a production CodeMirror editor surface."
+          "status": "complete",
+          "summary": "Bounded default-Chrome proof passed against the official CodeMirror demo with strict screenshot-backed evidence.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture codemirror-official"
         }
       ]
     },

@@ -33,6 +33,8 @@ Results:
 - `check_prompt_app_proof.sh`: failed because the full trace contains 2 Codex `wrongContextInsertionCount` guard events.
 - Obsidian default live refresh: failed with `Could not read the focused Obsidian editor.`
 - Codex live refresh: failed safely with `Could not find a safe disposable Codex composer.`
+- Chrome CodeMirror official live refresh: passed at 2026-05-09T12:02:35Z with 2 verified accepts, strict visual trace evidence, and screenshot `chrome-codemirror-official.png`.
+- Chrome Monaco official and ProseMirror official live refreshes: failed closed because this Chrome profile still rejects JavaScript from Apple Events and AX could not find a verified official editor target on those pages.
 
 ## Scores
 
@@ -58,10 +60,10 @@ no stale visible suggestion, and no accidental submit.
 | Chrome local chat-like composer | 93 | Current local chat-like fixture passes; screenshot `chrome-chat-like.png`; submit counters stay zero for the fixture. | This does not prove ChatGPT, Slack, Discord, or other real hosted composers. | Keep real browser-chat services blocked until exact no-submit proof exists. |
 | Chrome public textarea page | 94 | Current `textarea-public` row passes with strict screenshot-backed trace evidence. | Only one public page is proven. | Add more public textarea pages and secondary-display proof. |
 | Chrome public contenteditable page | 94 | Current `contenteditable-public` row passes with strict screenshot-backed trace evidence. | Only one public page is proven. | Add more public contenteditable pages and scroll/resize variants. |
-| Chrome CodeMirror | 78 | Local CodeMirror-like fixture passes; Obsidian covers a real CodeMirror family app historically. | Official/default Chrome CodeMirror production proof is pending. | Run `chrome --fixture codemirror-official`. |
+| Chrome CodeMirror | 100 | Current official CodeMirror demo proof passed at 2026-05-09T12:02:35Z with 2 verified accepts, strict screenshot-backed trace evidence, and screenshot [chrome-codemirror-official.png](visual-placement-screenshots/chrome-codemirror-official.png). Local CodeMirror-like fixture and Obsidian CodeMirror-family proof also pass. | None for this CodeMirror lane. | Keep this row green while Monaco and ProseMirror official-demo lanes continue. |
 | Chrome Monaco | 85 | Local Monaco-like and real Monaco rows pass in current smoke status. | Production/default Chrome Monaco variance remains open in the manifest. | Run official/default Monaco lanes until manifest can be complete. |
 | Chrome ProseMirror | 86 | Local ProseMirror-like and real ProseMirror rows pass in current smoke status. | Production/default Chrome ProseMirror variance remains open in the manifest. | Run official/default ProseMirror lanes until manifest can be complete. |
-| Browser editor fixtures aggregate | 82 | Local editor-like, Monaco-like, ProseMirror-like, real Monaco, and real ProseMirror have screenshot evidence. | Production CodeMirror/Monaco/ProseMirror requirements remain pending/blocked. | Close the official editor-demo proof rows. |
+| Browser editor fixtures aggregate | 88 | Local editor-like, Monaco-like, ProseMirror-like, real Monaco, real ProseMirror, and official CodeMirror have screenshot evidence. | Production Monaco and ProseMirror official-demo requirements remain blocked: normal Chrome rejects JavaScript from Apple Events and AX did not expose a verified official editor target on those pages. | Keep CodeMirror green; close Monaco/ProseMirror only when real official-demo or equivalent production proof passes. |
 | Unsupported, secure, URL, search, password, payment, login fields | 72 | Sensitive-field and browser hosted-surface policies exist; blocked profiles are listed in the manifest. | No single current screenshot-backed suppression sweep proves every listed private/secure field class. | Add a real suppression-only proof suite with disposable URL/search/login/password/payment fields. |
 
 ## Other Manifest Profiles

@@ -9,6 +9,7 @@ public enum TextContextRepairReason: String, Equatable, Sendable {
     case obsidianCodeMirrorStalePreviousLine = "obsidian-codemirror-stale-previous-line"
     case obsidianCodeMirrorTextAfterGrowth = "obsidian-codemirror-text-after-growth"
     case obsidianCodeMirrorLineDrift = "obsidian-codemirror-line-drift"
+    case chromeCodeMirrorTrailingCharacter = "chrome-codemirror-trailing-character"
 }
 
 public struct TextContextRepairInput: Equatable, Sendable {
@@ -19,6 +20,7 @@ public struct TextContextRepairInput: Equatable, Sendable {
     public let selectedTextLength: Int
     public let previousTextBeforeCursor: String?
     public let previousTextAfterCursor: String?
+    public let fingerprintText: String
 
     public init(
         bundleIdentifier: String,
@@ -27,7 +29,8 @@ public struct TextContextRepairInput: Equatable, Sendable {
         textAfterCursor: String,
         selectedTextLength: Int,
         previousTextBeforeCursor: String? = nil,
-        previousTextAfterCursor: String? = nil
+        previousTextAfterCursor: String? = nil,
+        fingerprintText: String = ""
     ) {
         self.bundleIdentifier = bundleIdentifier
         self.role = role
@@ -36,6 +39,7 @@ public struct TextContextRepairInput: Equatable, Sendable {
         self.selectedTextLength = max(0, selectedTextLength)
         self.previousTextBeforeCursor = previousTextBeforeCursor
         self.previousTextAfterCursor = previousTextAfterCursor
+        self.fingerprintText = fingerprintText
     }
 }
 
@@ -63,6 +67,9 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
     public init() {}
 
     public func repair(_ input: TextContextRepairInput) -> TextContextRepairResult {
+        if let chromeRepair = chromeCodeMirrorTrailingCharacterRepair(input) {
+            return chromeRepair
+        }
         if let obsidianRepair = obsidianCodeMirrorTrailingCharacterRepair(input) {
             return obsidianRepair
         }
@@ -83,6 +90,35 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         }
 
         return notesTextAfterCursorRepair(input)
+    }
+
+    private func chromeCodeMirrorTrailingCharacterRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
+        guard input.bundleIdentifier == "com.google.Chrome",
+              input.role == "AXTextArea",
+              input.selectedTextLength == 0,
+              input.fingerprintText.localizedCaseInsensitiveContains("codemirror"),
+              let lastCharacterBeforeCursor = input.textBeforeCursor.last,
+              lastCharacterBeforeCursor.isLetter else {
+            return nil
+        }
+
+        let lineAfterCursor = firstLine(in: input.textAfterCursor)
+        guard lineAfterCursor.count == 1,
+              lineAfterCursor.allSatisfy(\.isLetter) else {
+            return nil
+        }
+
+        let repairedTextBeforeCursor = input.textBeforeCursor + lineAfterCursor
+        let repairedTextAfterCursor = String(input.textAfterCursor.dropFirst(lineAfterCursor.count))
+        guard isPlausibleActiveTypingLine(currentLine(in: repairedTextBeforeCursor)) else {
+            return nil
+        }
+
+        return TextContextRepairResult(
+            textBeforeCursor: repairedTextBeforeCursor,
+            textAfterCursor: repairedTextAfterCursor,
+            reason: .chromeCodeMirrorTrailingCharacter
+        )
     }
 
     private func notesTextAfterCursorRepair(_ input: TextContextRepairInput) -> TextContextRepairResult {
