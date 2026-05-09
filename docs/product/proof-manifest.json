@@ -361,29 +361,29 @@
       "requirements": [
         {
           "id": "production-chrome-text-fields",
-          "status": "passed",
+          "status": "complete",
           "summary": "Bounded screenshot-backed smoke proof now covers representative production Chrome text fields beyond local fixtures.",
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture production-text-fields",
           "safePath": [
             "textarea-public: https://www.editpad.org/",
             "contenteditable-public: https://yabwe.github.io/medium-editor/"
-          ],
-          "proofRows": [
-            {
-              "app": "Chrome",
-              "bundle": "com.google.Chrome",
-              "proof": "textarea-public",
-              "minVerifiedAccepts": 2,
-              "requiresVisualStrictComplete": true
-            },
-            {
-              "app": "Chrome",
-              "bundle": "com.google.Chrome",
-              "proof": "contenteditable-public",
-              "minVerifiedAccepts": 2,
-              "requiresVisualStrictComplete": true
-            }
           ]
+        }
+      ],
+      "manualSmokeVariants": [
+        {
+          "app": "Chrome",
+          "bundle": "com.google.Chrome",
+          "proof": "textarea-public",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "app": "Chrome",
+          "bundle": "com.google.Chrome",
+          "proof": "contenteditable-public",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
         }
       ]
     },
