@@ -638,3 +638,10 @@ Target real dogfood score: 92/100 or higher with no wrong-field insertions and n
 - Evidence: diagnostics lines 251908-251977 and trace lines 63153-63171; manual smoke row `2026-05-09T06:52:49Z`, app binary SHA `071780c039448c51a8866ed5d3e49b55ed4911c704e163ffc8e2e48713505cd3`.
 - Validation: `script/real_app_smoke_self_test.sh` passed, and `swift test --filter 'CompatibilityProfileTests|TextContextRepairPolicyTests|InsertionVerificationContextRecoveryPolicyTests'` passed 33 focused tests. The model stayed `qwen3-0.6b`.
 - Honest gate status: default Obsidian is no longer the acceptance blocker. `script/manual_smoke_status.sh --require-all` still fails because the new source change makes older broad proof rows stale and the `obsidian-theme`, `obsidian-pane`, `obsidian-long-note`, Claude Code, Claude desktop, and default-Chrome real-editor AX lanes still need proof.
+
+2026-05-09T07:03Z heartbeat follow-up: refreshed the broad current-head proof matrix after the Obsidian commit.
+
+- Result: refreshed TextEdit, Notes title, Notes body, Notes checklist, default Obsidian, Chrome textarea, Chrome contenteditable, Chrome editor-like, Chrome Monaco-like, Chrome ProseMirror-like, Chrome real Monaco, Chrome real ProseMirror, Chrome chat-like no-submit, public Chrome textarea, public Chrome contenteditable, and Codex one-word no-submit on PR #35 head `361a62f19239`.
+- Evidence: new manual smoke rows from `2026-05-09T06:58:40Z` through `2026-05-09T07:03:21Z`; every refreshed row has strict screenshot-backed visual trace evidence and the model stayed `qwen3-0.6b`.
+- Gate movement: `script/manual_smoke_status.sh --require-all` now reports the main native/editor/prompt lanes green and fails honestly with 14 remaining target-app proof gaps.
+- Remaining gaps: `obsidian-theme`, `obsidian-pane`, `obsidian-long-note`, default-Chrome real Monaco/ProseMirror AX, Claude Code, and Claude desktop layout variants.
