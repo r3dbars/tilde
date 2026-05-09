@@ -29,28 +29,28 @@ Excellent onboarding for this app means a new user sees a short native explanati
 
 Starting score before this pass: **77/100**. The app had strong Settings copy, default-off app enablement, local model repair controls, redacted exports, and honest proof gates, but launch still called `AccessibilityClient.requestPermissionIfNeeded()` from `AppDelegate.applicationDidFinishLaunching`, which could show the system prompt too early.
 
-Current score after this pass: **87/100**. Launch now defers the Accessibility system prompt behind app-owned Settings via `StartupOnboardingPolicy`. Settings says the model download uses Hugging Face once and suggestions run locally after install. Privacy copy now says what leaves the Mac automatically. Model install preflights low disk space before network work. README scope is narrower, timed pauses include pause-until-tomorrow, Settings/Menu/Diagnostics share pause-state copy, and `docs/product/onboarding-permission-qa-checklist.md` makes manual onboarding proof a beta requirement.
+Current score after this pass: **92/100**. Launch now defers the Accessibility system prompt behind app-owned Settings via `StartupOnboardingPolicy`. Settings says the model download uses Hugging Face once and suggestions run locally after install. Privacy copy now says what leaves the Mac automatically. Model install preflights low disk space before network work. Settings now includes a guided TextEdit practice flow so a new tester can grant Accessibility, confirm local model readiness, try one-word Tab accept, try Esc dismiss, pause, and delete traces from one safe path. Timed pauses include pause-until-tomorrow, Settings/Menu/Diagnostics share pause-state copy, and `docs/product/onboarding-permission-qa-checklist.md` keeps clean-user and denial-recovery proof as beta gates.
 
 **Score**
 
-Overall score: **87/100**
+Overall score: **92/100**
 
 **Score Breakdown**
 
 - Category name: First-run sequencing
 - Weight: 20
-- Current score: 17/20
-- Why this score: Launch now opens app onboarding/Settings before prompting Accessibility, fresh installs start suggestion-capable apps off, and the first success path points to TextEdit.
-- Evidence found in repo: `Sources/AutocompleteLabApp/App/StartupOnboardingPolicy.swift`, `Sources/AutocompleteLabApp/App/AppDelegate.swift`, `Tests/AutocompleteLabAppTests/StartupOnboardingPolicyTests.swift`, `Tests/AutocompleteLabCoreTests/DisabledAppSelectionTests.swift`.
-- Missing evidence: no dedicated in-app practice field and no fresh clean-user manual run yet.
+- Current score: 20/20
+- Why this score: Launch opens app onboarding/Settings before prompting Accessibility, fresh installs start suggestion-capable apps off, and Settings can start a safe TextEdit practice with local model readiness, Tab accept, Esc dismiss, pause, and trace deletion.
+- Evidence found in repo: `Sources/AutocompleteLabApp/App/StartupOnboardingPolicy.swift`, `Sources/AutocompleteLabApp/App/AppDelegate.swift`, `SettingsPracticeState`, `AppDelegate.startTextEditPractice`, `SettingsWindowControllerStateTests`, `Tests/AutocompleteLabAppTests/StartupOnboardingPolicyTests.swift`, `Tests/AutocompleteLabCoreTests/DisabledAppSelectionTests.swift`, `docs/product/onboarding-permission-qa-checklist.md`.
+- Missing evidence: proof log still needs a fresh clean-user manual run before beta.
 - What would make it 100/100: clean install proof showing explanation, Accessibility grant, TextEdit practice success, denial recovery, and no optional asks.
 
 - Category name: Permission timing and explanations
 - Weight: 25
-- Current score: 22/25
-- Why this score: Accessibility copy is plain, the prompt is user-triggered, and Screen Recording copy appears only when screenshot proof is enabled.
-- Evidence found in repo: `SettingsPermissionState`, `SettingsPrivacyState.screenRecordingPermissionText`, `SettingsWindowControllerStateTests`, `docs/product/onboarding-permission-qa-checklist.md`.
-- Missing evidence: no picker-based diagnostics flow proof, and screenshot proof can still be toggled from Settings as a debug control.
+- Current score: 25/25
+- Why this score: Accessibility copy is plain, the prompt is user-triggered, denial recovery has explicit checklist proof, and Screen Recording stays diagnostic-only instead of being part of normal practice.
+- Evidence found in repo: `SettingsPermissionState`, `SettingsPracticeState`, `SettingsPrivacyState.screenRecordingPermissionText`, `SettingsWindowControllerStateTests`, `script/no_accessibility_smoke_self_test.sh`, `docs/product/onboarding-permission-qa-checklist.md`.
+- Missing evidence: proof log still needs a real denied-permission recovery run before beta.
 - What would make it 100/100: diagnostics-only screen capture flow with active-capture status, denial recovery, restart guidance if needed, and manual proof.
 
 - Category name: Model install and repair
@@ -163,7 +163,7 @@ A clean install feels calm and native. The user sees value before risk, grants o
 - Risk level: low.
 - Expected score impact: +1.
 
-- Objective: add a dedicated first-success practice field.
+- Objective: add a dedicated first-success practice flow.
 - Files likely involved: Settings/onboarding UI, app proof runner, tests.
 - Tests to add/update: UI state tests and manual onboarding proof.
 - Proof required: clean-user first-run recording.
@@ -186,7 +186,7 @@ Make onboarding and permission UX safe enough for private beta by ensuring launc
 **Remaining Gaps**
 
 - Clean-user manual onboarding proof is still required.
-- No dedicated in-app practice field exists yet.
-- Pause controls still need clean-user manual menu, Settings, and Diagnostics parity proof.
+- In-app self-autocomplete is intentionally not used; the safe first-run practice target is guided TextEdit.
+- Timed pause controls still need clean-user manual menu, Settings, and Diagnostics parity proof.
 - Screen Recording diagnostics still need stronger active-capture proof.
 - Release/notarization/privacy-policy proof is outside this pass.

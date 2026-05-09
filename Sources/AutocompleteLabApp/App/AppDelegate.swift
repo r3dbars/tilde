@@ -128,6 +128,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startCurrentAppProof: { [weak self] in
             self?.startCurrentAppProof()
         },
+        startTextEditPractice: { [weak self] in
+            self?.startTextEditPractice()
+        },
         enableAllApps: { [weak self] in
             self?.enableAllDisabledApps()
         },
@@ -548,6 +551,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 isModelInstallInProgress: modelInstallTask != nil,
                 currentApp: settingsCurrentAppState,
                 fieldControl: settingsFieldControlState,
+                practice: settingsPracticeState,
                 privacy: settingsPrivacyState,
                 keyboardShortcuts: settingsKeyboardShortcutState,
                 suggestionAggressiveness: settingsSuggestionAggressivenessState,
@@ -601,6 +605,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hasFieldTarget: true,
             isCurrentField: target.fieldIdentity == currentFieldIdentity,
             isSilenced: suppressedFieldIdentities.contains(target.fieldIdentity)
+        )
+    }
+
+    private var settingsPracticeState: SettingsPracticeState {
+        SettingsPracticeState(
+            isTrusted: accessibilityClient.isTrusted,
+            suggestionsPaused: suggestionsPaused,
+            runtimeReport: runtimeReadinessReport,
+            isModelInstallInProgress: modelInstallTask != nil,
+            isTextEditEnabled: !disabledBundleIdentifiers.contains(Self.textEditPracticeBundleIdentifier)
         )
     }
 
@@ -6281,6 +6295,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 isModelInstallInProgress: modelInstallTask != nil,
                 currentApp: settingsCurrentAppState,
                 fieldControl: settingsFieldControlState,
+                practice: settingsPracticeState,
                 privacy: settingsPrivacyState,
                 keyboardShortcuts: settingsKeyboardShortcutState,
                 suggestionAggressiveness: settingsSuggestionAggressivenessState,
@@ -6673,6 +6688,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isModelInstallInProgress: modelInstallTask != nil,
             currentApp: settingsCurrentAppState,
             fieldControl: settingsFieldControlState,
+            practice: settingsPracticeState,
             privacy: settingsPrivacyState,
             keyboardShortcuts: settingsKeyboardShortcutState,
             suggestionAggressiveness: settingsSuggestionAggressivenessState,
@@ -6691,6 +6707,108 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func startTextEditPractice() {
+        guard accessibilityClient.isTrusted else {
+            requestAccessibilityPermission()
+            return
+        }
+
+        guard runtimeReadinessReport.allowsSuggestions else {
+            setSuggestionDecision("Blocked: model not ready")
+            refreshRuntimeChrome()
+            showSettings()
+            return
+        }
+
+        disabledBundleIdentifiers.remove(Self.textEditPracticeBundleIdentifier)
+        markAppEnablementSetupCompleted()
+        persistDisabledApps()
+
+        if suggestionsPaused {
+            suggestionsPaused = false
+            suggestionsPausedUntil = nil
+            pauseExpirationTask?.cancel()
+            pauseExpirationTask = nil
+            persistPauseState()
+        }
+
+        setSuggestionDecision("Ready: TextEdit practice")
+        openTextEditPracticeDocument()
+        DiagnosticsLog.shared.record(
+            "textedit-practice-started",
+            metadata: [
+                "app": Self.textEditPracticeBundleIdentifier,
+                "model": runtimeReadinessReport.summary,
+                "textEditEnabled": String(!disabledBundleIdentifiers.contains(Self.textEditPracticeBundleIdentifier))
+            ]
+        )
+        refreshRuntimeChrome()
+    }
+
+    private func openTextEditPracticeDocument() {
+        do {
+            let documentURL = try writeTextEditPracticeDocument()
+            openTextEditPracticeDocument(at: documentURL)
+        } catch {
+            DiagnosticsLog.shared.record(
+                "textedit-practice-document-failed",
+                metadata: ["reason": error.localizedDescription]
+            )
+            openTextEditWithoutDocument()
+        }
+    }
+
+    private func writeTextEditPracticeDocument() throws -> URL {
+        let documentURL = Self.textEditPracticeDocumentURL
+        try FileManager.default.createDirectory(
+            at: documentURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Self.textEditPracticeDocumentText.write(to: documentURL, atomically: true, encoding: .utf8)
+        return documentURL
+    }
+
+    private func openTextEditPracticeDocument(at documentURL: URL) {
+        guard let appURL = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: Self.textEditPracticeBundleIdentifier
+        ) else {
+            NSWorkspace.shared.open(documentURL)
+            return
+        }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        NSWorkspace.shared.open(
+            [documentURL],
+            withApplicationAt: appURL,
+            configuration: configuration
+        ) { _, error in
+            if let error {
+                DiagnosticsLog.shared.record(
+                    "textedit-practice-open-failed",
+                    metadata: ["reason": error.localizedDescription]
+                )
+            }
+        }
+    }
+
+    private func openTextEditWithoutDocument() {
+        guard let appURL = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: Self.textEditPracticeBundleIdentifier
+        ) else {
+            return
+        }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
+            if let error {
+                DiagnosticsLog.shared.record(
+                    "textedit-open-failed",
+                    metadata: ["reason": error.localizedDescription]
+                )
+            }
+        }
+    }
+
     @objc
     private func showSettings() {
         settingsWindow.show(
@@ -6704,6 +6822,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isModelInstallInProgress: modelInstallTask != nil,
             currentApp: settingsCurrentAppState,
             fieldControl: settingsFieldControlState,
+            practice: settingsPracticeState,
             privacy: settingsPrivacyState,
             keyboardShortcuts: settingsKeyboardShortcutState,
             suggestionAggressiveness: settingsSuggestionAggressivenessState,
@@ -7798,6 +7917,32 @@ private extension AppDelegate {
 
     static var proofModeBundleIDsEnvironmentKey: String {
         "AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS"
+    }
+
+    static var textEditPracticeBundleIdentifier: String {
+        "com.apple.TextEdit"
+    }
+
+    static var textEditPracticeDocumentURL: URL {
+        let supportDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return supportDirectory
+            .appendingPathComponent("AutocompleteLab", isDirectory: true)
+            .appendingPathComponent("TextEdit Practice.txt")
+    }
+
+    static var textEditPracticeDocumentText: String {
+        """
+        Autocomplete Lab practice
+
+        This is a disposable local TextEdit file.
+        Type one short sentence below.
+        When a suggestion appears, press Tab once to accept one word.
+        Type again, then press Esc to dismiss the next suggestion.
+        Return to Autocomplete Lab Settings to pause suggestions or delete traces.
+
+        Practice here:
+
+        """
     }
 
     static var acceptedAndKeptLearningDefaultsKey: String {
