@@ -29,7 +29,7 @@ Excellent onboarding for this app means a new user sees a short native explanati
 
 Starting score before this pass: **77/100**. The app had strong Settings copy, default-off app enablement, local model repair controls, redacted exports, and honest proof gates, but launch still called `AccessibilityClient.requestPermissionIfNeeded()` from `AppDelegate.applicationDidFinishLaunching`, which could show the system prompt too early.
 
-Current score after this pass: **92/100**. Launch now defers the Accessibility system prompt behind app-owned Settings via `StartupOnboardingPolicy`. Settings says the model download uses Hugging Face once and suggestions run locally after install. Privacy copy now says what leaves the Mac automatically. Settings now includes a guided TextEdit practice flow so a new tester can grant Accessibility, confirm local model readiness, try one-word Tab accept, try Esc dismiss, pause, and delete traces from one safe path. `docs/product/onboarding-permission-qa-checklist.md` keeps clean-user and denial-recovery proof as beta gates.
+Current score after this pass: **92/100**. Launch now defers the Accessibility system prompt behind app-owned Settings via `StartupOnboardingPolicy`. Settings says the model download uses Hugging Face once and suggestions run locally after install. Privacy copy now says what leaves the Mac automatically. Model install preflights low disk space before network work. Settings now includes a guided TextEdit practice flow so a new tester can grant Accessibility, confirm local model readiness, try one-word Tab accept, try Esc dismiss, pause, and delete traces from one safe path. Timed pauses include pause-until-tomorrow, Settings/Menu/Diagnostics share pause-state copy, and `docs/product/onboarding-permission-qa-checklist.md` keeps clean-user and denial-recovery proof as beta gates.
 
 **Score**
 
@@ -71,11 +71,11 @@ Overall score: **92/100**
 
 - Category name: Pause, disable, and per-app control
 - Weight: 10
-- Current score: 8/10
-- Why this score: Global pause, 15-minute pause, 1-hour pause, current-field silence, per-app enable/disable, and delete controls exist and have policy coverage.
-- Evidence found in repo: `SuggestionControlPolicy`, `SuggestionPauseSchedulePolicy`, `DisabledAppSelection`, `AppDelegate.togglePauseSuggestions`, `AppDelegate.pauseSuggestionsFor15Minutes`, `AppDelegate.pauseSuggestionsFor1Hour`, `AppDelegate.toggleCurrentApp`, `AppDelegate.silenceCurrentField`, `SuggestionControlPolicyTests`, `SuggestionPauseSchedulePolicyTests`.
-- Missing evidence: no "pause until tomorrow" control and no manual proof that timed pause state mirrors instantly in Settings.
-- What would make it 100/100: pause-until-tomorrow, pause-current-app wording, and manual proof that states mirror instantly.
+- Current score: 9/10
+- Why this score: Global pause, 15-minute pause, 1-hour pause, pause-until-tomorrow, current-field silence, per-app pause/resume wording, delete controls, shortcut conflict copy, and redacted feedback export control exist and have policy/state coverage.
+- Evidence found in repo: `SuggestionControlPolicy`, `SuggestionPauseSchedulePolicy`, `KeyboardShortcutConflictPolicy`, `DisabledAppSelection`, `ControlSurfaceState`, `SettingsWindowController`, `DiagnosticsWindowController`, `AppDelegate.togglePauseSuggestions`, `AppDelegate.pauseSuggestionsFor15Minutes`, `AppDelegate.pauseSuggestionsFor1Hour`, `AppDelegate.pauseSuggestionsUntilTomorrowFromControl`, `AppDelegate.toggleCurrentApp`, `AppDelegate.silenceCurrentField`, `SuggestionControlPolicyTests`, `SuggestionPauseSchedulePolicyTests`, `AutocompleteKeyMapperTests`, `SettingsWindowControllerStateTests`, `DiagnosticsWindowControllerStateTests`.
+- Missing evidence: no clean-user manual proof that Settings, menu, and Diagnostics mirror pause/resume instantly.
+- What would make it 100/100: completed manual state-parity proof on a clean user account.
 
 - Category name: README and release-page trust proof
 - Weight: 10
@@ -117,6 +117,7 @@ A clean install feels calm and native. The user sees value before risk, grants o
 - Automated: `swift test --filter StartupOnboardingPolicyTests`.
 - Automated: `swift test --filter SuggestionPauseSchedulePolicyTests`.
 - Automated: `swift test --filter SettingsWindowControllerStateTests`.
+- Automated: `swift test --filter DiagnosticsWindowControllerStateTests`.
 - Automated: `swift test --filter RuntimePolicyTests`.
 - Automated: `swift test --filter LocalModelAssetInstallerTests`.
 - Automated: `./script/check_proof_manifest.sh`.
@@ -177,7 +178,7 @@ Make onboarding and permission UX safe enough for private beta by ensuring launc
 
 - Launch no longer prompts Accessibility before app-owned copy.
 - Automated tests for launch, Settings copy, and runtime copy pass.
-- Timed pause controls exist with expiry policy coverage.
+- Timed pause controls include pause-until-tomorrow and shared Settings/Menu/Diagnostics state copy.
 - Low-disk model install preflight exists with recovery-copy coverage.
 - Scorecard exists and names current score honestly.
 - Remaining work is manual proof, broader pause UX, or larger onboarding UI.
@@ -186,6 +187,6 @@ Make onboarding and permission UX safe enough for private beta by ensuring launc
 
 - Clean-user manual onboarding proof is still required.
 - In-app self-autocomplete is intentionally not used; the safe first-run practice target is guided TextEdit.
-- Timed pause controls still need manual menu and Settings parity proof.
+- Timed pause controls still need clean-user manual menu, Settings, and Diagnostics parity proof.
 - Screen Recording diagnostics still need stronger active-capture proof.
 - Release/notarization/privacy-policy proof is outside this pass.

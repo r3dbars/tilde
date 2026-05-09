@@ -26,6 +26,7 @@ require_contains "stop_running_apps()"
 require_contains "open_app()"
 require_contains "current_bundle_is_running()"
 require_contains "quarantine_stale_app_bundles"
+require_contains "AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN"
 reject_contains "kill_running_app_instances"
 reject_contains "is_target_app_running"
 

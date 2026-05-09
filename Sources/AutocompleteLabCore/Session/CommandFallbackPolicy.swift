@@ -46,7 +46,7 @@ public struct CommandFallbackDecision: Equatable, Sendable {
             case .noCurrentApp:
                 return "Fallback: choose a writing app first."
             case .appDisabled:
-                return "Fallback: off because this app is disabled."
+                return "Fallback: off while this app is paused."
             case .sensitiveApp, .sensitiveField, .denylistedApp:
                 return "Fallback: unavailable in sensitive apps or fields."
             case .unsupportedApp:
@@ -66,7 +66,7 @@ public struct CommandFallbackDecision: Equatable, Sendable {
         case .inlineAvailable:
             return "Use the normal inline path; the fallback stays out of the typing loop."
         case .appDisabled:
-            return "The user's app block wins over fallback helpers."
+            return "The user's app pause wins over fallback helpers."
         case .sensitiveApp:
             return "Autocomplete stays quiet and does not offer copy helpers in sensitive app profiles."
         case .sensitiveField:
