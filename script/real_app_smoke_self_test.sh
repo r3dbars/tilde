@@ -28,6 +28,13 @@ if ! grep -F "proof fragments are typed through System Events key events" "$TMP_
   exit 1
 fi
 
+script/real_app_smoke.sh textedit-model-latency --dry-run >"$TMP_DIR/textedit-model-latency.txt"
+if ! grep -F "TextEdit variant: model-latency" "$TMP_DIR/textedit-model-latency.txt" >/dev/null ||
+   ! grep -F "require real model-backed suggestions in one launch" "$TMP_DIR/textedit-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the TextEdit model latency dry-run plan" >&2
+  exit 1
+fi
+
 script/real_app_smoke.sh chrome --dry-run >"$TMP_DIR/chrome.txt"
 if ! grep -F "disposable Chrome textarea fixture" "$TMP_DIR/chrome.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome dry-run plan" >&2
