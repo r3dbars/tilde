@@ -7,6 +7,7 @@ final class SuggestionOrchestrator {
     private let wordCompletionRanker: WordCompletionCandidateRanker
     private let commonPhrasePredictor: CommonPhraseContinuationPredictor
     private let failureVisibilityPolicy = CompletionFailureVisibilityPolicy()
+    private let completionConfidencePolicy: CompletionConfidencePolicy
     private let suggestionPresentationGate: SuggestionPresentationGate
     private let suggestionReplacementPolicy: SuggestionReplacementPolicy
     private var requestGate = SuggestionRequestGate()
@@ -18,6 +19,7 @@ final class SuggestionOrchestrator {
         engine: any CompletionEngine,
         wordCompletionRanker: WordCompletionCandidateRanker = WordCompletionCandidateRanker(),
         commonPhrasePredictor: CommonPhraseContinuationPredictor = CommonPhraseContinuationPredictor(),
+        completionConfidencePolicy: CompletionConfidencePolicy = CompletionConfidencePolicy(),
         suggestionPresentationGate: SuggestionPresentationGate = SuggestionPresentationGate(),
         suggestionReplacementPolicy: SuggestionReplacementPolicy = SuggestionReplacementPolicy(),
         prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy = PrefixFamilyCooldownPolicy()
@@ -25,6 +27,7 @@ final class SuggestionOrchestrator {
         self.engineBox = CompletionEngineBox(engine: engine)
         self.wordCompletionRanker = wordCompletionRanker
         self.commonPhrasePredictor = commonPhrasePredictor
+        self.completionConfidencePolicy = completionConfidencePolicy
         self.suggestionPresentationGate = suggestionPresentationGate
         self.suggestionReplacementPolicy = suggestionReplacementPolicy
         self.prefixFamilyCooldownPolicy = prefixFamilyCooldownPolicy
@@ -511,9 +514,48 @@ final class SuggestionOrchestrator {
             acceptedAndKeptSignal: acceptedAndKeptSignal,
             isRepeatedMiss: isRepeatedMiss
         )
-        let decision = displayScorePolicy
+        let adjustedPolicy = displayScorePolicy
             .adjustingThresholds(by: prefixEagernessAdjustment.thresholdAdjustment)
-            .decision(
+        let confidenceDecision = completionConfidencePolicy.decision(
+            suggestion: suggestion,
+            mode: request.mode,
+            textBeforeCursor: request.textBeforeCursor,
+            latencyMilliseconds: latencyMilliseconds,
+            supportLevel: profile.supportLevel
+        )
+        let confidenceMetadata = [
+            "completionConfidenceBucket": confidenceDecision.bucket.rawValue,
+            "completionConfidenceScore": String(confidenceDecision.score),
+            "completionConfidenceReasons": confidenceDecision.reasons.joined(separator: ",")
+        ]
+        if confidenceDecision.reasons.contains("too-slow-to-display") {
+            let trace = DisplayScoreTrace(
+                score: score,
+                mode: request.mode,
+                behaviorProfileID: request.behaviorProfile.id,
+                threshold: adjustedPolicy.threshold(for: request.mode),
+                acceptedAndKeptProbabilityThreshold: adjustedPolicy.acceptedAndKeptProbabilityThreshold(
+                    for: request.mode,
+                    behaviorProfileID: request.behaviorProfile.id
+                )
+            )
+            return SuggestionDisplayScoreDecision(
+                decision: .suppress(
+                    DisplayScoreSuppression(
+                        reason: .tooSlowToDisplay,
+                        trace: trace
+                    )
+                ),
+                metadata: DisplayScoreSuppression(
+                    reason: .tooSlowToDisplay,
+                    trace: trace
+                ).metadata
+                    .merging(prefixEagernessAdjustment.metadata) { current, _ in current }
+                    .merging(confidenceMetadata) { current, _ in current }
+            )
+        }
+
+        let decision = adjustedPolicy.decision(
                 for: score,
                 mode: request.mode,
                 behaviorProfileID: request.behaviorProfile.id
@@ -522,6 +564,7 @@ final class SuggestionOrchestrator {
             decision: decision,
             metadata: decision.metadata
                 .merging(prefixEagernessAdjustment.metadata) { current, _ in current }
+                .merging(confidenceMetadata) { current, _ in current }
         )
     }
 

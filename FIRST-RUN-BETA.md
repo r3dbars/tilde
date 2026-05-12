@@ -4,17 +4,22 @@ Use this in the first 10 minutes of a private beta session.
 
 ## What Will Happen
 
-- Suggestions appear near the cursor in supported writing apps.
+- Suggestions appear as a small floating suggestion next to the cursor in
+  supported writing apps. They do not become document text until you accept
+  them.
 - `Tab` accepts one word.
 - `Esc` dismisses the suggestion.
 - Pause Suggestions stops suggestions everywhere.
-- Disable Current App stops suggestions only in the frontmost app.
+- Pause Current App stops suggestions only in the frontmost app.
 
 ## Start In TextEdit
 
 1. Open SteadyType Settings.
 2. Confirm Accessibility is allowed.
-3. Confirm the local model is ready.
+3. Confirm the local model is ready. If it is missing or broken, use
+   `Install Local Model` or `Repair Local Model` in Settings. Stop if in-app
+   setup fails; do not run Ollama, Python, shell scripts, or a separate model
+   server.
 4. Click `Start TextEdit Practice`.
 5. Type disposable text in the local TextEdit practice file.
 6. Press `Tab` once when the next word is clearly useful.
@@ -31,14 +36,14 @@ field kind, timing, counters, failure labels, and text lengths.
 
 ## Supported Test Apps
 
-Use these for beta writing:
+Write-test only in these apps:
 
 - TextEdit
 - Notes
 - Obsidian
 - Chrome local text fields
 
-Use these only as proof targets:
+Do not write-test these as normal beta apps. Use them only as proof targets:
 
 - Codex
 - Claude
