@@ -31,6 +31,11 @@ if ! grep -F "repo_id=mlx-community/Qwen3.5-4B-MLX-4bit" /tmp/autocomplete-downl
   cat /tmp/autocomplete-download-model-target.txt >&2
   exit 1
 fi
+if ! grep -F "revision=32f3e8ecf65426fc3306969496342d504bfa13f3" /tmp/autocomplete-download-model-target.txt >/dev/null; then
+  echo "download helper did not pin qwen35-4b to the expected revision" >&2
+  cat /tmp/autocomplete-download-model-target.txt >&2
+  exit 1
+fi
 
 script/download_mlx_model.py --model qwen3.5-4b --print-target >/tmp/autocomplete-download-model-target.txt
 if ! grep -F "repo_id=mlx-community/Qwen3.5-4B-MLX-4bit" /tmp/autocomplete-download-model-target.txt >/dev/null; then
@@ -38,10 +43,20 @@ if ! grep -F "repo_id=mlx-community/Qwen3.5-4B-MLX-4bit" /tmp/autocomplete-downl
   cat /tmp/autocomplete-download-model-target.txt >&2
   exit 1
 fi
+if ! grep -F "canonical=qwen35-4b" /tmp/autocomplete-download-model-target.txt >/dev/null; then
+  echo "download helper did not normalize the qwen3.5-4b alias for receipts" >&2
+  cat /tmp/autocomplete-download-model-target.txt >&2
+  exit 1
+fi
 
 script/download_mlx_model.py --model qwen3.5-9b --print-target >/tmp/autocomplete-download-model-target.txt
 if ! grep -F "target=$HOME/Library/Application Support/SteadyType/Models/Qwen35NineB/MLX/Qwen3.5-9B-MLX-4bit" /tmp/autocomplete-download-model-target.txt >/dev/null; then
   echo "download helper did not match the runtime qwen3.5-9b target" >&2
+  cat /tmp/autocomplete-download-model-target.txt >&2
+  exit 1
+fi
+if ! grep -F "revision=938d8919941c6e7efd3c7150eff7fe9d12afa631" /tmp/autocomplete-download-model-target.txt >/dev/null; then
+  echo "download helper did not pin qwen3.5-9b to the expected revision" >&2
   cat /tmp/autocomplete-download-model-target.txt >&2
   exit 1
 fi

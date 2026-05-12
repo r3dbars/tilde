@@ -56,6 +56,63 @@ struct ModelAssetInstallerTests {
         #expect(!fileManager.fileExists(atPath: targetURL.appendingPathComponent("old.txt").path))
     }
 
+    @Test("Finalizing a source-backed snapshot writes an integrity receipt")
+    func finalizeSourceBackedSnapshotWritesIntegrityReceipt() throws {
+        let fileManager = FileManager.default
+        let rootURL = fileManager.temporaryDirectory
+            .appendingPathComponent("AutocompleteLabInstallerTests-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? fileManager.removeItem(at: rootURL)
+        }
+
+        let snapshotURL = rootURL.appendingPathComponent("snapshot", isDirectory: true)
+        let targetURL = rootURL.appendingPathComponent("target", isDirectory: true)
+        try fileManager.createDirectory(at: snapshotURL, withIntermediateDirectories: true)
+        try "{}".write(
+            to: snapshotURL.appendingPathComponent("config.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "weights".write(
+            to: snapshotURL.appendingPathComponent("model.safetensors"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let manifest = LocalModelAssetManifest(
+            model: .qwen35FourB,
+            runtimeCandidate: .mlx,
+            cacheDirectoryName: "Models/Test/MLX",
+            fileName: "test-model",
+            source: LocalModelAssetSource(
+                repoID: "mlx-community/Test",
+                revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                allowPatterns: ["*.safetensors", "config.json"]
+            ),
+            expectedMinimumBytes: 1,
+            requiredFileNames: ["config.json"]
+        )
+
+        try ModelAssetInstaller.finalizeDownloadedSnapshot(
+            manifest: manifest,
+            snapshotURL: snapshotURL,
+            targetURL: targetURL,
+            fileManager: fileManager
+        )
+
+        let receiptURL = targetURL.appendingPathComponent(ModelAssetIntegrityReceiptWriter.fileName)
+        let receipt = try JSONDecoder().decode(
+            ModelAssetIntegrityReceipt.self,
+            from: Data(contentsOf: receiptURL)
+        )
+
+        #expect(receipt.model == "qwen35-4b")
+        #expect(receipt.repoID == "mlx-community/Test")
+        #expect(receipt.revision == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        #expect(receipt.files.map(\.path).sorted() == ["config.json", "model.safetensors"])
+        #expect(receipt.files.allSatisfy { $0.sha256.count == 64 })
+    }
+
     @Test("Finalizing an invalid downloaded snapshot keeps the previous model folder")
     func finalizeInvalidSnapshotKeepsTarget() throws {
         let fileManager = FileManager.default
