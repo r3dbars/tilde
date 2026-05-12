@@ -203,7 +203,7 @@
             "reference": "Claude Code/default"
           }
         ],
-        "notes": "Direct bundle is disabled; terminal-host proof is marker-gated and one-word only, but the current app fingerprint still needs a fresh host-labeled no-submit row."
+        "notes": "Direct bundle is disabled; terminal-host proof is marker-gated and one-word only. The current Terminal-host row proves one-word no-submit insertion on commit ca41cdc33e5e without claiming screenshot evidence; strict screenshot refresh and host-labeled iTerm2/Ghostty rows remain pending."
       },
       {
         "bundle": "com.anthropic.claudefordesktop",
@@ -780,19 +780,33 @@
         "proof": "default",
         "minVerifiedAccepts": 1,
         "maxVerifiedAccepts": 1,
-        "requiresVisualStrictComplete": true
+        "requiresVisualStrictComplete": false
       },
       "screenshots": [
         "docs/product/visual-placement-screenshots/claude-code-terminal.png"
       ],
       "gaps": [
-        "Terminal-host proof is stricter and host-labelable, but only the Terminal lane has historical screenshot-backed no-submit proof. iTerm2 and Ghostty are installed on this Mac and need their own host-labeled trace slices. Warp, kitty, Alacritty, and WezTerm are supported by policy but unavailable here or still pending proof."
+        "Terminal-host proof is stricter and host-labelable. The current Terminal lane has no-submit insertion proof on commit ca41cdc33e5e, but the strict screenshot refresh was blocked by an ungranted macOS screen/audio permission prompt. iTerm2 and Ghostty are installed on this Mac and need their own host-labeled trace slices. Warp, kitty, Alacritty, and WezTerm are supported by policy but unavailable here or still pending proof."
       ],
       "requirements": [
         {
           "id": "claude-code-terminal-host-no-submit",
+          "status": "complete",
+          "summary": "Current Terminal-host one-word Tab accept proof passed without submitting shell input or an agent prompt.",
+          "manualSmoke": {
+            "app": "Claude Code",
+            "bundle": "com.anthropic.claude-code",
+            "proof": "default",
+            "minVerifiedAccepts": 1,
+            "maxVerifiedAccepts": 1,
+            "requiresVisualStrictComplete": false
+          },
+          "smokeCommand": "script/real_app_smoke.sh claude-code --manual-gate"
+        },
+        {
+          "id": "claude-code-terminal-strict-screenshot-refresh",
           "status": "pending",
-          "summary": "Refresh terminal-host screenshot-backed one-word Tab accept proof on the current app fingerprint without submitting shell input or an agent prompt.",
+          "summary": "Refresh Terminal-host proof with strict screenshot evidence after the local macOS screen/audio permission prompt is granted by the user.",
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
         },
         {
