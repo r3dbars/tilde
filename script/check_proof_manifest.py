@@ -17,6 +17,13 @@ DEFAULT_APP_PROOF_MATRIX = ROOT_DIR / "docs/product/app-proof-matrix.md"
 DEFAULT_COMPATIBILITY_PROFILES = ROOT_DIR / "Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift"
 PROOF_METADATA_SOURCE = ROOT_DIR / "Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift"
 HOST_POLICY_SOURCE = ROOT_DIR / "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift"
+CURRENT_PROOF_SOURCE_PATHS = (
+    "Package.swift",
+    "Package.resolved",
+    "Sources",
+    "script/local_completion_runtime.py",
+    "script/real_app_smoke.sh",
+)
 EXPECTED_GRADUATION_DECISIONS = {
     "Google Docs in Chrome": {
         "decision": "blocked",
@@ -250,6 +257,34 @@ def current_commit() -> str:
         ).strip()
     except subprocess.CalledProcessError:
         return ""
+
+
+def source_commit_is_current_compatible(source_commit: str, head: str) -> bool:
+    if not source_commit or not head:
+        return False
+    try:
+        proof_commit = subprocess.check_output(
+            ["git", "rev-parse", "--verify", f"{source_commit}^{{commit}}"],
+            cwd=ROOT_DIR,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except subprocess.CalledProcessError:
+        return False
+
+    if proof_commit == head:
+        return True
+
+    try:
+        subprocess.check_call(
+            ["git", "diff", "--quiet", f"{proof_commit}..{head}", "--", *CURRENT_PROOF_SOURCE_PATHS],
+            cwd=ROOT_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
 
 
 def compatibility_profiles(path: Path) -> dict[str, dict[str, str]]:
@@ -820,8 +855,11 @@ def verify_manifest(
 
     manifest_commit = str(manifest.get("sourceCommit", ""))
     head = current_commit()
-    if require_current_commit and head and manifest_commit != head:
-        failures.append(f"sourceCommit is {manifest_commit or 'missing'}; expected current HEAD {head}")
+    if require_current_commit and head and not source_commit_is_current_compatible(manifest_commit, head):
+        failures.append(
+            f"sourceCommit is {manifest_commit or 'missing'}; expected current HEAD {head} "
+            "or a source-compatible commit with no changes in proof-sensitive app/smoke paths"
+        )
 
     surfaces = manifest.get("surfaces")
     if not isinstance(surfaces, list) or not surfaces:

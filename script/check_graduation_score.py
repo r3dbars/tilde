@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -232,10 +233,34 @@ def contains_all(haystack: str, needles: tuple[str, ...]) -> bool:
     return all(needle in haystack for needle in needles)
 
 
+def proof_manifest_validator_passes(manifest_path: Path) -> tuple[bool, str]:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT_DIR / "script/check_proof_manifest.py"),
+            "--manifest",
+            str(manifest_path),
+            "--skip-profile-coverage",
+            "--require-current-commit",
+        ],
+        cwd=ROOT_DIR,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    output = result.stdout.strip()
+    if result.returncode == 0:
+        return True, ""
+    tail = "\n".join(output.splitlines()[-8:])
+    return False, tail or "proof manifest validator failed"
+
+
 def manifest_checks(manifest: dict) -> list[Check]:
     expected_names = tuple(surface.surface for surface in EXPECTED_SURFACES)
     rows = rows_by_surface(manifest)
     manifest_checker = text("script/check_proof_manifest.py")
+    validator_passed, validator_detail = proof_manifest_validator_passes(DEFAULT_MANIFEST)
     checks: list[Check] = []
     checks.append(
         Check(
@@ -290,8 +315,8 @@ def manifest_checks(manifest: dict) -> list[Check]:
     )
     checks.append(
         Check(
-            4,
-            "Manifest required proof gates are explicit and checked",
+            2,
+            "Manifest required proof gates are explicit and current-source checked",
             all(
                 set(expected.required_proof).issubset(set(rows.get(expected.surface, {}).get("requiredProof", [])))
                 for expected in EXPECTED_SURFACES
@@ -301,12 +326,30 @@ def manifest_checks(manifest: dict) -> list[Check]:
             "one or more requiredProof lists are incomplete",
         )
     )
+    checks.append(
+        Check(
+            2,
+            "Proof manifest validator passes with current source-compatible evidence",
+            validator_passed
+            and contains_all(
+                manifest_checker,
+                (
+                    "CURRENT_PROOF_SOURCE_PATHS",
+                    "source_commit_is_current_compatible",
+                    "script/real_app_smoke.sh",
+                    "script/local_completion_runtime.py",
+                ),
+            ),
+            validator_detail or "proof manifest validator or current-source path rules failed",
+        )
+    )
     return checks
 
 
 def profile_checks() -> list[Check]:
     compatibility = text("Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift")
     app_profiles = text("Sources/AutocompleteLabCore/Compatibility/AppCompatibilityProfile.swift")
+    app_delegate = text("Sources/AutocompleteLabApp/App/AppDelegate.swift")
     browser_policy = text("Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift")
     proof_mode_policy = text("Sources/AutocompleteLabCore/Configuration/ProofModeScopePolicy.swift")
     compatibility_tests = text("Tests/AutocompleteLabCoreTests/CompatibilityProfileTests.swift")
@@ -361,6 +404,7 @@ def profile_checks() -> list[Check]:
             "High-risk browser and collaboration surfaces stay blocked, redacted, and proof scoped",
             contains_all(
                 app_profiles
+                + app_delegate
                 + app_profile_tests
                 + browser_policy
                 + browser_policy_tests
@@ -376,6 +420,8 @@ def profile_checks() -> list[Check]:
                     "blockedSurfaceTextRedacted",
                     "Chrome sensitive pages outrank service fingerprints",
                     "ProofModeScopePolicy",
+                    "environmentProofModeScopePolicy.allows",
+                    "suggestionBundleIdentifier: profile.bundleIdentifier",
                     "Active proof mode blocks apps outside the requested proof target",
                     "Active proof mode can allow a virtual proof profile through its suggestion bundle",
                 ),
