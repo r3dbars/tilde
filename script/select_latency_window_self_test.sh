@@ -15,6 +15,7 @@ cat >"$DIAGNOSTICS_LOG" <<'LOG'
 2026-05-12T10:00:01Z focused-text-poll-latency-summary count=4 maxMilliseconds=9 p50Milliseconds=4 p90Milliseconds=6 p95Milliseconds=8 p99Milliseconds=9
 2026-05-12T10:05:00Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=qwen3-0.6b-4bit modelOverride=qwen3-0.6b nativeRuntimeAvailable=true
 2026-05-12T10:10:00Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+2026-05-12T10:10:01Z focused-text-poll-latency-summary count=4 maxMilliseconds=9 p50Milliseconds=4 p90Milliseconds=6 p95Milliseconds=8 p99Milliseconds=9
 LOG
 
 cat >"$TRACE_LOG" <<'LOG'
@@ -22,6 +23,10 @@ cat >"$TRACE_LOG" <<'LOG'
 {"timestamp":"2026-05-12T10:00:03Z","sessionID":"session","suggestionID":"one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"behaviorProfile":"docs_prose"}}
 {"timestamp":"2026-05-12T10:00:04Z","sessionID":"session","suggestionID":"two","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":140,"metadata":{"behaviorProfile":"docs_prose","firstTokenLatencyMilliseconds":"100","totalGenerationLatencyMilliseconds":"140"}}
 {"timestamp":"2026-05-12T10:00:05Z","sessionID":"session","suggestionID":"two","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":150,"metadata":{"behaviorProfile":"docs_prose"}}
+{"timestamp":"2026-05-12T10:10:02Z","sessionID":"session","suggestionID":"three","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"behaviorProfile":"docs_prose","firstTokenLatencyMilliseconds":"90","totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"2026-05-12T10:10:03Z","sessionID":"session","suggestionID":"three","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"behaviorProfile":"docs_prose"}}
+{"timestamp":"2026-05-12T10:10:04Z","sessionID":"session","suggestionID":"four","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":140,"metadata":{"behaviorProfile":"docs_prose","firstTokenLatencyMilliseconds":"100","totalGenerationLatencyMilliseconds":"140"}}
+{"timestamp":"2026-05-12T10:10:05Z","sessionID":"session","suggestionID":"four","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":150,"metadata":{"behaviorProfile":"docs_prose"}}
 LOG
 
 WINDOW="$(
@@ -32,13 +37,13 @@ WINDOW="$(
     --min-model-samples 2
 )"
 
-if ! grep -F "AUTOCOMPLETE_LAB_LOG_START_LINE=0" <<<"$WINDOW" >/dev/null; then
-  echo "latency window self-test did not choose the sampled default launch" >&2
+if ! grep -F "AUTOCOMPLETE_LAB_LOG_START_LINE=3" <<<"$WINDOW" >/dev/null; then
+  echo "latency window self-test did not choose the latest sampled default launch" >&2
   echo "$WINDOW" >&2
   exit 1
 fi
 
-if ! grep -F "AUTOCOMPLETE_LAB_TRACE_START_LINE=0" <<<"$WINDOW" >/dev/null; then
+if ! grep -F "AUTOCOMPLETE_LAB_TRACE_START_LINE=4" <<<"$WINDOW" >/dev/null; then
   echo "latency window self-test did not choose the matching trace window" >&2
   echo "$WINDOW" >&2
   exit 1
@@ -58,17 +63,37 @@ env $WINDOW \
     --max-first-token-p95-ms 650 \
     --max-total-generation-p95-ms 850 >/dev/null
 
-WINDOW="$(
-  script/select_latency_window.py \
-    --diagnostics-log "$DIAGNOSTICS_LOG" \
-    --trace-log "$TRACE_LOG" \
-    --min-first-visible-samples 3 \
-    --min-model-samples 3
-)"
+if ! script/select_latency_window.py \
+  --diagnostics-log "$DIAGNOSTICS_LOG" \
+  --trace-log "$TRACE_LOG" \
+  --min-first-visible-samples 3 \
+  --min-model-samples 3 2>"$TMP_DIR/undersampled.err" >/dev/null; then
+  if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/undersampled.err" >/dev/null; then
+    echo "latency window self-test did not explain the undersampled latest launch" >&2
+    cat "$TMP_DIR/undersampled.err" >&2
+    exit 1
+  fi
+else
+  echo "latency window self-test expected undersampled latest launch to fail" >&2
+  exit 1
+fi
 
-if ! grep -F "AUTOCOMPLETE_LAB_LOG_START_LINE=3" <<<"$WINDOW" >/dev/null; then
-  echo "latency window self-test did not fail closed on the latest default launch" >&2
-  echo "$WINDOW" >&2
+cat >>"$DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T10:15:00Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=qwen3-0.6b-4bit modelOverride=qwen3-0.6b nativeRuntimeAvailable=true
+LOG
+
+if script/select_latency_window.py \
+  --diagnostics-log "$DIAGNOSTICS_LOG" \
+  --trace-log "$TRACE_LOG" \
+  --min-first-visible-samples 2 \
+  --min-model-samples 2 2>"$TMP_DIR/override.err" >/dev/null; then
+  echo "latency window self-test expected latest model override launch to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "latest runtime launch is not the expected default runtime" "$TMP_DIR/override.err" >/dev/null; then
+  echo "latency window self-test did not explain the latest override launch" >&2
+  cat "$TMP_DIR/override.err" >&2
   exit 1
 fi
 
