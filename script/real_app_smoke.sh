@@ -3813,7 +3813,7 @@ open_textedit_smoke_document() {
     return 0
   fi
 
-  osascript - "$file_path" <<'APPLESCRIPT' >/dev/null 2>&1 || true
+  osascript - "$file_path" <<'APPLESCRIPT' >/dev/null 2>&1 &
 on run argv
   set targetPath to item 1 of argv
   tell application "TextEdit"
@@ -3822,6 +3822,7 @@ on run argv
   end tell
 end run
 APPLESCRIPT
+  wait_for_background_process "$!" 5 "TextEdit disposable document AppleScript open" >/dev/null 2>&1 || true
 
   if wait_for_textedit_document_open "$window_title" 6; then
     return 0

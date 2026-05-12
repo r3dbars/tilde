@@ -70,6 +70,10 @@ if ! grep -F 'wait_for_background_process "$!" 5 "stale TextEdit smoke window cl
   echo "real app smoke self-test expected TextEdit cleanup AppleScript to be timeout-bounded" >&2
   exit 1
 fi
+if ! grep -F 'wait_for_background_process "$!" 5 "TextEdit disposable document AppleScript open"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit open AppleScript fallback to be timeout-bounded" >&2
+  exit 1
+fi
 if ! grep -F 'real_app_smoke received $signal_name during phase:' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Tracked TextEdit smoke windows:' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected SIGTERM diagnostics for interrupted proof runs" >&2
