@@ -166,6 +166,10 @@ class RowScore:
     def display_eligible(self) -> bool:
         return not self.no_suggestion and not bool(self.failures & HARD_DISPLAY_FAILURES)
 
+    @property
+    def expected_suppression_passed(self) -> bool:
+        return self.no_suggestion and self.row.expected_suppression and not self.failures
+
 
 def word_tokens(text: str) -> list[str]:
     return [token for token in re.split(r"[^A-Za-z0-9']+", text.lower()) if token]
@@ -381,18 +385,22 @@ def percentage(failures: int, total: int) -> str:
 def summarize(scores: list[RowScore], source: str, include_raw: bool) -> tuple[str, int, int]:
     total_rows = len(scores)
     display_scores = [score for score in scores if score.display_eligible]
+    expected_suppressions = [score for score in scores if score.expected_suppression_passed]
     suppressed = total_rows - len(display_scores)
     label_failures = {
         label: sum(1 for score in scores if label in score.failures)
         for label in LABELS
     }
 
-    if display_scores:
-        total_possible = len(display_scores) * len(LABELS)
-        total_failed = sum(1 for score in display_scores for label in LABELS if label in score.failures)
-        relevance_failed = sum(1 for score in display_scores if "relevance" in score.failures)
+    if scores:
+        total_possible = total_rows * len(LABELS)
+        total_failed = sum(1 for score in scores for label in LABELS if label in score.failures)
+        relevance_population = [score for score in scores if not score.row.expected_suppression]
+        relevance_failed = sum(1 for score in relevance_population if "relevance" in score.failures)
         overall = round(((total_possible - total_failed) / total_possible) * 100)
-        relevance = round(((len(display_scores) - relevance_failed) / len(display_scores)) * 100)
+        relevance = round(
+            ((len(relevance_population) - relevance_failed) / max(1, len(relevance_population))) * 100
+        )
     else:
         overall = 0
         relevance = 0
@@ -403,6 +411,7 @@ def summarize(scores: list[RowScore], source: str, include_raw: bool) -> tuple[s
         f"Rows scored: {total_rows}",
         f"Display-eligible rows: {len(display_scores)}",
         f"Suppressed/no-suggestion rows: {suppressed}",
+        f"Expected suppressions passed: {len(expected_suppressions)}",
         f"Overall score: {overall}/100",
         f"Relevance score: {relevance}/100",
         "Raw output persisted: no",
