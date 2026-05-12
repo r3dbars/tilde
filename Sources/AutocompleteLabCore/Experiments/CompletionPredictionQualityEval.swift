@@ -8,6 +8,7 @@ public struct CompletionPredictionEvalCase: Equatable, Sendable {
     public let textBeforeCursor: String
     public let expectedVisibleText: String?
     public let rawCandidateLines: [String]
+    public let usePredictivePhraseFallback: Bool
 
     public init(
         id: String,
@@ -16,7 +17,8 @@ public struct CompletionPredictionEvalCase: Equatable, Sendable {
         behaviorProfileID: AutocompleteBehaviorProfileID,
         textBeforeCursor: String,
         expectedVisibleText: String?,
-        rawCandidateLines: [String]
+        rawCandidateLines: [String],
+        usePredictivePhraseFallback: Bool = false
     ) {
         self.id = id
         self.surfaceName = surfaceName
@@ -25,6 +27,7 @@ public struct CompletionPredictionEvalCase: Equatable, Sendable {
         self.textBeforeCursor = textBeforeCursor
         self.expectedVisibleText = expectedVisibleText
         self.rawCandidateLines = rawCandidateLines
+        self.usePredictivePhraseFallback = usePredictivePhraseFallback
     }
 
     public var expectsSuggestion: Bool {
@@ -43,6 +46,7 @@ public struct CompletionPredictionEvalCaseResult: Equatable, Sendable {
     public let candidateTopScore: Double?
     public let candidateScoreMargin: Double?
     public let candidateSuppressionReason: String?
+    public let selectionSource: String
 
     public var shown: Bool {
         visibleText != nil
@@ -160,9 +164,13 @@ public struct CompletionPredictionEvalReport: Equatable, Sendable {
             let status = result.evalCase.expectsSuggestion
                 ? (result.exactVisibleText ? "ok" : "miss")
                 : (result.noSuggestionCorrect == true ? "ok" : "unsafe-display")
-            return "| \(result.evalCase.id) | \(result.evalCase.surfaceName) | \(expected) | \(actual) | \(status) |"
+            return "| \(result.evalCase.id) | \(result.evalCase.surfaceName) | \(expected) | \(actual) | \(result.selectionSource) | \(status) |"
         }
         .joined(separator: "\n")
+        let predictiveResults = results.filter { $0.selectionSource == "predictive-phrase-fallback" }
+        let modelResults = results.filter { $0.selectionSource == "model-candidate-ranker" }
+        let predictiveExact = predictiveResults.filter { $0.evalCase.expectsSuggestion && $0.exactVisibleText }.count
+        let modelExact = modelResults.filter { $0.evalCase.expectsSuggestion && $0.exactVisibleText }.count
 
         return """
         # Completion Prediction Quality Eval - 500 Cases
@@ -179,10 +187,16 @@ public struct CompletionPredictionEvalReport: Equatable, Sendable {
         \(rows)
         | Total | \(totalSummary.shownCount)/\(totalSummary.caseCount) | \(percent(totalSummary.exactNextWordRate)) | \(percent(totalSummary.exactPrefix2Rate)) | \(percent(totalSummary.exactPrefix3Rate)) | \(percent(totalSummary.exactPrefix4Rate)) | \(percent(totalSummary.noSuggestionRate)) | \(totalSummary.unsafeDisplayFailureCount) |
 
+        ## Source Mix
+
+        - Predictive phrase fallback exact: \(predictiveExact)/\(predictiveResults.count)
+        - Model candidate ranker exact: \(modelExact)/\(modelResults.filter { $0.evalCase.expectsSuggestion }.count)
+        - Predictor-only positives omit the expected answer from raw model candidates.
+
         ## First 40 Case Evidence
 
-        | Case | Surface | Expected | Actual | Result |
-        | --- | --- | --- | --- | --- |
+        | Case | Surface | Expected | Actual | Source | Result |
+        | --- | --- | --- | --- | --- | --- |
         \(evidenceRows)
 
         ## Decision
@@ -219,6 +233,24 @@ public enum CompletionPredictionQualityEvaluator {
         cleaner: CompletionOutputCleaner,
         ranker: CompletionCandidateRanker
     ) -> CompletionPredictionEvalCaseResult {
+        if evalCase.usePredictivePhraseFallback {
+            let predictiveSelection = CommonPhraseContinuationPredictor().selection(
+                for: evalCase.textBeforeCursor,
+                behaviorProfileID: evalCase.behaviorProfileID
+            )
+            if let suggestion = predictiveSelection.suggestion {
+                return CompletionPredictionEvalCaseResult(
+                    evalCase: evalCase,
+                    visibleText: suggestion.visibleText,
+                    candidateCount: 1,
+                    candidateTopScore: predictiveSelection.score,
+                    candidateScoreMargin: nil,
+                    candidateSuppressionReason: predictiveSelection.suppressionReason,
+                    selectionSource: "predictive-phrase-fallback"
+                )
+            }
+        }
+
         let selection = cleaner.cleanBestCandidate(
             evalCase.rawOutput,
             after: evalCase.textBeforeCursor,
@@ -233,7 +265,8 @@ public enum CompletionPredictionQualityEvaluator {
             candidateCount: selection.rankedCandidates.count,
             candidateTopScore: selection.selectedCandidate?.score ?? selection.rankedCandidates.first?.score,
             candidateScoreMargin: selection.scoreMargin,
-            candidateSuppressionReason: selection.suppressionReason?.rawValue
+            candidateSuppressionReason: selection.suppressionReason?.rawValue,
+            selectionSource: "model-candidate-ranker"
         )
     }
 
@@ -327,18 +360,25 @@ public enum CompletionPredictionQualityEvaluator {
         tone: String,
         template: PositiveTemplate
     ) -> CompletionPredictionEvalCase {
-        CompletionPredictionEvalCase(
+        let usePredictivePhraseFallback = index.isMultiple(of: 2)
+        return CompletionPredictionEvalCase(
             id: "prediction-\(String(format: "%03d", index))",
             surfaceName: surface.name,
             appBundleIdentifier: surface.appBundleIdentifier,
             behaviorProfileID: surface.behaviorProfileID,
             textBeforeCursor: "\(tone): \(template.textBeforeCursor)",
             expectedVisibleText: " \(template.expectedVisibleText)",
-            rawCandidateLines: orderedCandidates(
-                expected: template.expectedVisibleText,
-                distractors: template.distractors,
-                offset: index
-            )
+            rawCandidateLines: usePredictivePhraseFallback
+                ? orderedDistractorCandidates(
+                    distractors: template.distractors,
+                    offset: index
+                )
+                : orderedCandidates(
+                    expected: template.expectedVisibleText,
+                    distractors: template.distractors,
+                    offset: index
+                ),
+            usePredictivePhraseFallback: usePredictivePhraseFallback
         )
     }
 
@@ -383,6 +423,18 @@ public enum CompletionPredictionQualityEvaluator {
         default:
             return [first, second, expected]
         }
+    }
+
+    private static func orderedDistractorCandidates(
+        distractors: [String],
+        offset: Int
+    ) -> [String] {
+        let first = distractors.first ?? "right now"
+        let second = distractors.dropFirst().first ?? "at some point"
+
+        return offset.isMultiple(of: 2)
+            ? [first, second, "submit the prompt"]
+            : [second, "press Enter to send", first]
     }
 
     private struct EvalSurface: Equatable {

@@ -25,6 +25,11 @@ struct CompletionPredictionQualityEvalTests {
         #expect(total.unsafeDisplayFailureCount == 0)
         #expect(report.score == 100)
         #expect(report.squaredScore == 10_000)
+        #expect(report.results.filter { $0.selectionSource == "predictive-phrase-fallback" }.count == 200)
+        #expect(report.results.filter { $0.selectionSource == "model-candidate-ranker" && $0.evalCase.expectsSuggestion }.count == 200)
+        #expect(report.results.filter { $0.evalCase.usePredictivePhraseFallback }.allSatisfy { result in
+            !result.evalCase.rawCandidateLines.contains(result.evalCase.expectedVisibleText?.trimmingCharacters(in: .whitespaces) ?? "")
+        })
     }
 
     @Test("Corpus covers real target surfaces and blocked negative fields")
@@ -59,6 +64,9 @@ struct CompletionPredictionQualityEvalTests {
         #expect(markdown.contains("Next word exact"))
         #expect(markdown.contains("4-word exact"))
         #expect(markdown.contains("Unsafe displays"))
+        #expect(markdown.contains("Source Mix"))
+        #expect(markdown.contains("Predictive phrase fallback exact: 200/200"))
+        #expect(markdown.contains("Predictor-only positives omit the expected answer"))
         #expect(markdown.contains("not a claim that the live model is 100/100"))
     }
 }

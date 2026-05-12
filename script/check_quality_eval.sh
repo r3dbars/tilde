@@ -42,6 +42,8 @@ for required in \
   "Next word exact" \
   "4-word exact" \
   "Unsafe displays" \
+  "Predictive phrase fallback exact: 200/200" \
+  "Predictor-only positives omit the expected answer" \
   "not a claim that the live model is 100/100"; do
   if ! grep -F "$required" "$PREDICTION_REPORT_PATH" >/dev/null; then
     echo "completion prediction quality report missing required section: $required" >&2
