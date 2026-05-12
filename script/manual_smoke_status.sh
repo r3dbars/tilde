@@ -131,6 +131,7 @@ current_build_proof_summary() {
 
 line_has_current_build_proof() {
   local line="$1"
+  local bundle_id="${2:-}"
 
   if [[ "$line" == *"archive-sha256:"* ]]; then
     if [[ -n "$CURRENT_ARCHIVE_PROOF" && "$line" == *"$CURRENT_ARCHIVE_PROOF"* ]]; then
@@ -142,7 +143,7 @@ line_has_current_build_proof() {
     return 0
   fi
 
-  if line_has_source_compatible_commit_proof "$line"; then
+  if line_has_source_compatible_commit_proof "$line" "$(proof_source_paths_for_bundle "$bundle_id")"; then
     return 0
   fi
 
@@ -167,6 +168,7 @@ line_commit_proof_token() {
 
 line_has_source_compatible_commit_proof() {
   local line="$1"
+  local source_paths_raw="${2:-${AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS:-Package.swift Package.resolved Sources}}"
   local proof_token
   proof_token="$(line_commit_proof_token "$line")"
   [[ -n "$proof_token" ]] || return 1
@@ -183,14 +185,25 @@ line_has_source_compatible_commit_proof() {
     return 0
   fi
 
-  # Proof rows should go stale when the app/runtime source changes, not when the
-  # proof driver gets safer for a different lane and app behavior is unchanged.
-  local source_paths_raw="${AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS:-Package.swift Package.resolved Sources}"
   local -a source_paths=()
   read -r -a source_paths <<<"$source_paths_raw"
   (( ${#source_paths[@]} > 0 )) || return 1
 
   git diff --quiet "$proof_commit".."$current_commit" -- "${source_paths[@]}"
+}
+
+proof_source_paths_for_bundle() {
+  local bundle_id="${1:-}"
+  if [[ -n "${AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS+x}" ]]; then
+    printf '%s' "$AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS"
+    return
+  fi
+
+  local paths="Package.swift Package.resolved Sources"
+  if [[ "$bundle_id" != "com.anthropic.claude-code" ]]; then
+    paths+=" :!Sources/AutocompleteLabCore/Configuration/ClaudeCodeTerminalHostProofPolicy.swift"
+  fi
+  printf '%s' "$paths"
 }
 
 matching_report_line() {
@@ -421,7 +434,7 @@ for app_entry in "${APPS[@]}"; do
   fi
 
   if [[ -n "$pass_line" ]]; then
-    if line_has_current_build_proof "$pass_line"; then
+    if line_has_current_build_proof "$pass_line" "$bundle_id"; then
       echo "- $display_name: passed$pass_suffix"
     else
       echo "- $display_name: stale pass (needs current app/source proof; run $run_hint)"

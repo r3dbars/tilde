@@ -807,6 +807,42 @@ EOF
   fi
 fi
 
+CLAUDE_POLICY_ONLY_COMMIT=""
+CURRENT_HEAD="$(git rev-parse --verify HEAD)"
+while IFS= read -r candidate; do
+  [[ "$candidate" != "$CURRENT_HEAD" ]] || continue
+  changed_paths="$(git diff --name-only "$candidate".."$CURRENT_HEAD" -- Package.swift Package.resolved Sources | tr '\n' ' ')"
+  if [[ "$changed_paths" == "Sources/AutocompleteLabCore/Configuration/ClaudeCodeTerminalHostProofPolicy.swift " ]]; then
+    CLAUDE_POLICY_ONLY_COMMIT="$(git rev-parse --short=12 "$candidate")"
+    break
+  fi
+done < <(git rev-list --max-count=120 HEAD)
+
+if [[ -n "$CLAUDE_POLICY_ONLY_COMMIT" ]]; then
+  cat >"$MASKED_STALE_REPORT" <<EOF
+# Manual Smoke Runs
+
+| Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
+| --- | --- | --- | --- | ---: | --- | --- | --- |
+| 2026-04-26T08:00:00Z | TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-2 in \`/tmp/diagnostics.log\` | lines 1-2 in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; build \`commit:$CLAUDE_POLICY_ONLY_COMMIT,app-sha256:stale-app-binary\` |
+| 2026-04-26T08:01:00Z | Claude Code | \`com.anthropic.claude-code\` | \`default\` | 1 | \`inlineAdjacent|floatingMirror\` | lines 3-4 in \`/tmp/diagnostics.log\` | lines 3-4 in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; prompt no-submit confirmed; build \`commit:$CLAUDE_POLICY_ONLY_COMMIT,app-sha256:stale-app-binary\` |
+EOF
+
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$MASKED_STALE_REPORT" \
+    AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
+    script/manual_smoke_status.sh >"$STATUS_OUTPUT"
+
+  if ! grep -F -- "- TextEdit: passed" "$STATUS_OUTPUT" >/dev/null; then
+    echo "manual smoke self-test should not stale TextEdit on Claude Code-only source changes" >&2
+    exit 1
+  fi
+
+  if ! grep -F -- "- Claude Code: stale pass" "$STATUS_OUTPUT" >/dev/null; then
+    echo "manual smoke self-test should stale Claude Code on Claude Code policy changes" >&2
+    exit 1
+  fi
+fi
+
 EMPTY_REPORT="$TMP_DIR/empty-manual-smoke-runs.md"
 cat >"$EMPTY_REPORT" <<'EOF'
 # Manual Smoke Runs

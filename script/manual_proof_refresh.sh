@@ -257,6 +257,7 @@ line_commit_proof_token() {
 
 line_has_source_compatible_commit_proof() {
   local line="$1"
+  local source_paths_raw="${2:-${AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS:-Package.swift Package.resolved Sources}}"
   local proof_token
   proof_token="$(line_commit_proof_token "$line")"
   [[ -n "$proof_token" ]] || return 1
@@ -273,12 +274,24 @@ line_has_source_compatible_commit_proof() {
     return 0
   fi
 
-  local source_paths_raw="${AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS:-Package.swift Package.resolved Sources}"
   local -a source_paths=()
   read -r -a source_paths <<<"$source_paths_raw"
   (( ${#source_paths[@]} > 0 )) || return 1
 
   git diff --quiet "$proof_commit".."$current_commit" -- "${source_paths[@]}"
+}
+
+proof_source_paths_for_target() {
+  if [[ -n "${AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS+x}" ]]; then
+    printf '%s' "$AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS"
+    return
+  fi
+
+  local paths="Package.swift Package.resolved Sources"
+  if [[ "${TARGET_BUNDLE:-}" != "com.anthropic.claude-code" ]]; then
+    paths+=" :!Sources/AutocompleteLabCore/Configuration/ClaudeCodeTerminalHostProofPolicy.swift"
+  fi
+  printf '%s' "$paths"
 }
 
 classify_current_commit_or_archive() {
@@ -304,7 +317,7 @@ classify_current_commit_or_archive() {
     return 0
   fi
 
-  if line_has_source_compatible_commit_proof "$line"; then
+  if line_has_source_compatible_commit_proof "$line" "$(proof_source_paths_for_target)"; then
     TARGET_STATUS="current"
     TARGET_STATUS_REASON="source-compatible commit fingerprint"
     return 0
