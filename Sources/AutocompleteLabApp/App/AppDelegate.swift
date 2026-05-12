@@ -6573,7 +6573,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let searchableText = context.fingerprint.searchableText
         guard profile.bundleIdentifier == "com.google.Chrome",
               context.role == "AXTextArea",
-              context.caretIsSynthetic,
               context.selectedTextLength == 0,
               (searchableText.contains("codemirror") || searchableText.contains("monaco")),
               let lastTextSnapshot,
