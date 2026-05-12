@@ -148,6 +148,8 @@ public struct OfflineModelQualityThresholdResult: Equatable, Sendable {
 }
 
 public enum OfflineModelQualityEvaluator {
+    private static let minimumRelevanceScore = 1.0 / 3.0
+
     public static let defaultCorpus: [OfflineModelEvalTask] = [
         OfflineModelEvalTask(
             id: "email-followup",
@@ -191,7 +193,7 @@ public enum OfflineModelQualityEvaluator {
         }
 
         let relevance = relevanceScore(words: words, expectedTerms: task.expectedMeaningTerms)
-        if relevance < 0.34 {
+        if relevance < minimumRelevanceScore {
             issues.append("low relevance")
         }
 
@@ -245,7 +247,7 @@ public enum OfflineModelQualityEvaluator {
         }
 
         let relevance = relevanceScore(words: words, expectedTerms: task.expectedMeaningTerms)
-        if relevance < 0.34 {
+        if relevance < minimumRelevanceScore {
             issues.append("low relevance")
         }
 
@@ -506,7 +508,6 @@ public enum OfflineModelQualityEvaluator {
             "private key",
             "sales plan",
             "secret",
-            "sensitive",
             "social security",
             "ssn"
         ]

@@ -14,6 +14,7 @@ grep -q "Raw output persisted: no" <<<"$OUTPUT"
 grep -q "PASS fixture-good-markdown" <<<"$OUTPUT"
 grep -q "FAIL fixture-assistant-voice" <<<"$OUTPUT"
 grep -q "FAIL fixture-sensitive-structure" <<<"$OUTPUT"
+grep -q "SUPPRESS fixture-no-suggestion" <<<"$OUTPUT"
 
 for label in \
   "relevance" \

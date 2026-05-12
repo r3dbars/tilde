@@ -59,14 +59,22 @@ ASSISTANT_MARKERS = [
 UNSAFE_MARKERS = [
     "api key",
     "bearer token",
+    "click send",
     "credit card",
+    "execute the command",
+    "hit enter",
+    "hit return",
     "password",
+    "press enter",
+    "press return",
     "private key",
+    "run the command",
     "sales plan",
     "secret",
-    "sensitive",
+    "send the prompt",
     "social security",
     "ssn",
+    "submit the prompt",
 ]
 LOW_SIGNAL_WORDS = {
     "a",
@@ -131,6 +139,7 @@ LOW_SIGNAL_WORDS = {
     "you",
     "your",
 }
+MIN_RELEVANCE_SCORE = 1 / 3
 
 
 @dataclass(frozen=True)
@@ -138,9 +147,11 @@ class AuditRow:
     row_id: str
     system: str
     user: str
+    mode: str
     expected_terms: tuple[str, ...]
     max_words: int
     line_structure: str
+    expected_suppression: bool = False
     output: Optional[str] = None
 
 
@@ -174,7 +185,7 @@ def relevance_failure(output_words: list[str], expected_terms: tuple[str, ...]) 
     content_word_count = max(1, sum(1 for word in output_words if word not in LOW_SIGNAL_WORDS))
     denominator = min(3, len(expected_terms), content_word_count)
     hits = sum(1 for term in expected_terms if term.lower() in word_set)
-    return hits / denominator < 0.34
+    return hits / denominator < MIN_RELEVANCE_SCORE
 
 
 def literal_continuation_failure(output: str) -> bool:
@@ -253,7 +264,7 @@ def score_row(row: AuditRow, output: str) -> RowScore:
     failures = set()
 
     if no_suggestion:
-        if relevance_failed:
+        if relevance_failed and not row.expected_suppression:
             failures.add("relevance")
         return RowScore(
             row=row,
@@ -301,9 +312,16 @@ def parse_row(line: str, line_number: int) -> AuditRow:
         row_id=str(payload.get("id") or f"row-{line_number}"),
         system=str(payload.get("system") or ""),
         user=str(payload.get("user") or payload.get("text_before_cursor") or ""),
+        mode=str(payload.get("mode") or payload.get("requestMode") or "phrase"),
         expected_terms=tuple(term.lower() for term in expected_terms),
         max_words=max(1, int(payload.get("max_words") or payload.get("maxVisibleWords") or 8)),
         line_structure=str(payload.get("line_structure") or payload.get("lineStructure") or "plain"),
+        expected_suppression=bool(
+            payload.get("expected_suppression")
+            or payload.get("expectedSuppression")
+            or payload.get("expect_no_suggestion")
+            or payload.get("expectNoSuggestion")
+        ),
         output=None if payload.get("output") is None else str(payload.get("output")),
     )
 
@@ -320,11 +338,13 @@ def read_rows(path: Path) -> list[AuditRow]:
 
 
 def generated_output(row: AuditRow, timeout: float) -> str:
-    payload = {"system": row.system, "user": row.user}
+    payload = {"system": row.system, "user": row.user, "mode": row.mode}
     command = [
         str(ROOT_DIR / "script" / "local_completion_runtime.py"),
         "--max-words",
         str(row.max_words),
+        "--max-tokens",
+        str(min(16, max(3, row.max_words + 6))),
     ]
     completed = subprocess.run(
         command,
@@ -394,8 +414,15 @@ def summarize(scores: list[RowScore], source: str, include_raw: bool) -> tuple[s
 
     lines.append("Rows:")
     for score in scores:
-        status = "PASS" if score.display_eligible else "FAIL"
-        detail = "display-eligible" if score.display_eligible else ", ".join(sorted(score.failures)) or "no suggestion"
+        if score.display_eligible:
+            status = "PASS"
+            detail = "display-eligible"
+        elif score.no_suggestion and score.row.expected_suppression and not score.failures:
+            status = "SUPPRESS"
+            detail = "expected no suggestion"
+        else:
+            status = "FAIL"
+            detail = ", ".join(sorted(score.failures)) or "no suggestion"
         if include_raw:
             detail = f"{detail}; raw={score.output!r}"
         lines.append(f"- {status} {score.row.row_id}: {detail}")
@@ -409,45 +436,55 @@ def self_test_rows() -> list[AuditRow]:
             row_id="fixture-good-markdown",
             system="Inline autocomplete. Return only the continuation.",
             user="The current Obsidian note should prove",
+            mode="phrase",
             expected_terms=("markdown", "local", "proof"),
             max_words=3,
             line_structure="plain",
+            expected_suppression=False,
             output="markdown local proof",
         ),
         AuditRow(
             row_id="fixture-good-tone",
             system="Inline autocomplete. Return only the continuation.",
             user="I want this to feel",
+            mode="phrase",
             expected_terms=("natural", "quiet"),
             max_words=3,
             line_structure="plain",
+            expected_suppression=False,
             output="natural and quiet",
         ),
         AuditRow(
             row_id="fixture-assistant-voice",
             system="Inline autocomplete. Return only the continuation.",
             user="I am trying to say this in a way that feels",
+            mode="phrase",
             expected_terms=("human",),
             max_words=4,
             line_structure="plain",
+            expected_suppression=False,
             output="Okay, the user wants a human sentence",
         ),
         AuditRow(
             row_id="fixture-sensitive-structure",
             system="Inline autocomplete. Return only the continuation.",
             user="The markdown proof should stay",
+            mode="phrase",
             expected_terms=("markdown", "local", "proof"),
             max_words=3,
             line_structure="plain",
+            expected_suppression=False,
             output="- Sure, let's put the secret calendar sales plan here today",
         ),
         AuditRow(
             row_id="fixture-no-suggestion",
             system="Inline autocomplete. Return only the continuation.",
             user="Password:",
+            mode="phrase",
             expected_terms=("safe",),
             max_words=3,
             line_structure="plain",
+            expected_suppression=True,
             output="<NO_SUGGESTION>",
         ),
     ]

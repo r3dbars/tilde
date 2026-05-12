@@ -11,7 +11,7 @@ from typing import Optional
 
 DEFAULT_LITERT_REPO = "litert-community/gemma-4-E2B-it-litert-lm"
 DEFAULT_LITERT_MODEL = "gemma-4-E2B-it.litertlm"
-DEFAULT_MLX_MODEL = "mlx-community/gemma-4-E2B-it-4bit"
+DEFAULT_MLX_MODEL = "mlx-community/Llama-3.2-3B-Instruct-4bit"
 
 
 def repo_root() -> Path:
@@ -40,19 +40,66 @@ def candidate_executable(env_key: str, names: list) -> Optional[str]:
     return None
 
 
+def candidate_python_with_module(env_key: str, module_name: str) -> Optional[str]:
+    explicit = os.environ.get(env_key)
+    candidates = []
+    if explicit:
+        candidates.append(explicit)
+
+    candidates.extend([
+        str(repo_root() / ".venv" / "bin" / "python3"),
+        "/opt/homebrew/bin/python3",
+        "/opt/homebrew/bin/python3.14",
+        sys.executable,
+        shutil.which("python3") or "",
+        "/usr/bin/python3",
+    ])
+
+    seen = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen or not os.access(candidate, os.X_OK):
+            continue
+        seen.add(candidate)
+        completed = subprocess.run(
+            [candidate, "-c", f"import {module_name}"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=5,
+            check=False,
+        )
+        if completed.returncode == 0:
+            return candidate
+
+    return None
+
+
 def prompt_text(payload: dict[str, str]) -> str:
     user = payload.get("user", "").strip()
-    return f"Before cursor:\n{user}\n\nNext words:"
+    mode = payload.get("mode", "").strip().lower()
+    suffix = "Suffix:" if mode in {"word", "word_completion", "wordCompletion"} else "Next words:"
+    return f"Before cursor:\n{user}\n\n{suffix}"
 
 
 def system_prompt_text(payload: dict[str, str]) -> str:
     system = payload.get("system", "").strip()
-    rules = [
-        "Return exactly the next few words after the Before cursor text.",
-        "No explanation, labels, quotes, reasoning, or mention of the user.",
-        "Never repeat the Before cursor text.",
-        "If unsure, return <NO_SUGGESTION>.",
-    ]
+    mode = payload.get("mode", "").strip().lower()
+    if mode in {"word", "word_completion", "wordCompletion"}:
+        rules = [
+            "Return only the missing suffix for the current word.",
+            "No spaces, punctuation, explanation, labels, quotes, reasoning, or mention of the user.",
+            "If the suffix is not obvious, return <NO_SUGGESTION>.",
+        ]
+    else:
+        rules = [
+            "Act as inline autocomplete, not as a chat assistant.",
+            "Return exactly one short continuation after the Before cursor text.",
+            "Prefer 3 to 5 useful words, or fewer when fewer words are enough.",
+            "No explanation, labels, quotes, reasoning, or mention of the user.",
+            "Never repeat the Before cursor text.",
+            "Never suggest pressing Enter or Return, sending, submitting, clicking, running, or approving.",
+            "Return <NO_SUGGESTION> for passwords, secrets, private fields, search fields, terminal punctuation, weak guesses, new topics, full-sentence answers, or list markers.",
+        ]
     return "\n".join([system, *rules]).strip()
 
 
@@ -139,9 +186,9 @@ def run_mlx(prompt: str, system_prompt: str, max_tokens: int, timeout: float) ->
             "False",
         ]
     else:
-        python = candidate_executable("AUTOCOMPLETE_LAB_PYTHON", ["python3"])
+        python = candidate_python_with_module("AUTOCOMPLETE_LAB_PYTHON", "mlx_lm")
         if not python:
-            raise RuntimeError("python3 not installed")
+            raise RuntimeError("mlx_lm is not installed in an available python")
 
         command = [
             python,

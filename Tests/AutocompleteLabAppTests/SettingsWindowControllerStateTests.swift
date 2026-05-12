@@ -686,7 +686,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(quiet.statusText == "Aggressiveness: 1/5 - Quiet")
         #expect(quiet.detailText == "Waits longer and needs stronger scores before showing.")
-        #expect(quiet.maxWordsText == "Words shown: 8")
+        #expect(quiet.maxWordsText == "Words shown: 5")
         #expect(normal.statusText == "Aggressiveness: 2/5 - Normal")
         #expect(normal.detailText == "Shows a little sooner with balanced filtering.")
         #expect(normal.maxWordsText == "Words shown: 4")

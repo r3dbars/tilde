@@ -15,8 +15,8 @@ struct LocalCompletionEngineTests {
 
         let configuration = await runner.lastConfiguration
         #expect(configuration?.model == .qwen35FourB)
-        #expect(configuration?.maxGeneratedTokens == 14)
-        #expect(configuration?.maxVisibleWords == 8)
+        #expect(configuration?.maxGeneratedTokens == 11)
+        #expect(configuration?.maxVisibleWords == 5)
         #expect(configuration?.reasoningEnabled == false)
     }
 
