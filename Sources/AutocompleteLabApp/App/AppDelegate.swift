@@ -7804,21 +7804,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         markAppEnablementSetupCompleted()
         persistDisabledApps()
 
-        if suggestionsPaused {
-            suggestionsPaused = false
-            suggestionsPausedUntil = nil
-            pauseExpirationTask?.cancel()
-            pauseExpirationTask = nil
-            persistPauseState()
-        }
-
-        setSuggestionDecision("Ready: TextEdit practice")
+        setSuggestionDecision(suggestionsPaused ? "Paused: TextEdit practice ready" : "Ready: TextEdit practice")
         openTextEditPracticeDocument()
         DiagnosticsLog.shared.record(
             "textedit-practice-started",
             metadata: [
                 "app": Self.textEditPracticeBundleIdentifier,
                 "model": runtimeReadinessReport.summary,
+                "globalPaused": String(suggestionsPaused),
                 "textEditEnabled": String(!disabledBundleIdentifiers.contains(Self.textEditPracticeBundleIdentifier))
             ]
         )
