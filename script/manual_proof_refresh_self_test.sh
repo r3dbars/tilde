@@ -112,12 +112,31 @@ EOF
 if AUTOCOMPLETE_LAB_ARCHIVE_PATH="$ARCHIVE_PATH" \
   AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$STALE_REPORT" \
   script/manual_proof_refresh.sh --verify-target textedit >"$OUTPUT" 2>&1; then
-  echo "manual proof refresh self-test expected stale archive proof to fail" >&2
+  :
+else
+  echo "manual proof refresh self-test should accept current commit proof even when a rebuild changed the archive hash" >&2
+  exit 1
+fi
+
+if ! grep -F "TextEdit: current proof recorded" "$OUTPUT" >/dev/null; then
+  echo "manual proof refresh self-test did not accept current commit proof with stale archive hash" >&2
+  exit 1
+fi
+
+write_report_header "$STALE_REPORT"
+cat >>"$STALE_REPORT" <<'EOF'
+| 2026-05-09T00:00:00Z | TextEdit | `com.apple.TextEdit` | `default` | 2 | `inlineAdjacent|floatingMirror` | lines 1-2 in `/tmp/diagnostics.log` | lines 1-2 in `/tmp/traces.jsonl`; visual `strict-complete`; build `archive-sha256:deadbeef` |
+EOF
+
+if AUTOCOMPLETE_LAB_ARCHIVE_PATH="$ARCHIVE_PATH" \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$STALE_REPORT" \
+  script/manual_proof_refresh.sh --verify-target textedit >"$OUTPUT" 2>&1; then
+  echo "manual proof refresh self-test expected archive-only stale proof to fail" >&2
   exit 1
 fi
 
 if ! grep -F "stale archive fingerprint" "$OUTPUT" >/dev/null; then
-  echo "manual proof refresh self-test did not explain stale archive proof" >&2
+  echo "manual proof refresh self-test did not explain archive-only stale proof" >&2
   exit 1
 fi
 
