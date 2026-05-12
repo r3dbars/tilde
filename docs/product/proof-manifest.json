@@ -738,7 +738,7 @@
         {
           "id": "production-chrome-chat-no-submit",
           "status": "pending",
-          "summary": "Keep browser ChatGPT, Slack, and Discord blocked until each real service has exact no-submit proof. The browser-chat harness is disposable proof only."
+          "summary": "Keep browser ChatGPT, Slack, and Discord blocked until each real service has exact no-submit proof. The browser-chat harness is disposable proof only, and the existing local chat-like fixture still includes full-accept-without-proof events."
         }
       ]
     },
@@ -760,6 +760,20 @@
         "Default one-word no-submit proof exists, but broader Codex prompt layouts and full-accept no-submit proof remain gated."
       ],
       "requirements": [
+        {
+          "id": "codex-one-word-no-submit",
+          "status": "complete",
+          "summary": "Default one-word Tab accept proof has bounded strict screenshot evidence and prompt no-submit confirmation.",
+          "manualSmoke": {
+            "app": "Codex",
+            "bundle": "com.openai.codex",
+            "proof": "default",
+            "minVerifiedAccepts": 1,
+            "maxVerifiedAccepts": 1,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+        },
         {
           "id": "codex-layout-variants",
           "status": "pending",
