@@ -132,18 +132,21 @@ if [[ "${AUTOCOMPLETE_LAB_REQUIRE_READY:-0}" == "1" ]]; then
   RECENT_LINES="$(tail -n "${AUTOCOMPLETE_LAB_LOG_LINES:-120}" <<<"$SCAN_LINES")"
 fi
 
-require_recent_line "launch accessibility="
+require_latest_launch_line "launch accessibility="
 require_latest_launch_line "runtime-bootstrap"
 require_latest_launch_line "readinessStage="
-require_recent_line "status accessibility="
+require_latest_launch_line "status accessibility="
 
 if [[ -n "${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-}" ]]; then
   require_latest_launch_line "asset=${AUTOCOMPLETE_LAB_EXPECTED_ASSET}"
 fi
 
 if [[ "${AUTOCOMPLETE_LAB_REQUIRE_READY:-0}" == "1" ]]; then
+  require_latest_launch_line "allowsUserManagedServer=false"
   require_latest_launch_line "readinessAction=none readinessStage=ready state=ready (MLX)"
   reject_latest_launch_pattern "runtime-warm-failed"
+  reject_latest_launch_pattern "activeCandidate=(mock|unavailable)"
+  reject_latest_launch_pattern "fallbackReason="
 fi
 
 if [[ "${AUTOCOMPLETE_LAB_REQUIRE_TYPING_FAST:-0}" == "1" ]]; then
