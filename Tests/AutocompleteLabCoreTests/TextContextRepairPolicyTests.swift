@@ -138,6 +138,70 @@ struct TextContextRepairPolicyTests {
         #expect(result.reason == .obsidianCodeMirrorLineDrift)
     }
 
+    @Test("Repairs Obsidian CodeMirror active line reported after the AX cursor")
+    func repairsObsidianCodeMirrorTextAfterActiveLine() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "AL scroll 45\nAutocomplete Lab Obsidian proof",
+            textAfterCursor: "Smoke proof feels",
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == "AL scroll 45\nAutocomplete Lab Obsidian proof\nSmoke proof feels")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorTextAfterActiveLine)
+    }
+
+    @Test("Does not repair Obsidian after-cursor active line when later content is on another line")
+    func doesNotRepairObsidianTextAfterActiveLineWithMoreDocumentContent() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "AL scroll 45\nAutocomplete Lab Obsidian proof",
+            textAfterCursor: "Smoke proof feels\nExisting note content",
+            selectedTextLength: 0
+        ))
+
+        #expect(!result.wasRepaired)
+    }
+
+    @Test("Repairs Obsidian CodeMirror leading word drift in a long note")
+    func repairsObsidianCodeMirrorLeadingWordDrift() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "AL scroll 44\nSmoke proof",
+            textAfterCursor: " stays\nAutocomplete Lab Obsidian proof",
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == "AL scroll 44\nSmoke proof stays")
+        #expect(result.textAfterCursor == "\nAutocomplete Lab Obsidian proof")
+        #expect(result.reason == .obsidianCodeMirrorLeadingWordDrift)
+    }
+
+    @Test("Does not repair Obsidian leading word drift when more same-line text remains")
+    func doesNotRepairObsidianLeadingWordInRealMiddleOfLine() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof",
+            textAfterCursor: " stays in the middle",
+            selectedTextLength: 0
+        ))
+
+        #expect(!result.wasRepaired)
+    }
+
     @Test("Repairs Obsidian CodeMirror hidden spacer drift before the visible line")
     func repairsObsidianCodeMirrorHiddenSpacerLine() {
         let policy = TextContextRepairPolicy()
