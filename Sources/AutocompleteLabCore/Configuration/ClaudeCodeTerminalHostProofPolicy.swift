@@ -213,8 +213,16 @@ public enum ClaudeCodeTerminalHostProofPolicy {
 
     public static func proofInputText(
         textBeforeCursor: String,
-        textAfterCursor _: String
+        textAfterCursor: String
     ) -> String? {
+        let afterLine = textAfterCursor
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .first
+            .map(String.init) ?? ""
+        guard afterLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+
         let beforeLine = textBeforeCursor
             .split(separator: "\n", omittingEmptySubsequences: false)
             .last
