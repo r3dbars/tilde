@@ -50,6 +50,14 @@ if ! grep -F 'build_run_env+=(AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1)' script/real_app
   echo "real app smoke self-test expected Codex proof to direct-launch the current app bundle" >&2
   exit 1
 fi
+if ! grep -F '|| screenshot_trace_requested' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected screenshot proof to direct-launch the current app bundle" >&2
+  exit 1
+fi
+if ! grep -F 'stop_current_steadytype_app_bundle' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit proof to stop the old app before opening its disposable target" >&2
+  exit 1
+fi
 if ! grep -F 'local backup_path="${2:-}"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "focused AX verification is deferred to the click/refocus step" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Codex seeding to allow refocus-step verification" >&2
