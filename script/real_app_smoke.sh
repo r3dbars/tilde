@@ -6108,11 +6108,19 @@ run_obsidian() {
 
   second_start_line="$(line_count "$LOG_PATH")"
   case "$manual_app" in
-    obsidian-pane|obsidian-long-note)
+    obsidian-pane)
       wait_for_log_pattern "$start_line" "accepted-insertion-undo-cleared .*reason=expired" "Obsidian first undo expiry" 10
       second_start_line="$(line_count "$LOG_PATH")"
       assert_obsidian_smoke_target "Smoke proof feels instant"
       type_obsidian_raw_smoke_text " and stays"
+      ;;
+    obsidian-long-note)
+      wait_for_log_pattern "$start_line" "accepted-insertion-undo-cleared .*reason=expired" "Obsidian first undo expiry" 10
+      AUTOCOMPLETE_LAB_OBSIDIAN_MOVE_TO_DOCUMENT_END=1 \
+        AUTOCOMPLETE_LAB_OBSIDIAN_RESET_TEXT="$obsidian_reset_text" \
+        reset_obsidian_smoke_note
+      second_start_line="$(line_count "$LOG_PATH")"
+      type_obsidian_raw_smoke_text "Smoke proof stays"
       ;;
     *)
       assert_obsidian_smoke_target "Smoke proof feels instant"
