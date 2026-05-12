@@ -86,7 +86,7 @@ struct AppModelRuntimeFactoryTests {
             reason: "missing integrity receipt .steadytype-model-integrity.json"
         ))
 
-        try ModelAssetIntegrityReceiptWriter.write(
+        _ = try ModelAssetIntegrityReceiptWriter.write(
             manifest: manifest,
             modelDirectoryURL: modelURL,
             fileManager: fileManager
@@ -139,7 +139,7 @@ struct AppModelRuntimeFactoryTests {
         )
 
         let manifest = smallSourceBackedManifest()
-        try ModelAssetIntegrityReceiptWriter.write(
+        _ = try ModelAssetIntegrityReceiptWriter.write(
             manifest: manifest,
             modelDirectoryURL: modelURL,
             fileManager: fileManager
