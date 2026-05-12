@@ -83,6 +83,11 @@ if ! grep -F 'cleanup_stale_textedit_smoke_windows' script/real_app_smoke.sh >/d
   echo "real app smoke self-test expected stale TextEdit proof windows to be cleaned before opening a new disposable document" >&2
   exit 1
 fi
+if ! grep -F 'wait_for_background_process "$osascript_pid" 4 "stale TextEdit smoke cleanup"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'wait_for_background_process "$osascript_pid" 4 "TextEdit smoke cleanup"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit cleanup AppleScript to be bounded so proof setup cannot hang" >&2
+  exit 1
+fi
 if ! grep -F 'launch_steadytype_after_chrome_setup' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'pause_steadytype_for_chrome_setup' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Chrome proof to pause during setup and relaunch before proof" >&2
