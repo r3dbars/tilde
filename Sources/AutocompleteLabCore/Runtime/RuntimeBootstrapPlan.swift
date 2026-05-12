@@ -58,7 +58,7 @@ public enum RuntimeReadinessAction: String, Equatable, Sendable {
         case .retry:
             return "Retry"
         case .none:
-            return "None"
+            return "Model ready"
         }
     }
 }

@@ -149,7 +149,7 @@ struct SettingsCurrentAppState: Equatable {
 
         switch (profile.supportsOneWordAcceptance, profile.supportsFullAcceptance) {
         case (true, true):
-            return "Keys: Tab accepts one word. Whole-suggestion accept is allowed here."
+            return "Keys: Tab accepts one word. The whole-suggestion shortcut works here."
         case (true, false):
             return "Keys: Tab accepts one word. Whole-suggestion accept is off for safety."
         case (false, true):
@@ -184,23 +184,23 @@ struct SettingsCurrentAppState: Equatable {
     }
 
     var modeButtonTitle: String {
-        renderModeOverride == .floatingMirror ? "Use Profile Mode" : "Force Mirror Mode"
+        renderModeOverride == .floatingMirror ? "Use Default Placement" : "Use Floating Backup"
     }
 
     var proofButtonTitle: String {
         if bundleIdentifier == "com.apple.TextEdit", isEnabled {
-            return "Run TextEdit Proof"
+            return "Run TextEdit Test"
         }
 
         if bundleIdentifier == "com.google.Chrome", isEnabled {
-            return "Run Chrome Proof"
+            return "Run Chrome Test"
         }
 
-        return isEnabled ? "Start App Proof" : "Enable App First"
+        return isEnabled ? "Start App Test" : "Enable App First"
     }
 
     var copyProofCommandButtonTitle: String {
-        canCopyProofCommand ? "Copy Proof Command" : "No Proof Command"
+        canCopyProofCommand ? "Copy Test Command" : "No Test Command"
     }
 
     var canCopyProofCommand: Bool {
@@ -209,32 +209,32 @@ struct SettingsCurrentAppState: Equatable {
 
     var proofText: String {
         guard bundleIdentifier != nil else {
-            return "Proof: choose a writing app first."
+            return "Test: choose a writing app first."
         }
 
         guard case let .supported(profile) = supportStatus,
               profile.canPresentSuggestions,
               !profile.isSensitive else {
-            return "Proof: unavailable here."
+            return "Test: unavailable here."
         }
 
         guard isEnabled else {
-            return "Proof: turn on suggestions for this app first."
+            return "Test: turn on suggestions for this app first."
         }
 
         if bundleIdentifier == "com.openai.codex" {
-            return "Proof: include AUTOCOMPLETE_LAB_CODEX_PROOF, press Tab once, and do not press Enter."
+            return "Test: include AUTOCOMPLETE_LAB_CODEX_PROOF, press Tab once, and do not press Enter."
         }
 
         if profile.supportsOneWordAcceptance && !profile.supportsFullAcceptance {
-            return "Proof: use disposable prompt text, press Tab once, and do not press Enter."
+            return "Test: use disposable prompt text, press Tab once, and do not press Enter."
         }
 
         if profile.supportsOneWordAcceptance && profile.supportsFullAcceptance {
-            return "Proof: use disposable text, press Tab once, then the whole-suggestion shortcut."
+            return "Test: use disposable text, press Tab once, then the whole-suggestion shortcut."
         }
 
-        return "Proof: use disposable text and verify accepted text stays in the field."
+        return "Test: use disposable text and verify accepted text stays in the field."
     }
 
     var proofCommandText: String? {
@@ -330,7 +330,7 @@ struct SettingsFirstRunTrustState: Equatable {
     }
 
     var appsText: String {
-        "Supported test apps: TextEdit, Notes, Obsidian, and the included Chrome practice pages. Do not test random websites, search boxes, login, address, payment, or private fields. Do not use Codex or Claude for normal testing unless asked; they are special safety tests."
+        "Supported test apps: TextEdit, Notes, Obsidian, and Chrome only on the included local practice pages. Do not test random websites, search boxes, login, address, payment, or private fields. Do not use Codex or Claude for normal testing unless asked; they are special safety tests."
     }
 }
 
@@ -394,7 +394,7 @@ struct SettingsPrivacyState: Equatable {
         }
 
         if screenshotTracingEnabled && screenshotTracingExpiresAt == nil {
-            return "Screen Recording: used only while screenshot proof is on to capture local placement screenshots."
+            return "Screen Recording: used only while screenshot test mode is on to capture local placement screenshots."
         }
 
         if screenshotTracingEnabled && !visiblePageContextEnabled {
@@ -740,10 +740,10 @@ final class SettingsWindowController: NSObject {
         target: nil,
         action: nil
     )
-    private let forceMirrorModeButton = NSButton(title: "Force Mirror Mode", target: nil, action: nil)
-    private let startAppProofButton = NSButton(title: "Start App Proof", target: nil, action: nil)
-    private let copyProofCommandButton = NSButton(title: "Copy Proof Command", target: nil, action: nil)
-    private let enableAllAppsButton = NSButton(title: "Resume All Paused Apps", target: nil, action: nil)
+    private let forceMirrorModeButton = NSButton(title: "Use Floating Backup", target: nil, action: nil)
+    private let startAppProofButton = NSButton(title: "Start App Test", target: nil, action: nil)
+    private let copyProofCommandButton = NSButton(title: "Copy Test Command", target: nil, action: nil)
+    private let enableAllAppsButton = NSButton(title: "Resume Every Paused App", target: nil, action: nil)
     private let privacyLabel = NSTextField(labelWithString: "")
     private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
     private let rawContentStatusLabel = NSTextField(labelWithString: "")
@@ -1237,18 +1237,19 @@ final class SettingsWindowController: NSObject {
         forceMirrorModeButton.target = self
         forceMirrorModeButton.action = #selector(toggleCurrentAppMirrorModeControl)
         forceMirrorModeButton.bezelStyle = .rounded
-        forceMirrorModeButton.toolTip = "Forces mirror placement for this app, or resets to its profile mode."
+        forceMirrorModeButton.toolTip = "Uses the floating backup for this app, or returns to its default placement."
         startAppProofButton.target = self
         startAppProofButton.action = #selector(startAppProofControl)
         startAppProofButton.bezelStyle = .rounded
-        startAppProofButton.toolTip = "Turns on temporary screenshot proof for the enabled current app and opens Diagnostics."
+        startAppProofButton.toolTip = "Turns on temporary screenshot test mode for the enabled current app and opens Diagnostics."
         copyProofCommandButton.target = self
         copyProofCommandButton.action = #selector(copyProofCommandControl)
         copyProofCommandButton.bezelStyle = .rounded
-        copyProofCommandButton.toolTip = "Copies the exact smoke command for the current app."
+        copyProofCommandButton.toolTip = "Copies the exact local test command for the current app."
         enableAllAppsButton.target = self
         enableAllAppsButton.action = #selector(enableAllAppsControl)
         enableAllAppsButton.bezelStyle = .rounded
+        enableAllAppsButton.toolTip = "Resumes every app you paused in SteadyType."
         toggleTracingButton.target = self
         toggleTracingButton.action = #selector(toggleTracingControl)
         toggleTracingButton.toolTip = "Keeps local performance and placement events available for debugging."

@@ -40,7 +40,7 @@ public struct CommandFallbackDecision: Equatable, Sendable {
         case .inlineAvailable:
             return "Fallback: not needed; cursor placement is available."
         case .copyOnly:
-            return "Fallback: copy-only; cursor placement and auto-insert stay off until proof passes."
+            return "Fallback: copy-only; cursor placement and auto-insert stay off until testing passes."
         case .unavailable:
             switch reason {
             case .noCurrentApp:
