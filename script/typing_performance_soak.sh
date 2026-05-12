@@ -502,7 +502,10 @@ wait_for_stable_textedit_focus() {
   require_positive_int "$attempts" "AUTOCOMPLETE_LAB_SOAK_FOCUS_ATTEMPTS"
 
   for ((attempt = 1; attempt <= attempts; attempt++)); do
-    focus_textedit_document "$target_name"
+    if ! focus_textedit_document "$target_name"; then
+      sleep 0.25
+      continue
+    fi
     for ((check = 1; check <= stable_checks; check++)); do
       frontmost_name="$(osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true' 2>/dev/null || true)"
       if [[ "$frontmost_name" != "TextEdit" ]]; then
@@ -796,7 +799,7 @@ type_textedit_fixture() {
   SOAK_TARGET_DOCUMENT_NAME=""
   generate_soak_text "$TARGET_CHARS" >"$text_file"
   SOAK_TARGET_DOCUMENT_NAME="$(prepare_textedit_document "$SOAK_TARGET_TEXT_FILE")"
-  focus_textedit_document "$SOAK_TARGET_DOCUMENT_NAME"
+  wait_for_stable_textedit_focus "$SOAK_TARGET_DOCUMENT_NAME"
   sleep 1
   SOAK_TYPING_START_LINE="$(line_count "$LOG_PATH")"
   wait_for_focused_text_poll_summary_after_line "$SOAK_TYPING_START_LINE" 15
