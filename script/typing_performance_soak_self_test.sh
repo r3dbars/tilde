@@ -243,6 +243,8 @@ if ! cmp -s "$TMP_DIR/expected-document-newline.txt" "$TMP_DIR/actual-document-n
   exit 1
 fi
 
+script/typing_performance_soak.sh --self-test-osascript-timeout
+
 large_log="$TMP_DIR/large-diagnostics.log"
 for _ in $(seq 1 8000); do
   printf '2026-05-12T00:00:00Z status decision=waiting\n'
