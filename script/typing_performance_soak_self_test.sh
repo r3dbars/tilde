@@ -59,7 +59,7 @@ if ! grep -F "Typing batches: up to 250 chars per Swift process" "$TMP_DIR/defau
   exit 1
 fi
 
-if ! grep -F "Typing focus guard: reactivates TextEdit before each generated key" "$TMP_DIR/default.txt" >/dev/null; then
+if ! grep -F "Typing focus guard: verifies TextEdit is frontmost before each generated key" "$TMP_DIR/default.txt" >/dev/null; then
   echo "typing soak self-test did not explain the frontmost app guard" >&2
   cat "$TMP_DIR/default.txt" >&2
   exit 1
