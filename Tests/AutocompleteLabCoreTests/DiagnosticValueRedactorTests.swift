@@ -17,6 +17,11 @@ struct DiagnosticValueRedactorTests {
         #expect(DiagnosticValueRedactor.attributedStringSummary(length: 12) == "AttributedString(12 chars)")
     }
 
+    @Test("Unknown summaries preserve type names only")
+    func unknownSummaryPreservesTypeNamesOnly() {
+        #expect(DiagnosticValueRedactor.unknownSummary(typeName: "AXValue") == "AXValue(redacted)")
+    }
+
     @Test("Diagnostics metadata redacts likely raw text keys")
     func diagnosticsMetadataRedactsLikelyRawTextKeys() {
         #expect(
