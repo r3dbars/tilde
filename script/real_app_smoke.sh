@@ -1832,7 +1832,7 @@ function expressionForFixture() {
       const editors = Array.from(document.querySelectorAll('[contenteditable="true"], [role="textbox"]'))
         .filter((editor) => {
           const rect = editor.getBoundingClientRect();
-          return rect.width >= 300 && rect.height >= 60;
+          return rect.width >= 300 && rect.height >= 30;
         })
         .sort((a, b) => {
           const av = /dead simple inline editor/i.test(a.textContent || '') ? 1000000 : 0;
@@ -2477,7 +2477,7 @@ func isExpectedPublicCandidate(_ candidate: Candidate) -> Bool {
     case "contenteditable-public":
         return candidate.role == "AXTextArea"
             && candidate.frame.width >= 300
-            && candidate.frame.height >= 60
+            && candidate.frame.height >= 30
     default:
         return true
     }

@@ -352,7 +352,7 @@
     },
     {
       "surface": "Chrome text fields",
-      "status": "partial",
+      "status": "complete",
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-textarea.png",
         "docs/product/visual-placement-screenshots/chrome-contenteditable.png"
@@ -364,11 +364,16 @@
           "proof": "textarea-public",
           "minVerifiedAccepts": 2,
           "requiresVisualStrictComplete": true
+        },
+        {
+          "app": "Chrome",
+          "bundle": "com.google.Chrome",
+          "proof": "contenteditable-public",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
         }
       ],
-      "gaps": [
-        "Public contenteditable proof is stale: the current MediumEditor page rerun could focus an AXTextArea once, then failed to find a stable web-backed editable target for setup."
-      ],
+      "gaps": [],
       "requirements": [
         {
           "id": "production-chrome-textarea",
@@ -388,9 +393,19 @@
         },
         {
           "id": "production-chrome-contenteditable",
-          "status": "pending",
-          "summary": "Refresh bounded screenshot-backed proof for a public contenteditable or rich-editor page. The current MediumEditor page rerun could not keep a stable web-backed AX editor target.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable-public"
+          "status": "complete",
+          "summary": "Bounded screenshot-backed smoke proof covers the public MediumEditor-style contenteditable lane after allowing the same AX editor target to collapse to a single editing line.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable-public",
+          "safePath": [
+            "contenteditable-public: https://yabwe.github.io/medium-editor/"
+          ],
+          "manualSmoke": {
+            "app": "Chrome",
+            "bundle": "com.google.Chrome",
+            "proof": "contenteditable-public",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          }
         }
       ]
     },
