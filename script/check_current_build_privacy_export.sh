@@ -9,7 +9,7 @@ APP_BINARY="$APP_BUNDLE/Contents/MacOS/SteadyType"
 OUTPUT_DIR="${AUTOCOMPLETE_LAB_PRIVACY_PROOF_OUTPUT:-$ROOT_DIR/docs/diagnostics/runs/current-build-privacy-export-proof}"
 
 if [[ ! -x "$APP_BINARY" || "${AUTOCOMPLETE_LAB_REBUILD_PRIVACY_PROOF:-0}" =~ ^(1|true|yes|on)$ ]]; then
-  ./script/build_and_run.sh --bundle-only >/tmp/autocomplete-current-build-privacy-build.log
+  ./script/build_and_run.sh --bundle-only 2>&1 | tee /tmp/autocomplete-current-build-privacy-build.log
 fi
 
 if [[ ! -x "$APP_BINARY" ]]; then

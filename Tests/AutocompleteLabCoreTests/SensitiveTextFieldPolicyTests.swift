@@ -81,6 +81,34 @@ struct SensitiveTextFieldPolicyTests {
         }
     }
 
+    @Test("Classifies expanded sensitive label variants")
+    func classifiesExpandedSensitiveLabelVariants() {
+        let cases: [(SensitiveFieldProofCategory, FocusedElementFingerprint)] = [
+            (.password, FocusedElementFingerprint(placeholder: "Passkey", windowTitle: "Sign in")),
+            (.password, FocusedElementFingerprint(help: "Paste recovery key", windowTitle: "Wallet")),
+            (.password, FocusedElementFingerprint(title: "SSH private key", windowTitle: "Deploy key")),
+            (.otp, FocusedElementFingerprint(placeholder: "SSO code", windowTitle: "Identity provider")),
+            (.otp, FocusedElementFingerprint(placeholder: "OAuth code", windowTitle: "Authorize app")),
+            (.payment, FocusedElementFingerprint(placeholder: "IBAN", windowTitle: "Bank transfer")),
+            (.payment, FocusedElementFingerprint(help: "Routing number", windowTitle: "Payment")),
+            (.payment, FocusedElementFingerprint(title: "PayPal", windowTitle: "Checkout")),
+            (.address, FocusedElementFingerprint(placeholder: "Address line 2", windowTitle: "Shipping")),
+            (.address, FocusedElementFingerprint(placeholder: "Postal code", windowTitle: "Address")),
+            (.address, FocusedElementFingerprint(placeholder: "Email address", windowTitle: "Contact")),
+            (.address, FocusedElementFingerprint(placeholder: "Phone number", windowTitle: "Contact")),
+            (.commandLine, FocusedElementFingerprint(placeholder: "sudo command", windowTitle: "Web terminal")),
+            (.commandLine, FocusedElementFingerprint(placeholder: "SSH command", windowTitle: "Codespaces")),
+            (.commandLine, FocusedElementFingerprint(windowTitle: "StackBlitz terminal")),
+            (.privatePrompt, FocusedElementFingerprint(placeholder: "Confidential instructions", windowTitle: "Internal prompt"))
+        ]
+
+        for (category, fingerprint) in cases {
+            let assessment = policy.assessment(role: "AXTextField", subrole: nil, fingerprint: fingerprint)
+            #expect(assessment.isSensitive)
+            #expect(assessment.category == category)
+        }
+    }
+
     @Test("Sensitive proof harness keeps all beta fixtures silent")
     func proofHarnessKeepsAllBetaFixturesSilent() {
         let results = SensitiveFieldProofHarness().run()

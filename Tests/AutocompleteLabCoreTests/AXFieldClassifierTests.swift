@@ -10,6 +10,9 @@ struct AXFieldClassifierTests {
         #expect(classifier.classify(AXFieldClassifierInput(isSecure: true)) == .secure)
         #expect(classifier.classify(AXFieldClassifierInput(placeholder: "Password")) == .secure)
         #expect(classifier.classification(for: AXFieldClassifierInput(placeholder: "One-time code")).reason == "secureHint:one-time code")
+        #expect(classifier.classify(AXFieldClassifierInput(placeholder: "Passkey")) == .secure)
+        #expect(classifier.classify(AXFieldClassifierInput(help: "Paste recovery key")) == .secure)
+        #expect(classifier.classify(AXFieldClassifierInput(title: "SSH private key")) == .secure)
         #expect(AXFieldKind.secure.suppressesSuggestionsByDefault)
     }
 
@@ -29,8 +32,14 @@ struct AXFieldClassifierTests {
         #expect(classifier.classify(AXFieldClassifierInput(description: "Payment cardholder name")) == .form)
         #expect(classifier.classify(AXFieldClassifierInput(help: "Use this field to sign in")) == .form)
         #expect(classifier.classify(AXFieldClassifierInput(title: "Credit card number")) == .form)
+        #expect(classifier.classify(AXFieldClassifierInput(placeholder: "IBAN")) == .form)
+        #expect(classifier.classify(AXFieldClassifierInput(help: "Routing number")) == .form)
+        #expect(classifier.classify(AXFieldClassifierInput(title: "Apple Pay")) == .form)
         #expect(classifier.classify(AXFieldClassifierInput(placeholder: "Shipping address")) == .form)
+        #expect(classifier.classify(AXFieldClassifierInput(placeholder: "Address line 2")) == .form)
+        #expect(classifier.classify(AXFieldClassifierInput(placeholder: "Phone number")) == .form)
         #expect(classifier.classify(AXFieldClassifierInput(windowTitle: "Login")) == .form)
+        #expect(classifier.classify(AXFieldClassifierInput(help: "Sign-in with SSO")) == .form)
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextField")) == .form)
         #expect(AXFieldKind.form.suppressesSuggestionsByDefault)
     }
@@ -47,6 +56,9 @@ struct AXFieldClassifierTests {
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", windowTitle: "Discord")) == .unprovenSurface)
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", windowTitle: "Web terminal")) == .unprovenSurface)
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", placeholder: "Command line")) == .unprovenSurface)
+        #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", placeholder: "sudo command")) == .unprovenSurface)
+        #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", windowTitle: "GitHub Codespaces")) == .unprovenSurface)
+        #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", windowTitle: "StackBlitz terminal")) == .unprovenSurface)
         #expect(classifier.classification(
             for: AXFieldClassifierInput(role: "AXWebArea", textBeforeCursorLength: 12)
         ).reason == "webAreaWithoutComposeHint")
