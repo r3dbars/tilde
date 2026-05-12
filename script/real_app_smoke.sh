@@ -6348,33 +6348,34 @@ describe_plan() {
           ;;
       esac
       if [[ "$CHROME_FIXTURE" == "all" ]]; then
-        echo "Plan: build/relaunch AutocompleteLab, then run disposable Chrome textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, real Monaco, real ProseMirror, and chat-like no-submit local fixtures."
+        echo "Plan: build the app bundle, seed disposable Chrome fixtures, launch SteadyType only for proof, then run textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, real Monaco, real ProseMirror, and chat-like no-submit local fixtures."
         if [[ "$CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF" == "1" ]]; then
           echo "Plan add-on: rerun real Monaco and real ProseMirror in default Chrome AX mode after the forced renderer lane."
         fi
       elif [[ "$CHROME_FIXTURE" == "production-text-fields" ]]; then
-        echo "Plan: build/relaunch AutocompleteLab, then run bounded public Chrome textarea and contenteditable proof on top-level demo pages with disposable text."
+        echo "Plan: build the app bundle, seed disposable Chrome fixtures, launch SteadyType only for proof, then run bounded public Chrome textarea and contenteditable proof on top-level demo pages."
         echo "Proof path: production text-field lanes use public URLs plus guarded coordinate focus and AX verification; Chrome JavaScript-from-Apple-Events is not required for these two lanes."
       elif chrome_fixture_is_public_text_field_demo "$CHROME_FIXTURE"; then
-        echo "Plan: build/relaunch AutocompleteLab, open the public top-level $CHROME_FIXTURE demo page in Chrome, type a disposable test fragment, then validate logs and traces."
+        echo "Plan: build the app bundle, open the public top-level $CHROME_FIXTURE demo page in Chrome, seed disposable text, launch SteadyType only for proof, then validate logs and traces."
         echo "Proof path: public text-field proof uses guarded coordinate focus and AX verification; Chrome JavaScript-from-Apple-Events is not required for this lane."
       elif chrome_fixture_is_official_demo "$CHROME_FIXTURE"; then
-        echo "Plan: build/relaunch AutocompleteLab, open the public official $CHROME_FIXTURE demo page in Chrome, type a disposable test fragment, then validate logs and traces."
+        echo "Plan: build the app bundle, open the public official $CHROME_FIXTURE demo page in Chrome, seed disposable text, launch SteadyType only for proof, then validate logs and traces."
         echo "Proof path: official rich-editor demo lanes use an isolated temporary Chrome profile plus localhost DevTools focus/setup when available; otherwise they try Accessibility editor focus before the Apple Events fallback."
         echo "Requirement: SteadyType must already be allowed in macOS Accessibility; the lane fails closed before typing if AX is missing."
         echo "Runtime: official demo lanes allow up to $(chrome_runtime_ready_timeout_seconds)s for cold current-build MLX warmup before touching Chrome."
       elif [[ "$CHROME_FIXTURE" == "browser-chat-harness" ]]; then
-        echo "Plan: build/relaunch AutocompleteLab, serve the bounded HTTP browser-chat no-submit proof harness on 127.0.0.1, type disposable text, then validate trace and harness counters."
+        echo "Plan: build the app bundle, serve the bounded HTTP browser-chat no-submit proof harness on 127.0.0.1, seed disposable text, launch SteadyType only for proof, then validate trace and harness counters."
         echo "Scope: this proves only the disposable harness surface. It does not enable Slack, Discord, ChatGPT, or broad browser chat support."
       elif chrome_fixture_is_blocked_high_value_surface "$CHROME_FIXTURE"; then
         echo "Plan: blocked preflight only. This fixture records the next high-value surface but refuses to type into the live service."
         echo "Blocked: $(chrome_blocked_high_value_surface_reason "$CHROME_FIXTURE")"
       else
-        echo "Plan: build/relaunch AutocompleteLab, open a disposable Chrome $CHROME_FIXTURE fixture, type a test fragment, then validate logs and traces."
+        echo "Plan: build the app bundle, open a disposable Chrome $CHROME_FIXTURE fixture, seed disposable text, launch SteadyType only for proof, then validate logs and traces."
       fi
       echo "Safety: the smoke launch temporarily enables Chrome only for this proof pass."
       echo "Safety: before Chrome typing, the smoke requires Chrome to expose a focused editable web text target through Accessibility."
-      echo "Safety: Chrome setup text pauses SteadyType while disposable text is seeded, then relaunches the current app bundle before proof starts."
+      echo "Safety: Chrome setup text is seeded before SteadyType launches whenever the smoke builds the app itself."
+      echo "Safety: later Chrome setup pauses SteadyType while disposable text is seeded, then relaunches the current app bundle before proof resumes."
       echo "Safety: Chrome setup text first tries DevTools/DOM or AX value replacement, then guarded key/paste fallbacks only after the disposable editor is rechecked as frontmost and editable."
       ;;
     notes)
@@ -6491,6 +6492,14 @@ build_if_needed() {
     fi
     env "${build_run_env[@]}" ./script/build_and_run.sh run
     wait_for_current_autocomplete_lab_process
+  fi
+
+  refresh_build_archive_proof
+}
+
+build_bundle_if_needed() {
+  if [[ "$SKIP_BUILD" != "1" ]]; then
+    AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 ./script/build_and_run.sh bundle-only
   fi
 
   refresh_build_archive_proof
@@ -8324,9 +8333,13 @@ run_chrome() {
   runtime_start_line="$(line_count "$LOG_PATH")"
 
   prepare_temporary_app_enablement
-  build_if_needed
-  wait_for_accessibility_ready "$runtime_start_line" "Chrome Accessibility readiness" 20 "$SKIP_BUILD"
-  wait_for_runtime_ready "$runtime_start_line" "Chrome runtime readiness" "$(chrome_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    build_if_needed
+    wait_for_accessibility_ready "$runtime_start_line" "Chrome Accessibility readiness" 20 "$SKIP_BUILD"
+    wait_for_runtime_ready "$runtime_start_line" "Chrome runtime readiness" "$(chrome_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
+  else
+    build_bundle_if_needed
+  fi
 
   if [[ "$CHROME_FIXTURE" == "all" ]]; then
     run_chrome_fixture textarea

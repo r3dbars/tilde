@@ -41,8 +41,9 @@ if ! grep -F "requires Chrome to expose a focused editable web text target" "$TM
   echo "real app smoke self-test did not explain the Chrome focused editable guard" >&2
   exit 1
 fi
-if ! grep -F "Chrome setup text pauses SteadyType while disposable text is seeded" "$TMP_DIR/chrome.txt" >/dev/null; then
-  echo "real app smoke self-test did not explain the Chrome setup/relaunch guard" >&2
+if ! grep -F "Chrome setup text is seeded before SteadyType launches whenever the smoke builds the app itself" "$TMP_DIR/chrome.txt" >/dev/null ||
+   ! grep -F "later Chrome setup pauses SteadyType while disposable text is seeded" "$TMP_DIR/chrome.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Chrome setup/relaunch guards" >&2
   exit 1
 fi
 if ! grep -F "Chrome setup text first tries DevTools/DOM or AX value replacement, then guarded key/paste fallbacks" "$TMP_DIR/chrome.txt" >/dev/null; then
@@ -65,6 +66,11 @@ fi
 if ! grep -F 'launch_steadytype_after_chrome_setup' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'pause_steadytype_for_chrome_setup' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Chrome proof to pause during setup and relaunch before proof" >&2
+  exit 1
+fi
+if ! grep -F 'build_bundle_if_needed' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F './script/build_and_run.sh bundle-only' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Chrome proof to build before seeding and launch only for proof" >&2
   exit 1
 fi
 if ! grep -F 'local backup_path="${2:-}"' script/real_app_smoke.sh >/dev/null ||
