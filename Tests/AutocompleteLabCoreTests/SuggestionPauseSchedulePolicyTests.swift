@@ -4,6 +4,21 @@ import Testing
 
 @Suite("Suggestion pause schedule policy")
 struct SuggestionPauseSchedulePolicyTests {
+    @Test("Unpaused state drops stale expiry")
+    func unpausedStateDropsStaleExpiry() {
+        let policy = SuggestionPauseSchedulePolicy()
+        let now = Date(timeIntervalSince1970: 1_000)
+
+        let state = policy.normalizedState(
+            isPaused: false,
+            pausedUntil: now.addingTimeInterval(900),
+            now: now
+        )
+
+        #expect(!state.isPaused)
+        #expect(state.pausedUntil == nil)
+    }
+
     @Test("Expired timed pause resumes suggestions")
     func expiredTimedPauseResumesSuggestions() {
         let policy = SuggestionPauseSchedulePolicy()
@@ -43,6 +58,17 @@ struct SuggestionPauseSchedulePolicyTests {
 
         #expect(state.isPaused)
         #expect(try #require(state.pausedUntil) == now.addingTimeInterval(900))
+    }
+
+    @Test("Timed pause clamps nonpositive durations")
+    func timedPauseClampsNonpositiveDurations() throws {
+        let policy = SuggestionPauseSchedulePolicy()
+        let now = Date(timeIntervalSince1970: 1_000)
+
+        let state = policy.timedPause(now: now, durationSeconds: 0)
+
+        #expect(state.isPaused)
+        #expect(try #require(state.pausedUntil) == now.addingTimeInterval(1))
     }
 
     @Test("Pause until tomorrow expires at the next local day")

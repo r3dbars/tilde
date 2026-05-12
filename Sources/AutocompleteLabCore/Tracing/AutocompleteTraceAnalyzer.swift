@@ -761,7 +761,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             suppressedByReason: countsByReason(suppressed),
             sensitiveSuppressedByCategory: counts(sensitiveSuppressed, key: sensitiveSuppressionCategory),
             sensitivePresentedByCategory: counts(
-                Array(firstPresentedByID.values).filter { sensitivePresentationCategory($0) != nil },
+                Array(firstPresentedByID.values).filter { sensitiveCategory($0) != nil || isSensitiveFieldKind($0) },
                 key: sensitivePresentationCategory
             ),
             suppressedByApp: counts(suppressed, key: \.appBundleIdentifier),
