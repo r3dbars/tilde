@@ -37,6 +37,7 @@ swift test
 ./script/check_typing_performance_log_self_test.sh
 ./script/latency_benchmark_report_self_test.sh
 ./script/select_latency_window_self_test.sh
+./script/fresh_latency_proof_self_test.sh
 ./script/typing_performance_soak_self_test.sh
 ./script/typing_performance_endurance_soak_self_test.sh
 ./script/model_latency_report_self_test.sh
