@@ -414,25 +414,25 @@
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is current for Monaco and ProseMirror, but broad production-site proof remains open."
+        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is current for Monaco and ProseMirror. The official ProseMirror page now has insertion-only isolated-CDP proof, but broad screenshot-backed production-site proof remains open."
       ],
       "requirements": [
         {
           "id": "production-chrome-monaco",
           "status": "pending",
-          "summary": "Add bounded default-Chrome proof against a production Monaco editor surface; official-demo lanes need Chrome's Allow JavaScript from Apple Events setting before the script can focus and verify the editor.",
+          "summary": "Add bounded screenshot-backed proof against a production Monaco editor surface; the isolated-CDP official lane can focus/setup the Monaco page, but the current page still exposes too little AX text context for Autocomplete Lab to present a suggestion.",
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-official"
         },
         {
           "id": "production-chrome-prosemirror",
           "status": "pending",
-          "summary": "Add bounded default-Chrome proof against a production ProseMirror editor surface; official-demo lanes need Chrome's Allow JavaScript from Apple Events setting before the script can focus and verify the editor.",
+          "summary": "Refresh the current isolated-CDP ProseMirror official insertion pass with strict screenshot evidence before counting it as complete production proof.",
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-official"
         },
         {
           "id": "production-chrome-codemirror",
           "status": "pending",
-          "summary": "Add bounded default-Chrome proof against a production CodeMirror editor surface; `codemirror-official` was attempted on 2026-05-12 and failed closed before typing because Chrome's Allow JavaScript from Apple Events setting is disabled.",
+          "summary": "Add bounded screenshot-backed proof against a production CodeMirror editor surface; the isolated-CDP official lane can focus/setup the page, but the current CodeMirror try page still exposes selected/middle-of-line AX state that blocks suggestions.",
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture codemirror-official"
         }
       ]

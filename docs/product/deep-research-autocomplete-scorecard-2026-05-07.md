@@ -767,12 +767,13 @@ these are true.
 73. Done: harden Chrome proof typing further after live proof exposed stale
    worktree smoke processes, disabled Chrome JavaScript-from-Apple-Events
    preflight, and global setup-keystroke focus changes. Non-dry real-app smoke
-   now scans for other active smoke scripts before acquiring the lock, fails
-   official-demo lanes fast when Chrome cannot run Apple Event JavaScript,
-   requires a focused editable web text AX target before Chrome setup text,
-   sends that setup text to the Chrome process, and verifies the focused editor
-   value changed before waiting for app logs. This improves proof safety but
-   does not raise Chrome scores until official-demo traces pass.
+   now scans for other active smoke scripts before acquiring the lock, uses
+   isolated Chrome plus localhost DevTools for official-demo readiness/focus/
+   setup, requires a focused editable web text AX target before Chrome setup
+   text, and verifies setup text before waiting for app logs. `prosemirror-
+   official` now has insertion-only proof; CodeMirror and Monaco still fail on
+   current-page AX context, so Chrome scores stay capped until screenshot-backed
+   official-demo traces pass.
 
 ## Goal Status
 

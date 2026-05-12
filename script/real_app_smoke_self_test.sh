@@ -156,8 +156,8 @@ for official_fixture in codemirror-official monaco-official prosemirror-official
     echo "real app smoke self-test did not print the Chrome $official_fixture dry-run plan" >&2
     exit 1
   fi
-  if ! grep -F "Allow JavaScript from Apple Events" "$TMP_DIR/chrome-$official_fixture.txt" >/dev/null; then
-    echo "real app smoke self-test did not print the Chrome $official_fixture JavaScript preflight requirement" >&2
+  if ! grep -F "isolated temporary Chrome profile plus localhost DevTools focus/setup" "$TMP_DIR/chrome-$official_fixture.txt" >/dev/null; then
+    echo "real app smoke self-test did not print the Chrome $official_fixture isolated DevTools proof path" >&2
     exit 1
   fi
 done
