@@ -21,11 +21,31 @@ required = {
     "search",
     "url-address",
     "address",
+    "government-id",
+    "date-of-birth",
+    "tax",
+    "insurance",
+    "medical",
+    "crypto-wallet",
     "command-line",
     "api-key-like-text",
     "password-manager",
     "private-prompt",
     "private-search",
+}
+required_browser_surfaces = {
+    "google-docs",
+    "notion",
+    "chatgpt",
+    "slack",
+    "discord",
+    "browser-login",
+    "browser-payment",
+    "browser-password-manager",
+    "browser-private-search",
+    "browser-search-or-address-bar",
+    "browser-developer-tool",
+    "unproven-browser-surface",
 }
 raw_needles = [
     "sk-LOCALTEST",
@@ -34,10 +54,17 @@ raw_needles = [
     "correct horse",
     "example.invalid",
     "1600 Amphitheatre",
+    "123-45-6789",
+    "01/02/1990",
+    "12-3456789",
+    "ABC123456",
+    "Current medication",
+    "abandon abandon",
     "rm -rf",
 ]
 
 seen = set()
+seen_browser_surfaces = set()
 presented = []
 unsafe_field_presentations = []
 errors = []
@@ -49,9 +76,17 @@ for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines()
     event = json.loads(line)
     metadata = event.get("metadata") or {}
     category = metadata.get("sensitiveSuppressionCategory") or metadata.get("sensitiveFieldCategory")
+    browser_surface = metadata.get("browserSurface")
     field_kind = metadata.get("fieldKind") or event.get("fieldKind")
     if event.get("type") == "suggestionPresented" and field_kind in unsafe_field_kinds:
         unsafe_field_presentations.append((line_number, field_kind))
+    if browser_surface:
+        if metadata.get("browserSurfaceDecision") != "blocked":
+            errors.append(f"line {line_number}: browser surface {browser_surface} is not marked blocked")
+        elif browser_surface in required_browser_surfaces:
+            seen_browser_surfaces.add(browser_surface)
+        if event.get("type") == "suggestionPresented":
+            errors.append(f"line {line_number}: browser surface {browser_surface} was presented")
     if not category:
         continue
 
@@ -68,6 +103,9 @@ for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines()
 missing = sorted(required - seen)
 if missing:
     errors.append("missing sensitive categories: " + ", ".join(missing))
+missing_browser_surfaces = sorted(required_browser_surfaces - seen_browser_surfaces)
+if missing_browser_surfaces:
+    errors.append("missing browser-hosted blocks: " + ", ".join(missing_browser_surfaces))
 if presented:
     errors.append("sensitive presentations: " + ", ".join(f"line {line}:{category}" for line, category in presented))
 if unsafe_field_presentations:

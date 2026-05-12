@@ -21,6 +21,47 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(block.userFacingReason == "Google Docs needs proof first")
     }
 
+    @Test("Known browsers all use the hosted surface policy")
+    func knownBrowsersAllUseHostedSurfacePolicy() throws {
+        for bundleIdentifier in BrowserHostedSurfacePolicy.browserBundleIdentifiers {
+            let decision = policy.decision(
+                bundleIdentifier: bundleIdentifier,
+                fingerprint: FocusedElementFingerprint(
+                    title: "Draft",
+                    windowTitle: "Private writing app"
+                )
+            )
+
+            let block = try #require(blockedSurface(from: decision))
+            #expect(block.surface == .unproven)
+            #expect(block.traceMetadata["browserSurfaceDecision"] == "blocked")
+        }
+    }
+
+    @Test("Known browsers all block risky hosted services")
+    func knownBrowsersAllBlockRiskyHostedServices() throws {
+        let services: [(FocusedElementFingerprint, BrowserHostedSurface)] = [
+            (FocusedElementFingerprint(windowTitle: "Project plan - Google Docs"), .googleDocs),
+            (FocusedElementFingerprint(windowTitle: "Roadmap - Notion"), .notion),
+            (FocusedElementFingerprint(windowTitle: "ChatGPT"), .chatGPT),
+            (FocusedElementFingerprint(windowTitle: "Transcripted | Slack"), .slack),
+            (FocusedElementFingerprint(windowTitle: "Discord"), .discord),
+            (FocusedElementFingerprint(help: "Search Google or type a URL"), .browserSearchOrAddressBar),
+            (FocusedElementFingerprint(windowTitle: "github.dev - Visual Studio Code"), .browserDeveloperTool)
+        ]
+
+        for browserBundleIdentifier in BrowserHostedSurfacePolicy.browserBundleIdentifiers {
+            for (fingerprint, expectedSurface) in services {
+                let decision = policy.decision(
+                    bundleIdentifier: browserBundleIdentifier,
+                    fingerprint: fingerprint
+                )
+
+                #expect(try #require(blockedSurface(from: decision)).surface == expectedSurface)
+            }
+        }
+    }
+
     @Test("Chrome Notion is blocked until real production proof exists")
     func blocksChromeNotion() throws {
         let decision = policy.decision(

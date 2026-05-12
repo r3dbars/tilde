@@ -19,11 +19,31 @@ categories = [
     "search",
     "url-address",
     "address",
+    "government-id",
+    "date-of-birth",
+    "tax",
+    "insurance",
+    "medical",
+    "crypto-wallet",
     "command-line",
     "api-key-like-text",
     "password-manager",
     "private-prompt",
     "private-search",
+]
+browser_surfaces = [
+    "google-docs",
+    "notion",
+    "chatgpt",
+    "slack",
+    "discord",
+    "browser-login",
+    "browser-payment",
+    "browser-password-manager",
+    "browser-private-search",
+    "browser-search-or-address-bar",
+    "browser-developer-tool",
+    "unproven-browser-surface",
 ]
 with path.open("w", encoding="utf-8") as handle:
     for index, category in enumerate(categories, start=1):
@@ -39,6 +59,24 @@ with path.open("w", encoding="utf-8") as handle:
                 "sensitiveSuppressionCategory": category,
                 "sensitiveSuppressionProof": "localFixture",
                 "sensitiveSuppressionDecision": "blocked",
+                "rawTextIncluded": "false",
+            },
+        }
+        handle.write(json.dumps(event, separators=(",", ":")) + "\n")
+    for index, surface in enumerate(browser_surfaces, start=1):
+        event = {
+            "timestamp": "2026-05-08T00:00:00Z",
+            "sessionID": "sensitive-self-test",
+            "suggestionID": f"browser-block-{index}",
+            "type": "suggestionSuppressed",
+            "appBundleIdentifier": "com.google.Chrome",
+            "requestMode": "wordCompletion",
+            "reason": "unsupported-browser-surface",
+            "metadata": {
+                "browserSurface": surface,
+                "browserSurfaceDecision": "blocked",
+                "browserSurfaceReason": "unsupported-surface-needs-proof",
+                "blockedSurfaceTextRedacted": "true",
                 "rawTextIncluded": "false",
             },
         }
@@ -76,6 +114,21 @@ missing="$tmpdir/missing.jsonl"
 grep -v '"private-search"' "$trace" > "$missing"
 if "$(dirname "$0")/check_sensitive_field_proof.sh" "$missing" >/dev/null 2>&1; then
   echo "expected missing category trace to fail" >&2
+  exit 1
+fi
+
+missing_browser="$tmpdir/missing-browser.jsonl"
+grep -v '"browserSurface":"chatgpt"' "$trace" > "$missing_browser"
+if "$(dirname "$0")/check_sensitive_field_proof.sh" "$missing_browser" >/dev/null 2>&1; then
+  echo "expected missing browser-hosted block trace to fail" >&2
+  exit 1
+fi
+
+browser_presented="$tmpdir/browser-presented.jsonl"
+cp "$trace" "$browser_presented"
+printf '{"timestamp":"2026-05-08T00:00:00Z","sessionID":"sensitive-self-test","suggestionID":"browser-presented","type":"suggestionPresented","metadata":{"browserSurface":"google-docs","browserSurfaceDecision":"blocked"}}\n' >> "$browser_presented"
+if "$(dirname "$0")/check_sensitive_field_proof.sh" "$browser_presented" >/dev/null 2>&1; then
+  echo "expected browser-hosted presentation trace to fail" >&2
   exit 1
 fi
 
