@@ -145,9 +145,9 @@ struct DiagnosticsTypingHealthTests {
             requestMode: "phrase",
             displayedText: "private client sentence",
             acceptedText: "private",
-            screenshotPath: "/tmp/private-proof.png",
             latencyMilliseconds: 24,
             reason: "shown",
+            screenshotPath: "/tmp/private-proof.png",
             metadata: [
                 "effectiveRenderMode": "inlineAdjacent",
                 "placementConfidenceBand": "high",
