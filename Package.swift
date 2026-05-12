@@ -31,16 +31,27 @@ let package = Package(
             name: "AutocompleteLabCore",
             exclude: [
                 "AGENTS.md",
+                "CLAUDE.md",
                 "Compatibility/AGENTS.md",
+                "Compatibility/CLAUDE.md",
                 "Configuration/AGENTS.md",
+                "Configuration/CLAUDE.md",
                 "Engine/AGENTS.md",
+                "Engine/CLAUDE.md",
                 "Experiments/AGENTS.md",
+                "Experiments/CLAUDE.md",
                 "Geometry/AGENTS.md",
+                "Geometry/CLAUDE.md",
                 "Runtime/AGENTS.md",
+                "Runtime/CLAUDE.md",
                 "Session/AGENTS.md",
+                "Session/CLAUDE.md",
                 "Suggestions/AGENTS.md",
+                "Suggestions/CLAUDE.md",
                 "Text/AGENTS.md",
-                "Tracing/AGENTS.md"
+                "Text/CLAUDE.md",
+                "Tracing/AGENTS.md",
+                "Tracing/CLAUDE.md"
             ]
         ),
         .executableTarget(
@@ -56,25 +67,40 @@ let package = Package(
             ],
             exclude: [
                 "AGENTS.md",
+                "CLAUDE.md",
                 "App/AGENTS.md",
+                "App/CLAUDE.md",
                 "Mac/AGENTS.md",
+                "Mac/CLAUDE.md",
                 "Runtime/AGENTS.md",
-                "UI/AGENTS.md"
+                "Runtime/CLAUDE.md",
+                "UI/AGENTS.md",
+                "UI/CLAUDE.md"
             ]
         ),
         .executableTarget(
             name: "AutocompleteTraceReplay",
-            dependencies: ["AutocompleteLabCore"]
+            dependencies: ["AutocompleteLabCore"],
+            exclude: [
+                "AGENTS.md",
+                "CLAUDE.md"
+            ]
         ),
         .testTarget(
             name: "AutocompleteLabCoreTests",
             dependencies: ["AutocompleteLabCore"],
-            exclude: ["AGENTS.md"]
+            exclude: [
+                "AGENTS.md",
+                "CLAUDE.md"
+            ]
         ),
         .testTarget(
             name: "AutocompleteLabAppTests",
             dependencies: ["AutocompleteLabApp"],
-            exclude: ["AGENTS.md"]
+            exclude: [
+                "AGENTS.md",
+                "CLAUDE.md"
+            ]
         )
     ]
 )
