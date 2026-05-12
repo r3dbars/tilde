@@ -60,6 +60,21 @@ struct MockModelRuntimeTests {
         }
         await #expect(runtime.state == .unavailable(reason: "Runtime was canceled."))
     }
+
+    @Test("Unavailable model runtime never completes")
+    func unavailableModelRuntimeNeverCompletes() async throws {
+        let runtime = UnavailableModelRuntime(reason: "missing model")
+
+        await #expect(runtime.state == .unavailable(reason: "missing model"))
+        #expect(try await runtime.complete(CompletionRequest(textBeforeCursor: "I think")) == nil)
+
+        do {
+            try await runtime.warm()
+            Issue.record("Expected warm to throw")
+        } catch let error as UnavailableModelRuntimeError {
+            #expect(error == .unavailable(reason: "missing model"))
+        }
+    }
 }
 
 private final class PartialCollector: @unchecked Sendable {

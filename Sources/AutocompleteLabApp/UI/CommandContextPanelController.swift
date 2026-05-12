@@ -37,7 +37,7 @@ struct CommandContextSnapshot: Equatable {
             textAfterCursorLength: context.textAfterCursor.count,
             selectedTextLength: context.selectedTextLength,
             isSecure: context.isSecure,
-            fieldKind: .unknown,
+            fieldKind: context.fieldClassification.kind,
             canInsertWithAccessibility: context.capabilities.supportsAXInsertion,
             hasCaretBounds: context.caretRect != nil,
             hasFieldBounds: context.elementRect != nil

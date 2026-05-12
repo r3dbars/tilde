@@ -64,7 +64,8 @@ let package = Package(
         ),
         .executableTarget(
             name: "AutocompleteTraceReplay",
-            dependencies: ["AutocompleteLabCore"]
+            dependencies: ["AutocompleteLabCore"],
+            exclude: ["AGENTS.md"]
         ),
         .testTarget(
             name: "AutocompleteLabCoreTests",

@@ -93,3 +93,43 @@ public final class MockModelRuntime: ModelRuntime, @unchecked Sendable {
         return suggestion
     }
 }
+
+public struct UnavailableModelRuntime: ModelRuntime, Equatable, Sendable {
+    public let candidate: CompletionRuntimeCandidate
+    public let reason: String
+
+    public init(
+        candidate: CompletionRuntimeCandidate = .mock,
+        reason: String
+    ) {
+        self.candidate = candidate
+        self.reason = reason
+    }
+
+    public var state: LocalRuntimeState {
+        get async {
+            .unavailable(reason: reason)
+        }
+    }
+
+    public func warm() async throws {
+        throw UnavailableModelRuntimeError.unavailable(reason: reason)
+    }
+
+    public func cancel() {}
+
+    public func complete(_ request: CompletionRequest) async throws -> CompletionSuggestion? {
+        nil
+    }
+}
+
+public enum UnavailableModelRuntimeError: LocalizedError, Equatable, Sendable {
+    case unavailable(reason: String)
+
+    public var errorDescription: String? {
+        switch self {
+        case let .unavailable(reason):
+            reason
+        }
+    }
+}

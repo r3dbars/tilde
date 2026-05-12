@@ -117,7 +117,8 @@ public struct SuggestionSession: Equatable, Sendable {
         } else {
             visibleSuggestion = CompletionSuggestion(
                 text: String(remainingText),
-                maxVisibleWords: suggestion.maxVisibleWords
+                maxVisibleWords: suggestion.maxVisibleWords,
+                maxVisibleCharacters: suggestion.maxVisibleCharacters
             )
         }
     }
@@ -215,7 +216,8 @@ public struct SuggestionSession: Equatable, Sendable {
 
         return CompletionSuggestion(
             text: String(remainingText),
-            maxVisibleWords: suggestion.maxVisibleWords
+            maxVisibleWords: suggestion.maxVisibleWords,
+            maxVisibleCharacters: suggestion.maxVisibleCharacters
         ).visibleText
     }
 }

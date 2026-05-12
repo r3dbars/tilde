@@ -15,7 +15,7 @@ public enum CompletionPrefixTrimmer {
         }
 
         guard let typedFragment = trailingWordFragment(in: textBeforeCursor),
-              !typedFragment.isEmpty else {
+              !normalized(typedFragment).isEmpty else {
             return suggestion
         }
 

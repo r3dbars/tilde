@@ -65,6 +65,23 @@ struct SuggestionSessionTests {
         #expect(session.visibleSuggestion?.visibleText == " should ship")
     }
 
+    @Test("Tab residual keeps the original visible character cap")
+    func tabResidualKeepsOriginalVisibleCharacterCap() throws {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(
+                text: " one two three",
+                maxVisibleWords: 8,
+                maxVisibleCharacters: 16
+            )
+        )
+
+        #expect(session.acceptNextWord() == " one")
+
+        let residual = try #require(session.visibleSuggestion)
+        #expect(residual.maxVisibleCharacters == 16)
+        #expect(residual.visibleText == " two three")
+    }
+
     @Test("Tab can require recompute after one accepted word")
     func tabCanRequireRecomputeAfterOneAcceptedWord() {
         var session = SuggestionSession(
@@ -157,6 +174,22 @@ struct SuggestionSessionTests {
         #expect(preview.traceMetadata["remainingVisibleAfterAcceptChars"] == String(preview.remainingVisibleTextAfterAccept.count))
         #expect(preview.traceMetadata["acceptanceMatchesVisiblePrefix"] == "true")
         #expect(preview.traceMetadata["acceptanceMatchesFullVisible"] == "false")
+    }
+
+    @Test("Next word preview keeps residual character cap")
+    func nextWordPreviewKeepsResidualCharacterCap() throws {
+        let session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(
+                text: " one two three",
+                maxVisibleWords: 8,
+                maxVisibleCharacters: 16
+            )
+        )
+
+        let preview = try #require(session.nextWordAcceptancePreview())
+
+        #expect(preview.acceptedText == " one")
+        #expect(preview.remainingVisibleTextAfterAccept == " two three")
     }
 
     @Test("Failed insert can leave suggestion untouched")

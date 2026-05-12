@@ -367,6 +367,10 @@ struct SettingsPrivacyState: Equatable {
             return "Screen Recording: required for visible page context OCR."
         }
 
+        if screenshotTracingEnabled && !screenCaptureAccessGranted {
+            return "Screen Recording: required for local placement screenshots."
+        }
+
         if screenshotTracingEnabled && screenshotTracingExpiresAt == nil {
             return "Screen Recording: used only while screenshot proof is on to capture local placement screenshots."
         }

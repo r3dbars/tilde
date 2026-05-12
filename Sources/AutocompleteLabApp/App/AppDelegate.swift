@@ -1282,11 +1282,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: fieldIdentity,
             profile: profile
         )
-        rememberTypedWordsIfNeeded(
-            previousSnapshot: previousSnapshot,
-            currentSnapshot: snapshot,
-            appBundleIdentifier: frontmostApp.bundleIdentifier
-        )
         if advanceVisibleSuggestionForTypingProgressIfNeeded(
             context: context,
             profile: profile,
@@ -1404,6 +1399,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion()
             return
         }
+
+        rememberTypedWordsIfNeeded(
+            previousSnapshot: previousSnapshot,
+            currentSnapshot: snapshot,
+            appBundleIdentifier: frontmostApp.bundleIdentifier
+        )
 
         let requestMode = activationDecision.requestMode ?? .phraseContinuation
         let prefixCooldownInput = PrefixFamilyCooldownInput(

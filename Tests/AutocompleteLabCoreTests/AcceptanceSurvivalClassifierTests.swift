@@ -166,4 +166,23 @@ struct AcceptanceSurvivalClassifierTests {
         #expect(measurement.survivalClass == .exactKept)
         #expect(wrongOffset.survivalClass == .rejectedAfterAccept)
     }
+
+    @Test("Clamps stale expected insertion offsets to the current text")
+    func clampsStaleExpectedInsertionOffsetsToCurrentText() {
+        let tailWindow = AcceptanceSurvivalClassifier.localTextWindow(
+            in: "We should ship now",
+            expectedInsertionUTF16Offset: 10_000,
+            acceptedTextUTF16Length: "now".utf16.count,
+            radius: 8
+        )
+        let headWindow = AcceptanceSurvivalClassifier.localTextWindow(
+            in: "We should ship now",
+            expectedInsertionUTF16Offset: -10_000,
+            acceptedTextUTF16Length: "We".utf16.count,
+            radius: 8
+        )
+
+        #expect(tailWindow == "ship now")
+        #expect(headWindow == "We should ")
+    }
 }

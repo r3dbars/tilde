@@ -339,14 +339,32 @@ public struct AcceptanceSurvivalClassifier: Equatable, Sendable {
         acceptedTextUTF16Length: Int,
         radius: Int
     ) -> (startUTF16Offset: Int, startIndex: String.Index, endIndex: String.Index) {
-        let safeStart = max(0, expectedInsertionUTF16Offset - radius)
-        let safeEnd = min(
-            text.utf16.count,
-            max(expectedInsertionUTF16Offset, expectedInsertionUTF16Offset + acceptedTextUTF16Length) + radius
+        let textLength = text.utf16.count
+        let safeRadius = max(0, radius)
+        let safeExpectedOffset = min(max(0, expectedInsertionUTF16Offset), textLength)
+        let acceptedEndOffset = clampedAdd(
+            safeExpectedOffset,
+            max(0, acceptedTextUTF16Length),
+            upperBound: textLength
+        )
+        let safeStart = max(0, safeExpectedOffset - safeRadius)
+        let safeEnd = clampedAdd(
+            max(safeExpectedOffset, acceptedEndOffset),
+            safeRadius,
+            upperBound: textLength
         )
         let startIndex = String.Index(utf16Offset: safeStart, in: text)
         let endIndex = String.Index(utf16Offset: max(safeStart, safeEnd), in: text)
         return (safeStart, startIndex, endIndex)
+    }
+
+    private static func clampedAdd(_ value: Int, _ increment: Int, upperBound: Int) -> Int {
+        let (sum, overflow) = value.addingReportingOverflow(increment)
+        if overflow {
+            return upperBound
+        }
+
+        return min(max(0, sum), upperBound)
     }
 
     private static func tokenRecall(

@@ -35,7 +35,6 @@ public struct SuggestionPrivacySettings: Equatable, Sendable {
         allowedBundleIdentifiers: [
             "com.apple.TextEdit",
             "com.apple.Notes",
-            "com.apple.mail",
             "md.obsidian"
         ],
         suppressSecureFields: true,

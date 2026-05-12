@@ -761,7 +761,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             suppressedByReason: countsByReason(suppressed),
             sensitiveSuppressedByCategory: counts(sensitiveSuppressed, key: sensitiveSuppressionCategory),
             sensitivePresentedByCategory: counts(
-                Array(firstPresentedByID.values).filter { sensitivePresentationCategory($0) != nil },
+                Array(firstPresentedByID.values).filter(isSensitivePresentation),
                 key: sensitivePresentationCategory
             ),
             suppressedByApp: counts(suppressed, key: \.appBundleIdentifier),
@@ -822,6 +822,10 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
     private func sensitivePresentationCategory(_ event: AutocompleteTraceEvent) -> String {
         sensitiveCategory(event) ?? (isSensitiveFieldKind(event) ? fieldKind(event) : "unknown")
+    }
+
+    private func isSensitivePresentation(_ event: AutocompleteTraceEvent) -> Bool {
+        sensitiveCategory(event) != nil || isSensitiveFieldKind(event)
     }
 
     private func isSensitiveFieldKind(_ event: AutocompleteTraceEvent) -> Bool {

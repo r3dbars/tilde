@@ -163,6 +163,38 @@ struct CommandContextPanelStateTests {
         #expect(selected.summaryText.contains("selected text, 17 chars"))
     }
 
+    @Test("Context snapshot keeps focused field classification")
+    func contextSnapshotKeepsFocusedFieldClassification() {
+        let snapshot = CommandContextSnapshot(context: FocusedTextContext(
+            elementIdentifier: 1,
+            role: "AXTextArea",
+            subrole: nil,
+            fingerprint: FocusedElementFingerprint(),
+            textBeforeCursor: "Draft text",
+            textAfterCursor: "",
+            selectedTextLength: 0,
+            caretRect: nil,
+            elementRect: nil,
+            windowRect: nil,
+            windowIdentifier: nil,
+            textLineRect: nil,
+            textStyle: nil,
+            isSecure: false,
+            fieldClassification: AXFieldClassification(kind: .multilineCompose, reason: "textAreaRole"),
+            caretIsSynthetic: false,
+            capabilities: FocusedTextCapabilities(
+                canReadValue: true,
+                canReadSelectedTextRange: true,
+                canReadBoundsForRange: false,
+                canReadAttributedText: false,
+                canSetSelectedText: true
+            )
+        ))
+
+        #expect(snapshot.fieldKind == .multilineCompose)
+        #expect(snapshot.summaryText.contains("multilineCompose"))
+    }
+
     @Test("Loading state disables duplicate requests and copy")
     func loadingStateDisablesDuplicateRequestsAndCopy() {
         let state = CommandContextPanelState(

@@ -375,6 +375,23 @@ struct SettingsWindowControllerStateTests {
                 == "Screen Recording: used only for temporary local placement screenshots."
         )
 
+        let screenshotsNeedPermission = SettingsPrivacyState(
+            tracingPaused: false,
+            rawContentTracingEnabled: false,
+            rawContentTracingExpiresAt: nil,
+            screenshotTracingEnabled: true,
+            screenshotTracingExpiresAt: nil,
+            visiblePageContextEnabled: false,
+            screenCaptureAccessGranted: false,
+            diagnosticsPath: "/tmp/diagnostics.log",
+            tracePath: "/tmp/traces.jsonl"
+        )
+
+        #expect(
+            screenshotsNeedPermission.screenRecordingPermissionText
+                == "Screen Recording: required for local placement screenshots."
+        )
+
         let shareSafe = SettingsPrivacyState(
             tracingPaused: false,
             rawContentTracingEnabled: false,

@@ -171,7 +171,10 @@ public struct AXFieldClassifier: Equatable, Sendable {
 
     private func firstMatch(_ input: AXFieldClassifierInput, needles: [String]) -> String? {
         let haystack = normalizedHaystack(input)
-        return needles.first { haystack.contains($0) }
+        let tokens = normalizedTokens(in: haystack)
+        return needles.first { needle in
+            matchesNeedle(needle, haystack: haystack, tokens: tokens)
+        }
     }
 
     private func hasComposeHint(_ input: AXFieldClassifierInput) -> Bool {
@@ -192,6 +195,21 @@ public struct AXFieldClassifier: Equatable, Sendable {
         .compactMap { $0 }
         .joined(separator: " ")
         .lowercased()
+    }
+
+    private func normalizedTokens(in text: String) -> Set<String> {
+        Set(text
+            .split { !$0.isLetter && !$0.isNumber }
+            .map { String($0).lowercased() })
+    }
+
+    private func matchesNeedle(_ needle: String, haystack: String, tokens: Set<String>) -> Bool {
+        guard needle.count <= 8,
+              needle.allSatisfy({ $0.isLetter || $0.isNumber }) else {
+            return haystack.contains(needle)
+        }
+
+        return tokens.contains(needle)
     }
 
     private static let secureNeedles: [String] = [

@@ -58,4 +58,10 @@ struct CompletionPrefixTrimmerTests {
 
         #expect(trimmed == "ould keep going")
     }
+
+    @Test("Does not trim after punctuation-only fragments")
+    func doesNotTrimAfterPunctuationOnlyFragments() {
+        #expect(CompletionPrefixTrimmer.trim("world", after: "hello (") == "world")
+        #expect(CompletionPrefixTrimmer.trim("world", after: "hello \"") == "world")
+    }
 }

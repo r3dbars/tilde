@@ -23,6 +23,13 @@ struct AXFieldClassifierTests {
         #expect(AXFieldKind.url.suppressesSuggestionsByDefault)
     }
 
+    @Test("Does not suppress compose fields for short needle substrings")
+    func doesNotSuppressComposeFieldsForShortNeedleSubstrings() {
+        #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", windowTitle: "Research notes")) == .multilineCompose)
+        #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", title: "Candidate feedback")) == .multilineCompose)
+        #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", windowTitle: "Update draft")) == .multilineCompose)
+    }
+
     @Test("Classifies form fields")
     func classifiesFormFields() {
         #expect(classifier.classify(AXFieldClassifierInput(placeholder: "Email address")) == .form)

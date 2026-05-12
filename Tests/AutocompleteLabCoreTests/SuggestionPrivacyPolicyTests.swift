@@ -9,12 +9,25 @@ struct SuggestionPrivacyPolicyTests {
 
         #expect(settings.isAppAllowlistEnabled)
         #expect(settings.allowedBundleIdentifiers.contains("com.apple.TextEdit"))
+        #expect(!settings.allowedBundleIdentifiers.contains("com.apple.mail"))
         #expect(settings.suppressSecureFields)
         #expect(settings.minimumCharactersBeforeSuggestion == 3)
         #expect(settings.suppressEmptyText)
         #expect(settings.suppressImmediatelyAfterNewline)
         #expect(settings.debounceMilliseconds == CompletionModelPolicy.mvp.debounceMilliseconds)
         #expect(settings.targetLatencyMilliseconds == CompletionModelPolicy.mvp.targetLatencyMilliseconds)
+    }
+
+    @Test("Mail stays outside the default allowlist")
+    func mailStaysOutsideTheDefaultAllowlist() {
+        let policy = SuggestionPrivacyPolicy()
+        let context = FocusedSuggestionPrivacyContext(
+            bundleIdentifier: "com.apple.mail",
+            textBeforeCursor: "Private email draft",
+            isSecureTextEntry: false
+        )
+
+        #expect(policy.decision(for: context) == .suppressed(.bundleIdentifierNotAllowed("com.apple.mail")))
     }
 
     @Test("Allowed app with enough plain text can request a suggestion")

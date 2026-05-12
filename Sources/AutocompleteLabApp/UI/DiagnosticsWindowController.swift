@@ -282,7 +282,7 @@ final class DiagnosticsWindowController {
         }
 
         sections.append(diagnostics?.summary ?? "Focused text diagnostics: unavailable")
-        sections.append(recentTraceText(recentTraceEvents))
+        sections.append(DiagnosticsTraceHistory(events: recentTraceEvents).summaryText)
         sections.append(typingHealthText(recentEvents))
         sections.append(recentDiagnosticsText(recentEvents))
 
@@ -388,19 +388,6 @@ final class DiagnosticsWindowController {
             return lhs.value > rhs.value
         }.map { key, value in
             "  \(key): \(value)"
-        }.joined(separator: "\n"))
-        """
-    }
-
-    private func recentTraceText(_ events: [AutocompleteTraceEvent]) -> String {
-        guard !events.isEmpty else {
-            return "Recent trace events: none yet"
-        }
-
-        return """
-        Recent trace events:
-        \(events.suffix(16).map {
-            "  \($0.timestamp) \($0.type.rawValue) mode=\($0.requestMode) app=\($0.appBundleIdentifier) shown=\($0.displayedText) accepted=\($0.acceptedText) reason=\($0.reason) latency=\(Self.latency($0.latencyMilliseconds))"
         }.joined(separator: "\n"))
         """
     }

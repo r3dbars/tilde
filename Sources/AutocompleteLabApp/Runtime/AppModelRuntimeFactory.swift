@@ -77,7 +77,10 @@ enum AppModelRuntimeFactory {
                 lengthConfiguration: lengthConfiguration
             )
         } else {
-            runtime = MockModelRuntime(candidate: plan.activeCandidate)
+            runtime = UnavailableModelRuntime(
+                candidate: plan.activeCandidate,
+                reason: plan.fallbackReason ?? "Local model runtime is unavailable."
+            )
         }
 
         return AppModelRuntimeBundle(
