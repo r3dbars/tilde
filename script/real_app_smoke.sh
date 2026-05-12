@@ -871,7 +871,15 @@ guard CommandLine.arguments.count == 2,
 app.activate(options: [.activateAllWindows])
 SWIFT
 
-  osascript - "$target_pid" <<'APPLESCRIPT' >/dev/null 2>&1 || true
+  activate_process_id_osascript "$target_pid" &
+  local osascript_pid="$!"
+  wait_for_background_process "$osascript_pid" 2 "System Events process activation" >/dev/null 2>&1 || true
+}
+
+activate_process_id_osascript() {
+  local target_pid="$1"
+
+  osascript - "$target_pid" <<'APPLESCRIPT' >/dev/null 2>&1
 on run argv
   set targetPID to (item 1 of argv) as integer
   tell application "System Events"
