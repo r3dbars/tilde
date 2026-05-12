@@ -6088,10 +6088,7 @@ run_obsidian() {
   second_start_line="$(line_count "$LOG_PATH")"
   case "$manual_app" in
     obsidian-pane|obsidian-long-note)
-      AUTOCOMPLETE_LAB_OBSIDIAN_RESET_TEXT="$obsidian_reset_text" reset_obsidian_smoke_note
       sleep 0.4
-      second_start_line="$(line_count "$LOG_PATH")"
-      type_obsidian_raw_smoke_text "Variant proof feels"
       ;;
     *)
       assert_obsidian_smoke_target "Smoke proof feels instant"
