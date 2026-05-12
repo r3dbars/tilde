@@ -116,6 +116,56 @@ struct AppModelRuntimeFactoryTests {
         ))
     }
 
+    @Test("MLX warm revalidates source-backed integrity before loading")
+    func mlxWarmRevalidatesSourceBackedIntegrityBeforeLoading() async throws {
+        let fileManager = FileManager.default
+        let rootURL = fileManager.temporaryDirectory
+            .appendingPathComponent("steadytype-runtime-warm-integrity-\(UUID().uuidString)", isDirectory: true)
+        let modelURL = rootURL.appendingPathComponent("model", isDirectory: true)
+        defer {
+            try? fileManager.removeItem(at: rootURL)
+        }
+
+        try fileManager.createDirectory(at: modelURL, withIntermediateDirectories: true)
+        try "{}".write(
+            to: modelURL.appendingPathComponent("config.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "weights".write(
+            to: modelURL.appendingPathComponent("model.safetensors"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let manifest = smallSourceBackedManifest()
+        try ModelAssetIntegrityReceiptWriter.write(
+            manifest: manifest,
+            modelDirectoryURL: modelURL,
+            fileManager: fileManager
+        )
+        try "tamper!".write(
+            to: modelURL.appendingPathComponent("model.safetensors"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let runtime = MLXModelRuntime(
+            modelDirectoryURL: modelURL,
+            modelManifest: manifest,
+            fileManager: fileManager
+        )
+        let reason = "integrity receipt checksum mismatch for model.safetensors"
+
+        await #expect(throws: MLXModelRuntimeError.modelAssetIntegrityFailed(reason: reason)) {
+            try await runtime.warm()
+        }
+        #expect(await runtime.state == .failed(
+            candidate: .mlx,
+            reason: "Model asset integrity failed: \(reason)"
+        ))
+    }
+
     private func temporaryDefaults() -> UserDefaults {
         let suiteName = "autocomplete-app-model-runtime-factory-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
