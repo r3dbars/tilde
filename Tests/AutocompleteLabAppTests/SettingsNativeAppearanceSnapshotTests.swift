@@ -41,7 +41,7 @@ struct SettingsNativeAppearanceSnapshotTests {
                 isReady: true
             ),
             runtimeTargetSummary: "Qwen local • short completions • normal",
-            modelDirectoryPath: "/Users/example/Library/Application Support/AutocompleteLab/Models",
+            modelDirectoryPath: "/Users/example/Library/Application Support/SteadyType/Models",
             modelInstallStatusText: nil,
             isModelInstallInProgress: false,
             currentApp: SettingsCurrentAppState(
@@ -65,8 +65,8 @@ struct SettingsNativeAppearanceSnapshotTests {
                 screenshotTracingExpiresAt: nil,
                 visiblePageContextEnabled: false,
                 screenCaptureAccessGranted: false,
-                diagnosticsPath: "/Users/example/Library/Logs/AutocompleteLab/diagnostics.log",
-                tracePath: "/Users/example/Library/Logs/AutocompleteLab/events.jsonl"
+                diagnosticsPath: "/Users/example/Library/Logs/SteadyType/diagnostics.log",
+                tracePath: "/Users/example/Library/Logs/SteadyType/events.jsonl"
             ),
             keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .backtick),
             suggestionAggressiveness: SettingsSuggestionAggressivenessState(tuning: SuggestionTuning()),

@@ -80,6 +80,8 @@ def summarize(events):
         "flicker": 0,
         "learning_applied": 0,
         "latest_offset": "none",
+        "stale_geometry_hidden": 0,
+        "layout_variants": Counter(),
         "trusted_applied": 0,
         "trusted_refused": 0,
         "refused_reasons": Counter(),
@@ -107,6 +109,9 @@ def summarize(events):
                 buckets[key]["learning_applied"] += 1
             if metadata.get("learningXOffset") is not None and metadata.get("learningYOffset") is not None:
                 buckets[key]["latest_offset"] = f"({metadata['learningXOffset']}, {metadata['learningYOffset']})"
+            variant = metadata.get("displayLayoutVariant")
+            if variant:
+                buckets[key]["layout_variants"][variant] += 1
             status = trust_status(metadata)
             if status == "applied":
                 buckets[key]["trusted_applied"] += 1
@@ -120,8 +125,19 @@ def summarize(events):
             lifetime = safe_int(metadata.get("lifetimeMs"))
             if lifetime is not None and lifetime < 150:
                 buckets[key]["flicker"] += 1
+            if (event.get("reason") or "").startswith("stale-geometry"):
+                buckets[key]["stale_geometry_hidden"] += 1
+            variant = metadata.get("displayLayoutVariant")
+            if variant:
+                buckets[key]["layout_variants"][variant] += 1
 
     return buckets, failure_reasons
+
+
+def format_counter(counter):
+    if not counter:
+        return "none"
+    return ",".join(f"{key}:{value}" for key, value in counter.most_common())
 
 
 def reason_summary(counter):
@@ -144,6 +160,8 @@ def format_rows(buckets):
             f"  {app} / {mode}: shown={shown} caretFailures={failures} "
             f"failureRate={rate}% missingCaret={values['missing_caret']} "
             f"flicker={values['flicker']} learningApplied={values['learning_applied']} "
+            f"staleGeometryHidden={values['stale_geometry_hidden']} "
+            f"layoutVariants={format_counter(values['layout_variants'])} "
             f"latestOffset={values['latest_offset']} "
             f"trustedCorrection=applied:{values['trusted_applied']} "
             f"refused:{values['trusted_refused']} "
@@ -222,12 +240,12 @@ def main():
     )
     parser.add_argument(
         "--log",
-        default="~/Library/Logs/AutocompleteLab/traces.jsonl",
+        default="~/Library/Logs/SteadyType/traces.jsonl",
         help="Trace JSONL path. Defaults to the local redacted trace.",
     )
     parser.add_argument(
         "--diagnostics-log",
-        default="~/Library/Logs/AutocompleteLab/diagnostics.log",
+        default="~/Library/Logs/SteadyType/diagnostics.log",
         help="Diagnostics log path used for geometry-only screenshot correction proof.",
     )
     parser.add_argument("--start-line", type=int, default=0)

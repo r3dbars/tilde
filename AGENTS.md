@@ -40,7 +40,8 @@ Avoid early:
 
 ## Repo structure
 
-- Every source, test, script, or docs folder should have an `AGENTS.md` file that explains what belongs there.
+- Every tracked folder should have an `AGENTS.md` file and a `CLAUDE.md` file that explain what belongs there.
+- When adding guide files inside a SwiftPM target folder, update `Package.swift` excludes so the package still loads cleanly.
 - Keep the model runtime app-owned. Do not require users to start Ollama, llama.cpp, or any other separate server.
 - Mock engines are fine for development and tests, but production UX should feel like one Mac app.
 - Add tests with each meaningful behavior change.

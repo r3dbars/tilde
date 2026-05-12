@@ -14,6 +14,15 @@ struct SensitiveTextFieldPolicyTests {
         ))
     }
 
+    @Test("Blocks native secure text roles before text reads")
+    func blocksSecureRole() {
+        #expect(policy.isSensitive(
+            role: "AXSecureTextField",
+            subrole: nil,
+            fingerprint: FocusedElementFingerprint()
+        ))
+    }
+
     @Test("Blocks browser and Electron password-like fields")
     func blocksPasswordLikeFingerprints() {
         let fingerprint = FocusedElementFingerprint(

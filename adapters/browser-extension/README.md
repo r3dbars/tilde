@@ -13,4 +13,8 @@ Current prototype:
 - Asks the extension background for suggestions.
 - Falls back to a local mock suggestion until native messaging is wired to the macOS app.
 
+The prototype is intentionally limited to local proof pages: `localhost`,
+`127.0.0.1`, and `[::1]`. Do not broaden it to production websites without a
+site allowlist, field policy, and native-host revalidation.
+
 Load this as an unpacked extension in Chrome/Arc/Brave for early testing.

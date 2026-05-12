@@ -14,7 +14,7 @@ NO_FINGERPRINT_REPORT="$TMP_DIR/manual-smoke-no-fingerprint.md"
 PROMPT_REPORT="$TMP_DIR/manual-smoke-prompt.md"
 OUTPUT="$TMP_DIR/output.txt"
 APP_BINARY="$TMP_DIR/AutocompleteLab"
-ARCHIVE_PATH="$TMP_DIR/AutocompleteLab.zip"
+ARCHIVE_PATH="$TMP_DIR/SteadyType.zip"
 
 write_report_header() {
   local path="$1"
@@ -181,7 +181,8 @@ if ! grep -F "# status: pending - missing prompt no-submit confirmation" "$OUTPU
   exit 1
 fi
 
-script/manual_proof_refresh.sh --print >"$OUTPUT"
+AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$NO_FINGERPRINT_REPORT" \
+  script/manual_proof_refresh.sh --print >"$OUTPUT"
 for expected in \
   "# textedit - TextEdit" \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit" \

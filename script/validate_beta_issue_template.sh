@@ -62,7 +62,7 @@ require_file "$TEMPLATE_PATH"
 require_file "$LABELS_PATH"
 
 if [[ -f "$TEMPLATE_PATH" ]]; then
-  require_contains "$TEMPLATE_PATH" "name: Autocomplete Lab beta feedback"
+  require_contains "$TEMPLATE_PATH" "name: SteadyType beta feedback"
   require_contains "$TEMPLATE_PATH" "Do not paste raw typed text"
   require_contains "$TEMPLATE_PATH" "  - beta feedback"
   require_contains "$TEMPLATE_PATH" "  - needs triage"

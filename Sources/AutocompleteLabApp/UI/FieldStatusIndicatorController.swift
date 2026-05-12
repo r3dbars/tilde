@@ -15,23 +15,23 @@ struct FieldStatusIndicatorState: Equatable {
 
     static let ready = FieldStatusIndicatorState(
         kind: .ready,
-        accessibilityLabel: "Autocomplete Lab is on in this field"
+        accessibilityLabel: "SteadyType is on in this field"
     )
     static let thinking = FieldStatusIndicatorState(
         kind: .thinking,
-        accessibilityLabel: "Autocomplete Lab is thinking in this field"
+        accessibilityLabel: "SteadyType is thinking in this field"
     )
     static let shown = FieldStatusIndicatorState(
         kind: .shown,
-        accessibilityLabel: "Autocomplete Lab is showing a suggestion in this field"
+        accessibilityLabel: "SteadyType is showing a suggestion in this field"
     )
     static let waiting = FieldStatusIndicatorState(
         kind: .waiting,
-        accessibilityLabel: "Autocomplete Lab is waiting in this field"
+        accessibilityLabel: "SteadyType is waiting in this field"
     )
     static let blocked = FieldStatusIndicatorState(
         kind: .blocked,
-        accessibilityLabel: "Autocomplete Lab is off in this field"
+        accessibilityLabel: "SteadyType is off in this field"
     )
 }
 
@@ -63,7 +63,7 @@ final class FieldStatusIndicatorController {
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
         panel.animationBehavior = .none
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.collectionBehavior = OverlayDesktopBehavior.collectionBehavior
         panel.contentView = badgeView
     }
 

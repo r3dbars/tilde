@@ -33,7 +33,7 @@ for path in \
   fi
 done
 
-if ! grep -F "Deleted Autocomplete Lab local traces:" /tmp/autocomplete-delete-local-traces-self-test.txt >/dev/null; then
+if ! grep -F "Deleted SteadyType local traces:" /tmp/autocomplete-delete-local-traces-self-test.txt >/dev/null; then
   echo "delete local traces self-test did not print confirmation" >&2
   cat /tmp/autocomplete-delete-local-traces-self-test.txt >&2
   exit 1

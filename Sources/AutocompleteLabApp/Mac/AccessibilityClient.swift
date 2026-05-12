@@ -573,7 +573,13 @@ final class AccessibilityClient: @unchecked Sendable {
             for: focusedElement,
             processIdentifier: app.processIdentifier
         )
-        let text = editableText(
+        let isSecure = isSensitiveTextElement(
+            focusedElement,
+            role: role,
+            subrole: subrole,
+            fingerprint: fingerprint
+        )
+        let text = isSecure ? nil : editableText(
             in: focusedElement,
             role: role,
             bundleIdentifier: app.bundleIdentifier,
@@ -624,12 +630,7 @@ final class AccessibilityClient: @unchecked Sendable {
             role: role,
             subrole: subrole,
             fingerprint: fingerprint,
-            isSecure: isSensitiveTextElement(
-                focusedElement,
-                role: role,
-                subrole: subrole,
-                fingerprint: fingerprint
-            ),
+            isSecure: isSecure,
             textBeforeCursorLength: textSlice?.textBeforeCursor.count ?? 0,
             textAfterCursorLength: textSlice?.textAfterCursor.count ?? 0,
             selectedRangeDescription: selectedRange.map { "location=\($0.location), length=\($0.length)" } ?? "missing",

@@ -765,6 +765,100 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.annoyanceSignalCounts["focusStealing"] == 1)
     }
 
+    @Test("summarizes undo recoverability proof by app")
+    func summarizesUndoRecoverabilityProofByApp() {
+        let events = [
+            event(
+                .suggestionAccepted,
+                suggestionID: "one",
+                appBundleIdentifier: "com.apple.TextEdit",
+                outcome: "acceptNextWord",
+                metadata: ["acceptMode": "acceptNextWord"]
+            ),
+            event(
+                .insertionVerified,
+                suggestionID: "one",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: ["acceptMode": "acceptNextWord"]
+            ),
+            event(
+                .acceptedInsertionUndone,
+                suggestionID: "one",
+                appBundleIdentifier: "com.apple.TextEdit",
+                outcome: "acceptNextWord",
+                metadata: [
+                    "acceptMode": "acceptNextWord",
+                    "undoMechanism": "nativeSingleEdit",
+                    "sameSliceUndoProof": "true",
+                    "restoredOriginalTarget": "true"
+                ]
+            ),
+            event(
+                .suggestionAccepted,
+                suggestionID: "two",
+                appBundleIdentifier: "com.apple.TextEdit",
+                outcome: "acceptAllVisible",
+                metadata: ["acceptMode": "acceptAllVisible"]
+            ),
+            event(
+                .insertionVerified,
+                suggestionID: "two",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: ["acceptMode": "acceptAllVisible"]
+            ),
+            event(
+                .acceptedInsertionUndone,
+                suggestionID: "two",
+                appBundleIdentifier: "com.apple.TextEdit",
+                outcome: "acceptAllVisible",
+                metadata: [
+                    "acceptMode": "acceptAllVisible",
+                    "undoMechanism": "nativeSingleEdit",
+                    "sameSliceUndoProof": "true",
+                    "restoredOriginalTarget": "true"
+                ]
+            ),
+            event(
+                .suggestionAccepted,
+                suggestionID: "three",
+                appBundleIdentifier: "com.apple.Notes",
+                metadata: ["acceptMode": "acceptNextWord"]
+            ),
+            event(
+                .insertionVerified,
+                suggestionID: "three",
+                appBundleIdentifier: "com.apple.Notes",
+                metadata: ["acceptMode": "acceptNextWord"]
+            ),
+            event(
+                .acceptedInsertionUndone,
+                suggestionID: "three",
+                appBundleIdentifier: "com.apple.Notes",
+                metadata: [
+                    "acceptMode": "acceptNextWord",
+                    "undoMechanism": "appRollback",
+                    "sameSliceUndoProof": "true",
+                    "restoredOriginalTarget": "true"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.undoRecoverabilityByApp.contains { row in
+            row.appBundleIdentifier == "com.apple.TextEdit"
+                && row.status == "nativeSingleEdit"
+                && row.nativeSingleEditCount == 2
+                && row.oneWordNativeCount == 1
+                && row.fullNativeCount == 1
+        })
+        #expect(summary.undoRecoverabilityByApp.contains { row in
+            row.appBundleIdentifier == "com.apple.Notes"
+                && row.status == "appRollback"
+                && row.appRollbackCount == 1
+        })
+    }
+
     @Test("summarizes model quality tracking buckets")
     func summarizesModelQualityTrackingBuckets() {
         let events = [
@@ -839,6 +933,13 @@ struct AutocompleteTraceAnalyzerTests {
                     "sensitiveSuppressionCategory": "payment",
                     "fieldKind": "form"
                 ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "normal",
+                metadata: [
+                    "fieldKind": "body"
+                ]
             )
         ]
 
@@ -847,6 +948,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.sensitiveSuppressedByCategory["password"] == 1)
         #expect(summary.sensitiveSuppressedByCategory["otp"] == 1)
         #expect(summary.sensitivePresentedByCategory["payment"] == 1)
+        #expect(summary.sensitivePresentedByCategory["unknown"] == nil)
         #expect(summary.doNotShipCounters["sensitive-category-suggestion"] == 1)
         #expect(summary.doNotShipCounters["sensitive-field-suggestion"] == 1)
     }

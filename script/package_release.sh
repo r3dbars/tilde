@@ -3,14 +3,14 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
-APP_BUNDLE="$DIST_DIR/AutocompleteLab.app"
-ZIP_PATH="$DIST_DIR/AutocompleteLab.zip"
-DMG_PATH="$DIST_DIR/AutocompleteLab.dmg"
+APP_BUNDLE="$DIST_DIR/SteadyType.app"
+ZIP_PATH="$DIST_DIR/SteadyType.zip"
+DMG_PATH="$DIST_DIR/SteadyType.dmg"
 PROOF_DIR="$DIST_DIR/release-proof"
 CHECKSUM_PATH="$PROOF_DIR/checksums.txt"
 NOTARY_BLOCKER_PATH="$PROOF_DIR/notarization-blocker.txt"
 FRESH_INSTALL_PROOF_PATH="$PROOF_DIR/fresh-install-gatekeeper-proof.md"
-BUNDLE_ID="bar.r3d.autocomplete-lab"
+BUNDLE_ID="bar.r3d.steadytype"
 MODE="archive"
 REQUIRE_NOTARY_PROFILE=0
 
@@ -21,7 +21,7 @@ usage() {
 Usage: script/package_release.sh [archive|--check|--notarize] [--require-notary-profile]
 
 archive    Build a release app, sign with Developer ID, validate, and create
-           dist/AutocompleteLab.zip plus preferred dist/AutocompleteLab.dmg.
+           dist/SteadyType.zip plus preferred dist/SteadyType.dmg.
 --check    Report whether local signing/notary prerequisites are present.
 --notarize Submit the DMG to Apple notarytool. This uploads the app to Apple.
 --require-notary-profile
@@ -93,13 +93,13 @@ print_proof_template() {
   created_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
   cat <<EOF
-# Autocomplete Lab Release Proof
+# SteadyType Release Proof
 
 - Created UTC: $created_at
 - Stage: $stage
-- App bundle: dist/AutocompleteLab.app
-- Preferred artifact: dist/AutocompleteLab.dmg
-- Secondary artifact: dist/AutocompleteLab.zip
+- App bundle: dist/SteadyType.app
+- Preferred artifact: dist/SteadyType.dmg
+- Secondary artifact: dist/SteadyType.zip
 - Bundle ID: $BUNDLE_ID
 - Notarization status: $notarization_status
 - Stapler status: $stapler_status
@@ -135,38 +135,38 @@ write_fresh_install_proof_instructions() {
   cat >"$FRESH_INSTALL_PROOF_PATH" <<EOF
 # Fresh Install / Gatekeeper / Quarantine Proof
 
-Use this after \`dist/AutocompleteLab.dmg\` is notarized and stapled.
+Use this after \`dist/SteadyType.dmg\` is notarized and stapled.
 
 ## Automated Local Quarantine Check
 
 \`\`\`bash
 verify_dir="\$(mktemp -d)"
 mkdir -p "\$verify_dir/mount"
-xattr -w com.apple.quarantine "0081;\$(printf '%x' "\$(date +%s)");AutocompleteLab;$(uuidgen)" dist/AutocompleteLab.dmg
-hdiutil attach dist/AutocompleteLab.dmg -mountpoint "\$verify_dir/mount" -nobrowse -quiet
-cp -R "\$verify_dir/mount/AutocompleteLab.app" "\$verify_dir/AutocompleteLab.app"
+xattr -w com.apple.quarantine "0081;\$(printf '%x' "\$(date +%s)");SteadyType;$(uuidgen)" dist/SteadyType.dmg
+hdiutil attach dist/SteadyType.dmg -mountpoint "\$verify_dir/mount" -nobrowse -quiet
+cp -R "\$verify_dir/mount/SteadyType.app" "\$verify_dir/SteadyType.app"
 hdiutil detach "\$verify_dir/mount" -quiet
-spctl --assess --type execute --verbose=4 "\$verify_dir/AutocompleteLab.app" | tee dist/release-proof/spctl-installed-app.txt
+spctl --assess --type execute --verbose=4 "\$verify_dir/SteadyType.app" | tee dist/release-proof/spctl-installed-app.txt
 rm -rf "\$verify_dir"
 \`\`\`
 
 ## Fresh Machine / VM Check
 
-1. Download or copy \`dist/AutocompleteLab.dmg\` onto a machine or VM that has not seen this exact build.
+1. Download or copy \`dist/SteadyType.dmg\` onto a machine or VM that has not seen this exact build.
 2. Confirm the DMG has quarantine metadata:
 
 \`\`\`bash
-xattr -p com.apple.quarantine AutocompleteLab.dmg
+xattr -p com.apple.quarantine SteadyType.dmg
 \`\`\`
 
-3. Open the DMG, drag \`AutocompleteLab.app\` to \`/Applications\`, and launch it.
+3. Open the DMG, drag \`SteadyType.app\` to \`/Applications\`, and launch it.
 4. Confirm Gatekeeper does not warn that the app cannot be checked for malware.
 5. Grant Accessibility, verify one safe TextEdit suggestion, then deny Accessibility and verify safe degradation.
 6. Run:
 
 \`\`\`bash
-spctl --assess --type execute --verbose=4 /Applications/AutocompleteLab.app | tee dist/release-proof/spctl-installed-app.txt
-xcrun stapler validate dist/AutocompleteLab.dmg | tee dist/release-proof/stapler-validate.txt
+spctl --assess --type execute --verbose=4 /Applications/SteadyType.app | tee dist/release-proof/spctl-installed-app.txt
+xcrun stapler validate dist/SteadyType.dmg | tee dist/release-proof/stapler-validate.txt
 \`\`\`
 EOF
 }
@@ -227,11 +227,11 @@ create_dmg() {
   local dmg_src
   dmg_src="$(mktemp -d)"
 
-  cp -R "$APP_BUNDLE" "$dmg_src/AutocompleteLab.app"
+  cp -R "$APP_BUNDLE" "$dmg_src/SteadyType.app"
   ln -s /Applications "$dmg_src/Applications"
   rm -f "$DMG_PATH"
   hdiutil create \
-    -volname "AutocompleteLab" \
+    -volname "SteadyType" \
     -srcfolder "$dmg_src" \
     -ov \
     -format UDZO \
@@ -350,10 +350,10 @@ case "$MODE" in
     trap 'rm -rf "$verify_dir"' EXIT
     mkdir -p "$verify_dir/mount"
     hdiutil attach "$DMG_PATH" -mountpoint "$verify_dir/mount" -nobrowse -quiet
-    cp -R "$verify_dir/mount/AutocompleteLab.app" "$verify_dir/AutocompleteLab.app"
+    cp -R "$verify_dir/mount/SteadyType.app" "$verify_dir/SteadyType.app"
     hdiutil detach "$verify_dir/mount" -quiet
     record_command "$PROOF_DIR/spctl-installed-app.txt" \
-      spctl --assess --type execute --verbose=4 "$verify_dir/AutocompleteLab.app"
+      spctl --assess --type execute --verbose=4 "$verify_dir/SteadyType.app"
     write_checksums
     write_proof_checklist "notarized" "accepted" "validated" "accepted"
     write_fresh_install_proof_instructions

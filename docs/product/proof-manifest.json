@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceCommit": "409f75bff4a6eed9c2256e1865394d677d7ae16a",
+  "sourceCommit": "a17647484961cc573e074b1c83c7f07a18bdecbf",
   "proofFingerprint": {
     "traceProofVersion": "2026-05-07.1",
     "placementProofVersion": "placement-v4",
@@ -203,8 +203,8 @@
         "bundle": "com.openai.codex",
         "displayName": "Codex",
         "versionState": "exact",
-        "hostVersion": "26.506.21252",
-        "hostBuild": "2575",
+        "hostVersion": "26.506.31421",
+        "hostBuild": "2620",
         "versionSource": "/Applications/Codex.app",
         "safetyMode": "wordOnly",
         "runtimeState": "userToggleAllowed",
@@ -220,7 +220,7 @@
             "reference": "Codex/default"
           }
         ],
-        "notes": "Dogfood prompt support is word-only; same-slice no-submit proof is green and full accept remains disabled."
+        "notes": "Dogfood prompt support is word-only; May 12 strict screenshot trace proves one-word Tab accept with no submit. Full accept remains disabled."
       },
       {
         "bundle": "com.anthropic.claude-code",
@@ -433,6 +433,22 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-textarea.png",
         "docs/product/visual-placement-screenshots/chrome-contenteditable.png"
+      ],
+      "manualSmokeVariants": [
+        {
+          "app": "Chrome",
+          "bundle": "com.google.Chrome",
+          "proof": "textarea-public",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "app": "Chrome",
+          "bundle": "com.google.Chrome",
+          "proof": "contenteditable-public",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        }
       ],
       "gaps": [],
       "requirements": [
@@ -905,9 +921,9 @@
       "displayName": "Codex",
       "supportLevel": "yellow",
       "surface": "Codex",
-      "status": "partial",
+      "status": "complete",
       "owner": "prompt-app proof lane",
-      "safetyNote": "Screenshot proof exists, but support must stay yellow until one trace slice proves one-word accept with no prompt submit."
+      "safetyNote": "Codex stays yellow because it is word-only and proof-mode-gated, but the May 12 strict trace proves screenshot-backed one-word Tab accept with no prompt submit."
     },
     {
       "bundle": "com.anthropic.claude-code",
