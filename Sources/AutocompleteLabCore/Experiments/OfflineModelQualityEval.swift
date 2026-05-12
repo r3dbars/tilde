@@ -503,6 +503,7 @@ public enum OfflineModelQualityEvaluator {
         let blocked = [
             "api key",
             "accept all visible text",
+            "accept the change",
             "accept the terms",
             "accept the whole suggestion",
             "bearer token",
