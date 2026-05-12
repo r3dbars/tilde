@@ -26,7 +26,7 @@ archive    Build a release app, sign with Developer ID, validate, and create
 --check    Report whether local signing/notary prerequisites are present.
 --notarize Submit the DMG to Apple notarytool. This uploads the app to Apple.
 --require-notary-profile
-           Make --check fail when NOTARYTOOL_PROFILE is missing.
+           Make --check fail when no usable notarytool profile is available.
 --require-developer-id
            Make --check fail when a Developer ID Application identity is missing.
 --print-proof-template
