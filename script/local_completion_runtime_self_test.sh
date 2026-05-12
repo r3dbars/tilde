@@ -23,6 +23,25 @@ assert module.mlx_model_name("unknown") == module.DEFAULT_MLX_MODEL
 
 os.environ["AUTOCOMPLETE_LAB_MLX_MODEL"] = "local/test-model"
 assert module.mlx_model_name("Qwen3.5 4B") == "local/test-model"
+
+captured = {}
+
+def fake_candidate_executable(env_key, names):
+    assert env_key == "AUTOCOMPLETE_LAB_MLX_BIN"
+    return "/tmp/mlx_lm.generate"
+
+def fake_run_command(command, timeout):
+    captured["command"] = command
+    captured["timeout"] = timeout
+    return "ok"
+
+module.candidate_executable = fake_candidate_executable
+module.run_command = fake_run_command
+module.run_mlx("prompt", "system", 4, 3.5, "Qwen3.5 4B")
+command = captured["command"]
+assert "--chat-template-config" in command
+config = command[command.index("--chat-template-config") + 1]
+assert config == '{"enable_thinking": false}'
 PY
 
 echo "Local completion runtime self-test: PASS"
