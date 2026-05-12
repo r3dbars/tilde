@@ -507,15 +507,16 @@ EOF
 
 1. Unzip `SteadyType.zip`.
 2. Open `SteadyType.app`.
-3. Grant Accessibility when macOS asks.
-4. Open Settings from the menu bar item.
-5. Read `tester-docs/FIRST-RUN-BETA.md`.
-6. If the local model is not ready, use `Install Local Model` or `Repair Local Model` in Settings and wait for it to finish.
-7. Confirm Settings says the model is ready.
-8. Click `Start TextEdit Practice`.
-9. Use Tab for one-word accept.
-10. Press Esc if a suggestion feels wrong.
-11. Use Diagnostics -> Export to create the local redacted trace report and survival report.
+3. Open Settings from the menu bar item.
+4. Read `tester-docs/FIRST-RUN-BETA.md`.
+5. Click `Allow Accessibility` in SteadyType, then grant Accessibility in System Settings.
+6. Return to Settings and confirm Accessibility updates without restarting.
+7. If the local model is not ready, use `Install Local Model` or `Repair Local Model` in Settings and wait for it to finish.
+8. Confirm Settings says the model is ready.
+9. Click `Start TextEdit Practice`.
+10. Use Tab for one-word accept.
+11. Press Esc if a suggestion feels wrong.
+12. Use Diagnostics -> Export to create the local redacted trace report and survival report.
 
 Stop the test if suggestions feel distracting, appear in the wrong app, or
 insert text somewhere surprising.

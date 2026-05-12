@@ -16,8 +16,8 @@ language:
 - `Pause Current App` stops suggestions only in the frontmost app.
 - Typed text, prompts, model output, accepted text, screenshots, document
   names, URLs, recipients, and subject lines stay on this Mac by default.
-- The write-test apps are TextEdit, Notes, Obsidian, and Chrome local text
-  fields.
+- The write-test apps are TextEdit, Notes, Obsidian, and the included Chrome
+  local practice pages.
 - Mail, Atlas, Slack, Discord, Notion, search, login, payment, address, URL,
   secure, and private fields stay off until proof says otherwise.
 
@@ -90,8 +90,8 @@ Do not invite private beta testers until this checklist passes on a clean macOS 
 Keep unchecked boxes and Pending proof rows visible until the run is complete.
 Current known gaps:
 
-- [ ] Accessibility denial/regrant proof is still pending.
-- [ ] Fresh clean-user first-prompt proof is still pending.
+- Accessibility denial/regrant proof is still pending.
+- Fresh clean-user first-prompt proof is still pending.
 
 ## Proof Log
 

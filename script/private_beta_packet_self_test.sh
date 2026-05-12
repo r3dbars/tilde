@@ -96,6 +96,7 @@ require_contains "$FIRST_RUN_DOC" "Write-test only in these apps:"
 require_contains "$FIRST_RUN_DOC" "Do not write-test these as normal beta apps."
 require_contains "$FIRST_RUN_DOC" "Mail"
 require_contains "$FIRST_RUN_DOC" "search, login, payment, address, URL, secure, and private fields"
+require_contains "$FIRST_RUN_DOC" "Chrome included local practice pages"
 
 require_contains "$PRIVACY_DOC" "no default remote crash, analytics, or behavior telemetry path"
 require_contains "$PRIVACY_DOC" "Raw text traces and placement screenshots are debug opt-ins"
@@ -103,6 +104,10 @@ require_contains "$PRIVACY_DOC" "Normal first-run setup does not need Screen Rec
 require_contains "$PRIVACY_DOC" "Pause the current app from the menu bar"
 
 SCRIPT_TEXT="$(cat script/private_beta_packet.sh)"
+
+require_contains "$SCRIPT_TEXT" 'Click `Allow Accessibility` in SteadyType'
+require_contains "$SCRIPT_TEXT" "confirm Accessibility updates without restarting"
+reject_contains "$SCRIPT_TEXT" "Grant Accessibility when macOS asks"
 
 for expected_doc in \
   "PRIVACY-BETA.md" \
