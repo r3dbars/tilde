@@ -166,9 +166,9 @@ public struct KeyboardShortcutConflictPolicy: Equatable, Sendable {
         guard acceptAllShortcut != .disabled else {
             return KeyboardShortcutConflictEvaluation(
                 level: .none,
-                statusText: "Conflict check: full accept is off",
+                statusText: "Conflict check: whole-suggestion accept is off",
                 detailText: "Tab still accepts the next word when suggestions are visible.",
-                perAppProfileText: "Per-app profile: full accept is disabled."
+                perAppProfileText: "Per-app profile: whole-suggestion accept is disabled."
             )
         }
 
@@ -177,7 +177,7 @@ public struct KeyboardShortcutConflictPolicy: Equatable, Sendable {
                 level: .warning,
                 statusText: "Conflict check: choose an app",
                 detailText: "Open a writing app to check the shortcut against that app profile.",
-                perAppProfileText: "Per-app profile: choose an app to check full accept."
+                perAppProfileText: "Per-app profile: choose an app to check whole-suggestion accept."
             )
         }
 
@@ -185,7 +185,7 @@ public struct KeyboardShortcutConflictPolicy: Equatable, Sendable {
             return KeyboardShortcutConflictEvaluation(
                 level: .blocked,
                 statusText: "Conflict check: \(context.appDisplayName) is paused",
-                detailText: "Full accept will not run while this app is paused.",
+                detailText: "Whole-suggestion accept will not run while this app is paused.",
                 perAppProfileText: "Per-app profile: \(context.appDisplayName) is paused."
             )
         }
@@ -202,9 +202,9 @@ public struct KeyboardShortcutConflictPolicy: Equatable, Sendable {
         guard context.supportsFullAcceptance else {
             return KeyboardShortcutConflictEvaluation(
                 level: .blocked,
-                statusText: "Conflict check: full accept is off in \(context.appDisplayName)",
-                detailText: "Tab next word is allowed, but full accept stays off for this app.",
-                perAppProfileText: "Per-app profile: \(context.appDisplayName) allows Tab next word only."
+                statusText: "Conflict check: whole-suggestion accept is off in \(context.appDisplayName)",
+                detailText: "Tab accepts one word, but whole-suggestion accept stays off for this app.",
+                perAppProfileText: "Per-app profile: \(context.appDisplayName) allows Tab one-word accept only."
             )
         }
 
@@ -213,15 +213,15 @@ public struct KeyboardShortcutConflictPolicy: Equatable, Sendable {
                 level: .warning,
                 statusText: "Conflict check: Option-Tab may overlap app shortcuts",
                 detailText: "Backtick is quieter if Option-Tab already means something in this app.",
-                perAppProfileText: "Per-app profile: \(context.appDisplayName) allows Tab next word and full accept."
+                perAppProfileText: "Per-app profile: \(context.appDisplayName) allows Tab one-word accept and whole-suggestion accept."
             )
         }
 
         return KeyboardShortcutConflictEvaluation(
             level: .none,
             statusText: "Conflict check: no known conflict in \(context.appDisplayName)",
-            detailText: "Full accept is checked against the current app profile before it can run.",
-            perAppProfileText: "Per-app profile: \(context.appDisplayName) allows Tab next word and full accept."
+            detailText: "Whole-suggestion accept is checked against the current app profile before it can run.",
+            perAppProfileText: "Per-app profile: \(context.appDisplayName) allows Tab one-word accept and whole-suggestion accept."
         )
     }
 }

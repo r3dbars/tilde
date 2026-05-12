@@ -74,12 +74,12 @@ struct SettingsWindowControllerStateTests {
         #expect(allowed.statusText == "Current app: TextEdit is green and on")
         #expect(
             allowed.detailText
-                == "Verified inline suggestions and native text insertion. Suggestions are on for this app."
+                == "Verified suggestions near the cursor and native text insertion. Suggestions are on for this app."
         )
-        #expect(allowed.modeText == "Mode: inline, mirror fallback")
-        #expect(allowed.acceptanceText == "Acceptance: Tab next word + full accept")
-        #expect(allowed.fallbackText == "Fallback: not needed; inline is available.")
-        #expect(allowed.proofText == "Proof: use disposable text, press Tab once, then the full-accept shortcut.")
+        #expect(allowed.modeText == "Mode: next to the cursor, floating backup fallback")
+        #expect(allowed.acceptanceText == "Keys: Tab accepts one word. Whole-suggestion accept is allowed here.")
+        #expect(allowed.fallbackText == "Fallback: not needed; cursor placement is available.")
+        #expect(allowed.proofText == "Proof: use disposable text, press Tab once, then the whole-suggestion shortcut.")
         #expect(allowed.proofCommandText == "Command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit")
         #expect(allowed.proofCommandClipboardText == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit")
         #expect(allowed.copyProofCommandButtonTitle == "Copy Proof Command")
@@ -114,10 +114,10 @@ struct SettingsWindowControllerStateTests {
         #expect(blocked.statusText == "Current app: Notes is yellow and off")
         #expect(
             blocked.detailText
-                == "Rich text can drift; display can fall back to floating, and insertion fails closed. Suggestions are paused in this app. Resume only where you want to test."
+                == "Rich text can drift; display can use a floating backup, and insertion fails closed. Suggestions are paused in this app. Resume only where you want to test."
         )
-        #expect(blocked.modeText == "Mode: inline, mirror fallback")
-        #expect(blocked.acceptanceText == "Acceptance: Tab next word + full accept")
+        #expect(blocked.modeText == "Mode: next to the cursor, floating backup fallback")
+        #expect(blocked.acceptanceText == "Keys: Tab accepts one word. Whole-suggestion accept is allowed here.")
         #expect(blocked.fallbackText == "Fallback: off while this app is paused.")
         #expect(blocked.proofText == "Proof: turn on suggestions for this app first.")
         #expect(blocked.proofCommandText == nil)
@@ -231,7 +231,7 @@ struct SettingsWindowControllerStateTests {
         #expect(safari.statusText == "Current app: Safari is diagnostics-only")
         #expect(safari.modeText == "Mode: disabled")
         #expect(safari.acceptanceText == "Acceptance: off here")
-        #expect(safari.fallbackText == "Fallback: copy-only; inline and auto-insert stay off until proof passes.")
+        #expect(safari.fallbackText == "Fallback: copy-only; cursor placement and auto-insert stay off until proof passes.")
         #expect(safari.proofText == "Proof: unavailable here.")
         #expect(!safari.canToggle)
     }
@@ -248,8 +248,8 @@ struct SettingsWindowControllerStateTests {
         )
 
         #expect(codex.statusText == "Current app: Codex is yellow and on")
-        #expect(codex.modeText == "Mode: inline, mirror fallback")
-        #expect(codex.acceptanceText == "Acceptance: Tab next word only; full accept is off for safety")
+        #expect(codex.modeText == "Mode: next to the cursor, floating backup fallback")
+        #expect(codex.acceptanceText == "Keys: Tab accepts one word. Whole-suggestion accept is off for safety.")
         #expect(codex.proofText == "Proof: include AUTOCOMPLETE_LAB_CODEX_PROOF, press Tab once, and do not press Enter.")
         #expect(
             codex.proofCommandText
@@ -274,7 +274,7 @@ struct SettingsWindowControllerStateTests {
             renderModeOverride: .floatingMirror
         )
 
-        #expect(forcedMirror.modeText == "Mode: mirror forced (profile inline)")
+        #expect(forcedMirror.modeText == "Mode: floating backup forced (profile next to the cursor)")
         #expect(forcedMirror.modeButtonTitle == "Use Profile Mode")
         #expect(forcedMirror.canOverrideMode)
         #expect(forcedMirror.proofButtonTitle == "Run TextEdit Proof")
@@ -324,7 +324,7 @@ struct SettingsWindowControllerStateTests {
         #expect(needed.statusText == "Accessibility permission: needed")
         #expect(
             needed.detailText
-                == "Allow Accessibility in System Settings so SteadyType can see the focused text field, find the cursor, and insert text only when you accept. If you denied it, use Open Privacy Settings and turn SteadyType back on. Text stays on this Mac. Normal setup does not need Screen Recording."
+                == "Click Allow Accessibility when you are ready. macOS will ask for access so SteadyType can read the focused text field, place suggestions near the cursor, and insert text only after you accept. If you denied it, use Open Privacy Settings and turn SteadyType back on. Text stays on this Mac. Normal setup does not need Screen Recording."
         )
 
         let allowed = SettingsPermissionState(isTrusted: true)
@@ -347,9 +347,10 @@ struct SettingsWindowControllerStateTests {
         #expect(state.detailText.contains("Pause stops suggestions everywhere"))
         #expect(state.detailText.contains("stay on this Mac"))
         #expect(state.detailText.contains("redacted Privacy Bundle"))
-        #expect(state.appsText.contains("TextEdit, Notes, Obsidian, and Chrome local text fields"))
-        #expect(state.appsText.contains("Codex and Claude are proof targets"))
-        #expect(state.appsText.contains("Mail, Atlas, chat, search, login, payment, URL, and private fields stay off"))
+        #expect(state.appsText.contains("TextEdit, Notes, Obsidian, and the included Chrome practice pages"))
+        #expect(state.appsText.contains("Do not test random websites"))
+        #expect(state.appsText.contains("Do not use Codex or Claude for normal testing unless asked"))
+        #expect(state.appsText.contains("special safety tests"))
     }
 
     @Test("Privacy copy exposes diagnostics and raw content state")
@@ -595,17 +596,17 @@ struct SettingsWindowControllerStateTests {
     func keyboardShortcutCopySupportsDirectAcceptAllEditing() {
         let backtick = SettingsKeyboardShortcutState(acceptAllShortcut: .backtick)
 
-        #expect(backtick.statusText == "Shortcuts: Tab next word | Backtick all")
+        #expect(backtick.statusText == "Shortcuts: Tab accepts one word | Backtick accepts whole suggestion")
         #expect(backtick.conflictText == "Conflict check: choose an app")
-        #expect(backtick.perAppProfileText == "Per-app profile: choose an app to check full accept.")
-        #expect(backtick.acceptAllPickerLabel == "Accept all:")
+        #expect(backtick.perAppProfileText == "Per-app profile: choose an app to check whole-suggestion accept.")
+        #expect(backtick.acceptAllPickerLabel == "Whole suggestion:")
         #expect(backtick.cycleButtonTitle == "Use Option-Tab")
 
         let optionTab = SettingsKeyboardShortcutState(acceptAllShortcut: .optionTab)
 
-        #expect(optionTab.statusText == "Shortcuts: Tab next word | Option-Tab all")
+        #expect(optionTab.statusText == "Shortcuts: Tab accepts one word | Option-Tab accepts whole suggestion")
         #expect(optionTab.conflictDetailText == "Open a writing app to check the shortcut against that app profile.")
-        #expect(optionTab.acceptAllPickerLabel == "Accept all:")
+        #expect(optionTab.acceptAllPickerLabel == "Whole suggestion:")
         #expect(optionTab.cycleButtonTitle == "Use Backtick")
 
         let store = CompatibilityProfileStore.mvp
@@ -620,7 +621,7 @@ struct SettingsWindowControllerStateTests {
             )
         )
         #expect(textEdit.conflictText == "Conflict check: no known conflict in TextEdit")
-        #expect(textEdit.perAppProfileText == "Per-app profile: TextEdit allows Tab next word and full accept.")
+        #expect(textEdit.perAppProfileText == "Per-app profile: TextEdit allows Tab one-word accept and whole-suggestion accept.")
 
         let codex = SettingsKeyboardShortcutState(
             acceptAllShortcut: .backtick,
@@ -632,8 +633,8 @@ struct SettingsWindowControllerStateTests {
                 disabledAppCount: 0
             )
         )
-        #expect(codex.conflictText == "Conflict check: full accept is off in Codex")
-        #expect(codex.perAppProfileText == "Per-app profile: Codex allows Tab next word only.")
+        #expect(codex.conflictText == "Conflict check: whole-suggestion accept is off in Codex")
+        #expect(codex.perAppProfileText == "Per-app profile: Codex allows Tab one-word accept only.")
     }
 
     @Test("Pause state copy stays shared across surfaces")

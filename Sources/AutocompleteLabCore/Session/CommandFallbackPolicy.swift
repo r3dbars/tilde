@@ -38,9 +38,9 @@ public struct CommandFallbackDecision: Equatable, Sendable {
     public var statusText: String {
         switch availability {
         case .inlineAvailable:
-            return "Fallback: not needed; inline is available."
+            return "Fallback: not needed; cursor placement is available."
         case .copyOnly:
-            return "Fallback: copy-only; inline and auto-insert stay off until proof passes."
+            return "Fallback: copy-only; cursor placement and auto-insert stay off until proof passes."
         case .unavailable:
             switch reason {
             case .noCurrentApp:
@@ -54,7 +54,7 @@ public struct CommandFallbackDecision: Equatable, Sendable {
             case .diagnosticsOnlyProfile, .untrustedPlacement, .unsupportedProfile:
                 return "Fallback: unavailable here."
             case .inlineAvailable:
-                return "Fallback: not needed; inline is available."
+                return "Fallback: not needed; cursor placement is available."
             }
         }
     }
@@ -64,7 +64,7 @@ public struct CommandFallbackDecision: Equatable, Sendable {
         case .noCurrentApp:
             return "No text is read until a current writing app is selected."
         case .inlineAvailable:
-            return "Use the normal inline path; the fallback stays out of the typing loop."
+            return "Use the normal cursor-placement path; the fallback stays out of the typing loop."
         case .appDisabled:
             return "The user's app pause wins over fallback helpers."
         case .sensitiveApp:
@@ -76,11 +76,11 @@ public struct CommandFallbackDecision: Equatable, Sendable {
         case .denylistedApp:
             return "Denylisted apps stay fully unavailable."
         case .diagnosticsOnlyProfile:
-            return "A non-sensitive diagnostics-only profile can use explicit copy-only fallback, but never inline insert."
+            return "A non-sensitive diagnostics-only profile can use explicit copy-only fallback, but never automatic insert."
         case .untrustedPlacement:
             return "When placement is untrusted, the app can fall back to copy-only instead of showing detached ghost text."
         case .unsupportedProfile:
-            return "This profile has no safe inline or copy-only fallback."
+            return "This profile has no safe cursor-placement or copy-only fallback."
         }
     }
 }

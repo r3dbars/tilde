@@ -149,11 +149,11 @@ struct SettingsCurrentAppState: Equatable {
 
         switch (profile.supportsOneWordAcceptance, profile.supportsFullAcceptance) {
         case (true, true):
-            return "Acceptance: Tab next word + full accept"
+            return "Keys: Tab accepts one word. Whole-suggestion accept is allowed here."
         case (true, false):
-            return "Acceptance: Tab next word only; full accept is off for safety"
+            return "Keys: Tab accepts one word. Whole-suggestion accept is off for safety."
         case (false, true):
-            return "Acceptance: full accept only"
+            return "Keys: whole-suggestion accept only"
         case (false, false):
             return "Acceptance: off here"
         }
@@ -231,7 +231,7 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         if profile.supportsOneWordAcceptance && profile.supportsFullAcceptance {
-            return "Proof: use disposable text, press Tab once, then the full-accept shortcut."
+            return "Proof: use disposable text, press Tab once, then the whole-suggestion shortcut."
         }
 
         return "Proof: use disposable text and verify accepted text stays in the field."
@@ -295,9 +295,9 @@ struct SettingsCurrentAppState: Equatable {
     private static func renderModeName(_ mode: SuggestionRenderMode) -> String {
         switch mode {
         case .inlineAdjacent:
-            return "inline"
+            return "next to the cursor"
         case .floatingMirror:
-            return "mirror"
+            return "floating backup"
         case .disabled:
             return "disabled"
         }
@@ -316,7 +316,7 @@ struct SettingsPermissionState: Equatable {
             return "SteadyType can see the focused text field, place suggestions at the cursor, and insert text only when you accept. Text stays on this Mac. Normal setup does not need Screen Recording."
         }
 
-        return "Allow Accessibility in System Settings so SteadyType can see the focused text field, find the cursor, and insert text only when you accept. If you denied it, use Open Privacy Settings and turn SteadyType back on. Text stays on this Mac. Normal setup does not need Screen Recording."
+        return "Click Allow Accessibility when you are ready. macOS will ask for access so SteadyType can read the focused text field, place suggestions near the cursor, and insert text only after you accept. If you denied it, use Open Privacy Settings and turn SteadyType back on. Text stays on this Mac. Normal setup does not need Screen Recording."
     }
 }
 
@@ -330,7 +330,7 @@ struct SettingsFirstRunTrustState: Equatable {
     }
 
     var appsText: String {
-        "Supported test apps: TextEdit, Notes, Obsidian, and Chrome local text fields. Codex and Claude are proof targets. Mail, Atlas, chat, search, login, payment, URL, and private fields stay off."
+        "Supported test apps: TextEdit, Notes, Obsidian, and the included Chrome practice pages. Do not test random websites, search boxes, login, address, payment, or private fields. Do not use Codex or Claude for normal testing unless asked; they are special safety tests."
     }
 }
 
@@ -443,7 +443,7 @@ struct SettingsKeyboardShortcutState: Equatable {
     }
 
     var statusText: String {
-        "Shortcuts: Tab next word | \(acceptAllShortcut.displayName) all"
+        "Shortcuts: Tab accepts one word | \(acceptAllShortcut.displayName) accepts whole suggestion"
     }
 
     var cycleButtonTitle: String {
@@ -456,7 +456,7 @@ struct SettingsKeyboardShortcutState: Equatable {
     }
 
     var acceptAllPickerLabel: String {
-        "Accept all:"
+        "Whole suggestion:"
     }
 
     var conflictText: String {
@@ -743,7 +743,7 @@ final class SettingsWindowController: NSObject {
     private let forceMirrorModeButton = NSButton(title: "Force Mirror Mode", target: nil, action: nil)
     private let startAppProofButton = NSButton(title: "Start App Proof", target: nil, action: nil)
     private let copyProofCommandButton = NSButton(title: "Copy Proof Command", target: nil, action: nil)
-    private let enableAllAppsButton = NSButton(title: "Clear Blocked Apps", target: nil, action: nil)
+    private let enableAllAppsButton = NSButton(title: "Resume All Paused Apps", target: nil, action: nil)
     private let privacyLabel = NSTextField(labelWithString: "")
     private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
     private let rawContentStatusLabel = NSTextField(labelWithString: "")
@@ -781,7 +781,7 @@ final class SettingsWindowController: NSObject {
     private let shortcutConflictLabel = NSTextField(labelWithString: "")
     private let shortcutConflictDetailLabel = NSTextField(labelWithString: "")
     private let shortcutPerAppProfileLabel = NSTextField(labelWithString: "")
-    private let acceptAllShortcutLabel = NSTextField(labelWithString: "Accept all:")
+    private let acceptAllShortcutLabel = NSTextField(labelWithString: "Whole suggestion:")
     private let acceptAllShortcutPopup = NSPopUpButton()
     private let cycleAcceptAllShortcutButton = NSButton(title: "Use Option-Tab", target: nil, action: nil)
     private let aggressivenessLabel = NSTextField(labelWithString: "")
@@ -1007,7 +1007,9 @@ final class SettingsWindowController: NSObject {
             runtimeActionButton.isEnabled = true
             currentRuntimeAction = .cancelModelInstall
         } else {
-            runtimeActionLabel.stringValue = "Next step: \(runtimeReport.action.displayName)"
+            runtimeActionLabel.stringValue = runtimeReport.action == .none
+                ? "Next step: Model ready."
+                : "Next step: \(runtimeReport.action.displayName)"
             runtimeActionButton.title = guidance.actionTitle
             runtimeActionButton.isEnabled = guidance.isActionEnabled
             currentRuntimeAction = runtimeReport.action
