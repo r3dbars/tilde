@@ -3708,6 +3708,96 @@ print("")
 SWIFT
 }
 
+set_textedit_document_text() {
+  local window_title="$1"
+  local text="$2"
+
+  swift - "$window_title" "$text" <<'SWIFT'
+import AppKit
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 3 else {
+    exit(2)
+}
+
+let targetTitle = CommandLine.arguments[1]
+let replacementText = CommandLine.arguments[2]
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func firstTextInput(in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
+    guard depth <= 8 else {
+        return nil
+    }
+
+    let role = copyAttribute(element, kAXRoleAttribute) as? String
+    if role == kAXTextAreaRole as String || role == kAXTextFieldRole as String {
+        return element
+    }
+
+    for child in children(of: element) {
+        if let found = firstTextInput(in: child, depth: depth + 1) {
+            return found
+        }
+    }
+
+    return nil
+}
+
+func setSelectedTextRange(_ range: CFRange, in element: AXUIElement) -> Bool {
+    var mutableRange = range
+    guard let rangeValue = AXValueCreate(.cfRange, &mutableRange) else {
+        return false
+    }
+    return AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, rangeValue) == .success
+}
+
+for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    AXUIElementSetMessagingTimeout(appElement, 0.5)
+    guard let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] else {
+        continue
+    }
+
+    for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+        guard let textInput = firstTextInput(in: window) else {
+            exit(1)
+        }
+
+        app.activate(options: [.activateAllWindows])
+        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+        AXUIElementSetAttributeValue(textInput, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+
+        let currentValue = copyAttribute(textInput, kAXValueAttribute) as? String ?? ""
+        guard setSelectedTextRange(CFRange(location: 0, length: currentValue.utf16.count), in: textInput) else {
+            exit(1)
+        }
+        guard AXUIElementSetAttributeValue(textInput, kAXSelectedTextAttribute as CFString, replacementText as CFString) == .success else {
+            exit(1)
+        }
+        guard setSelectedTextRange(CFRange(location: replacementText.utf16.count, length: 0), in: textInput) else {
+            exit(1)
+        }
+        exit(0)
+    }
+}
+
+exit(1)
+SWIFT
+}
+
 textedit_document_exists() {
   local window_title="$1"
 
@@ -4065,14 +4155,7 @@ type_textedit_smoke_fragment_and_confirm() {
   echo "TextEdit did not receive the $label fragment; refocusing and retrying once." >&2
   focus_textedit_smoke_editor "$window_title"
   click_textedit_smoke_editor "$window_title"
-  osascript <<'APPLESCRIPT'
-tell application "System Events"
-  keystroke "a" using command down
-  key code 51
-  key code 53
-end tell
-delay 0.2
-APPLESCRIPT
+  set_textedit_document_text "$window_title" ""
   type_textedit_smoke_fragment "$window_title" "$fragment"
   wait_for_textedit_document_fragment "$window_title" "$fragment" "$label retry" 5
 }
@@ -8006,14 +8089,7 @@ run_textedit() {
   wait_for_textedit_smoke_editor "$textedit_window_title"
   focus_textedit_smoke_editor "$textedit_window_title"
   click_textedit_smoke_editor "$textedit_window_title"
-  osascript <<'APPLESCRIPT'
-tell application "System Events"
-  keystroke "a" using command down
-  key code 51
-  key code 53
-end tell
-delay 0.4
-APPLESCRIPT
+  set_textedit_document_text "$textedit_window_title" ""
   click_textedit_smoke_editor "$textedit_window_title"
 
   if [[ "$TEXTEDIT_VARIANT" == "scrolled" ]]; then
