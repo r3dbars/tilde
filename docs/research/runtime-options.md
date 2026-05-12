@@ -19,7 +19,7 @@ future app-owned packaging work.
 The preferred beta model asset is Qwen3.5 4B 4-bit:
 
 ```text
-~/Library/Application Support/AutocompleteLab/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
+~/Library/Application Support/SteadyType/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
 ```
 
 The matching development download alias is:
@@ -35,6 +35,11 @@ In the app, Settings now owns the install path. When the model folder is
 missing, use `Install Local Model`. When the folder is incomplete, use `Repair
 Local Model`. The app rechecks the asset and retries the MLX runtime after the
 download completes.
+
+The default model source is pinned to Hugging Face revision
+`32f3e8ecf65426fc3306969496342d504bfa13f3`. Install and repair flows write a
+local `.steadytype-model-integrity.json` receipt with file sizes and SHA-256
+hashes. `./script/check_model_asset.py` verifies that receipt before beta use.
 
 Sources:
 
@@ -77,13 +82,13 @@ native build.
 Use the MLX/Hugging Face directory format under:
 
 ```text
-~/Library/Application Support/AutocompleteLab/Models/<ModelName>/MLX/<AssetFolder>
+~/Library/Application Support/SteadyType/Models/<ModelName>/MLX/<AssetFolder>
 ```
 
 The preferred beta asset currently resolves to:
 
 ```text
-~/Library/Application Support/AutocompleteLab/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
+~/Library/Application Support/SteadyType/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
 ```
 
 The directory should contain at least:
@@ -91,6 +96,7 @@ The directory should contain at least:
 - `config.json`
 - tokenizer files such as `tokenizer.json` or `tokenizer_config.json`
 - one or more `.safetensors` weight files
+- `.steadytype-model-integrity.json`
 
 The default model repo is `mlx-community/Qwen3.5-4B-MLX-4bit`.
 

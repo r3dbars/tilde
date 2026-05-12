@@ -44,7 +44,7 @@ Useful docs:
 
 The app owns the model runtime. Testers should not need to start Ollama, llama.cpp, Python, or any other server.
 
-The current local runtime path uses MLX on Apple Silicon and downloads the default model files once.
+The current local runtime path uses MLX on Apple Silicon and downloads one pinned default model revision once. The beta gate checks the local checksum receipt before calling the model ready.
 
 ## What This Is Not
 

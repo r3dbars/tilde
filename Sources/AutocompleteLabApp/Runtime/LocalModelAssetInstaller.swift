@@ -179,6 +179,10 @@ struct LocalModelAssetInstaller: Sendable {
         }
 
         await progressHandler?(.init(phase: .validating))
+        _ = try ModelAssetIntegrityReceiptWriter.write(
+            manifest: manifest,
+            modelDirectoryURL: destinationURL
+        )
         let state = modelAssetState(at: destinationURL)
         guard state.isUsable else {
             throw LocalModelAssetInstallerError.invalidAfterInstall(state.statusSummary)

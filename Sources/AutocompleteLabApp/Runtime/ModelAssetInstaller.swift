@@ -159,6 +159,12 @@ struct ModelAssetInstaller {
             throw ModelAssetInstallerError.invalidDownloadedAsset(reason)
         }
 
+        _ = try ModelAssetIntegrityReceiptWriter.write(
+            manifest: manifest,
+            modelDirectoryURL: snapshotURL,
+            fileManager: fileManager
+        )
+
         let parentURL = targetURL.deletingLastPathComponent()
         try fileManager.createDirectory(at: parentURL, withIntermediateDirectories: true)
 

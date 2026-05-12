@@ -4,8 +4,15 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
+
+from model_asset_integrity import (
+    RECEIPT_NAME,
+    validate_integrity_receipt,
+    write_integrity_receipt,
+)
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DOWNLOAD_SCRIPT = ROOT_DIR / "script" / "download_mlx_model.py"
@@ -75,6 +82,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Only print failures.",
     )
+    parser.add_argument(
+        "--write-integrity-receipt",
+        action="store_true",
+        help="Write or refresh the local checksum receipt before validating it.",
+    )
 
     args = parser.parse_args()
     if args.model not in models:
@@ -107,6 +119,7 @@ def validation_failure(model: str, path: Path, reason: str) -> str:
             "Fix:",
             "  Open SteadyType Settings and use the Local model action.",
             "  The app shows the expected model folder and keeps suggestions off until the model is valid.",
+            f"  The verifier requires the pinned revision and {RECEIPT_NAME} checksum receipt.",
             "",
             "Developer fallback:",
             "  python3 -m pip install --user huggingface_hub",
@@ -118,11 +131,28 @@ def validation_failure(model: str, path: Path, reason: str) -> str:
     )
 
 
-def validate_model(model: str, path: Path) -> tuple[bool, str, int, int]:
+def validate_model(
+    model: str,
+    path: Path,
+    *,
+    write_receipt: bool = False,
+) -> tuple[bool, str, int, int]:
+    models = load_download_models()
+    model_info = models[model]
     validation = MODEL_VALIDATION[model]
     required_files = validation["required_files"]
     weight_extension = validation["weight_extension"]
-    minimum_weight_bytes = validation["minimum_weight_bytes"]
+    minimum_weight_bytes = int(
+        os.environ.get(
+            "AUTOCOMPLETE_LAB_MODEL_MINIMUM_WEIGHT_BYTES",
+            str(validation["minimum_weight_bytes"]),
+        )
+    )
+    repo_id = model_info["repo_id"]
+    revision = model_info.get("revision")
+
+    if not revision:
+        return False, "model download is not pinned to an immutable revision", 0, 0
 
     if not path.exists():
         return False, f"missing {validation['display_name']} MLX model", 0, 0
@@ -157,6 +187,24 @@ def validate_model(model: str, path: Path) -> tuple[bool, str, int, int]:
             weight_bytes,
         )
 
+    if write_receipt:
+        write_integrity_receipt(
+            model=model,
+            display_name=validation["display_name"],
+            repo_id=repo_id,
+            revision=revision,
+            path=path,
+        )
+
+    receipt_error = validate_integrity_receipt(
+        model=model,
+        repo_id=repo_id,
+        revision=revision,
+        path=path,
+    )
+    if receipt_error:
+        return False, receipt_error, len(weight_files), weight_bytes
+
     return True, "ok", len(weight_files), weight_bytes
 
 
@@ -168,15 +216,23 @@ def main() -> int:
         print(path)
         return 0
 
-    is_valid, reason, weight_count, weight_bytes = validate_model(args.model, path)
+    is_valid, reason, weight_count, weight_bytes = validate_model(
+        args.model,
+        path,
+        write_receipt=args.write_integrity_receipt,
+    )
     if not is_valid:
         print(validation_failure(args.model, path, reason), file=sys.stderr)
         return 1
 
     if not args.quiet:
+        models = load_download_models()
+        model_info = models[args.model]
         display_name = MODEL_VALIDATION[args.model]["display_name"]
         print(f"Model asset verified: {display_name} MLX ({args.model})")
         print(f"Path: {path}")
+        print(f"Revision: {model_info.get('revision')}")
+        print(f"Integrity receipt: {path / RECEIPT_NAME}")
         print(f"Weights: {format_bytes(weight_bytes)} across {weight_count} file(s)")
 
     return 0
