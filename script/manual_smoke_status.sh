@@ -199,7 +199,7 @@ proof_source_paths_for_bundle() {
     return
   fi
 
-  local paths="Package.swift Package.resolved Sources"
+  local paths="Package.swift Package.resolved Sources :!Sources/AutocompleteLabCore/Experiments"
   if [[ "$bundle_id" != "com.anthropic.claude-code" ]]; then
     paths+=" :!Sources/AutocompleteLabCore/Configuration/ClaudeCodeTerminalHostProofPolicy.swift"
   fi

@@ -3,23 +3,41 @@
 Score: 100.0/100
 Squared score: 10000.0/10000
 
-This deterministic harness uses 500 synthetic cases. It now checks two paths: the model candidate cleaner/ranker when the right answer is present, and the predictive common-phrase fallback when the raw model candidates omit the right answer. It still suppresses prompt-app, search, form, password, and code-like negatives.
+This deterministic harness uses 500 synthetic cases. It now checks two paths: the model candidate cleaner/ranker when the right answer is present, and the predictive common-phrase fallback when the raw model candidates omit the right answer. It scores exact next word, useful suffix, 2-4 word continuation, over-eager/chatty output, repetition, wrong-topic continuation, unsafe/sensitive output, and user-feel. It still suppresses prompt-app, search, form, password, and code-like negatives.
 
-## Summary
+`Shown` counts visible positive suggestions. The 100 expected-silence cases should stay hidden.
+
+## Exactness Summary
 
 | Surface | Shown | Next word exact | 2-word exact | 3-word exact | 4-word exact | Silence exact | Unsafe displays |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Code field negative | 0/20 | 100% | 100% | 100% | 100% | 100% | 0 |
+| Code field negative | 0/20 | n/a | n/a | n/a | n/a | 100% | 0 |
 | Chrome contenteditable | 80/80 | 100% | 100% | 100% | 100% | 100% | 0 |
 | Chrome textarea | 80/80 | 100% | 100% | 100% | 100% | 100% | 0 |
-| Codex prompt negative | 0/20 | 100% | 100% | 100% | 100% | 100% | 0 |
-| Form field negative | 0/20 | 100% | 100% | 100% | 100% | 100% | 0 |
+| Codex prompt negative | 0/20 | n/a | n/a | n/a | n/a | 100% | 0 |
+| Form field negative | 0/20 | n/a | n/a | n/a | n/a | 100% | 0 |
 | Notes | 80/80 | 100% | 100% | 100% | 100% | 100% | 0 |
 | Obsidian | 80/80 | 100% | 100% | 100% | 100% | 100% | 0 |
-| Password field negative | 0/20 | 100% | 100% | 100% | 100% | 100% | 0 |
-| Search field negative | 0/20 | 100% | 100% | 100% | 100% | 100% | 0 |
+| Password field negative | 0/20 | n/a | n/a | n/a | n/a | 100% | 0 |
+| Search field negative | 0/20 | n/a | n/a | n/a | n/a | 100% | 0 |
 | TextEdit | 80/80 | 100% | 100% | 100% | 100% | 100% | 0 |
 | Total | 400/500 | 100% | 100% | 100% | 100% | 100% | 0 |
+
+## Guardrail Summary
+
+| Surface | Useful suffix | Over-eager/chatty ok | Repetition ok | Wrong-topic ok | Unsafe/sensitive ok | User-feel ok |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Code field negative | n/a | 100% | 100% | 100% | 100% | 100% |
+| Chrome contenteditable | 100% | 100% | 100% | 100% | 100% | 100% |
+| Chrome textarea | 100% | 100% | 100% | 100% | 100% | 100% |
+| Codex prompt negative | n/a | 100% | 100% | 100% | 100% | 100% |
+| Form field negative | n/a | 100% | 100% | 100% | 100% | 100% |
+| Notes | 100% | 100% | 100% | 100% | 100% | 100% |
+| Obsidian | 100% | 100% | 100% | 100% | 100% | 100% |
+| Password field negative | n/a | 100% | 100% | 100% | 100% | 100% |
+| Search field negative | n/a | 100% | 100% | 100% | 100% | 100% |
+| TextEdit | 100% | 100% | 100% | 100% | 100% | 100% |
+| Total | 100% | 100% | 100% | 100% | 100% | 100% |
 
 ## Source Mix
 
