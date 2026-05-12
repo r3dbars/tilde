@@ -94,7 +94,8 @@ if ! grep -F 'reset_textedit_smoke_document "$textedit_window_title" "initial Te
 fi
 if ! grep -F 'wait_for_textedit_document_exact_at_end' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'current_caret="$(textedit_document_caret_location "$window_title")"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'expected_text="${before_text}${fragment}"' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'expected_text="${before_text}${fragment}"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '$text = "" unless defined $text' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit proof to require exact text with caret at end before suggestions" >&2
   exit 1
 fi
