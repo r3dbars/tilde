@@ -410,6 +410,7 @@ CHROME_LAST_LAUNCHED_PID=""
 SMOKE_LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-real-app-smoke.lock}"
 SMOKE_LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS:-300}"
 SMOKE_LOCK_HELD=0
+SMOKE_SCRIPT_PID="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SELF_PID:-${BASHPID:-$$}}"
 
 if [[ ! "$SMOKE_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]]; then
   echo "AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS must be a non-negative integer." >&2
@@ -525,7 +526,7 @@ acquire_smoke_lock() {
   while true; do
     if mkdir "$SMOKE_LOCK_DIR" >/dev/null 2>&1; then
       SMOKE_LOCK_HELD=1
-      echo "$$" >"$SMOKE_LOCK_DIR/pid"
+      echo "$SMOKE_SCRIPT_PID" >"$SMOKE_LOCK_DIR/pid"
       return 0
     fi
 
@@ -554,14 +555,14 @@ acquire_smoke_lock() {
 
 other_smoke_process_lines() {
   local process_list current_pgid
-  current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ' || true)"
+  current_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d ' ' || true)"
   if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST+x}" == "x" ]]; then
     process_list="$AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST"
   else
     process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
   fi
 
-  awk -v self="$$" -v selfPGID="$current_pgid" '
+  awk -v self="$SMOKE_SCRIPT_PID" -v selfPGID="$current_pgid" '
     {
       pid = $1
       pgid = $3
