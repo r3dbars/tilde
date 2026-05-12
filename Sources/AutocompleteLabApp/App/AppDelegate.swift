@@ -51,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
     private let suggestionReplacementVisibilityPolicy = SuggestionReplacementVisibilityPolicy()
     private let suggestionGeometryChangePolicy = SuggestionGeometryChangePolicy()
+    private let suggestionInterruptionPolicy = SuggestionInterruptionPolicy()
     private let workspaceFocusChangePolicy = WorkspaceFocusChangePolicy()
     private let visibleSuggestionPersistencePolicy = VisibleSuggestionPersistencePolicy()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
@@ -201,6 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suppressedFieldIdentities: Set<FocusedFieldIdentity> = []
     private var disabledBundleIdentifiers: Set<String> = []
     private var debounceTask: Task<Void, Never>?
+    private var debounceTaskSuggestionID: String?
     private var insertionVerificationTask: Task<Void, Never>?
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
     private var acceptanceSurvivalTasks: [String: Task<Void, Never>] = [:]
@@ -343,6 +345,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         bundleIdentifier: bundleIdentifier
                     )
                 }
+            },
+            center.addObserver(
+                forName: NSWorkspace.willSleepNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.handleSuggestionInterruption(.systemWillSleep)
+                }
+            },
+            center.addObserver(
+                forName: NSWorkspace.didWakeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.handleSuggestionInterruption(.systemDidWake)
+                }
+            },
+            center.addObserver(
+                forName: NSWorkspace.screensDidSleepNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.handleSuggestionInterruption(.displaysDidSleep)
+                }
+            },
+            center.addObserver(
+                forName: NSWorkspace.screensDidWakeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.handleSuggestionInterruption(.displaysDidWake)
+                }
             }
         ]
     }
@@ -391,16 +429,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let interruption = suggestionInterruptionPolicy.decision(for: .screenGeometryChanged)
         invalidatePendingSuggestionRequest()
         let metadata = SuggestionGeometryInvalidationDecision
             .invalidate(.screenLayoutChanged)
             .metadata
+            .merging(interruption.diagnosticMetadata) { current, _ in current }
             .merging(geometryTraceMetadata()) { current, _ in current }
         hideSuggestion(reason: "stale-geometry-screen-layout-changed", metadata: metadata)
+        stopKeyboardEventTapNow(reason: interruption.keyboardCaptureStopReason)
         fieldStatusIndicator.hide()
         DiagnosticsLog.shared.record(
-            "screen-geometry-changed",
+            interruption.diagnosticEvent,
             metadata: metadata
+        )
+    }
+
+    private func handleSuggestionInterruption(_ kind: SuggestionInterruptionKind) {
+        let decision = suggestionInterruptionPolicy.decision(for: kind)
+
+        setSuggestionDecision(decision.decisionText)
+        if decision.shouldClearFocusedField {
+            clearFocusedFieldState(hideReason: decision.hideReason, resetBlockLogGate: false)
+        } else {
+            if decision.shouldInvalidatePendingRequest {
+                invalidatePendingSuggestionRequest()
+            }
+            if suggestionSession.hasVisibleSuggestion {
+                hideSuggestion(reason: decision.hideReason, metadata: decision.diagnosticMetadata)
+            }
+        }
+
+        if decision.shouldStopKeyboardCapture {
+            stopKeyboardEventTapNow(reason: decision.keyboardCaptureStopReason)
+        }
+        if decision.shouldHideFieldStatus {
+            fieldStatusIndicator.hide()
+        }
+        DiagnosticsLog.shared.record(
+            decision.diagnosticEvent,
+            metadata: decision.diagnosticMetadata
         )
     }
 
@@ -552,6 +620,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func warmModelRuntime() {
         let candidate = modelRuntimeBundle.activeCandidate
         let runtime = modelRuntime
+        let startedAt = Date()
 
         guard modelRuntimeBundle.bootstrapPlan.canWarmPreferredRuntime else {
             let reason = modelRuntimeBundle.bootstrapPlan.unavailableReason ?? "local model runtime is not ready"
@@ -586,7 +655,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "runtime-warm-failed",
                         metadata: [
                             "candidate": candidate.rawValue,
-                            "reason": error.localizedDescription
+                            "reason": error.localizedDescription,
+                            "warmMilliseconds": String(Self.elapsedMilliseconds(since: startedAt))
                         ]
                     )
                     self?.applyRuntimeState(.failed(candidate: candidate, reason: error.localizedDescription))
@@ -600,12 +670,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "runtime-warm-succeeded",
                     metadata: [
                         "candidate": candidate.rawValue,
-                        "state": state.statusSummary
+                        "state": state.statusSummary,
+                        "warmMilliseconds": String(Self.elapsedMilliseconds(since: startedAt))
                     ]
                 )
                 self?.applyRuntimeState(state)
             }
         }
+    }
+
+    private static func elapsedMilliseconds(since startedAt: Date) -> Int {
+        max(0, Int(Date().timeIntervalSince(startedAt) * 1_000))
     }
 
     private func applyRuntimeState(_ state: LocalRuntimeState) {
@@ -983,10 +1058,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard accessibilityClient.isTrusted else {
-            setSuggestionDecision("Blocked: Accessibility permission missing")
+            handleSuggestionInterruption(.accessibilityPermissionLost)
             updateStatusMenu(app: nil, profile: nil, appEnabled: false)
-            hideSuggestion()
-            fieldStatusIndicator.hide()
             return
         }
 
@@ -4630,6 +4703,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         visiblePageContext: VisiblePageContext?
     ) {
         cancelPrefixCooldownRetry()
+        cancelPendingSuggestionTask(reason: "new-request")
         lastRequestedTextBeforeCursor = context.textBeforeCursor
 
         let acceptedTextStyleKey = suggestionOrchestrator.acceptedTextStyleKey(
@@ -4859,10 +4933,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        debounceTaskSuggestionID = suggestionID
         debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity] in
             let renderDelay = renderMode == .inlineAdjacent ? delayMilliseconds : max(delayMilliseconds, 60)
             try? await Task.sleep(for: .milliseconds(renderDelay))
             guard !Task.isCancelled else {
+                await MainActor.run {
+                    self.clearCompletedSuggestionTask(suggestionID: suggestionID)
+                }
                 return
             }
 
@@ -5064,9 +5142,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         candidateSelectionMetadata: appModelResultMetadata
                     )
                 }
+                await MainActor.run {
+                    self.clearCompletedSuggestionTask(suggestionID: suggestionID)
+                }
             } catch {
                 await MainActor.run {
                     self.suggestionOrchestrator.finishStreamingPresentation(suggestionID: suggestionID)
+                    self.clearCompletedSuggestionTask(suggestionID: suggestionID)
                     guard self.suggestionOrchestrator.shouldHideVisibleSuggestionAfterFailure(
                         ticket: requestTicket,
                         failedRequestFieldIdentity: fieldIdentity,
@@ -7821,10 +7903,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func invalidatePendingSuggestionRequest() {
-        debounceTask?.cancel()
-        debounceTask = nil
+        cancelPendingSuggestionTask(reason: "invalidate")
         suggestionOrchestrator.clearStreamingPresentations()
         suggestionOrchestrator.invalidate()
+    }
+
+    private func cancelPendingSuggestionTask(reason: String) {
+        guard let debounceTask else {
+            return
+        }
+
+        debounceTask.cancel()
+        self.debounceTask = nil
+        debounceTaskSuggestionID = nil
+        suggestionOrchestrator.clearStreamingPresentations()
+        DiagnosticsLog.shared.record(
+            "suggestion-request-cancelled",
+            metadata: [
+                "reason": reason
+            ]
+        )
+    }
+
+    private func clearCompletedSuggestionTask(suggestionID: String) {
+        guard debounceTaskSuggestionID == suggestionID else {
+            return
+        }
+
+        debounceTask = nil
+        debounceTaskSuggestionID = nil
     }
 
     @objc

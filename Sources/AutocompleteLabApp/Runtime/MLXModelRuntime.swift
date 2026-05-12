@@ -46,9 +46,12 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 
     public func warm() async throws {
+        let startedAt = Date()
+        var didReuseLoadedContainer = false
         let warmGeneration = stateQueue.sync {
             if container != nil {
                 storedState = .ready(candidate: .mlx)
+                didReuseLoadedContainer = true
                 return generation
             }
 
@@ -57,17 +60,50 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             return generation
         }
 
+        if didReuseLoadedContainer {
+            DiagnosticsLog.shared.record(
+                "mlx-model-load-reused",
+                metadata: [
+                    "assetDirectory": modelDirectoryURL.path,
+                    "loadMilliseconds": String(Self.milliseconds(from: startedAt, to: Date())),
+                    "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
+                ]
+            )
+            return
+        }
+
+        DiagnosticsLog.shared.record(
+            "mlx-model-load-start",
+            metadata: [
+                "assetDirectory": modelDirectoryURL.path,
+                "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
+            ]
+        )
+
         let loadedContainer: ModelContainer
-        if usesVisionLanguageFactory {
-            loadedContainer = try await VLMModelFactory.shared.loadContainer(
-                from: modelDirectoryURL,
-                using: #huggingFaceTokenizerLoader()
+        do {
+            if usesVisionLanguageFactory {
+                loadedContainer = try await VLMModelFactory.shared.loadContainer(
+                    from: modelDirectoryURL,
+                    using: #huggingFaceTokenizerLoader()
+                )
+            } else {
+                loadedContainer = try await LLMModelFactory.shared.loadContainer(
+                    from: modelDirectoryURL,
+                    using: #huggingFaceTokenizerLoader()
+                )
+            }
+        } catch {
+            DiagnosticsLog.shared.record(
+                "mlx-model-load-failed",
+                metadata: [
+                    "assetDirectory": modelDirectoryURL.path,
+                    "loadMilliseconds": String(Self.milliseconds(from: startedAt, to: Date())),
+                    "reason": error.localizedDescription,
+                    "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
+                ]
             )
-        } else {
-            loadedContainer = try await LLMModelFactory.shared.loadContainer(
-                from: modelDirectoryURL,
-                using: #huggingFaceTokenizerLoader()
-            )
+            throw error
         }
 
         try Task.checkCancellation()
@@ -77,6 +113,14 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         }
 
         guard !wasCancelled else {
+            DiagnosticsLog.shared.record(
+                "mlx-model-load-cancelled",
+                metadata: [
+                    "assetDirectory": modelDirectoryURL.path,
+                    "loadMilliseconds": String(Self.milliseconds(from: startedAt, to: Date())),
+                    "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
+                ]
+            )
             throw CancellationError()
         }
 
@@ -84,6 +128,14 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             container = loadedContainer
             storedState = .ready(candidate: .mlx)
         }
+        DiagnosticsLog.shared.record(
+            "mlx-model-load-succeeded",
+            metadata: [
+                "assetDirectory": modelDirectoryURL.path,
+                "loadMilliseconds": String(Self.milliseconds(from: startedAt, to: Date())),
+                "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
+            ]
+        )
     }
 
     public func cancel() {
@@ -289,7 +341,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             return existing
         }
 
-        for _ in 0..<600 {
+        for _ in 0..<3_000 {
             let isWarming = stateQueue.sync {
                 if case .warming = storedState {
                     return true
@@ -303,7 +355,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             }
 
             try Task.checkCancellation()
-            try await Task.sleep(for: .milliseconds(50))
+            try await Task.sleep(for: .milliseconds(10))
 
             if let existing = stateQueue.sync(execute: { container }) {
                 return existing

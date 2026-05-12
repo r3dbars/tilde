@@ -140,6 +140,32 @@ if ! grep -F "Latency beta gate passed." <<<"$REPORT" >/dev/null; then
   exit 1
 fi
 
+cat >"$DIAGNOSTICS_LOG" <<'LOG'
+2026-05-09T10:00:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit
+2026-05-09T10:00:01Z mlx-completion-timing app=com.apple.TextEdit cleanedChars=0 cleanupMilliseconds=0 firstChunkMilliseconds=120 generationMilliseconds=160 maxTokens=9 mode=phraseContinuation promptMilliseconds=0 rawChars=4 sessionMilliseconds=0 totalMilliseconds=160
+2026-05-09T10:00:02Z focused-text-poll-latency-summary count=60 maxMilliseconds=9 p50Milliseconds=4 p90Milliseconds=6 p95Milliseconds=8 p99Milliseconds=9
+LOG
+
+cat >"$TRACE_LOG" <<'LOG'
+LOG
+
+REPORT="$(
+  script/latency_benchmark_report.py \
+    --diagnostics-log "$DIAGNOSTICS_LOG" \
+    --trace-log "$TRACE_LOG" \
+    --beta-gate \
+    --require-first-visible-samples 0 \
+    --require-model-samples 1 \
+    --require-event-tap-samples 0 \
+    --require-ax-samples 1
+)"
+
+if ! grep -F "Latency beta gate passed." <<<"$REPORT" >/dev/null; then
+  echo "latency benchmark self-test did not honor explicit zero sample overrides" >&2
+  echo "$REPORT" >&2
+  exit 1
+fi
+
 cat >"$TRACE_LOG" <<'LOG'
 {"timestamp":"2026-05-09T10:00:01Z","sessionID":"session","suggestionID":"one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","latencyMilliseconds":190,"metadata":{"behaviorProfile":"notes","firstTokenLatencyMilliseconds":"100","totalGenerationLatencyMilliseconds":"190"}}
 {"timestamp":"2026-05-09T10:00:02Z","sessionID":"session","suggestionID":"one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","latencyMilliseconds":210,"metadata":{"behaviorProfile":"notes"}}

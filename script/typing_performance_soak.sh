@@ -138,6 +138,26 @@ wait_for_focused_text_poll_summary_after_line() {
   echo "Note: no focused-text poll summary arrived during the pre-typing warmup window." >&2
 }
 
+wait_for_required_focused_text_poll_summary_after_line() {
+  local start_line="$1"
+  local timeout_seconds="${2:-20}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local first_new_line=$((start_line + 1))
+
+  while ((SECONDS < deadline)); do
+    if [[ -f "$LOG_PATH" ]] &&
+      sed -n "${first_new_line},\$p" "$LOG_PATH" | grep -q "focused-text-poll-latency-summary"; then
+      return 0
+    fi
+    sleep 0.25
+  done
+
+  echo "Timed out waiting for a post-typing focused-text poll summary." >&2
+  echo "Log: $LOG_PATH" >&2
+  echo "Start line: $start_line" >&2
+  return 1
+}
+
 computed_typing_budget_seconds() {
   local chunk_count
   chunk_count="$(((TARGET_CHARS + CHUNK_SIZE - 1) / CHUNK_SIZE))"
@@ -647,6 +667,11 @@ type_textedit_fixture() {
   SOAK_TRACE_START_LINE="$(line_count "$TRACE_PATH")"
   type_text_with_cgevents "$text_file"
   sleep 2
+  if ((MIN_AX_SAMPLES > 0)); then
+    wait_for_required_focused_text_poll_summary_after_line \
+      "$SOAK_TYPING_START_LINE" \
+      "${AUTOCOMPLETE_LAB_SOAK_POST_TYPE_AX_WAIT_SECONDS:-20}"
+  fi
   capture_typed_text "$SOAK_ACTUAL_TEXT_FILE" "$SOAK_TARGET_DOCUMENT_NAME"
   verify_typed_text "$SOAK_EXPECTED_TEXT_FILE" "$SOAK_ACTUAL_TEXT_FILE"
 }
