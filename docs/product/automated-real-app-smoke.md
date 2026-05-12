@@ -110,14 +110,18 @@ The script also has guarded public-demo lanes for `codemirror-official`,
 `monaco-official`, and `prosemirror-official`. Those lanes are for production
 editor proof only after they pass with bounded screenshot-backed traces. Official
 rich-editor lanes use an isolated temporary Chrome profile plus localhost
-DevTools only for readiness, focus, and disposable setup text, so they do not
-touch the user's live Chrome profile or require Chrome's JavaScript-from-Apple
-Events setting. The Chrome setup path still requires a focused editable web text
-target through Accessibility and real Autocomplete Lab suggestion/acceptance
-traces before recording a pass. Real-app smoke runs take a single-run lock and
-scan for other active smoke scripts so two proof processes cannot type at the
-same time, even if an older worktree process did not share the current lock
-state.
+DevTools for readiness, focus, and disposable setup text when available, so they
+do not touch the user's live Chrome profile. They also fail closed before typing
+unless Chrome is frontmost, the expected official demo URL is active, and the
+current SteadyType build is already allowed in macOS Accessibility. Official
+demo lanes allow up to 180 seconds for cold current-build MLX warmup before
+touching Chrome. The Chrome setup path still requires a focused editable web
+text target through Accessibility and real Autocomplete Lab suggestion/
+acceptance traces before recording a pass; the Apple Events path is only a
+fallback when the safer setup path cannot be used. Real-app smoke runs take a
+single-run lock and scan for other active smoke scripts so two proof processes
+cannot type at the same time, even if an older worktree process did not share
+the current lock state.
 
 Run the score target loop when working toward the product scorecards:
 
