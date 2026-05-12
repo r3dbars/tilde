@@ -223,6 +223,20 @@ for official_fixture in codemirror-official monaco-official prosemirror-official
   fi
 done
 
+script/real_app_smoke.sh chrome --fixture monaco-official --chrome-accessibility default --dry-run >"$TMP_DIR/chrome-monaco-official-default.txt"
+if ! grep -F "Monaco official must expose setup text through the focused macOS AX editor" "$TMP_DIR/chrome-monaco-official-default.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Monaco official AX-readable setup gate" >&2
+  exit 1
+fi
+if ! grep -F "monaco-official default AX uses normal Chrome AX focus only" "$TMP_DIR/chrome-monaco-official-default.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Monaco official default-AX no-fallback path" >&2
+  exit 1
+fi
+if ! grep -F 'wait_for_chrome_setup_text_visible_to_ax "$fixture" "$chrome_pid" "$expected_fragment" "$label"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Monaco official setup to require AX-readable text after DevTools setup" >&2
+  exit 1
+fi
+
 script/real_app_smoke.sh chrome --fixture all --dry-run >"$TMP_DIR/chrome-all.txt"
 if ! grep -F "textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, real Monaco, real ProseMirror, and chat-like no-submit local fixtures" "$TMP_DIR/chrome-all.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome all-fixtures dry-run plan" >&2
