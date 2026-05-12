@@ -6086,8 +6086,18 @@ run_obsidian() {
   wait_for_log_pattern "$start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian first verified insertion"
 
   second_start_line="$(line_count "$LOG_PATH")"
-  assert_obsidian_smoke_target "Smoke proof feels instant"
-  type_obsidian_raw_smoke_text " and stays"
+  case "$manual_app" in
+    obsidian-pane|obsidian-long-note)
+      AUTOCOMPLETE_LAB_OBSIDIAN_RESET_TEXT="$obsidian_reset_text" reset_obsidian_smoke_note
+      sleep 0.4
+      second_start_line="$(line_count "$LOG_PATH")"
+      type_obsidian_raw_smoke_text "Variant proof feels"
+      ;;
+    *)
+      assert_obsidian_smoke_target "Smoke proof feels instant"
+      type_obsidian_raw_smoke_text " and stays"
+      ;;
+  esac
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
   assert_frontmost_app "Obsidian" "Obsidian"
