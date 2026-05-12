@@ -6261,7 +6261,8 @@ describe_plan() {
       fi
       echo "Safety: the smoke launch temporarily enables Chrome only for this proof pass."
       echo "Safety: before Chrome typing, the smoke requires Chrome to expose a focused editable web text target through Accessibility."
-      echo "Safety: Chrome setup text first tries AX value replacement, then guarded key/paste fallbacks only after the disposable editor is rechecked as frontmost and editable."
+      echo "Safety: Chrome setup text pauses SteadyType while disposable text is seeded, then relaunches the current app bundle before proof starts."
+      echo "Safety: Chrome setup text first tries DevTools/DOM or AX value replacement, then guarded key/paste fallbacks only after the disposable editor is rechecked as frontmost and editable."
       ;;
     notes)
       local notes_app notes_surface
@@ -6400,6 +6401,37 @@ stop_current_steadytype_app_bundle() {
     fi
     sleep 0.1
   done
+}
+
+pause_steadytype_for_chrome_setup() {
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    return 0
+  fi
+
+  stop_current_steadytype_app_bundle
+}
+
+launch_steadytype_after_chrome_setup() {
+  local fixture="$1"
+  local start_line="$2"
+
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    return 0
+  fi
+
+  local app_binary="$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType"
+  if [[ ! -x "$app_binary" ]]; then
+    echo "SteadyType app binary is missing after build: $app_binary" >&2
+    exit 1
+  fi
+
+  AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1 \
+    nohup "$app_binary" >"$ROOT_DIR/dist/SteadyType.launch.log" 2>&1 </dev/null &
+  disown "$!" 2>/dev/null || true
+
+  wait_for_current_autocomplete_lab_process
+  wait_for_accessibility_ready "$start_line" "Chrome $fixture post-setup Accessibility readiness" 20 0
+  wait_for_runtime_ready "$start_line" "Chrome $fixture post-setup runtime readiness" "$(chrome_runtime_ready_timeout_seconds)" 0
 }
 
 wait_for_current_autocomplete_lab_process() {
@@ -8036,7 +8068,12 @@ APPLESCRIPT
     second_fragment=" and stays dicta"
   fi
 
+  pause_steadytype_for_chrome_setup
   type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "first fragment" "$first_fragment"
+  start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
+  launch_steadytype_after_chrome_setup "$fixture" "$start_line"
+  focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.google.Chrome" "Chrome $fixture"
@@ -8087,12 +8124,14 @@ APPLESCRIPT
     return 0
   fi
 
-  second_start_line="$(line_count "$LOG_PATH")"
-
   if [[ -z "$chrome_pid" ]]; then
     focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
   fi
+  pause_steadytype_for_chrome_setup
   type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "second fragment" "$second_fragment"
+  second_start_line="$(line_count "$LOG_PATH")"
+  launch_steadytype_after_chrome_setup "$fixture" "$second_start_line"
+  focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.google.Chrome" "Chrome $fixture second"
