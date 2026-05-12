@@ -10,10 +10,11 @@ usage() {
   cat <<'EOF'
 Usage: script/scorecard_goal_loop.sh [--iterations N]
 
-Runs the scorecard target gate, strict manual smoke status, strict visual
-evidence gate, strict proof manifest gate, and prompt-app proof gate
-repeatedly. This is intentionally a proof loop, not a score inflator: it exits
-1 until every score and required app proof is actually complete.
+Runs the SteadyType product scorecard checker, scorecard target gate, strict
+manual smoke status, strict visual evidence gate, strict proof manifest gate,
+and prompt-app proof gate repeatedly. This is intentionally a proof loop, not a
+score inflator: it exits 1 until every score and required app proof is actually
+complete.
 EOF
 }
 
@@ -52,6 +53,10 @@ run_iteration() {
   local prefix="$TMP_DIR/iteration-$iteration"
   local failed=0
 
+  if ! ./script/check_steadytype_scorecard.py >"$prefix-steadytype-scorecard.txt" 2>&1; then
+    failed=1
+  fi
+
   if ! ./script/check_score_targets.sh >"$prefix-score-targets.txt" 2>&1; then
     failed=1
   fi
@@ -78,6 +83,10 @@ run_iteration() {
 print_final_output() {
   local iteration="$1"
   local prefix="$TMP_DIR/iteration-$iteration"
+
+  echo
+  echo "Final SteadyType scorecard output:"
+  sed -n '1,220p' "$prefix-steadytype-scorecard.txt"
 
   echo
   echo "Final score target output:"
