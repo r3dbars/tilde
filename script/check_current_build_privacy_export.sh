@@ -40,7 +40,7 @@ if find "$OUTPUT_DIR" \( -name 'traces.jsonl' -o -name 'raw-traces.jsonl' \) -pr
   exit 1
 fi
 
-if grep -R -I -E 'proof-private-|private\.example|private-screenshot|private-recipient|private document|private subject' "$OUTPUT_DIR" >/tmp/autocomplete-current-build-privacy-leaks.txt 2>/dev/null; then
+if grep -R -I -E 'proof-private-|private\.example|private-screenshot|private-recipient|private document|private subject|private-cache-redbars|freeform-reason-redbars|/Users/redbars/Library/Application Support/SteadyType/private-cache-redbars|/Users/redbars/private/freeform-reason-redbars\.md' "$OUTPUT_DIR" >/tmp/autocomplete-current-build-privacy-leaks.txt 2>/dev/null; then
   echo "privacy proof output leaked private sentinel text" >&2
   cat /tmp/autocomplete-current-build-privacy-leaks.txt >&2
   exit 1

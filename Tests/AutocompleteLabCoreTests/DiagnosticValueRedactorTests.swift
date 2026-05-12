@@ -144,6 +144,12 @@ struct DiagnosticValueRedactorTests {
                 value: "bundle=/Applications/SteadyType.app/Contents/MacOS/SteadyType"
             ) == "String(61 chars)"
         )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "hasLocalPath",
+                value: "/Users/redbars/private/shape.txt"
+            ) == "String(32 chars)"
+        )
     }
 
     @Test("Diagnostics metadata redacts freeform reasons")
