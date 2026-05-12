@@ -1632,12 +1632,26 @@ try {
             .filter((editor) => editor?.getModel?.());
           const editor = editors[0];
           if (!editor) return { ok: false, reason: 'missing monaco editor instance' };
-          editor.setValue(text);
           const model = editor.getModel();
-          const position = model.getPositionAt(text.length);
+          const nextText = text.startsWith(' ') ? String(model.getValue()) + text : text;
+          editor.setValue(nextText);
+          const position = model.getPositionAt(nextText.length);
           editor.setPosition(position);
           editor.focus();
-          return { ok: String(model.getValue()).includes(text), role: 'monaco', valueLength: model.getValue().length };
+          const input = document.querySelector('.monaco-editor textarea') || document.querySelector('.monaco-editor .inputarea');
+          if (input) {
+            input.setAttribute('aria-label', 'Official Monaco proof editor');
+            input.value = nextText;
+            input.textContent = nextText;
+            input.focus();
+            if (input.setSelectionRange) input.setSelectionRange(nextText.length, nextText.length);
+            input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+          }
+          return {
+            ok: String(model.getValue()).includes(text) && String(input?.value || '').includes(text),
+            role: 'monaco',
+            valueLength: model.getValue().length
+          };
         })()`);
         if (!value?.ok) {
           return { ok: false, reason: "monaco model setup failed", role: "monaco", valueLength: value?.valueLength || 0 };
