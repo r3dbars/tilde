@@ -7,6 +7,8 @@ public enum TextContextRepairReason: String, Equatable, Sendable {
     case obsidianCodeMirrorTrailingScaffolding = "obsidian-codemirror-trailing-scaffolding"
     case obsidianCodeMirrorHiddenSpacerLine = "obsidian-codemirror-hidden-spacer-line"
     case obsidianCodeMirrorLineDrift = "obsidian-codemirror-line-drift"
+    case chromeCodeMirrorSoftWrapCursor = "chrome-codemirror-soft-wrap-cursor"
+    case chromeCodeMirrorTrailingScaffolding = "chrome-codemirror-trailing-scaffolding"
 }
 
 public struct TextContextRepairInput: Equatable, Sendable {
@@ -17,6 +19,7 @@ public struct TextContextRepairInput: Equatable, Sendable {
     public let selectedTextLength: Int
     public let previousTextBeforeCursor: String?
     public let previousTextAfterCursor: String?
+    public let windowTitle: String?
 
     public init(
         bundleIdentifier: String,
@@ -25,7 +28,8 @@ public struct TextContextRepairInput: Equatable, Sendable {
         textAfterCursor: String,
         selectedTextLength: Int,
         previousTextBeforeCursor: String? = nil,
-        previousTextAfterCursor: String? = nil
+        previousTextAfterCursor: String? = nil,
+        windowTitle: String? = nil
     ) {
         self.bundleIdentifier = bundleIdentifier
         self.role = role
@@ -34,6 +38,7 @@ public struct TextContextRepairInput: Equatable, Sendable {
         self.selectedTextLength = max(0, selectedTextLength)
         self.previousTextBeforeCursor = previousTextBeforeCursor
         self.previousTextAfterCursor = previousTextAfterCursor
+        self.windowTitle = windowTitle
     }
 }
 
@@ -72,6 +77,12 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         }
         if let obsidianRepair = obsidianCodeMirrorLineDriftRepair(input) {
             return obsidianRepair
+        }
+        if let chromeRepair = chromeCodeMirrorSoftWrapCursorRepair(input) {
+            return chromeRepair
+        }
+        if let chromeRepair = chromeCodeMirrorTrailingScaffoldingRepair(input) {
+            return chromeRepair
         }
 
         return notesTextAfterCursorRepair(input)
@@ -236,6 +247,55 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
             textBeforeCursor: input.textBeforeCursor + lineAfterCursor,
             textAfterCursor: String(input.textAfterCursor.dropFirst(lineAfterCursor.count)),
             reason: .obsidianCodeMirrorLineDrift
+        )
+    }
+
+    private func chromeCodeMirrorTrailingScaffoldingRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
+        guard input.bundleIdentifier == "com.google.Chrome",
+              input.role == "AXTextArea",
+              input.selectedTextLength == 0,
+              input.windowTitle?.localizedCaseInsensitiveContains("CodeMirror") == true,
+              !input.textAfterCursor.isEmpty,
+              input.textAfterCursor.count <= 12,
+              input.textAfterCursor.containsCodeMirrorScaffolding,
+              input.textAfterCursor.trimmingCodeMirrorScaffolding().isEmpty,
+              isPlausibleActiveTypingLine(currentLine(in: input.textBeforeCursor)) else {
+            return nil
+        }
+
+        return TextContextRepairResult(
+            textBeforeCursor: input.textBeforeCursor,
+            textAfterCursor: "",
+            reason: .chromeCodeMirrorTrailingScaffolding
+        )
+    }
+
+    private func chromeCodeMirrorSoftWrapCursorRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
+        guard input.bundleIdentifier == "com.google.Chrome",
+              input.role == "AXTextArea",
+              input.selectedTextLength == 0,
+              input.windowTitle?.localizedCaseInsensitiveContains("CodeMirror") == true,
+              input.textBeforeCursor.contains("\n\n"),
+              !input.textAfterCursor.isEmpty,
+              input.textAfterCursor.count <= 4,
+              input.textAfterCursor.allSatisfy(\.isLetter) else {
+            return nil
+        }
+
+        let repairedText = (input.textBeforeCursor + input.textAfterCursor)
+            .replacingOccurrences(of: "\n\n", with: " ")
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        guard repairedText != input.textBeforeCursor + input.textAfterCursor,
+              repairedText.count <= 160,
+              isPlausibleActiveTypingLine(repairedText) else {
+            return nil
+        }
+
+        return TextContextRepairResult(
+            textBeforeCursor: repairedText,
+            textAfterCursor: "",
+            reason: .chromeCodeMirrorSoftWrapCursor
         )
     }
 

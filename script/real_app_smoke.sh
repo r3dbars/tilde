@@ -1191,7 +1191,7 @@ chrome_fixture_url() {
       printf '%s\n' "https://yabwe.github.io/medium-editor/"
       ;;
     codemirror-official)
-      printf '%s\n' "https://codemirror.net/try/"
+      printf '%s\n' "https://codemirror.net/try/#c=U21va2UgcHJvb2YgZmVlbHMgaW5zdA=="
       ;;
     monaco-official)
       printf '%s\n' "https://microsoft.github.io/monaco-editor/playground.html"
@@ -1459,12 +1459,6 @@ function focusExpression() {
         editor.setAttribute('aria-label', 'Official CodeMirror proof editor');
         editor.scrollIntoView({ block: 'center', inline: 'center' });
         editor.focus();
-        const selection = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(editor);
-        range.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(range);
         return { ok: true, role: 'codemirror' };
       })()`;
     case "monaco-official":
@@ -1578,6 +1572,18 @@ async function evaluate(send, expression) {
   }));
 }
 
+async function dispatchEndKey(send) {
+  for (const type of ["keyDown", "keyUp"]) {
+    await send("Input.dispatchKeyEvent", {
+      type,
+      key: "End",
+      code: "End",
+      windowsVirtualKeyCode: 35,
+      nativeVirtualKeyCode: 0,
+    });
+  }
+}
+
 try {
   const wsURL = await tabWebSocketURL();
   const result = await withSocket(wsURL, async (send) => {
@@ -1600,6 +1606,24 @@ try {
     }
 
     if (mode === "insert") {
+      if (fixture === "codemirror-official") {
+        await dispatchEndKey(send);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const current = await evaluate(send, readExpression());
+        if (current?.ok) {
+          return { ok: true, role: current.role || "codemirror", valueLength: current.valueLength || 0 };
+        }
+
+        await send("Input.insertText", { text });
+        await dispatchEndKey(send);
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const value = await evaluate(send, readExpression());
+        if (!value?.ok) {
+          return { ok: false, reason: "codemirror text not observed", role: value?.role || "codemirror", valueLength: value?.valueLength || 0 };
+        }
+        return { ok: true, role: value.role || "codemirror", valueLength: value.valueLength || 0 };
+      }
+
       if (fixture === "monaco-official") {
         const encodedText = JSON.stringify(text);
         const value = await evaluate(send, `(() => {
@@ -4930,6 +4954,10 @@ type_chrome_smoke_text() {
   if chrome_public_setup_text_with_devtools "$fixture" "$text"; then
     wait_for_chrome_focused_text_contains "$fixture" "$chrome_pid" "$text" "$label" 8
     return 0
+  fi
+  if chrome_fixture_is_official_rich_editor_demo "$fixture"; then
+    echo "Chrome $fixture setup text failed through isolated DevTools during $label; refusing guarded global typing fallback for an official public editor lane." >&2
+    exit 1
   fi
 
   if insert_chrome_smoke_text_with_ax "$fixture" "$chrome_pid" "$label" "$text"; then
