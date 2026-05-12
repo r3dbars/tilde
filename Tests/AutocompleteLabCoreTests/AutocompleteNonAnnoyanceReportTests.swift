@@ -71,6 +71,24 @@ struct AutocompleteNonAnnoyanceReportTests {
         #expect(report.gatePassed)
     }
 
+    @Test("Timed pause traces count as pause disable control signals")
+    func timedPauseTracesCountAsPauseDisableControlSignals() {
+        let events = [
+            event(.suggestionPresented, at: 0, suggestionID: "s1"),
+            event(.appPaused, at: 10, suggestionID: "s1", reason: "timed-pause"),
+            event(.fieldPaused, at: 70, reason: "manual-field")
+        ]
+
+        let report = AutocompleteNonAnnoyanceReporter(
+            thresholds: AutocompleteNonAnnoyanceThresholds(maxPauseDisablePerShown: 2)
+        ).report(for: events)
+
+        #expect(report.pauseDisableEvents == 2)
+        #expect(report.pauseDisablePerShown == 2)
+        #expect(report.gatePassed)
+        #expect(report.plainTextReport().contains("Pause/disable events: 2"))
+    }
+
     @Test("Plain text report does not include raw trace text")
     func plaintextReportDoesNotIncludeRawText() {
         let events = [

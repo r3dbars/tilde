@@ -30,6 +30,17 @@ struct SuggestionControlPolicyTests {
         #expect(policy.startupState(persistedIsPaused: false) == .running)
     }
 
+    @Test("Missing persisted pause value is different from persisted false")
+    func missingPersistedPauseValueIsDifferentFromPersistedFalse() {
+        let policy = SuggestionControlPolicy()
+
+        let missingDefaultsState = policy.startupState(persistedIsPaused: nil)
+        let explicitlyResumedState = policy.startupState(persistedIsPaused: false)
+
+        #expect(missingDefaultsState.isPaused)
+        #expect(!explicitlyResumedState.isPaused)
+    }
+
     @Test("Paused state blocks suggestion requests with global pause reason")
     func pausedStateBlocksSuggestionRequests() {
         let policy = SuggestionControlPolicy()

@@ -1166,16 +1166,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateStatusMenu(app: frontmostApp, profile: profile, appEnabled: appEnabled)
 
         guard appEnabled else {
-            clearFocusedFieldState()
+            clearFocusedFieldState(hideReason: "app-disabled")
+            stopKeyboardEventTapNow(reason: "app-disabled")
             setSuggestionDecision("Blocked: app disabled")
-            hideSuggestion()
             return
         }
 
         guard profile.canPresentSuggestions, !profile.isSensitive else {
-            clearFocusedFieldState()
+            clearFocusedFieldState(hideReason: profile.isSensitive ? "sensitive-app" : "profile-disabled")
+            stopKeyboardEventTapNow(reason: profile.isSensitive ? "sensitive-app" : "profile-disabled")
             setSuggestionDecision(profile.isSensitive ? "Blocked: sensitive app" : "Blocked: profile disabled")
-            hideSuggestion()
             return
         }
 
@@ -8976,8 +8976,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 suggestionID: currentSuggestionID ?? "",
                 reason: "manual"
             )
-            clearFocusedFieldState()
-            hideSuggestion()
+            clearFocusedFieldState(hideReason: "app-disabled")
+            stopKeyboardEventTapNow(reason: "app-disabled")
         }
 
         persistDisabledApps()
@@ -9252,6 +9252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if suggestionSession.hasVisibleSuggestion {
             hideSuggestion(reason: "field-silenced")
         }
+        stopKeyboardEventTapNow(reason: "field-silenced")
 
         let context = annoyanceContext(
             appBundleIdentifier: target.appBundleIdentifier,
@@ -9387,11 +9388,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         reason: String,
         metadata: [String: String]
     ) {
+        let context = currentAnnoyanceContext()
+        let suggestionID = currentSuggestionID ?? ""
         suggestionsPaused = state.isPaused
         suggestionsPausedUntil = state.pausedUntil
         setSuggestionDecision(decisionText)
         clearFocusedFieldState(hideReason: reason)
         stopKeyboardEventTapNow(reason: reason)
+        RawAutocompleteTraceLog.shared.record(
+            type: .appPaused,
+            suggestionID: suggestionID,
+            appBundleIdentifier: context?.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? "",
+            fieldIdentity: context?.fieldIdentifier ?? "",
+            requestMode: context?.requestMode?.rawValue ?? "",
+            reason: reason,
+            metadata: metadata
+        )
+        recordAnnoyanceSignal(
+            .manualPause,
+            context: context,
+            suggestionID: suggestionID,
+            reason: reason,
+            metadata: metadata
+        )
         persistPauseState()
         schedulePauseExpiration()
         DiagnosticsLog.shared.record(
@@ -9512,8 +9531,10 @@ private extension AppDelegate {
         let defaults = UserDefaults.standard
         let pausedUntilValue = defaults.double(forKey: Self.suggestionsPausedUntilDefaultsKey)
         let pausedUntil = pausedUntilValue > 0 ? Date(timeIntervalSince1970: pausedUntilValue) : nil
+        let persistedIsPaused = defaults.object(forKey: Self.suggestionsPausedDefaultsKey) as? Bool
+        let startupState = suggestionControlPolicy.startupState(persistedIsPaused: persistedIsPaused)
         let state = suggestionPauseSchedulePolicy.normalizedState(
-            isPaused: defaults.bool(forKey: Self.suggestionsPausedDefaultsKey),
+            isPaused: startupState.isPaused,
             pausedUntil: pausedUntil,
             now: Date()
         )
