@@ -6533,7 +6533,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
             hasPendingSuggestionRequest: suggestionOrchestrator.currentRequest != nil,
             previousSnapshot: lastVisibleSuggestionGeometrySnapshot,
-            currentSnapshot: currentGeometrySnapshot
+            currentSnapshot: currentGeometrySnapshot,
+            allowsCaretRectChange: allowsStableCodeMirrorCaretChurn(
+                context: context,
+                profile: profile
+            )
         )
         if invalidation.shouldInvalidate {
             let reason = invalidation.reason?.rawValue ?? "unknown"
@@ -6555,6 +6559,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastVisibleSuggestionGeometrySnapshot = currentGeometrySnapshot
         showFieldStatusIndicator(.shown, context: context)
         refreshVisibleSuggestion()
+    }
+
+    private func allowsStableCodeMirrorCaretChurn(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) -> Bool {
+        guard profile.bundleIdentifier == "com.google.Chrome",
+              context.role == "AXTextArea",
+              context.caretIsSynthetic,
+              context.selectedTextLength == 0,
+              context.fingerprint.searchableText.contains("codemirror"),
+              let lastTextSnapshot,
+              lastTextSnapshot.textBeforeCursor == context.textBeforeCursor,
+              lastTextSnapshot.textAfterCursor == context.textAfterCursor else {
+            return false
+        }
+
+        return true
     }
 
     private func recordAcceptedText(_ acceptedText: String) {
