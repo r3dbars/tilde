@@ -4,6 +4,7 @@ public enum CompletionRuntimeCandidate: String, Equatable, Sendable {
     case liteRTLM
     case mlx
     case mock
+    case unavailable
 
     public var displayName: String {
         switch self {
@@ -13,6 +14,8 @@ public enum CompletionRuntimeCandidate: String, Equatable, Sendable {
             return "MLX"
         case .mock:
             return "mock"
+        case .unavailable:
+            return "unavailable"
         }
     }
 }

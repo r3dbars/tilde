@@ -57,7 +57,11 @@ enum AppModelRuntimeFactory {
         ]) { current, _ in current }
         let lengthConfiguration = CompletionLengthConfiguration.fromEnvironment(lengthEnvironment)
         let manifest = LocalModelAssetManifest.mlxManifest(named: modelOverrideName)
-        let modelDirectoryURL = modelAssetURL(for: manifest, fileManager: fileManager)
+        let modelDirectoryURL = modelAssetURL(
+            for: manifest,
+            fileManager: fileManager,
+            environment: environment
+        )
         let assetState = modelAssetState(
             for: manifest,
             at: modelDirectoryURL,
@@ -70,14 +74,16 @@ enum AppModelRuntimeFactory {
         )
         let runtime: any ModelRuntime
 
-        if plan.activeCandidate == .mlx {
+        if plan.canWarmPreferredRuntime {
             runtime = MLXModelRuntime(
                 modelDirectoryURL: modelDirectoryURL,
                 usesVisionLanguageFactory: manifest.requiresVisionLanguageFactory,
                 lengthConfiguration: lengthConfiguration
             )
         } else {
-            runtime = MockModelRuntime(candidate: plan.activeCandidate)
+            runtime = UnavailableModelRuntime(
+                reason: plan.unavailableReason ?? "local model runtime is not ready"
+            )
         }
 
         return AppModelRuntimeBundle(
@@ -159,15 +165,23 @@ enum AppModelRuntimeFactory {
 
     private static func modelAssetURL(
         for manifest: LocalModelAssetManifest,
-        fileManager: FileManager
+        fileManager: FileManager,
+        environment: [String: String]
     ) -> URL {
-        let baseDirectory = fileManager.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        let baseDirectory: URL
+        if let override = environment["AUTOCOMPLETE_LAB_MODEL_ROOT"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            baseDirectory = URL(fileURLWithPath: override, isDirectory: true)
+        } else {
+            baseDirectory = (fileManager.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first ?? URL(fileURLWithPath: NSTemporaryDirectory()))
+                .appendingPathComponent("SteadyType", isDirectory: true)
+        }
 
         return baseDirectory
-            .appendingPathComponent("AutocompleteLab", isDirectory: true)
             .appendingPathComponent(manifest.cacheDirectoryName, isDirectory: true)
             .appendingPathComponent(manifest.fileName, isDirectory: true)
     }

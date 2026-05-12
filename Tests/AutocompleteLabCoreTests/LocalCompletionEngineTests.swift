@@ -57,8 +57,8 @@ struct LocalCompletionEngineTests {
         #expect(suggestion?.visibleText == " checking the draft first")
     }
 
-    @Test("Falls back to mock when runtime fails")
-    func fallsBackToMockWhenRuntimeFails() async throws {
+    @Test("Returns no suggestion when runtime fails without an explicit test fallback")
+    func returnsNoSuggestionWhenRuntimeFailsWithoutExplicitFallback() async throws {
         let runner = FakeLocalRunner(result: .failure(FakeRuntimeError.failed))
         let engine = LocalCompletionEngine(runner: runner)
 
@@ -66,11 +66,11 @@ struct LocalCompletionEngineTests {
             for: CompletionRequest(textBeforeCursor: "I think", maxVisibleWords: 8)
         )
 
-        #expect(suggestion?.visibleText == " we should ship this")
+        #expect(suggestion == nil)
     }
 
-    @Test("Falls back to mock when runtime returns empty output")
-    func fallsBackToMockWhenRuntimeReturnsEmptyOutput() async throws {
+    @Test("Returns no suggestion when runtime returns empty output")
+    func returnsNoSuggestionWhenRuntimeReturnsEmptyOutput() async throws {
         let runner = FakeLocalRunner(result: .success("   "))
         let engine = LocalCompletionEngine(runner: runner)
 
@@ -78,13 +78,13 @@ struct LocalCompletionEngineTests {
             for: CompletionRequest(textBeforeCursor: "can we", maxVisibleWords: 8)
         )
 
-        #expect(suggestion?.visibleText == " make this feel instant")
+        #expect(suggestion == nil)
     }
 
-    @Test("Mock fallback keeps suggestions after a completed unmatched word")
-    func mockFallbackSuggestsAfterTrailingWhitespace() async throws {
+    @Test("Explicit test fallback can still exercise unmatched words")
+    func explicitTestFallbackSuggestsAfterTrailingWhitespace() async throws {
         let runner = FakeLocalRunner(result: .success("   "))
-        let engine = LocalCompletionEngine(runner: runner)
+        let engine = LocalCompletionEngine(runner: runner, fallback: MockCompletionEngine())
 
         let suggestion = try await engine.suggestion(
             for: CompletionRequest(textBeforeCursor: "I wrote test ", maxVisibleWords: 8)
@@ -93,10 +93,10 @@ struct LocalCompletionEngineTests {
         #expect(suggestion?.visibleText == " and keep moving")
     }
 
-    @Test("Falls back to mock when runtime echoes earlier context")
-    func fallsBackToMockWhenRuntimeEchoesEarlierContext() async throws {
+    @Test("Explicit test fallback can still exercise echoed context")
+    func explicitTestFallbackCanExerciseEchoedContext() async throws {
         let runner = FakeLocalRunner(result: .success("Hey. How are"))
-        let engine = LocalCompletionEngine(runner: runner)
+        let engine = LocalCompletionEngine(runner: runner, fallback: MockCompletionEngine())
 
         let suggestion = try await engine.suggestion(
             for: CompletionRequest(textBeforeCursor: "Hey. How are we going to do th", maxVisibleWords: 8)
@@ -117,13 +117,13 @@ struct LocalCompletionEngineTests {
         #expect(suggestion?.visibleText == " Hey that sounds")
     }
 
-    @Test("Factory selects mock when app-owned runtime is missing")
-    func factorySelectsMockForMissingRuntime() {
+    @Test("Factory selects unavailable when app-owned runtime is missing")
+    func factorySelectsUnavailableForMissingRuntime() {
         let factory = CompletionEngineFactory(
             runtimeExecutableURL: URL(fileURLWithPath: "/tmp/autocomplete-lab-missing-runtime")
         )
 
-        #expect(factory.selection() == .mockFallback)
+        #expect(factory.selection() == .unavailable)
     }
 
     @Test("Factory selects local Gemma bridge when app-owned runtime is executable")
