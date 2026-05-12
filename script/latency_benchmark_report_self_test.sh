@@ -140,33 +140,6 @@ if ! grep -F "Latency beta gate passed." <<<"$REPORT" >/dev/null; then
   exit 1
 fi
 
-REPORT="$(
-  AUTOCOMPLETE_LAB_LOG_START_LINE=2 \
-    AUTOCOMPLETE_LAB_TRACE_START_LINE=1 \
-    AUTOCOMPLETE_LAB_LATENCY_WINDOW_STALE=1 \
-    AUTOCOMPLETE_LAB_LATENCY_WINDOW_STALE_DIAGNOSTICS_LINE=5 \
-    AUTOCOMPLETE_LAB_LATENCY_WINDOW_STALE_FIRST_VISIBLE_SAMPLES=1 \
-    AUTOCOMPLETE_LAB_LATENCY_WINDOW_STALE_MODEL_SAMPLES=0 \
-    script/latency_benchmark_report.py \
-      --diagnostics-log "$DIAGNOSTICS_LOG" \
-      --trace-log "$TRACE_LOG" \
-      --beta-gate \
-      --require-first-visible-samples 1 \
-      --require-model-samples 1 \
-      --require-event-tap-samples 0 \
-      --require-ax-samples 1 \
-      --max-first-visible-p95-ms 250 \
-      --max-first-visible-p99-ms 250 \
-      --max-first-token-p95-ms 650 \
-      --max-total-generation-p95-ms 850
-)"
-
-if ! grep -F "Latency window caveat: current default runtime launch is under-sampled; diagnosticsLine=5; firstVisibleSamples=1; modelSamples=0; reporting latest older sampled default window" <<<"$REPORT" >/dev/null; then
-  echo "latency benchmark self-test did not print the stale current-launch caveat" >&2
-  echo "$REPORT" >&2
-  exit 1
-fi
-
 cat >"$DIAGNOSTICS_LOG" <<'LOG'
 2026-05-09T10:00:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit
 2026-05-09T10:00:01Z mlx-completion-timing app=com.apple.TextEdit cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=100 generationMilliseconds=180 maxTokens=9 mode=phraseContinuation promptMilliseconds=0 rawChars=12 sessionMilliseconds=0 totalMilliseconds=190

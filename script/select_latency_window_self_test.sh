@@ -145,60 +145,24 @@ cat >>"$TRACE_LOG" <<'LOG'
 {"timestamp":"2026-05-12T10:12:02Z","sessionID":"session","suggestionID":"future-slow","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":2000,"metadata":{"behaviorProfile":"docs_prose"}}
 LOG
 
-WINDOW_WITH_PARTIAL_LATEST="$(
-  script/select_latency_window.py \
-    --diagnostics-log "$DIAGNOSTICS_LOG" \
-    --trace-log "$TRACE_LOG" \
-    --min-first-visible-samples 2 \
-    --min-model-samples 2 2>"$TMP_DIR/partial-latest.err"
-)"
-
-if ! grep -F "AUTOCOMPLETE_LAB_LOG_START_LINE=3" <<<"$WINDOW_WITH_PARTIAL_LATEST" >/dev/null; then
-  echo "latency window self-test did not fall back to the latest valid sampled window" >&2
-  cat "$TMP_DIR/partial-latest.err" >&2
-  echo "$WINDOW_WITH_PARTIAL_LATEST" >&2
+if script/select_latency_window.py \
+  --diagnostics-log "$DIAGNOSTICS_LOG" \
+  --trace-log "$TRACE_LOG" \
+  --min-first-visible-samples 2 \
+  --min-model-samples 2 2>"$TMP_DIR/partial-latest.err" >/dev/null; then
+  echo "latency window self-test expected partial latest launch samples to fail" >&2
   exit 1
 fi
 
-if ! grep -F "AUTOCOMPLETE_LAB_LATENCY_WINDOW_STALE=1" <<<"$WINDOW_WITH_PARTIAL_LATEST" >/dev/null; then
-  echo "latency window self-test did not mark the current partial launch as stale" >&2
-  cat "$TMP_DIR/partial-latest.err" >&2
-  echo "$WINDOW_WITH_PARTIAL_LATEST" >&2
-  exit 1
-fi
-
-if ! grep -F "currentDefaultRuntimeUnderSampled=true" "$TMP_DIR/partial-latest.err" >/dev/null; then
-  echo "latency window self-test did not explain the stale current launch" >&2
+if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/partial-latest.err" >/dev/null; then
+  echo "latency window self-test did not keep partial latest launch proof red" >&2
   cat "$TMP_DIR/partial-latest.err" >&2
   exit 1
 fi
 
-PARTIAL_LATEST_ENV=()
-while IFS= read -r assignment; do
-  [[ -n "$assignment" ]] && PARTIAL_LATEST_ENV+=("$assignment")
-done <<<"$WINDOW_WITH_PARTIAL_LATEST"
-
-if ! env "${PARTIAL_LATEST_ENV[@]}" \
-  script/latency_benchmark_report.py \
-    --diagnostics-log "$DIAGNOSTICS_LOG" \
-    --trace-log "$TRACE_LOG" \
-    --beta-gate \
-    --require-first-visible-samples 2 \
-    --require-model-samples 2 \
-    --require-event-tap-samples 0 \
-    --require-ax-samples 1 \
-    --max-first-visible-p95-ms 250 \
-    --max-first-visible-p99-ms 250 \
-    --max-first-token-p95-ms 650 \
-    --max-total-generation-p95-ms 850 >"$TMP_DIR/partial-latest-report.txt"; then
-  echo "latency window self-test could not report the fallback window" >&2
-  cat "$TMP_DIR/partial-latest-report.txt" >&2
-  exit 1
-fi
-
-if ! grep -F "Latency window caveat: current default runtime launch is under-sampled" "$TMP_DIR/partial-latest-report.txt" >/dev/null; then
-  echo "latency window self-test did not carry the stale launch caveat into the report" >&2
-  cat "$TMP_DIR/partial-latest-report.txt" >&2
+if ! grep -F "firstVisibleSamples=1; modelSamples=1" "$TMP_DIR/partial-latest.err" >/dev/null; then
+  echo "latency window self-test did not report the partial latest launch sample counts" >&2
+  cat "$TMP_DIR/partial-latest.err" >&2
   exit 1
 fi
 
