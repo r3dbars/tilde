@@ -670,6 +670,18 @@ wait_for_runtime_ready() {
 wait_for_frontmost_app() {
   local expected="$1"
   local timeout_seconds="${2:-5}"
+
+  if try_wait_for_frontmost_app "$expected" "$timeout_seconds"; then
+    return 0
+  fi
+
+  echo "Timed out waiting for $expected to become frontmost." >&2
+  exit 1
+}
+
+try_wait_for_frontmost_app() {
+  local expected="$1"
+  local timeout_seconds="${2:-5}"
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
@@ -681,8 +693,7 @@ wait_for_frontmost_app() {
     sleep 0.2
   done
 
-  echo "Timed out waiting for $expected to become frontmost." >&2
-  exit 1
+  return 1
 }
 
 wait_for_background_process() {
@@ -2362,6 +2373,10 @@ exit(1)
 SWIFT
 }
 
+nudge_textedit_frontmost() {
+  open -a TextEdit >/dev/null 2>&1 || true
+}
+
 focus_textedit_smoke_editor() {
   local window_title="${1:-}"
 
@@ -2373,7 +2388,13 @@ focus_textedit_smoke_editor() {
       return 1
     fi
     activate_process_id "$target_pid"
-    wait_for_frontmost_app "TextEdit" 5
+    if ! try_wait_for_frontmost_app "TextEdit" 5; then
+      nudge_textedit_frontmost
+    fi
+    if ! try_wait_for_frontmost_app "TextEdit" 3; then
+      echo "Timed out waiting for TextEdit smoke window '$window_title' to become frontmost." >&2
+      return 1
+    fi
   else
     osascript >/dev/null <<'APPLESCRIPT'
 tell application "System Events"
@@ -2384,7 +2405,13 @@ end tell
 APPLESCRIPT
   fi
 
-  wait_for_frontmost_app "TextEdit" 5
+  if ! try_wait_for_frontmost_app "TextEdit" 5; then
+    nudge_textedit_frontmost
+  fi
+  if ! try_wait_for_frontmost_app "TextEdit" 3; then
+    echo "Timed out waiting for TextEdit to become frontmost." >&2
+    return 1
+  fi
 }
 
 click_textedit_smoke_editor() {
@@ -2398,7 +2425,13 @@ click_textedit_smoke_editor() {
       return 1
     fi
     activate_process_id "$target_pid"
-    wait_for_frontmost_app "TextEdit" 5
+    if ! try_wait_for_frontmost_app "TextEdit" 5; then
+      nudge_textedit_frontmost
+    fi
+    if ! try_wait_for_frontmost_app "TextEdit" 3; then
+      echo "Timed out waiting for TextEdit smoke window '$window_title' to become frontmost after click." >&2
+      return 1
+    fi
   else
     osascript >/dev/null <<'APPLESCRIPT'
 tell application "System Events"
@@ -2414,7 +2447,13 @@ end tell
 APPLESCRIPT
   fi
 
-  wait_for_frontmost_app "TextEdit" 5
+  if ! try_wait_for_frontmost_app "TextEdit" 5; then
+    nudge_textedit_frontmost
+  fi
+  if ! try_wait_for_frontmost_app "TextEdit" 3; then
+    echo "Timed out waiting for TextEdit to become frontmost after click." >&2
+    return 1
+  fi
 }
 
 textedit_document_text() {
