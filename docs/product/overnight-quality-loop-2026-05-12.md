@@ -38,7 +38,7 @@ This is a progress score, not a release claim. The deterministic 500-case predic
 
 - Claude Code has current insertion/no-submit proof, but strict screenshot refresh is blocked until the user grants the local macOS screen/audio permission prompt; iTerm2 and Ghostty host-labeled lanes are still pending.
 - Claude desktop lanes need manual no-submit confirmation on the current app binary.
-- Production official CodeMirror, Monaco, and ProseMirror site variants still need bounded screenshot-backed traces. The official-demo harness now uses isolated Chrome plus localhost DevTools instead of Chrome JavaScript-from-Apple-Events; `prosemirror-official` passed strict screenshot-backed proof at 2026-05-12T07:47:10Z, while current CodeMirror and Monaco official pages still fail honestly because their AX context reports selected/middle-of-line or too-little-context state.
+- Production official Monaco still needs a bounded screenshot-backed trace. The official-demo harness now uses isolated Chrome plus localhost DevTools instead of Chrome JavaScript-from-Apple-Events; `prosemirror-official` passed strict screenshot-backed proof at 2026-05-12T07:47:10Z, and `codemirror-official` passed strict screenshot-backed proof at 2026-05-12T08:14:38Z after narrowing setup and CodeMirror AX soft-wrap repair. Monaco still fails honestly because its official page exposes too little AX text context.
 - Browser ChatGPT, Slack, and Discord stay blocked until exact real-service no-submit proof exists.
 - Codex needs more prompt layout proof before it can move above A-.
 - `./script/check_score_targets.sh` should keep failing until those proof gates close.
