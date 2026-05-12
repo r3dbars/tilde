@@ -22,6 +22,83 @@ require_pattern() {
   grep -E "$pattern" "$path" >/dev/null || fail "missing $label in $path"
 }
 
+coverage_test_path_for_source() {
+  local source_path="$1"
+  local base
+  base="$(basename "$source_path" .swift)"
+
+  case "$source_path" in
+    Sources/AutocompleteLabCore/*)
+      printf 'Tests/AutocompleteLabCoreTests/%sTests.swift\n' "$base"
+      ;;
+    Sources/AutocompleteLabApp/*)
+      printf 'Tests/AutocompleteLabAppTests/%sTests.swift\n' "$base"
+      ;;
+    Sources/AutocompleteTraceReplay/*)
+      printf 'Tests/AutocompleteTraceReplayTests/%sTests.swift\n' "$base"
+      ;;
+    *)
+      printf '\n'
+      ;;
+  esac
+}
+
+require_coverage_artifacts() {
+  local source_path="$1"
+  local kind="$2"
+  local artifacts="$3"
+  local artifact
+
+  case "$kind" in
+    unit|integration|e2e)
+      ;;
+    *)
+      fail "unknown coverage kind '$kind' for $source_path"
+      ;;
+  esac
+
+  [[ -n "$artifacts" ]] || fail "missing coverage artifact for $source_path"
+  local old_ifs="$IFS"
+  IFS=","
+  for artifact in $artifacts; do
+    IFS="$old_ifs"
+    [[ -n "$artifact" ]] || fail "empty coverage artifact for $source_path"
+    require_file "$artifact"
+    IFS=","
+  done
+  IFS="$old_ifs"
+}
+
+require_source_coverage_ownership() {
+  local manifest="docs/product/test-coverage-ownership.psv"
+  require_file "$manifest"
+
+  local source_path
+  while IFS= read -r source_path; do
+    local direct_test
+    direct_test="$(coverage_test_path_for_source "$source_path")"
+    if [[ -n "$direct_test" && -f "$direct_test" ]]; then
+      continue
+    fi
+
+    grep -F "${source_path}|" "$manifest" >/dev/null ||
+      fail "missing unit/e2e coverage owner for $source_path"
+  done < <(find Sources -type f -name '*.swift' | sort)
+
+  local line source kind artifacts note
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" || "$line" == \#* ]] && continue
+
+    IFS="|" read -r source kind artifacts note <<<"$line"
+    [[ -n "$source" && -n "$kind" && -n "$artifacts" ]] ||
+      fail "malformed coverage ownership row: $line"
+    require_file "$source"
+    require_coverage_artifacts "$source" "$kind" "$artifacts"
+  done < "$manifest"
+}
+
+require_source_coverage_ownership
+
 require_file "Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift" "Blocks secure or suppressed fields" "secure-field activation coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift" "Blocks selected text" "selected-text activation coverage"

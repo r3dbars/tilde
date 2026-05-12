@@ -524,7 +524,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportsOneWordAcceptance: true,
             supportsFullAcceptance: false,
             requiresNoSubmitAcceptanceProof: true,
-            suppressesAfterInsertionFailure: false,
+            suppressesAfterInsertionFailure: true,
             allowsDetachedSuggestions: false,
             promptAppSafetyMode: .wordOnly,
             notes: "Dogfood target for Claude desktop. Prefer prompt-bound inline suggestions when the composer exposes bounds; otherwise use mirror placement without showing detached whole-window suggestions. Same-slice one-word no-submit proof exists; full accept stays disabled until separate full-accept no-submit proof is current."

@@ -19,6 +19,12 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_PROCESS_NAME = "SteadyType"
 DEFAULT_PROOF_DIR = ROOT_DIR / "docs" / "diagnostics" / "runs"
 MODEL_SETUP_PHASES = {"model-setup", "model-download", "model-update"}
+ALLOWED_MODEL_REMOTE_SUFFIXES = (
+    "huggingface.co",
+    ".huggingface.co",
+    "hf.co",
+    ".hf.co",
+)
 
 
 @dataclass(frozen=True)
@@ -184,6 +190,14 @@ def remote_endpoints(endpoints: list[Endpoint]) -> list[Endpoint]:
     ]
 
 
+def is_allowed_model_remote(endpoint: Endpoint) -> bool:
+    host = endpoint.remote_host.lower().strip(".")
+    return any(
+        host == suffix.lstrip(".") or host.endswith(suffix)
+        for suffix in ALLOWED_MODEL_REMOTE_SUFFIXES
+    )
+
+
 def find_pids(process_name: str) -> list[int]:
     candidates: set[int] = set()
     commands = [
@@ -312,7 +326,7 @@ def build_summary(
         "network_assertion": (
             "No non-loopback remote endpoints during autocomplete."
             if args.phase == "autocomplete"
-            else "Remote endpoints are classified as model setup/update traffic, not autocomplete-time egress."
+            else "Only allowlisted model setup/update endpoints are permitted."
         ),
         "remote_endpoint_count": len(remote_endpoints(endpoints)),
         "unexpected_remote_endpoint_count": len(unexpected),
@@ -386,8 +400,12 @@ def main() -> int:
 
     endpoints = parse_lsof_samples(sample_texts)
     remotes = remote_endpoints(endpoints)
-    allowed_model = remotes if args.phase in MODEL_SETUP_PHASES else []
-    unexpected = [] if args.phase in MODEL_SETUP_PHASES else remotes
+    if args.phase in MODEL_SETUP_PHASES:
+        allowed_model = [endpoint for endpoint in remotes if is_allowed_model_remote(endpoint)]
+        unexpected = [endpoint for endpoint in remotes if not is_allowed_model_remote(endpoint)]
+    else:
+        allowed_model = []
+        unexpected = remotes
     passed = not unexpected
 
     summary = build_summary(
@@ -419,7 +437,10 @@ def main() -> int:
         print(f"Proof artifact: {out_path}")
 
     if unexpected:
-        print("Unexpected autocomplete-time egress:", file=sys.stderr)
+        if args.phase in MODEL_SETUP_PHASES:
+            print("Unexpected model setup/update egress:", file=sys.stderr)
+        else:
+            print("Unexpected autocomplete-time egress:", file=sys.stderr)
         for endpoint in unexpected:
             print(f"- {endpoint.safe_remote}", file=sys.stderr)
         return 1

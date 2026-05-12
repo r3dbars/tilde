@@ -248,6 +248,31 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         ) == .eligible)
     }
 
+    @Test("Terminal-host proof accepts the marked current prompt line when scrollback has prior shell commands")
+    func terminalHostProofAcceptsMarkedCurrentPromptLineWithShellScrollback() {
+        let textBeforeCursor = """
+        redbars@Mac % cd /tmp/autocomplete-claude-code-proof; printf '\\033]0;Claude Code AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF\\007'; claude
+        Claude Code
+        ❯ AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF Can we make this dicta
+        """
+        let focusedLine = ClaudeCodeTerminalHostProofPolicy.focusedInputLine(
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: " \n  ? for shortcuts"
+        )
+
+        #expect(focusedLine == "❯ AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF Can we make this dicta ")
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(
+            ClaudeCodeTerminalHostProofContext(
+                hostBundleIdentifier: "com.apple.Terminal",
+                windowTitle: "redbars — ✳ Claude Code — node ◂ claude — 120×30",
+                focusedText: focusedLine,
+                rawTextBeforeCursor: textBeforeCursor,
+                rawTextAfterCursor: " \n  ? for shortcuts",
+                proofModeEnabled: true
+            )
+        ) == .eligible)
+    }
+
     @Test("Terminal-host proof input strips prompt glyph and marker")
     func terminalHostProofInputStripsPromptGlyphAndMarker() {
         let input = ClaudeCodeTerminalHostProofPolicy.proofInputText(

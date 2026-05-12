@@ -127,6 +127,36 @@ struct SuggestionAggressivenessTests {
             appBundleIdentifier: "com.apple.mail",
             visiblePageContextAvailable: true
         ))
+        #expect(normal.allowsPredictivePhraseFallback(
+            appBundleIdentifier: "com.apple.Notes",
+            behaviorProfileID: .notes,
+            visiblePageContextAvailable: false
+        ))
+        #expect(!normal.allowsPredictivePhraseFallback(
+            appBundleIdentifier: "com.apple.mail",
+            behaviorProfileID: .email,
+            visiblePageContextAvailable: false
+        ))
+        #expect(normal.allowsPredictivePhraseFallback(
+            appBundleIdentifier: "com.apple.mail",
+            behaviorProfileID: .email,
+            visiblePageContextAvailable: true
+        ))
+        #expect(normal.allowsPredictivePhraseFallback(
+            appBundleIdentifier: "com.google.Chrome",
+            behaviorProfileID: .docsProse,
+            visiblePageContextAvailable: false
+        ))
+        #expect(!normal.allowsPredictivePhraseFallback(
+            appBundleIdentifier: "com.google.Chrome",
+            behaviorProfileID: .forms,
+            visiblePageContextAvailable: false
+        ))
+        #expect(SuggestionTuning(aggressivenessLevel: 3).allowsPredictivePhraseFallback(
+            appBundleIdentifier: "com.apple.mail",
+            behaviorProfileID: .email,
+            visiblePageContextAvailable: false
+        ))
     }
 
     @Test("parsing and cycling are stable")

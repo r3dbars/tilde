@@ -15,8 +15,9 @@ release/beta work. The status command also lists the current scorecard rows
 that are still below 10/10. In strict mode it also runs the screenshot evidence
 gate, so stale screenshot rows, unreferenced screenshot files, and below-target
 visual rows without a clear `Pending` label block the pass.
-It only counts manual smoke rows that include the current Git commit or current
-release archive checksum in the trace slice.
+It only counts manual smoke rows that include the current app binary, current
+archive, current commit, or a commit whose app/runtime source still matches the
+current checkout.
 
 For the full remaining manual beta proof sequence, run:
 
@@ -27,9 +28,8 @@ script/manual_proof_queue.sh --print
 
 Use `script/manual_proof_refresh.sh --run --target textedit` for one focused
 refresh at a time. It prints the exact recorder command, runs it, then refuses
-the row unless the latest report includes the current commit or archive
-fingerprint. This keeps old app binary hashes from making stale source proof
-look current.
+the row unless the latest report includes a current app/source proof fingerprint.
+This keeps old app binary hashes from making stale source proof look current.
 
 Use `script/manual_proof_queue.sh --run` only when you are ready to walk
 through each manual-gated recorder with disposable content. The queue verifies
@@ -75,8 +75,8 @@ Recorder:
 
 ```bash
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-multiline
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-wrapped
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-long-wrap
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-narrow
 ```
 
 - Type `Smoke proof feels inst`.
@@ -85,7 +85,7 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-wrapped
 - Type ` and stays inst`.
 - Press the configured full-accept shortcut and expect another `instant` completion.
 - Confirm `insert-verification result=verified`.
-- Run the multiline and wrapped-line variants before treating TextEdit as fully current.
+- Run the wrapped-line and narrow-window variants before treating TextEdit as fully current.
 
 ## Notes
 
