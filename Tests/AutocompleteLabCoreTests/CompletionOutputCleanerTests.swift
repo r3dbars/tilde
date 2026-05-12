@@ -102,6 +102,7 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("press Option-Tab to accept all visible text", after: "Then") == nil)
         #expect(cleaner.clean("use Backtick to accept all visible text", after: "Then") == nil)
         #expect(cleaner.clean("accept the terms", after: "For the manual smoke row, press Tab and confirm") == nil)
+        #expect(cleaner.clean("and accept the change", after: "For the manual smoke row, press Tab and confirm") == nil)
         #expect(cleaner.clean("submit the prompt", after: "Then") == nil)
         #expect(cleaner.clean("then submit it", after: "Check once") == nil)
         #expect(cleaner.clean("click send", after: "Next") == nil)

@@ -755,6 +755,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
     private static let unsafePromptActionPhrases = [
         "accept all visible text",
+        "accept the change",
         "accept the terms",
         "accept the whole suggestion",
         "click send",
