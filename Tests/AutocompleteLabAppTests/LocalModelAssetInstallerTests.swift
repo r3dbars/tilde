@@ -78,4 +78,27 @@ struct LocalModelAssetInstallerTests {
         try policy.validate(availableBytes: nil, expectedMinimumBytes: 4_000_000_000)
         try policy.validate(availableBytes: 5_000_000_000, expectedMinimumBytes: 4_000_000_000)
     }
+
+    @Test("Volume resolver falls back to an existing ancestor for first install")
+    func volumeResolverFallsBackToExistingAncestorForFirstInstall() throws {
+        let resolver = LocalModelInstallVolumeCapacityResolver()
+        let baseURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("autocomplete-volume-test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: baseURL)
+        }
+
+        let destinationURL = baseURL
+            .appendingPathComponent("missing-cache", isDirectory: true)
+            .appendingPathComponent("model", isDirectory: true)
+
+        let resolved = resolver.installVolumeURL(for: destinationURL)
+
+        #expect(
+            resolved.resolvingSymlinksInPath().path
+                == baseURL.resolvingSymlinksInPath().path
+        )
+        #expect(resolver.availableBytes(for: destinationURL) != nil)
+    }
 }

@@ -91,19 +91,52 @@ struct LocalModelInstallPreflightPolicy: Equatable, Sendable {
     }
 }
 
+struct LocalModelInstallVolumeCapacityResolver: Equatable, Sendable {
+    func installVolumeURL(
+        for destinationURL: URL,
+        fileManager: FileManager = .default
+    ) -> URL {
+        var candidate = destinationURL.deletingLastPathComponent()
+        while !fileManager.fileExists(atPath: candidate.path) {
+            let parent = candidate.deletingLastPathComponent()
+            guard parent.path != candidate.path else {
+                return candidate
+            }
+            candidate = parent
+        }
+        return candidate
+    }
+
+    func availableBytes(
+        for destinationURL: URL,
+        fileManager: FileManager = .default
+    ) -> Int64? {
+        let volumeURL = installVolumeURL(for: destinationURL, fileManager: fileManager)
+        let values = try? volumeURL.resourceValues(forKeys: [
+            .volumeAvailableCapacityForImportantUsageKey,
+            .volumeAvailableCapacityKey
+        ])
+        return values?.volumeAvailableCapacityForImportantUsage
+            ?? values?.volumeAvailableCapacity.map(Int64.init)
+    }
+}
+
 struct LocalModelAssetInstaller: Sendable {
     let manifest: LocalModelAssetManifest
     let destinationURL: URL
     let preflightPolicy: LocalModelInstallPreflightPolicy
+    let capacityResolver: LocalModelInstallVolumeCapacityResolver
 
     init(
         manifest: LocalModelAssetManifest,
         destinationURL: URL,
-        preflightPolicy: LocalModelInstallPreflightPolicy = LocalModelInstallPreflightPolicy()
+        preflightPolicy: LocalModelInstallPreflightPolicy = LocalModelInstallPreflightPolicy(),
+        capacityResolver: LocalModelInstallVolumeCapacityResolver = LocalModelInstallVolumeCapacityResolver()
     ) {
         self.manifest = manifest
         self.destinationURL = destinationURL
         self.preflightPolicy = preflightPolicy
+        self.capacityResolver = capacityResolver
     }
 
     func install(
@@ -183,12 +216,6 @@ struct LocalModelAssetInstaller: Sendable {
     }
 
     private func availableBytesForInstallVolume() -> Int64? {
-        let volumeURL = destinationURL.deletingLastPathComponent()
-        let values = try? volumeURL.resourceValues(forKeys: [
-            .volumeAvailableCapacityForImportantUsageKey,
-            .volumeAvailableCapacityKey
-        ])
-        return values?.volumeAvailableCapacityForImportantUsage
-            ?? values?.volumeAvailableCapacity.map(Int64.init)
+        capacityResolver.availableBytes(for: destinationURL)
     }
 }
