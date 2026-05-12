@@ -3,8 +3,8 @@ import Testing
 
 @Suite("Keyboard capture safety policy")
 struct KeyboardCaptureSafetyPolicyTests {
-    @Test("Acceptance blocks replay the original captured key")
-    func acceptanceBlocksReplayOriginalCapturedKey() {
+    @Test("Ordinary acceptance blocks replay the original captured key")
+    func ordinaryAcceptanceBlocksReplayOriginalCapturedKey() {
         let policy = KeyboardCaptureSafetyPolicy()
         let blockReasons: [SuggestionAcceptanceBlockReason] = [
             .appChanged,
@@ -14,9 +14,6 @@ struct KeyboardCaptureSafetyPolicyTests {
             .textAfterCursorChanged,
             .missingShownSnapshot,
             .missingCurrentSnapshot,
-            .currentBecameSecure,
-            .currentBecameSuppressedField,
-            .promptTargetChanged,
             .targetFingerprintChanged
         ]
 
@@ -26,6 +23,24 @@ struct KeyboardCaptureSafetyPolicyTests {
                     == .replayOriginalKey(.acceptanceTargetChanged)
             )
         }
+    }
+
+    @Test("Sensitive acceptance blocks drop the captured key")
+    func sensitiveAcceptanceBlocksDropCapturedKey() {
+        let policy = KeyboardCaptureSafetyPolicy()
+
+        #expect(
+            policy.handlingResult(forAcceptanceBlock: .currentBecameSecure)
+                == .dropOriginalKey(.secureFieldBeforeAccept)
+        )
+        #expect(
+            policy.handlingResult(forAcceptanceBlock: .currentBecameSuppressedField)
+                == .dropOriginalKey(.suppressedFieldBeforeAccept)
+        )
+        #expect(
+            policy.handlingResult(forAcceptanceBlock: .promptTargetChanged)
+                == .dropOriginalKey(.promptTargetChangedBeforeAccept)
+        )
     }
 
     @Test("Unsafe acceptance failures drop the original captured key")
