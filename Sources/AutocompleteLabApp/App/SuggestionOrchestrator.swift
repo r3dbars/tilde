@@ -3,6 +3,8 @@ import AutocompleteLabCore
 
 @MainActor
 final class SuggestionOrchestrator {
+    private static let maximumFinalModelDisplayLatencyMilliseconds = 750
+
     private let engineBox: CompletionEngineBox
     private let wordCompletionRanker: WordCompletionCandidateRanker
     private let commonPhrasePredictor: CommonPhraseContinuationPredictor
@@ -511,13 +513,32 @@ final class SuggestionOrchestrator {
             acceptedAndKeptSignal: acceptedAndKeptSignal,
             isRepeatedMiss: isRepeatedMiss
         )
-        let decision = displayScorePolicy
+        let adjustedDisplayScorePolicy = displayScorePolicy
             .adjustingThresholds(by: prefixEagernessAdjustment.thresholdAdjustment)
-            .decision(
+        let decision: DisplayScoreDecision
+        if triggerReason != "model-stream",
+           latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds {
+            let trace = DisplayScoreTrace(
+                score: score,
+                mode: request.mode,
+                behaviorProfileID: request.behaviorProfile.id,
+                threshold: adjustedDisplayScorePolicy.threshold(for: request.mode),
+                acceptedAndKeptProbabilityThreshold: adjustedDisplayScorePolicy.acceptedAndKeptProbabilityThreshold(
+                    for: request.mode,
+                    behaviorProfileID: request.behaviorProfile.id
+                )
+            )
+            decision = .suppress(DisplayScoreSuppression(
+                reason: .tooSlowToDisplay,
+                trace: trace
+            ))
+        } else {
+            decision = adjustedDisplayScorePolicy.decision(
                 for: score,
                 mode: request.mode,
                 behaviorProfileID: request.behaviorProfile.id
             )
+        }
         return SuggestionDisplayScoreDecision(
             decision: decision,
             metadata: decision.metadata

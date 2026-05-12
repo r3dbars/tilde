@@ -14,6 +14,8 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("boring connective tissue"))
         #expect(prompt.system.contains("Prefer 3 to 5 useful words"))
         #expect(prompt.system.contains("full-sentence continuation"))
+        #expect(prompt.system.contains("Never suggest pressing Tab, Option-Tab, Backtick"))
+        #expect(prompt.system.contains("do not suggest accepting terms or permissions"))
         #expect(prompt.system.contains("common phrase"))
         #expect(prompt.system.contains("Do not answer, explain"))
         #expect(prompt.system.contains("repeat the Before cursor text"))
@@ -142,6 +144,7 @@ struct CompletionPromptBuilderTests {
         ))
 
         #expect(prompt.system.contains("Document/window title shape"))
+        #expect(prompt.system.contains("Tab inserts only this visible suffix"))
         #expect(prompt.system.contains("file extension md"))
         #expect(!prompt.system.contains("Launch"))
         #expect(!prompt.system.contains("Plan"))

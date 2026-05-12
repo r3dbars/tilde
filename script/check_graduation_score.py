@@ -235,6 +235,7 @@ def contains_all(haystack: str, needles: tuple[str, ...]) -> bool:
 def manifest_checks(manifest: dict) -> list[Check]:
     expected_names = tuple(surface.surface for surface in EXPECTED_SURFACES)
     rows = rows_by_surface(manifest)
+    manifest_checker = text("script/check_proof_manifest.py")
     checks: list[Check] = []
     checks.append(
         Check(
@@ -290,11 +291,13 @@ def manifest_checks(manifest: dict) -> list[Check]:
     checks.append(
         Check(
             4,
-            "Manifest required proof gates are explicit",
+            "Manifest required proof gates are explicit and checked",
             all(
                 set(expected.required_proof).issubset(set(rows.get(expected.surface, {}).get("requiredProof", [])))
                 for expected in EXPECTED_SURFACES
-            ),
+            )
+            and "EXPECTED_GRADUATION_DECISIONS" in manifest_checker
+            and "verify_graduation_decisions" in manifest_checker,
             "one or more requiredProof lists are incomplete",
         )
     )
@@ -304,8 +307,10 @@ def manifest_checks(manifest: dict) -> list[Check]:
 def profile_checks() -> list[Check]:
     compatibility = text("Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift")
     app_profiles = text("Sources/AutocompleteLabCore/Compatibility/AppCompatibilityProfile.swift")
+    browser_policy = text("Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift")
     compatibility_tests = text("Tests/AutocompleteLabCoreTests/CompatibilityProfileTests.swift")
     app_profile_tests = text("Tests/AutocompleteLabCoreTests/AppCompatibilityProfileTests.swift")
+    browser_policy_tests = text("Tests/AutocompleteLabCoreTests/BrowserHostedSurfacePolicyTests.swift")
     checks = [
         Check(
             4,
@@ -351,15 +356,18 @@ def profile_checks() -> list[Check]:
         ),
         Check(
             4,
-            "Notion, Slack, and Discord have blocked routing profiles",
+            "High-risk browser and collaboration surfaces stay blocked and redacted",
             contains_all(
-                app_profiles + app_profile_tests,
+                app_profiles + app_profile_tests + browser_policy + browser_policy_tests,
                 (
                     "notion-blocked",
                     "slack-blocked",
                     "discord-blocked",
                     "High-value unproven collaboration apps stay blocked at the routing layer",
                     "acceptMode == .none",
+                    "redactedTraceMetadata",
+                    "blockedSurfaceTextRedacted",
+                    "Chrome sensitive pages outrank service fingerprints",
                 ),
             ),
         ),

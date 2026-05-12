@@ -666,6 +666,38 @@ if ! grep -F "Proof manifest verified." "$TMP_DIR/pass.out" >/dev/null; then
   exit 1
 fi
 
+BROKEN_GRADUATION_MANIFEST="$TMP_DIR/proof-manifest.json"
+cp docs/product/proof-manifest.json "$BROKEN_GRADUATION_MANIFEST"
+python3 - "$BROKEN_GRADUATION_MANIFEST" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+manifest = json.loads(path.read_text(encoding="utf-8"))
+for row in manifest["graduationDecisions"]:
+    if row["surface"] == "Google Docs in Chrome":
+        row["decision"] = "supported"
+        break
+path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+PY
+
+if script/check_proof_manifest.sh \
+  --manifest "$BROKEN_GRADUATION_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --skip-profile-coverage >"$TMP_DIR/broken-graduation.out" 2>&1; then
+  echo "proof manifest self-test expected changed graduation decision to fail" >&2
+  cat "$TMP_DIR/broken-graduation.out" >&2
+  exit 1
+fi
+
+if ! grep -F "graduationDecisions Google Docs in Chrome: decision is 'supported'; expected 'blocked'" "$TMP_DIR/broken-graduation.out" >/dev/null; then
+  echo "proof manifest self-test did not explain changed graduation decision" >&2
+  cat "$TMP_DIR/broken-graduation.out" >&2
+  exit 1
+fi
+
 script/check_proof_manifest.sh \
   --manifest "$VARIANT_MANIFEST" \
   --manual-smoke "$MANUAL_SMOKE" \

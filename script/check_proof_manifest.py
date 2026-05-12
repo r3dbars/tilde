@@ -17,6 +17,139 @@ DEFAULT_APP_PROOF_MATRIX = ROOT_DIR / "docs/product/app-proof-matrix.md"
 DEFAULT_COMPATIBILITY_PROFILES = ROOT_DIR / "Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift"
 PROOF_METADATA_SOURCE = ROOT_DIR / "Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift"
 HOST_POLICY_SOURCE = ROOT_DIR / "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift"
+EXPECTED_GRADUATION_DECISIONS = {
+    "Google Docs in Chrome": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh chrome --fixture google-docs",
+        "requiredProof": {
+            "correct placement",
+            "safe Tab",
+            "no submit/send",
+            "no sensitive-field leak",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+    "Notion browser or desktop": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh chrome --fixture notion",
+        "requiredProof": {
+            "correct placement",
+            "safe Tab",
+            "no submit/send",
+            "no sensitive-field leak",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+    "Slack browser or desktop": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh chrome --fixture browser-slack",
+        "requiredProof": {
+            "correct placement",
+            "safe Tab",
+            "no submit/send",
+            "no sensitive-field leak",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+    "Discord browser or desktop": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh chrome --fixture browser-discord",
+        "requiredProof": {
+            "correct placement",
+            "safe Tab",
+            "no submit/send",
+            "no sensitive-field leak",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+    "Mail compose": {
+        "decision": "diagnostics-only",
+        "proofState": "blocked",
+        "smokeCommand": None,
+        "requiredProof": {
+            "compose-body-only placement",
+            "safe Tab",
+            "no recipient/search/account-field leak",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+    "Browser ChatGPT": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh chrome --fixture browser-chatgpt",
+        "requiredProof": {
+            "correct placement",
+            "safe one-word Tab",
+            "no submit/send",
+            "no tool/context side effect",
+            "no sensitive-field leak",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+    "Claude desktop layouts": {
+        "decision": "word-only",
+        "proofState": "partial",
+        "smokeCommand": "script/real_app_smoke.sh claude-empty --manual-gate",
+        "requiredProof": {
+            "empty prompt layout",
+            "long prompt layout",
+            "wrapped prompt layout",
+            "narrow window layout",
+            "context layout",
+            "light appearance",
+            "dark appearance",
+        },
+    },
+    "Codex layouts": {
+        "decision": "word-only",
+        "proofState": "complete",
+        "smokeCommand": "script/real_app_smoke.sh codex --manual-gate",
+        "requiredProof": {
+            "more prompt layouts before raising beyond word-only",
+            "separate full-accept no-submit proof before enabling full accept",
+        },
+    },
+    "Obsidian long notes": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh obsidian-long-note --manual-gate",
+        "requiredProof": {
+            "correct scrolled CodeMirror caret source",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+    "Real Monaco and CodeMirror editors": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh chrome --fixture monaco-official",
+        "requiredProof": {
+            "official CodeMirror proof",
+            "official Monaco proof",
+            "default-AX Monaco proof",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+}
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 TRACE_REFERENCE_PATTERN = re.compile(
     r"lines\s+(\d+)(?:\s*-\s*(\d+)|\+)?\s+in\s+`?([^`;\s]+)`?"
@@ -671,6 +804,12 @@ def verify_manifest(
             failures,
         )
     host_policy_count = verify_host_policy(manifest, expected_profiles, failures)
+    graduation_decision_count = verify_graduation_decisions(
+        manifest,
+        failures,
+        require_graduation_decisions=manifest_path.name == DEFAULT_MANIFEST.name
+        or "graduationDecisions" in manifest,
+    )
 
     proof_fingerprint = manifest.get("proofFingerprint", {})
     current_versions = current_proof_versions()
@@ -898,6 +1037,7 @@ def verify_manifest(
     if not skip_profile_coverage:
         print(f"Profile coverage rows: {profile_coverage_count}")
     print(f"Host policy rows: {host_policy_count}")
+    print(f"Graduation decision rows: {graduation_decision_count}")
     if verify_trace_slices:
         print(f"Verified trace slices: {verified_trace_slices}")
     if partial:
@@ -1132,6 +1272,72 @@ def verify_host_policy(
     missing = sorted(set(expected_profiles) - set(seen))
     if missing:
         failures.append("hostPolicy missing bundle(s): " + ", ".join(missing))
+
+    return len(seen)
+
+
+def verify_graduation_decisions(
+    manifest: dict,
+    failures: list[str],
+    require_graduation_decisions: bool,
+) -> int:
+    rows = manifest.get("graduationDecisions")
+    if not isinstance(rows, list) or not rows:
+        if require_graduation_decisions:
+            failures.append("graduationDecisions must list focused high-value surface decisions")
+        return 0
+
+    seen: dict[str, dict] = {}
+    for index, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            failures.append(f"graduationDecisions entry {index} must be an object")
+            continue
+        surface = str(row.get("surface", "")).strip()
+        if not surface:
+            failures.append(f"graduationDecisions entry {index} is missing surface")
+            continue
+        if surface in seen:
+            failures.append(f"graduationDecisions duplicate surface: {surface}")
+        seen[surface] = row
+
+    expected_surfaces = set(EXPECTED_GRADUATION_DECISIONS)
+    missing = sorted(expected_surfaces - set(seen))
+    extra = sorted(set(seen) - expected_surfaces)
+    if missing:
+        failures.append("graduationDecisions missing surface(s): " + ", ".join(missing))
+    if extra:
+        failures.append("graduationDecisions unexpected surface(s): " + ", ".join(extra))
+
+    for surface, expected in EXPECTED_GRADUATION_DECISIONS.items():
+        row = seen.get(surface)
+        if row is None:
+            continue
+
+        for key in ["decision", "proofState", "smokeCommand"]:
+            actual = row.get(key)
+            if actual != expected[key]:
+                failures.append(
+                    f"graduationDecisions {surface}: {key} is {actual!r}; expected {expected[key]!r}"
+                )
+
+        required_proof = row.get("requiredProof")
+        if not isinstance(required_proof, list):
+            failures.append(f"graduationDecisions {surface}: requiredProof must be a list")
+            continue
+        missing_proof = sorted(set(expected["requiredProof"]) - set(required_proof))
+        if missing_proof:
+            failures.append(
+                f"graduationDecisions {surface}: missing requiredProof item(s): "
+                + ", ".join(missing_proof)
+            )
+
+        decision = str(row.get("decision", "")).strip()
+        if decision in {"blocked", "diagnostics-only"}:
+            notes = str(row.get("notes", "")).strip().lower()
+            if "until" not in notes and "disabled" not in notes and "diagnosed" not in notes:
+                failures.append(
+                    f"graduationDecisions {surface}: blocked/diagnostics row needs a concrete blocked-until note"
+                )
 
     return len(seen)
 

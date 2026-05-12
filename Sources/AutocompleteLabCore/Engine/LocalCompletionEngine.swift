@@ -17,6 +17,7 @@ public struct LocalCompletionRuntimeConfiguration: Equatable, Sendable {
 public protocol LocalCompletionRuntimeRunner: Sendable {
     func complete(
         prompt: CompletionPrompt,
+        mode: CompletionRequestMode,
         configuration: LocalCompletionRuntimeConfiguration
     ) async throws -> String
 }
@@ -46,6 +47,7 @@ public final class ProcessCompletionRuntimeRunner: LocalCompletionRuntimeRunner,
 
     public func complete(
         prompt: CompletionPrompt,
+        mode: CompletionRequestMode,
         configuration: LocalCompletionRuntimeConfiguration
     ) async throws -> String {
         guard FileManager.default.isExecutableFile(atPath: executableURL.path) else {
@@ -78,7 +80,12 @@ public final class ProcessCompletionRuntimeRunner: LocalCompletionRuntimeRunner,
                 throw LocalCompletionRuntimeError.launchFailed
             }
 
-            let payload = RuntimePromptPayload(system: prompt.system, user: prompt.user)
+            let payload = RuntimePromptPayload(
+                system: prompt.system,
+                user: prompt.user,
+                mode: mode,
+                promptIsBuilt: true
+            )
             try stdin.fileHandleForWriting.write(contentsOf: JSONEncoder().encode(payload))
             try stdin.fileHandleForWriting.close()
 
@@ -124,7 +131,11 @@ public final class LocalCompletionEngine: CompletionEngine, @unchecked Sendable 
     public func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
         do {
             let prompt = promptBuilder.prompt(for: request)
-            let rawOutput = try await runner.complete(prompt: prompt, configuration: configuration)
+            let rawOutput = try await runner.complete(
+                prompt: prompt,
+                mode: request.mode,
+                configuration: configuration
+            )
             if let cleaned = clean(rawOutput, request: request) {
                 return cleaned
             }
@@ -199,4 +210,6 @@ public struct CompletionEngineFactory: Sendable {
 private struct RuntimePromptPayload: Encodable {
     let system: String
     let user: String
+    let mode: CompletionRequestMode
+    let promptIsBuilt: Bool
 }

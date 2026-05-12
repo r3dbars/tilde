@@ -20,6 +20,23 @@ struct LocalCompletionEngineTests {
         #expect(configuration?.reasoningEnabled == false)
     }
 
+    @Test("Passes request mode to runtime runner")
+    func passesRequestModeToRuntimeRunner() async throws {
+        let runner = FakeLocalRunner(result: .success("tion"))
+        let engine = LocalCompletionEngine(runner: runner)
+
+        _ = try await engine.suggestion(
+            for: CompletionRequest(
+                textBeforeCursor: "The explanation needs a simple transi",
+                maxVisibleWords: 1,
+                mode: .wordCompletion
+            )
+        )
+
+        #expect(await runner.lastMode == .wordCompletion)
+        #expect(await runner.lastPrompt?.user.hasSuffix("Suffix:") == true)
+    }
+
     @Test("Cleans runtime output and trims repeated typed prefix")
     func cleansAndTrimsRuntimeOutput() async throws {
         let runner = FakeLocalRunner(
@@ -137,6 +154,7 @@ struct LocalCompletionEngineTests {
 private actor FakeLocalRunner: LocalCompletionRuntimeRunner {
     private let result: Result<String, any Error>
     private(set) var lastPrompt: CompletionPrompt?
+    private(set) var lastMode: CompletionRequestMode?
     private(set) var lastConfiguration: LocalCompletionRuntimeConfiguration?
 
     init(result: Result<String, any Error>) {
@@ -145,9 +163,11 @@ private actor FakeLocalRunner: LocalCompletionRuntimeRunner {
 
     func complete(
         prompt: CompletionPrompt,
+        mode: CompletionRequestMode,
         configuration: LocalCompletionRuntimeConfiguration
     ) async throws -> String {
         lastPrompt = prompt
+        lastMode = mode
         lastConfiguration = configuration
         return try result.get()
     }
