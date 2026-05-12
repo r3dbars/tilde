@@ -182,8 +182,7 @@ def select_window(
         )
         return Selection(latest_launch, trace_window(trace_log, latest_launch.timestamp), reason, False)
 
-    undersampled_default_launches = 0
-    latest_undersampled_window = None
+    skipped_empty_default_relaunches = 0
     eligible_indexed_launches = [
         (index, launch)
         for index, launch in enumerate(launches)
@@ -197,27 +196,30 @@ def select_window(
             and window.model_samples >= min_model_samples
         ):
             reason = "selected latest sampled default runtime launch"
-            if undersampled_default_launches:
-                reason += f"; skippedUnsampledDefaultLaunches={undersampled_default_launches}"
+            if skipped_empty_default_relaunches:
+                reason += (
+                    f"; skippedEmptyDefaultRelaunches={skipped_empty_default_relaunches}"
+                )
             return Selection(launch, window, reason, True)
 
-        undersampled_default_launches += 1
-        if latest_undersampled_window is None:
-            latest_undersampled_window = window
+        if window.first_visible_samples == 0 and window.model_samples == 0:
+            skipped_empty_default_relaunches += 1
+            continue
 
-    window = latest_undersampled_window or trace_window(trace_log, latest_launch.timestamp)
-    if (
-        window.first_visible_samples < min_first_visible_samples
-        or window.model_samples < min_model_samples
-    ):
         return Selection(
-            latest_launch,
+            launch,
             window,
-            "no sampled default runtime launch meets sample requirements",
+            "latest default runtime launch has too few samples",
             False,
         )
 
-    return Selection(latest_launch, window, "selected latest sampled default runtime launch", True)
+    window = trace_window(trace_log, latest_launch.timestamp)
+    return Selection(
+        latest_launch,
+        window,
+        "no sampled default runtime launch meets sample requirements",
+        False,
+    )
 
 
 def main():
