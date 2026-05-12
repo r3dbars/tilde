@@ -6372,7 +6372,7 @@ build_if_needed() {
     local build_run_env=(
       AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1
     )
-    if [[ "$APP" == "codex" ]]; then
+    if [[ "$APP" == "codex" ]] || screenshot_trace_requested; then
       build_run_env+=(AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1)
     fi
     env "${build_run_env[@]}" ./script/build_and_run.sh run
@@ -6380,6 +6380,26 @@ build_if_needed() {
   fi
 
   refresh_build_archive_proof
+}
+
+stop_current_steadytype_app_bundle() {
+  local app_binary="$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType"
+  local pid
+
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    kill "$pid" >/dev/null 2>&1 || true
+  done < <(
+    ps ax -o pid=,command= |
+      awk -v app_binary="$app_binary" 'index($0, app_binary) > 0 { print $1 }'
+  )
+
+  for _ in {1..20}; do
+    if ! ps ax -o command= | grep -F "$app_binary" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.1
+  done
 }
 
 wait_for_current_autocomplete_lab_process() {
@@ -7744,12 +7764,12 @@ run_textedit() {
   local runtime_start_line start_line textedit_file textedit_tmp_dir textedit_window_title trace_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
 
-  prepare_temporary_app_enablement
-  build_if_needed
-  wait_for_accessibility_ready "$runtime_start_line" "TextEdit Accessibility readiness" 20 "$SKIP_BUILD"
-  wait_for_runtime_ready "$runtime_start_line" "TextEdit runtime readiness" 60 "$SKIP_BUILD"
-
   if [[ "$TEXTEDIT_VARIANT" == "fast-typing" ]]; then
+    prepare_temporary_app_enablement
+    build_if_needed
+    wait_for_accessibility_ready "$runtime_start_line" "TextEdit Accessibility readiness" 20 "$SKIP_BUILD"
+    wait_for_runtime_ready "$runtime_start_line" "TextEdit runtime readiness" 60 "$SKIP_BUILD"
+
     local typing_start_line typing_trace_start_line manual_app
     typing_start_line="$(line_count "$LOG_PATH")"
     typing_trace_start_line="$(line_count "$TRACE_PATH")"
@@ -7781,6 +7801,9 @@ run_textedit() {
   textedit_window_title="$(basename "$textedit_file")"
   SMOKE_TEXTEDIT_WINDOW_TITLES+=("$textedit_window_title")
   : >"$textedit_file"
+  if [[ "$SKIP_BUILD" != "1" ]]; then
+    stop_current_steadytype_app_bundle
+  fi
   open_textedit_smoke_document "$textedit_file" "$textedit_window_title"
   sleep 0.8
 
@@ -7813,6 +7836,12 @@ APPLESCRIPT
     click_textedit_smoke_editor "$textedit_window_title"
     sleep 0.4
   fi
+
+  runtime_start_line="$(line_count "$LOG_PATH")"
+  prepare_temporary_app_enablement
+  build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "TextEdit Accessibility readiness" 20 "$SKIP_BUILD"
+  wait_for_runtime_ready "$runtime_start_line" "TextEdit runtime readiness" 60 "$SKIP_BUILD"
 
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"

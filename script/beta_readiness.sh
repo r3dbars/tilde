@@ -132,8 +132,10 @@ if latest_launch_line:
 
 if latest_launch_timestamp and trace_path.exists():
     trace_start_line = 0
+    trace_line_count = 0
     with trace_path.open("r", encoding="utf-8", errors="ignore") as handle:
         for line_number, line in enumerate(handle, start=1):
+            trace_line_count = line_number
             try:
                 timestamp = json.loads(line).get("timestamp", "")
             except json.JSONDecodeError:
@@ -141,6 +143,8 @@ if latest_launch_timestamp and trace_path.exists():
             if timestamp >= latest_launch_timestamp:
                 trace_start_line = max(0, line_number - 1)
                 break
+    if not trace_start_line and trace_line_count:
+        trace_start_line = trace_line_count
     if trace_start_line:
         print(f"AUTOCOMPLETE_LAB_TRACE_START_LINE={trace_start_line}")
 PY
