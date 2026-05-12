@@ -6458,27 +6458,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hideSuggestion(reason: "acceptance-safety-blocked", metadata: metadata)
     }
 
-    private func refreshVisibleSuggestion() {
-        guard let suggestion = suggestionSession.visibleSuggestion,
-              let caretRect = lastCaretRect else {
+    @discardableResult
+    private func refreshVisibleSuggestion(
+        placement: PlacementHealthPresentation? = nil,
+        fallbackRenderMode: SuggestionRenderMode? = nil
+    ) -> PlacementHealthPresentation? {
+        guard let suggestion = suggestionSession.visibleSuggestion else {
             hideSuggestion()
-            return
+            return nil
+        }
+
+        let initialPlacement: PlacementHealthPresentation
+        if let placement {
+            initialPlacement = placement
+        } else {
+            guard let caretRect = lastCaretRect else {
+                hideSuggestion()
+                return nil
+            }
+            let renderMode = lastRenderMode ?? .inlineAdjacent
+            initialPlacement = PlacementHealthPresentation(
+                requestedRenderMode: renderMode,
+                renderMode: renderMode,
+                anchorRect: caretRect,
+                anchorSource: .caret,
+                textLineRect: lastTextLineRect,
+                clippingRect: lastClippingRect,
+                reason: .healthy
+            )
         }
 
         currentSuggestionDisplayedText = suggestion.visibleText
         cancelKeyboardEventTapIdleStop()
-        guard suggestionPanel.show(
-            text: suggestion.visibleText,
-            near: caretRect,
-            alignedTo: lastTextLineRect,
-            boundedBy: lastClippingRect,
-            style: lastTextStyle,
-            renderMode: lastRenderMode ?? .inlineAdjacent
-        ) != nil else {
-            hideSuggestion(reason: "panel-frame-unusable")
-            return
+        let attempt = SuggestionPanelPresentationPolicy.attempt(
+            initialPlacement: initialPlacement,
+            fallbackRenderMode: fallbackRenderMode
+        ) { placement in
+            suggestionPanel.show(
+                text: suggestion.visibleText,
+                near: placement.anchorRect,
+                alignedTo: placement.renderMode == .inlineAdjacent ? placement.textLineRect : nil,
+                boundedBy: placement.clippingRect,
+                style: lastTextStyle,
+                renderMode: placement.renderMode
+            )
         }
+        guard attempt.didPresent else {
+            hideSuggestion(reason: "panel-frame-unusable")
+            return nil
+        }
+
+        lastCaretRect = attempt.placement.anchorRect
+        lastTextLineRect = attempt.placement.textLineRect
+        lastClippingRect = attempt.placement.clippingRect
+        lastRenderMode = attempt.placement.renderMode
         updateKeyboardEventTapSnapshot()
+        return attempt.placement
     }
 
     private func repositionVisibleSuggestion(
@@ -6555,15 +6590,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        lastCaretRect = placement.anchorRect
-        lastTextLineRect = placement.textLineRect
-        lastClippingRect = placement.clippingRect
         lastTextStyle = context.textStyle
-        lastRenderMode = placement.renderMode
         lastCompatibilityLearningTrustContext = visualTrustContext
-        lastVisibleSuggestionGeometrySnapshot = currentGeometrySnapshot
         showFieldStatusIndicator(.shown, context: context)
-        refreshVisibleSuggestion()
+        guard let refreshedPlacement = refreshVisibleSuggestion(
+            placement: placement,
+            fallbackRenderMode: profile.fallbackRenderMode
+        ) else {
+            return
+        }
+        lastVisibleSuggestionGeometrySnapshot = visibleGeometrySnapshot(
+            context: context,
+            fieldIdentity: currentFieldIdentity,
+            placement: refreshedPlacement
+        )
     }
 
     private func allowsStableChromeEditorGeometryChurn(
