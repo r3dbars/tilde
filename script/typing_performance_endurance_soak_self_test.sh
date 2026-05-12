@@ -15,7 +15,7 @@ for expected in \
   "Computed text: 9090 generated chars" \
   "Underlying command: script/typing_performance_soak.sh --characters 9090 --chunk-size 5 --delay-ms 250 --require-event-tap-samples 0 --require-ax-samples 0" \
   "Synthetic text: 9090 generated chars from a built-in neutral fixture" \
-  "Typed text proof: exact TextEdit clipboard capture match required" \
+  "Typed text proof: exact TextEdit target capture match required" \
   "Typing driver: CGEvent Unicode key events after target-window focus" \
   "Typing batches: up to 250 chars per Swift process" \
   "AX warmup: waits for a focused-text poll summary before typing"; do

@@ -492,6 +492,34 @@ end run
 APPLESCRIPT
 }
 
+wait_for_stable_textedit_focus() {
+  local target_name="$1"
+  local stable_checks="${AUTOCOMPLETE_LAB_SOAK_FOCUS_STABLE_CHECKS:-4}"
+  local attempts="${AUTOCOMPLETE_LAB_SOAK_FOCUS_ATTEMPTS:-5}"
+  local attempt check frontmost_name
+
+  require_positive_int "$stable_checks" "AUTOCOMPLETE_LAB_SOAK_FOCUS_STABLE_CHECKS"
+  require_positive_int "$attempts" "AUTOCOMPLETE_LAB_SOAK_FOCUS_ATTEMPTS"
+
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    focus_textedit_document "$target_name"
+    for ((check = 1; check <= stable_checks; check++)); do
+      frontmost_name="$(osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true' 2>/dev/null || true)"
+      if [[ "$frontmost_name" != "TextEdit" ]]; then
+        break
+      fi
+      sleep 0.15
+    done
+
+    if ((check > stable_checks)); then
+      return 0
+    fi
+  done
+
+  echo "TextEdit typing target did not keep focus before generated key." >&2
+  return 73
+}
+
 type_text_with_cgevents() {
   local text_file="$1"
   local text total_length offset segment segment_file segment_length segment_dir
@@ -506,7 +534,7 @@ type_text_with_cgevents() {
     segment_file="$segment_dir/segment-$offset.txt"
     printf '%s' "$segment" >"$segment_file"
     segment_length="${#segment}"
-    focus_textedit_document "$SOAK_TARGET_DOCUMENT_NAME"
+    wait_for_stable_textedit_focus "$SOAK_TARGET_DOCUMENT_NAME"
     type_text_segment_with_cgevents "$segment_file"
     offset=$((offset + segment_length))
     sleep 0.3
