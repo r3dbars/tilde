@@ -20,7 +20,44 @@ struct SettingsWindowControllerStateTests {
         #expect(style.contentInsets.left == 24)
         #expect(style.contentInsets.bottom == 24)
         #expect(style.contentInsets.right == 24)
+        #expect(style.preferredContentSize.width == 560)
+        #expect(style.preferredContentSize.height == 680)
+        #expect(style.minimumContentSize.width == 540)
+        #expect(style.minimumContentSize.height == 420)
+        #expect(style.visibleScreenInset == 32)
         #expect(style.secondaryLabelMaxWidth == 470)
+    }
+
+    @MainActor
+    @Test("Settings content scrolls inside a shorter window")
+    func settingsContentScrollsInsideShorterWindow() {
+        _ = NSApplication.shared
+        let controller = SettingsWindowController(
+            requestPermission: {},
+            openAccessibilitySettings: {},
+            toggleSuggestionsPaused: {},
+            silenceCurrentField: {},
+            performRuntimeAction: { _ in },
+            toggleCurrentApp: {},
+            toggleCurrentAppMirrorMode: {},
+            startCurrentAppProof: {},
+            enableAllApps: {},
+            toggleTracingPaused: {},
+            toggleRawContentTracing: {},
+            toggleScreenshotTracing: {},
+            toggleVisiblePageContext: {},
+            deleteLocalLogs: {},
+            clearLearningData: {},
+            cycleAcceptAllShortcut: {},
+            setAcceptAllShortcut: { _ in },
+            setSuggestionAggressivenessLevel: { _ in },
+            setSuggestionMaxVisibleWords: { _ in }
+        )
+
+        #expect(controller.usesScrollableSettingsContent)
+        #expect(controller.preferredSettingsContentSize.height == 680)
+        #expect(controller.minimumSettingsContentSize.height == 420)
+        #expect(controller.minimumSettingsContentSize.height < controller.preferredSettingsContentSize.height)
     }
 
     @Test("Current app copy makes support stance and blocked state clear")
