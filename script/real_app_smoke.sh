@@ -983,6 +983,10 @@ SWIFT
   swift_activation_pid="$!"
   wait_for_background_process "$swift_activation_pid" 2 "Swift activation for pid $target_pid" >/dev/null 2>&1 || true
 
+  if [[ ! "${AUTOCOMPLETE_LAB_SYSTEM_EVENTS_PROCESS_ACTIVATION:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    return 0
+  fi
+
   local activation_pid
   osascript - "$target_pid" <<'APPLESCRIPT' >/dev/null 2>&1 &
 on run argv
