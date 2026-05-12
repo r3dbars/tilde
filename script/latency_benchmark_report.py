@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import os
 import re
 import statistics
 from collections import defaultdict
@@ -721,6 +722,14 @@ def optional_int_arg(value):
     return int(value)
 
 
+def env_start_line(name):
+    value = os.environ.get(name, "0") or "0"
+    try:
+        return max(0, int(value))
+    except ValueError:
+        raise SystemExit(f"{name} must be an integer line number, got {value!r}")
+
+
 def should_enforce(args):
     if args.beta_gate:
         return True
@@ -754,13 +763,13 @@ def main():
     parser.add_argument(
         "--diagnostics-start-line",
         type=int,
-        default=0,
+        default=env_start_line("AUTOCOMPLETE_LAB_LOG_START_LINE"),
         help="ignore diagnostics lines at or before this 1-based line number",
     )
     parser.add_argument(
         "--trace-start-line",
         type=int,
-        default=0,
+        default=env_start_line("AUTOCOMPLETE_LAB_TRACE_START_LINE"),
         help="ignore trace lines at or before this 1-based line number",
     )
     parser.add_argument(

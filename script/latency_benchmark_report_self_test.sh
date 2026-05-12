@@ -91,6 +91,60 @@ if ! grep -F "Latency beta gate passed." <<<"$REPORT" >/dev/null; then
   exit 1
 fi
 
+cat >"$DIAGNOSTICS_LOG" <<'LOG'
+2026-05-09T09:59:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit
+2026-05-09T09:59:01Z focused-text-poll-latency-summary count=60 maxMilliseconds=250 p50Milliseconds=250 p90Milliseconds=250 p95Milliseconds=250 p99Milliseconds=250
+2026-05-09T10:00:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit
+2026-05-09T10:00:01Z mlx-completion-timing app=com.apple.TextEdit cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=100 generationMilliseconds=180 maxTokens=9 mode=phraseContinuation promptMilliseconds=0 rawChars=12 sessionMilliseconds=0 totalMilliseconds=190
+2026-05-09T10:00:02Z focused-text-poll-latency-summary count=4 maxMilliseconds=9 p50Milliseconds=4 p90Milliseconds=6 p95Milliseconds=8 p99Milliseconds=9
+LOG
+
+cat >"$TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-09T09:59:00Z","sessionID":"old","suggestionID":"late","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","latencyMilliseconds":900,"metadata":{"behaviorProfile":"notes"}}
+{"timestamp":"2026-05-09T10:00:01Z","sessionID":"session","suggestionID":"one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","latencyMilliseconds":190,"metadata":{"behaviorProfile":"notes","firstTokenLatencyMilliseconds":"100","totalGenerationLatencyMilliseconds":"190"}}
+{"timestamp":"2026-05-09T10:00:02Z","sessionID":"session","suggestionID":"one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","latencyMilliseconds":210,"metadata":{"behaviorProfile":"notes"}}
+LOG
+
+REPORT="$(
+  AUTOCOMPLETE_LAB_LOG_START_LINE=2 \
+    AUTOCOMPLETE_LAB_TRACE_START_LINE=1 \
+    script/latency_benchmark_report.py \
+      --diagnostics-log "$DIAGNOSTICS_LOG" \
+      --trace-log "$TRACE_LOG" \
+      --beta-gate \
+      --require-first-visible-samples 1 \
+      --require-model-samples 1 \
+      --require-event-tap-samples 0 \
+      --require-ax-samples 1 \
+      --max-first-visible-p95-ms 250 \
+      --max-first-visible-p99-ms 250 \
+      --max-first-token-p95-ms 650 \
+      --max-total-generation-p95-ms 850
+)"
+
+if ! grep -F "Diagnostics start line: 2" <<<"$REPORT" >/dev/null; then
+  echo "latency benchmark self-test did not honor AUTOCOMPLETE_LAB_LOG_START_LINE" >&2
+  echo "$REPORT" >&2
+  exit 1
+fi
+
+if ! grep -F "Trace start line: 1" <<<"$REPORT" >/dev/null; then
+  echo "latency benchmark self-test did not honor AUTOCOMPLETE_LAB_TRACE_START_LINE" >&2
+  echo "$REPORT" >&2
+  exit 1
+fi
+
+if ! grep -F "Latency beta gate passed." <<<"$REPORT" >/dev/null; then
+  echo "latency benchmark self-test did not ignore old latency when start-line env vars are set" >&2
+  echo "$REPORT" >&2
+  exit 1
+fi
+
+cat >"$TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-09T10:00:01Z","sessionID":"session","suggestionID":"one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","latencyMilliseconds":190,"metadata":{"behaviorProfile":"notes","firstTokenLatencyMilliseconds":"100","totalGenerationLatencyMilliseconds":"190"}}
+{"timestamp":"2026-05-09T10:00:02Z","sessionID":"session","suggestionID":"one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","latencyMilliseconds":210,"metadata":{"behaviorProfile":"notes"}}
+LOG
+
 {
   echo "2026-05-09T10:10:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit"
   for index in $(seq 1 100); do
