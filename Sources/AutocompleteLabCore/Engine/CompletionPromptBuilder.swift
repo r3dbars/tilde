@@ -52,6 +52,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
                 system: """
                 Inline word completion.
                 Return only the missing suffix for the current word.
+                Tab inserts only this visible suffix; full accept is separate and must never be implied.
                 \(titleShapeGuidance)
                 \(partialWordGuidance)
                 \(lineStructureGuidance)
@@ -91,6 +92,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         Return only the suffix after the Before cursor text.
         Each candidate must be only the next \(effectiveMaxVisibleWords) words or fewer.
         Only exception: return exactly \(Self.noSuggestionToken) when unsafe, chatty, or likely to answer the prompt instead of continuing it.
+        Never suggest pressing Tab, Option-Tab, Backtick, or accepting all visible text.
         Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens.
         \(styleGuidance)
         \(titleShapeGuidance)
@@ -102,6 +104,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         Prefer the next word or short phrase the user was already likely to type, especially names, repeated local terms, reply language, list items, and boring connective tissue.
         Prefer 3 to 5 useful words for phrase suggestions; use fewer words when fewer are enough.
         Return \(Self.noSuggestionToken) instead of a full-sentence continuation, weak guess, new topic, or action instruction.
+        If the user is writing about Tab, acceptance behavior, or shortcuts, continue the safety rule itself; do not suggest accepting terms or permissions.
         When the continuation is a common phrase, put that boring obvious phrase first.
         When the visible page context is useful, act like a local writing companion that can see the screen but still only types the user's next words.
         Do not repeat the Before cursor text.

@@ -85,6 +85,17 @@ public struct BrowserHostedSurfaceBlock: Equatable, Sendable {
             "promptSafetyMetricSurface": surface.safetyClass
         ]
     }
+
+    public func redactedTraceMetadata(
+        textBeforeCursorLength: Int,
+        textAfterCursorLength: Int
+    ) -> [String: String] {
+        var metadata = traceMetadata
+        metadata["blockedSurfaceTextRedacted"] = "true"
+        metadata["textBeforeCursorChars"] = "\(textBeforeCursorLength)"
+        metadata["textAfterCursorChars"] = "\(textAfterCursorLength)"
+        return metadata
+    }
 }
 
 public enum BrowserHostedSurfaceDecision: Equatable, Sendable {
@@ -117,6 +128,18 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         }
 
         let searchableText = fingerprint.searchableText
+        if matchesPayment(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .payment))
+        }
+        if matchesPasswordManager(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .passwordManager))
+        }
+        if matchesPrivateSearch(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .privateSearch))
+        }
+        if matchesLogin(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .login))
+        }
         if matchesGoogleDocs(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .googleDocs))
         }
@@ -131,18 +154,6 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         }
         if matchesDiscord(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .discord))
-        }
-        if matchesPayment(searchableText) {
-            return .blocked(BrowserHostedSurfaceBlock(surface: .payment))
-        }
-        if matchesPasswordManager(searchableText) {
-            return .blocked(BrowserHostedSurfaceBlock(surface: .passwordManager))
-        }
-        if matchesPrivateSearch(searchableText) {
-            return .blocked(BrowserHostedSurfaceBlock(surface: .privateSearch))
-        }
-        if matchesLogin(searchableText) {
-            return .blocked(BrowserHostedSurfaceBlock(surface: .login))
         }
         if matchesLocalProofFixture(searchableText) {
             return .allowed

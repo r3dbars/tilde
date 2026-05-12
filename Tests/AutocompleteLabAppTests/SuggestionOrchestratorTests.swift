@@ -438,6 +438,97 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Late final model results are suppressed before display")
+    func lateFinalModelResultsAreSuppressedBeforeDisplay() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "Can you send the notes",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4,
+            mode: .phraseContinuation,
+            suggestionID: "late-final"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let display = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " for the meeting", maxVisibleWords: 4),
+            request: request,
+            context: makeContext(textBeforeCursor: "Can you send the notes", textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 900,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+
+        #expect(!display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+    }
+
+    @MainActor
+    @Test("Late streaming partials are not hard suppressed by the final latency cutoff")
+    func lateStreamingPartialsAreNotHardSuppressedByFinalLatencyCutoff() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "Can you send the notes",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4,
+            mode: .phraseContinuation,
+            suggestionID: "late-stream"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let display = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " for the meeting", maxVisibleWords: 4),
+            request: request,
+            context: makeContext(textBeforeCursor: "Can you send the notes", textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-stream",
+            latencyMilliseconds: 900,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+
+        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+    }
+
+    @MainActor
     @Test("Prefix cooldown and display threshold adjustment are orchestrated")
     func prefixCooldownAndDisplayThresholdAdjustmentAreOrchestrated() throws {
         let now = Date(timeIntervalSince1970: 100)

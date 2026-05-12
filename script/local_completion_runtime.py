@@ -76,6 +76,9 @@ def candidate_python_with_module(env_key: str, module_name: str) -> Optional[str
 
 def prompt_text(payload: dict[str, str]) -> str:
     user = payload.get("user", "").strip()
+    if bool(payload.get("promptIsBuilt") or payload.get("prompt_is_built")):
+        return user
+
     mode = payload.get("mode", "").strip().lower()
     suffix = "Suffix:" if mode in {"word", "word_completion", "wordCompletion"} else "Next words:"
     return f"Before cursor:\n{user}\n\n{suffix}"
@@ -83,6 +86,9 @@ def prompt_text(payload: dict[str, str]) -> str:
 
 def system_prompt_text(payload: dict[str, str]) -> str:
     system = payload.get("system", "").strip()
+    if bool(payload.get("promptIsBuilt") or payload.get("prompt_is_built")):
+        return system
+
     mode = payload.get("mode", "").strip().lower()
     if mode in {"word", "word_completion", "wordCompletion"}:
         rules = [
@@ -98,6 +104,7 @@ def system_prompt_text(payload: dict[str, str]) -> str:
             "No explanation, labels, quotes, reasoning, or mention of the user.",
             "Never repeat the Before cursor text.",
             "Never suggest pressing Enter or Return, sending, submitting, clicking, running, or approving.",
+            "When the text discusses Tab or acceptance behavior, continue the safety rule itself; never suggest accepting terms.",
             "Return <NO_SUGGESTION> for passwords, secrets, private fields, search fields, terminal punctuation, weak guesses, new topics, full-sentence answers, or list markers.",
         ]
     return "\n".join([system, *rules]).strip()

@@ -461,7 +461,7 @@
         "undo/recovery",
         "screenshot-backed current-head evidence"
       ],
-      "notes": "The local browser-chat harness is not real-service ChatGPT proof."
+      "notes": "The local browser-chat harness is not real-service ChatGPT proof; keep Browser ChatGPT blocked until real-service no-submit proof exists."
     },
     {
       "surface": "Claude desktop layouts",
@@ -534,7 +534,7 @@
         "undo/recovery",
         "screenshot-backed current-head evidence"
       ],
-      "notes": "Forced local editor fixtures do not unblock production Monaco or CodeMirror editors."
+      "notes": "Forced local editor fixtures do not unblock production Monaco or CodeMirror editors; keep them blocked until official/default editor proof exists."
     }
   ],
   "surfaces": [

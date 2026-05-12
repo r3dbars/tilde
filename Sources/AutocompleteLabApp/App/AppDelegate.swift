@@ -1316,6 +1316,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: rawContext,
             profile: profile
         )
+        let hostedSurfaceTraceMetadata = hostedSurfaceBlock.redactedTraceMetadata(
+            textBeforeCursorLength: rawContext.textBeforeCursor.count,
+            textAfterCursorLength: rawContext.textAfterCursor.count
+        )
         clearFocusedFieldState(resetBlockLogGate: false)
         currentProfile = profile
         setSuggestionDecision("Blocked: \(hostedSurfaceBlock.userFacingReason)")
@@ -1327,17 +1331,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: hostedSurfaceFieldIdentity.traceDescription,
             requestMode: "",
             triggerReason: "browser-hosted-surface-policy",
-            textBeforeCursor: rawContext.textBeforeCursor,
-            textAfterCursor: rawContext.textAfterCursor,
+            textBeforeCursor: "",
+            textAfterCursor: "",
             reason: hostedSurfaceBlock.traceReason,
-            metadata: hostedSurfaceBlock.traceMetadata
+            metadata: hostedSurfaceTraceMetadata
         )
         recordBlockedSuggestionEvent(
             "suggestion-blocked",
             context: rawContext,
             profile: profile,
             fieldIdentity: hostedSurfaceFieldIdentity,
-            metadata: hostedSurfaceBlock.traceMetadata
+            metadata: hostedSurfaceTraceMetadata
         )
         hideSuggestion(reason: hostedSurfaceBlock.traceReason)
     }
@@ -4821,6 +4825,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     renderMode: renderMode,
                     latencyMilliseconds: 0,
                     triggerReason: "fast-word-completion",
+                    requestTicket: requestTicket,
                     candidateSelectionMetadata: fastSelectionMetadata,
                     refreshBeforePresenting: false
                 )
@@ -4926,6 +4931,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     renderMode: renderMode,
                     latencyMilliseconds: 0,
                     triggerReason: "predictive-phrase-fallback",
+                    requestTicket: requestTicket,
                     candidateSelectionMetadata: fastSelectionMetadata,
                     refreshBeforePresenting: false
                 )
@@ -4985,7 +4991,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 fieldIdentity: fieldIdentity,
                                 renderMode: renderMode,
                                 latencyMilliseconds: latencyMilliseconds,
-                                triggerReason: "model-stream"
+                                triggerReason: "model-stream",
+                                requestTicket: requestTicket
                             )
                         }
                     }
@@ -5139,6 +5146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         renderMode: renderMode,
                         latencyMilliseconds: latencyMilliseconds,
                         triggerReason: "model-result",
+                        requestTicket: requestTicket,
                         candidateSelectionMetadata: appModelResultMetadata
                     )
                 }
@@ -5172,6 +5180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         renderMode: SuggestionRenderMode,
         latencyMilliseconds: Int,
         triggerReason: String,
+        requestTicket: SuggestionRequestTicket? = nil,
         candidateSelectionMetadata: [String: String] = [:],
         refreshBeforePresenting: Bool = true
     ) {
@@ -5318,6 +5327,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let displayScoreTrace = displayScoreDecision.trace
         guard displayScoreDecision.shouldDisplay else {
             let reason = displayScoreMetadata["displayScoreSuppressionReason"] ?? "display-score"
+            let shouldKeepStreamedSuggestion: Bool
+            if reason == DisplayScoreSuppressionReason.tooSlowToDisplay.rawValue,
+               let requestTicket {
+                shouldKeepStreamedSuggestion = suggestionOrchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
+                    suggestionID: suggestionID,
+                    currentSuggestionID: currentSuggestionID,
+                    ticket: requestTicket,
+                    fieldIdentity: fieldIdentity,
+                    currentFieldIdentity: currentFieldIdentity,
+                    hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+                )
+            } else {
+                shouldKeepStreamedSuggestion = false
+            }
+            let lateSuggestionMetadata = shouldKeepStreamedSuggestion
+                ? ["keptVisibleStreamingSuggestion": "true"]
+                : [:]
             setSuggestionDecision("Blocked: display score \(reason)")
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
@@ -5337,6 +5363,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     .merging(placement.metadata) { current, _ in current }
                     .merging(candidateSelectionMetadata) { current, _ in current }
                     .merging(displayScoreMetadata) { current, _ in current }
+                    .merging(lateSuggestionMetadata) { current, _ in current }
             )
             recordSuggestionEvent(
                 "suggestion-blocked",
@@ -5350,7 +5377,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(placement.metadata) { current, _ in current }
                 .merging(candidateSelectionMetadata) { current, _ in current }
                 .merging(displayScoreMetadata) { current, _ in current }
+                .merging(lateSuggestionMetadata) { current, _ in current }
             )
+            if shouldKeepStreamedSuggestion {
+                setSuggestionDecision("Shown: kept streamed suggestion")
+                repositionVisibleSuggestion(context: context, profile: profile)
+                return
+            }
             hideSuggestion(reason: reason)
             return
         }

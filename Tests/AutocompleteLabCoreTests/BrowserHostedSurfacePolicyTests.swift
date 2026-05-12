@@ -108,6 +108,21 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(try #require(blockedSurface(from: login)).surface == .login)
     }
 
+    @Test("Chrome sensitive pages outrank service fingerprints")
+    func sensitiveBrowserPagesOutrankServiceFingerprints() throws {
+        let slackLogin = policy.decision(
+            bundleIdentifier: "com.google.Chrome",
+            fingerprint: FocusedElementFingerprint(windowTitle: "Sign in - Slack")
+        )
+        let docsCheckout = policy.decision(
+            bundleIdentifier: "com.google.Chrome",
+            fingerprint: FocusedElementFingerprint(windowTitle: "Checkout - Google Docs")
+        )
+
+        #expect(try #require(blockedSurface(from: slackLogin)).surface == .login)
+        #expect(try #require(blockedSurface(from: docsCheckout)).surface == .payment)
+    }
+
     @Test("Chrome unknown browser pages fail closed until proofed")
     func blocksUnknownChromePages() throws {
         let decision = policy.decision(
@@ -156,6 +171,25 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(metadata["browserSurfaceSafetyClass"] == "browser-editor")
         #expect(!metadata.values.contains(secretTitle))
         #expect(!metadata.values.contains("https://docs.google.com/document/d/private-id/edit"))
+    }
+
+    @Test("Blocked browser metadata can record lengths without raw cursor text")
+    func blockedBrowserMetadataCanRecordLengthsWithoutRawCursorText() throws {
+        let decision = policy.decision(
+            bundleIdentifier: "com.google.Chrome",
+            fingerprint: FocusedElementFingerprint(windowTitle: "Private roadmap - Google Docs")
+        )
+
+        let block = try #require(blockedSurface(from: decision))
+        let metadata = block.redactedTraceMetadata(
+            textBeforeCursorLength: 21,
+            textAfterCursorLength: 8
+        )
+
+        #expect(metadata["blockedSurfaceTextRedacted"] == "true")
+        #expect(metadata["textBeforeCursorChars"] == "21")
+        #expect(metadata["textAfterCursorChars"] == "8")
+        #expect(!metadata.values.contains("Private roadmap"))
     }
 
     @Test("Browser chat blocks are tagged for no-submit metrics")

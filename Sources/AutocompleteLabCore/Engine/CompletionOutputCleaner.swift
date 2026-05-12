@@ -395,8 +395,12 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return true
         }
 
-        return normalized.hasPrefix("press enter")
+        return containsUnsafePromptActionPhrase(normalized)
+            || normalized.hasPrefix("press enter")
             || normalized.hasPrefix("press return")
+            || normalized.hasPrefix("press tab")
+            || normalized.hasPrefix("press option-tab")
+            || normalized.hasPrefix("use backtick")
             || normalized.hasPrefix("hit enter")
             || normalized.hasPrefix("hit return")
             || normalized.hasPrefix("send the prompt")
@@ -405,7 +409,18 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("run this command")
             || normalized.hasPrefix("execute this command")
             || normalized.hasPrefix("execute the command")
+            || normalized.hasPrefix("accept all visible")
+            || normalized.hasPrefix("accept the whole suggestion")
             || Self.unsafePromptActionWords.contains(normalized)
+    }
+
+    private func containsUnsafePromptActionPhrase(_ normalized: String) -> Bool {
+        Self.unsafePromptActionPhrases.contains { phrase in
+            normalized.range(
+                of: #"(?<![a-z0-9])\#(NSRegularExpression.escapedPattern(for: phrase))(?![a-z0-9])"#,
+                options: .regularExpression
+            ) != nil
+        }
     }
 
     private func containsUnsafePromptHiddenOrControlCharacter(_ text: String) -> Bool {
@@ -736,6 +751,28 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "send",
         "ship",
         "submit"
+    ]
+
+    private static let unsafePromptActionPhrases = [
+        "accept all visible text",
+        "accept the terms",
+        "accept the whole suggestion",
+        "click send",
+        "execute the command",
+        "execute this command",
+        "hit enter",
+        "hit return",
+        "option-tab",
+        "press enter",
+        "press option-tab",
+        "press return",
+        "press tab",
+        "run this command",
+        "send it",
+        "send the prompt",
+        "submit it",
+        "submit the prompt",
+        "use backtick"
     ]
 
     private static let unsafePromptHiddenScalars: Set<Unicode.Scalar> = [
