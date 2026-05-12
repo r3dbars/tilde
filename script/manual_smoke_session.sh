@@ -386,7 +386,7 @@ case "$APP" in
         if (( REQUIRES_UNDO_ACCEPT == 1 )); then
           PROOF_LABEL="notes-title-undo"
           SESSION_NAME="Notes title undo"
-          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put the caret in the note title.\n- Type `Smoke proof feels inst` in the title only.\n- Press Tab once and expect `instant`.\n- Press Command-Z and confirm only the accepted `ant` suffix is removed.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put the caret in the note title.\n- Type `Smoke proof feels` in the title only.\n- Press Tab once and expect ` instant`.\n- Press Command-Z and confirm only the accepted ` instant` insertion is removed.\n- Type ` and stays`.\n- Press the configured full-accept shortcut and expect another ` instant` prediction.\n- Use --visual when screenshot-backed placement must be proven.'
         else
           PROOF_LABEL="notes-title"
           SESSION_NAME="Notes title"
@@ -408,7 +408,7 @@ case "$APP" in
         if (( REQUIRES_UNDO_ACCEPT == 1 )); then
           PROOF_LABEL="notes-checklist-undo"
           SESSION_NAME="Notes checklist undo"
-          STEPS=$'- Open the disposable autocomplete smoke note.\n- Toggle Checklist and create a disposable checklist row.\n- Type `Smoke proof feels inst` in that checklist row.\n- Press Tab once and expect `instant`.\n- Press Command-Z and confirm only the accepted `ant` suffix is removed.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Toggle Checklist and create a disposable checklist row.\n- Type `Smoke proof feels` in that checklist row.\n- Press Tab once and expect ` instant`.\n- Press Command-Z and confirm only the accepted ` instant` insertion is removed.\n- Type ` and stays`.\n- Press the configured full-accept shortcut and expect another ` instant` prediction.\n- Use --visual when screenshot-backed placement must be proven.'
         else
           PROOF_LABEL="notes-checklist"
           SESSION_NAME="Notes checklist"

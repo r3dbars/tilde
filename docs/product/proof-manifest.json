@@ -618,7 +618,7 @@
         "docs/product/visual-placement-screenshots/notes-title.png"
       ],
       "gaps": [
-        "More title lengths and same-slice notes-title-undo proof are still required."
+        "More title lengths are still required; same-slice notes-title-undo proof is current."
       ],
       "requirements": [
         {
@@ -628,8 +628,15 @@
         },
         {
           "id": "notes-title-undo-same-slice",
-          "status": "pending",
-          "summary": "Add same-slice accepted-insertion undo proof for the Notes title lane.",
+          "status": "complete",
+          "summary": "Same-slice accepted-insertion undo proof for the Notes title lane is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-title-undo",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-undo --manual-gate"
         }
       ]
@@ -648,7 +655,7 @@
         "docs/product/visual-placement-screenshots/notes-body.png"
       ],
       "gaps": [
-        "More body lengths and same-slice notes-body-undo proof are still required."
+        "More body lengths are still required; same-slice notes-body-undo proof is current."
       ],
       "requirements": [
         {
@@ -658,8 +665,15 @@
         },
         {
           "id": "notes-body-undo-same-slice",
-          "status": "pending",
-          "summary": "Add same-slice accepted-insertion undo proof for the Notes body lane.",
+          "status": "complete",
+          "summary": "Same-slice accepted-insertion undo proof for the Notes body lane is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-body-undo",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-undo --manual-gate"
         }
       ]
@@ -678,7 +692,7 @@
         "docs/product/visual-placement-screenshots/notes-checklist.png"
       ],
       "gaps": [
-        "Checked items, longer checklist rows, and same-slice notes-checklist-undo proof are still required."
+        "Checked items and longer checklist rows are still required; same-slice notes-checklist-undo proof is current."
       ],
       "requirements": [
         {
@@ -693,8 +707,15 @@
         },
         {
           "id": "notes-checklist-undo-same-slice",
-          "status": "pending",
-          "summary": "Add same-slice accepted-insertion undo proof for the Notes checklist lane.",
+          "status": "complete",
+          "summary": "Same-slice accepted-insertion undo proof for the Notes checklist lane is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-checklist-undo",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-undo --manual-gate"
         }
       ]

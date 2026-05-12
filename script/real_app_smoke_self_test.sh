@@ -188,16 +188,32 @@ fi
 
 for notes_surface in notes-title notes-body notes-checklist notes-title-undo notes-body-undo notes-checklist-undo; do
   script/real_app_smoke.sh "$notes_surface" --dry-run >"$TMP_DIR/$notes_surface.txt"
-  if [[ "$notes_surface" == "notes-title" || "$notes_surface" == "notes-body" || "$notes_surface" == "notes-checklist" ]]; then
-    if ! grep -F "guarded Apple Notes ${notes_surface#notes-} proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
-      echo "real app smoke self-test did not print the guarded $notes_surface proof plan" >&2
-      exit 1
-    fi
-  elif ! grep -F "manual-gated Apple Notes ${notes_surface#notes-} proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
+  case "$notes_surface" in
+    notes-title-undo)
+      expected_plan="guarded Apple Notes title undo proof"
+      ;;
+    notes-body-undo)
+      expected_plan="guarded Apple Notes body undo proof"
+      ;;
+    notes-checklist-undo)
+      expected_plan="guarded Apple Notes checklist undo proof"
+      ;;
+    *)
+      expected_plan="guarded Apple Notes ${notes_surface#notes-} proof"
+      ;;
+  esac
+  if ! grep -F "$expected_plan" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
     echo "real app smoke self-test did not print the $notes_surface proof plan" >&2
     exit 1
   fi
 done
+
+if ! grep -F "Command-Z" "$TMP_DIR/notes-title-undo.txt" >/dev/null ||
+   ! grep -F "same-slice undo" "$TMP_DIR/notes-body-undo.txt" >/dev/null ||
+   ! grep -F "same-slice undo" "$TMP_DIR/notes-checklist-undo.txt" >/dev/null; then
+  echo "real app smoke self-test expected Notes undo lanes to be automated guarded proofs" >&2
+  exit 1
+fi
 
 if ! grep -F "bodyText.utf16.count" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "kAXSelectedTextRangeAttribute" script/real_app_smoke.sh >/dev/null; then

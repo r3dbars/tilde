@@ -635,6 +635,29 @@ wait_for_log_fields() {
   exit 1
 }
 
+wait_for_log_fields_optional() {
+  local start_line="$1"
+  local timeout_seconds="$2"
+  local prefix="$3"
+  shift 3
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    local lines
+    lines="$(tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -F "$prefix" || true)"
+    local field
+    for field in "$@"; do
+      lines="$(grep -F "$field" <<<"$lines" || true)"
+    done
+    if [[ -n "$lines" ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  return 1
+}
+
 latest_runtime_is_ready() {
   local latest_runtime_line
   latest_runtime_line="$(grep -E " runtime .*readinessStage=" "$LOG_PATH" 2>/dev/null | tail -n 1 || true)"
@@ -5189,6 +5212,15 @@ describe_plan() {
           notes-checklist)
             echo "Plan: guarded Apple Notes checklist proof. The script creates a fresh disposable note, toggles Checklist from Notes' Format menu, verifies the disposable prefix, types smoke fragments, then validates logs and traces."
             ;;
+          notes-title-undo)
+            echo "Plan: guarded Apple Notes title undo proof. The script creates a fresh blank note, verifies the title, accepts one suggestion, presses Command-Z, then validates same-slice undo logs and traces."
+            ;;
+          notes-body-undo)
+            echo "Plan: guarded Apple Notes body undo proof. The script verifies the disposable body marker, accepts one suggestion, presses Command-Z, then validates same-slice undo logs and traces."
+            ;;
+          notes-checklist-undo)
+            echo "Plan: guarded Apple Notes checklist undo proof. The script creates a fresh checklist row, accepts one suggestion, presses Command-Z, then validates same-slice undo logs and traces."
+            ;;
           *)
             echo "Plan: manual-gated Apple Notes $notes_surface proof. The script validates only that surface after you run it."
             ;;
@@ -5759,10 +5791,10 @@ ensure_notes_body_smoke_note() {
 
 create_notes_blank_smoke_note() {
   osascript <<'APPLESCRIPT'
-tell application "Notes" to activate
-delay 0.2
 tell application "System Events"
   tell process "Notes"
+    set frontmost to true
+    delay 0.2
     click menu item "New Note" of menu "File" of menu bar item "File" of menu bar 1
   end tell
 end tell
@@ -5783,6 +5815,44 @@ tell application "System Events"
   keystroke rawText
 end tell
 APPLESCRIPT
+}
+
+try_press_accepted_insertion_undo() {
+  local app_bundle_id="$1"
+  local label="$2"
+  local undo_start_line
+
+  undo_start_line="$(line_count "$LOG_PATH")"
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  keystroke "z" using command down
+end tell
+APPLESCRIPT
+  if ! wait_for_log_fields_optional "$undo_start_line" 8 \
+    "keyboard-action" \
+    "app=$app_bundle_id" \
+    "action=undoAcceptedInsertion" \
+    "handled=true"; then
+    return 1
+  fi
+  wait_for_log_fields "$undo_start_line" "$label accepted insertion undo" 8 \
+    "accepted-insertion-undone" \
+    "app=$app_bundle_id"
+}
+
+press_and_wait_for_accepted_insertion_undo() {
+  local app_bundle_id="$1"
+  local label="$2"
+
+  if try_press_accepted_insertion_undo "$app_bundle_id" "$label"; then
+    return 0
+  fi
+
+  echo "Timed out waiting for $label undo keyboard action." >&2
+  echo "Required fields: keyboard-action app=$app_bundle_id action=undoAcceptedInsertion handled=true" >&2
+  echo "Log: $LOG_PATH" >&2
+  tail -n 80 "$LOG_PATH" 2>/dev/null >&2
+  exit 1
 }
 
 type_obsidian_raw_smoke_text() {
@@ -5953,10 +6023,34 @@ run_notes() {
     exit 2
   fi
 
-  if [[ "$manual_app" != "notes-title" && "$manual_app" != "notes-body" && "$manual_app" != "notes-checklist" ]]; then
-    run_manual_gated
-    return 0
-  fi
+  local notes_surface notes_requires_undo=0
+  case "$manual_app" in
+    notes-title)
+      notes_surface="title"
+      ;;
+    notes-title-undo)
+      notes_surface="title"
+      notes_requires_undo=1
+      ;;
+    notes-body)
+      notes_surface="body"
+      ;;
+    notes-body-undo)
+      notes_surface="body"
+      notes_requires_undo=1
+      ;;
+    notes-checklist)
+      notes_surface="checklist"
+      ;;
+    notes-checklist-undo)
+      notes_surface="checklist"
+      notes_requires_undo=1
+      ;;
+    *)
+      run_manual_gated
+      return 0
+      ;;
+  esac
 
   local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
@@ -5967,13 +6061,17 @@ run_notes() {
 
   full_accept_key="$(accept_all_shortcut)"
 
-  if [[ "$manual_app" == "notes-title" ]]; then
+  if [[ "$notes_surface" == "title" ]]; then
     ensure_notes_title_smoke_note
     start_line="$(line_count "$LOG_PATH")"
     trace_start_line="$(line_count "$TRACE_PATH")"
 
+    local first_fragment="Smoke proof feels"
+    local expected_after_first="Smoke proof feels instant"
+    local second_fragment=" and stays"
+
     assert_notes_title_smoke_target
-    type_notes_raw_smoke_text "Smoke proof feels"
+    type_notes_raw_smoke_text "$first_fragment"
     wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes title suggestion"
     wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes title"
     assert_frontmost_app "Notes" "Notes title"
@@ -5986,9 +6084,16 @@ run_notes() {
       "handled=true"
     wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.Notes .*result=verified" "Notes title first verified insertion"
 
+    if (( notes_requires_undo == 1 )); then
+      press_and_wait_for_accepted_insertion_undo "com.apple.Notes" "Notes title"
+      assert_notes_title_smoke_target "$first_fragment"
+    fi
+
     second_start_line="$(line_count "$LOG_PATH")"
-    assert_notes_title_smoke_target "Smoke proof feels instant"
-    type_notes_raw_smoke_text " and stays"
+    if (( notes_requires_undo == 0 )); then
+      assert_notes_title_smoke_target "$expected_after_first"
+    fi
+    type_notes_raw_smoke_text "$second_fragment"
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes title second suggestion"
     wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes title second"
     assert_frontmost_app "Notes" "Notes title"
@@ -6002,7 +6107,7 @@ run_notes() {
       "handled=true"
 
     sleep 1
-    local manual_check_args=(notes-title --check)
+    local manual_check_args=("$manual_app" --check)
     if screenshot_trace_requested; then
       manual_check_args+=(--visual)
     fi
@@ -6013,14 +6118,19 @@ run_notes() {
     return 0
   fi
 
-  if [[ "$manual_app" == "notes-checklist" ]]; then
+  if [[ "$notes_surface" == "checklist" ]]; then
     local checklist_title="${AUTOCOMPLETE_LAB_NOTES_CHECKLIST_TITLE:-Autocomplete Lab Checklist Smoke}"
     ensure_notes_checklist_smoke_note
     start_line="$(line_count "$LOG_PATH")"
     trace_start_line="$(line_count "$TRACE_PATH")"
 
+    local first_fragment="Smoke proof feels"
+    local expected_after_first="$checklist_title"$'\n'"Smoke proof feels instant"
+    local expected_after_undo="$checklist_title"$'\n'"$first_fragment"
+    local second_fragment=" and stays"
+
     assert_notes_checklist_smoke_target
-    type_notes_raw_smoke_text "Smoke proof feels"
+    type_notes_raw_smoke_text "$first_fragment"
     wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes checklist suggestion"
     wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes checklist"
     assert_frontmost_app "Notes" "Notes checklist"
@@ -6033,9 +6143,21 @@ run_notes() {
       "handled=true"
     wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.Notes .*result=verified" "Notes checklist first verified insertion"
 
+    if (( notes_requires_undo == 1 )); then
+      local checklist_acceptance_id
+      checklist_acceptance_id="$(latest_log_field_since "$start_line" "accepted-insertion-undo-armed" "acceptanceID")"
+      if ! try_press_accepted_insertion_undo "com.apple.Notes" "Notes checklist"; then
+        assert_notes_checklist_smoke_target "$expected_after_undo"
+        record_native_undo_proof "com.apple.Notes" "$checklist_acceptance_id" "acceptNextWord" "Notes checklist"
+      fi
+      assert_notes_checklist_smoke_target "$expected_after_undo"
+    fi
+
     second_start_line="$(line_count "$LOG_PATH")"
-    assert_notes_checklist_smoke_target "$checklist_title"$'\n'"Smoke proof feels instant"
-    type_notes_raw_smoke_text " and stays"
+    if (( notes_requires_undo == 0 )); then
+      assert_notes_checklist_smoke_target "$expected_after_first"
+    fi
+    type_notes_raw_smoke_text "$second_fragment"
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes checklist second suggestion"
     wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes checklist second"
     assert_frontmost_app "Notes" "Notes checklist"
@@ -6049,7 +6171,7 @@ run_notes() {
       "handled=true"
 
     sleep 1
-    local manual_check_args=(notes-checklist --check)
+    local manual_check_args=("$manual_app" --check)
     if screenshot_trace_requested; then
       manual_check_args+=(--visual)
     fi
@@ -6064,8 +6186,11 @@ run_notes() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
+  local body_first_fragment=$'\nSmoke proof feels'
+  local body_second_fragment=" and stays"
+
   assert_notes_body_smoke_target
-  type_notes_raw_smoke_text $'\nSmoke proof feels'
+  type_notes_raw_smoke_text "$body_first_fragment"
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes body"
   assert_frontmost_app "Notes" "Notes body"
@@ -6078,9 +6203,14 @@ run_notes() {
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.Notes .*result=verified" "Notes body first verified insertion"
 
+  if (( notes_requires_undo == 1 )); then
+    press_and_wait_for_accepted_insertion_undo "com.apple.Notes" "Notes body"
+    assert_notes_body_smoke_target
+  fi
+
   second_start_line="$(line_count "$LOG_PATH")"
   assert_notes_body_smoke_target
-  type_notes_raw_smoke_text " and stays"
+  type_notes_raw_smoke_text "$body_second_fragment"
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body second suggestion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes body second"
   assert_frontmost_app "Notes" "Notes body"
@@ -6094,7 +6224,7 @@ run_notes() {
     "handled=true"
 
   sleep 1
-  local manual_check_args=(notes-body --check)
+  local manual_check_args=("$manual_app" --check)
   if screenshot_trace_requested; then
     manual_check_args+=(--visual)
   fi
