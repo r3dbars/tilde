@@ -111,6 +111,22 @@ struct ModelAssetInstallerTests {
         #expect(receipt.revision == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
         #expect(receipt.files.map(\.path).sorted() == ["config.json", "model.safetensors"])
         #expect(receipt.files.allSatisfy { $0.sha256.count == 64 })
+        #expect(ModelAssetIntegrityReceiptValidator.validate(
+            manifest: manifest,
+            modelDirectoryURL: targetURL,
+            fileManager: fileManager
+        ) == nil)
+
+        try "WEIGHTS".write(
+            to: targetURL.appendingPathComponent("model.safetensors"),
+            atomically: true,
+            encoding: .utf8
+        )
+        #expect(ModelAssetIntegrityReceiptValidator.validate(
+            manifest: manifest,
+            modelDirectoryURL: targetURL,
+            fileManager: fileManager
+        ) == "integrity receipt checksum mismatch for model.safetensors")
     }
 
     @Test("Finalizing an invalid downloaded snapshot keeps the previous model folder")

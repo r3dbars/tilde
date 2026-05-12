@@ -76,7 +76,7 @@ enum ModelAssetIntegrityReceiptWriter {
         return receiptURL
     }
 
-    private static func modelFiles(
+    static func modelFiles(
         in directoryURL: URL,
         fileManager: FileManager
     ) throws -> [URL] {
@@ -95,7 +95,7 @@ enum ModelAssetIntegrityReceiptWriter {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
-    private static func sha256(_ url: URL) throws -> String {
+    static func sha256(_ url: URL) throws -> String {
         let handle = try FileHandle(forReadingFrom: url)
         defer {
             try? handle.close()
@@ -121,7 +121,7 @@ enum ModelAssetIntegrityReceiptWriter {
         return formatter.string(from: date)
     }
 
-    private static func canonicalModelAlias(for model: LocalModelID) -> String {
+    static func canonicalModelAlias(for model: LocalModelID) -> String {
         switch model {
         case .qwen35FourB:
             return "qwen35-4b"
@@ -140,5 +140,116 @@ enum ModelAssetIntegrityReceiptWriter {
         case .gemma4A4B:
             return "gemma-4-26b"
         }
+    }
+}
+
+enum ModelAssetIntegrityReceiptValidator {
+    static func validate(
+        manifest: LocalModelAssetManifest,
+        modelDirectoryURL: URL,
+        fileManager: FileManager = .default
+    ) -> String? {
+        guard let source = manifest.source else {
+            return nil
+        }
+
+        let receiptURL = modelDirectoryURL.appendingPathComponent(
+            ModelAssetIntegrityReceiptWriter.fileName,
+            isDirectory: false
+        )
+        guard fileManager.fileExists(atPath: receiptURL.path) else {
+            return "missing integrity receipt \(ModelAssetIntegrityReceiptWriter.fileName)"
+        }
+
+        let receipt: ModelAssetIntegrityReceipt
+        do {
+            receipt = try JSONDecoder().decode(
+                ModelAssetIntegrityReceipt.self,
+                from: Data(contentsOf: receiptURL)
+            )
+        } catch {
+            return "invalid integrity receipt: \(error.localizedDescription)"
+        }
+
+        guard receipt.schemaVersion == 1 else {
+            return "unsupported integrity receipt schema \(receipt.schemaVersion)"
+        }
+
+        let expectedModel = ModelAssetIntegrityReceiptWriter.canonicalModelAlias(for: manifest.model)
+        guard receipt.model == expectedModel else {
+            return "integrity receipt model mismatch"
+        }
+
+        guard receipt.repoID == source.repoID else {
+            return "integrity receipt repo mismatch"
+        }
+
+        guard receipt.revision == source.revision else {
+            return "integrity receipt revision mismatch"
+        }
+
+        let entriesByPath = Dictionary(grouping: receipt.files, by: \.path)
+        if let duplicate = entriesByPath.first(where: { $0.value.count > 1 })?.key {
+            return "integrity receipt has duplicate file \(duplicate)"
+        }
+
+        let receiptPaths = Set(entriesByPath.keys)
+        if let unsafePath = receiptPaths.first(where: isUnsafeReceiptPath) {
+            return "integrity receipt has unsafe file path \(unsafePath)"
+        }
+
+        let fileURLs: [URL]
+        do {
+            fileURLs = try ModelAssetIntegrityReceiptWriter.modelFiles(
+                in: modelDirectoryURL,
+                fileManager: fileManager
+            )
+        } catch {
+            return "could not inspect model files: \(error.localizedDescription)"
+        }
+
+        let fileNames = Set(fileURLs.map(\.lastPathComponent))
+        let extraFiles = fileNames.subtracting(receiptPaths).sorted()
+        if let extraFile = extraFiles.first {
+            return "model file is not in integrity receipt: \(extraFile)"
+        }
+
+        let missingFiles = receiptPaths.subtracting(fileNames).sorted()
+        if let missingFile = missingFiles.first {
+            return "integrity receipt references missing model file: \(missingFile)"
+        }
+
+        for fileURL in fileURLs {
+            guard let entry = entriesByPath[fileURL.lastPathComponent]?.first else {
+                return "model file is not in integrity receipt: \(fileURL.lastPathComponent)"
+            }
+
+            let size = (try? fileManager.attributesOfItem(atPath: fileURL.path)[.size] as? NSNumber)?
+                .int64Value ?? -1
+            guard size == entry.byteCount else {
+                return "integrity receipt byte count mismatch for \(entry.path)"
+            }
+
+            let digest: String
+            do {
+                digest = try ModelAssetIntegrityReceiptWriter.sha256(fileURL)
+            } catch {
+                return "could not checksum \(entry.path): \(error.localizedDescription)"
+            }
+
+            guard digest == entry.sha256 else {
+                return "integrity receipt checksum mismatch for \(entry.path)"
+            }
+        }
+
+        return nil
+    }
+
+    private static func isUnsafeReceiptPath(_ path: String) -> Bool {
+        path.isEmpty
+            || path.contains("/")
+            || path.contains("\\")
+            || path == "."
+            || path == ".."
     }
 }
