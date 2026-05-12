@@ -9,6 +9,9 @@ struct SettingsLayoutStyle {
     let sectionSpacing: CGFloat
     let sectionItemSpacing: CGFloat
     let contentInsets: NSEdgeInsets
+    let preferredContentSize: NSSize
+    let minimumContentSize: NSSize
+    let visibleScreenInset: CGFloat
     let secondaryLabelMaxWidth: CGFloat
 
     static let nativeUtility = SettingsLayoutStyle(
@@ -19,8 +22,17 @@ struct SettingsLayoutStyle {
         sectionSpacing: 14,
         sectionItemSpacing: 5,
         contentInsets: NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24),
+        preferredContentSize: NSSize(width: 560, height: 680),
+        minimumContentSize: NSSize(width: 540, height: 420),
+        visibleScreenInset: 32,
         secondaryLabelMaxWidth: 470
     )
+}
+
+private final class FlippedSettingsDocumentView: NSView {
+    override var isFlipped: Bool {
+        true
+    }
 }
 
 struct SettingsCurrentAppState: Equatable {
@@ -669,6 +681,8 @@ struct SettingsFieldControlState: Equatable {
 @MainActor
 final class SettingsWindowController: NSObject {
     private let window: NSWindow
+    private let contentScrollView = NSScrollView()
+    private let scrollDocumentView = FlippedSettingsDocumentView()
     private let permissionLabel = NSTextField(labelWithString: "")
     private let permissionDetailLabel = NSTextField(labelWithString: "")
     private let runtimeLabel = NSTextField(labelWithString: "")
@@ -840,7 +854,9 @@ final class SettingsWindowController: NSObject {
         self.setSuggestionAggressivenessLevel = setSuggestionAggressivenessLevel
         self.setSuggestionMaxVisibleWords = setSuggestionMaxVisibleWords
 
-        let contentView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 560, height: 920))
+        let contentView = NSVisualEffectView(
+            frame: NSRect(origin: .zero, size: SettingsLayoutStyle.nativeUtility.preferredContentSize)
+        )
         contentView.material = .contentBackground
         contentView.blendingMode = .behindWindow
         contentView.state = .active
@@ -853,7 +869,7 @@ final class SettingsWindowController: NSObject {
         window.title = "SteadyType"
         window.contentView = contentView
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 540, height: 820)
+        window.contentMinSize = SettingsLayoutStyle.nativeUtility.minimumContentSize
         window.isMovableByWindowBackground = true
 
         super.init()
@@ -895,13 +911,31 @@ final class SettingsWindowController: NSObject {
             suggestionAggressiveness: suggestionAggressiveness,
             lastSuggestionDecision: lastSuggestionDecision
         )
-        window.center()
+        fitWindowInsideVisibleScreen()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     var isShowing: Bool {
         window.isVisible
+    }
+
+    var usesScrollableSettingsContent: Bool {
+        guard let documentView = contentScrollView.documentView else {
+            return false
+        }
+
+        return contentScrollView.hasVerticalScroller
+            && !contentScrollView.hasHorizontalScroller
+            && documentView === scrollDocumentView
+    }
+
+    var minimumSettingsContentSize: NSSize {
+        window.contentMinSize
+    }
+
+    var preferredSettingsContentSize: NSSize {
+        layoutStyle.preferredContentSize
     }
 
     func refresh(
@@ -1055,6 +1089,18 @@ final class SettingsWindowController: NSObject {
     }
 
     private func buildContent(in contentView: NSView) {
+        contentScrollView.translatesAutoresizingMaskIntoConstraints = false
+        contentScrollView.drawsBackground = false
+        contentScrollView.borderType = .noBorder
+        contentScrollView.hasVerticalScroller = true
+        contentScrollView.hasHorizontalScroller = false
+        contentScrollView.autohidesScrollers = true
+        contentScrollView.verticalScrollElasticity = .allowed
+        contentScrollView.horizontalScrollElasticity = .none
+
+        scrollDocumentView.translatesAutoresizingMaskIntoConstraints = false
+        contentScrollView.documentView = scrollDocumentView
+
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -1325,14 +1371,50 @@ final class SettingsWindowController: NSObject {
             stack.addArrangedSubview($0)
         }
 
-        contentView.addSubview(stack)
+        contentView.addSubview(contentScrollView)
+        scrollDocumentView.addSubview(stack)
 
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: layoutStyle.contentInsets.left),
-            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -layoutStyle.contentInsets.right),
-            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: layoutStyle.contentInsets.top),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -layoutStyle.contentInsets.bottom)
+            contentScrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            contentScrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            contentScrollView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            contentScrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+
+            scrollDocumentView.leadingAnchor.constraint(equalTo: contentScrollView.contentView.leadingAnchor),
+            scrollDocumentView.trailingAnchor.constraint(equalTo: contentScrollView.contentView.trailingAnchor),
+            scrollDocumentView.topAnchor.constraint(equalTo: contentScrollView.contentView.topAnchor),
+            scrollDocumentView.widthAnchor.constraint(equalTo: contentScrollView.contentView.widthAnchor),
+            scrollDocumentView.heightAnchor.constraint(greaterThanOrEqualTo: contentScrollView.contentView.heightAnchor),
+
+            stack.leadingAnchor.constraint(equalTo: scrollDocumentView.leadingAnchor, constant: layoutStyle.contentInsets.left),
+            stack.trailingAnchor.constraint(equalTo: scrollDocumentView.trailingAnchor, constant: -layoutStyle.contentInsets.right),
+            stack.topAnchor.constraint(equalTo: scrollDocumentView.topAnchor, constant: layoutStyle.contentInsets.top),
+            stack.bottomAnchor.constraint(equalTo: scrollDocumentView.bottomAnchor, constant: -layoutStyle.contentInsets.bottom)
         ])
+    }
+
+    private func fitWindowInsideVisibleScreen() {
+        guard let visibleFrame = (window.screen ?? NSScreen.main)?.visibleFrame else {
+            window.center()
+            return
+        }
+
+        let desiredFrame = window.frameRect(forContentRect: NSRect(
+            origin: .zero,
+            size: layoutStyle.preferredContentSize
+        ))
+        let maxFrameWidth = max(window.minSize.width, visibleFrame.width - layoutStyle.visibleScreenInset)
+        let maxFrameHeight = max(window.minSize.height, visibleFrame.height - layoutStyle.visibleScreenInset)
+        let targetSize = NSSize(
+            width: min(desiredFrame.width, maxFrameWidth),
+            height: min(desiredFrame.height, maxFrameHeight)
+        )
+        let targetOrigin = NSPoint(
+            x: visibleFrame.midX - (targetSize.width / 2),
+            y: visibleFrame.midY - (targetSize.height / 2)
+        )
+
+        window.setFrame(NSRect(origin: targetOrigin, size: targetSize), display: false)
     }
 
     private func configureSecondaryLabel(
