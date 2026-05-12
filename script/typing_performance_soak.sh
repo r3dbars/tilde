@@ -17,6 +17,8 @@ MIN_AX_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_AX_SAMPLES:-0}"
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_LOG:-$HOME/Library/Logs/SteadyType/traces.jsonl}"
 SEGMENT_CHARS="${AUTOCOMPLETE_LAB_SOAK_SEGMENT_CHARS:-250}"
+LOG_SCAN_SELF_TEST=0
+LOG_SCAN_SELF_TEST_START_LINE=0
 DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.steadytype}"
 PAUSE_DEFAULTS_KEY="SuggestionsPaused"
 DISABLED_APPS_DEFAULTS_KEY="DisabledBundleIdentifiers"
@@ -121,15 +123,32 @@ textedit_is_disabled_by_defaults() {
   printf '%s\n' "$disabled_bundles" | grep -F "com.apple.TextEdit" >/dev/null
 }
 
+has_focused_text_poll_summary_after_line() {
+  local start_line="$1"
+  local first_new_line=$((start_line + 1))
+
+  [[ -f "$LOG_PATH" ]] || return 1
+  awk -v first_new_line="$first_new_line" '
+    NR < first_new_line { next }
+    /focused-text-poll-latency-summary/ {
+      found = 1
+      exit
+    }
+    END {
+      if (found != 1) {
+        exit 1
+      }
+    }
+  ' "$LOG_PATH"
+}
+
 wait_for_focused_text_poll_summary_after_line() {
   local start_line="$1"
   local timeout_seconds="${2:-15}"
   local deadline=$((SECONDS + timeout_seconds))
-  local first_new_line=$((start_line + 1))
 
   while ((SECONDS < deadline)); do
-    if [[ -f "$LOG_PATH" ]] &&
-      sed -n "${first_new_line},\$p" "$LOG_PATH" | grep -q "focused-text-poll-latency-summary"; then
+    if has_focused_text_poll_summary_after_line "$start_line"; then
       return 0
     fi
     sleep 0.25
@@ -142,11 +161,9 @@ wait_for_required_focused_text_poll_summary_after_line() {
   local start_line="$1"
   local timeout_seconds="${2:-20}"
   local deadline=$((SECONDS + timeout_seconds))
-  local first_new_line=$((start_line + 1))
 
   while ((SECONDS < deadline)); do
-    if [[ -f "$LOG_PATH" ]] &&
-      sed -n "${first_new_line},\$p" "$LOG_PATH" | grep -q "focused-text-poll-latency-summary"; then
+    if has_focused_text_poll_summary_after_line "$start_line"; then
       return 0
     fi
     sleep 0.25
@@ -790,6 +807,17 @@ while (($#)); do
     --strict-ax)
       STRICT_AX=1
       ;;
+    --self-test-log-scan)
+      shift
+      if (($# < 2)); then
+        usage >&2
+        exit 2
+      fi
+      LOG_PATH="$1"
+      shift
+      LOG_SCAN_SELF_TEST_START_LINE="$1"
+      LOG_SCAN_SELF_TEST=1
+      ;;
     -h|--help)
       usage
       exit 0
@@ -801,6 +829,12 @@ while (($#)); do
   esac
   shift
 done
+
+if [[ "$LOG_SCAN_SELF_TEST" == "1" ]]; then
+  require_non_negative_int "$LOG_SCAN_SELF_TEST_START_LINE" "--self-test-log-scan start-line"
+  has_focused_text_poll_summary_after_line "$LOG_SCAN_SELF_TEST_START_LINE"
+  exit $?
+fi
 
 case "$APP" in
   textedit)

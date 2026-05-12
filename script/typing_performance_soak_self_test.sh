@@ -195,4 +195,23 @@ if script/typing_performance_soak.sh --dry-run --unknown >/dev/null 2>&1; then
   exit 1
 fi
 
+large_log="$TMP_DIR/large-diagnostics.log"
+for _ in $(seq 1 8000); do
+  printf '2026-05-12T00:00:00Z status decision=waiting\n'
+done >"$large_log"
+printf '2026-05-12T00:00:01Z focused-text-poll-latency-summary count=60 maxMilliseconds=8\n' >>"$large_log"
+for _ in $(seq 1 8000); do
+  printf '2026-05-12T00:00:02Z status decision=waiting\n'
+done >>"$large_log"
+
+if ! script/typing_performance_soak.sh --self-test-log-scan "$large_log" 7000; then
+  echo "typing soak self-test expected large post-start log scan to find focused-text summary" >&2
+  exit 1
+fi
+
+if script/typing_performance_soak.sh --self-test-log-scan "$large_log" 9000; then
+  echo "typing soak self-test expected post-summary log scan to fail" >&2
+  exit 1
+fi
+
 echo "Typing performance soak self-test passed."
