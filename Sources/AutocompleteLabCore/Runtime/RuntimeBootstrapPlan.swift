@@ -406,6 +406,16 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
             break
         }
 
+        if case let .failed(_, reason) = runtimeState,
+           Self.isRepairableModelAssetFailure(reason) {
+            return RuntimeReadinessReport(
+                stage: .repairNeeded,
+                summary: "model folder needs repair",
+                detail: "The local model failed integrity validation: \(reason)",
+                action: .repairModel
+            )
+        }
+
         guard nativeRuntimeAvailable else {
             return RuntimeReadinessReport(
                 stage: .runtimeUnavailable,
@@ -450,5 +460,11 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
 
     public func readinessSummary(for runtimeState: LocalRuntimeState) -> String {
         readinessReport(for: runtimeState).summary
+    }
+
+    public static func isRepairableModelAssetFailure(_ reason: String) -> Bool {
+        let lowercased = reason.lowercased()
+        return lowercased.contains("model asset integrity failed")
+            || lowercased.contains("integrity receipt")
     }
 }

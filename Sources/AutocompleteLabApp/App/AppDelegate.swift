@@ -758,7 +758,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func applyRuntimeState(_ state: LocalRuntimeState) {
         let wasReadyForSuggestions = runtimeReadinessReport.allowsSuggestions
-        currentRuntimeState = state
+        currentRuntimeState = refreshModelAssetStateIfNeeded(for: state)
         refreshRuntimeChrome()
         let report = runtimeReadinessReport
         if report.allowsSuggestions,
@@ -781,6 +781,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "readinessStage": report.stage.rawValue,
                 "readinessAction": report.action.rawValue
             ]
+        )
+    }
+
+    private func refreshModelAssetStateIfNeeded(for state: LocalRuntimeState) -> LocalRuntimeState {
+        guard case let .failed(candidate, reason) = state,
+              RuntimeBootstrapPlan.isRepairableModelAssetFailure(reason) else {
+            return state
+        }
+
+        modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
+        engine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
+        suggestionOrchestrator.updateEngine(engine)
+        DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
+        DiagnosticsLog.shared.record(
+            "runtime-model-asset-state-refreshed",
+            metadata: [
+                "candidate": candidate.rawValue,
+                "reason": reason,
+                "assetState": modelRuntimeBundle.bootstrapPlan.assetState.statusSummary
+            ]
+        )
+
+        guard !modelRuntimeBundle.bootstrapPlan.assetState.isUsable else {
+            return state
+        }
+
+        return .unavailable(
+            reason: modelRuntimeBundle.bootstrapPlan.unavailableReason ?? reason
         )
     }
 
