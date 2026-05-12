@@ -19,19 +19,40 @@ That must create and verify:
 - `dist/AutocompleteLab.zip`
 - `dist/private-beta/README.md`
 - `dist/private-beta/install-checklist.md`
+- `dist/private-beta/daily-tester-checklist.md`
+- `dist/private-beta/redacted-report-export-flow.md`
 - `dist/private-beta/feedback-log.md`
+- `dist/private-beta/feedback-triage.md`
+- `dist/private-beta/stop-condition-dashboard.md`
+- `dist/private-beta/issue-template-validation.md`
+- `dist/private-beta/beta-readiness-summary.md`
 - `dist/private-beta/session-report.md`
 - `dist/private-beta/privacy-status.md`
+- `dist/private-beta/tester-docs/PRIVACY-BETA.md`
+- `dist/private-beta/tester-docs/KNOWN-LIMITATIONS.md`
+- `dist/private-beta/tester-docs/UNINSTALL-DELETE-DATA.md`
+- `dist/private-beta/tester-docs/DIAGNOSTIC-EXPORT.md`
+- `dist/private-beta/tester-docs/private-beta-ops-loop.md`
 - `dist/private-beta/checksums.txt`
 
 Also read:
 
 - `docs/product/beta-readiness-checklist.md`
+- `docs/product/private-beta-ops-loop.md`
 - `docs/product/compatibility-matrix.md`
 - `docs/product/privacy-and-controls.md`
 
-If the build needs a user-started model server, Python setup, Ollama,
-llama.cpp, or mock fallback, do not invite testers.
+If the build needs a user-started model server, tester-side Python setup,
+Ollama, llama.cpp, or mock fallback, do not invite testers.
+
+The generated private-beta packet must also keep tester model setup inside the
+app. If the model is missing or invalid, testers should use Settings
+`Install Model` or `Repair Model`; if that in-app setup fails, stop the session
+instead of giving testers shell commands.
+
+The tester install path is inside Settings. If the model is missing, use
+`Install Local Model`; if the folder is incomplete, use `Repair Local Model`.
+Do not ask testers to run shell or Python commands.
 
 ## Test Shape
 
@@ -66,7 +87,8 @@ Walk each tester through this in 15 minutes or less:
 - Smoke check: open TextEdit, type a normal sentence, accept one word with
   `Tab`, dismiss with `Esc`, then export the redacted report.
 - Stop rules: one wrong insertion, sensitive-field suggestion, unreliable
-  `Tab`, mock fallback, or manual model setup ends the beta.
+  `Tab`, mock fallback, failed in-app model setup, or tester-side shell/Python
+  setup ends the beta.
 
 ## Daily 2-Minute Survey
 
@@ -81,6 +103,9 @@ Ask once per day:
 - Did `Tab` ever surprise you?
 - Did anything appear in search, login, payment, address, or other sensitive
   fields?
+
+Use `dist/private-beta/daily-tester-checklist.md` for the exact daily tester
+flow. It is the tester-facing version of this plan.
 
 ## Forced Edge Cases
 
@@ -131,6 +156,10 @@ Stop the beta immediately if any of these happen:
 - tester must manually start or manage a model server,
 - model asset setup requires tester-side Python or shell steps.
 
+Track these in `dist/private-beta/stop-condition-dashboard.md`. Each stop row
+must point to a proof command, the redacted report, or an app removal decision
+before it can be closed.
+
 ## After Each Session
 
 Record one lightweight row in:
@@ -148,15 +177,26 @@ capture:
 - worst app,
 - pause or disable reason.
 
-Do not ask for raw traces, screenshots, prompts, typed text, accepted text,
-document names, URLs, recipients, or subject lines by default. Use the redacted
-privacy bundle unless a specific debug session has explicit written consent.
+Do not paste raw typed text, prompts, screenshots, document names, URLs,
+recipients, subject lines, or trace excerpts into beta feedback. Use short
+labels like `wrong app`, `late`, `too much`, or `good word finish`.
+
+If feedback needs a GitHub issue, use the menu bar `Submit Feedback...` item or
+the structured issue form:
+
+```text
+.github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml
+```
+
+Every issue starts with `beta feedback` and `needs triage`. Add `beta stop`
+for hard stop conditions. Ask only for the redacted Privacy Bundle by default.
 
 Run the trace checker before trusting the session:
 
 ```bash
 ./script/check_trace_eval.sh
-./script/model_latency_report.py --latest
+./script/model_latency_report.py --default-model-proof
+./script/validate_beta_issue_template.sh
 ```
 
 Fix the top repeated trust miss before inviting another tester.

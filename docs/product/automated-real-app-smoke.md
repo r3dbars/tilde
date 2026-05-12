@@ -42,6 +42,9 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-und
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host terminal --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host iterm2 --manual-gate
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host ghostty --manual-gate
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate
 ```
 
@@ -62,8 +65,9 @@ What this proves:
   manual recorder or by setting `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1`
 - Chrome works in plain textareas, contenteditable fields, editor-like nested
   contenteditables, Monaco-like editors, ProseMirror-like editors, pinned
-  upstream Monaco/ProseMirror fixtures in isolated renderer-accessibility Chrome,
-  and a chat-style composer fixture that fails if Tab/full-accept submits the form
+  upstream Monaco/ProseMirror fixtures, and a chat-style composer fixture that
+  fails if Tab/full-accept submits the form. Local Chrome fixtures run in an
+  isolated temp-profile Chrome with renderer accessibility forced by default.
 
 Notes, Obsidian, Codex, Claude Code, and Claude desktop checks are
 manual-gated. Do not use real notes, vault content, terminal commands, or live
@@ -72,44 +76,52 @@ agent prompt pass. Codex, Claude Code, and Claude desktop require one-word
 no-submit proof before graduation.
 Prompt-app full accept stays disabled until separate full-accept no-submit proof
 exists.
+Claude Code host-specific proof commands record separate Terminal, iTerm2,
+Ghostty, Warp, kitty, Alacritty, and WezTerm lanes, and host-labeled checks
+require the trace field identity to match the requested terminal host.
 For Notes, `notes-title`, `notes-body`, `notes-checklist`, and the matching
 `notes-*-undo` lanes are separate proof targets. A generic `notes` run is only
 a picker and does not count. Undo lanes require `accepted-insertion-undone` in
 the bounded diagnostics slice.
 
-The default Chrome fixtures are local and dependency-free. The Monaco-like and
+The default Chrome fixtures are local and dependency-free. They run in an
+isolated temp-profile Chrome process with `--force-renderer-accessibility` so
+the unattended proof lane is not blocked by normal Chrome's current AX exposure.
+The Monaco-like and
 ProseMirror-like fixtures copy the DOM shape and focus behavior those editors
 usually expose, but they do not load the real upstream libraries. The
 `monaco-real` and `prosemirror-real` fixtures install pinned npm packages into a
 temporary folder during the run and never commit `node_modules`. They are the
-right proof lane for real editor engines. For these two lanes the script launches
-an isolated temp-profile Chrome process with `--force-renderer-accessibility`
-and kills only that captured process during cleanup. That proves Autocomplete
-Lab works when Chrome exposes real editor AX, but it is still weaker than
-default-Chrome production-site proof. The Settings Chrome proof runner now calls
+right proof lane for real editor engines. The script kills only the captured
+isolated Chrome process during cleanup. That proves Autocomplete Lab works when
+Chrome exposes real editor AX, but it is still weaker than default-Chrome
+production-site proof. The Settings Chrome proof runner now calls
 `--fixture all --include-default-real-editor-proof`, so the same one-click proof
 also reruns real Monaco and real ProseMirror under normal Chrome AX exposure.
-The `--chrome-accessibility default` lane records distinct `monaco-real-default`
-and `prosemirror-real-default` proof rows when normal Chrome exposes enough
-editor AX for strict screenshot-backed acceptance and proof-gated inline
-synthetic-caret placement. The remaining Chrome editor gap is production editor
-variants. The chat-like fixture is not a real Codex or Claude
+The `--chrome-accessibility default` lane records distinct `*-default` proof
+rows when normal Chrome exposes enough editor AX for strict screenshot-backed
+acceptance and proof-gated inline synthetic-caret placement. The remaining
+Chrome editor gap is production editor variants. The chat-like fixture is not a
+real Codex or Claude
 proof; it is a local no-submit guardrail that must pass before trusting prompt
 app smoke results.
 
 The script also has guarded public-demo lanes for `codemirror-official`,
 `monaco-official`, and `prosemirror-official`. Those lanes are for production
-editor proof only after they pass with bounded screenshot-backed traces. They
-fail closed before typing unless Chrome is frontmost and the expected official
-demo URL is the active tab. Official demo lanes also fail fast if Chrome's
-View > Developer > Allow JavaScript from Apple Events setting is off, because
-the script cannot safely focus or verify those public editors without it. The
-Chrome setup text path also requires a focused editable web text target through
-Accessibility, sends setup text to the Chrome process rather than as global
-setup keystrokes, and verifies that the focused editor value changed before
-continuing. Real-app smoke runs take a single-run lock and scan for other
-active smoke scripts so two proof processes cannot type at the same time, even
-if an older worktree process did not share the current lock state.
+editor proof only after they pass with bounded screenshot-backed traces. Official
+rich-editor lanes use an isolated temporary Chrome profile plus localhost
+DevTools for readiness, focus, and disposable setup text when available, so they
+do not touch the user's live Chrome profile. They also fail closed before typing
+unless Chrome is frontmost, the expected official demo URL is active, and the
+current SteadyType build is already allowed in macOS Accessibility. Official
+demo lanes allow up to 180 seconds for cold current-build MLX warmup before
+touching Chrome. The Chrome setup path still requires a focused editable web
+text target through Accessibility and real Autocomplete Lab suggestion/
+acceptance traces before recording a pass; the Apple Events path is only a
+fallback when the safer setup path cannot be used. Real-app smoke runs take a
+single-run lock and scan for other active smoke scripts so two proof processes
+cannot type at the same time, even if an older worktree process did not share
+the current lock state.
 
 Run the score target loop when working toward the product scorecards:
 

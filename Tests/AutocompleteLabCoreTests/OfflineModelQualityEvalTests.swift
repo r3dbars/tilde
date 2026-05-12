@@ -67,4 +67,44 @@ struct OfflineModelQualityEvalTests {
         #expect(tiny.passes == false)
         #expect(tiny.label == .directional)
     }
+
+    @Test("Local quality audit scores every self-authored label")
+    func localQualityAuditScoresEverySelfAuthoredLabel() {
+        let task = OfflineModelQualityAuditTask(
+            id: "markdown-proof",
+            textBeforeCursor: "The current Obsidian note should prove",
+            expectedMeaningTerms: ["markdown", "local", "proof"],
+            maxVisibleWords: 3,
+            lineStructure: .plain
+        )
+
+        let good = OfflineModelQualityEvaluator.scoreAuditOutput(
+            output: "markdown local proof",
+            for: task
+        )
+        let bad = OfflineModelQualityEvaluator.scoreAuditOutput(
+            output: "- Sure, let's put the secret calendar sales plan here today",
+            for: task
+        )
+
+        #expect(good.relevance == 1)
+        #expect(good.literalContinuation == 1)
+        #expect(good.assistantLeakage == 1)
+        #expect(good.wrongTopic == 1)
+        #expect(good.lengthControl == 1)
+        #expect(good.structuralIntegrity == 1)
+        #expect(good.unsafeSensitiveContent == 1)
+        #expect(good.repetition == 1)
+
+        #expect(bad.wrongTopic == 0)
+        #expect(bad.assistantLeakage == 0)
+        #expect(bad.lengthControl < 1)
+        #expect(bad.structuralIntegrity == 0)
+        #expect(bad.unsafeSensitiveContent == 0)
+        #expect(bad.issues.contains("wrong topic"))
+        #expect(bad.issues.contains("assistant leakage"))
+        #expect(bad.issues.contains("length control"))
+        #expect(bad.issues.contains("structural integrity"))
+        #expect(bad.issues.contains("unsafe sensitive content"))
+    }
 }

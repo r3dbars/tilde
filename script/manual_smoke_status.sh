@@ -32,6 +32,7 @@ docs/product/manual-smoke-runs.md and lists remaining sub-10 scorecard gaps.
 It separates insertion proof from screenshot-backed visual placement proof so
 real-app visual gaps stay visible after insertion passes.
 Notes title, body, and checklist are separate proof targets.
+Obsidian default, theme, pane, and long-note lanes are separate proof targets.
 
 Use --require-all or --strict when you want the command to fail until every
 target app has a recorded pass and every visual audit row has screenshot-backed
@@ -46,8 +47,13 @@ declare -a APPS=(
   "Notes body|Notes|com.apple.Notes|full|notes-body|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate"
   "Notes checklist|Notes|com.apple.Notes|full|notes-checklist|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate"
   "Obsidian|Obsidian|md.obsidian|full|default|script/manual_smoke_session.sh obsidian --visual"
+  "Obsidian theme|Obsidian|md.obsidian|full|obsidian-theme|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
+  "Obsidian panes|Obsidian|md.obsidian|full|obsidian-pane|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
+  "Obsidian long note|Obsidian|md.obsidian|full|obsidian-long-note|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
   "Chrome textarea|Chrome|com.google.Chrome|full|textarea|script/manual_smoke_session.sh chrome --visual"
   "Chrome contenteditable|Chrome|com.google.Chrome|full|contenteditable|AUTOCOMPLETE_LAB_CHROME_FIXTURE=contenteditable script/manual_smoke_session.sh chrome --visual"
+  "Chrome production textarea|Chrome|com.google.Chrome|full|textarea-public|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public"
+  "Chrome production contenteditable|Chrome|com.google.Chrome|full|contenteditable-public|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable-public"
   "Chrome editor-like|Chrome|com.google.Chrome|full|editor-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=editor-like script/manual_smoke_session.sh chrome --visual"
   "Chrome Monaco-like|Chrome|com.google.Chrome|full|monaco-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=monaco-like script/manual_smoke_session.sh chrome --visual"
   "Chrome ProseMirror-like|Chrome|com.google.Chrome|full|prosemirror-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=prosemirror-like script/manual_smoke_session.sh chrome --visual"
@@ -59,6 +65,13 @@ declare -a APPS=(
   "Codex|Codex|com.openai.codex|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
   "Claude Code|Claude Code|com.anthropic.claude-code|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
   "Claude desktop|Claude|com.anthropic.claudefordesktop|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
+  "Claude desktop empty composer|Claude|com.anthropic.claudefordesktop|one-word|claude-empty|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-empty --manual-gate"
+  "Claude desktop long prompt|Claude|com.anthropic.claudefordesktop|one-word|claude-long|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-long --manual-gate"
+  "Claude desktop wrapped prompt|Claude|com.anthropic.claudefordesktop|one-word|claude-wrapped|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-wrapped --manual-gate"
+  "Claude desktop narrow window|Claude|com.anthropic.claudefordesktop|one-word|claude-narrow|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-narrow --manual-gate"
+  "Claude desktop context layout|Claude|com.anthropic.claudefordesktop|one-word|claude-context|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-context --manual-gate"
+  "Claude desktop light appearance|Claude|com.anthropic.claudefordesktop|one-word|claude-light|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-light --manual-gate"
+  "Claude desktop dark appearance|Claude|com.anthropic.claudefordesktop|one-word|claude-dark|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-dark --manual-gate"
 )
 
 trim() {
@@ -66,6 +79,169 @@ trim() {
   value="${value#"${value%%[![:space:]]*}"}"
   value="${value%"${value##*[![:space:]]}"}"
   printf '%s' "$value"
+}
+
+declare -a CURRENT_BUILD_PROOFS=()
+CURRENT_COMMIT_PROOF=""
+CURRENT_APP_PROOF=""
+CURRENT_ARCHIVE_PROOF=""
+
+collect_current_build_proofs() {
+  if [[ -n "${AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF:-}" ]]; then
+    CURRENT_BUILD_PROOFS+=("$AUTOCOMPLETE_LAB_SMOKE_BUILD_PROOF")
+  fi
+
+  local commit
+  commit="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
+  if [[ -n "$commit" ]]; then
+    CURRENT_COMMIT_PROOF="commit:$commit"
+    CURRENT_BUILD_PROOFS+=("$CURRENT_COMMIT_PROOF")
+  fi
+
+  local app_binary="${AUTOCOMPLETE_LAB_APP_BINARY:-dist/SteadyType.app/Contents/MacOS/SteadyType}"
+  if [[ -s "$app_binary" ]]; then
+    local app_sha
+    app_sha="$(shasum -a 256 "$app_binary" | awk '{print $1}')"
+    if [[ -n "$app_sha" ]]; then
+      CURRENT_APP_PROOF="app-sha256:$app_sha"
+      CURRENT_BUILD_PROOFS+=("$CURRENT_APP_PROOF")
+    fi
+  fi
+
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/SteadyType.zip}"
+  if [[ -s "$archive_path" ]]; then
+    local archive_sha
+    archive_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
+    if [[ -n "$archive_sha" ]]; then
+      CURRENT_ARCHIVE_PROOF="archive-sha256:$archive_sha"
+      CURRENT_BUILD_PROOFS+=("$CURRENT_ARCHIVE_PROOF")
+    fi
+  fi
+}
+
+current_build_proof_summary() {
+  if (( ${#CURRENT_BUILD_PROOFS[@]} == 0 )); then
+    printf 'none'
+    return
+  fi
+
+  local IFS=', '
+  printf '%s' "${CURRENT_BUILD_PROOFS[*]}"
+}
+
+line_has_current_build_proof() {
+  local line="$1"
+  local bundle_id="${2:-}"
+
+  if [[ "$line" == *"archive-sha256:"* ]]; then
+    if [[ -n "$CURRENT_ARCHIVE_PROOF" && "$line" == *"$CURRENT_ARCHIVE_PROOF"* ]]; then
+      return 0
+    fi
+  fi
+
+  if [[ -n "$CURRENT_APP_PROOF" && "$line" == *"$CURRENT_APP_PROOF"* ]]; then
+    return 0
+  fi
+
+  if line_has_source_compatible_commit_proof "$line" "$(proof_source_paths_for_bundle "$bundle_id")"; then
+    return 0
+  fi
+
+  if [[ "$line" == *"commit:"* || "$line" == *"archive-sha256:"* || "$line" == *"app-sha256:"* ]]; then
+    return 1
+  fi
+
+  if [[ -n "$CURRENT_ARCHIVE_PROOF" && "$line" == *"$CURRENT_ARCHIVE_PROOF"* ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
+line_commit_proof_token() {
+  local line="$1"
+
+  if [[ "$line" =~ commit:([0-9a-fA-F]{7,40}) ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+  fi
+}
+
+line_has_source_compatible_commit_proof() {
+  local line="$1"
+  local source_paths_raw="${2:-${AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS:-Package.swift Package.resolved Sources}}"
+  local proof_token
+  proof_token="$(line_commit_proof_token "$line")"
+  [[ -n "$proof_token" ]] || return 1
+
+  local proof_commit
+  proof_commit="$(git rev-parse --verify --quiet "$proof_token^{commit}" 2>/dev/null || true)"
+  [[ -n "$proof_commit" ]] || return 1
+
+  local current_commit
+  current_commit="$(git rev-parse --verify --quiet HEAD^{commit} 2>/dev/null || true)"
+  [[ -n "$current_commit" ]] || return 1
+
+  if [[ "$proof_commit" == "$current_commit" ]]; then
+    return 0
+  fi
+
+  local -a source_paths=()
+  read -r -a source_paths <<<"$source_paths_raw"
+  (( ${#source_paths[@]} > 0 )) || return 1
+
+  git diff --quiet "$proof_commit".."$current_commit" -- "${source_paths[@]}"
+}
+
+proof_source_paths_for_bundle() {
+  local bundle_id="${1:-}"
+  if [[ -n "${AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS+x}" ]]; then
+    printf '%s' "$AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS"
+    return
+  fi
+
+  local paths="Package.swift Package.resolved Sources :!Sources/AutocompleteLabCore/Experiments"
+  if [[ "$bundle_id" != "com.anthropic.claude-code" ]]; then
+    paths+=" :!Sources/AutocompleteLabCore/Configuration/ClaudeCodeTerminalHostProofPolicy.swift"
+  fi
+  printf '%s' "$paths"
+}
+
+matching_report_line() {
+  local report_name="$1"
+  local bundle_id="$2"
+  local proof_label="$3"
+  local required_verified_regex="$4"
+
+  [[ -f "$REPORT_PATH" ]] || return 0
+
+  local line
+  line="$(
+    grep -E "\\| $report_name \\| \`$bundle_id\` \\| \`$proof_label\` \\| $required_verified_regex \\|" "$REPORT_PATH" |
+      tail -n 1 ||
+      true
+  )"
+
+  if [[ -z "$line" && "$proof_label" == "default" ]]; then
+    line="$(
+      grep -E "\\| $report_name \\| \`$bundle_id\` \\| $required_verified_regex \\|" "$REPORT_PATH" |
+        tail -n 1 ||
+        true
+    )"
+  fi
+
+  printf '%s' "$line"
+}
+
+matching_limited_report_line() {
+  local report_name="$1"
+  local bundle_id="$2"
+  local proof_label="$3"
+
+  [[ -f "$REPORT_PATH" ]] || return 0
+
+  grep -E "\\| $report_name \\| \`$bundle_id\` \\| (\`$proof_label\` \\| )?0 \\| \`detached-suppressed\` \\|" "$REPORT_PATH" |
+    tail -n 1 ||
+    true
 }
 
 print_scorecard_gaps() {
@@ -212,6 +388,8 @@ if [[ ! -f "$REPORT_PATH" ]]; then
 else
   echo "Insertion proof status: $REPORT_PATH"
 fi
+collect_current_build_proofs
+echo "Current build proof: $(current_build_proof_summary)"
 
 missing=0
 declare -a pending_apps=()
@@ -247,15 +425,23 @@ for app_entry in "${APPS[@]}"; do
     limited_reason="needs one-word no-submit proof"
   fi
 
-  if [[ -f "$REPORT_PATH" ]] &&
-    grep -E "\\| $report_name \\| \`$bundle_id\` \\| \`$proof_label\` \\| $required_verified_regex \\|" "$REPORT_PATH" >/dev/null; then
-    echo "- $display_name: passed$pass_suffix"
-  elif [[ "$proof_label" == "default" ]] &&
-    [[ -f "$REPORT_PATH" ]] &&
-    grep -E "\\| $report_name \\| \`$bundle_id\` \\| $required_verified_regex \\|" "$REPORT_PATH" >/dev/null; then
-    echo "- $display_name: passed$pass_suffix"
-  elif [[ -f "$REPORT_PATH" ]] &&
-    grep -E "\\| $report_name \\| \`$bundle_id\` \\| (\`$proof_label\` \\| )?0 \\| \`detached-suppressed\` \\|" "$REPORT_PATH" >/dev/null; then
+  pass_line="$(matching_report_line "$report_name" "$bundle_id" "$proof_label" "$required_verified_regex")"
+  limited_line="$(matching_limited_report_line "$report_name" "$bundle_id" "$proof_label")"
+
+  if [[ "$proof_mode" == "one-word" && -n "$pass_line" ]] &&
+    ! grep -F "prompt no-submit confirmed" <<<"$pass_line" >/dev/null; then
+    pass_line=""
+  fi
+
+  if [[ -n "$pass_line" ]]; then
+    if line_has_current_build_proof "$pass_line" "$bundle_id"; then
+      echo "- $display_name: passed$pass_suffix"
+    else
+      echo "- $display_name: stale pass (needs current app/source proof; run $run_hint)"
+      missing=$((missing + 1))
+      pending_apps+=("$display_name - $run_hint")
+    fi
+  elif [[ -n "$limited_line" ]]; then
     echo "- $display_name: limited pass ($limited_reason; run $run_hint)"
     missing=$((missing + 1))
     pending_apps+=("$display_name - $run_hint")

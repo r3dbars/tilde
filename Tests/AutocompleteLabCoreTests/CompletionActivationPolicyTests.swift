@@ -11,13 +11,15 @@ struct CompletionActivationPolicyTests {
             textBeforeCursor: "I think this should ",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ))
         #expect(policy.decision(
             textBeforeCursor: "I think this should ",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .allow(.phraseContinuation))
     }
 
@@ -29,7 +31,8 @@ struct CompletionActivationPolicyTests {
             textBeforeCursor: "I think this should",
             textAfterCursor: "   \nnext line",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ))
     }
 
@@ -41,13 +44,15 @@ struct CompletionActivationPolicyTests {
             textBeforeCursor: "I think",
             textAfterCursor: " this should stay",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ))
         #expect(policy.decision(
             textBeforeCursor: "I think",
             textAfterCursor: " this should stay",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .block(.middleOfLine))
     }
 
@@ -59,13 +64,15 @@ struct CompletionActivationPolicyTests {
             textBeforeCursor: "I think this",
             textAfterCursor: "",
             isSecure: true,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ))
         #expect(policy.decision(
             textBeforeCursor: "I think this",
             textAfterCursor: "",
             isSecure: true,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .block(.secureField))
 
         #expect(!policy.canSuggest(
@@ -86,7 +93,7 @@ struct CompletionActivationPolicyTests {
     func blocksUnsafeFieldKinds() {
         let policy = CompletionActivationPolicy()
 
-        for fieldKind in [AXFieldKind.search, .form, .url] {
+        for fieldKind in [AXFieldKind.search, .form, .url, .unprovenSurface, .unknown] {
             #expect(policy.decision(
                 textBeforeCursor: "I think this",
                 textAfterCursor: "",
@@ -105,6 +112,29 @@ struct CompletionActivationPolicyTests {
         ) == .allow(.phraseContinuation))
     }
 
+    @Test("Blocks unknown field kinds unless explicitly allowed")
+    func blocksUnknownFieldKindsUnlessAllowed() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "I think this through ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .unknown,
+            allowsUnknownFieldKind: false
+        ) == .block(.blockedFieldKind))
+
+        #expect(policy.decision(
+            textBeforeCursor: "I think this through ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .unknown,
+            allowsUnknownFieldKind: true
+        ) == .allow(.phraseContinuation))
+    }
+
     @Test("Blocks selected text so accept cannot overwrite user content")
     func blocksSelectedText() {
         let policy = CompletionActivationPolicy()
@@ -114,14 +144,16 @@ struct CompletionActivationPolicyTests {
             textAfterCursor: "",
             isSecure: false,
             selectedTextLength: 7,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ))
         #expect(policy.decision(
             textBeforeCursor: "Replace this",
             textAfterCursor: "",
             isSecure: false,
             selectedTextLength: 7,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .block(.selectedText))
     }
 
@@ -133,19 +165,29 @@ struct CompletionActivationPolicyTests {
             textBeforeCursor: "api_key = sk-abcdefghijklmnopqrstuvwxyz",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .block(.sensitiveContent))
         #expect(policy.decision(
             textBeforeCursor: "Card number: 4242 4242 4242 4242",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .block(.sensitiveContent))
         #expect(policy.decision(
             textBeforeCursor: "client secret: ",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.sensitiveContent))
+        #expect(policy.decision(
+            textBeforeCursor: "Verification code: 123456",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .block(.sensitiveContent))
     }
 
@@ -157,13 +199,15 @@ struct CompletionActivationPolicyTests {
             textBeforeCursor: "hi",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ))
         #expect(policy.decision(
             textBeforeCursor: "hi",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .block(.tooLittleContext))
     }
 
@@ -175,7 +219,8 @@ struct CompletionActivationPolicyTests {
             textBeforeCursor: "dic",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .allow(.wordCompletion))
     }
 
@@ -187,41 +232,89 @@ struct CompletionActivationPolicyTests {
             textBeforeCursor: "I think",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .block(.unfinishedWord))
 
         #expect(policy.decision(
             textBeforeCursor: "I think ",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .block(.tooLittleContext))
 
         #expect(policy.decision(
             textBeforeCursor: "I think this through ",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .allow(.phraseContinuation))
     }
 
-    @Test("Sentence-ending punctuation uses sentence continuation mode")
-    func sentenceEndingPunctuationUsesSentenceContinuationMode() {
+    @Test("Sentence-ending punctuation stays quiet by default")
+    func sentenceEndingPunctuationStaysQuietByDefault() {
         let policy = CompletionActivationPolicy()
 
         #expect(policy.decision(
             textBeforeCursor: "I finished the thing.",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
-        ) == .allow(.sentenceContinuation))
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.terminalSentenceBoundary))
 
         #expect(policy.decision(
             textBeforeCursor: "I finished the thing. ",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
-        ) == .allow(.sentenceContinuation))
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.terminalSentenceBoundary))
+        #expect(policy.decision(
+            textBeforeCursor: "I finished the thing?",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.terminalSentenceBoundary))
+        #expect(policy.decision(
+            textBeforeCursor: "I finished the thing!",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.terminalSentenceBoundary))
+    }
+
+    @Test("Blocks unsupported Markdown code contexts")
+    func blocksUnsupportedMarkdownCodeContexts() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "Here is the command:\n```swift\nlet value = ma",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.markdownCodeContext))
+
+        #expect(policy.decision(
+            textBeforeCursor: "Here is the command:\n```swift\nlet value = make()\n```\nNow this should ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
+
+        #expect(policy.decision(
+            textBeforeCursor: "Use `swift bu",
+            textAfterCursor: "` when testing",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.markdownCodeContext))
     }
 
     @Test("Blocks phrase continuation while cursor is inside a common word")
@@ -232,14 +325,16 @@ struct CompletionActivationPolicyTests {
             textBeforeCursor: "I need to understand an",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .block(.unfinishedWord))
 
         #expect(policy.decision(
             textBeforeCursor: "I need to understand an ",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .allow(.phraseContinuation))
     }
 
@@ -251,14 +346,16 @@ struct CompletionActivationPolicyTests {
             textBeforeCursor: "hi there ",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .block(.tooLittleContext))
 
         #expect(policy.decision(
             textBeforeCursor: "ok sounds good ",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .block(.tooLittleContext))
     }
 
@@ -270,14 +367,16 @@ struct CompletionActivationPolicyTests {
             textBeforeCursor: "First name: ",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .block(.tooLittleContext))
 
         #expect(policy.decision(
             textBeforeCursor: "Shipping address ",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .block(.tooLittleContext))
     }
 
@@ -289,7 +388,8 @@ struct CompletionActivationPolicyTests {
             textBeforeCursor: "First nam",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .allow(.wordCompletion))
     }
 
@@ -313,14 +413,16 @@ struct CompletionActivationPolicyTests {
             textBeforeCursor: "- [ ] Follow upd",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .allow(.wordCompletion))
 
         #expect(policy.decision(
             textBeforeCursor: "- [ ] Follow up with ",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .allow(.phraseContinuation))
     }
 
@@ -332,7 +434,109 @@ struct CompletionActivationPolicyTests {
             textBeforeCursor: "Hey",
             textAfterCursor: "",
             isSecure: false,
-            isFieldSuppressed: false
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .block(.tooLittleContext))
+    }
+
+    @Test("Suggestion pace changes phrase and word completion eagerness")
+    func suggestionPaceChangesActivationThresholds() {
+        let quiet = CompletionActivationPolicy(pace: .quiet)
+        let normal = CompletionActivationPolicy(pace: .normal)
+        let eager = CompletionActivationPolicy(pace: .eager)
+        let veryProactive = SuggestionTuning(aggressivenessLevel: 4).activationPolicy(supportPace: .eager)
+
+        #expect(quiet.decision(
+            textBeforeCursor: "I think this through ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.tooLittleContext))
+        #expect(normal.decision(
+            textBeforeCursor: "I think this through ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
+        #expect(eager.decision(
+            textBeforeCursor: "I think this ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
+        #expect(eager.decision(
+            textBeforeCursor: "I feel ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
+        #expect(veryProactive.decision(
+            textBeforeCursor: "Um ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
+        #expect(eager.decision(
+            textBeforeCursor: "I think this works. ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.terminalSentenceBoundary))
+        #expect(veryProactive.decision(
+            textBeforeCursor: "I think this works. ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
+        #expect(quiet.decision(
+            textBeforeCursor: "di",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.tooLittleContext))
+        #expect(eager.decision(
+            textBeforeCursor: "dicti",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.wordCompletion))
+        #expect(eager.decision(
+            textBeforeCursor: "reccomen",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.wordCompletion))
+    }
+
+    @Test("App support level allows proactive pace in green and yellow apps")
+    func appSupportLevelAllowsProactivePaceInGreenAndYellowApps() throws {
+        let store = CompatibilityProfileStore.mvp
+        let policy = SuggestionAggressivenessPolicy()
+        let textEdit = try #require(store.profile(for: "com.apple.TextEdit"))
+        let notes = try #require(store.profile(for: "com.apple.Notes"))
+
+        #expect(policy.pace(userPace: .eager, supportStatus: .supported(textEdit)) == .eager)
+        #expect(policy.pace(userPace: .eager, supportStatus: .supported(notes)) == .eager)
+        #expect(policy.pace(userPace: .normal, supportStatus: .supported(notes)) == .normal)
+        #expect(policy.pace(userPace: .quiet, supportStatus: .supported(notes)) == .quiet)
+        #expect(policy.pace(userPace: .eager, supportStatus: .unsupported) == .quiet)
+        #expect(policy.pace(userPace: .eager, supportStatus: .denylisted) == .quiet)
+    }
+
+    @Test("Suggestion pace falls back to normal for missing or bad defaults")
+    func suggestionPaceDefaultsToNormal() {
+        #expect(SuggestionPace(persistedRawValue: nil) == .normal)
+        #expect(SuggestionPace(persistedRawValue: "nope") == .normal)
+        #expect(SuggestionPace(persistedRawValue: "quiet") == .quiet)
     }
 }

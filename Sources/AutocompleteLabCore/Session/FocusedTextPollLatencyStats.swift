@@ -29,7 +29,9 @@ public struct FocusedTextPollLatencyStats: Equatable, Sendable {
         let summary = FocusedTextPollLatencySummary(
             count: samples.count,
             p50Milliseconds: percentile(0.50, in: ordered),
+            p90Milliseconds: percentile(0.90, in: ordered),
             p95Milliseconds: percentile(0.95, in: ordered),
+            p99Milliseconds: percentile(0.99, in: ordered),
             maxMilliseconds: ordered.last ?? 0
         )
         samples.removeAll(keepingCapacity: true)
@@ -51,18 +53,24 @@ public struct FocusedTextPollLatencyStats: Equatable, Sendable {
 public struct FocusedTextPollLatencySummary: Equatable, Sendable {
     public let count: Int
     public let p50Milliseconds: Int
+    public let p90Milliseconds: Int
     public let p95Milliseconds: Int
+    public let p99Milliseconds: Int
     public let maxMilliseconds: Int
 
     public init(
         count: Int,
         p50Milliseconds: Int,
+        p90Milliseconds: Int? = nil,
         p95Milliseconds: Int,
+        p99Milliseconds: Int? = nil,
         maxMilliseconds: Int
     ) {
         self.count = count
         self.p50Milliseconds = p50Milliseconds
+        self.p90Milliseconds = p90Milliseconds ?? p95Milliseconds
         self.p95Milliseconds = p95Milliseconds
+        self.p99Milliseconds = p99Milliseconds ?? maxMilliseconds
         self.maxMilliseconds = maxMilliseconds
     }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import AutocompleteLabCore
 @testable import AutocompleteLabApp
 
 @Suite("Serial focused text AX reader")
@@ -13,8 +14,9 @@ struct SerialFocusedTextAXReaderTests {
         let reader = SerialFocusedTextAXReader(
             label: "SerialFocusedTextAXReaderTests.work.async",
             callbackQueue: callbackQueue
-        ) { app, _ in
+        ) { app, _, options in
             #expect(app.bundleIdentifier == "com.example.Editor")
+            #expect(options == .standard)
             readStarted.signal()
             allowReadToFinish.wait()
             return focusedTextContext(textBeforeCursor: "hel")
@@ -28,6 +30,7 @@ struct SerialFocusedTextAXReaderTests {
             #expect(result.requestID == 1)
             #expect(result.app == runningApplicationInfo())
             #expect(result.allowDescendantTextFallback)
+            #expect(result.options == .standard)
             #expect(result.context?.textBeforeCursor == "hel")
             completionReceived.signal()
         }
@@ -48,7 +51,7 @@ struct SerialFocusedTextAXReaderTests {
         let reader = SerialFocusedTextAXReader(
             label: "SerialFocusedTextAXReaderTests.work.serial",
             callbackQueue: callbackQueue
-        ) { _, _ in
+        ) { _, _, _ in
             recorder.recordRead {
                 Thread.sleep(forTimeInterval: 0.02)
                 return focusedTextContext(textBeforeCursor: "read-\($0)")
@@ -71,6 +74,56 @@ struct SerialFocusedTextAXReaderTests {
         #expect(recorder.readOrder == [1, 2, 3, 4])
         #expect(recorder.completionOrder == [1, 2, 3, 4])
         #expect(recorder.completedText == ["read-1", "read-2", "read-3", "read-4"])
+    }
+
+    @Test("Passes focused text read options into the worker and result")
+    func passesFocusedTextReadOptionsIntoWorkerAndResult() throws {
+        let completionReceived = DispatchSemaphore(value: 0)
+        let callbackQueue = DispatchQueue(label: "SerialFocusedTextAXReaderTests.callback.options")
+        let reader = SerialFocusedTextAXReader(
+            label: "SerialFocusedTextAXReaderTests.work.options",
+            callbackQueue: callbackQueue
+        ) { _, _, options in
+            #expect(options == .syntheticTextAreaFastPath)
+            return focusedTextContext(textBeforeCursor: "cod")
+        }
+
+        _ = reader.readFocusedTextContext(
+            for: runningApplicationInfo(bundleIdentifier: "com.openai.codex"),
+            allowDescendantTextFallback: false,
+            options: .syntheticTextAreaFastPath
+        ) { result in
+            #expect(result.options == .syntheticTextAreaFastPath)
+            #expect(result.context?.textBeforeCursor == "cod")
+            completionReceived.signal()
+        }
+
+        #expect(completionReceived.wait(timeout: .now() + 1) == .success)
+    }
+
+    @Test("Codex prompt uses synthetic text area fast path")
+    func codexPromptUsesSyntheticTextAreaFastPath() throws {
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
+        let options = FocusedTextReadOptionsPolicy.options(
+            for: runningApplicationInfo(bundleIdentifier: "com.openai.codex"),
+            profile: profile
+        )
+
+        #expect(options == .syntheticTextAreaFastPath)
+        #expect(options.useMinimalFingerprint)
+        #expect(options.skipWindowLookup)
+        #expect(options.assumedCanSetSelectedText == true)
+    }
+
+    @Test("Non Codex apps use standard focused text reads")
+    func nonCodexAppsUseStandardFocusedTextReads() throws {
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let options = FocusedTextReadOptionsPolicy.options(
+            for: runningApplicationInfo(bundleIdentifier: "com.apple.TextEdit"),
+            profile: profile
+        )
+
+        #expect(options == .standard)
     }
 }
 
@@ -136,9 +189,9 @@ private final class SerialReadRecorder: @unchecked Sendable {
     }
 }
 
-private func runningApplicationInfo() -> RunningApplicationInfo {
+private func runningApplicationInfo(bundleIdentifier: String = "com.example.Editor") -> RunningApplicationInfo {
     RunningApplicationInfo(
-        bundleIdentifier: "com.example.Editor",
+        bundleIdentifier: bundleIdentifier,
         localizedName: "Example Editor",
         processIdentifier: 42
     )
@@ -152,13 +205,16 @@ private func focusedTextContext(textBeforeCursor: String) -> FocusedTextContext 
         fingerprint: .init(),
         textBeforeCursor: textBeforeCursor,
         textAfterCursor: "",
+        selectedText: "",
         selectedTextLength: 0,
         caretRect: nil,
         elementRect: nil,
         windowRect: nil,
+        windowIdentifier: nil,
         textLineRect: nil,
         textStyle: nil,
         isSecure: false,
+        fieldClassification: AXFieldClassification(kind: .unknown, reason: "unknown"),
         caretIsSynthetic: false,
         capabilities: FocusedTextCapabilities(
             canReadValue: true,

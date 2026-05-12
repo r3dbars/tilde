@@ -153,7 +153,7 @@ struct LocalReportExporter {
 
     private func privacyChecklist(eventCount: Int) -> String {
         """
-        # Autocomplete Lab Privacy Export
+        # SteadyType Privacy Export
 
         - [x] Generated locally on this Mac.
         - [x] Uses the redacted beta telemetry lane.
@@ -161,6 +161,21 @@ struct LocalReportExporter {
         - [x] Excludes raw typed text, prompts, model output, accepted text, screenshot files, and screenshot paths.
         - [x] Uses counts, fingerprints, latency, app IDs, request modes, and geometry metadata for debugging.
         - [ ] Review this folder before sharing it.
+
+        ## Default Field Checklist
+
+        | Field | Stored by default | Retention | Opt-in state | Can leave the Mac |
+        | --- | --- | --- | --- | --- |
+        | Typed text near cursor | No, length only | No raw default retention | Raw local debug only | No |
+        | Prompt text | No, length only | No raw default retention | Raw local debug only | No |
+        | Model output or visible suggestion | No, length only | No raw default retention | Raw local debug only | No |
+        | Accepted text | No, length/fingerprint only | RAM checks at 2s/10s/30s, then cleared | Raw local debug only | No |
+        | Screenshot path or image | No | No default retention | Screenshot proof only | No |
+        | App bundle identifier | Yes | Until traces are deleted | Default redacted diagnostics | Yes, only if user shares export |
+        | Field kind and request mode | Yes | Until traces are deleted | Default redacted diagnostics | Yes, only if user shares export |
+        | Timing, counts, scores, and reasons | Yes | Until traces are deleted | Default redacted diagnostics | Yes, only if user shares export |
+        | HMAC fingerprints | Yes | Until traces are deleted | Default redacted diagnostics | Yes, only if user shares export |
+        | URL, document title, recipient, subject | No, length only if seen in metadata | No raw default retention | Raw local debug only | No |
         """
     }
 }

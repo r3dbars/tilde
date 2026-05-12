@@ -56,6 +56,26 @@ struct FocusedTextPollingBackoffPolicyTests {
         #expect(policy.isSnapshotStale(lastObservedAt: now.addingTimeInterval(-0.45), now: now))
     }
 
+    @Test("In-flight skip waits for the grace window")
+    func inFlightSkipWaitsForGraceWindow() {
+        let now = Date(timeIntervalSince1970: 100)
+        let policy = FocusedTextPollingBackoffPolicy(inFlightSkipGraceMilliseconds: 450)
+
+        #expect(policy.shouldRecordInFlightSkip(lastPollAttemptAt: nil, now: now))
+        #expect(!policy.shouldRecordInFlightSkip(
+            lastPollAttemptAt: now.addingTimeInterval(-0.44),
+            now: now
+        ))
+        #expect(policy.shouldRecordInFlightSkip(
+            lastPollAttemptAt: now.addingTimeInterval(-0.45),
+            now: now
+        ))
+        #expect(policy.shouldRecordInFlightSkip(
+            lastPollAttemptAt: now.addingTimeInterval(0.1),
+            now: now
+        ))
+    }
+
     @Test("Slow latency recommends throttle")
     func slowLatencyRecommendsThrottle() {
         let policy = FocusedTextPollingBackoffPolicy(
@@ -133,6 +153,14 @@ struct FocusedTextPollingBackoffPolicyTests {
             reason: .slowAXRead,
             pauseMilliseconds: 360
         ))
+    }
+
+    @Test("Slow AX read with context still processes the current snapshot")
+    func slowAXReadWithContextStillProcessesCurrentSnapshot() {
+        let policy = FocusedTextPollingBackoffPolicy()
+
+        #expect(policy.shouldProcessCurrentAXReadBeforeThrottle(hasContext: true))
+        #expect(!policy.shouldProcessCurrentAXReadBeforeThrottle(hasContext: false))
     }
 
     @Test("Fast clean polls do not throttle")

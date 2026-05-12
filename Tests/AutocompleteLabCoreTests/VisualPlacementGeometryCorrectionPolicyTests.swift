@@ -17,6 +17,13 @@ struct VisualPlacementGeometryCorrectionPolicyTests {
         #expect(correction.decision == .accepted)
         #expect(correction.reason == .trusted)
         #expect(correction.adjusted(rect) == CGRect(x: 104, y: 192, width: 0, height: 20))
+
+        let proof = correction.proof(measuredDX: 4, measuredDY: -8)
+        #expect(proof.outcome == .improved)
+        #expect(abs(proof.beforeDistance - 8.944) < 0.01)
+        #expect(proof.afterDistance == 0)
+        #expect(proof.improvement > 8.9)
+        #expect(proof.privacyBoundary == "geometry-only")
     }
 
     @Test("Rejects low confidence screenshot noise")
@@ -32,6 +39,11 @@ struct VisualPlacementGeometryCorrectionPolicyTests {
         #expect(correction.decision == .rejected)
         #expect(correction.reason == .insufficientEvidence)
         #expect(correction.adjusted(rect) == rect)
+
+        let proof = correction.proof(measuredDX: 10, measuredDY: -6)
+        #expect(proof.outcome == .refused)
+        #expect(proof.beforeDistance == proof.afterDistance)
+        #expect(proof.improvement == 0)
     }
 
     @Test("Rejects subpixel jitter")
@@ -60,6 +72,11 @@ struct VisualPlacementGeometryCorrectionPolicyTests {
         #expect(correction.reason == .clampedToSafeRange)
         #expect(abs(correction.dx - 19.2) < 0.001)
         #expect(abs(correction.dy - 14.4) < 0.001)
+
+        let proof = correction.proof(measuredDX: 40, measuredDY: 30)
+        #expect(proof.outcome == .improved)
+        #expect(abs(proof.afterDistance - 26.0) < 0.001)
+        #expect(abs(proof.improvement - 24.0) < 0.001)
     }
 
     @Test("Rejects extreme visual outliers")

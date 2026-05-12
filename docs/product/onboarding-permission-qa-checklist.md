@@ -10,6 +10,21 @@ Use this before a private beta build. This is manual proof, not a code claim.
 - [ ] Click `Allow Accessibility`.
 - [ ] Confirm the app explains why System Settings is opening.
 - [ ] Grant Accessibility, return to the app, and confirm the status updates without restart.
+- [ ] Record clean-user proof below with the macOS user name, build commit, and whether the first system prompt appeared only after `Allow Accessibility`.
+
+## Guided Practice
+
+- [ ] Confirm Settings shows `Practice`.
+- [ ] Confirm Practice shows Accessibility status, local model readiness, and TextEdit enablement.
+- [ ] Click `Start TextEdit Practice`.
+- [ ] Confirm the app opens a disposable local TextEdit practice file.
+- [ ] Confirm TextEdit is enabled for suggestions.
+- [ ] Type disposable text in TextEdit.
+- [ ] Confirm a suggestion appears near the cursor.
+- [ ] Press `Tab` and confirm only the next word inserts.
+- [ ] Type again, wait for another suggestion, press `Esc`, and confirm the suggestion dismisses without changing text.
+- [ ] Click `Pause Suggestions` from Practice and confirm suggestions stop.
+- [ ] Click `Delete Traces` from Practice and confirm local trace JSONL and screenshot files are gone.
 
 ## First Success
 
@@ -26,6 +41,9 @@ Use this before a private beta build. This is manual proof, not a code claim.
 - [ ] Confirm the app stays calm and says suggestions need Accessibility.
 - [ ] Confirm `Open Privacy Settings` returns the user to the right Settings area.
 - [ ] Confirm Screen Recording is not requested during normal autocomplete setup.
+- [ ] Relaunch with Accessibility still denied and confirm Settings opens without a suggestion appearing.
+- [ ] Grant Accessibility again and confirm Practice can start without reinstalling the app.
+- [ ] Record denial-recovery proof below with the build commit and log slice.
 
 ## Diagnostics
 
@@ -46,3 +64,10 @@ Use this before a private beta build. This is manual proof, not a code claim.
 ## Release Rule
 
 Do not invite private beta testers until this checklist passes on a clean macOS user account.
+
+## Proof Log
+
+| Date | Build commit | macOS user | Result | Evidence |
+| --- | --- | --- | --- | --- |
+| Pending | Pending | Clean tester account | Pending | Needs fresh clean-user run. |
+| Pending | Pending | Permission denied account | Pending | Needs denial-recovery run. |

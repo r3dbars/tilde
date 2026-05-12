@@ -21,6 +21,15 @@ struct SuggestionControlPolicyTests {
         #expect(paused.toggleTitle == "Resume Suggestions")
     }
 
+    @Test("Fresh installs start paused until the user resumes suggestions")
+    func freshInstallsStartPausedUntilTheUserResumesSuggestions() {
+        let policy = SuggestionControlPolicy()
+
+        #expect(policy.startupState(persistedIsPaused: nil) == .paused)
+        #expect(policy.startupState(persistedIsPaused: true) == .paused)
+        #expect(policy.startupState(persistedIsPaused: false) == .running)
+    }
+
     @Test("Paused state blocks suggestion requests with global pause reason")
     func pausedStateBlocksSuggestionRequests() {
         let policy = SuggestionControlPolicy()

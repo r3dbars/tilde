@@ -190,7 +190,7 @@ struct AppProofCommandRunnerTests {
 
         let bundleURL = sourceRootURL
             .appendingPathComponent("dist", isDirectory: true)
-            .appendingPathComponent("AutocompleteLab.app", isDirectory: true)
+            .appendingPathComponent("SteadyType.app", isDirectory: true)
         let resolvedURL = AppProofCommandPlan.sourceRootURL(
             environment: [:],
             bundleURL: bundleURL,

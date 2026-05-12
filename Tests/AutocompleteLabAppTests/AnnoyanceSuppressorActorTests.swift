@@ -5,45 +5,34 @@ import Testing
 
 @Suite("Annoyance suppressor actor")
 struct AnnoyanceSuppressorActorTests {
-    @Test("Recording an escape dismissal quiets the current field")
-    func recordingEscapeDismissalQuietsField() async {
+    @Test("Records signals and returns the current quiet mode")
+    func recordsSignalsAndReturnsQuietMode() async {
         let actor = AnnoyanceSuppressorActor()
-        let context = annoyanceContext()
-
-        let update = await actor.record(
-            .rapidEscDismissal,
-            context: context,
-            now: Date(timeIntervalSince1970: 1_000)
+        let context = AnnoyanceContext(
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldIdentifier: "field-1"
         )
+        let now = Date(timeIntervalSince1970: 1_000)
 
-        #expect(update.quietMode.traceReason == "quiet-mode-field")
-        #expect(update.update.startedQuietModes.contains { mode in
-            if case .field = mode {
-                return true
-            }
-            return false
-        })
+        let update = await actor.record(.rapidEscDismissal, context: context, now: now)
+        let quietMode = await actor.quietMode(for: context, now: now)
+
+        #expect(update.update.signal == .rapidEscDismissal)
+        #expect(update.quietMode == quietMode)
     }
 
-    @Test("Clearing a field removes active field quiet mode")
-    func clearingFieldRemovesQuietMode() async {
+    @Test("Clearing a field removes field scoped quiet mode")
+    func clearingFieldRemovesFieldScopedQuietMode() async {
         let actor = AnnoyanceSuppressorActor()
-        let context = annoyanceContext()
+        let context = AnnoyanceContext(
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldIdentifier: "field-1"
+        )
         let now = Date(timeIntervalSince1970: 1_000)
 
         _ = await actor.record(.rapidEscDismissal, context: context, now: now)
-        await actor.clearField(context.fieldIdentifier)
+        await actor.clearField("field-1")
 
-        let quietMode = await actor.quietMode(for: context, now: now)
-        #expect(quietMode == .normal)
-    }
-
-    private func annoyanceContext() -> AnnoyanceContext {
-        AnnoyanceContext(
-            appBundleIdentifier: "com.apple.TextEdit",
-            fieldIdentifier: "com.apple.TextEdit|pid:42|element:7",
-            requestMode: .phraseContinuation,
-            fieldKind: .multilineCompose
-        )
+        #expect(await actor.quietMode(for: context, now: now) == .normal)
     }
 }

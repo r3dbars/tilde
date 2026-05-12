@@ -25,13 +25,13 @@ struct CommandFallbackPolicyTests {
             isEnabled: false
         )
         let unsupported = CommandFallbackPolicy().decision(
-            supportStatus: store.supportStatus(for: "com.openai.atlas"),
+            supportStatus: store.supportStatus(for: "com.example.UnknownEditor"),
             isEnabled: true
         )
 
         #expect(disabled.availability == .unavailable)
         #expect(disabled.reason == .appDisabled)
-        #expect(disabled.statusText == "Fallback: off because this app is disabled.")
+        #expect(disabled.statusText == "Fallback: off while this app is paused.")
         #expect(unsupported.availability == .unavailable)
         #expect(unsupported.reason == .unsupportedApp)
         #expect(unsupported.statusText == "Fallback: unavailable until this app has a profile.")

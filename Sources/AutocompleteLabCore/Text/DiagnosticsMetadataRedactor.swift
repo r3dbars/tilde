@@ -22,9 +22,19 @@ public enum DiagnosticsMetadataRedactor {
             "prompt",
             "output",
             "completion",
+            "document",
+            "email",
+            "filename",
+            "fileurl",
+            "path",
+            "recipient",
             "suggestion",
             "selected",
+            "subject",
+            "title",
             "typed",
+            "url",
+            "uri",
             "value"
         ].contains { normalized.contains($0) }
     }
@@ -38,6 +48,8 @@ public enum DiagnosticsMetadataRedactor {
             || normalized.hasSuffix("rect")
             || normalized.hasSuffix("frame")
             || normalized.hasPrefix("has")
+            || normalized.contains("hmac")
+            || (normalized.hasPrefix("acceptedtext") && normalized.contains("fingerprint"))
     }
 
     private static func flattenedValue(_ value: String) -> String {

@@ -11,7 +11,7 @@ public struct CompletionPrompt: Equatable, Sendable {
 }
 
 public struct CompletionPromptBuilder: Equatable, Sendable {
-    public static let promptStyleIdentifier = "tiny-continuation-v2"
+    public static let promptStyleIdentifier = "screen-aware-continuation-v6"
     public static let noSuggestionToken = "<NO_SUGGESTION>"
 
     public let maxContextCharacters: Int
@@ -37,11 +37,17 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
     public func prompt(for request: CompletionRequest) -> CompletionPrompt {
         let context = promptContext(from: request.textBeforeCursor, mode: request.mode)
         let behaviorProfile = behaviorProfile(for: request)
+        let userPrompt = userPrompt(
+            context: context,
+            visiblePageContext: request.visiblePageContext,
+            suffix: request.mode == .wordCompletion ? "Suffix:" : "Next words:"
+        )
 
         if request.mode == .wordCompletion {
             let titleShapeGuidance = request.documentTitleShape?.promptGuidance ?? ""
             let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
             let lineStructureGuidance = request.currentLineStructure?.promptGuidance ?? ""
+            let visiblePageGuidance = request.visiblePageContext?.promptGuidance ?? ""
             return CompletionPrompt(
                 system: """
                 Inline word completion.
@@ -49,16 +55,19 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
                 \(titleShapeGuidance)
                 \(partialWordGuidance)
                 \(lineStructureGuidance)
-                Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, or the suffix would complete the wrong word.
+                \(visiblePageGuidance)
+                If visible page context includes a matching local word, name, or term, prefer that word's missing suffix.
+                For partial product names, app names, permissions, people, project terms, and repeated OCR words, complete the visible local word before guessing a generic dictionary word.
+                Only exception: return exactly \(Self.noSuggestionToken) when unsafe or the suffix would complete the wrong word.
                 No spaces, punctuation, quotes, reasoning, or extra words.
                 """,
-                user: "Before cursor:\n\(context)\n\nSuffix:"
+                user: userPrompt
             )
         }
 
         return CompletionPrompt(
             system: phraseContinuationSystemPrompt(for: request, behaviorProfile: behaviorProfile),
-            user: "Before cursor:\n\(context)\n\nNext words:"
+            user: userPrompt
         )
     }
 
@@ -72,22 +81,28 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let titleShapeGuidance = request.documentTitleShape?.promptGuidance ?? ""
         let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
         let lineStructureGuidance = request.currentLineStructure?.promptGuidance ?? ""
+        let visiblePageGuidance = request.visiblePageContext?.promptGuidance ?? ""
         let modeGuidance = request.mode == .sentenceContinuation
-            ? "Sentence mode: start only the next sentence's first few words. Require higher confidence and return <NO_SUGGESTION> when the next sentence is not obvious."
-            : "Phrase mode: continue only the current local thought."
+            ? "Sentence mode: start only the next sentence's first few words. If visible context makes the next sentence obvious, make the best short guess."
+            : "Phrase mode: continue only the current local thought. If visible context implies what the user is replying to or writing about, use it."
         let base = """
         Inline autocomplete.
-        Return 1 to 3 candidate suffixes, one per line, best first.
+        Return 1 to 4 candidate suffixes, one per line, best first.
+        Return only the suffix after the Before cursor text.
         Each candidate must be only the next \(effectiveMaxVisibleWords) words or fewer.
-        Only exception: return exactly \(Self.noSuggestionToken) when confidence is low, unsafe, chatty, or likely to answer the prompt instead of continuing it.
+        Only exception: return exactly \(Self.noSuggestionToken) when unsafe, chatty, or likely to answer the prompt instead of continuing it.
         Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens.
         \(styleGuidance)
         \(titleShapeGuidance)
         \(partialWordGuidance)
         \(lineStructureGuidance)
+        \(visiblePageGuidance)
         \(behaviorProfile.promptGuidance.joined(separator: "\n"))
         \(modeGuidance)
-        Prefer boring connective tissue, names, repeated local terms, closers, and the next few words the user was already likely to type.
+        Prefer the next word or short phrase the user was already likely to type, especially names, repeated local terms, reply language, list items, and boring connective tissue.
+        When the continuation is a common phrase, put that boring obvious phrase first.
+        When the visible page context is useful, act like a local writing companion that can see the screen but still only types the user's next words.
+        Do not repeat the Before cursor text.
         \(sentenceGuidance) Do not answer, explain, greet, quote, reason, or restart.
         Do not brainstorm, rewrite, introduce a new topic, or complete the user's whole thought.
         """
@@ -119,6 +134,26 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
 
     private func behaviorProfile(for request: CompletionRequest) -> AutocompleteBehaviorProfile {
         request.behaviorProfile
+    }
+
+    private func userPrompt(
+        context: String,
+        visiblePageContext: VisiblePageContext?,
+        suffix: String
+    ) -> String {
+        guard let visiblePageContext else {
+            return "Before cursor:\n\(context)\n\n\(suffix)"
+        }
+
+        return """
+        Visible page context:
+        \(visiblePageContext.promptText)
+
+        Before cursor:
+        \(context)
+
+        \(suffix)
+        """
     }
 
     private func sentenceGuidance(for request: CompletionRequest) -> String {

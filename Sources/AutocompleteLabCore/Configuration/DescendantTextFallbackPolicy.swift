@@ -15,6 +15,9 @@ public struct DescendantTextFallbackPolicy: Equatable, Sendable {
         }
 
         switch bundleIdentifier {
+        case "md.obsidian":
+            return true
+
         case "com.apple.mail":
             return windowTitle == "New Message"
 
@@ -23,7 +26,7 @@ public struct DescendantTextFallbackPolicy: Equatable, Sendable {
                 return false
             }
 
-            return searchableTitle.contains("autocomplete lab chrome")
+            return searchableTitle.contains("steadytype chrome")
                 && searchableTitle.contains("smoke")
 
         default:

@@ -2,8 +2,8 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-APP_NAME="AutocompleteLab"
-BUNDLE_ID="bar.r3d.autocomplete-lab"
+APP_NAME="SteadyType"
+BUNDLE_ID="bar.r3d.steadytype"
 MIN_SYSTEM_VERSION="26.0"
 BUILD_CONFIGURATION="${AUTOCOMPLETE_LAB_BUILD_CONFIGURATION:-debug}"
 APP_VERSION="${AUTOCOMPLETE_LAB_VERSION:-0.1.0}"
@@ -23,6 +23,18 @@ LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchS
 
 cd "$ROOT_DIR"
 
+SWIFT_SCRATCH_ARGS=()
+SWIFT_JOB_ARGS=()
+
+if [[ -n "${AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH:-}" ]]; then
+  mkdir -p "$AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH"
+  SWIFT_SCRATCH_ARGS+=(--scratch-path "$AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH")
+fi
+
+if [[ -n "${AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS:-}" ]]; then
+  SWIFT_JOB_ARGS+=(--jobs "$AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS")
+fi
+
 running_app_pids() {
   local app_process_pattern
   app_process_pattern="/[${APP_NAME:0:1}]${APP_NAME:1}.app/Contents/MacOS/$APP_NAME"
@@ -37,7 +49,9 @@ running_app_services() {
 stale_app_bundles() {
   local search_root="$HOME/.codex/worktrees"
   [[ -d "$search_root" ]] || return 0
-  find "$search_root" -path "*/dist/$APP_NAME.app" -type d -prune 2>/dev/null || true
+  find "$search_root" \
+    \( -name .build -o -name .git -o -name .swiftpm -o -name node_modules -o -name DerivedData \) -type d -prune -o \
+    -path "*/dist/$APP_NAME.app" -type d -print 2>/dev/null || true
 }
 
 unregister_stale_app_bundles() {
@@ -47,7 +61,9 @@ unregister_stale_app_bundles() {
   while IFS= read -r bundle; do
     [[ -z "$bundle" || "$bundle" == "$APP_BUNDLE" ]] && continue
     "$LSREGISTER" -u "$bundle" >/dev/null 2>&1 || true
-  done < <(stale_app_bundles)
+  done < <(stale_app_bundles) || true
+
+  return 0
 }
 
 quarantine_stale_app_bundles() {
@@ -63,7 +79,9 @@ quarantine_stale_app_bundles() {
     fi
     disabled="${bundle}.disabled-${timestamp}-$$"
     mv "$bundle" "$disabled" >/dev/null 2>&1 || true
-  done < <(stale_app_bundles)
+  done < <(stale_app_bundles) || true
+
+  return 0
 }
 
 stop_running_apps() {
@@ -133,7 +151,15 @@ print_running_apps() {
   done < <(running_app_pids)
 }
 
-quarantine_stale_app_bundles
+skip_stale_app_bundle_scan() {
+  [[ "${AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN:-}" =~ ^(1|true|yes|on)$ ]]
+}
+
+if skip_stale_app_bundle_scan; then
+  echo "Skipping stale app bundle scan because AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN is enabled." >&2
+else
+  quarantine_stale_app_bundles
+fi
 stop_running_apps
 
 find_signing_identity() {
@@ -154,10 +180,37 @@ find_signing_identity() {
   echo "$identity"
 }
 
-swift package resolve
+run_swift_package_resolve() {
+  if ((${#SWIFT_SCRATCH_ARGS[@]})); then
+    swift package "${SWIFT_SCRATCH_ARGS[@]}" resolve
+  else
+    swift package resolve
+  fi
+}
+
+run_swift_build() {
+  local args=(-c "$BUILD_CONFIGURATION" --product "$APP_NAME")
+  if ((${#SWIFT_JOB_ARGS[@]})); then
+    args=("${SWIFT_JOB_ARGS[@]}" "${args[@]}")
+  fi
+  if ((${#SWIFT_SCRATCH_ARGS[@]})); then
+    args=("${SWIFT_SCRATCH_ARGS[@]}" "${args[@]}")
+  fi
+  swift build "${args[@]}"
+}
+
+swift_build_bin_path() {
+  local args=(-c "$BUILD_CONFIGURATION" --show-bin-path)
+  if ((${#SWIFT_SCRATCH_ARGS[@]})); then
+    args=("${SWIFT_SCRATCH_ARGS[@]}" "${args[@]}")
+  fi
+  swift build "${args[@]}"
+}
+
+run_swift_package_resolve
 ./script/patch_mlx_swift_lm.sh
-swift build -c "$BUILD_CONFIGURATION" --product "$APP_NAME"
-BUILD_BINARY="$(swift build -c "$BUILD_CONFIGURATION" --show-bin-path)/$APP_NAME"
+run_swift_build
+BUILD_BINARY="$(swift_build_bin_path)/$APP_NAME"
 
 build_mlx_metallib_if_needed() {
   if [[ -f "$MLX_METALLIB" ]]; then
@@ -269,7 +322,7 @@ cat >"$INFO_PLIST" <<PLIST
   <key>NSSupportsAutomaticTermination</key>
   <false/>
   <key>NSAccessibilityUsageDescription</key>
-  <string>AutocompleteLab needs Accessibility permission to read the active text field and show local suggestions near the cursor.</string>
+  <string>SteadyType needs Accessibility permission to read the active text field and show local suggestions near the cursor.</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
 </dict>
@@ -286,7 +339,6 @@ fi
 
 open_app() {
   stop_running_apps
-  quarantine_stale_app_bundles
 
   if [[ "${AUTOCOMPLETE_LAB_TRACE:-}" =~ ^(0|false|no|off)$ ]]; then
     launchctl setenv AUTOCOMPLETE_LAB_TRACE "$AUTOCOMPLETE_LAB_TRACE"

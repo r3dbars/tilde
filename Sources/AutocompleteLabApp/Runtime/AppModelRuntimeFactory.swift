@@ -43,7 +43,7 @@ struct AppModelRuntimeBundle {
 }
 
 enum AppModelRuntimeFactory {
-    private static let experimentArmDefaultsKey = "AutocompleteLabCurrentExperimentArm"
+    static let experimentArmDefaultsKey = "AutocompleteLabCurrentExperimentArm"
 
     static func makeRuntime(
         fileManager: FileManager = .default,
@@ -96,13 +96,31 @@ enum AppModelRuntimeFactory {
     ) -> AutocompleteExperimentArm {
         let selection = AutocompleteExperimentArmSelection.current(
             environment: environment,
-            persistedRawValue: defaults.string(forKey: experimentArmDefaultsKey)
+            persistedRawValue: defaults.string(forKey: experimentArmDefaultsKey),
+            chooseArm: { .length3Word }
         )
-        if selection.shouldPersist {
-            defaults.set(selection.arm.rawValue, forKey: experimentArmDefaultsKey)
+        let arm = shouldMigratePersistedOneWordArm(selection: selection, environment: environment)
+            ? .length3Word
+            : selection.arm
+        if selection.shouldPersist || arm != selection.arm {
+            defaults.set(arm.rawValue, forKey: experimentArmDefaultsKey)
         }
 
-        return selection.arm
+        return arm
+    }
+
+    private static func shouldMigratePersistedOneWordArm(
+        selection: AutocompleteExperimentArmSelection,
+        environment: [String: String]
+    ) -> Bool {
+        guard selection.source == .persisted,
+              selection.arm == .length1Word else {
+            return false
+        }
+
+        return environment["AUTOCOMPLETE_LAB_EXPERIMENT_ARM"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty != false
     }
 
     private static func modelAssetState(

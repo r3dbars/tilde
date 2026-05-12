@@ -37,6 +37,10 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
     public let pauseDelayMilliseconds: Int
     public let largeTextChangeCharacterThreshold: Int
     public let largeTextChangeDelayMilliseconds: Int
+    public let minimumWordCompletionCharacters: Int
+    public let allowsPlainLineStartWordCompletion: Bool
+    public let allowsPlainLineStartPhraseContinuation: Bool
+    public let allowsSentenceBoundaryRequest: Bool
 
     public init(
         charactersBeforePauseRequest: Int = 4,
@@ -48,18 +52,69 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         sentenceBoundaryDelayMilliseconds: Int = 360,
         pauseDelayMilliseconds: Int = 180,
         largeTextChangeCharacterThreshold: Int = 24,
-        largeTextChangeDelayMilliseconds: Int = 250
+        largeTextChangeDelayMilliseconds: Int = 250,
+        minimumWordCompletionCharacters: Int = 3,
+        allowsPlainLineStartWordCompletion: Bool = false,
+        allowsPlainLineStartPhraseContinuation: Bool = false,
+        allowsSentenceBoundaryRequest: Bool = false
     ) {
         self.charactersBeforePauseRequest = max(1, charactersBeforePauseRequest)
-        self.wordCompletionDelayMilliseconds = wordCompletionDelayMilliseconds.clamped(to: 90...140)
-        self.wordBoundaryDelayMilliseconds = wordBoundaryDelayMilliseconds.clamped(to: 140...240)
-        self.softPunctuationDelayMilliseconds = softPunctuationDelayMilliseconds.clamped(to: 140...240)
-        self.structuralPunctuationDelayMilliseconds = structuralPunctuationDelayMilliseconds.clamped(to: 140...240)
-        self.closingPunctuationDelayMilliseconds = closingPunctuationDelayMilliseconds.clamped(to: 140...240)
-        self.sentenceBoundaryDelayMilliseconds = sentenceBoundaryDelayMilliseconds.clamped(to: 280...450)
-        self.pauseDelayMilliseconds = pauseDelayMilliseconds.clamped(to: 140...240)
+        self.wordCompletionDelayMilliseconds = wordCompletionDelayMilliseconds.clamped(to: 20...140)
+        self.wordBoundaryDelayMilliseconds = wordBoundaryDelayMilliseconds.clamped(to: 20...240)
+        self.softPunctuationDelayMilliseconds = softPunctuationDelayMilliseconds.clamped(to: 40...240)
+        self.structuralPunctuationDelayMilliseconds = structuralPunctuationDelayMilliseconds.clamped(to: 40...240)
+        self.closingPunctuationDelayMilliseconds = closingPunctuationDelayMilliseconds.clamped(to: 40...240)
+        self.sentenceBoundaryDelayMilliseconds = sentenceBoundaryDelayMilliseconds.clamped(to: 60...450)
+        self.pauseDelayMilliseconds = pauseDelayMilliseconds.clamped(to: 20...240)
         self.largeTextChangeCharacterThreshold = max(1, largeTextChangeCharacterThreshold)
         self.largeTextChangeDelayMilliseconds = max(self.pauseDelayMilliseconds, largeTextChangeDelayMilliseconds)
+        self.minimumWordCompletionCharacters = max(1, minimumWordCompletionCharacters)
+        self.allowsPlainLineStartWordCompletion = allowsPlainLineStartWordCompletion
+        self.allowsPlainLineStartPhraseContinuation = allowsPlainLineStartPhraseContinuation
+        self.allowsSentenceBoundaryRequest = allowsSentenceBoundaryRequest
+    }
+
+    public init(pace: SuggestionPace) {
+        switch pace {
+        case .quiet:
+            self.init(
+                charactersBeforePauseRequest: 6,
+                wordCompletionDelayMilliseconds: 140,
+                wordBoundaryDelayMilliseconds: 240,
+                softPunctuationDelayMilliseconds: 240,
+                structuralPunctuationDelayMilliseconds: 240,
+                closingPunctuationDelayMilliseconds: 220,
+                sentenceBoundaryDelayMilliseconds: 450,
+                pauseDelayMilliseconds: 240,
+                largeTextChangeDelayMilliseconds: 320
+            )
+        case .normal:
+            self.init(
+                charactersBeforePauseRequest: 1,
+                wordCompletionDelayMilliseconds: 70,
+                wordBoundaryDelayMilliseconds: 100,
+                softPunctuationDelayMilliseconds: 140,
+                structuralPunctuationDelayMilliseconds: 140,
+                closingPunctuationDelayMilliseconds: 140,
+                sentenceBoundaryDelayMilliseconds: 260,
+                pauseDelayMilliseconds: 100
+            )
+        case .eager:
+            self.init(
+                charactersBeforePauseRequest: 1,
+                wordCompletionDelayMilliseconds: 40,
+                wordBoundaryDelayMilliseconds: 70,
+                softPunctuationDelayMilliseconds: 120,
+                structuralPunctuationDelayMilliseconds: 120,
+                closingPunctuationDelayMilliseconds: 120,
+                sentenceBoundaryDelayMilliseconds: 200,
+                pauseDelayMilliseconds: 70,
+                minimumWordCompletionCharacters: 2,
+                allowsPlainLineStartWordCompletion: true,
+                allowsPlainLineStartPhraseContinuation: false,
+                allowsSentenceBoundaryRequest: false
+            )
+        }
     }
 
     public func shouldRequestSuggestion(
@@ -113,7 +168,11 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         }
 
         if currentTextBeforeCursor.last?.isSentenceBoundary == true {
-            return .request(delayMilliseconds: sentenceBoundaryDelayMilliseconds)
+            if allowsSentenceBoundaryRequest {
+                return .request(delayMilliseconds: sentenceBoundaryDelayMilliseconds)
+            }
+
+            return .skip
         }
 
         if let punctuationDecision = punctuationBoundaryDecision(
@@ -141,7 +200,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
 
     private func shouldRequestWordCompletion(previousTextBeforeCursor: String, currentTextBeforeCursor: String) -> Bool {
         guard let currentFragment = trailingWordFragment(in: currentTextBeforeCursor),
-              currentFragment.count >= 3,
+              currentFragment.count >= minimumWordCompletionCharacters,
               currentFragment.allSatisfy({ $0.isLetter }) else {
             return false
         }
@@ -217,6 +276,16 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
 
         switch behavior {
         case .plain:
+            if allowsPlainLineStartWordCompletion,
+               hasLineStartWordCompletionFragment(in: currentLine) {
+                return false
+            }
+
+            if allowsPlainLineStartPhraseContinuation,
+               hasLineStartPhraseContinuationContext(in: currentLine) {
+                return false
+            }
+
             return true
         case .listItem, .email:
             return !hasLineStartWordCompletionFragment(in: currentLine)
@@ -278,8 +347,16 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         let normalized = fragment
             .trimmingCharacters(in: .punctuationCharacters)
 
-        return normalized.count >= 3
+        return normalized.count >= minimumWordCompletionCharacters
             && normalized.allSatisfy { $0.isLetter }
+    }
+
+    private func hasLineStartPhraseContinuationContext(in text: String) -> Bool {
+        guard text.last?.isNaturalBoundary == true else {
+            return false
+        }
+
+        return contentWordCount(in: text) >= 1
     }
 
     private func isLikelyEmailGreetingLine(_ text: String) -> Bool {

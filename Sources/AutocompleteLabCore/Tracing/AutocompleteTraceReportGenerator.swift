@@ -71,7 +71,7 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
             : rows.map { row in
                 let rate = percent(row.caretFailureRate)
                 let offset = row.latestOffset ?? "none"
-                return "\(row.appBundleIdentifier) / \(row.renderMode): shown=\(row.shown) caretFailures=\(row.caretFailures) failureRate=\(rate) missingCaret=\(row.missingCaretRectPresentations) flicker=\(row.flickerCount) learningApplied=\(row.learningAppliedCount) latestOffset=\(offset)"
+                return "\(row.appBundleIdentifier) / \(row.renderMode): shown=\(row.shown) caretFailures=\(row.caretFailures) failureRate=\(rate) missingCaret=\(row.missingCaretRectPresentations) flicker=\(row.flickerCount) learningApplied=\(row.learningAppliedCount) latestOffset=\(offset) trustedCorrection=applied:\(row.trustedCorrectionAppliedCount) refused:\(row.trustedCorrectionRefusedCount) refusedReasons=\(row.trustedCorrectionRefusedReasons)"
             }.joined(separator: "\n")
 
         return """
@@ -85,6 +85,7 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
         forRedactedEvents events: [AutocompleteTraceEvent],
         summary: AutocompleteTraceSummary
     ) -> String {
+        let nonAnnoyance = AutocompleteNonAnnoyanceReporter().reportForRedactedEvents(events)
         let rows = events.suffix(200).reversed().map { event in
             """
             <tr>
@@ -114,7 +115,7 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
         <html>
         <head>
           <meta charset="utf-8">
-          <title>Autocomplete Lab Redacted Trace Report</title>
+          <title>SteadyType Redacted Trace Report</title>
           <style>
             body { font: 14px -apple-system, BlinkMacSystemFont, sans-serif; margin: 28px; color: #1d1d1f; }
             h1 { font-size: 24px; }
@@ -128,7 +129,7 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
           </style>
         </head>
         <body>
-          <h1>Autocomplete Lab Redacted Trace Report</h1>
+          <h1>SteadyType Redacted Trace Report</h1>
           <p>Generated locally from the default redacted trace. Nothing was uploaded.</p>
           <div class="grid">
             <div class="metric"><b>\(summary.totalEvents)</b>events</div>
@@ -139,17 +140,32 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
             <div class="metric"><b>\(summary.acceptedCount)</b>accepted</div>
             <div class="metric"><b>\(summary.acceptanceRetentionClearedCount)</b>retention cleared</div>
             <div class="metric"><b>\(summary.suppressedCount)</b>suppressed</div>
+            <div class="metric"><b>\(summary.sensitiveSuppressedByCategory.values.reduce(0, +))</b>sensitive suppressed</div>
             <div class="metric"><b>\(percent(summary.acceptRate))</b>accept rate</div>
             <div class="metric"><b>\(percent(summary.usefulRate))</b>useful rate</div>
             <div class="metric"><b>\(percent(summary.tabAcceptShare))</b>Tab accept share</div>
             <div class="metric"><b>\(percent(summary.insertionVerificationSuccessRate))</b>verified inserts</div>
             <div class="metric"><b>\(percent(summary.caretGeometryFailureRate))</b>caret failure rate</div>
             <div class="metric"><b>\(String(format: "%.2f", summary.annoyanceScore))</b>annoyance score</div>
+            <div class="metric"><b>\(String(format: "%.2f", summary.shownPerActiveMinute))</b>shown / active min</div>
+            <div class="metric"><b>\(percent(summary.explicitDismissalsPerShown))</b>Esc / shown</div>
+            <div class="metric"><b>\(percent(summary.typedOverRate))</b>typed-over rate</div>
+            <div class="metric"><b>\(percent(summary.staleOrWrongContextRate))</b>stale/wrong-context</div>
             <div class="metric"><b>\(summary.p95LatencyMilliseconds.map { "\($0)ms" } ?? "n/a")</b>first-visible p95</div>
+            <div class="metric"><b>\(summary.p95VisibleLifetimeMilliseconds.map { "\($0)ms" } ?? "n/a")</b>visible lifetime p95</div>
+            <div class="metric"><b>\(summary.p95HideLatencyMilliseconds.map { "\($0)ms" } ?? "n/a")</b>hide p95</div>
+            <div class="metric"><b>\(summary.doNotShipCounters.values.reduce(0, +))</b>do-not-ship</div>
           </div>
           <h2>RAM-only retention proof</h2>
           <p>Accepted text is kept only for checkpoint comparison. The durable proof is the redacted <code>acceptanceRetentionCleared</code> event with counts and fingerprints, not raw text.</p>
           <ul>\(sortedCountList(summary.acceptanceRetentionClearedByReason))</ul>
+          <h2>Privacy checklist</h2>
+          <ul>
+            <li>This report is generated locally from the default redacted trace.</li>
+            <li>Typed text, accepted text, screenshots, screenshot paths, document names, URLs, recipients, and subject lines are not included.</li>
+            <li>Share only this redacted report for normal beta feedback.</li>
+            <li>Use raw debug exports only for explicit local debugging sessions.</li>
+          </ul>
           <h2>Accepted-and-kept survival slices</h2>
           <h3>By app</h3><ul>\(sortedRateList(summary.acceptedAndKeptRateByApp))</ul>
           <h3>By field kind</h3><ul>\(sortedRateList(summary.acceptedAndKeptRateByFieldKind))</ul>
@@ -161,6 +177,16 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
           <h2>Visual calibration, no screenshots</h2>
           <p>This section uses redacted caret and panel metadata only. Screenshot paths are not included.</p>
           \(visualCalibrationHTMLTable(from: events))
+          <h2>Non-annoyance gate</h2>
+          <p>This gate uses the default redacted trace. Raw typed text, model text, accepted text, screenshots, and screenshot paths are not included.</p>
+          \(nonAnnoyanceHTML(nonAnnoyance))
+          <h2>Do-not-ship blockers</h2>
+          <p>These are hard trust failures. A beta proof run should keep every counter at zero.</p>
+          <ul>\(sortedCountList(summary.doNotShipCounters))</ul>
+          <h2>Sensitive-field silence</h2>
+          <p>Categories are redacted proof labels only. Raw typed text, URLs, titles, field values, and fixture contents are not included.</p>
+          <h3>Suppressed</h3><ul>\(sortedCountList(summary.sensitiveSuppressedByCategory))</ul>
+          <h3>Presented</h3><ul>\(sortedCountList(summary.sensitivePresentedByCategory))</ul>
           <h2>Recommended next fix</h2>
           <ol>\(recommendedFixList(summary.recommendedFixes))</ol>
           <h2>Support state by app</h2>
@@ -177,6 +203,28 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
           </table>
         </body>
         </html>
+        """
+    }
+
+    private func nonAnnoyanceHTML(_ report: AutocompleteNonAnnoyanceReport) -> String {
+        let gateLabel = report.gatePassed ? "pass" : "fail"
+        let failures = report.gateFailures.isEmpty
+            ? "<li>none</li>"
+            : report.gateFailures.map { "<li>\(escape($0))</li>" }.joined(separator: "\n")
+
+        return """
+        <div class="grid">
+          <div class="metric"><b>\(escape(gateLabel))</b>gate</div>
+          <div class="metric"><b>\(String(format: "%.2f", report.shownPerActiveMinute))</b>shown / active min</div>
+          <div class="metric"><b>\(percent(report.dismissalsPerShown))</b>dismissals / shown</div>
+          <div class="metric"><b>\(percent(report.typedOverWithinOneSecondRate))</b>typed-over &lt;1s</div>
+          <div class="metric"><b>\(report.acceptedThenDeleted)</b>accepted then deleted</div>
+          <div class="metric"><b>\(report.immediateResurfacing)</b>immediate resurfacing</div>
+          <div class="metric"><b>\(percent(report.lateSuggestionsHiddenRate))</b>late hidden</div>
+          <div class="metric"><b>\(percent(report.pauseDisablePerShown))</b>pause+disable / shown</div>
+          <div class="metric"><b>\(percent(report.severeSuppressionRate))</b>severe suppression</div>
+        </div>
+        <ul>\(failures)</ul>
         """
     }
 
@@ -202,13 +250,15 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
               <td>\(row.flickerCount)</td>
               <td>\(row.learningAppliedCount)</td>
               <td>\(escape(row.latestOffset ?? "none"))</td>
+              <td>applied \(row.trustedCorrectionAppliedCount), refused \(row.trustedCorrectionRefusedCount)</td>
+              <td>\(escape(row.trustedCorrectionRefusedReasons))</td>
             </tr>
             """
         }.joined(separator: "\n")
 
         return """
         <table>
-          <thead><tr><th>App</th><th>Render</th><th>Shown</th><th>Caret failures</th><th>Failure rate</th><th>Missing caret rect</th><th>Flicker</th><th>Learning applied</th><th>Latest offset</th></tr></thead>
+          <thead><tr><th>App</th><th>Render</th><th>Shown</th><th>Caret failures</th><th>Failure rate</th><th>Missing caret rect</th><th>Flicker</th><th>Learning applied</th><th>Latest offset</th><th>Trusted correction</th><th>Refusal reason</th></tr></thead>
           <tbody>\(body)</tbody>
         </table>
         """
@@ -237,6 +287,18 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
                    let yOffset = event.metadata["learningYOffset"] {
                     buckets[key, default: VisualCalibrationAccumulator()].latestOffset = "(\(xOffset), \(yOffset))"
                 }
+                let trustStatus = event.metadata["learningVisualOffsetStatus"]
+                    ?? legacyTrustStatus(from: event.metadata["learningVisualOffsetTrusted"])
+                switch trustStatus {
+                case CompatibilityLearningVisualOffsetTrustStatus.applied.rawValue:
+                    buckets[key, default: VisualCalibrationAccumulator()].trustedCorrectionAppliedCount += 1
+                case CompatibilityLearningVisualOffsetTrustStatus.refused.rawValue:
+                    buckets[key, default: VisualCalibrationAccumulator()].trustedCorrectionRefusedCount += 1
+                    let reason = event.metadata["learningVisualOffsetReason"] ?? "unknown"
+                    buckets[key, default: VisualCalibrationAccumulator()].trustedCorrectionRefusedReasons[reason, default: 0] += 1
+                default:
+                    break
+                }
 
             case .caretGeometryFailed:
                 let key = visualKey(for: event)
@@ -264,7 +326,10 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
                     missingCaretRectPresentations: value.missingCaretRectPresentations,
                     flickerCount: value.flickerCount,
                     learningAppliedCount: value.learningAppliedCount,
-                    latestOffset: value.latestOffset
+                    latestOffset: value.latestOffset,
+                    trustedCorrectionAppliedCount: value.trustedCorrectionAppliedCount,
+                    trustedCorrectionRefusedCount: value.trustedCorrectionRefusedCount,
+                    trustedCorrectionRefusedReasons: reasonSummary(value.trustedCorrectionRefusedReasons)
                 )
             }
             .sorted { lhs, rhs in
@@ -285,6 +350,34 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
             appBundleIdentifier: event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier,
             renderMode: event.metadata["effectiveRenderMode"] ?? event.metadata["renderMode"] ?? "unknown"
         )
+    }
+
+    private func legacyTrustStatus(from value: String?) -> String {
+        switch value {
+        case "true":
+            CompatibilityLearningVisualOffsetTrustStatus.applied.rawValue
+        case "false":
+            CompatibilityLearningVisualOffsetTrustStatus.refused.rawValue
+        default:
+            CompatibilityLearningVisualOffsetTrustStatus.none.rawValue
+        }
+    }
+
+    private func reasonSummary(_ reasons: [String: Int]) -> String {
+        guard !reasons.isEmpty else {
+            return "none"
+        }
+
+        return reasons
+            .sorted {
+                if $0.value == $1.value {
+                    return $0.key < $1.key
+                }
+
+                return $0.value > $1.value
+            }
+            .map { "\($0.key):\($0.value)" }
+            .joined(separator: ",")
     }
 
     private func sortedCountList(_ buckets: [String: Int]) -> String {
@@ -366,6 +459,9 @@ private struct VisualCalibrationAccumulator {
     var flickerCount = 0
     var learningAppliedCount = 0
     var latestOffset: String?
+    var trustedCorrectionAppliedCount = 0
+    var trustedCorrectionRefusedCount = 0
+    var trustedCorrectionRefusedReasons: [String: Int] = [:]
 }
 
 private struct VisualCalibrationRow {
@@ -377,6 +473,9 @@ private struct VisualCalibrationRow {
     let flickerCount: Int
     let learningAppliedCount: Int
     let latestOffset: String?
+    let trustedCorrectionAppliedCount: Int
+    let trustedCorrectionRefusedCount: Int
+    let trustedCorrectionRefusedReasons: String
 
     var caretFailureRate: Double {
         let denominator = shown + caretFailures

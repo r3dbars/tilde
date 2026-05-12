@@ -7,13 +7,14 @@ public enum AXFieldKind: String, Codable, Equatable, Sendable, CaseIterable {
     case form
     case secure
     case url
+    case unprovenSurface
     case unknown
 
     public var suppressesSuggestionsByDefault: Bool {
         switch self {
-        case .search, .form, .secure, .url:
+        case .search, .form, .secure, .url, .unprovenSurface, .unknown:
             true
-        case .multilineCompose, .singlelineCompose, .unknown:
+        case .multilineCompose, .singlelineCompose:
             false
         }
     }
@@ -44,7 +45,10 @@ public struct AXFieldClassification: Equatable, Sendable {
 public struct AXFieldClassifierInput: Equatable, Sendable {
     public let role: String?
     public let subrole: String?
+    public let identifier: String?
     public let title: String?
+    public let description: String?
+    public let help: String?
     public let placeholder: String?
     public let windowTitle: String?
     public let isSecure: Bool
@@ -56,7 +60,10 @@ public struct AXFieldClassifierInput: Equatable, Sendable {
     public init(
         role: String? = nil,
         subrole: String? = nil,
+        identifier: String? = nil,
         title: String? = nil,
+        description: String? = nil,
+        help: String? = nil,
         placeholder: String? = nil,
         windowTitle: String? = nil,
         isSecure: Bool = false,
@@ -67,7 +74,10 @@ public struct AXFieldClassifierInput: Equatable, Sendable {
     ) {
         self.role = role
         self.subrole = subrole
+        self.identifier = identifier
         self.title = title
+        self.description = description
+        self.help = help
         self.placeholder = placeholder
         self.windowTitle = windowTitle
         self.isSecure = isSecure
@@ -122,6 +132,10 @@ public struct AXFieldClassifier: Equatable, Sendable {
             return AXFieldClassification(kind: .form, reason: "formHint:\(match)")
         }
 
+        if let match = firstMatch(input, needles: Self.unprovenSurfaceNeedles) {
+            return AXFieldClassification(kind: .unprovenSurface, reason: "unprovenSurface:\(match)")
+        }
+
         if hasRole(input, "AXTextArea") {
             return AXFieldClassification(kind: .multilineCompose, reason: "textAreaRole")
         }
@@ -130,9 +144,14 @@ public struct AXFieldClassifier: Equatable, Sendable {
             return AXFieldClassification(kind: .multilineCompose, reason: "multipleLines")
         }
 
-        if hasRole(input, "AXWebArea"),
-           input.textAfterCursorLength + input.textBeforeCursorLength > 0 || hasComposeHint(input) {
-            return AXFieldClassification(kind: .multilineCompose, reason: "webCompose")
+        if hasRole(input, "AXWebArea") {
+            if hasComposeHint(input) {
+                return AXFieldClassification(kind: .multilineCompose, reason: "webComposeHint")
+            }
+
+            if input.textAfterCursorLength + input.textBeforeCursorLength > 0 {
+                return AXFieldClassification(kind: .unprovenSurface, reason: "webAreaWithoutComposeHint")
+            }
         }
 
         if hasRole(input, "AXTextField") {
@@ -163,7 +182,10 @@ public struct AXFieldClassifier: Equatable, Sendable {
         [
             input.role,
             input.subrole,
+            input.identifier,
             input.title,
+            input.description,
+            input.help,
             input.placeholder,
             input.windowTitle
         ]
@@ -176,18 +198,32 @@ public struct AXFieldClassifier: Equatable, Sendable {
         "password",
         "passcode",
         "one-time code",
+        "one time code",
+        "one-time password",
+        "one time password",
+        "verification code",
+        "verification",
+        "authenticator",
+        "2fa",
+        "mfa",
+        "two factor",
         "otp",
         "secret",
         "security code",
         "cvv",
-        "cvc"
+        "cvc",
+        "private prompt",
+        "private browsing",
+        "incognito"
     ]
 
     private static let urlNeedles: [String] = [
         "axurlfield",
         "url",
         "address bar",
+        "address and search",
         "location bar",
+        "omnibox",
         "search or enter address",
         "website",
         "web address"
@@ -199,6 +235,7 @@ public struct AXFieldClassifier: Equatable, Sendable {
         "find",
         "filter",
         "query",
+        "search query",
         "spotlight"
     ]
 
@@ -212,12 +249,15 @@ public struct AXFieldClassifier: Equatable, Sendable {
         "postal",
         "credit card",
         "card number",
+        "cardholder",
         "expiration",
         "expiry",
         "name on card",
         "payment",
         "username",
         "login",
+        "sign in",
+        "signin",
         "account",
         "subject",
         "to:",
@@ -237,5 +277,13 @@ public struct AXFieldClassifier: Equatable, Sendable {
         "draft",
         "compose",
         "write"
+    ]
+
+    private static let unprovenSurfaceNeedles: [String] = [
+        "docs.google",
+        "google docs",
+        "notion",
+        "slack",
+        "discord"
     ]
 }

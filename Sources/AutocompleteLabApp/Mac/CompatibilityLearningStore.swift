@@ -5,7 +5,7 @@ final class CompatibilityLearningStore: @unchecked Sendable {
     static let shared = CompatibilityLearningStore(
         fileURL: FileManager.default
             .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/AutocompleteLab/compatibility-learning.json")
+            .appendingPathComponent("Library/Application Support/SteadyType/compatibility-learning.json")
     )
 
     private let queue = DispatchQueue(label: "app.transcripted.autocomplete.compatibility-learning")
@@ -63,6 +63,22 @@ final class CompatibilityLearningStore: @unchecked Sendable {
         y: Double,
         for bundleIdentifier: String,
         reason: String,
+        visualScope: CompatibilityLearningVisualScope? = nil
+    ) {
+        update(bundleIdentifier: bundleIdentifier, reason: reason) { profile in
+            profile.xOffset = x
+            profile.yOffset = y
+            profile.visualScope = visualScope
+            profile.observations += 1
+            profile.confidence = min(1, max(profile.confidence, 0.25))
+        }
+    }
+
+    func updateOffset(
+        x: Double,
+        y: Double,
+        for bundleIdentifier: String,
+        reason: String,
         visualTrustContext: CompatibilityLearningVisualTrustContext? = nil,
         confidence: Double? = nil
     ) {
@@ -72,6 +88,21 @@ final class CompatibilityLearningStore: @unchecked Sendable {
             profile.applyVisualTrustContext(visualTrustContext)
             profile.observations += 1
             profile.confidence = min(1, max(profile.confidence, confidence ?? 0.25))
+        }
+    }
+
+    func nudgeOffset(
+        dx: Double,
+        dy: Double,
+        for bundleIdentifier: String,
+        visualScope: CompatibilityLearningVisualScope? = nil
+    ) {
+        update(bundleIdentifier: bundleIdentifier, reason: "manual-visual-nudge") { profile in
+            profile.xOffset += dx
+            profile.yOffset += dy
+            profile.visualScope = visualScope
+            profile.observations += 1
+            profile.confidence = min(1, max(profile.confidence, 0.35))
         }
     }
 
@@ -93,7 +124,7 @@ final class CompatibilityLearningStore: @unchecked Sendable {
     func setRenderModeOverride(_ renderMode: SuggestionRenderMode?, for bundleIdentifier: String) {
         update(
             bundleIdentifier: bundleIdentifier,
-            reason: renderMode == nil ? "manual-render-mode-reset" : "manual-render-mode-override"
+            reason: renderMode == nil ? "profile-mode-restored" : "mirror-mode-forced"
         ) { profile in
             profile.renderModeOverride = renderMode
             profile.observations += 1

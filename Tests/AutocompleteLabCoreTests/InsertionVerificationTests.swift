@@ -126,6 +126,14 @@ struct InsertionVerificationTests {
             previousTextAfterCursor: " keep writing",
             currentTextAfterCursor: " writing"
         ) == .selectionChangedUnexpectedly)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we make",
+            previousTextAfterCursor: " keep writing",
+            currentTextAfterCursor: " writing"
+        ) == .selectionChangedUnexpectedly)
     }
 
     @Test("Detects after-cursor mutation even when the accepted prefix landed")

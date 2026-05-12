@@ -14,10 +14,13 @@ DELAY_MS="${AUTOCOMPLETE_LAB_SOAK_DELAY_MS:-120}"
 KEY_DELAY_US="${AUTOCOMPLETE_LAB_SOAK_KEY_DELAY_US:-3000}"
 MIN_EVENT_TAP_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_EVENT_TAP_SAMPLES:-0}"
 MIN_AX_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_AX_SAMPLES:-0}"
-LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
+LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
+TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_LOG:-$HOME/Library/Logs/SteadyType/traces.jsonl}"
 SEGMENT_CHARS="${AUTOCOMPLETE_LAB_SOAK_SEGMENT_CHARS:-250}"
-DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.autocomplete-lab}"
+DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.steadytype}"
 PAUSE_DEFAULTS_KEY="SuggestionsPaused"
+DISABLED_APPS_DEFAULTS_KEY="DisabledBundleIdentifiers"
+TEXTEDIT_BUNDLE_ID="com.apple.TextEdit"
 PAUSE_DEFAULTS_WAS_PREPARED=0
 PAUSE_DEFAULTS_PREVIOUS_EXISTS=0
 PAUSE_DEFAULTS_PREVIOUS=""
@@ -26,9 +29,11 @@ SOAK_ACTUAL_TEXT_FILE=""
 SOAK_TARGET_TEXT_FILE=""
 SOAK_TARGET_DOCUMENT_NAME=""
 SOAK_TYPING_START_LINE=""
+SOAK_TRACE_START_LINE=""
 TEMP_ENABLE_ENV_KEY="AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
 TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED=0
 TEMP_ENABLE_LAUNCHCTL_PREVIOUS=""
+TEXTEDIT_ENABLEMENT_STATE="already-allowed"
 declare -a SOAK_TMP_DIRS=()
 
 usage() {
@@ -36,8 +41,9 @@ usage() {
 Usage: script/typing_performance_soak.sh [--dry-run] [--skip-build] [--strict-ax] [--characters N] [--chunk-size N] [--delay-ms N] [--key-delay-us N] [--require-event-tap-samples N] [--require-ax-samples N]
 
 Runs a safe TextEdit typing soak with built-in neutral fixture text, then checks
-diagnostics for keyboard event-tap latency. Focused-text AX polling is reported
-separately and stays non-fatal unless --strict-ax is set.
+diagnostics for keyboard event-tap latency and prints the latency benchmark
+report. Focused-text AX polling is reported separately and stays non-fatal
+unless --strict-ax is set.
 EOF
 }
 
@@ -107,6 +113,12 @@ line_count() {
   else
     echo 0
   fi
+}
+
+textedit_is_disabled_by_defaults() {
+  local disabled_bundles
+  disabled_bundles="$(defaults read "$DEFAULTS_DOMAIN" DisabledBundleIdentifiers 2>/dev/null || true)"
+  printf '%s\n' "$disabled_bundles" | grep -F "com.apple.TextEdit" >/dev/null
 }
 
 wait_for_focused_text_poll_summary_after_line() {
@@ -515,8 +527,26 @@ build_if_needed() {
   ./script/build_and_run.sh --verify
 }
 
+textedit_is_disabled() {
+  defaults read "$DEFAULTS_DOMAIN" "$DISABLED_APPS_DEFAULTS_KEY" 2>/dev/null \
+    | grep -F "$TEXTEDIT_BUNDLE_ID" >/dev/null
+}
+
+prepare_textedit_enablement_plan() {
+  if textedit_is_disabled; then
+    TEXTEDIT_ENABLEMENT_STATE="temporarily-allow"
+    if [[ "$SKIP_BUILD" == "1" ]]; then
+      echo "TextEdit is disabled in $DEFAULTS_DOMAIN." >&2
+      echo "--skip-build cannot refresh the running app state; rerun without --skip-build so the temporary allowlist reaches the app." >&2
+      exit 1
+    fi
+  else
+    TEXTEDIT_ENABLEMENT_STATE="already-allowed"
+  fi
+}
+
 prepare_temporary_textedit_enablement() {
-  local bundle_ids="com.apple.TextEdit"
+  local bundle_ids="$TEXTEDIT_BUNDLE_ID"
 
   if [[ "$TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     TEMP_ENABLE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$TEMP_ENABLE_ENV_KEY" 2>/dev/null || true)"
@@ -563,6 +593,7 @@ describe_plan() {
   echo "Safe typing performance soak"
   echo "Target app: disposable TextEdit window"
   echo "Diagnostics log: $LOG_PATH"
+  echo "Trace log: $TRACE_PATH"
   echo "Safety: temporarily enables TextEdit only for this proof pass"
   echo "Safety: temporarily resumes suggestions and restores the previous pause state"
   if [[ "$SKIP_BUILD" == "1" ]]; then
@@ -588,6 +619,13 @@ describe_plan() {
     echo "AX warnings: separate non-fatal lane"
   fi
   echo "AX sample proof: require at least $MIN_AX_SAMPLES focused-text poll samples"
+  echo "Latency report: script/latency_benchmark_report.py after typing"
+  echo "Primer: require a TextEdit suggestion before long typing"
+  if [[ "$TEXTEDIT_ENABLEMENT_STATE" == "temporarily-allow" ]]; then
+    echo "TextEdit enablement: would temporarily allow TextEdit before relaunch"
+  else
+    echo "TextEdit enablement: already allowed"
+  fi
 }
 
 type_textedit_fixture() {
@@ -606,10 +644,24 @@ type_textedit_fixture() {
   sleep 1
   wait_for_focused_text_poll_summary_after_line "$(line_count "$LOG_PATH")" 15
   SOAK_TYPING_START_LINE="$(line_count "$LOG_PATH")"
+  SOAK_TRACE_START_LINE="$(line_count "$TRACE_PATH")"
   type_text_with_cgevents "$text_file"
   sleep 2
   capture_typed_text "$SOAK_ACTUAL_TEXT_FILE" "$SOAK_TARGET_DOCUMENT_NAME"
   verify_typed_text "$SOAK_EXPECTED_TEXT_FILE" "$SOAK_ACTUAL_TEXT_FILE"
+}
+
+run_latency_report() {
+  local diagnostics_start_line="$1"
+  local trace_start_line="$2"
+
+  echo
+  echo "== Latency benchmark report =="
+  ./script/latency_benchmark_report.py \
+    --diagnostics-log "$LOG_PATH" \
+    --trace-log "$TRACE_PATH" \
+    --diagnostics-start-line "$diagnostics_start_line" \
+    --trace-start-line "$trace_start_line"
 }
 
 run_checker() {
@@ -753,6 +805,7 @@ if ((CHUNK_SIZE > 80)); then
   exit 2
 fi
 
+prepare_textedit_enablement_plan
 describe_plan
 
 if [[ "$DRY_RUN" == "1" ]]; then
@@ -768,6 +821,9 @@ wait_for_runtime_ready "$runtime_start_line" "$SKIP_BUILD"
 type_textedit_fixture
 sleep 1
 run_checker "${SOAK_TYPING_START_LINE:-$(line_count "$LOG_PATH")}"
+run_latency_report \
+  "${SOAK_TYPING_START_LINE:-$(line_count "$LOG_PATH")}" \
+  "${SOAK_TRACE_START_LINE:-$(line_count "$TRACE_PATH")}"
 
 echo
 echo "Typing soak complete."

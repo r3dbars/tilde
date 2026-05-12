@@ -8,6 +8,13 @@ Research-backed caret-locking work now lives in
 
 ## Now
 
+- [x] Harden the current goal-pass trust gates.
+  - [x] Block accept if app, process, focused field, selection, or text snapshot changed after a suggestion was shown.
+  - [x] Trace accept-key focus mismatches as `wrong-app-or-field-before-accept` do-not-ship blockers.
+  - [x] Suppress phrase continuation during fast typing bursts while keeping word completion eligible.
+  - [x] Add explicit low-confidence suppression before display for long, slow, thin-context, generic, or unsupported-profile suggestions.
+  - [x] Cover secure-field, unsupported-app, and screenshot/raw-text privacy edges in tests.
+
 - [x] Verify insertion after every accept.
   - Detect whether the target text actually changed.
   - Keep the remaining suggestion only when the accepted text landed.
@@ -21,7 +28,7 @@ Research-backed caret-locking work now lives in
   - Obsidian: keep CodeMirror behavior stable across AX element churn; do not suppress the whole field after one flaky key-event verification miss.
   - Mail: safe diagnostics pass shows compose body as AXWebArea with empty direct value, no selected range, and no selected-text insertion; profile is diagnostics-only until a safe adapter is verified.
   - Chrome: local textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture paths have distinct smoke proof labels.
-  - Atlas: keep unsupported until the focused AX element is reliably available.
+  - Atlas: keep diagnostics-only until browser-field privacy and no-submit proof exist.
   - [x] Capture the current app stance in `docs/product/compatibility-matrix.md`.
 
 - [x] Persist user control.
@@ -91,7 +98,7 @@ Research-backed caret-locking work now lives in
   - [x] Obsidian one-word accept and full accept.
   - [x] Chrome text field and local editor fixture one-word and full accept.
   - [ ] Codex one-word no-submit accept; full accept stays disabled until separately proven.
-  - [ ] Claude Code terminal-host adapter plus one-word no-submit accept; direct `com.anthropic.claude-code` bundle proof is diagnostics-only.
+  - [ ] Claude Code terminal-host adapter plus one-word no-submit accept; Terminal has historical proof, iTerm2/Ghostty need host-labeled rows, and direct `com.anthropic.claude-code` bundle proof is diagnostics-only.
   - [x] Claude desktop one-word no-submit accept; full accept stays disabled until separately proven.
 
 - [x] Build the local eval loop.

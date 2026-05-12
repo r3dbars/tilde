@@ -47,10 +47,40 @@ The app also keeps local compatibility learning here:
 
 That file can hold per-app visual offsets, render-mode overrides, screenshot-tracing state, observation counts, and confidence. This is the first self-healing layer: small learned adjustments can apply at runtime, while bigger repeated misses become adapter patches.
 
+Compatibility learning is not a support claim by itself. Treat it as a code
+candidate only when all of these are true:
+
+- at least 5 observations for the same bundle id,
+- confidence is at least 0.75,
+- the reason is `manual-visual-nudge` or `screenshot-visual-correction`,
+- the offset is reproduced on the current commit with screenshot-backed smoke,
+- no wrong-app insertion, sensitive-field, or Tab-capture failure appears in
+  the same slice.
+
+Use the report helper to separate low-confidence learning from code candidates:
+
+```bash
+script/compatibility_self_healing_report.py
+```
+
+The default code-promotion thresholds are 5 observations and 0.75 confidence.
+Lower them only for a local experiment, not for beta support language.
+
 For quick visual calibration, use the menu bar nudge actions while the target app is focused:
 
 - `Nudge Suggestion Up/Down/Left/Right`
 - `Reset Current App Learning`
+
+Nudges are explicit local opt-in actions. Autocomplete Lab must not infer,
+store, or apply visual calibration automatically for a beta/customer user.
+Only local dogfood/lab runs may use screenshot-backed visual calibration, and
+only after screenshot tracing is explicitly enabled for that app or run.
+
+ScreenCaptureKit and Vision are useful dogfood candidates for measuring
+caret/suggestion alignment from local screenshots, but they stay out of the
+private beta path for now. The product path remains AX geometry plus explicit
+local nudges until screenshot/Vision calibration has fixture proof, current app
+smoke proof, and a visible opt-in control.
 
 Nudges are local, per app, and take effect on the next suggestion.
 For a screenshot-free placement readout, run:
@@ -60,7 +90,8 @@ script/visual_calibration_report.py
 ```
 
 The report uses redacted caret, render-mode, learning-offset, flicker, and
-caret-failure metadata only. It does not read or link screenshots.
+caret-failure metadata only. It does not read or link screenshots. Its
+self-test uses a fixture JSONL slice and is part of `script/smoke_test.sh`.
 
 ## Trace Events
 
@@ -88,6 +119,15 @@ from the default trace. They are written only to `raw-traces.jsonl` when raw
 local debug tracing is explicitly enabled.
 
 The headline product metric is accepted-and-kept, not raw accept rate. Accepted text is compared at 2s, 10s, 30s, and field blur. Durable checkpoint events store survival class, token recall, edit distance, accepted length, timing metadata, and redacted fingerprints. They should not need the current field text on disk.
+
+Acceptance events also carry log-safe proof that inserted text came from the
+visible suggestion slice: accepted character count, pre-accept visible character
+count, remaining visible character count, visible-prefix/full-visible match
+flags, and the acceptance source. Raw text is still only available when local
+debug tracing is explicitly enabled.
+Set `AUTOCOMPLETE_LAB_TRACE_REQUIRE_ACCEPTANCE_SLICE_PROOF=1` with
+`script/check_trace_eval.sh` to fail any slice where accepted events lack this
+proof.
 
 The RAM-only audit proof is the `acceptanceRetentionCleared` event. It records
 the clear reason, accepted text length, fingerprint metadata, and
@@ -123,10 +163,17 @@ Use the command-line checker for repeatable proof:
 ./script/check_trace_eval.sh
 ```
 
+All-history trace output is diagnostic only. The log can contain old branches,
+old app versions, failed experiments, and stale proof attempts, so do not use it
+to raise or lower beta support grades. Product proof must use a fresh marked
+slice from `trace_mark.sh` or explicit `AUTOCOMPLETE_LAB_TRACE_START_LINE` and
+`AUTOCOMPLETE_LAB_TRACE_END_LINE` bounds.
+
 Compare local model latency after a trial launch:
 
 ```bash
-script/model_latency_report.py --latest
+script/model_latency_report.py --default-model-proof
+script/latency_benchmark_report.py --beta-gate
 AUTOCOMPLETE_LAB_MODEL=qwen35-9b ./script/build_and_run.sh --verify
 ```
 
@@ -148,6 +195,48 @@ After a manual model trial, require enough samples before trusting the result:
 
 ```bash
 script/model_latency_report.py --latest --require-timing-samples 5 --require-shown-samples 5
+script/model_latency_report.py --default-model-proof
+script/latency_benchmark_report.py --beta-gate
+```
+
+## Local Quality Audit
+
+Raw content quality audits are local opt-in only. Use disposable prompts, and do
+not use real private writing unless you explicitly choose to debug that text on
+this machine.
+
+Run the current local model against a JSONL prompt set:
+
+```bash
+AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT=1 \
+AUTOCOMPLETE_LAB_RUNTIME_BACKEND=mlx \
+  ./script/local_quality_audit.py \
+    --input /path/to/disposable-prompts.jsonl \
+    --generate \
+    --min-overall 92 \
+    --min-relevance 72
+```
+
+The default report prints aggregate labels and row ids only. It scores
+relevance, literal continuation, assistant voice, wrong topic, too long,
+structural breakage, unsafe or sensitive content, and repetition. It does not
+persist raw prompt text or raw model output by default.
+
+Only include raw output for a short local debug session with disposable prompts:
+
+```bash
+AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT=1 \
+AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT_INCLUDE_RAW=1 \
+  ./script/local_quality_audit.py \
+    --input /path/to/disposable-prompts.jsonl \
+    --generate \
+    --include-raw-output
+```
+
+Self-test the audit harness with fixtures:
+
+```bash
+./script/check_local_quality_audit_self_test.sh
 ```
 
 For a clean app-specific slice:

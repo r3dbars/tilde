@@ -18,6 +18,7 @@ struct AXFieldClassifierTests {
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXSearchField")) == .search)
         #expect(classifier.classify(AXFieldClassifierInput(placeholder: "Search messages")) == .search)
         #expect(classifier.classify(AXFieldClassifierInput(title: "Address Bar")) == .url)
+        #expect(classifier.classify(AXFieldClassifierInput(identifier: "omnibox")) == .url)
         #expect(AXFieldKind.search.suppressesSuggestionsByDefault)
         #expect(AXFieldKind.url.suppressesSuggestionsByDefault)
     }
@@ -25,16 +26,36 @@ struct AXFieldClassifierTests {
     @Test("Classifies form fields")
     func classifiesFormFields() {
         #expect(classifier.classify(AXFieldClassifierInput(placeholder: "Email address")) == .form)
+        #expect(classifier.classify(AXFieldClassifierInput(description: "Payment cardholder name")) == .form)
+        #expect(classifier.classify(AXFieldClassifierInput(help: "Use this field to sign in")) == .form)
         #expect(classifier.classify(AXFieldClassifierInput(title: "Credit card number")) == .form)
         #expect(classifier.classify(AXFieldClassifierInput(windowTitle: "Login")) == .form)
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextField")) == .form)
         #expect(AXFieldKind.form.suppressesSuggestionsByDefault)
     }
 
+    @Test("Classifies unproven web surfaces")
+    func classifiesUnprovenWebSurfaces() {
+        #expect(classifier.classification(
+            for: AXFieldClassifierInput(role: "AXTextArea", windowTitle: "Untitled document - Google Docs")
+        ).kind == .unprovenSurface)
+        #expect(classifier.classification(
+            for: AXFieldClassifierInput(role: "AXTextArea", windowTitle: "Roadmap - Notion")
+        ).reason == "unprovenSurface:notion")
+        #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", windowTitle: "general - Slack")) == .unprovenSurface)
+        #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", windowTitle: "Discord")) == .unprovenSurface)
+        #expect(classifier.classification(
+            for: AXFieldClassifierInput(role: "AXWebArea", textBeforeCursorLength: 12)
+        ).reason == "webAreaWithoutComposeHint")
+        #expect(AXFieldKind.unprovenSurface.suppressesSuggestionsByDefault)
+    }
+
     @Test("Classifies compose fields")
     func classifiesComposeFields() {
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea")) == .multilineCompose)
-        #expect(classifier.classify(AXFieldClassifierInput(role: "AXWebArea", textBeforeCursorLength: 12)) == .multilineCompose)
+        #expect(classifier.classification(
+            for: AXFieldClassifierInput(role: "AXWebArea", placeholder: "Write a reply", textBeforeCursorLength: 12)
+        ).reason == "webComposeHint")
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextField", placeholder: "Message", lineCount: 2)) == .multilineCompose)
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextField", placeholder: "Message")) == .singlelineCompose)
         #expect(!AXFieldKind.multilineCompose.suppressesSuggestionsByDefault)
@@ -44,6 +65,6 @@ struct AXFieldClassifierTests {
     @Test("Classifies unknown fields")
     func classifiesUnknownFields() {
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXGroup")) == .unknown)
-        #expect(!AXFieldKind.unknown.suppressesSuggestionsByDefault)
+        #expect(AXFieldKind.unknown.suppressesSuggestionsByDefault)
     }
 }

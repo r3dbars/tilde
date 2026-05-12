@@ -5,7 +5,12 @@ import statistics
 from pathlib import Path
 
 
-DEFAULT_LOG = Path.home() / "Library/Logs/AutocompleteLab/diagnostics.log"
+DEFAULT_LOG = Path.home() / "Library/Logs/SteadyType/diagnostics.log"
+DEFAULT_MODEL_ASSET = "Qwen3.5-4B-4bit"
+DEFAULT_PHRASE_MAX_TOKENS = 9
+DEFAULT_PROOF_MIN_SAMPLES = 5
+DEFAULT_PROOF_P95_SHOWN_MS = 750
+DEFAULT_PROOF_AVERAGE_SHOWN_MS = 700
 
 BOOTSTRAP_RE = re.compile(
     r"^(?P<timestamp>\S+) runtime-bootstrap .*?\basset=(?P<asset>\S+)"
@@ -37,6 +42,7 @@ def metric_line(label, values):
         f"p50={percentile(values, 0.50)}ms "
         f"p90={percentile(values, 0.90)}ms "
         f"p95={percentile(values, 0.95)}ms "
+        f"p99={percentile(values, 0.99)}ms "
         f"max={max(values)}ms"
     )
 
@@ -174,6 +180,24 @@ def count_samples(launches, bucket):
     return sum(len(launch[bucket]) for launch in launches)
 
 
+def mode_timing_samples(launches, mode):
+    return [
+        item
+        for launch in launches
+        for item in launch["timings"]
+        if item["mode"] == mode
+    ]
+
+
+def mode_presented_samples(launches, mode):
+    return [
+        item
+        for launch in launches
+        for item in first_presented_samples(launch["presented"])
+        if item["mode"] == mode
+    ]
+
+
 def enforce_minimum(label, actual, expected):
     if expected is None:
         return
@@ -184,11 +208,43 @@ def enforce_minimum(label, actual, expected):
         )
 
 
+def enforce_maximum(label, actual, maximum):
+    if maximum is None:
+        return
+
+    if actual is None:
+        raise SystemExit(f"{label} missing")
+
+    if actual > maximum:
+        raise SystemExit(f"{label} too slow: expected <= {maximum}ms, found {actual}ms")
+
+
+def enforce_phrase_max_tokens(launches, expected):
+    if expected is None:
+        return
+
+    token_budgets = sorted(
+        {
+            item["maxTokens"]
+            for item in mode_timing_samples(launches, "phraseContinuation")
+            if item["maxTokens"] is not None
+        }
+    )
+    if expected not in token_budgets:
+        found = ", ".join(map(str, token_budgets)) if token_budgets else "none"
+        raise SystemExit(f"default phrase token budget mismatch: expected {expected}, found {found}")
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Summarize local Autocomplete Lab model latency logs.")
+    parser = argparse.ArgumentParser(description="Summarize local SteadyType model latency logs.")
     parser.add_argument("--log", default=str(DEFAULT_LOG), help="diagnostics.log path")
     parser.add_argument("--latest", action="store_true", help="show only the latest model launch")
     parser.add_argument("--asset", help="show only launches whose asset contains this text")
+    parser.add_argument(
+        "--default-model-proof",
+        action="store_true",
+        help="prove the latest Qwen3.5 4B default-model launch has enough phrase latency samples under target.",
+    )
     parser.add_argument(
         "--require-timing-samples",
         type=int,
@@ -199,7 +255,43 @@ def main():
         type=int,
         help="fail unless the selected launches include at least this many shown suggestion samples",
     )
+    parser.add_argument(
+        "--require-phrase-timing-samples",
+        type=int,
+        help="fail unless selected launches include at least this many phrase model timing samples",
+    )
+    parser.add_argument(
+        "--require-phrase-shown-samples",
+        type=int,
+        help="fail unless selected launches include at least this many phrase shown-latency samples",
+    )
+    parser.add_argument(
+        "--require-phrase-max-tokens",
+        type=int,
+        help="fail unless phrase model timings include this max token budget",
+    )
+    parser.add_argument(
+        "--require-p95-shown-ms",
+        type=int,
+        help="fail unless phrase shown-latency p95 is at or below this threshold",
+    )
+    parser.add_argument(
+        "--require-average-shown-ms",
+        type=int,
+        help="fail unless phrase shown-latency average is at or below this threshold",
+    )
     args = parser.parse_args()
+
+    if args.default_model_proof:
+        args.latest = True
+        args.asset = DEFAULT_MODEL_ASSET
+        args.require_timing_samples = args.require_timing_samples or DEFAULT_PROOF_MIN_SAMPLES
+        args.require_shown_samples = args.require_shown_samples or DEFAULT_PROOF_MIN_SAMPLES
+        args.require_phrase_timing_samples = args.require_phrase_timing_samples or DEFAULT_PROOF_MIN_SAMPLES
+        args.require_phrase_shown_samples = args.require_phrase_shown_samples or DEFAULT_PROOF_MIN_SAMPLES
+        args.require_phrase_max_tokens = args.require_phrase_max_tokens or DEFAULT_PHRASE_MAX_TOKENS
+        args.require_p95_shown_ms = args.require_p95_shown_ms or DEFAULT_PROOF_P95_SHOWN_MS
+        args.require_average_shown_ms = args.require_average_shown_ms or DEFAULT_PROOF_AVERAGE_SHOWN_MS
 
     log_path = Path(args.log).expanduser()
     if not log_path.exists():
@@ -224,11 +316,49 @@ def main():
         count_samples(launches, "presented"),
         args.require_shown_samples,
     )
+    phrase_timing = mode_timing_samples(launches, "phraseContinuation")
+    phrase_shown = mode_presented_samples(launches, "phraseContinuation")
+    enforce_minimum(
+        "phrase model timing",
+        len(phrase_timing),
+        args.require_phrase_timing_samples,
+    )
+    enforce_minimum(
+        "phrase shown suggestion",
+        len(phrase_shown),
+        args.require_phrase_shown_samples,
+    )
+    enforce_phrase_max_tokens(launches, args.require_phrase_max_tokens)
+
+    phrase_shown_latencies = [item["latency"] for item in phrase_shown]
+    enforce_maximum(
+        "phrase shown p95",
+        percentile(phrase_shown_latencies, 0.95),
+        args.require_p95_shown_ms,
+    )
+    average_phrase_shown = (
+        round(statistics.mean(phrase_shown_latencies)) if phrase_shown_latencies else None
+    )
+    enforce_maximum(
+        "phrase shown average",
+        average_phrase_shown,
+        args.require_average_shown_ms,
+    )
 
     for index, launch in enumerate(launches):
         if index:
             print()
         print_launch(launch)
+
+    if args.default_model_proof:
+        print()
+        print(
+            "Default model proof passed: "
+            f"asset={DEFAULT_MODEL_ASSET} "
+            f"phraseShownP95<={args.require_p95_shown_ms}ms "
+            f"phraseShownAverage<={args.require_average_shown_ms}ms "
+            f"phraseMaxTokens={args.require_phrase_max_tokens}"
+        )
 
 
 if __name__ == "__main__":

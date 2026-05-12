@@ -37,6 +37,21 @@ public struct CompletionCandidateSelection: Equatable, Sendable {
     public var suggestion: CompletionSuggestion? {
         selectedCandidate?.suggestion
     }
+
+    public var traceMetadata: [String: String] {
+        [
+            "candidateCount": String(rankedCandidates.count),
+            "candidateTopScore": selectedCandidate.map { Self.format($0.score) }
+                ?? rankedCandidates.first.map { Self.format($0.score) }
+                ?? "0.00",
+            "candidateScoreMargin": scoreMargin.map(Self.format) ?? "none",
+            "candidateSuppressionReason": suppressionReason?.rawValue ?? "none"
+        ]
+    }
+
+    private static func format(_ value: Double) -> String {
+        String(format: "%.2f", value)
+    }
 }
 
 public struct CompletionCandidateRanker: Equatable, Sendable {
@@ -160,6 +175,11 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         }
 
         if mode.isContinuation {
+            score += commonPhrasePriorScore(
+                visibleText,
+                textBeforeCursor: textBeforeCursor,
+                behaviorProfileID: behaviorProfileID
+            )
             score += localContextAlignmentScore(visibleText, textBeforeCursor: textBeforeCursor)
             score -= unsupportedCommitmentPenalty(visibleText, textBeforeCursor: textBeforeCursor)
             score -= genericFillerPenalty(visibleText)
@@ -175,6 +195,44 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         }
 
         return score
+    }
+
+    private func commonPhrasePriorScore(
+        _ text: String,
+        textBeforeCursor: String?,
+        behaviorProfileID: AutocompleteBehaviorProfileID?
+    ) -> Double {
+        guard let textBeforeCursor,
+              !textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              allowsCommonPhrasePrior(for: behaviorProfileID)
+        else {
+            return 0
+        }
+
+        let context = normalizedPhrase(textBeforeCursor)
+        let candidateWords = allWords(in: text)
+        guard !candidateWords.isEmpty else {
+            return 0
+        }
+
+        for prior in CommonPhraseContinuationPrior.defaultPriors where context.hasSuffix(prior.contextSuffix) {
+            guard candidateWords.starts(with: prior.continuationWords) else {
+                continue
+            }
+
+            return prior.score
+        }
+
+        return 0
+    }
+
+    private func allowsCommonPhrasePrior(for behaviorProfileID: AutocompleteBehaviorProfileID?) -> Bool {
+        switch behaviorProfileID {
+        case .some(.aiChat), .some(.coding), .some(.forms), .some(.search):
+            return false
+        case .some, .none:
+            return true
+        }
     }
 
     private func phraseLengthScore(_ wordCount: Int) -> Double {
@@ -386,17 +444,29 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
 
     private func promptAppActionPenalty(_ text: String) -> Double {
         let normalized = normalizedPhrase(text)
+        if Self.promptCommandPrefixes.contains(where: { normalized.hasPrefix($0) })
+            || normalized.hasPrefix("```")
+            || normalized.hasPrefix("$ ")
+            || normalized.hasPrefix("> ") {
+            return 0.75
+        }
+
+        if normalized.unicodeScalars.contains(where: Self.promptShellMetacharacters.contains)
+            || normalized.unicodeScalars.contains(where: Self.promptHiddenScalars.contains) {
+            return 0.75
+        }
+
         let submitPhrases = [
             "press enter", "press return", "run the command", "send it",
-            "submit it", "hit enter", "hit return"
+            "submit it", "hit enter", "hit return", "click send",
+            "approve it", "deploy it", "execute it", "ship it"
         ]
         if submitPhrases.contains(where: { normalized.contains($0) }) {
             return 0.60
         }
 
         let words = Set(contentWords(in: text))
-        let submitWords: Set<String> = ["enter", "return", "run", "send", "submit"]
-        return words.isDisjoint(with: submitWords) ? 0 : 0.35
+        return words.isDisjoint(with: Self.promptActionWords) ? 0 : 0.35
     }
 
     private func formOrSearchPenalty(_ text: String) -> Double {
@@ -476,6 +546,34 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
     }
+
+    private func allWords(in text: String) -> [String] {
+        normalizedPhrase(text)
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+    }
+
+    private static let promptCommandPrefixes = [
+        "/", "!", "@", "--", "sudo ", "curl ", "bash ", "sh ", "rm "
+    ]
+
+    private static let promptShellMetacharacters: Set<Unicode.Scalar> = [
+        "|", "&", ";", "<", ">", "$", "\\", "(", ")", "{", "}", "[", "]", "*", "?"
+    ]
+
+    private static let promptHiddenScalars: Set<Unicode.Scalar> = [
+        "\u{200B}",
+        "\u{200C}",
+        "\u{200D}",
+        "\u{2060}",
+        "\u{FEFF}"
+    ]
+
+    private static let promptActionWords: Set<String> = [
+        "allow", "approve", "bash", "click", "curl", "delete", "deploy",
+        "enter", "execute", "merge", "return", "run", "send", "ship",
+        "submit", "sudo"
+    ]
 
     private static let stopWords: Set<String> = [
         "and", "are", "but", "can", "for", "from", "had", "has", "have",

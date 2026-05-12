@@ -28,10 +28,64 @@ public enum CompletionActivationBlockReason: String, Equatable, Sendable {
     case suppressedField
     case blockedFieldKind
     case sensitiveContent
+    case markdownCodeContext
     case selectedText
+    case terminalSentenceBoundary
     case tooLittleContext
     case middleOfLine
     case unfinishedWord
+}
+
+public enum SuggestionPace: String, CaseIterable, Codable, Equatable, Sendable {
+    case quiet
+    case normal
+    case eager
+
+    public init(persistedRawValue: String?) {
+        self = persistedRawValue.flatMap(Self.init(rawValue:)) ?? .normal
+    }
+
+    public var displayName: String {
+        switch self {
+        case .quiet:
+            "Quiet"
+        case .normal:
+            "Normal"
+        case .eager:
+            "Proactive"
+        }
+    }
+
+    public var detailText: String {
+        switch self {
+        case .quiet:
+            "Quiet waits for more context before phrase suggestions."
+        case .normal:
+            "Normal starts suggestions a little sooner."
+        case .eager:
+            "Proactive predicts partial words quickly and starts phrase suggestions after short pauses."
+        }
+    }
+
+    public func maxVisibleWords(defaultMaxVisibleWords: Int, requestMode: CompletionRequestMode) -> Int {
+        defaultMaxVisibleWords
+    }
+}
+
+public struct SuggestionAggressivenessPolicy: Equatable, Sendable {
+    public init() {}
+
+    public func pace(
+        userPace: SuggestionPace,
+        supportStatus: CompatibilitySupportStatus
+    ) -> SuggestionPace {
+        switch supportStatus.supportLevel {
+        case .green, .yellow:
+            return userPace
+        case .diagnosticsOnly, .unsupported:
+            return .quiet
+        }
+    }
 }
 
 public struct CompletionActivationPolicy: Equatable, Sendable {
@@ -40,19 +94,57 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
     public let minimumPhraseContinuationWords: Int
     public let minimumWordCompletionCharacters: Int
     public let maximumWordCompletionCharacters: Int
+    public let allowsTerminalSentenceBoundary: Bool
+    public let allowsUnfinishedWordPhraseContinuation: Bool
 
     public init(
         minimumContextCharacters: Int = 3,
         minimumContextWords: Int = 2,
         minimumPhraseContinuationWords: Int = 4,
         minimumWordCompletionCharacters: Int = 3,
-        maximumWordCompletionCharacters: Int = 4
+        maximumWordCompletionCharacters: Int = 4,
+        allowsTerminalSentenceBoundary: Bool = false,
+        allowsUnfinishedWordPhraseContinuation: Bool = false
     ) {
         self.minimumContextCharacters = max(1, minimumContextCharacters)
         self.minimumContextWords = max(1, minimumContextWords)
         self.minimumPhraseContinuationWords = max(self.minimumContextWords, minimumPhraseContinuationWords)
         self.minimumWordCompletionCharacters = max(1, minimumWordCompletionCharacters)
         self.maximumWordCompletionCharacters = max(self.minimumWordCompletionCharacters, maximumWordCompletionCharacters)
+        self.allowsTerminalSentenceBoundary = allowsTerminalSentenceBoundary
+        self.allowsUnfinishedWordPhraseContinuation = allowsUnfinishedWordPhraseContinuation
+    }
+
+    public init(pace: SuggestionPace) {
+        switch pace {
+        case .quiet:
+            self.init(
+                minimumContextCharacters: 6,
+                minimumContextWords: 3,
+                minimumPhraseContinuationWords: 6,
+                minimumWordCompletionCharacters: 3,
+                maximumWordCompletionCharacters: 4,
+                allowsTerminalSentenceBoundary: false
+            )
+        case .normal:
+            self.init(
+                minimumContextCharacters: 2,
+                minimumContextWords: 2,
+                minimumPhraseContinuationWords: 3,
+                minimumWordCompletionCharacters: 2,
+                maximumWordCompletionCharacters: 5,
+                allowsTerminalSentenceBoundary: false
+            )
+        case .eager:
+            self.init(
+                minimumContextCharacters: 1,
+                minimumContextWords: 1,
+                minimumPhraseContinuationWords: 2,
+                minimumWordCompletionCharacters: 2,
+                maximumWordCompletionCharacters: 16,
+                allowsTerminalSentenceBoundary: false
+            )
+        }
     }
 
     public func canSuggest(
@@ -61,7 +153,8 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         isSecure: Bool,
         selectedTextLength: Int = 0,
         isFieldSuppressed: Bool,
-        fieldKind: AXFieldKind = .unknown
+        fieldKind: AXFieldKind = .multilineCompose,
+        allowsUnknownFieldKind: Bool = false
     ) -> Bool {
         decision(
             textBeforeCursor: textBeforeCursor,
@@ -69,7 +162,8 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             isSecure: isSecure,
             selectedTextLength: selectedTextLength,
             isFieldSuppressed: isFieldSuppressed,
-            fieldKind: fieldKind
+            fieldKind: fieldKind,
+            allowsUnknownFieldKind: allowsUnknownFieldKind
         ).canSuggest
     }
 
@@ -79,7 +173,8 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         isSecure: Bool,
         selectedTextLength: Int = 0,
         isFieldSuppressed: Bool,
-        fieldKind: AXFieldKind = .unknown
+        fieldKind: AXFieldKind = .multilineCompose,
+        allowsUnknownFieldKind: Bool = false
     ) -> CompletionActivationDecision {
         if isSecure || fieldKind == .secure {
             return .block(.secureField)
@@ -93,7 +188,11 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             return .block(.suppressedField)
         }
 
-        if fieldKind.suppressesSuggestionsByDefault {
+        if fieldKind == .unknown {
+            if !allowsUnknownFieldKind {
+                return .block(.blockedFieldKind)
+            }
+        } else if fieldKind.suppressesSuggestionsByDefault {
             return .block(.blockedFieldKind)
         }
 
@@ -101,7 +200,15 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             return .block(.sensitiveContent)
         }
 
+        if isInMarkdownCodeContext(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
+            return .block(.markdownCodeContext)
+        }
+
         let trimmedContext = textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !allowsTerminalSentenceBoundary, endsAtTerminalSentenceBoundary(trimmedContext) {
+            return .block(.terminalSentenceBoundary)
+        }
+
         let contextWordCount = trimmedContext.split(whereSeparator: { $0.isWhitespace }).count
         guard trimmedContext.count >= minimumContextCharacters,
               contextWordCount >= minimumContextWords else {
@@ -121,6 +228,11 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         }
 
         if endsInsideWord(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
+            if allowsUnfinishedWordPhraseContinuation,
+               contextWordCount >= minimumPhraseContinuationWords {
+                return .allow(.phraseContinuation)
+            }
+
             return .block(.unfinishedWord)
         }
 
@@ -128,17 +240,11 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             return .block(.tooLittleContext)
         }
 
-        if endsAtSentenceBoundary(textBeforeCursor: textBeforeCursor) {
-            return .allow(.sentenceContinuation)
-        }
-
         return .allow(.phraseContinuation)
     }
 
-    private func endsAtSentenceBoundary(textBeforeCursor: String) -> Bool {
-        guard let last = textBeforeCursor
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .last else {
+    private func endsAtTerminalSentenceBoundary(_ trimmedContext: String) -> Bool {
+        guard let last = trimmedContext.last else {
             return false
         }
 
@@ -233,6 +339,42 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         return before + after
     }
 
+    private func isInMarkdownCodeContext(textBeforeCursor: String, textAfterCursor: String) -> Bool {
+        isInsideFencedCodeBlock(textBeforeCursor)
+            || isInsideInlineCodeSpan(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor)
+    }
+
+    private func isInsideFencedCodeBlock(_ textBeforeCursor: String) -> Bool {
+        let lines = textBeforeCursor.split(
+            omittingEmptySubsequences: false,
+            whereSeparator: \.isNewline
+        )
+        let fenceCount = lines.reduce(0) { count, line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            return count + ((trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~")) ? 1 : 0)
+        }
+
+        return fenceCount % 2 == 1
+    }
+
+    private func isInsideInlineCodeSpan(textBeforeCursor: String, textAfterCursor: String) -> Bool {
+        let line = currentLineContext(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor)
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.hasPrefix("```"), !trimmed.hasPrefix("~~~") else {
+            return true
+        }
+
+        let before = textBeforeCursor.split(
+            omittingEmptySubsequences: false,
+            whereSeparator: \.isNewline
+        ).last.map(String.init) ?? ""
+        let backtickCount = before.reduce(0) { count, character in
+            count + (character == "`" ? 1 : 0)
+        }
+
+        return backtickCount % 2 == 1
+    }
+
     private static let commonCompleteWords: Set<String> = [
         "a", "an", "and", "are", "as", "at",
         "be", "but", "by",
@@ -250,6 +392,8 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
     private static let sensitiveLineHints = [
         "api key", "apikey", "access token", "auth token", "bearer token",
         "client secret", "private key", "secret key", "password", "passcode",
+        "otp", "one time code", "one time password", "verification code",
+        "authenticator", "2fa", "mfa", "expiration",
         "recovery code", "seed phrase", "social security", "ssn", "card number",
         "credit card", "debit card", "security code", "cvv", "cvc", "expiry",
         "routing number", "account number"

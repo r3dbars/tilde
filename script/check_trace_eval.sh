@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
+TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/SteadyType/traces.jsonl}"
 START_LINE="${AUTOCOMPLETE_LAB_TRACE_START_LINE:-0}"
 END_LINE="${AUTOCOMPLETE_LAB_TRACE_END_LINE:-}"
 REQUIRE_APP="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP:-}"
@@ -16,13 +16,15 @@ REQUIRE_CONFIDENT_PLACEMENT="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_CONFIDENT_PLACEMEN
 REQUIRE_VISUAL_EVIDENCE="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE:-0}"
 MIN_USEFUL_RATE="${AUTOCOMPLETE_LAB_TRACE_MIN_USEFUL_RATE:-}"
 MAX_REPEATED_UNACCEPTED="${AUTOCOMPLETE_LAB_TRACE_MAX_REPEATED_UNACCEPTED:-}"
+REQUIRE_ACCEPTANCE_SLICE_PROOF="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_ACCEPTANCE_SLICE_PROOF:-0}"
+REQUIRE_UNDO_RECOVERABILITY="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_UNDO_RECOVERABILITY:-0}"
 
 if [[ ! -f "$TRACE_PATH" ]]; then
   echo "trace log missing: $TRACE_PATH" >&2
   exit 1
 fi
 
-python3 - "$TRACE_PATH" "$START_LINE" "$END_LINE" "$REQUIRE_APP" "$REQUIRE_EXPERIMENT_ARM" "$REQUIRE_SUPPORT_STATE" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" "$REQUIRE_CONFIDENT_PLACEMENT" "$REQUIRE_VISUAL_EVIDENCE" "$MIN_USEFUL_RATE" "$MAX_REPEATED_UNACCEPTED" <<'PY'
+python3 - "$TRACE_PATH" "$START_LINE" "$END_LINE" "$REQUIRE_APP" "$REQUIRE_EXPERIMENT_ARM" "$REQUIRE_SUPPORT_STATE" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" "$REQUIRE_CONFIDENT_PLACEMENT" "$REQUIRE_VISUAL_EVIDENCE" "$MIN_USEFUL_RATE" "$MAX_REPEATED_UNACCEPTED" "$REQUIRE_ACCEPTANCE_SLICE_PROOF" "$REQUIRE_UNDO_RECOVERABILITY" <<'PY'
 import json
 import os
 import sys
@@ -44,6 +46,8 @@ require_confident_placement = sys.argv[12].lower() in {"1", "true", "yes", "on"}
 require_visual_evidence = sys.argv[13].lower() in {"1", "true", "yes", "on"}
 min_useful_rate = int(sys.argv[14]) if sys.argv[14] else None
 max_repeated_unaccepted = int(sys.argv[15]) if sys.argv[15] else None
+require_acceptance_slice_proof = sys.argv[16].lower() in {"1", "true", "yes", "on"}
+require_undo_recoverability = sys.argv[17].lower() in {"1", "true", "yes", "on"}
 events = []
 with open(path, "r", encoding="utf-8") as handle:
     for line_number, line in enumerate(handle, start=1):
@@ -74,6 +78,10 @@ insertion_verified = [
     (index, event)
     for index, event in enumerate(events)
     if event.get("type") == "insertionVerified"
+]
+accepted_insertion_undone = [
+    event for event in events
+    if event.get("type") == "acceptedInsertionUndone"
 ]
 presented_by_id = {}
 presentations_by_id = defaultdict(list)
@@ -261,6 +269,9 @@ def safe_int(value, default=999999999):
     except (TypeError, ValueError):
         return default
 
+def rate_float(numerator, denominator):
+    return 0 if denominator == 0 else numerator / denominator
+
 def accepted_then_deleted(event):
     metadata = event.get("metadata") or {}
     return (
@@ -298,6 +309,8 @@ def overlay_flicker(event):
 def severe_failure(event):
     metadata = event.get("metadata") or {}
     return (
+        metadata.get("severe") == "true"
+        or
         event.get("type") in {"insertionFailed", "appDisabled"}
         or (event.get("type") == "caretGeometryFailed" and metadata.get("severe") == "true")
         or metadata.get("focusStealing") == "true"
@@ -543,6 +556,58 @@ def insertion_mode_reliability(events):
             bucket[1] += 1
     return buckets
 
+def is_one_word_accept(event):
+    metadata = event.get("metadata") or {}
+    return (
+        metadata.get("acceptMode") in {"tab", "acceptNextWord"}
+        or event.get("outcome") == "acceptNextWord"
+    )
+
+def is_full_accept(event):
+    metadata = event.get("metadata") or {}
+    return (
+        metadata.get("acceptMode") in {"full", "acceptAllVisible"}
+        or event.get("outcome") == "acceptAllVisible"
+    )
+
+def undo_recoverability(events):
+    accepted_by_app = Counter(event.get("appBundleIdentifier") or "unknown" for event in accepted)
+    verified_by_app = Counter(
+        event.get("appBundleIdentifier") or "unknown"
+        for _, event in insertion_verified
+    )
+    undone_by_app = defaultdict(list)
+    for event in accepted_insertion_undone:
+        undone_by_app[event.get("appBundleIdentifier") or "unknown"].append(event)
+
+    apps = sorted(set(accepted_by_app) | set(verified_by_app) | set(undone_by_app))
+    rows = []
+    for app in apps:
+        undone = undone_by_app[app]
+        native = [event for event in undone if (event.get("metadata") or {}).get("undoMechanism") == "nativeSingleEdit"]
+        rollback = [event for event in undone if (event.get("metadata") or {}).get("undoMechanism") == "appRollback"]
+        degraded = [event for event in undone if (event.get("metadata") or {}).get("undoMechanism") == "degraded"]
+        if native:
+            status = "nativeSingleEdit"
+        elif rollback:
+            status = "appRollback"
+        elif degraded:
+            status = "degraded"
+        else:
+            status = "missing"
+        rows.append({
+            "app": app,
+            "accepted": accepted_by_app[app],
+            "verified": verified_by_app[app],
+            "native": len(native),
+            "rollback": len(rollback),
+            "degraded": len(degraded),
+            "one_word_native": sum(1 for event in native if is_one_word_accept(event)),
+            "full_native": sum(1 for event in native if is_full_accept(event)),
+            "status": status,
+        })
+    return rows
+
 missing = []
 if not presented:
     missing.append("suggestionPresented")
@@ -555,6 +620,8 @@ visual_evidence_failures = []
 annoyance_failures = []
 insertion_failures = []
 geometry_failures = []
+acceptance_slice_failures = []
+undo_recoverability_failures = []
 
 def event_key(event):
     suggestion_id = event.get("suggestionID")
@@ -643,6 +710,53 @@ stale_mismatch_examples = []
 def metadata_for(event):
     metadata = event.get("metadata") or {}
     return metadata if isinstance(metadata, dict) else {}
+
+def int_metadata(metadata, key):
+    try:
+        return int(metadata.get(key) or "")
+    except (TypeError, ValueError):
+        return None
+
+def acceptance_slice_issues(event):
+    metadata = metadata_for(event)
+    issues = []
+    source = metadata.get("acceptanceSource")
+    if source not in {"visiblePrefix", "visibleFull"}:
+        issues.append("missing acceptanceSource")
+    if metadata.get("acceptanceMatchesVisiblePrefix") != "true":
+        issues.append("visible prefix mismatch")
+    if source == "visibleFull" and metadata.get("acceptanceMatchesFullVisible") != "true":
+        issues.append("full visible mismatch")
+    if int_metadata(metadata, "acceptedChars") is None:
+        issues.append("missing acceptedChars")
+    if int_metadata(metadata, "visibleBeforeAcceptChars") is None:
+        issues.append("missing visibleBeforeAcceptChars")
+    if int_metadata(metadata, "remainingVisibleAfterAcceptChars") is None:
+        issues.append("missing remainingVisibleAfterAcceptChars")
+    return issues
+
+acceptance_slice_proof = [
+    event
+    for event in accepted
+    if not acceptance_slice_issues(event)
+]
+
+if require_acceptance_slice_proof:
+    for event in accepted:
+        issues = acceptance_slice_issues(event)
+        if issues:
+            app = event.get("appBundleIdentifier") or "unknown"
+            suggestion_id = event.get("suggestionID") or "unknown"
+            acceptance_slice_failures.append(
+                f"{app}/{suggestion_id}: " + "; ".join(issues)
+            )
+
+if require_undo_recoverability:
+    for row in undo_recoverability(events):
+        if row["accepted"] > 0 and row["verified"] > 0 and row["status"] == "missing":
+            undo_recoverability_failures.append(
+                f"{row['app']}: missing same-slice acceptedInsertionUndone proof"
+            )
 
 def metadata_text(metadata, *keys):
     for key in keys:
@@ -1002,6 +1116,44 @@ search_form_leakage_count = sum(
 )
 overlay_flicker_count = sum(1 for event in events if overlay_flicker(event))
 accepted_then_deleted_count = sum(1 for event in events if accepted_then_deleted(event))
+hidden_events = [event for event in events if event.get("type") == "suggestionHidden"]
+explicit_dismissals = [event for event in hidden_events if event.get("reason") == "escape"]
+visible_lifetimes = sorted(
+    value
+    for event in hidden_events
+    for value in [
+        metadata_int(event, "lifetimeMs") or metadata_int(event, "visibleLifetimeMs")
+    ]
+    if value is not None
+)
+hide_latencies = sorted(
+    value
+    for event in hidden_events
+    for value in [metadata_int(event, "hideLatencyMs")]
+    if value is not None
+)
+active_dates = sorted(
+    parsed
+    for event in events
+    for parsed in [parse_date(event.get("timestamp"))]
+    if parsed
+)
+active_minutes = 0
+if active_dates:
+    active_minutes = max(1, int(((active_dates[-1] - active_dates[0]).total_seconds() + 59) // 60))
+
+def stale_or_wrong_context_event(event):
+    reason = event.get("reason") or ""
+    metadata = metadata_for(event)
+    return (
+        metadata.get("focusMismatch") == "true"
+        or reason == "wrong-app-or-field-before-accept"
+        or reason == "focus-changed"
+        or reason == "stale-after-keydown"
+        or reason.startswith("stale-")
+    )
+
+stale_or_wrong_context_events = [event for event in events if stale_or_wrong_context_event(event)]
 
 failure_reasons = [
     ("Duplicate text", duplicate_text_count, 100, "insertion trust"),
@@ -1090,6 +1242,25 @@ caret_failure_denominator = len(presented_by_id) + len(caret_geometry_failures)
 caret_failure_rate = 0 if not caret_failure_denominator else round((len(caret_geometry_failures) / caret_failure_denominator) * 100)
 print(f"Caret placement failures: {len(caret_geometry_failures)}")
 print(f"Caret placement failure rate: {caret_failure_rate}%")
+shown_per_active_minute = rate_float(len(presented_by_id), active_minutes)
+explicit_dismissals_per_shown = rate_float(len(explicit_dismissals), len(presented_by_id))
+typed_over_rate = rate_float(types["suggestionTypedOver"], len(presented_by_id))
+stale_wrong_context_rate = rate_float(len(stale_or_wrong_context_events), len(presented_by_id))
+print(f"Active writing minutes: {active_minutes}")
+print(f"Shown per active minute: {shown_per_active_minute:.2f}")
+print(
+    "Explicit dismissals per shown: "
+    f"{explicit_dismissals_per_shown:.2f} ({len(explicit_dismissals)}/{len(presented_by_id)})"
+)
+print(f"Typed-over rate: {typed_over_rate:.2f} ({types['suggestionTypedOver']}/{len(presented_by_id)})")
+print(
+    "Stale/wrong-context rate: "
+    f"{stale_wrong_context_rate:.2f} ({len(stale_or_wrong_context_events)}/{len(presented_by_id)})"
+)
+print(f"Visible lifetime p50: {percentile(visible_lifetimes, 0.50)}")
+print(f"Visible lifetime p95: {percentile(visible_lifetimes, 0.95)}")
+print(f"Hide latency p50: {percentile(hide_latencies, 0.50)}")
+print(f"Hide latency p95: {percentile(hide_latencies, 0.95)}")
 accept_rate = 0 if not presented_ids else round((len(accepted_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
 useful_rate = 0 if not presented_ids else round((len(useful_suggestion_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
 accepted_and_kept_rate_shown = 0 if not presented_ids else round((len(accepted_and_kept_suggestion_ids.intersection(presented_ids)) / len(presented_ids)) * 100)
@@ -1104,6 +1275,7 @@ full_accepts = [
 ]
 tab_accept_share = 0 if not accepted else round((len(tab_accepts) / len(accepted)) * 100)
 full_accept_share = 0 if not accepted else round((len(full_accepts) / len(accepted)) * 100)
+acceptance_slice_proof_rate = 0 if not accepted else round((len(acceptance_slice_proof) / len(accepted)) * 100)
 verified_inserts = types["insertionVerified"]
 failed_inserts = types["insertionFailed"]
 insert_attempts = verified_inserts + failed_inserts
@@ -1115,6 +1287,7 @@ print(f"Accepted-and-kept shown rate: {accepted_and_kept_rate_shown}%")
 print(f"Accepted-and-kept accepted rate: {accepted_and_kept_rate_accepted}%")
 print(f"Tab accept share: {tab_accept_share}%")
 print(f"Full accept share: {full_accept_share}%")
+print(f"Visible acceptance slice proof: {len(acceptance_slice_proof)}/{len(accepted)} ({acceptance_slice_proof_rate}%)")
 print(f"Insertion verification success: {verification_success}%")
 print(f"p50 latency: {percentile(latencies, 0.50)}")
 print(f"p90 latency: {percentile(latencies, 0.90)}")
@@ -1402,6 +1575,18 @@ if insertion_reliability:
         print(f"  {app} {mode}: {success}% ({verified} ok / {failed} failed)")
 else:
     print("  none")
+print("Undo recoverability by app:")
+undo_rows = undo_recoverability(events)
+if undo_rows:
+    for row in undo_rows:
+        print(
+            f"  {row['app']}: {row['status']} "
+            f"(accepted={row['accepted']} verified={row['verified']} "
+            f"native={row['native']} appRollback={row['rollback']} degraded={row['degraded']} "
+            f"oneWordNative={row['one_word_native']} fullNative={row['full_native']})"
+        )
+else:
+    print("  none")
 
 if require_app:
     app_events = [event for event in events if event.get("appBundleIdentifier") == require_app]
@@ -1468,4 +1653,8 @@ if annoyance_failures:
     raise SystemExit("suggestion annoyance guardrail failed: " + "; ".join(annoyance_failures))
 if geometry_failures:
     raise SystemExit("geometry proof guardrail failed: " + "; ".join(geometry_failures))
+if acceptance_slice_failures:
+    raise SystemExit("acceptance slice guardrail failed: " + "; ".join(acceptance_slice_failures))
+if undo_recoverability_failures:
+    raise SystemExit("undo recoverability guardrail failed: " + "; ".join(undo_recoverability_failures))
 PY

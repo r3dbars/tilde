@@ -5,7 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
+TEST_DEFAULTS_DOMAIN="bar.r3d.steadytype.typing-soak-self-test.$$"
+export AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN="$TEST_DEFAULTS_DOMAIN"
+trap 'defaults delete "$TEST_DEFAULTS_DOMAIN" >/dev/null 2>&1 || true; rm -rf "$TMP_DIR"' EXIT
 
 script/typing_performance_soak.sh --dry-run >"$TMP_DIR/default.txt"
 
@@ -75,6 +77,18 @@ if ! grep -F "AX warnings: separate non-fatal lane" "$TMP_DIR/default.txt" >/dev
   exit 1
 fi
 
+if ! grep -F "Primer: require a TextEdit suggestion before long typing" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain the TextEdit suggestion primer" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "TextEdit enablement: already allowed" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not report TextEdit enablement state" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
 script/typing_performance_soak.sh \
   --dry-run \
   --skip-build \
@@ -120,6 +134,28 @@ if ! grep -F "AX sample proof: require at least 3 focused-text poll samples" "$T
   cat "$TMP_DIR/strict.txt" >&2
   exit 1
 fi
+
+defaults write "$TEST_DEFAULTS_DOMAIN" DisabledBundleIdentifiers -array com.apple.TextEdit md.obsidian
+script/typing_performance_soak.sh --dry-run >"$TMP_DIR/textedit-disabled.txt"
+
+if ! grep -F "TextEdit enablement: would temporarily allow TextEdit before relaunch" "$TMP_DIR/textedit-disabled.txt" >/dev/null; then
+  echo "typing soak self-test did not explain temporary TextEdit enablement" >&2
+  cat "$TMP_DIR/textedit-disabled.txt" >&2
+  exit 1
+fi
+
+if script/typing_performance_soak.sh --dry-run --skip-build >/dev/null 2>"$TMP_DIR/textedit-disabled-skip-build.txt"; then
+  echo "typing soak self-test expected disabled TextEdit with --skip-build to fail" >&2
+  exit 1
+fi
+
+if ! grep -F -- "--skip-build cannot refresh the running app state" "$TMP_DIR/textedit-disabled-skip-build.txt" >/dev/null; then
+  echo "typing soak self-test did not explain disabled TextEdit plus --skip-build" >&2
+  cat "$TMP_DIR/textedit-disabled-skip-build.txt" >&2
+  exit 1
+fi
+
+defaults delete "$TEST_DEFAULTS_DOMAIN" DisabledBundleIdentifiers >/dev/null 2>&1 || true
 
 if script/typing_performance_soak.sh --dry-run --characters 99 >/dev/null 2>"$TMP_DIR/short.txt"; then
   echo "typing soak self-test expected very short soaks to fail" >&2

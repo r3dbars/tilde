@@ -14,6 +14,15 @@ struct SensitiveTextFieldPolicyTests {
         ))
     }
 
+    @Test("Blocks native secure text roles before text reads")
+    func blocksSecureRole() {
+        #expect(policy.isSensitive(
+            role: "AXSecureTextField",
+            subrole: nil,
+            fingerprint: FocusedElementFingerprint()
+        ))
+    }
+
     @Test("Blocks browser and Electron password-like fields")
     func blocksPasswordLikeFingerprints() {
         let fingerprint = FocusedElementFingerprint(
@@ -34,7 +43,7 @@ struct SensitiveTextFieldPolicyTests {
 
     @Test("Blocks token and API key fields")
     func blocksTokenFields() {
-        #expect(policy.isSensitive(
+        let assessment = policy.assessment(
             role: "AXTextArea",
             subrole: nil,
             fingerprint: FocusedElementFingerprint(
@@ -45,7 +54,39 @@ struct SensitiveTextFieldPolicyTests {
                 placeholder: "sk-...",
                 windowTitle: "Developer settings"
             )
-        ))
+        )
+
+        #expect(assessment.isSensitive)
+        #expect(assessment.category == .apiKeyLikeText)
+        #expect(assessment.traceMetadata["sensitiveSuppressionCategory"] == "api-key-like-text")
+    }
+
+    @Test("Classifies required beta sensitive categories")
+    func classifiesRequiredBetaSensitiveCategories() {
+        let cases: [(SensitiveFieldProofCategory, FocusedElementFingerprint)] = [
+            (.otp, FocusedElementFingerprint(placeholder: "One time code", windowTitle: "Sign in")),
+            (.payment, FocusedElementFingerprint(identifier: "card-number", placeholder: "Credit card", windowTitle: "Checkout")),
+            (.login, FocusedElementFingerprint(identifier: "username", placeholder: "Username", windowTitle: "Login")),
+            (.passwordManager, FocusedElementFingerprint(title: "1Password", placeholder: "Search 1Password", windowTitle: "1Password")),
+            (.privatePrompt, FocusedElementFingerprint(placeholder: "Private prompt", windowTitle: "Private chat")),
+            (.privateSearch, FocusedElementFingerprint(placeholder: "Private search", windowTitle: "Private Browsing"))
+        ]
+
+        for (category, fingerprint) in cases {
+            let assessment = policy.assessment(role: "AXTextField", subrole: nil, fingerprint: fingerprint)
+            #expect(assessment.isSensitive)
+            #expect(assessment.category == category)
+        }
+    }
+
+    @Test("Sensitive proof harness keeps all beta fixtures silent")
+    func proofHarnessKeepsAllBetaFixturesSilent() {
+        let results = SensitiveFieldProofHarness().run()
+        let categories = Set(results.map(\.fixture.category))
+
+        #expect(results.allSatisfy { $0.isSilent })
+        #expect(categories == Set(SensitiveFieldProofCategory.allCases))
+        #expect(results.allSatisfy { $0.traceMetadata["rawTextIncluded"] == "false" })
     }
 
     @Test("Allows ordinary writing fields")

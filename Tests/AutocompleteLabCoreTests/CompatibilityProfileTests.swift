@@ -23,10 +23,11 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "md.obsidian")?.appFamily == .electron)
         #expect(store.profile(for: "md.obsidian")?.anchorLadder == [.caret])
         #expect(store.profile(for: "md.obsidian")?.supportLevel == .yellow)
-        #expect(store.profile(for: "md.obsidian")?.insertionMode == .axThenKeyEvents)
+        #expect(store.profile(for: "md.obsidian")?.insertionMode == .axValueReplacement)
         #expect(store.profile(for: "md.obsidian")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "md.obsidian")?.suppressesAfterInsertionFailure == false)
         #expect(store.profile(for: "md.obsidian")?.fieldIdentityMode == .stableBounds)
+        #expect(store.profile(for: "md.obsidian")?.allowsDescendantTextFallback == true)
         #expect(store.profile(for: "md.obsidian")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "md.obsidian")?.allowsSyntheticCaretPlacement == true)
         #expect(store.profile(for: "com.apple.mail")?.displayName == "Mail")
@@ -38,13 +39,29 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.mail")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "com.apple.mail")?.allowsDescendantTextFallback == true)
         #expect(store.profile(for: "com.apple.mail")?.canPresentSuggestions == false)
+        #expect(store.profile(for: "com.openai.atlas")?.displayName == "ChatGPT Atlas")
+        #expect(store.profile(for: "com.openai.atlas")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.openai.atlas")?.renderMode == .disabled)
+        #expect(store.profile(for: "com.openai.atlas")?.insertionMode == .disabled)
+        #expect(store.profile(for: "com.openai.atlas")?.supportsOneWordAcceptance == false)
+        #expect(store.profile(for: "com.openai.atlas")?.supportsFullAcceptance == false)
+        #expect(store.profile(for: "com.openai.atlas")?.isSensitive == true)
+        #expect(store.profile(for: "com.openai.atlas")?.promptAppSafetyMode == .disabled)
+        #expect(store.profile(for: "com.openai.atlas")?.canPresentSuggestions == false)
+        #expect(store.profile(for: "com.openai.chat")?.displayName == "ChatGPT")
+        #expect(store.profile(for: "com.openai.chat")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.openai.chat")?.renderMode == .disabled)
+        #expect(store.profile(for: "com.openai.chat")?.insertionMode == .disabled)
+        #expect(store.profile(for: "com.openai.chat")?.promptAppSafetyMode == .disabled)
+        #expect(store.profile(for: "com.openai.ChatGPT")?.displayName == "ChatGPT")
+        #expect(store.profile(for: "com.openai.ChatGPT")?.promptAppSafetyMode == .disabled)
         #expect(store.profile(for: "com.google.Chrome")?.displayName == "Chrome")
         #expect(store.profile(for: "com.google.Chrome")?.appFamily == .chromium)
         #expect(store.profile(for: "com.google.Chrome")?.anchorLadder == [.caret, .field])
         #expect(store.profile(for: "com.google.Chrome")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.google.Chrome")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackRenderMode == .floatingMirror)
-        #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .keyEvents)
+        #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .axThenKeyEvents)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.google.Chrome")?.allowsDescendantTextFallback == true)
         #expect(store.profile(for: "com.google.Chrome")?.allowsSyntheticCaretPlacement == false)
@@ -57,10 +74,14 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.insertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.openai.codex")?.fallbackInsertionMode == nil)
         #expect(store.profile(for: "com.openai.codex")?.fieldIdentityMode == .stableBounds)
+        #expect(store.profile(for: "com.openai.codex")?.anchorLadder == [.caret])
         #expect(store.profile(for: "com.openai.codex")?.supportsOneWordAcceptance == true)
         #expect(store.profile(for: "com.openai.codex")?.supportsFullAcceptance == false)
         #expect(store.profile(for: "com.openai.codex")?.requiresNoSubmitAcceptanceProof == true)
+        #expect(store.profile(for: "com.openai.codex")?.canPresentSuggestions == true)
         #expect(store.profile(for: "com.openai.codex")?.allowsDetachedSuggestions == false)
+        #expect(store.profile(for: "com.openai.codex")?.isSensitive == false)
+        #expect(store.profile(for: "com.openai.codex")?.promptAppSafetyMode == .wordOnly)
         #expect(store.profile(for: "com.anthropic.claude-code")?.displayName == "Claude Code")
         #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .diagnosticsOnly)
         #expect(store.profile(for: "com.anthropic.claude-code")?.renderMode == .disabled)
@@ -74,6 +95,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.anthropic.claude-code")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claude-code")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claude-code")?.isSensitive == true)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.promptAppSafetyMode == .disabled)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.displayName == "Claude")
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.renderMode == .inlineAdjacent)
@@ -84,9 +106,23 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportsOneWordAcceptance == true)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportsFullAcceptance == false)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.requiresNoSubmitAcceptanceProof == true)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.canPresentSuggestions == true)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.suppressesAfterInsertionFailure == true)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.allowsDetachedSuggestions == false)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.promptAppSafetyMode == .wordOnly)
         #expect(store.profile(for: "com.apple.Safari")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.apple.Safari")?.promptAppSafetyMode == .disabled)
         #expect(store.profile(for: "com.tinyspeck.slackmacgap")?.appFamily == .electron)
+        #expect(store.profile(for: "com.tinyspeck.slackmacgap")?.promptAppSafetyMode == .disabled)
+        #expect(store.profile(for: "ru.keepcoder.Telegram")?.displayName == "Telegram")
+        #expect(store.profile(for: "ru.keepcoder.Telegram")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "ru.keepcoder.Telegram")?.renderMode == .disabled)
+        #expect(store.profile(for: "ru.keepcoder.Telegram")?.promptAppSafetyMode == .disabled)
+        #expect(store.profile(for: "notion.id")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "notion.id")?.canPresentSuggestions == false)
+        #expect(store.profile(for: "com.hnc.Discord")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.hnc.DiscordPTB")?.canPresentSuggestions == false)
+        #expect(store.profile(for: "com.hnc.DiscordCanary")?.canPresentSuggestions == false)
         #expect(store.profiles["com.microsoft.VSCode"]?.anchorLadder == [.none])
         #expect(store.profiles["com.todesktop.230313mzl4w4u92"]?.renderMode == .disabled)
     }
@@ -126,7 +162,8 @@ struct CompatibilityProfileTests {
             "dev.warp.Warp",
             "com.mitchellh.ghostty",
             "net.kovidgoyal.kitty",
-            "org.alacritty"
+            "org.alacritty",
+            "com.github.wez.wezterm"
         ]
 
         for bundleIdentifier in highRiskBundleIdentifiers {
@@ -143,12 +180,20 @@ struct CompatibilityProfileTests {
         #expect(!store.allows(bundleIdentifier: "com.openai.atlas"))
     }
 
+    @Test("MVP profiles do not allow unknown field kinds by default")
+    func mvpProfilesDoNotAllowUnknownFieldKindsByDefault() {
+        for profile in CompatibilityProfileStore.mvp.profiles.values {
+            #expect(!profile.allowsUnknownFieldKind)
+        }
+    }
+
     @Test("Support status explains unsupported and denylisted apps")
     func supportStatusExplainsBlockedApps() {
         let store = CompatibilityProfileStore.mvp
 
         #expect(store.supportStatus(for: "com.apple.Terminal") == .denylisted)
-        #expect(store.supportStatus(for: "com.openai.atlas") == .unsupported)
+        #expect(store.supportStatus(for: "com.openai.atlas").summary == "diagnostics only: ChatGPT Atlas")
+        #expect(store.supportStatus(for: "com.example.UnknownEditor") == .unsupported)
         #expect(store.supportStatus(for: "com.apple.TextEdit").summary == "green: TextEdit")
         #expect(store.supportStatus(for: "com.apple.mail").summary == "diagnostics only: Mail")
     }
@@ -180,11 +225,28 @@ struct CompatibilityProfileTests {
         #expect(diagnosticsOnly.menuText(appDisplayName: "Mail", isEnabled: true) == "Mail diagnostics-only")
         #expect(!diagnosticsOnly.canToggleSuggestions)
 
-        let unsupported = store.supportStatus(for: "com.openai.atlas")
+        let atlas = store.supportStatus(for: "com.openai.atlas")
+        #expect(atlas.supportLevel == .diagnosticsOnly)
+        #expect(atlas.userFacingSummary == "Diagnostics-only: ChatGPT Atlas")
+        #expect(atlas.userFacingReason == "Atlas can contain private browser text and prompt chats; no no-submit proof exists.")
+        #expect(atlas.menuText(appDisplayName: "Atlas", isEnabled: true) == "Atlas diagnostics-only")
+        #expect(!atlas.canToggleSuggestions)
+
+        let chatGPT = store.supportStatus(for: "com.openai.chat")
+        #expect(chatGPT.supportLevel == .diagnosticsOnly)
+        #expect(chatGPT.userFacingSummary == "Diagnostics-only: ChatGPT")
+        #expect(
+            chatGPT.userFacingReason
+                == "ChatGPT prompt composers can submit, attach context, and expose tools; no exact-version no-submit proof exists."
+        )
+        #expect(chatGPT.menuText(appDisplayName: "ChatGPT", isEnabled: true) == "ChatGPT diagnostics-only")
+        #expect(!chatGPT.canToggleSuggestions)
+
+        let unsupported = store.supportStatus(for: "com.example.UnknownEditor")
         #expect(unsupported.supportLevel == .unsupported)
         #expect(unsupported.userFacingSummary == "Unsupported: not tested yet")
         #expect(unsupported.userFacingReason == "No compatibility profile yet.")
-        #expect(unsupported.menuText(appDisplayName: "Atlas", isEnabled: true) == "Atlas unsupported")
+        #expect(unsupported.menuText(appDisplayName: "Unknown", isEnabled: true) == "Unknown unsupported")
         #expect(!unsupported.canToggleSuggestions)
     }
 
@@ -195,7 +257,7 @@ struct CompatibilityProfileTests {
         #expect(profile.debugSummary.contains("primary render=inlineAdjacent"))
         #expect(profile.debugSummary.contains("support=yellow"))
         #expect(profile.debugSummary.contains("family=chromium"))
-        #expect(profile.debugSummary.contains("insert=keyEvents"))
+        #expect(profile.debugSummary.contains("insert=axThenKeyEvents"))
         #expect(profile.debugSummary.contains("fallback render=floatingMirror"))
         #expect(profile.debugSummary.contains("insert=axValueReplacement"))
         #expect(profile.debugSummary.contains("field=accessibilityElement"))
@@ -214,11 +276,15 @@ struct CompatibilityProfileTests {
 
         #expect(InsertionModePlan.modes(for: textEdit) == [.axSelectedText, .axValueReplacement])
         #expect(InsertionModePlan.modes(for: notes) == [.axThenKeyEvents, .keyEvents])
-        #expect(InsertionModePlan.modes(for: chrome) == [.keyEvents, .axValueReplacement])
+        #expect(InsertionModePlan.modes(for: chrome) == [.axThenKeyEvents, .axValueReplacement])
         #expect(InsertionModePlan.modes(for: codex) == [.axValueReplacement])
         #expect(InsertionModePlan.modes(for: claudeCode) == [])
         #expect(InsertionModePlan.modes(for: claude) == [.axValueReplacement])
         #expect(InsertionModePlan.modes(for: mail) == [])
+
+        for profile in CompatibilityProfileStore.mvp.profiles.values {
+            #expect(!InsertionModePlan.modes(for: profile).contains(.clipboardFallbackOptIn))
+        }
     }
 
     @Test("Unproven real app profiles fail closed on risky affordances")
@@ -233,28 +299,93 @@ struct CompatibilityProfileTests {
         #expect(codex.supportsOneWordAcceptance == true)
         #expect(codex.supportsFullAcceptance == false)
         #expect(codex.requiresNoSubmitAcceptanceProof == true)
+        #expect(codex.canPresentSuggestions == true)
         #expect(claudeCode.supportsOneWordAcceptance == false)
         #expect(claudeCode.supportsFullAcceptance == false)
         #expect(claudeCode.canPresentSuggestions == false)
-        #expect(claudeCode.isSensitive == true)
         #expect(claude.supportsOneWordAcceptance == true)
         #expect(claude.supportsFullAcceptance == false)
         #expect(claude.requiresNoSubmitAcceptanceProof == true)
+        #expect(claude.canPresentSuggestions == true)
 
-        for promptProfile in [codex, claude] {
-            #expect(promptProfile.supportReason.contains("one-word no-submit proof"))
-            #expect(promptProfile.notes.contains("Requires one-word no-submit proof"))
-            #expect(promptProfile.notes.contains("separate full-accept no-submit proof"))
-            #expect(promptProfile.supportsOneWordAcceptance == true)
-            #expect(promptProfile.supportsFullAcceptance == false)
-            #expect(promptProfile.allowsDetachedSuggestions == false)
-            #expect(promptProfile.allowsSyntheticCaretPlacement == false)
-            #expect(promptProfile.allowsStrictVisualProofSyntheticCaretPlacement == true)
-        }
+        #expect(codex.supportReason.contains("dogfood-only"))
+        #expect(codex.notes.contains("one-word no-submit proof"))
+        #expect(codex.supportsFullAcceptance == false)
+        #expect(codex.allowsDetachedSuggestions == false)
+        #expect(codex.allowsSyntheticCaretPlacement == false)
+        #expect(codex.isSensitive == false)
+        #expect(codex.promptAppSafetyMode == .wordOnly)
+        #expect(codex.allowsStrictVisualProofSyntheticCaretPlacement == true)
+        #expect(claude.notes.contains("Same-slice one-word no-submit proof exists"))
+        #expect(claude.promptAppSafetyMode == .wordOnly)
+        #expect(claude.allowsStrictVisualProofSyntheticCaretPlacement == true)
 
         #expect(claudeCode.supportReason.contains("terminal host"))
         #expect(claudeCode.notes.contains("terminal-host adapter"))
         #expect(claudeCode.allowsStrictVisualProofSyntheticCaretPlacement == false)
+    }
+
+    @Test("Required prompt and chat apps are disabled except Codex dogfood")
+    func requiredPromptAndChatAppsAreDisabledExceptCodexDogfood() throws {
+        let store = CompatibilityProfileStore.mvp
+        let codex = try #require(store.profile(for: "com.openai.codex"))
+        #expect(codex.supportLevel == .yellow)
+        #expect(codex.renderMode == .inlineAdjacent)
+        #expect(codex.insertionMode == .axValueReplacement)
+        #expect(codex.supportsOneWordAcceptance == true)
+        #expect(codex.supportsFullAcceptance == false)
+        #expect(codex.promptAppSafetyMode == .wordOnly)
+        #expect(codex.canPresentSuggestions == true)
+
+        let disabledPromptApps = [
+            "com.openai.chat",
+            "com.openai.ChatGPT",
+            "com.openai.atlas",
+            "com.anthropic.claude-code",
+            "com.tinyspeck.slackmacgap",
+            "ru.keepcoder.Telegram"
+        ]
+
+        for bundleIdentifier in disabledPromptApps {
+            let profile = try #require(store.profile(for: bundleIdentifier))
+
+            #expect(profile.supportLevel == .diagnosticsOnly)
+            #expect(profile.renderMode == .disabled)
+            #expect(profile.insertionMode == .disabled)
+            #expect(profile.supportsOneWordAcceptance == false)
+            #expect(profile.supportsFullAcceptance == false)
+            #expect(profile.promptAppSafetyMode == .disabled)
+            #expect(profile.canPresentSuggestions == false)
+        }
+    }
+
+    @Test("Safety summaries expose the practical current-app stance")
+    func safetySummariesExposePracticalCurrentAppStance() throws {
+        let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let notes = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.Notes"))
+        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
+        let mailStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.apple.mail")
+        let atlasStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.openai.atlas")
+        let unsupportedStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.example.UnknownEditor")
+
+        #expect(
+            textEdit.userFacingSafetySummary
+                == "Inline when caret proof is trusted; mirror fallback if inline is unsafe."
+        )
+        #expect(
+            notes.userFacingSafetySummary
+                == "Inline when caret proof is trusted; mirror fallback if inline is unsafe. Detached field/window suggestions are disabled. Insertion fails closed if the primary method is not verified."
+        )
+        #expect(
+            codex.userFacingSafetySummary
+                == "Inline when caret proof is trusted; mirror fallback if inline is unsafe. Detached field/window suggestions are disabled. Full accept stays off until no-submit proof exists. Prompt safety mode is word-only. Insertion fails closed if the primary method is not verified."
+        )
+        #expect(mailStatus.userFacingSafetySummary == "Suggestions stay off here.")
+        #expect(atlasStatus.userFacingSafetySummary == "Suggestions stay off here.")
+        #expect(
+            unsupportedStatus.userFacingSafetySummary
+                == "Suggestions are intentionally off until this app has a compatibility profile."
+        )
     }
 
     @Test("Insertion mode plans can skip failed primary modes")
@@ -264,8 +395,8 @@ struct CompatibilityProfileTests {
 
         #expect(InsertionModePlan.modes(for: notes, skipping: [.axThenKeyEvents]) == [.keyEvents])
         #expect(InsertionModePlan.modes(for: notes, skipping: [.axThenKeyEvents, .keyEvents]) == [])
-        #expect(InsertionModePlan.modes(for: chrome, skipping: [.keyEvents]) == [.axValueReplacement])
-        #expect(InsertionModePlan.modes(for: chrome, skipping: [.keyEvents, .axValueReplacement]) == [])
+        #expect(InsertionModePlan.modes(for: chrome, skipping: [.axThenKeyEvents]) == [.axValueReplacement])
+        #expect(InsertionModePlan.modes(for: chrome, skipping: [.axThenKeyEvents, .axValueReplacement]) == [])
     }
 
     @Test("Notes insertion can fall back while still failing closed after verification")
@@ -280,8 +411,8 @@ struct CompatibilityProfileTests {
         #expect(InsertionModePlan.modes(for: notes, skipping: [.axThenKeyEvents]) == [.keyEvents])
     }
 
-    @Test("Render mode plans fall back to mirror when inline bounds are unavailable")
-    func renderModePlansFallbackToMirrorWhenInlineBoundsAreUnavailable() throws {
+    @Test("Render mode plans respect Codex dogfood and disabled prompt targets")
+    func renderModePlansRespectCodexDogfoodAndDisabledPromptTargets() throws {
         let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
         let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
         let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))

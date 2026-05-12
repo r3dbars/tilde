@@ -61,9 +61,10 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             fieldClassification: classification,
             acceptedTextStyleSketch: sketch,
+            visiblePageContext: VisiblePageContext(text: "Launch Plan\nKeep this local and fast."),
             maxVisibleWords: 7,
             requestMode: .phraseContinuation,
-            suggestionAggressiveness: .quiet
+            suggestionTuning: SuggestionTuning(aggressiveness: .quiet)
         ))
 
         #expect(styleKey.behaviorProfile == AutocompleteBehaviorProfileID.bullets.rawValue)
@@ -75,6 +76,7 @@ struct SuggestionOrchestratorTests {
         #expect(orchestration.request.behaviorProfileID == .bullets)
         #expect(orchestration.request.acceptedTextStyleSketch == sketch)
         #expect(orchestration.request.documentTitleShape?.fileExtension == "md")
+        #expect(orchestration.request.visiblePageContext?.text.contains("Launch Plan") == true)
         #expect(orchestration.request.maxVisibleWords == 7)
         #expect(orchestration.request.mode == .phraseContinuation)
         #expect(orchestration.fieldIdentityDescription == field.traceDescription)
@@ -82,6 +84,10 @@ struct SuggestionOrchestratorTests {
         #expect(orchestration.requestMetadata["fieldKind"] == "multilineCompose")
         #expect(orchestration.requestMetadata["fieldKindReason"] == "test-compose")
         #expect(orchestration.requestMetadata["suggestionAggressiveness"] == "quiet")
+        #expect(orchestration.requestMetadata["suggestionAggressivenessLevel"] == "1")
+        #expect(orchestration.requestMetadata["suggestionMaxVisibleWords"] == "8")
+        #expect(orchestration.requestMetadata["visiblePageContextSource"] == "screen_ocr")
+        #expect(orchestration.requestMetadata["visiblePageContextCaptureScope"] == "visible_screen")
         #expect(orchestration.requestMetadata["runtimeSessionCacheDecision"] == "reset")
         #expect(orchestration.requestMetadata["runtimeSessionCacheResetReason"] == "no-prior-request")
         #expect(orchestrator.allows(orchestration.ticket))
@@ -104,9 +110,10 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             fieldClassification: classification,
             acceptedTextStyleSketch: nil,
+            visiblePageContext: nil,
             maxVisibleWords: 5,
             requestMode: .phraseContinuation,
-            suggestionAggressiveness: .normal
+            suggestionTuning: SuggestionTuning(aggressiveness: .normal)
         ))
         let second = orchestrator.beginRequest(SuggestionRequestInput(
             context: makeContext(textBeforeCursor: "The plan is", textAfterCursor: ""),
@@ -114,9 +121,10 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             fieldClassification: classification,
             acceptedTextStyleSketch: nil,
+            visiblePageContext: nil,
             maxVisibleWords: 5,
             requestMode: .phraseContinuation,
-            suggestionAggressiveness: .normal
+            suggestionTuning: SuggestionTuning(aggressiveness: .normal)
         ))
 
         #expect(second.runtimeSessionCacheDecision.canReuse)
@@ -201,6 +209,53 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Empty final preserves visible streaming suggestion for same request")
+    func emptyFinalPreservesVisibleStreamingSuggestionForSameRequest() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: "com.example.editor",
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let ticket = orchestrator.beginRequest(
+            CompletionRequest(textBeforeCursor: "Can we", suggestionID: "stream")
+        ).ticket
+
+        #expect(orchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
+            suggestionID: "stream",
+            currentSuggestionID: "stream",
+            ticket: ticket,
+            fieldIdentity: field,
+            currentFieldIdentity: field,
+            hasVisibleSuggestion: true
+        ))
+        #expect(!orchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
+            suggestionID: "stream",
+            currentSuggestionID: "other",
+            ticket: ticket,
+            fieldIdentity: field,
+            currentFieldIdentity: field,
+            hasVisibleSuggestion: true
+        ))
+        #expect(!orchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
+            suggestionID: "stream",
+            currentSuggestionID: "stream",
+            ticket: ticket,
+            fieldIdentity: field,
+            currentFieldIdentity: nil,
+            hasVisibleSuggestion: true
+        ))
+        #expect(!orchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
+            suggestionID: "stream",
+            currentSuggestionID: "stream",
+            ticket: ticket,
+            fieldIdentity: field,
+            currentFieldIdentity: field,
+            hasVisibleSuggestion: false
+        ))
+    }
+
+    @MainActor
     @Test("Invalidating clears the current request and blocks stale tickets")
     func invalidateClearsCurrentRequestAndBlocksTickets() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
@@ -228,6 +283,50 @@ struct SuggestionOrchestratorTests {
         #expect(selection.candidateCount == 1)
         #expect(selection.traceMetadata["candidateSelectionSource"] == "fast-word-completion")
         #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+    }
+
+    @MainActor
+    @Test("Fast word selection can opt into predictive fallback")
+    func fastWordSelectionPredictiveFallback() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+
+        let quietSelection = orchestrator.fastWordSelection(
+            for: "Smoke proof feels",
+            recentWords: []
+        )
+        let proactiveSelection = orchestrator.fastWordSelection(
+            for: "Smoke proof feels",
+            recentWords: [],
+            allowPredictiveFallback: true
+        )
+
+        #expect(quietSelection.suggestion == nil)
+        #expect(proactiveSelection.suggestion?.visibleText == " instant")
+        #expect(proactiveSelection.traceMetadata["candidateSelectionSource"] == "predictive-word-fallback")
+    }
+
+    @MainActor
+    @Test("Fast phrase selection predicts common continuations when enabled")
+    func fastPhraseSelectionPredictiveFallback() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+
+        let disabledSelection = orchestrator.fastPhraseSelection(
+            for: "Quick note: I just wanted to",
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4
+        )
+        let enabledSelection = orchestrator.fastPhraseSelection(
+            for: "Quick note: I just wanted to",
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4,
+            allowPredictiveFallback: true
+        )
+
+        #expect(disabledSelection.suggestion == nil)
+        #expect(disabledSelection.suppressionReason == "disabled")
+        #expect(enabledSelection.suggestion?.visibleText == " follow up")
+        #expect(enabledSelection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+        #expect(enabledSelection.traceMetadata["predictivePhraseMatch"] == "i just wanted to")
     }
 
     @MainActor
@@ -532,7 +631,7 @@ struct SuggestionOrchestratorTests {
         let context = makeContext(
             textBeforeCursor: "const value = mon",
             textAfterCursor: "",
-            windowTitle: "Autocomplete Lab Chrome Real Monaco Smoke",
+            windowTitle: "SteadyType Chrome Real Monaco Smoke",
             caretIsSynthetic: true
         )
 
@@ -692,6 +791,7 @@ private func makeContext(
         caretRect: CGRect(x: 10, y: 10, width: 1, height: 18),
         elementRect: CGRect(x: 0, y: 0, width: 400, height: 200),
         windowRect: CGRect(x: 0, y: 0, width: 500, height: 300),
+        windowIdentifier: 42,
         textLineRect: CGRect(x: 10, y: 10, width: 120, height: 18),
         textStyle: nil,
         isSecure: false,
