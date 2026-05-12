@@ -89,8 +89,8 @@ if script/select_latency_window.py \
   exit 1
 fi
 
-if ! grep -F "no sampled default runtime launch meets sample requirements" "$TMP_DIR/token-only-model.err" >/dev/null; then
-  echo "latency window self-test did not explain the undersampled launch set" >&2
+if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/token-only-model.err" >/dev/null; then
+  echo "latency window self-test did not keep partial latest launch proof red" >&2
   cat "$TMP_DIR/token-only-model.err" >&2
   exit 1
 fi
@@ -145,34 +145,20 @@ cat >>"$TRACE_LOG" <<'LOG'
 {"timestamp":"2026-05-12T10:12:02Z","sessionID":"session","suggestionID":"future-slow","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":2000,"metadata":{"behaviorProfile":"docs_prose"}}
 LOG
 
-WINDOW_WITH_PARTIAL_LATEST="$(
-  script/select_latency_window.py \
-    --diagnostics-log "$DIAGNOSTICS_LOG" \
-    --trace-log "$TRACE_LOG" \
-    --min-first-visible-samples 2 \
-    --min-model-samples 2 2>"$TMP_DIR/partial-latest.err"
-)"
-
-if ! grep -F "AUTOCOMPLETE_LAB_TRACE_END_LINE=10" <<<"$WINDOW_WITH_PARTIAL_LATEST" >/dev/null; then
-  echo "latency window self-test did not bound the selected window before partial latest samples" >&2
-  cat "$TMP_DIR/partial-latest.err" >&2
-  echo "$WINDOW_WITH_PARTIAL_LATEST" >&2
+if script/select_latency_window.py \
+  --diagnostics-log "$DIAGNOSTICS_LOG" \
+  --trace-log "$TRACE_LOG" \
+  --min-first-visible-samples 2 \
+  --min-model-samples 2 2>"$TMP_DIR/partial-latest.err" >/dev/null; then
+  echo "latency window self-test expected partial latest launch samples to fail" >&2
   exit 1
 fi
 
-env $WINDOW_WITH_PARTIAL_LATEST \
-  script/latency_benchmark_report.py \
-    --diagnostics-log "$DIAGNOSTICS_LOG" \
-    --trace-log "$TRACE_LOG" \
-    --beta-gate \
-    --require-first-visible-samples 2 \
-    --require-model-samples 2 \
-    --require-event-tap-samples 0 \
-    --require-ax-samples 1 \
-    --max-first-visible-p95-ms 250 \
-    --max-first-visible-p99-ms 250 \
-    --max-first-token-p95-ms 650 \
-    --max-total-generation-p95-ms 850 >/dev/null
+if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/partial-latest.err" >/dev/null; then
+  echo "latency window self-test did not explain the partial latest launch" >&2
+  cat "$TMP_DIR/partial-latest.err" >&2
+  exit 1
+fi
 
 CROSS_DIAGNOSTICS_LOG="$TMP_DIR/cross-override-diagnostics.log"
 CROSS_TRACE_LOG="$TMP_DIR/cross-override-traces.jsonl"
