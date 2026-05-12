@@ -76,17 +76,18 @@ unregister_stale_app_bundles() {
 
 quarantine_stale_app_bundles() {
   local bundle
-  local disabled
-  local timestamp
-  timestamp="$(date +%Y%m%d%H%M%S)"
 
   while IFS= read -r bundle; do
     [[ -z "$bundle" || "$bundle" == "$APP_BUNDLE" ]] && continue
     if [[ -x "$LSREGISTER" ]]; then
       "$LSREGISTER" -u "$bundle" >/dev/null 2>&1 || true
     fi
-    disabled="${bundle}.disabled-${timestamp}-$$"
-    mv "$bundle" "$disabled" >/dev/null 2>&1 || true
+    if [[ "${AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES:-}" =~ ^(1|true|yes|on)$ ]]; then
+      local disabled timestamp
+      timestamp="$(date +%Y%m%d%H%M%S)"
+      disabled="${bundle}.disabled-${timestamp}-$$"
+      mv "$bundle" "$disabled" >/dev/null 2>&1 || true
+    fi
   done < <(stale_app_bundles) || true
 
   return 0

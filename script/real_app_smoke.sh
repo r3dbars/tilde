@@ -938,7 +938,8 @@ guard CommandLine.arguments.count == 2,
 app.activate(options: [.activateAllWindows])
 SWIFT
 
-  osascript - "$target_pid" <<'APPLESCRIPT' >/dev/null 2>&1 || true
+  local activation_pid
+  osascript - "$target_pid" <<'APPLESCRIPT' >/dev/null 2>&1 &
 on run argv
   set targetPID to (item 1 of argv) as integer
   tell application "System Events"
@@ -953,6 +954,8 @@ on run argv
   end tell
 end run
 APPLESCRIPT
+  activation_pid="$!"
+  wait_for_background_process "$activation_pid" 2 "System Events activation for pid $target_pid" >/dev/null 2>&1 || true
 }
 
 assert_frontmost_app() {
