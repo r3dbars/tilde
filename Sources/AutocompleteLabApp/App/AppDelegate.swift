@@ -67,6 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
     private var acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
     private var activeAppProofBundleIdentifiers: Set<String> = []
+    private var environmentProofModeScopePolicy = ProofModeScopePolicy()
     private var appProofExpirationTasks: [String: Task<Void, Never>] = [:]
     private let annoyanceSuppressor = AnnoyanceSuppressorActor()
     private let traceScreenshotCaptureCoordinator = TraceScreenshotCaptureCoordinator()
@@ -1004,6 +1005,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for app: RunningApplicationInfo,
         profile: CompatibilityProfile
     ) -> Bool {
+        guard environmentProofModeScopePolicy.allows(
+            appBundleIdentifier: app.bundleIdentifier,
+            suggestionBundleIdentifier: profile.bundleIdentifier
+        ) else {
+            return false
+        }
+
         if isClaudeCodeTerminalHostProof(profile: profile, hostBundleIdentifier: app.bundleIdentifier) {
             return activeAppProofBundleIdentifiers.contains(
                 ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
@@ -9381,9 +9389,15 @@ private extension AppDelegate {
 
     func loadProofModeOverrides() {
         let environment = ProcessInfo.processInfo.environment
+        let environmentProofBundleIdentifiers = Set(
+            DisabledAppSelection.parseBundleIdentifierList(environment[Self.proofModeBundleIDsEnvironmentKey])
+        )
         let proofBundleIdentifiers = Set(
             DisabledAppSelection.parseBundleIdentifierList(environment[Self.temporarilyEnabledBundleIDsEnvironmentKey])
-                + DisabledAppSelection.parseBundleIdentifierList(environment[Self.proofModeBundleIDsEnvironmentKey])
+                + Array(environmentProofBundleIdentifiers)
+        )
+        environmentProofModeScopePolicy = ProofModeScopePolicy(
+            scopedBundleIdentifiers: environmentProofBundleIdentifiers
         )
         guard !proofBundleIdentifiers.isEmpty else {
             return

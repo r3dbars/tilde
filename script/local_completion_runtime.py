@@ -11,7 +11,16 @@ from typing import Optional
 
 DEFAULT_LITERT_REPO = "litert-community/gemma-4-E2B-it-litert-lm"
 DEFAULT_LITERT_MODEL = "gemma-4-E2B-it.litertlm"
-DEFAULT_MLX_MODEL = "mlx-community/Llama-3.2-3B-Instruct-4bit"
+DEFAULT_MODEL_NAME = "Qwen3.5 4B"
+DEFAULT_MLX_MODEL = "mlx-community/Qwen3.5-4B-MLX-4bit"
+MLX_MODEL_BY_NAME = {
+    "gemma 4 e2b": "mlx-community/gemma-4-E2B-it-4bit",
+    "gemma 4 e4b": "mlx-community/gemma-4-e4b-4bit",
+    "qwen3 0.6b": "mlx-community/Qwen3-0.6B-4bit",
+    "qwen3 1.7b": "mlx-community/Qwen3-1.7B-4bit",
+    "qwen3.5 4b": "mlx-community/Qwen3.5-4B-MLX-4bit",
+    "qwen3.5 9b": "mlx-community/Qwen3.5-9B-MLX-4bit",
+}
 
 
 def repo_root() -> Path:
@@ -72,6 +81,15 @@ def candidate_python_with_module(env_key: str, module_name: str) -> Optional[str
             return candidate
 
     return None
+
+
+def mlx_model_name(requested_model: str) -> str:
+    explicit = os.environ.get("AUTOCOMPLETE_LAB_MLX_MODEL")
+    if explicit:
+        return explicit
+
+    key = requested_model.strip().lower()
+    return MLX_MODEL_BY_NAME.get(key, DEFAULT_MLX_MODEL)
 
 
 def prompt_text(payload: dict[str, str]) -> str:
@@ -172,9 +190,9 @@ def run_litert(prompt: str, max_tokens: int, timeout: float) -> str:
     )
 
 
-def run_mlx(prompt: str, system_prompt: str, max_tokens: int, timeout: float) -> str:
+def run_mlx(prompt: str, system_prompt: str, max_tokens: int, timeout: float, requested_model: str) -> str:
     executable = candidate_executable("AUTOCOMPLETE_LAB_MLX_BIN", ["mlx_lm.generate"])
-    model = os.environ.get("AUTOCOMPLETE_LAB_MLX_MODEL", DEFAULT_MLX_MODEL)
+    model = mlx_model_name(requested_model)
 
     if executable:
         command = [
@@ -220,7 +238,7 @@ def run_mlx(prompt: str, system_prompt: str, max_tokens: int, timeout: float) ->
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="Gemma 4 E2B")
+    parser.add_argument("--model", default=DEFAULT_MODEL_NAME)
     parser.add_argument("--max-tokens", type=int, default=16)
     parser.add_argument("--max-words", type=int, default=8)
     parser.add_argument("--reasoning", choices=["on", "off"], default="off")
@@ -245,7 +263,7 @@ def main() -> int:
                 print(run_litert(prompt, args.max_tokens, timeout))
                 return 0
             if candidate == "mlx":
-                print(run_mlx(prompt, system_prompt, args.max_tokens, timeout))
+                print(run_mlx(prompt, system_prompt, args.max_tokens, timeout, args.model))
                 return 0
             errors.append(f"{candidate}: unsupported backend")
         except Exception as error:
