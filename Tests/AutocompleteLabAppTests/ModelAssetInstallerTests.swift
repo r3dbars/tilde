@@ -129,6 +129,77 @@ struct ModelAssetInstallerTests {
         ) == "integrity receipt checksum mismatch for model.safetensors")
     }
 
+    @Test("Integrity receipt validator rejects mismatched or unsafe receipts")
+    func integrityReceiptValidatorRejectsMismatchedOrUnsafeReceipts() throws {
+        let fileManager = FileManager.default
+        let rootURL = fileManager.temporaryDirectory
+            .appendingPathComponent("AutocompleteLabInstallerTests-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? fileManager.removeItem(at: rootURL)
+        }
+
+        let targetURL = rootURL.appendingPathComponent("target", isDirectory: true)
+        try fileManager.createDirectory(at: targetURL, withIntermediateDirectories: true)
+        try "{}".write(
+            to: targetURL.appendingPathComponent("config.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "weights".write(
+            to: targetURL.appendingPathComponent("model.safetensors"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let manifest = sourceBackedManifest()
+        let receiptURL = try ModelAssetIntegrityReceiptWriter.write(
+            manifest: manifest,
+            modelDirectoryURL: targetURL,
+            fileManager: fileManager
+        )
+        let validReceipt = try JSONDecoder().decode(
+            ModelAssetIntegrityReceipt.self,
+            from: Data(contentsOf: receiptURL!)
+        )
+
+        func validate(_ receipt: ModelAssetIntegrityReceipt) throws -> String? {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(receipt).write(to: receiptURL!, options: .atomic)
+            return ModelAssetIntegrityReceiptValidator.validate(
+                manifest: manifest,
+                modelDirectoryURL: targetURL,
+                fileManager: fileManager
+            )
+        }
+
+        #expect(try validate(receipt(from: validReceipt, model: "wrong-model")) == "integrity receipt model mismatch")
+        #expect(try validate(receipt(from: validReceipt, repoID: "mlx-community/Other")) == "integrity receipt repo mismatch")
+        #expect(try validate(receipt(from: validReceipt, revision: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")) == "integrity receipt revision mismatch")
+        #expect(try validate(receipt(from: validReceipt, files: validReceipt.files + [validReceipt.files[0]])) == "integrity receipt has duplicate file config.json")
+        #expect(try validate(receipt(from: validReceipt, files: [
+            .init(path: "../model.safetensors", byteCount: 7, sha256: String(repeating: "0", count: 64))
+        ])) == "integrity receipt has unsafe file path ../model.safetensors")
+        #expect(try validate(receipt(from: validReceipt, files: validReceipt.files + [
+            .init(path: "missing.safetensors", byteCount: 7, sha256: String(repeating: "0", count: 64))
+        ])) == "integrity receipt references missing model file: missing.safetensors")
+
+        var byteCountMismatchFiles = validReceipt.files
+        byteCountMismatchFiles[0] = .init(
+            path: byteCountMismatchFiles[0].path,
+            byteCount: byteCountMismatchFiles[0].byteCount + 1,
+            sha256: byteCountMismatchFiles[0].sha256
+        )
+        #expect(try validate(receipt(from: validReceipt, files: byteCountMismatchFiles)) == "integrity receipt byte count mismatch for config.json")
+
+        try "extra".write(
+            to: targetURL.appendingPathComponent("extra.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        #expect(try validate(validReceipt) == "model file is not in integrity receipt: extra.txt")
+    }
+
     @Test("Finalizing an invalid downloaded snapshot keeps the previous model folder")
     func finalizeInvalidSnapshotKeepsTarget() throws {
         let fileManager = FileManager.default
@@ -179,5 +250,40 @@ struct ModelAssetInstallerTests {
         )
 
         #expect(progress.statusText == "Model install: downloading 50% at 2.0 MiB/s")
+    }
+
+    private func sourceBackedManifest() -> LocalModelAssetManifest {
+        LocalModelAssetManifest(
+            model: .qwen35FourB,
+            runtimeCandidate: .mlx,
+            cacheDirectoryName: "Models/Test/MLX",
+            fileName: "test-model",
+            source: LocalModelAssetSource(
+                repoID: "mlx-community/Test",
+                revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                allowPatterns: ["*.safetensors", "config.json"]
+            ),
+            expectedMinimumBytes: 1,
+            requiredFileNames: ["config.json"]
+        )
+    }
+
+    private func receipt(
+        from base: ModelAssetIntegrityReceipt,
+        schemaVersion: Int? = nil,
+        model: String? = nil,
+        repoID: String? = nil,
+        revision: String? = nil,
+        files: [ModelAssetIntegrityReceipt.FileEntry]? = nil
+    ) -> ModelAssetIntegrityReceipt {
+        ModelAssetIntegrityReceipt(
+            schemaVersion: schemaVersion ?? base.schemaVersion,
+            generatedAtUTC: base.generatedAtUTC,
+            model: model ?? base.model,
+            displayName: base.displayName,
+            repoID: repoID ?? base.repoID,
+            revision: revision ?? base.revision,
+            files: files ?? base.files
+        )
     }
 }
