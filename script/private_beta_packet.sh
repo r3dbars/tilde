@@ -288,7 +288,7 @@ write_readiness_summary() {
   local sha="$1"
   local generated_at commit
   generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  commit="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+  commit="$(current_commit)"
 
   cat >"$READINESS_SUMMARY_PATH" <<EOF
 # Beta Readiness Summary
@@ -348,6 +348,10 @@ EOF
 
 archive_sha() {
   shasum -a 256 "$ARCHIVE_PATH" | awk '{print $1}'
+}
+
+current_commit() {
+  git rev-parse --short HEAD 2>/dev/null || echo "unknown"
 }
 
 require_archive() {
@@ -410,6 +414,24 @@ require_same_file() {
     echo "Regenerate with ./script/private_beta_packet.sh create" >&2
     exit 1
   fi
+}
+
+require_generated_file() {
+  local packet_path="$1"
+  shift
+
+  local expected_path
+  expected_path="$(mktemp)"
+  "$@" >"$expected_path"
+
+  if ! cmp -s "$expected_path" "$packet_path"; then
+    echo "beta packet generated file is stale: $packet_path" >&2
+    echo "Regenerate with ./script/private_beta_packet.sh create" >&2
+    rm -f "$expected_path"
+    exit 1
+  fi
+
+  rm -f "$expected_path"
 }
 
 create_packet() {
@@ -612,6 +634,17 @@ check_packet() {
     exit 1
   fi
 
+  local expected_commit actual_commit
+  expected_commit="$(current_commit)"
+  actual_commit="$(awk -F': ' '/^Commit:/ {print $2; exit}' "$READINESS_SUMMARY_PATH")"
+  if [[ "$expected_commit" != "$actual_commit" ]]; then
+    echo "beta packet commit is stale" >&2
+    echo "expected: $expected_commit" >&2
+    echo "actual:   ${actual_commit:-missing}" >&2
+    echo "Regenerate with ./script/private_beta_packet.sh create" >&2
+    exit 1
+  fi
+
   require_same_file "PRIVACY-BETA.md" "$TESTER_DOCS_DIR/PRIVACY-BETA.md"
   require_same_file "FIRST-RUN-BETA.md" "$TESTER_DOCS_DIR/FIRST-RUN-BETA.md"
   require_same_file "KNOWN-LIMITATIONS.md" "$TESTER_DOCS_DIR/KNOWN-LIMITATIONS.md"
@@ -621,6 +654,13 @@ check_packet() {
   require_same_file "docs/product/private-beta-ops-loop.md" "$TESTER_DOCS_DIR/private-beta-ops-loop.md"
   require_same_file ".github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml" "$TESTER_DOCS_DIR/autocomplete-beta-feedback.yml"
   require_same_file ".github/labels.yml" "$TESTER_DOCS_DIR/labels.yml"
+  require_generated_file "$FEEDBACK_PATH" ./script/private_beta_packet.sh --print-feedback-template
+  require_generated_file "$SESSION_REPORT_PATH" ./script/private_beta_packet.sh --print-session-report-template
+  require_generated_file "$DAILY_CHECKLIST_PATH" ./script/private_beta_packet.sh --print-daily-checklist-template
+  require_generated_file "$REDACTED_EXPORT_PATH" ./script/private_beta_packet.sh --print-redacted-export-template
+  require_generated_file "$FEEDBACK_TRIAGE_PATH" ./script/private_beta_packet.sh --print-feedback-triage-template
+  require_generated_file "$STOP_DASHBOARD_PATH" ./script/private_beta_packet.sh --print-stop-dashboard-template
+  require_generated_file "$MODEL_ASSET_PATH" ./script/private_beta_packet.sh --print-model-asset-template "$(./script/check_model_asset.py --print-path)"
 
   echo "Private beta packet verified: $PACKET_DIR"
 }
