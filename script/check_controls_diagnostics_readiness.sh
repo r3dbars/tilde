@@ -96,7 +96,7 @@ run_logged_check "Redacted report export" env \
   AUTOCOMPLETE_LAB_SWIFT_SKIP_BUILD=1 \
   ./script/check_redacted_report_export.sh || failures=$((failures + 1))
 
-run_logged_check "Current build privacy export proof" env \
+run_check "Current build privacy export proof" env \
   "${CURRENT_BUILD_ENV[@]}" \
   ./script/check_current_build_privacy_export.sh || failures=$((failures + 1))
 

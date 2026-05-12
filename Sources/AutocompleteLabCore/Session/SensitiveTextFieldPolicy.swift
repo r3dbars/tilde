@@ -129,37 +129,45 @@ public struct SensitiveTextFieldPolicy: Equatable, Sendable {
             "1password", "bitwarden", "dashlane", "lastpass", "password manager"
         ]),
         (.privatePrompt, [
-            "private prompt", "private chat", "confidential prompt", "private note"
+            "private prompt", "private chat", "confidential prompt",
+            "confidential instructions", "internal only prompt", "private note"
         ]),
         (.privateSearch, [
             "private search", "incognito search", "private browsing search"
         ]),
         (.password, [
-            "password", "passcode", "passphrase", "pin", "recovery phrase",
-            "seed phrase", "private key", "secret key", "client secret"
+            "password", "passkey", "passcode", "passphrase", "pin",
+            "recovery key", "recovery phrase", "seed phrase", "wallet seed",
+            "mnemonic phrase", "private key", "ssh private key", "secret key",
+            "client secret"
         ]),
         (.otp, [
             "2fa", "mfa", "otp", "auth code", "authentication code",
             "one time code", "one time password", "verification code",
-            "security code"
+            "security code", "sign in code", "sso code", "oauth code"
         ]),
         (.payment, [
             "card number", "credit card", "debit card", "cvc", "cvv",
-            "expiration", "expiry", "payment", "billing"
+            "expiration", "expiry", "payment", "billing", "apple pay",
+            "paypal", "iban", "routing number", "bank account", "account number"
         ]),
         (.login, [
-            "login", "sign in", "signin", "username", "account password"
+            "login", "sign in", "sign in with", "sign-in", "signin",
+            "username", "account password", "oauth", "sso"
         ]),
         (.urlAddress, [
             "url", "address bar", "location bar", "web address", "website"
         ]),
         (.address, [
             "street address", "shipping address", "mailing address", "home address",
-            "work address", "address line", "city state zip"
+            "work address", "address line", "address line 2", "city state zip",
+            "postal code", "zip code", "email address", "phone number"
         ]),
         (.commandLine, [
             "command line", "command-line", "terminal command", "shell command",
-            "shell prompt", "bash prompt", "zsh prompt", "console input"
+            "shell prompt", "bash prompt", "zsh prompt", "powershell prompt",
+            "console input", "sudo command", "ssh command", "web terminal",
+            "dev terminal", "codespaces", "github dev", "replit", "stackblitz"
         ]),
         (.search, [
             "search", "search query", "find", "filter"
