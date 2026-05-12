@@ -16,7 +16,7 @@ Run the full gate:
 
 That must create and verify:
 
-- `dist/AutocompleteLab.zip`
+- `dist/SteadyType.zip`
 - `dist/private-beta/README.md`
 - `dist/private-beta/install-checklist.md`
 - `dist/private-beta/daily-tester-checklist.md`
