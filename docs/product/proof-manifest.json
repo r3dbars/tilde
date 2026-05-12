@@ -553,13 +553,20 @@
         "docs/product/visual-placement-screenshots/obsidian.png"
       ],
       "gaps": [
-        "More vault themes, panes, long notes, and hidden-caret variants are still required before green support."
+        "Pane, long-note, and hidden-caret variants are still required before green support."
       ],
     "requirements": [
       {
         "id": "obsidian-theme-variants",
-        "status": "pending",
-        "summary": "Add bounded proof across at least one non-default vault theme.",
+        "status": "complete",
+        "summary": "Bounded proof across the non-default proof-vault theme is recorded.",
+        "manualSmoke": {
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-theme",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
         "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
       },
       {

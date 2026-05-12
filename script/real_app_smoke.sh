@@ -5286,7 +5286,7 @@ describe_plan() {
       obsidian_app="$(obsidian_session_app)"
       case "$obsidian_app" in
         obsidian-theme)
-          echo "Plan: manual-gated Obsidian non-default theme proof. The script validates caret-bound placement after you run it."
+          echo "Plan: guarded Obsidian non-default theme proof. The script opens the disposable proof-vault note, types smoke fragments, then validates logs and traces."
           ;;
         obsidian-pane)
           echo "Plan: manual-gated Obsidian split/side-pane proof. The script validates same-pane placement and insertion after you run it."
@@ -6017,10 +6017,14 @@ run_obsidian() {
 
   local manual_app
   manual_app="$(obsidian_session_app)"
-  if [[ "$manual_app" != "obsidian" ]]; then
-    run_manual_gated
-    return 0
-  fi
+  case "$manual_app" in
+    obsidian|obsidian-theme)
+      ;;
+    *)
+      run_manual_gated
+      return 0
+      ;;
+  esac
 
   local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
@@ -6069,7 +6073,7 @@ run_obsidian() {
   wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian full verified insertion"
 
   sleep 1
-  local manual_check_args=(obsidian --check)
+  local manual_check_args=("$manual_app" --check)
   if screenshot_trace_requested; then
     manual_check_args+=(--visual)
   fi
