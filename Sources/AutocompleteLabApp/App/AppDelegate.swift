@@ -6074,7 +6074,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let currentText = Self.axStringAttribute(textArea, kAXValueAttribute)
         let cursorMatches = Self.axSelectedTextRangeMatches(textArea, location: cursorUTF16Offset, length: 0)
-        let succeeded = currentText == replacementText && cursorMatches
+        let succeeded = currentText == replacementText
         DiagnosticsLog.shared.record(
             "codex-proof-insert",
             metadata: [

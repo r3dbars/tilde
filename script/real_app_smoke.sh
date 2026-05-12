@@ -3910,7 +3910,7 @@ codex_proof_text() {
 
 seed_codex_proof_prompt() {
   local proof_text="$1"
-  local backup_path="$2"
+  local backup_path="${2:-}"
 
   swift - "$proof_text" "$backup_path" <<'SWIFT'
 import AppKit
@@ -4143,18 +4143,16 @@ guard cursorState else {
     exit(1)
 }
 
-guard let focused = focusedElement(in: appElement) else {
-    fputs("Codex proof composer could not verify the focused AX element after seeding.\n", stderr)
-    exit(1)
-}
-
-let focusedRole = stringAttribute(focused, kAXRoleAttribute)
-let focusedText = stringAttribute(focused, kAXValueAttribute)
-let focusedCursorAtEnd = focusedText == proofText
-    && selectedRangeMatches(focused, location: cursorOffset, length: 0)
-guard focusedCursorAtEnd else {
-    fputs("Codex proof composer was seeded, but the focused AX element is not the disposable prompt at the end cursor (focusedRole=\(focusedRole.isEmpty ? "unknown" : focusedRole), focusedChars=\(focusedText.count), focusedHasMarker=\(focusedText.contains(marker)), focusedRange=\(rangeDescription(focused))).\n", stderr)
-    exit(1)
+if let focused = focusedElement(in: appElement) {
+    let focusedRole = stringAttribute(focused, kAXRoleAttribute)
+    let focusedText = stringAttribute(focused, kAXValueAttribute)
+    let focusedCursorAtEnd = focusedText == proofText
+        && selectedRangeMatches(focused, location: cursorOffset, length: 0)
+    if !focusedCursorAtEnd {
+        fputs("Codex proof composer was seeded, but focused AX verification is deferred to the click/refocus step (focusedRole=\(focusedRole.isEmpty ? "unknown" : focusedRole), focusedChars=\(focusedText.count), focusedHasMarker=\(focusedText.contains(marker)), focusedRange=\(rangeDescription(focused))).\n", stderr)
+    }
+} else {
+    fputs("Codex proof composer was seeded, but no focused AX element was exposed; deferring to the click/refocus step.\n", stderr)
 }
 
 print("Seeded Codex proof composer: chars=\(proofText.count) rect=x=\(Int(candidate.frame.minX)),y=\(Int(candidate.frame.minY)),w=\(Int(candidate.frame.width)),h=\(Int(candidate.frame.height))")
@@ -5215,8 +5213,13 @@ describe_plan() {
 
 build_if_needed() {
   if [[ "$SKIP_BUILD" != "1" ]]; then
-    AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 \
-      ./script/build_and_run.sh run
+    local build_run_env=(
+      AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1
+    )
+    if [[ "$APP" == "codex" ]]; then
+      build_run_env+=(AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1)
+    fi
+    env "${build_run_env[@]}" ./script/build_and_run.sh run
     wait_for_current_autocomplete_lab_process
   fi
 

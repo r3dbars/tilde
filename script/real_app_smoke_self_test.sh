@@ -46,6 +46,16 @@ if ! grep -F "Chrome setup text first uses process-targeted events, then a guard
   exit 1
 fi
 
+if ! grep -F 'build_run_env+=(AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1)' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Codex proof to direct-launch the current app bundle" >&2
+  exit 1
+fi
+if ! grep -F 'local backup_path="${2:-}"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "focused AX verification is deferred to the click/refocus step" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Codex seeding to allow refocus-step verification" >&2
+  exit 1
+fi
+
 script/real_app_smoke.sh chrome --fixture contenteditable --dry-run >"$TMP_DIR/chrome-contenteditable.txt"
 if ! grep -F "disposable Chrome contenteditable fixture" "$TMP_DIR/chrome-contenteditable.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome contenteditable dry-run plan" >&2
