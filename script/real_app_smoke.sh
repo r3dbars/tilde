@@ -3984,7 +3984,7 @@ wait_for_textedit_document_exact_at_end() {
   local timeout_seconds="${4:-8}"
   local deadline=$((SECONDS + timeout_seconds))
   local expected_caret
-  expected_caret="$(printf '%s' "$expected_text" | perl -CS -MEncode -ne 'print length(encode("UTF-16LE", $_)) / 2')"
+  expected_caret="$(printf '%s' "$expected_text" | perl -CS -MEncode -e 'local $/; my $text = <STDIN>; $text = "" unless defined $text; print length(encode("UTF-16LE", $text)) / 2')"
 
   while ((SECONDS <= deadline)); do
     local current_text current_caret
