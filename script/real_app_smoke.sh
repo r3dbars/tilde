@@ -38,7 +38,7 @@ CODEX_DRAFT_BACKUP_ACTIVE=0
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|chrome|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
+Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
 Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
@@ -48,9 +48,11 @@ The Codex lane uses a targeted disposable proof helper after the manual gate:
 it seeds AUTOCOMPLETE_LAB_CODEX_PROOF text into a safe composer, presses Tab
 once, and never presses Enter.
 
-Notes proof must use notes-title, notes-body, notes-checklist, or their
-notes-*-undo variants. A generic notes run only prints the surface picker and
-does not record proof.
+Notes proof must use notes-title, notes-body, notes-checklist, their
+notes-*-undo variants, or explicit Notes variant lanes such as
+notes-title-short, notes-title-long, notes-body-short, notes-body-long,
+notes-checklist-checked, and notes-checklist-long. A generic notes run only
+prints the surface picker and does not record proof.
 
 TextEdit proof can use textedit-light, textedit-dark, textedit-long-wrap,
 textedit-narrow, textedit-selected-suppression, textedit-undo-one-word,
@@ -206,6 +208,14 @@ case "$APP" in
     APP="notes"
     NOTES_SESSION_APP="notes-title"
     ;;
+  notes-title-short)
+    APP="notes"
+    NOTES_SESSION_APP="notes-title-short"
+    ;;
+  notes-title-long)
+    APP="notes"
+    NOTES_SESSION_APP="notes-title-long"
+    ;;
   notes-title-undo)
     APP="notes"
     NOTES_SESSION_APP="notes-title-undo"
@@ -214,6 +224,14 @@ case "$APP" in
     APP="notes"
     NOTES_SESSION_APP="notes-body"
     ;;
+  notes-body-short)
+    APP="notes"
+    NOTES_SESSION_APP="notes-body-short"
+    ;;
+  notes-body-long)
+    APP="notes"
+    NOTES_SESSION_APP="notes-body-long"
+    ;;
   notes-body-undo)
     APP="notes"
     NOTES_SESSION_APP="notes-body-undo"
@@ -221,6 +239,14 @@ case "$APP" in
   notes-checklist)
     APP="notes"
     NOTES_SESSION_APP="notes-checklist"
+    ;;
+  notes-checklist-checked)
+    APP="notes"
+    NOTES_SESSION_APP="notes-checklist-checked"
+    ;;
+  notes-checklist-long)
+    APP="notes"
+    NOTES_SESSION_APP="notes-checklist-long"
     ;;
   notes-checklist-undo)
     APP="notes"
@@ -1041,7 +1067,7 @@ notes_session_app() {
   fi
 
   case "${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-}" in
-    notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo)
+    notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo)
       printf '%s\n' "$AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL"
       return 0
       ;;
@@ -1054,8 +1080,14 @@ print_notes_surface_commands() {
   cat <<'EOF'
 Choose one Notes surface:
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-short --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-long --manual-gate
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-short --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-long --manual-gate
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-checked --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-long --manual-gate
 Optional undo proof:
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-undo --manual-gate
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-undo --manual-gate
@@ -5206,11 +5238,29 @@ describe_plan() {
           notes-title)
             echo "Plan: guarded Apple Notes title proof. The script creates a fresh blank note, verifies the focused title line is blank, types smoke fragments, then validates logs and traces."
             ;;
+          notes-title-short)
+            echo "Plan: guarded Apple Notes short title proof. The script creates a fresh blank note, verifies the focused title line is blank, types a short title smoke fragment, then validates logs and traces."
+            ;;
+          notes-title-long)
+            echo "Plan: guarded Apple Notes long title proof. The script creates a fresh blank note, verifies the focused title line is blank, types a longer title smoke fragment, then validates logs and traces."
+            ;;
           notes-body)
             echo "Plan: guarded Apple Notes body proof. The script verifies the open note body contains the disposable marker, appends smoke fragments, then validates logs and traces."
             ;;
+          notes-body-short)
+            echo "Plan: guarded Apple Notes short body proof. The script verifies the disposable body marker, appends a short smoke line, then validates logs and traces."
+            ;;
+          notes-body-long)
+            echo "Plan: guarded Apple Notes long body proof. The script verifies the disposable body marker, appends a longer smoke line, then validates logs and traces."
+            ;;
           notes-checklist)
             echo "Plan: guarded Apple Notes checklist proof. The script creates a fresh disposable note, toggles Checklist from Notes' Format menu, verifies the disposable prefix, types smoke fragments, then validates logs and traces."
+            ;;
+          notes-checklist-checked)
+            echo "Plan: guarded Apple Notes checked checklist proof. The script creates a fresh checklist row, marks it checked through Notes' Format menu, types smoke fragments, then validates logs and traces."
+            ;;
+          notes-checklist-long)
+            echo "Plan: guarded Apple Notes long checklist proof. The script creates a fresh checklist row, types a longer checklist smoke fragment, then validates logs and traces."
             ;;
           notes-title-undo)
             echo "Plan: guarded Apple Notes title undo proof. The script creates a fresh blank note, verifies the title, accepts one suggestion, presses Command-Z, then validates same-slice undo logs and traces."
@@ -5817,6 +5867,18 @@ end tell
 APPLESCRIPT
 }
 
+mark_notes_checklist_row_checked() {
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  tell process "Notes"
+    set frontmost to true
+    click menu item "Mark as Checked" of menu "Format" of menu bar item "Format" of menu bar 1
+  end tell
+end tell
+APPLESCRIPT
+  sleep 0.3
+}
+
 try_press_accepted_insertion_undo() {
   local app_bundle_id="$1"
   local label="$2"
@@ -6023,27 +6085,49 @@ run_notes() {
     exit 2
   fi
 
-  local notes_surface notes_requires_undo=0
+  local notes_surface notes_variant="default" notes_requires_undo=0
   case "$manual_app" in
-    notes-title)
+    notes-title|notes-title-short)
       notes_surface="title"
+      notes_variant="short"
+      ;;
+    notes-title-long)
+      notes_surface="title"
+      notes_variant="long"
       ;;
     notes-title-undo)
       notes_surface="title"
+      notes_variant="undo"
       notes_requires_undo=1
       ;;
-    notes-body)
+    notes-body|notes-body-short)
       notes_surface="body"
+      notes_variant="short"
+      ;;
+    notes-body-long)
+      notes_surface="body"
+      notes_variant="long"
       ;;
     notes-body-undo)
       notes_surface="body"
+      notes_variant="undo"
       notes_requires_undo=1
       ;;
     notes-checklist)
       notes_surface="checklist"
+      notes_variant="unchecked"
+      ;;
+    notes-checklist-checked)
+      notes_surface="checklist"
+      notes_variant="checked"
+      ;;
+    notes-checklist-long)
+      notes_surface="checklist"
+      notes_variant="long"
       ;;
     notes-checklist-undo)
       notes_surface="checklist"
+      notes_variant="undo"
       notes_requires_undo=1
       ;;
     *)
@@ -6067,7 +6151,13 @@ run_notes() {
     trace_start_line="$(line_count "$TRACE_PATH")"
 
     local first_fragment="Smoke proof feels"
+    if [[ "$notes_variant" == "long" ]]; then
+      first_fragment="Long title proof keeps the same caret path while Smoke proof feels"
+    fi
     local expected_after_first="Smoke proof feels instant"
+    if [[ "$notes_variant" == "long" ]]; then
+      expected_after_first="$first_fragment instant"
+    fi
     local second_fragment=" and stays"
 
     assert_notes_title_smoke_target
@@ -6125,11 +6215,21 @@ run_notes() {
     trace_start_line="$(line_count "$TRACE_PATH")"
 
     local first_fragment="Smoke proof feels"
+    if [[ "$notes_variant" == "long" ]]; then
+      first_fragment="Long checklist proof keeps the caret visible while Smoke proof feels"
+    fi
     local expected_after_first="$checklist_title"$'\n'"Smoke proof feels instant"
+    if [[ "$notes_variant" == "long" ]]; then
+      expected_after_first="$checklist_title"$'\n'"$first_fragment instant"
+    fi
     local expected_after_undo="$checklist_title"$'\n'"$first_fragment"
     local second_fragment=" and stays"
 
     assert_notes_checklist_smoke_target
+    if [[ "$notes_variant" == "checked" ]]; then
+      mark_notes_checklist_row_checked
+      assert_notes_checklist_smoke_target
+    fi
     type_notes_raw_smoke_text "$first_fragment"
     wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes checklist suggestion"
     wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes checklist"
@@ -6187,6 +6287,9 @@ run_notes() {
   trace_start_line="$(line_count "$TRACE_PATH")"
 
   local body_first_fragment=$'\nSmoke proof feels'
+  if [[ "$notes_variant" == "long" ]]; then
+    body_first_fragment=$'\nLong body proof keeps a wrapped Notes line stable while Smoke proof feels'
+  fi
   local body_second_fragment=" and stays"
 
   assert_notes_body_smoke_target
