@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+SCRIPT_TEXT="$(sed -n '1,340p' script/beta_readiness.sh)"
+
+require_contains() {
+  local expected="$1"
+  if ! grep -Fq -- "$expected" <<<"$SCRIPT_TEXT"; then
+    echo "missing expected beta readiness text: $expected" >&2
+    exit 1
+  fi
+}
+
+reject_contains() {
+  local rejected="$1"
+  if grep -Fq -- "$rejected" <<<"$SCRIPT_TEXT"; then
+    echo "unsafe beta readiness text remains: $rejected" >&2
+    exit 1
+  fi
+}
+
+reject_line() {
+  local rejected="$1"
+  if grep -Fxq -- "$rejected" <<<"$SCRIPT_TEXT"; then
+    echo "unsafe beta readiness line remains: $rejected" >&2
+    exit 1
+  fi
+}
+
+require_contains './script/package_release.sh --check --require-developer-id --require-notary-profile'
+require_contains 'check_release_archive_signature'
+require_contains 'check_notarized_install_proof'
+reject_line './script/package_release.sh --check'
+reject_contains 'Notarization is still pending'
+
+echo "Beta readiness self-test passed."

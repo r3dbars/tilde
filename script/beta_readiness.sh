@@ -260,8 +260,10 @@ echo "== Visual placement proof =="
 
 echo
 echo "== Release package =="
-./script/package_release.sh --check
+./script/package_release.sh --check --require-developer-id --require-notary-profile
 ./script/package_release.sh archive
+check_release_archive_signature
+check_notarized_install_proof
 
 echo
 echo "== Private beta packet =="
@@ -272,7 +274,3 @@ echo
 echo "Beta readiness passed."
 echo "Archive: $ROOT_DIR/dist/SteadyType.zip"
 echo "Private beta packet: $ROOT_DIR/dist/private-beta"
-
-if [[ -z "${NOTARYTOOL_PROFILE:-}" ]]; then
-  echo "Notarization is still pending: set NOTARYTOOL_PROFILE before submitting to Apple."
-fi
