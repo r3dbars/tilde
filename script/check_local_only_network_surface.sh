@@ -14,7 +14,7 @@ SOURCE_DIRS=(
   "Sources/AutocompleteLabCore"
 )
 
-NETWORK_PATTERN='URLSession|NSURLConnection|NWConnection|NWListener|HubApi|snapshot\(|https?://'
+NETWORK_PATTERN='URLSession|NSURLConnection|NWConnection|NWListener|HubApi|HubClient|snapshot\(|downloadSnapshot\(|https?://'
 failures=()
 matches=()
 
@@ -23,16 +23,28 @@ allow_reference() {
   local line="$2"
 
   case "$path" in
-    Sources/AutocompleteLabApp/Runtime/ModelAssetInstaller.swift)
-      return 0
-      ;;
-    Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift)
-      [[ "$line" == *"MLXHuggingFace"* ]]
-      return
-      ;;
-    Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swift)
-      [[ "$line" == *"licenseURL"* || "$line" == *"https://huggingface.co/"* ]]
-      return
+	    Sources/AutocompleteLabApp/Runtime/ModelAssetInstaller.swift)
+	      return 0
+	      ;;
+	    Sources/AutocompleteLabApp/Runtime/LocalModelAssetInstaller.swift)
+	      [[ "$line" == *"HubClient"* || "$line" == *"downloadSnapshot"* ]]
+	      return
+	      ;;
+	    Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift)
+	      [[ "$line" == *"MLXHuggingFace"* ]]
+	      return
+	      ;;
+	    Sources/AutocompleteLabApp/UI/BetaFeedbackLink.swift)
+	      [[ "$line" == *"https://github.com/r3dbars/transcripted-autocomplete-lab/issues/new"* ]]
+	      return
+	      ;;
+	    Sources/AutocompleteLabApp/App/PrivacyExportProofCommand.swift)
+	      [[ "$line" == *"https://private.example/redbars"* ]]
+	      return
+	      ;;
+	    Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swift)
+	      [[ "$line" == *"licenseURL"* || "$line" == *"https://huggingface.co/"* ]]
+	      return
       ;;
   esac
 
@@ -62,6 +74,9 @@ fi
 
 echo "Local-only network surface verified."
 echo "Allowed network-adjacent source references: ${#matches[@]}"
+echo "- Sources/AutocompleteLabApp/App/PrivacyExportProofCommand.swift: synthetic URL sentinel for redaction proof only"
 echo "- Sources/AutocompleteLabApp/Runtime/ModelAssetInstaller.swift: explicit user-triggered model install"
+echo "- Sources/AutocompleteLabApp/Runtime/LocalModelAssetInstaller.swift: explicit user-triggered pinned model install"
 echo "- Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift: MLX local model import"
+echo "- Sources/AutocompleteLabApp/UI/BetaFeedbackLink.swift: hard-coded GitHub feedback issue URL"
 echo "- Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swift: model license URLs only"

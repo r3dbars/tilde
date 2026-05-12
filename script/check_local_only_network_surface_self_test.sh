@@ -17,6 +17,10 @@ let hub = HubApi(downloadBase: scratchURL, useBackgroundSession: false)
 let snapshotURL = try await hub.snapshot(from: source)
 SWIFT
 
+cat >"$TMP_DIR/Sources/AutocompleteLabApp/Runtime/LocalModelAssetInstaller.swift" <<'SWIFT'
+let downloadedURL = try await HubClient.default.downloadSnapshot(of: repoID)
+SWIFT
+
 cat >"$TMP_DIR/Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift" <<'SWIFT'
 import MLXHuggingFace
 SWIFT
