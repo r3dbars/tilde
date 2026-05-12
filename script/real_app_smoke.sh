@@ -2473,7 +2473,7 @@ func isExpectedPublicCandidate(_ candidate: Candidate) -> Bool {
     case "textarea-public":
         return candidate.role == "AXTextArea"
             && candidate.frame.width >= 300
-            && candidate.frame.height >= 120
+            && candidate.frame.height >= 30
     case "contenteditable-public":
         return candidate.role == "AXTextArea"
             && candidate.frame.width >= 300
@@ -2497,7 +2497,7 @@ func collectCandidates(in element: AXUIElement, depth: Int = 0, candidates: inou
        frame.height >= 20 {
         var score = frame.width * frame.height
         let value = stringAttribute(element, kAXValueAttribute)
-        if fixture == "textarea-public", role == "AXTextArea", value.isEmpty, frame.height >= 120 {
+        if fixture == "textarea-public", role == "AXTextArea", value.isEmpty, frame.height >= 30 {
             score += 1_000_000
         }
         if fixture == "contenteditable-public",
