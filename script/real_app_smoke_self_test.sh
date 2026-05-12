@@ -78,6 +78,11 @@ if ! grep -F 'AUTOCOMPLETE_LAB_SYSTEM_EVENTS_PROCESS_ACTIVATION' script/real_app
   echo "real app smoke self-test expected System Events process activation to be opt-in" >&2
   exit 1
 fi
+if ! grep -F 'reset_textedit_smoke_document "$textedit_window_title" "initial TextEdit smoke reset"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'set_textedit_document_text "$window_title" "${current_text}${fragment}"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit proof to set exact document text and caret before polling" >&2
+  exit 1
+fi
 if ! grep -F 'local backup_path="${2:-}"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "focused AX verification is deferred to the click/refocus step" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Codex seeding to allow refocus-step verification" >&2
@@ -284,9 +289,9 @@ if ! grep -F "bodyText.utf16.count" script/real_app_smoke.sh >/dev/null ||
   echo "real app smoke self-test expected Notes body proof to move the caret to the end of the disposable note" >&2
   exit 1
 fi
-if ! grep -F "moveCaret(to: insertionLocation + fragment.utf16.count)" script/real_app_smoke.sh >/dev/null ||
+if ! grep -F "moveCaret(textInput, to: replacementText.utf16.count)" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "kAXValueAttribute as CFString" script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected TextEdit proof setup to leave the caret after inserted setup text" >&2
+  echo "real app smoke self-test expected TextEdit proof setup to leave the caret after exact setup text" >&2
   exit 1
 fi
 if ! grep -F "kAXFocusedUIElementAttribute" script/real_app_smoke.sh >/dev/null ||

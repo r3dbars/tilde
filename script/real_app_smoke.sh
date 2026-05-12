@@ -3902,29 +3902,11 @@ wait_for_textedit_document_exact() {
   exit 1
 }
 
-verify_textedit_native_undo() {
+set_textedit_document_text() {
   local window_title="$1"
-  local expected_text="$2"
-  local start_line="$3"
-  local label="$4"
-  local accept_mode="$5"
-  local acceptance_id
-  acceptance_id="$(latest_log_field_since "$start_line" "accepted-insertion-undo-armed" "acceptanceID")"
+  local replacement_text="$2"
 
-  osascript <<'APPLESCRIPT'
-tell application "System Events"
-  keystroke "z" using command down
-end tell
-APPLESCRIPT
-  wait_for_textedit_document_exact "$window_title" "$expected_text" "$label" 8
-  record_native_undo_proof "com.apple.TextEdit" "$acceptance_id" "$accept_mode" "$label"
-}
-
-insert_textedit_smoke_fragment() {
-  local window_title="$1"
-  local fragment="$2"
-
-  swift - "$window_title" "$fragment" <<'SWIFT'
+  swift - "$window_title" "$replacement_text" <<'SWIFT'
 import AppKit
 import ApplicationServices
 import Foundation
@@ -3934,7 +3916,7 @@ guard CommandLine.arguments.count == 3 else {
 }
 
 let targetTitle = CommandLine.arguments[1]
-let fragment = CommandLine.arguments[2]
+let replacementText = CommandLine.arguments[2]
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -3968,6 +3950,18 @@ func firstTextInput(in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
     return nil
 }
 
+func moveCaret(_ element: AXUIElement, to location: Int) -> Bool {
+    var range = CFRange(location: location, length: 0)
+    guard let rangeValue = AXValueCreate(.cfRange, &range) else {
+        return false
+    }
+    return AXUIElementSetAttributeValue(
+        element,
+        kAXSelectedTextRangeAttribute as CFString,
+        rangeValue
+    ) == .success
+}
+
 for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
     let appElement = AXUIElementCreateApplication(app.processIdentifier)
     AXUIElementSetMessagingTimeout(appElement, 0.5)
@@ -3983,44 +3977,53 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
         AXUIElementPerformAction(window, kAXRaiseAction as CFString)
         AXUIElementSetAttributeValue(textInput, kAXFocusedAttribute as CFString, kCFBooleanTrue)
 
-        let currentValue = copyAttribute(textInput, kAXValueAttribute) as? String ?? ""
-        func moveCaret(to location: Int) -> Bool {
-            var range = CFRange(location: location, length: 0)
-            guard let rangeValue = AXValueCreate(.cfRange, &range) else {
-                return false
-            }
-            return AXUIElementSetAttributeValue(
-                textInput,
-                kAXSelectedTextRangeAttribute as CFString,
-                rangeValue
-            ) == .success
-        }
-
-        let insertionLocation = currentValue.utf16.count
-        if moveCaret(to: insertionLocation) {
-            let result = AXUIElementSetAttributeValue(
-                textInput,
-                kAXSelectedTextAttribute as CFString,
-                fragment as CFString
-            )
-            if result == .success && moveCaret(to: insertionLocation + fragment.utf16.count) {
-                exit(0)
-            }
-        }
-
-        let replacementValue = currentValue + fragment
         let valueResult = AXUIElementSetAttributeValue(
             textInput,
             kAXValueAttribute as CFString,
-            replacementValue as CFString
+            replacementText as CFString
         )
-        _ = moveCaret(to: replacementValue.utf16.count)
-        exit(valueResult == .success ? 0 : 1)
+        let caretResult = moveCaret(textInput, to: replacementText.utf16.count)
+        exit(valueResult == .success && caretResult ? 0 : 1)
     }
 }
 
 exit(1)
 SWIFT
+}
+
+reset_textedit_smoke_document() {
+  local window_title="$1"
+  local label="${2:-reset}"
+
+  set_textedit_document_text "$window_title" ""
+  wait_for_textedit_document_exact "$window_title" "" "$label" 8
+}
+
+verify_textedit_native_undo() {
+  local window_title="$1"
+  local expected_text="$2"
+  local start_line="$3"
+  local label="$4"
+  local accept_mode="$5"
+  local acceptance_id
+  acceptance_id="$(latest_log_field_since "$start_line" "accepted-insertion-undo-armed" "acceptanceID")"
+
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  keystroke "z" using command down
+end tell
+APPLESCRIPT
+  wait_for_textedit_document_exact "$window_title" "$expected_text" "$label" 8
+  record_native_undo_proof "com.apple.TextEdit" "$acceptance_id" "$accept_mode" "$label"
+}
+
+insert_textedit_smoke_fragment() {
+  local window_title="$1"
+  local fragment="$2"
+
+  local current_text
+  current_text="$(textedit_document_text "$window_title")"
+  set_textedit_document_text "$window_title" "${current_text}${fragment}"
 }
 
 type_textedit_smoke_fragment() {
@@ -7920,6 +7923,7 @@ end tell
 delay 0.4
 APPLESCRIPT
   click_textedit_smoke_editor "$textedit_window_title"
+  reset_textedit_smoke_document "$textedit_window_title" "initial TextEdit smoke reset"
 
   if [[ "$TEXTEDIT_VARIANT" == "scrolled" ]]; then
     local scrolled_prefill
