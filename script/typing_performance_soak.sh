@@ -498,32 +498,10 @@ func textEditIsFrontmost() -> Bool {
     NSWorkspace.shared.frontmostApplication?.bundleIdentifier == targetBundleIdentifier
 }
 
-func activateTextEditIfNeeded() -> Bool {
-    if textEditIsFrontmost() {
-        return true
-    }
-
-    guard let textEdit = NSRunningApplication
-        .runningApplications(withBundleIdentifier: targetBundleIdentifier)
-        .first
-    else {
-        return false
-    }
-
-    textEdit.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
-    for _ in 0..<40 {
-        if textEditIsFrontmost() {
-            return true
-        }
-        usleep(50_000)
-    }
-    return textEditIsFrontmost()
-}
-
 var typedScalars = 0
 for scalar in text.unicodeScalars {
-    guard activateTextEditIfNeeded() else {
-        FileHandle.standardError.write(Data("TextEdit typing target lost focus\n".utf8))
+    guard textEditIsFrontmost() else {
+        FileHandle.standardError.write(Data("TextEdit typing target lost focus before generated key\n".utf8))
         exit(73)
     }
 
@@ -687,7 +665,7 @@ describe_plan() {
   echo "Typed text proof: exact TextEdit clipboard capture match required"
   echo "Typing driver: CGEvent Unicode key events after target-window focus"
   echo "Typing batches: up to $SEGMENT_CHARS chars per Swift process"
-  echo "Typing focus guard: reactivates TextEdit before each generated key"
+  echo "Typing focus guard: verifies TextEdit is frontmost before each generated key"
   echo "AX warmup: waits for a focused-text poll summary before typing"
   echo "Typing: $CHUNK_SIZE-char chunks with ${DELAY_MS}ms delay and ${KEY_DELAY_US}us key spacing"
   echo "Typing duration budget: $(computed_typing_budget_seconds)s"

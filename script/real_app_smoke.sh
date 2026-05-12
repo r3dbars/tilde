@@ -3119,6 +3119,113 @@ print("Chrome \(fixture) public proof focused \(candidate.role) title=\(candidat
 SWIFT
 }
 
+chrome_focus_smoke_editor_with_devtools() {
+  local fixture="$1"
+
+  if [[ -z "$CHROME_REMOTE_DEBUGGING_PORT" ]]; then
+    return 1
+  fi
+
+  node - "$CHROME_REMOTE_DEBUGGING_PORT" "$fixture" <<'NODE'
+const port = process.argv[2];
+
+async function fetchJSON(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} for ${url}`);
+  }
+  return response.json();
+}
+
+async function tabWebSocketURL() {
+  const deadline = Date.now() + 8000;
+  while (Date.now() <= deadline) {
+    try {
+      const tabs = await fetchJSON(`http://127.0.0.1:${port}/json`);
+      const page = tabs.find((tab) => tab.type === "page" && !String(tab.url || "").startsWith("devtools://"));
+      if (page?.webSocketDebuggerUrl) {
+        return page.webSocketDebuggerUrl;
+      }
+    } catch {
+      // Chrome may still be bringing up the DevTools endpoint.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  throw new Error("Timed out waiting for Chrome DevTools page target.");
+}
+
+async function evaluateExpression(wsURL, expression) {
+  const socket = new WebSocket(wsURL);
+  await new Promise((resolve, reject) => {
+    socket.addEventListener("open", resolve, { once: true });
+    socket.addEventListener("error", reject, { once: true });
+  });
+
+  const id = 1;
+  const responsePromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("Timed out waiting for Runtime.evaluate.")), 8000);
+    socket.addEventListener("message", (event) => {
+      const message = JSON.parse(event.data);
+      if (message.id !== id) return;
+      clearTimeout(timeout);
+      resolve(message);
+    });
+  });
+
+  socket.send(JSON.stringify({
+    id,
+    method: "Runtime.evaluate",
+    params: {
+      expression,
+      awaitPromise: true,
+      returnByValue: true
+    }
+  }));
+
+  const message = await responsePromise;
+  socket.close();
+  if (message.error) {
+    throw new Error(message.error.message || "Runtime.evaluate failed.");
+  }
+  if (message.result?.exceptionDetails) {
+    throw new Error(message.result.exceptionDetails.text || "Runtime.evaluate exception.");
+  }
+  return message.result?.result?.value;
+}
+
+try {
+  const wsURL = await tabWebSocketURL();
+  const focused = await evaluateExpression(wsURL, `(() => {
+    if (typeof window.focusSmokeEditor === 'function') {
+      window.focusSmokeEditor();
+      return true;
+    }
+
+    const editor = document.querySelector('[data-smoke-editor]');
+    if (!editor) return false;
+    editor.focus();
+    if (typeof editor.setSelectionRange === 'function') {
+      const length = String(editor.value || '').length;
+      editor.setSelectionRange(length, length);
+      return true;
+    }
+
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
+  })()`);
+  process.exit(focused ? 0 : 1);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+NODE
+}
+
 focus_chrome_smoke_editor() {
   local fixture="${1:-$CHROME_FIXTURE}"
   local chrome_pid="${2:-}"
@@ -3144,6 +3251,7 @@ focus_chrome_smoke_editor() {
 
   if [[ -n "$chrome_pid" ]]; then
     focus_chrome_process_window "$chrome_pid" "$click_x_offset" "$click_y_offset"
+    chrome_focus_smoke_editor_with_devtools "$fixture" >/dev/null 2>&1 || true
     return 0
   fi
 
@@ -3209,6 +3317,11 @@ tell application "System Events"
     set chromePosition to position of window 1
     click at {(item 1 of chromePosition) + $click_x_offset, (item 2 of chromePosition) + $click_y_offset}
   end tell
+end tell
+tell application "Google Chrome"
+  try
+    tell active tab of front window to execute javascript "window.focusSmokeEditor && window.focusSmokeEditor();"
+  end try
 end tell
 APPLESCRIPT
   wait_for_frontmost_app "Google Chrome" 5
@@ -6414,6 +6527,8 @@ pause_steadytype_for_chrome_setup() {
 launch_steadytype_after_chrome_setup() {
   local fixture="$1"
   local start_line="$2"
+  local chrome_pid="${3:-}"
+  local chrome_url="${4:-}"
 
   if [[ "$SKIP_BUILD" == "1" ]]; then
     return 0
@@ -6425,13 +6540,38 @@ launch_steadytype_after_chrome_setup() {
     exit 1
   fi
 
-  AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1 \
+  local launch_env=(
+    AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
+  )
+  local env_key
+  for env_key in \
+    AUTOCOMPLETE_LAB_SCREENSHOT_TRACE \
+    AUTOCOMPLETE_LAB_RAW_TRACE \
+    AUTOCOMPLETE_LAB_TRACE \
+    AUTOCOMPLETE_LAB_MODEL \
+    AUTOCOMPLETE_LAB_VISIBLE_WORDS \
+    AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS \
+    AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS \
+    AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS \
+    AUTOCOMPLETE_LAB_ACCEPTED_INSERTION_UNDO_RECOVERY; do
+    if [[ -n "${!env_key+x}" ]]; then
+      launch_env+=("$env_key=${!env_key}")
+    fi
+  done
+
+  env "${launch_env[@]}" \
     nohup "$app_binary" >"$ROOT_DIR/dist/SteadyType.launch.log" 2>&1 </dev/null &
   disown "$!" 2>/dev/null || true
 
   wait_for_current_autocomplete_lab_process
+  if [[ -n "$chrome_url" ]]; then
+    focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
+  fi
   wait_for_accessibility_ready "$start_line" "Chrome $fixture post-setup Accessibility readiness" 20 0
   wait_for_runtime_ready "$start_line" "Chrome $fixture post-setup runtime readiness" "$(chrome_runtime_ready_timeout_seconds)" 0
+  if [[ -n "$chrome_url" ]]; then
+    focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
+  fi
 }
 
 wait_for_current_autocomplete_lab_process() {
@@ -8072,7 +8212,7 @@ APPLESCRIPT
   type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "first fragment" "$first_fragment"
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
-  launch_steadytype_after_chrome_setup "$fixture" "$start_line"
+  launch_steadytype_after_chrome_setup "$fixture" "$start_line" "$chrome_pid" "$chrome_url"
   focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
@@ -8130,7 +8270,7 @@ APPLESCRIPT
   pause_steadytype_for_chrome_setup
   type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "second fragment" "$second_fragment"
   second_start_line="$(line_count "$LOG_PATH")"
-  launch_steadytype_after_chrome_setup "$fixture" "$second_start_line"
+  launch_steadytype_after_chrome_setup "$fixture" "$second_start_line" "$chrome_pid" "$chrome_url"
   focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion"
