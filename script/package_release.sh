@@ -34,6 +34,9 @@ archive    Build a release app, sign with Developer ID, validate, and create
 
 For --notarize, set NOTARYTOOL_PROFILE to a keychain profile created with:
   xcrun notarytool store-credentials <profile-name>
+If NOTARYTOOL_PROFILE is unset, the script tries stored profile aliases from
+AUTOCOMPLETE_LAB_NOTARY_PROFILE_CANDIDATES, then SteadyType, AutocompleteLab,
+and Transcripted.
 EOF
 }
 
@@ -85,15 +88,50 @@ developer_id="$(developer_id_identity)"
 
 validate_notary_profile() {
   local profile="$1"
+  local quiet="${2:-0}"
   local output_path="/tmp/autocomplete-notary-profile-check.txt"
 
   if xcrun notarytool history \
     --keychain-profile "$profile" \
-    --limit 1 >"$output_path" 2>&1; then
+    --output-format json >"$output_path" 2>&1; then
     return 0
   fi
 
-  cat "$output_path" >&2 2>/dev/null || true
+  if [[ "$quiet" != "1" ]]; then
+    cat "$output_path" >&2 2>/dev/null || true
+  fi
+  return 1
+}
+
+notary_profile_candidates() {
+  if [[ -n "${AUTOCOMPLETE_LAB_NOTARY_PROFILE_CANDIDATES+x}" ]]; then
+    printf '%s\n' "$AUTOCOMPLETE_LAB_NOTARY_PROFILE_CANDIDATES" | tr ',' '\n'
+    return
+  fi
+
+  printf '%s\n' \
+    "SteadyType" \
+    "AutocompleteLab" \
+    "Transcripted"
+}
+
+resolve_notary_profile() {
+  if [[ -n "${NOTARYTOOL_PROFILE:-}" ]]; then
+    printf '%s' "$NOTARYTOOL_PROFILE"
+    return 0
+  fi
+
+  local candidate
+  while IFS= read -r candidate; do
+    candidate="${candidate#"${candidate%%[![:space:]]*}"}"
+    candidate="${candidate%"${candidate##*[![:space:]]}"}"
+    [[ -n "$candidate" ]] || continue
+    if validate_notary_profile "$candidate" 1; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done < <(notary_profile_candidates)
+
   return 1
 }
 
@@ -207,13 +245,14 @@ EOF
 write_notary_blocker() {
   mkdir -p "$PROOF_DIR"
   cat >"$NOTARY_BLOCKER_PATH" <<EOF
-Notarization blocked: NOTARYTOOL_PROFILE is not set in this environment.
+Notarization blocked: no usable notarytool keychain profile was resolved.
 
 The release archive exists locally, but private beta readiness must remain
 blocked until the DMG is submitted to Apple, stapled, and fresh-install
 Gatekeeper proof is saved.
 
-Set a stored notary profile and rerun:
+Set a stored notary profile or add its alias to
+AUTOCOMPLETE_LAB_NOTARY_PROFILE_CANDIDATES, then rerun:
 
   export NOTARYTOOL_PROFILE=<profile-name>
   ./script/package_release.sh --notarize
@@ -288,6 +327,8 @@ case "$MODE" in
     ;;
   --check|check)
     check_failed=0
+    resolved_notary_profile=""
+    notary_profile_source=""
     if [[ -n "$developer_id" ]]; then
       developer_id_name="$(security find-identity -p codesigning -v 2>/dev/null \
         | awk -v hash="$developer_id" '$2 == hash { sub(/^[^"]*"/, ""); sub(/"$/, ""); print; exit }')"
@@ -300,18 +341,25 @@ case "$MODE" in
     fi
 
     if [[ -n "${NOTARYTOOL_PROFILE:-}" ]]; then
+      resolved_notary_profile="$NOTARYTOOL_PROFILE"
+      notary_profile_source="NOTARYTOOL_PROFILE"
+    elif resolved_notary_profile="$(resolve_notary_profile)"; then
+      notary_profile_source="stored keychain profile"
+    fi
+
+    if [[ -n "$resolved_notary_profile" ]]; then
       if [[ "$REQUIRE_NOTARY_PROFILE" == "1" ]]; then
-        if validate_notary_profile "$NOTARYTOOL_PROFILE"; then
-          echo "Apple notary credentials: OK - NOTARYTOOL_PROFILE=$NOTARYTOOL_PROFILE"
+        if validate_notary_profile "$resolved_notary_profile"; then
+          echo "Apple notary credentials: OK - $notary_profile_source=$resolved_notary_profile"
         else
-          echo "Apple notary credentials: blocked - NOTARYTOOL_PROFILE is not usable"
+          echo "Apple notary credentials: blocked - $notary_profile_source is not usable"
           check_failed=1
         fi
       else
-        echo "Apple notary credentials: present - NOTARYTOOL_PROFILE=$NOTARYTOOL_PROFILE (not verified without --require-notary-profile)"
+        echo "Apple notary credentials: present - $notary_profile_source=$resolved_notary_profile (not verified without --require-notary-profile)"
       fi
     else
-      echo "Apple notary credentials: blocked - NOTARYTOOL_PROFILE is missing (set it before notarization)"
+      echo "Apple notary credentials: blocked - no usable NOTARYTOOL_PROFILE or stored profile alias was found"
       if [[ "$REQUIRE_NOTARY_PROFILE" == "1" ]]; then
         check_failed=1
       fi
@@ -356,9 +404,9 @@ case "$MODE" in
     write_checksums
     write_proof_checklist "archive" "pending" "pending" "pending"
     write_fresh_install_proof_instructions
-    if [[ -z "${NOTARYTOOL_PROFILE:-}" ]]; then
+    if ! resolve_notary_profile >/dev/null; then
       write_notary_blocker
-      echo "Notarization blocked: set NOTARYTOOL_PROFILE and run ./script/package_release.sh --notarize"
+      echo "Notarization blocked: set NOTARYTOOL_PROFILE or a stored profile alias and run ./script/package_release.sh --notarize"
     else
       clear_notary_blocker
     fi
@@ -367,22 +415,23 @@ case "$MODE" in
     echo "Release proof checklist: $PROOF_DIR/release-proof-checklist.md"
     ;;
   --notarize|notarize)
+    resolved_notary_profile=""
     if [[ ! -f "$DMG_PATH" ]]; then
       echo "missing preferred artifact: $DMG_PATH" >&2
       echo "Run script/package_release.sh archive first." >&2
       exit 1
     fi
 
-    if [[ -z "${NOTARYTOOL_PROFILE:-}" ]]; then
-      echo "missing NOTARYTOOL_PROFILE" >&2
+    if ! resolved_notary_profile="$(resolve_notary_profile)"; then
+      echo "missing usable NOTARYTOOL_PROFILE or stored notarytool keychain profile" >&2
       exit 1
     fi
 
     mkdir -p "$PROOF_DIR"
-    echo "Submitting $DMG_PATH to Apple notarization for $BUNDLE_ID..."
+    echo "Submitting $DMG_PATH to Apple notarization for $BUNDLE_ID with keychain profile $resolved_notary_profile..."
     record_command "$PROOF_DIR/notarytool-submit.txt" \
       xcrun notarytool submit "$DMG_PATH" \
-      --keychain-profile "$NOTARYTOOL_PROFILE" \
+      --keychain-profile "$resolved_notary_profile" \
       --wait
     xcrun stapler staple "$DMG_PATH"
     record_command "$PROOF_DIR/stapler-validate.txt" \
