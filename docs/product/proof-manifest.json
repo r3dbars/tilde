@@ -28,11 +28,51 @@
             "reference": "docs/product/visual-placement-screenshots/textedit-inline.png"
           },
           {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/textedit-light.png"
+          },
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/textedit-dark.png"
+          },
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/textedit-long-wrap.png"
+          },
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/textedit-narrow.png"
+          },
+          {
+            "kind": "screenshot",
+            "reference": "docs/product/visual-placement-screenshots/textedit-scrolled.png"
+          },
+          {
             "kind": "manual-smoke",
             "reference": "TextEdit/default"
+          },
+          {
+            "kind": "manual-smoke",
+            "reference": "TextEdit/textedit-light"
+          },
+          {
+            "kind": "manual-smoke",
+            "reference": "TextEdit/textedit-dark"
+          },
+          {
+            "kind": "manual-smoke",
+            "reference": "TextEdit/textedit-long-wrap"
+          },
+          {
+            "kind": "manual-smoke",
+            "reference": "TextEdit/textedit-narrow"
+          },
+          {
+            "kind": "manual-smoke",
+            "reference": "TextEdit/textedit-scrolled"
           }
         ],
-        "notes": "Reference native target with current strict visual and insertion proof."
+        "notes": "Reference native target with current strict visual and insertion proof across default, light, dark, wrapped, narrow, and scrolled TextEdit lanes."
       },
       {
         "bundle": "com.apple.Notes",
@@ -78,7 +118,7 @@
             "reference": "docs/product/visual-placement-screenshots/obsidian.png"
           }
         ],
-        "notes": "Real CodeMirror proof exists, but theme, pane, and long-note variants remain open."
+        "notes": "Real CodeMirror proof exists for default, theme, and split-pane lanes; the long-note variant remains open."
       },
       {
         "bundle": "com.apple.mail",
@@ -346,7 +386,44 @@
         "requiresVisualStrictComplete": true
       },
       "screenshots": [
-        "docs/product/visual-placement-screenshots/textedit-inline.png"
+        "docs/product/visual-placement-screenshots/textedit-inline.png",
+        "docs/product/visual-placement-screenshots/textedit-light.png",
+        "docs/product/visual-placement-screenshots/textedit-dark.png",
+        "docs/product/visual-placement-screenshots/textedit-long-wrap.png",
+        "docs/product/visual-placement-screenshots/textedit-narrow.png",
+        "docs/product/visual-placement-screenshots/textedit-scrolled.png"
+      ],
+      "requirements": [
+        {
+          "id": "textedit-light",
+          "status": "complete",
+          "summary": "Current light-mode TextEdit placement proof with two verified accepts and strict screenshot trace evidence.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-light"
+        },
+        {
+          "id": "textedit-dark",
+          "status": "complete",
+          "summary": "Current dark-mode TextEdit placement proof with two verified accepts and strict screenshot trace evidence.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-dark"
+        },
+        {
+          "id": "textedit-long-wrap",
+          "status": "complete",
+          "summary": "Current wrapped-line TextEdit placement proof with two verified accepts and strict screenshot trace evidence.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-long-wrap"
+        },
+        {
+          "id": "textedit-narrow",
+          "status": "complete",
+          "summary": "Current narrow/resized-window TextEdit placement proof with two verified accepts and strict screenshot trace evidence.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-narrow"
+        },
+        {
+          "id": "textedit-scrolled",
+          "status": "complete",
+          "summary": "Current scrolled-document TextEdit placement proof with two verified accepts and strict screenshot trace evidence.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-scrolled"
+        }
       ],
       "gaps": []
     },
@@ -383,23 +460,23 @@
           "safePath": [
             "textarea-public: https://www.editpad.org/",
             "contenteditable-public: https://yabwe.github.io/medium-editor/"
-          ],
-          "proofRows": [
-            {
-              "app": "Chrome",
-              "bundle": "com.google.Chrome",
-              "proof": "textarea-public",
-              "minVerifiedAccepts": 2,
-              "requiresVisualStrictComplete": true
-            },
-            {
-              "app": "Chrome",
-              "bundle": "com.google.Chrome",
-              "proof": "contenteditable-public",
-              "minVerifiedAccepts": 2,
-              "requiresVisualStrictComplete": true
-            }
           ]
+        }
+      ],
+      "manualSmokeVariants": [
+        {
+          "app": "Chrome",
+          "bundle": "com.google.Chrome",
+          "proof": "textarea-public",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "app": "Chrome",
+          "bundle": "com.google.Chrome",
+          "proof": "contenteditable-public",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
         }
       ]
     },
@@ -408,13 +485,14 @@
       "status": "partial",
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-editor-like.png",
+        "docs/product/visual-placement-screenshots/chrome-codemirror-official.png",
         "docs/product/visual-placement-screenshots/chrome-monaco-like.png",
         "docs/product/visual-placement-screenshots/chrome-prosemirror-like.png",
         "docs/product/visual-placement-screenshots/chrome-monaco-real.png",
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Current default Chrome AX reruns expose only browser chrome on this machine, so default Chrome and broad production-site proof remain open."
+        "Official CodeMirror proof is now screenshot-backed in normal Chrome. Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced, but official Monaco and ProseMirror demos remain blocked because this Chrome profile rejects JavaScript from Apple Events and AX did not expose a verified editor target on those pages."
       ],
       "requirements": [
         {
@@ -429,8 +507,9 @@
         },
         {
           "id": "production-chrome-codemirror",
-          "status": "pending",
-          "summary": "Add bounded default-Chrome proof against a production CodeMirror editor surface."
+          "status": "complete",
+          "summary": "Bounded default-Chrome proof passed against the official CodeMirror demo with strict screenshot-backed evidence.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture codemirror-official"
         }
       ]
     },
@@ -536,21 +615,21 @@
         "docs/product/visual-placement-screenshots/obsidian.png"
       ],
       "gaps": [
-        "More vault themes, panes, long notes, and hidden-caret variants are still required before green support."
+        "Long scrolled notes and hidden-caret variants are still required before green support."
       ],
     "requirements": [
-      {
-        "id": "obsidian-theme-variants",
-        "status": "pending",
-        "summary": "Add bounded proof across at least one non-default vault theme.",
-        "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
-      },
-      {
-        "id": "obsidian-pane-variants",
-        "status": "pending",
-        "summary": "Add bounded proof with split panes or side panes visible.",
-        "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
-      },
+        {
+          "id": "obsidian-theme-variants",
+          "status": "complete",
+          "summary": "Add bounded proof across at least one non-default vault theme.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
+        },
+        {
+          "id": "obsidian-pane-variants",
+          "status": "complete",
+          "summary": "Add bounded proof with split panes or side panes visible.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
+        },
       {
         "id": "obsidian-long-note-variants",
         "status": "pending",

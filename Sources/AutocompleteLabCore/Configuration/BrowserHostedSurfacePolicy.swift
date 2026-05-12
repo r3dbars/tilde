@@ -126,7 +126,8 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
     }
 
     private func matchesLocalProofFixture(_ searchableText: String) -> Bool {
-        searchableText.contains("autocomplete lab chrome")
+        (searchableText.contains("autocomplete lab chrome")
+            || searchableText.contains("steadytype chrome"))
             && searchableText.contains("smoke")
     }
 
