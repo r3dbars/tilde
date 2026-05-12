@@ -74,6 +74,19 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(decision.canSuggest)
     }
 
+    @Test("Chrome local textarea smoke fixture stays eligible")
+    func allowsChromeLocalTextareaSmokeFixture() {
+        let decision = policy.decision(
+            bundleIdentifier: "com.google.Chrome",
+            fingerprint: FocusedElementFingerprint(
+                title: "Local smoke textarea fixture",
+                windowTitle: "SteadyType Chrome Textarea Fixture Smoke"
+            )
+        )
+
+        #expect(decision.canSuggest)
+    }
+
     @Test("Chrome sensitive pages block before local fixture allowlist")
     func blocksSensitiveBrowserPagesBeforeFixtureAllowlists() throws {
         let payment = policy.decision(
