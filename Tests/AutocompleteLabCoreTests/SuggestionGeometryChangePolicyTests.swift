@@ -108,6 +108,29 @@ struct SuggestionGeometryChangePolicyTests {
         #expect(decision == .invalidate(.textLineChanged))
     }
 
+    @Test("Caller-approved editor geometry churn keeps text line movement")
+    func callerApprovedEditorGeometryChurnKeepsTextLineMovement() {
+        let previous = snapshot(
+            caretRect: CGRect(x: 260, y: 445, width: 0, height: 20),
+            textLineRect: nil
+        )
+        let current = snapshot(
+            caretRect: CGRect(x: 260, y: 230, width: 0, height: 20),
+            textLineRect: CGRect(x: 120, y: 548, width: 480, height: 22)
+        )
+
+        let decision = policy.invalidationDecision(
+            hasVisibleSuggestion: true,
+            hasPendingSuggestionRequest: false,
+            previousSnapshot: previous,
+            currentSnapshot: current,
+            allowsCaretRectChange: true,
+            allowsTextLineRectChange: true
+        )
+
+        #expect(decision == .keep)
+    }
+
     @Test("Window moves invalidate visible geometry")
     func windowMovesInvalidateVisibleGeometry() {
         let previous = snapshot(windowRect: CGRect(x: 40, y: 80, width: 900, height: 700))
