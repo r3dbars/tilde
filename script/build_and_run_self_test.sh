@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-SCRIPT_TEXT="$(sed -n '1,340p' script/build_and_run.sh)"
+SCRIPT_TEXT="$(sed -n '1,480p' script/build_and_run.sh)"
 
 require_contains() {
   local expected="$1"
@@ -27,6 +27,7 @@ require_contains "open_app()"
 require_contains "current_bundle_is_running()"
 require_contains "quarantine_stale_app_bundles"
 require_contains "AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN"
+require_contains "exited during the verification stability window"
 reject_contains "kill_running_app_instances"
 reject_contains "is_target_app_running"
 
