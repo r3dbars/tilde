@@ -2,7 +2,7 @@
 
 Current score: 88/100.
 
-This is a progress score, not a release claim. The deterministic 500-case prediction harness is green, and TextEdit, Notes title/body/checklist, Chrome local fixtures, Chrome chat-like, and public Chrome text-field lanes now have fresh strict proof rows on the current source commit. Normal-Chrome default AX proof for the pinned real Monaco and ProseMirror fixtures is stale after the latest rebuild, and the current rerun hit Chrome focus/setup instability before it could be claimed. The strict target gate still fails because Obsidian, prompt no-submit variants, default AX real-editor lanes, and production official editor variants are not complete.
+This is a progress score, not a release claim. The deterministic 500-case prediction harness is green, and TextEdit, Notes title/body/checklist, Chrome local fixtures, Chrome chat-like, and public Chrome text-field lanes now have fresh strict proof rows on the same current app binary. Normal-Chrome default AX proof for the pinned real Monaco and ProseMirror fixtures is stale after the latest rebuild. The Obsidian rerun failed closed before typing because the focused editor was not readable through AX. The strict target gate still fails because Obsidian, prompt no-submit variants, default AX real-editor lanes, and production official editor variants are not complete.
 
 ## Prompt-To-Artifact Checklist
 
@@ -12,12 +12,13 @@ This is a progress score, not a release claim. The deterministic 500-case predic
 | Deterministic 500-case next-word / next-phrase eval | `docs/evals/completion-prediction-quality-500-2026-05-11.md`; `swift test --filter CompletionPredictionQualityEvalTests --jobs 1`; `./script/check_quality_eval.sh` | Passed |
 | Loop improvements based on evidence | `CompletionCandidateRanker` common phrase prior; TextEdit smoke focus retry; manual proof freshness classifier fix; Chrome setup text now tries AX value replacement before slower key/paste fallback to avoid smoke-induced typed-over noise | Passed for shipped slices |
 | Text boxes and visual placement proof | `docs/product/manual-smoke-runs.md`; `./script/manual_proof_refresh.sh --print`; `./script/manual_smoke_status.sh --strict` | Partial |
-| TextEdit proof | Fresh strict row at `2026-05-12T04:45:29Z`, 2 verified accepts, app proof `app-sha256:ce57dd1578119d73907e2cb3f3d1d9130fd680b4d1f082730016baef93df1282` | Passed |
-| Notes proof | Fresh current-commit strict rows at `2026-05-12T04:42:57Z`, `2026-05-12T04:43:15Z`, and `2026-05-12T04:43:38Z` for title/body/checklist | Passed for base lanes |
-| Chrome textarea/contenteditable/editor fixtures | Fresh strict rows from `2026-05-12T04:45:52Z` through `2026-05-12T04:47:31Z` | Passed |
-| Online notepad and MediumEditor-style public text fields | Fresh `textarea-public` and `contenteditable-public` rows at `2026-05-12T04:51:24Z` and `2026-05-12T04:51:42Z` | Passed |
-| Normal-Chrome Monaco/ProseMirror default AX | Last green rows are from `2026-05-12T04:35:02Z` and `2026-05-12T04:36:10Z`, but they are stale against the current app fingerprint; the current rerun hit Chrome focus/setup instability | Blocked |
-| Obsidian, Codex, Claude Code, Claude desktop | Existing stale/manual-gated rows only; not rerun unattended | Blocked by manual gate |
+| TextEdit proof | Fresh strict row at `2026-05-12T05:06:55Z`, 2 verified accepts, app proof `app-sha256:318d83089231706e633000d0428ffde1e07a75907ee774ce2d979f8252cc662c` | Passed |
+| Notes proof | Fresh strict rows at `2026-05-12T05:04:49Z`, `2026-05-12T05:05:56Z`, and `2026-05-12T05:06:15Z` for title/body/checklist on the same app binary | Passed for base lanes |
+| Chrome textarea/contenteditable/editor fixtures | Fresh strict rows from `2026-05-12T05:07:16Z` through `2026-05-12T05:09:04Z` on the same app binary | Passed |
+| Online notepad and MediumEditor-style public text fields | Fresh `textarea-public` and `contenteditable-public` rows at `2026-05-12T05:09:32Z` and `2026-05-12T05:09:52Z` | Passed |
+| Normal-Chrome Monaco/ProseMirror default AX | Last green rows are from `2026-05-12T04:35:02Z` and `2026-05-12T04:36:10Z`, but they are stale against the current app fingerprint; the latest current-binary proof is the isolated forced-renderer lane | Blocked |
+| Obsidian | Current rerun failed closed before typing because AX exposed only the whole web area, not a readable focused editor | Blocked by host AX exposure |
+| Codex, Claude Code, Claude desktop | Existing stale/manual-gated rows only; not rerun unattended | Blocked by manual gate |
 | Privacy of reports | Manual rows store redacted log/trace slices and proof fingerprints, not raw user text | Passed |
 | Verification commands | `bash -n`, `./script/real_app_smoke_self_test.sh`, `./script/manual_proof_refresh_self_test.sh`, `git diff --check`, targeted manual proof verifies | Passed for changed slices |
 
@@ -35,8 +36,8 @@ This is a progress score, not a release claim. The deterministic 500-case predic
 
 ## Remaining Blockers
 
-- Obsidian default, theme, pane, and long-note lanes need manual-gated current proof.
+- Obsidian default, theme, pane, and long-note lanes need current proof after the host exposes a focused editable AX surface.
 - Codex and Claude lanes need manual no-submit confirmation on the current app binary.
-- Normal-Chrome default AX proof for local real Monaco and ProseMirror needs a fresh current-binary rerun; the latest Monaco rerun failed before proof because Chrome's focused editor changed during setup.
+- Normal-Chrome default AX proof for local real Monaco and ProseMirror needs a fresh current-binary rerun.
 - Production official CodeMirror, Monaco, and ProseMirror site variants still need bounded screenshot-backed traces. `codemirror-official` was attempted on 2026-05-12 and failed closed before typing because Chrome's Allow JavaScript from Apple Events setting is disabled.
 - `./script/check_score_targets.sh` should keep failing until those proof gates close.
