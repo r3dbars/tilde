@@ -26,11 +26,14 @@ NORMALIZE_OSASCRIPT_STDOUT_SELF_TEST=0
 NORMALIZE_OSASCRIPT_STDOUT_INPUT=""
 NORMALIZE_OSASCRIPT_STDOUT_OUTPUT=""
 OSASCRIPT_TIMEOUT_SELF_TEST=0
+SOAK_LOCK_SELF_TEST=0
 DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.steadytype}"
 PAUSE_DEFAULTS_KEY="SuggestionsPaused"
 DISABLED_APPS_DEFAULTS_KEY="DisabledBundleIdentifiers"
 TEXTEDIT_BUNDLE_ID="com.apple.TextEdit"
 SOAK_DOCUMENT_NAME_PREFIX="autocomplete-lab-typing-soak-"
+SOAK_LOCK_DIR="${AUTOCOMPLETE_LAB_SOAK_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-typing-soak.lock}"
+SOAK_LOCK_HELD=0
 PAUSE_DEFAULTS_WAS_PREPARED=0
 PAUSE_DEFAULTS_PREVIOUS_EXISTS=0
 PAUSE_DEFAULTS_PREVIOUS=""
@@ -58,11 +61,15 @@ EOF
 }
 
 cleanup_soak() {
-  if [[ -n "$SOAK_TARGET_DOCUMENT_NAME" ]]; then
+  if [[ "$SOAK_LOCK_HELD" == "1" ]]; then
+    close_stale_textedit_soak_documents "" >/dev/null 2>&1 || true
+  elif [[ -n "$SOAK_TARGET_DOCUMENT_NAME" ]]; then
     close_textedit_document "$SOAK_TARGET_DOCUMENT_NAME" >/dev/null 2>&1 || true
   fi
-  if [[ "$DRY_RUN" != "1" && ( -n "$SOAK_TARGET_DOCUMENT_NAME" || -n "$SOAK_TARGET_TEXT_FILE" ) ]]; then
-    close_stale_textedit_soak_documents "" >/dev/null 2>&1 || true
+
+  if [[ "$SOAK_LOCK_HELD" == "1" ]]; then
+    rmdir "$SOAK_LOCK_DIR" >/dev/null 2>&1 || true
+    SOAK_LOCK_HELD=0
   fi
 
   if ((${#SOAK_TMP_DIRS[@]})); then
@@ -93,6 +100,27 @@ make_tmp_dir() {
   tmp_dir="$(mktemp -d)"
   SOAK_TMP_DIRS+=("$tmp_dir")
   printf '%s\n' "$tmp_dir"
+}
+
+acquire_soak_lock() {
+  local timeout_seconds="${AUTOCOMPLETE_LAB_SOAK_LOCK_TIMEOUT_SECONDS:-90}"
+  local deadline
+
+  require_positive_int "$timeout_seconds" "AUTOCOMPLETE_LAB_SOAK_LOCK_TIMEOUT_SECONDS"
+  deadline=$((SECONDS + timeout_seconds))
+
+  while ! mkdir "$SOAK_LOCK_DIR" 2>/dev/null; do
+    if ((SECONDS >= deadline)); then
+      echo "Timed out waiting for another TextEdit typing soak to finish." >&2
+      echo "Lock: $SOAK_LOCK_DIR" >&2
+      echo "Remove the lock only after confirming no typing_performance_soak.sh is running." >&2
+      return 75
+    fi
+    sleep 0.5
+  done
+
+  SOAK_LOCK_HELD=1
+  printf 'pid=%s\nstarted=%s\n' "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$SOAK_LOCK_DIR/owner"
 }
 
 is_truthy() {
@@ -320,24 +348,33 @@ close_stale_textedit_soak_documents() {
 on run argv
   set namePrefix to item 1 of argv
   set keepName to item 2 of argv
+  set namesToClose to {}
 
   tell application "TextEdit"
     repeat with candidate in documents
       try
         set candidateName to name of candidate as text
         if candidateName starts with namePrefix and candidateName is not keepName then
-          close candidate saving no
+          set end of namesToClose to candidateName
         end if
       end try
     end repeat
+
+    repeat with candidateName in namesToClose
+      try
+        close document (candidateName as text) saving no
+      end try
+    end repeat
   end tell
+
+  return count of namesToClose
 end run
 APPLESCRIPT
 }
 
 prepare_textedit_document() {
   local target_file="${1:-}"
-  local target_name attempt actual_name open_stdout open_stderr actual_stdout actual_stderr retry_stdout retry_stderr
+  local target_name attempt actual_name actual_stdout actual_stderr
 
   if [[ -z "$target_file" ]]; then
     echo "prepare_textedit_document needs a target file path" >&2
@@ -350,22 +387,6 @@ prepare_textedit_document() {
 
   for attempt in 1 2; do
     open -F -a TextEdit "$target_file" >/dev/null 2>&1 || true
-    open_stdout="$(make_tmp_dir)/textedit-open-stdout.txt"
-    open_stderr="$(make_tmp_dir)/textedit-open-stderr.txt"
-    run_osascript_with_timeout \
-      "${AUTOCOMPLETE_LAB_SOAK_SETUP_OPEN_TIMEOUT_SECONDS:-10}" \
-      "$open_stdout" \
-      "$open_stderr" \
-      - "$target_file" "$target_name" <<'APPLESCRIPT' || true
-on run argv
-  set targetPath to item 1 of argv
-  set targetName to item 2 of argv
-  tell application "TextEdit"
-    activate
-    open (POSIX file targetPath)
-  end tell
-end run
-APPLESCRIPT
     sleep 0.5
     actual_stdout="$(make_tmp_dir)/textedit-prepare-stdout.txt"
     actual_stderr="$(make_tmp_dir)/textedit-prepare-stderr.txt"
@@ -407,6 +428,9 @@ on run argv
         delay 0.1
         if exists text area 1 of scroll area 1 of window targetName then
           set value of text area 1 of scroll area 1 of window targetName to ""
+          set clearedValue to value of text area 1 of scroll area 1 of window targetName
+          if clearedValue is missing value then set clearedValue to ""
+          if clearedValue is not "" then error "TextEdit soak target did not clear"
           click text area 1 of scroll area 1 of window targetName
         end if
         key code 53
@@ -425,20 +449,6 @@ APPLESCRIPT
 
     echo "TextEdit document setup attempt $attempt failed; retrying." >&2
     open -F -a TextEdit "$target_file" >/dev/null 2>&1 || true
-    retry_stdout="$(make_tmp_dir)/textedit-retry-open-stdout.txt"
-    retry_stderr="$(make_tmp_dir)/textedit-retry-open-stderr.txt"
-    run_osascript_with_timeout \
-      "${AUTOCOMPLETE_LAB_SOAK_SETUP_OPEN_TIMEOUT_SECONDS:-10}" \
-      "$retry_stdout" \
-      "$retry_stderr" \
-      - "$target_file" <<'APPLESCRIPT' || true
-on run argv
-  tell application "TextEdit"
-    activate
-    open (POSIX file (item 1 of argv))
-  end tell
-end run
-APPLESCRIPT
     sleep 1
   done
 
@@ -563,15 +573,9 @@ on run argv
   set targetName to item 1 of argv
   set targetPath to item 2 of argv
 
-  tell application "TextEdit"
-    activate
-    if targetPath is not "" then open (POSIX file targetPath)
-  end tell
-
 with timeout of 20 seconds
   tell application "System Events"
     repeat 100 times
-      tell application "TextEdit" to activate
       if exists process "TextEdit" then
         tell process "TextEdit"
           set frontmost to true
@@ -871,6 +875,8 @@ describe_plan() {
   echo "Typing driver: CGEvent Unicode key events after target-window focus"
   echo "Typing batches: up to $SEGMENT_CHARS chars per Swift process"
   echo "Typing focus guard: verifies TextEdit is frontmost before each generated key"
+  echo "Concurrency guard: serializes TextEdit soak runs with a setup lock"
+  echo "Setup cleanup: closes old generated TextEdit soak documents before typing"
   echo "AX warmup: waits for a focused-text poll summary before typing"
   echo "Typing: $CHUNK_SIZE-char chunks with ${DELAY_MS}ms delay and ${KEY_DELAY_US}us key spacing"
   echo "Typing duration budget: $(computed_typing_budget_seconds)s"
@@ -905,6 +911,7 @@ type_textedit_fixture() {
   SOAK_TARGET_TEXT_FILE="$target_file"
   SOAK_TARGET_DOCUMENT_NAME=""
   generate_soak_text "$TARGET_CHARS" >"$text_file"
+  acquire_soak_lock
   SOAK_TARGET_DOCUMENT_NAME="$(prepare_textedit_document "$SOAK_TARGET_TEXT_FILE")"
   wait_for_stable_textedit_focus "$SOAK_TARGET_DOCUMENT_NAME"
   sleep 1
@@ -1074,6 +1081,9 @@ while (($#)); do
     --self-test-osascript-timeout)
       OSASCRIPT_TIMEOUT_SELF_TEST=1
       ;;
+    --self-test-soak-lock)
+      SOAK_LOCK_SELF_TEST=1
+      ;;
     -h|--help)
       usage
       exit 0
@@ -1141,6 +1151,16 @@ APPLESCRIPT
   fi
 
   echo "osascript timeout self-test passed."
+  exit 0
+fi
+
+if [[ "$SOAK_LOCK_SELF_TEST" == "1" ]]; then
+  acquire_soak_lock
+  if [[ ! -s "$SOAK_LOCK_DIR/owner" ]]; then
+    echo "soak lock self-test did not write an owner file" >&2
+    exit 1
+  fi
+  echo "soak lock self-test passed."
   exit 0
 fi
 
