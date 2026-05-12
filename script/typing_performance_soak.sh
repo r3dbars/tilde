@@ -19,6 +19,9 @@ TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_LOG:-$HOME/Library/Logs/SteadyType/traces.j
 SEGMENT_CHARS="${AUTOCOMPLETE_LAB_SOAK_SEGMENT_CHARS:-250}"
 LOG_SCAN_SELF_TEST=0
 LOG_SCAN_SELF_TEST_START_LINE=0
+NORMALIZE_OSASCRIPT_STDOUT_SELF_TEST=0
+NORMALIZE_OSASCRIPT_STDOUT_INPUT=""
+NORMALIZE_OSASCRIPT_STDOUT_OUTPUT=""
 DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.steadytype}"
 PAUSE_DEFAULTS_KEY="SuggestionsPaused"
 DISABLED_APPS_DEFAULTS_KEY="DisabledBundleIdentifiers"
@@ -192,7 +195,7 @@ expected_path, actual_path = sys.argv[1:3]
 with open(expected_path, "r", encoding="utf-8") as handle:
     expected = handle.read()
 with open(actual_path, "r", encoding="utf-8") as handle:
-    actual = handle.read().rstrip("\n")
+    actual = handle.read()
 
 if actual != expected:
     mismatch = next(
@@ -207,6 +210,13 @@ if actual != expected:
 
 print(f"Typed text verified: {len(expected)} chars matched TextEdit exactly.")
 PY
+}
+
+normalize_osascript_stdout_text() {
+  local source_file="$1"
+  local destination_file="$2"
+
+  perl -0pe 's/\n\z//' "$source_file" >"$destination_file"
 }
 
 prepare_textedit_document() {
@@ -268,10 +278,9 @@ on run argv
         perform action "AXRaise" of window targetName
         delay 0.1
         if exists text area 1 of scroll area 1 of window targetName then
+          set value of text area 1 of scroll area 1 of window targetName to ""
           click text area 1 of scroll area 1 of window targetName
         end if
-        keystroke "a" using {command down}
-        key code 51
         key code 53
       end tell
     end tell
@@ -305,17 +314,11 @@ APPLESCRIPT
 capture_typed_text() {
   local actual_file="$1"
   local target_name="$2"
-  local clipboard_file
-  clipboard_file="$(make_tmp_dir)/previous-clipboard.txt"
-
-  pbpaste >"$clipboard_file" 2>/dev/null || true
 
   if capture_typed_text_with_textedit_timeout "$actual_file" "$target_name" 45; then
-    pbcopy <"$clipboard_file" 2>/dev/null || true
     return 0
   fi
 
-  pbcopy <"$clipboard_file" 2>/dev/null || true
   echo "TextEdit document read timed out." >&2
   return 1
 }
@@ -324,9 +327,11 @@ capture_typed_text_with_textedit_timeout() {
   local actual_file="$1"
   local target_name="$2"
   local timeout_seconds="$3"
-  local pid deadline status
+  local raw_file pid deadline status
 
-  osascript - "$target_name" >/dev/null <<'APPLESCRIPT' &
+  raw_file="$(make_tmp_dir)/textedit-ax-value-stdout.txt"
+
+  osascript - "$target_name" >"$raw_file" <<'APPLESCRIPT' &
 on run argv
   set targetName to item 1 of argv
 
@@ -338,11 +343,11 @@ on run argv
       delay 0.1
       if exists text area 1 of scroll area 1 of window targetName then
         click text area 1 of scroll area 1 of window targetName
+        set targetValue to value of text area 1 of scroll area 1 of window targetName
+        if targetValue is missing value then set targetValue to ""
+        return targetValue
       end if
-      keystroke "a" using {command down}
-      delay 0.8
-      keystroke "c" using {command down}
-      delay 0.8
+      error "missing TextEdit soak text area " & targetName
     end tell
   end tell
 end run
@@ -359,13 +364,17 @@ APPLESCRIPT
     sleep 0.2
   done
 
-  wait "$pid"
-  status=$?
+  if wait "$pid"; then
+    status=0
+  else
+    status=$?
+  fi
   if ((status != 0)); then
     return "$status"
   fi
 
-  pbpaste >"$actual_file"
+  normalize_osascript_stdout_text "$raw_file" "$actual_file"
+  return 0
 }
 
 close_textedit_document() {
@@ -662,7 +671,8 @@ describe_plan() {
     echo "Build: ./script/build_and_run.sh --verify"
   fi
   echo "Synthetic text: $TARGET_CHARS generated chars from a built-in neutral fixture"
-  echo "Typed text proof: exact TextEdit clipboard capture match required"
+  echo "Typed text proof: exact TextEdit target capture match required"
+  echo "Typed text capture: direct AX value read from the target TextEdit window; no clipboard read/write"
   echo "Typing driver: CGEvent Unicode key events after target-window focus"
   echo "Typing batches: up to $SEGMENT_CHARS chars per Swift process"
   echo "Typing focus guard: verifies TextEdit is frontmost before each generated key"
@@ -842,6 +852,17 @@ while (($#)); do
       LOG_SCAN_SELF_TEST_START_LINE="$1"
       LOG_SCAN_SELF_TEST=1
       ;;
+    --self-test-normalize-osascript-stdout)
+      shift
+      if (($# < 2)); then
+        usage >&2
+        exit 2
+      fi
+      NORMALIZE_OSASCRIPT_STDOUT_INPUT="$1"
+      shift
+      NORMALIZE_OSASCRIPT_STDOUT_OUTPUT="$1"
+      NORMALIZE_OSASCRIPT_STDOUT_SELF_TEST=1
+      ;;
     -h|--help)
       usage
       exit 0
@@ -857,6 +878,11 @@ done
 if [[ "$LOG_SCAN_SELF_TEST" == "1" ]]; then
   require_non_negative_int "$LOG_SCAN_SELF_TEST_START_LINE" "--self-test-log-scan start-line"
   has_focused_text_poll_summary_after_line "$LOG_SCAN_SELF_TEST_START_LINE"
+  exit $?
+fi
+
+if [[ "$NORMALIZE_OSASCRIPT_STDOUT_SELF_TEST" == "1" ]]; then
+  normalize_osascript_stdout_text "$NORMALIZE_OSASCRIPT_STDOUT_INPUT" "$NORMALIZE_OSASCRIPT_STDOUT_OUTPUT"
   exit $?
 fi
 

@@ -41,8 +41,20 @@ if ! grep -F "Synthetic text: 1200 generated chars from a built-in neutral fixtu
   exit 1
 fi
 
-if ! grep -F "Typed text proof: exact TextEdit clipboard capture match required" "$TMP_DIR/default.txt" >/dev/null; then
+if ! grep -F "Typed text proof: exact TextEdit target capture match required" "$TMP_DIR/default.txt" >/dev/null; then
   echo "typing soak self-test did not explain exact typed-text verification" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Typed text capture: direct AX value read from the target TextEdit window; no clipboard read/write" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain direct target-window capture" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
+if grep -F "clipboard capture" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test still describes clipboard capture" >&2
   cat "$TMP_DIR/default.txt" >&2
   exit 1
 fi
@@ -198,6 +210,36 @@ fi
 
 if script/typing_performance_soak.sh --dry-run --unknown >/dev/null 2>&1; then
   echo "typing soak self-test expected unknown options to fail" >&2
+  exit 1
+fi
+
+if grep -E 'pbcopy|pbpaste|keystroke "c" using|keystroke "a" using' script/typing_performance_soak.sh >/dev/null; then
+  echo "typing soak self-test found clipboard-based capture commands in the soak script" >&2
+  grep -En 'pbcopy|pbpaste|keystroke "c" using|keystroke "a" using' script/typing_performance_soak.sh >&2
+  exit 1
+fi
+
+printf 'abc\n' >"$TMP_DIR/osascript-stdout-single-newline.txt"
+printf 'abc' >"$TMP_DIR/expected-single-newline.txt"
+script/typing_performance_soak.sh \
+  --self-test-normalize-osascript-stdout \
+  "$TMP_DIR/osascript-stdout-single-newline.txt" \
+  "$TMP_DIR/actual-single-newline.txt"
+
+if ! cmp -s "$TMP_DIR/expected-single-newline.txt" "$TMP_DIR/actual-single-newline.txt"; then
+  echo "typing soak self-test did not remove exactly one osascript stdout newline" >&2
+  exit 1
+fi
+
+printf 'abc\n\n' >"$TMP_DIR/osascript-stdout-document-newline.txt"
+printf 'abc\n' >"$TMP_DIR/expected-document-newline.txt"
+script/typing_performance_soak.sh \
+  --self-test-normalize-osascript-stdout \
+  "$TMP_DIR/osascript-stdout-document-newline.txt" \
+  "$TMP_DIR/actual-document-newline.txt"
+
+if ! cmp -s "$TMP_DIR/expected-document-newline.txt" "$TMP_DIR/actual-document-newline.txt"; then
+  echo "typing soak self-test did not preserve a real trailing document newline" >&2
   exit 1
 fi
 
