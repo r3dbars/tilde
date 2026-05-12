@@ -113,12 +113,16 @@ fail closed before typing unless Chrome is frontmost and the expected official
 demo URL is the active tab. Official demo lanes also fail fast if Chrome's
 View > Developer > Allow JavaScript from Apple Events setting is off, because
 the script cannot safely focus or verify those public editors without it. The
-Chrome setup text path also requires a focused editable web text target through
-Accessibility, sends setup text to the Chrome process rather than as global
-setup keystrokes, and verifies that the focused editor value changed before
-continuing. Real-app smoke runs take a single-run lock and scan for other
-active smoke scripts so two proof processes cannot type at the same time, even
-if an older worktree process did not share the current lock state.
+current SteadyType build must also already be allowed in macOS Accessibility;
+official lanes now check that before runtime readiness so missing AX is reported
+as the blocker instead of as a vague Chrome or runtime failure. Official demo
+lanes allow up to 180 seconds for cold current-build MLX warmup before they
+touch Chrome. The Chrome setup text path also requires a focused editable web
+text target through Accessibility, sends setup text to the Chrome process rather
+than as global setup keystrokes, and verifies that the focused editor value
+changed before continuing. Real-app smoke runs take a single-run lock and scan
+for other active smoke scripts so two proof processes cannot type at the same
+time, even if an older worktree process did not share the current lock state.
 
 Run the score target loop when working toward the product scorecards:
 

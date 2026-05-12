@@ -160,6 +160,14 @@ for official_fixture in codemirror-official monaco-official prosemirror-official
     echo "real app smoke self-test did not print the Chrome $official_fixture JavaScript preflight requirement" >&2
     exit 1
   fi
+  if ! grep -F "macOS Accessibility" "$TMP_DIR/chrome-$official_fixture.txt" >/dev/null; then
+    echo "real app smoke self-test did not print the Chrome $official_fixture Accessibility preflight requirement" >&2
+    exit 1
+  fi
+  if ! grep -F "allow up to 180s" "$TMP_DIR/chrome-$official_fixture.txt" >/dev/null; then
+    echo "real app smoke self-test did not print the Chrome $official_fixture cold runtime timeout" >&2
+    exit 1
+  fi
 done
 
 script/real_app_smoke.sh chrome --fixture all --dry-run >"$TMP_DIR/chrome-all.txt"
