@@ -77,6 +77,8 @@ enum AppModelRuntimeFactory {
         if plan.canWarmPreferredRuntime {
             runtime = MLXModelRuntime(
                 modelDirectoryURL: modelDirectoryURL,
+                modelManifest: manifest,
+                fileManager: fileManager,
                 usesVisionLanguageFactory: manifest.requiresVisionLanguageFactory,
                 lengthConfiguration: lengthConfiguration
             )

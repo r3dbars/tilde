@@ -8,6 +8,8 @@ import Tokenizers
 
 public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private let modelDirectoryURL: URL
+    private let modelManifest: LocalModelAssetManifest?
+    private let fileManager: FileManager
     private let usesVisionLanguageFactory: Bool
     private let promptBuilder: CompletionPromptBuilder
     private let cleaner: CompletionOutputCleaner
@@ -22,6 +24,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     public init(
         modelDirectoryURL: URL,
+        modelManifest: LocalModelAssetManifest? = nil,
+        fileManager: FileManager = .default,
         usesVisionLanguageFactory: Bool = false,
         lengthConfiguration: CompletionLengthConfiguration = .default,
         promptBuilder: CompletionPromptBuilder? = nil,
@@ -29,6 +33,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         candidateRanker: CompletionCandidateRanker = CompletionCandidateRanker()
     ) {
         self.modelDirectoryURL = modelDirectoryURL
+        self.modelManifest = modelManifest
+        self.fileManager = fileManager
         self.usesVisionLanguageFactory = usesVisionLanguageFactory
         self.lengthConfiguration = lengthConfiguration
         self.promptBuilder = promptBuilder ?? CompletionPromptBuilder(maxVisibleWords: lengthConfiguration.maxVisibleWords)
@@ -47,6 +53,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     public func warm() async throws {
         let startedAt = Date()
+        try verifyModelAssetIntegrity(startedAt: startedAt)
         var didReuseLoadedContainer = false
         let warmGeneration = stateQueue.sync {
             if container != nil {
@@ -136,6 +143,39 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                 "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
             ]
         )
+    }
+
+    private func verifyModelAssetIntegrity(startedAt: Date) throws {
+        guard let modelManifest else {
+            return
+        }
+
+        guard let integrityError = ModelAssetIntegrityReceiptValidator.validate(
+            manifest: modelManifest,
+            modelDirectoryURL: modelDirectoryURL,
+            fileManager: fileManager
+        ) else {
+            return
+        }
+
+        let error = MLXModelRuntimeError.modelAssetIntegrityFailed(reason: integrityError)
+        let failureDescription = error.errorDescription ?? "Model asset integrity failed."
+        stateQueue.sync {
+            generation += 1
+            container = nil
+            staticPromptCache = RuntimeStaticPromptCache()
+            storedState = .failed(candidate: .mlx, reason: failureDescription)
+        }
+        DiagnosticsLog.shared.record(
+            "mlx-model-integrity-failed",
+            metadata: [
+                "assetDirectory": modelDirectoryURL.path,
+                "loadMilliseconds": String(Self.milliseconds(from: startedAt, to: Date())),
+                "reason": integrityError,
+                "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
+            ]
+        )
+        throw error
     }
 
     public func cancel() {
@@ -337,7 +377,15 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 
     private func readyContainer() async throws -> ModelContainer {
-        if let existing = stateQueue.sync(execute: { container }) {
+        let initialSnapshot = stateQueue.sync {
+            (storedState, container)
+        }
+
+        if case let .failed(_, reason) = initialSnapshot.0 {
+            throw MLXModelRuntimeError.runtimeFailed(reason: reason)
+        }
+
+        if let existing = initialSnapshot.1 {
             return existing
         }
 
@@ -372,13 +420,19 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 }
 
-public enum MLXModelRuntimeError: LocalizedError {
+public enum MLXModelRuntimeError: LocalizedError, Equatable {
     case warmCompletedWithoutContainer
+    case modelAssetIntegrityFailed(reason: String)
+    case runtimeFailed(reason: String)
 
     public var errorDescription: String? {
         switch self {
         case .warmCompletedWithoutContainer:
             return "MLX warm completed without a loaded model container."
+        case let .modelAssetIntegrityFailed(reason):
+            return "Model asset integrity failed: \(reason)"
+        case let .runtimeFailed(reason):
+            return reason
         }
     }
 }
