@@ -157,7 +157,7 @@
             "reference": "docs/product/visual-placement-screenshots/chrome-chat-like.png"
           }
         ],
-        "notes": "Local fixtures are proven, but production sites and default AX editor variants remain open."
+        "notes": "Local fixtures and default AX editor variants are proven; production official editor sites remain open."
       },
       {
         "bundle": "com.openai.codex",
@@ -414,7 +414,7 @@
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Current default Chrome AX reruns expose only browser chrome on this machine, so default Chrome and broad production-site proof remain open."
+        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced and normal Chrome default AX. Broad production-site proof remains open."
       ],
       "requirements": [
         {
@@ -436,7 +436,7 @@
     },
     {
       "surface": "Chrome real Monaco",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Chrome",
         "bundle": "com.google.Chrome",
@@ -447,20 +447,25 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-monaco-real.png"
       ],
-      "gaps": [
-        "Current forced-renderer Chrome proof is green, but default Chrome AX proof is not current; latest default rerun exposed only browser chrome before typing."
-      ],
+      "gaps": [],
       "requirements": [
         {
           "id": "default-chrome-monaco-ax",
-          "status": "blocked",
-          "summary": "Refresh default Chrome Monaco proof only after normal Chrome exposes the editor AX tree, or replace this with another safe production proof path."
+          "status": "complete",
+          "summary": "Default Chrome Monaco proof refreshed with normal Chrome AX exposure and strict visual evidence.",
+          "manualSmoke": {
+            "app": "Chrome",
+            "bundle": "com.google.Chrome",
+            "proof": "monaco-real-default",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          }
         }
       ]
     },
     {
       "surface": "Chrome real ProseMirror",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Chrome",
         "bundle": "com.google.Chrome",
@@ -471,14 +476,19 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
-      "gaps": [
-        "Current forced-renderer Chrome proof is green, but default Chrome AX proof is not current; latest default Monaco probe exposed only browser chrome before typing."
-      ],
+      "gaps": [],
       "requirements": [
         {
           "id": "default-chrome-prosemirror-ax",
-          "status": "blocked",
-          "summary": "Refresh default Chrome ProseMirror proof only after normal Chrome exposes the editor AX tree, or replace this with another safe production proof path."
+          "status": "complete",
+          "summary": "Default Chrome ProseMirror proof refreshed with normal Chrome AX exposure and strict visual evidence.",
+          "manualSmoke": {
+            "app": "Chrome",
+            "bundle": "com.google.Chrome",
+            "proof": "prosemirror-real-default",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          }
         }
       ]
     },

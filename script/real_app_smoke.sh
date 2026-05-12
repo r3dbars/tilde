@@ -3624,20 +3624,6 @@ func postCommandRight(destination: TextEventDestination) {
     }
 }
 
-postTextEvents(destination: .pid)
-if waitForInsertedText() {
-    exit(0)
-}
-
-let selectedTextResult = AXUIElementSetAttributeValue(
-    focusedElement,
-    kAXSelectedTextAttribute as CFString,
-    text as CFTypeRef
-)
-if selectedTextResult == .success && waitForInsertedText() {
-    exit(0)
-}
-
 let valueReplacement = initialValue + text
 let valueReplacementResult = AXUIElementSetAttributeValue(
     focusedElement,
@@ -3653,6 +3639,20 @@ if valueReplacementResult == .success {
     if waitForInsertedTextAtEnd(valueReplacement) {
         exit(0)
     }
+}
+
+postTextEvents(destination: .pid)
+if waitForInsertedText() {
+    exit(0)
+}
+
+let selectedTextResult = AXUIElementSetAttributeValue(
+    focusedElement,
+    kAXSelectedTextAttribute as CFString,
+    text as CFTypeRef
+)
+if selectedTextResult == .success && waitForInsertedText() {
+    exit(0)
 }
 
 postTextEvents(destination: .eventTap)
@@ -3688,7 +3688,7 @@ if let previousPasteboardString {
 }
 
 let finalValue = currentFocusedValue()
-fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): targeted text events, AX selected-text fallback, AX value replacement, foreground text events, and guarded paste did not update the focused Chrome editor (beforeChars=\(initialValue.count), afterChars=\(finalValue.count), selectedTextResult=\(selectedTextResult.rawValue), valueReplacementResult=\(valueReplacementResult.rawValue)).\n", stderr)
+fputs("Chrome \(fixture) smoke refused to insert setup text during \(label): AX value replacement, targeted text events, AX selected-text fallback, foreground text events, and guarded paste did not update the focused Chrome editor (beforeChars=\(initialValue.count), afterChars=\(finalValue.count), selectedTextResult=\(selectedTextResult.rawValue), valueReplacementResult=\(valueReplacementResult.rawValue)).\n", stderr)
 exit(1)
 SWIFT
 }
@@ -5173,7 +5173,7 @@ describe_plan() {
       fi
       echo "Safety: the smoke launch temporarily enables Chrome only for this proof pass."
       echo "Safety: before Chrome typing, the smoke requires Chrome to expose a focused editable web text target through Accessibility."
-      echo "Safety: Chrome setup text first uses process-targeted events, then a guarded System Events fallback only after the disposable editor is rechecked as frontmost and editable."
+      echo "Safety: Chrome setup text first tries AX value replacement, then guarded key/paste fallbacks only after the disposable editor is rechecked as frontmost and editable."
       ;;
     notes)
       local notes_app notes_surface
