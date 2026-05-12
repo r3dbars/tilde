@@ -53,6 +53,29 @@ struct AppModelRuntimeFactoryTests {
         #expect(await bundle.runtime.state == .unavailable(reason: bundle.bootstrapPlan.unavailableReason ?? ""))
     }
 
+    @Test("Production runtime ignores mutable model environment overrides")
+    func productionRuntimeIgnoresMutableModelEnvironmentOverrides() {
+        let defaults = temporaryDefaults()
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("steadytype-production-model-root-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: rootURL)
+        }
+
+        let bundle = AppModelRuntimeFactory.makeRuntime(
+            environment: [
+                "AUTOCOMPLETE_LAB_MODEL": "qwen35-9b",
+                "AUTOCOMPLETE_LAB_MODEL_ROOT": rootURL.path
+            ],
+            defaults: defaults,
+            allowEnvironmentOverrides: false
+        )
+
+        #expect(bundle.modelOverrideName == nil)
+        #expect(bundle.bootstrapPlan.preferredAsset == .qwen35FourBMLX)
+        #expect(!bundle.modelDirectoryURL.path.hasPrefix(rootURL.path))
+    }
+
     @Test("Rejects source-backed model folders without a valid integrity receipt")
     func rejectsSourceBackedModelFoldersWithoutValidIntegrityReceipt() throws {
         let fileManager = FileManager.default

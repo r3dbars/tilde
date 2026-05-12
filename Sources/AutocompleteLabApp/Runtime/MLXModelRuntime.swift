@@ -114,6 +114,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         }
 
         try Task.checkCancellation()
+        try verifyModelAssetIntegrity(startedAt: startedAt)
+        try Task.checkCancellation()
 
         let wasCancelled = stateQueue.sync {
             warmGeneration != generation

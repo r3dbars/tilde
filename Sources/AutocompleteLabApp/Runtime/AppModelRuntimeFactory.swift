@@ -44,13 +44,21 @@ struct AppModelRuntimeBundle {
 
 enum AppModelRuntimeFactory {
     static let experimentArmDefaultsKey = "AutocompleteLabCurrentExperimentArm"
+    #if DEBUG
+    static let defaultAllowsEnvironmentOverrides = true
+    #else
+    static let defaultAllowsEnvironmentOverrides = false
+    #endif
 
     static func makeRuntime(
         fileManager: FileManager = .default,
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        allowEnvironmentOverrides: Bool = defaultAllowsEnvironmentOverrides
     ) -> AppModelRuntimeBundle {
-        let modelOverrideName = environment["AUTOCOMPLETE_LAB_MODEL"]
+        let modelOverrideName = allowEnvironmentOverrides
+            ? environment["AUTOCOMPLETE_LAB_MODEL"]
+            : nil
         let experimentArm = resolvedExperimentArm(environment: environment, defaults: defaults)
         let lengthEnvironment = environment.merging([
             "AUTOCOMPLETE_LAB_EXPERIMENT_ARM": experimentArm.rawValue
@@ -60,7 +68,8 @@ enum AppModelRuntimeFactory {
         let modelDirectoryURL = modelAssetURL(
             for: manifest,
             fileManager: fileManager,
-            environment: environment
+            environment: environment,
+            allowEnvironmentOverrides: allowEnvironmentOverrides
         )
         let assetState = modelAssetState(
             for: manifest,
@@ -182,10 +191,12 @@ enum AppModelRuntimeFactory {
     private static func modelAssetURL(
         for manifest: LocalModelAssetManifest,
         fileManager: FileManager,
-        environment: [String: String]
+        environment: [String: String],
+        allowEnvironmentOverrides: Bool
     ) -> URL {
         let baseDirectory: URL
-        if let override = environment["AUTOCOMPLETE_LAB_MODEL_ROOT"]?
+        if allowEnvironmentOverrides,
+           let override = environment["AUTOCOMPLETE_LAB_MODEL_ROOT"]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !override.isEmpty {
             baseDirectory = URL(fileURLWithPath: override, isDirectory: true)

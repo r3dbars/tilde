@@ -295,6 +295,25 @@ struct RuntimePolicyTests {
         #expect(plan.readinessReport(for: .ready(candidate: .mlx)).allowsSuggestions)
     }
 
+    @Test("Runtime integrity failures ask the user to repair the model")
+    func runtimeIntegrityFailuresAskUserToRepairModel() {
+        let plan = RuntimeBootstrapPlan(
+            assetState: .available(path: "/tmp/gemma"),
+            nativeRuntimeAvailable: true
+        )
+        let report = plan.readinessReport(
+            for: .failed(
+                candidate: .mlx,
+                reason: "Model asset integrity failed: integrity receipt checksum mismatch"
+            )
+        )
+
+        #expect(report.stage == .repairNeeded)
+        #expect(report.summary == "model folder needs repair")
+        #expect(report.action == .repairModel)
+        #expect(!report.allowsSuggestions)
+    }
+
     @Test("Qwen3.5 4B asset manifest is MLX first")
     func qwen35FourBAssetManifestIsMLXFirst() {
         let manifest = LocalModelAssetManifest.preferredMLX
