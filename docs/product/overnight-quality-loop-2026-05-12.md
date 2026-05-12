@@ -1,8 +1,8 @@
 # Overnight Quality Loop - 2026-05-12
 
-Current score: 88/100.
+Current score: 89/100.
 
-This is a progress score, not a release claim. The deterministic 500-case prediction harness is green, and TextEdit, Notes title/body/checklist, Chrome local fixtures, Chrome chat-like, and public Chrome text-field lanes now have fresh strict proof rows on the same current app binary. Normal-Chrome default AX proof for the pinned real Monaco and ProseMirror fixtures is stale after the latest rebuild. The Obsidian rerun failed closed before typing because the focused editor was not readable through AX. The strict target gate still fails because Obsidian, prompt no-submit variants, default AX real-editor lanes, and production official editor variants are not complete.
+This is a progress score, not a release claim. The deterministic 500-case prediction harness is green, and TextEdit, Notes title/body/checklist, Notes title/body/checklist undo, Chrome local fixtures, Chrome chat-like, and public Chrome text-field lanes now have fresh strict proof rows on the same current app binary. Normal-Chrome default AX proof for the pinned real Monaco and ProseMirror fixtures is stale after the latest rebuild. The Obsidian rerun failed closed before typing because the focused editor was not readable through AX. The strict target gate still fails because Obsidian, prompt no-submit variants, default AX real-editor lanes, and production official editor variants are not complete.
 
 ## Prompt-To-Artifact Checklist
 
@@ -10,10 +10,10 @@ This is a progress score, not a release claim. The deterministic 500-case predic
 | --- | --- | --- |
 | Repo-wide audit of autocomplete quality, placement, insertion safety, privacy, runtime, controls, and proof gaps | This report plus `docs/product/deep-research-overall-excellence-scorecard-2026-05-08.md`, `docs/product/app-proof-matrix.md`, and `docs/product/proof-manifest.json` | Partial; strict proof gaps remain |
 | Deterministic 500-case next-word / next-phrase eval | `docs/evals/completion-prediction-quality-500-2026-05-11.md`; `swift test --filter CompletionPredictionQualityEvalTests --jobs 1`; `./script/check_quality_eval.sh` | Passed |
-| Loop improvements based on evidence | `CompletionCandidateRanker` common phrase prior; TextEdit smoke focus retry; manual proof freshness classifier fix; Chrome setup text now tries AX value replacement before slower key/paste fallback to avoid smoke-induced typed-over noise | Passed for shipped slices |
+| Loop improvements based on evidence | `CompletionCandidateRanker` common phrase prior; TextEdit smoke focus retry; manual proof freshness classifier fix; Chrome setup text now tries AX value replacement before slower key/paste fallback; Notes undo lanes now run guarded disposable-note proof instead of manual-only validation | Passed for shipped slices |
 | Text boxes and visual placement proof | `docs/product/manual-smoke-runs.md`; `./script/manual_proof_refresh.sh --print`; `./script/manual_smoke_status.sh --strict` | Partial |
 | TextEdit proof | Fresh strict row at `2026-05-12T05:06:55Z`, 2 verified accepts, app proof `app-sha256:318d83089231706e633000d0428ffde1e07a75907ee774ce2d979f8252cc662c` | Passed |
-| Notes proof | Fresh strict rows at `2026-05-12T05:04:49Z`, `2026-05-12T05:05:56Z`, and `2026-05-12T05:06:15Z` for title/body/checklist on the same app binary | Passed for base lanes |
+| Notes proof | Fresh strict rows at `2026-05-12T05:04:49Z`, `2026-05-12T05:05:56Z`, and `2026-05-12T05:06:15Z` for title/body/checklist, plus `notes-title-undo`, `notes-body-undo`, and `notes-checklist-undo` rows at `2026-05-12T05:20:17Z`, `2026-05-12T05:20:38Z`, and `2026-05-12T05:22:39Z` | Passed for base and undo lanes |
 | Chrome textarea/contenteditable/editor fixtures | Fresh strict rows from `2026-05-12T05:07:16Z` through `2026-05-12T05:09:04Z` on the same app binary | Passed |
 | Online notepad and MediumEditor-style public text fields | Fresh `textarea-public` and `contenteditable-public` rows at `2026-05-12T05:09:32Z` and `2026-05-12T05:09:52Z` | Passed |
 | Normal-Chrome Monaco/ProseMirror default AX | Last green rows are from `2026-05-12T04:35:02Z` and `2026-05-12T04:36:10Z`, but they are stale against the current app fingerprint; the latest current-binary proof is the isolated forced-renderer lane | Blocked |
@@ -31,8 +31,8 @@ This is a progress score, not a release claim. The deterministic 500-case predic
 | Visual placement | 13/15 | Strict screenshot rows are current for TextEdit, Notes base lanes, Chrome safe lanes, and public text fields; private app variants and default AX real-editor refresh remain open. |
 | Privacy and restraint | 14/15 | Reports are redacted and local; prompt apps stay manual-gated. |
 | Runtime readiness | 8/10 | MLX app-owned runtime launches and warms; full long-session latency/energy proof remains outside this pass. |
-| Controls and recoverability | 8/10 | Existing pause/accept/undo controls are covered by tests; broader GUI parity was not rerun here. |
-| Proof coverage | 13/15 | `manual_proof_refresh` reports 14 current rows, 4 stale rows, and 9 pending rows after the Notes and public Chrome refresh. |
+| Controls and recoverability | 9/10 | Notes same-slice undo proof is now recorded for title, body, and checklist; broader GUI parity still needs more coverage. |
+| Proof coverage | 13/15 | `manual_proof_refresh` reports 14 current rows, 4 stale rows, and 9 pending rows for core targets, and the manifest now treats the three Notes undo requirements as complete. |
 
 ## Remaining Blockers
 
