@@ -21,6 +21,7 @@ swift test
 ./script/manual_proof_queue_self_test.sh
 ./script/manual_proof_refresh_self_test.sh
 ./script/check_score_targets_self_test.sh
+./script/scorecard_goal_loop_self_test.sh
 ./script/check_steadytype_scorecard_self_test.sh
 ./script/check_graduation_score_self_test.sh
 ./script/check_prompt_app_proof_self_test.sh
