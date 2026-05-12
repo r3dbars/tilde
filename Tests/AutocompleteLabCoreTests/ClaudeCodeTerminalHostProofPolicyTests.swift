@@ -172,10 +172,20 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func terminalHostProofInputStripsPromptGlyphAndMarker() {
         let input = ClaudeCodeTerminalHostProofPolicy.proofInputText(
             textBeforeCursor: "Welcome\n❯ AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF Can we make",
-            textAfterCursor: " this    \nOld output"
+            textAfterCursor: ""
         )
 
         #expect(input == "Can we make")
+    }
+
+    @Test("Terminal-host proof input refuses middle-of-line text")
+    func terminalHostProofInputRefusesMiddleOfLineText() {
+        let input = ClaudeCodeTerminalHostProofPolicy.proofInputText(
+            textBeforeCursor: "Welcome\n❯ AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF Can we make",
+            textAfterCursor: " this\nOld output"
+        )
+
+        #expect(input == nil)
     }
 
     @Test("Terminal-host proof input accepts title-marker typed line")
@@ -191,7 +201,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func terminalHostProofInputPreservesOneTypedTrailingSpace() {
         let input = ClaudeCodeTerminalHostProofPolicy.proofInputText(
             textBeforeCursor: "Welcome\n❯ AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF Can we make this ",
-            textAfterCursor: "screen padding that is not typed"
+            textAfterCursor: ""
         )
 
         #expect(input == "Can we make this ")
