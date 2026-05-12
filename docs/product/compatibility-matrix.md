@@ -38,7 +38,7 @@ insertion, and undo/recovery proof.
 | Claude desktop layouts | word-only | Default Claude desktop proof exists; layout variants are pending. | Empty, long, wrapped, narrow, context, light, and dark prompt layout rows with one-word no-submit proof. |
 | Codex layouts | word-only | Default Codex proof exists with one-word no-submit behavior. | More prompt layouts before raising beyond word-only; full accept stays off until a separate no-submit lane exists. |
 | Obsidian long notes | blocked | General Obsidian proof exists, but current-head long-note proof is pending. | Repair CodeMirror cursor source for scrolled long notes, then record screenshot-backed accept and undo proof. |
-| Real Monaco/CodeMirror editors | blocked | ProseMirror proof is stronger; official/default Monaco and current CodeMirror are not complete. | Official CodeMirror and Monaco/default-AX lanes with verified insertion, undo/recovery, and current screenshots. |
+| Real Monaco and CodeMirror editors | blocked | ProseMirror proof is stronger; official/default Monaco and current CodeMirror are not complete. | Official CodeMirror and Monaco/default-AX lanes with verified insertion, undo/recovery, and current screenshots. |
 
 Run:
 
