@@ -11,7 +11,7 @@ final class DiagnosticsLog: @unchecked Sendable {
     private init() {
         logURL = FileManager.default
             .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/AutocompleteLab/diagnostics.log")
+            .appendingPathComponent("Library/Logs/SteadyType/diagnostics.log")
     }
 
     var path: String {

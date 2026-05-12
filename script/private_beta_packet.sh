@@ -4,7 +4,7 @@ set -euo pipefail
 MODE="${1:-create}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${AUTOCOMPLETE_LAB_DIST_DIR:-$ROOT_DIR/dist}"
-ARCHIVE_PATH="$DIST_DIR/AutocompleteLab.zip"
+ARCHIVE_PATH="$DIST_DIR/SteadyType.zip"
 PACKET_DIR="$DIST_DIR/private-beta"
 README_PATH="$PACKET_DIR/README.md"
 INSTALL_PATH="$PACKET_DIR/install-checklist.md"
@@ -27,7 +27,7 @@ usage() {
   cat <<'EOF'
 Usage: script/private_beta_packet.sh [create|--check]
 
-create   Create a local private-beta packet beside dist/AutocompleteLab.zip.
+create   Create a local private-beta packet beside dist/SteadyType.zip.
 --check  Validate that the packet exists and points at the current archive.
 --print-feedback-template
          Print the no-raw-text feedback template used in the packet.
@@ -110,7 +110,7 @@ Use this once per beta day. It should take about 2 minutes.
 
 ## Before Writing
 
-- Open Autocomplete Lab from the menu bar.
+- Open SteadyType from the menu bar.
 - Confirm the local model is ready in Settings.
 - Confirm raw text tracing and screenshot tracing are off unless Justin asked
   for a debug session.
@@ -148,7 +148,7 @@ The default beta report is local and redacted.
 
 ## Tester Path
 
-1. Open the Autocomplete Lab menu bar item.
+1. Open the SteadyType menu bar item.
 2. Open `Debug` -> `Diagnostics`.
 3. Choose `Export Privacy Bundle`.
 4. Share only the exported privacy bundle when filing feedback.
@@ -230,7 +230,7 @@ EOF
 }
 
 print_model_asset_template() {
-  local expected_model_path="${1:-<model folder shown in Autocomplete Lab Settings>}"
+  local expected_model_path="${1:-<model folder shown in SteadyType Settings>}"
 
   cat <<EOF
 # Model Asset Check
@@ -245,7 +245,7 @@ $expected_model_path
 
 Verify it in the app:
 
-1. Open Autocomplete Lab Settings.
+1. Open SteadyType Settings.
 2. Check \`Local model\`.
 3. Confirm Settings says the model is ready.
 
@@ -295,7 +295,7 @@ write_readiness_summary() {
 
 Generated: $generated_at
 Commit: $commit
-Archive: ../AutocompleteLab.zip
+Archive: ../SteadyType.zip
 SHA-256: $sha
 
 ## Current Readiness
@@ -361,11 +361,11 @@ check_archive_app() {
   verify_dir="$(mktemp -d)"
 
   ditto -x -k "$ARCHIVE_PATH" "$verify_dir"
-  app_path="$verify_dir/AutocompleteLab.app"
+  app_path="$verify_dir/SteadyType.app"
 
   if [[ ! -d "$app_path" ]]; then
     rm -rf "$verify_dir"
-    echo "archive does not contain AutocompleteLab.app" >&2
+    echo "archive does not contain SteadyType.app" >&2
     exit 1
   fi
 
@@ -390,9 +390,9 @@ create_packet() {
   sha="$(archive_sha)"
 
   cat >"$README_PATH" <<EOF
-# Autocomplete Lab Private Beta Packet
+# SteadyType Private Beta Packet
 
-Archive: ../AutocompleteLab.zip
+Archive: ../SteadyType.zip
 SHA-256: $sha
 
 This is a local-only packet for a tiny private beta. Nothing here uploads
@@ -428,7 +428,7 @@ Useful commands:
 ./script/latency_benchmark_report.py --beta-gate
 ./script/model_latency_report.py --latest
 ./script/check_redacted_report_export.sh
-open "\$HOME/Library/Logs/AutocompleteLab"
+open "\$HOME/Library/Logs/SteadyType"
 \`\`\`
 
 Default beta feedback uses only the redacted privacy bundle. Do not ask testers
@@ -442,8 +442,8 @@ EOF
   cat >"$INSTALL_PATH" <<'EOF'
 # Install Checklist
 
-1. Unzip `AutocompleteLab.zip`.
-2. Open `AutocompleteLab.app`.
+1. Unzip `SteadyType.zip`.
+2. Open `SteadyType.app`.
 3. Grant Accessibility when macOS asks.
 4. Open Settings from the menu bar item.
 5. If the local model is not ready, use `Install Model` or `Repair Model` in Settings and wait for it to finish.
@@ -513,7 +513,7 @@ Use raw text or screenshots only for an explicit debug session, and write that
 consent in the session notes before collecting them.
 EOF
 
-  printf 'AutocompleteLab.zip  %s\n' "$sha" >"$CHECKSUM_PATH"
+  printf 'SteadyType.zip  %s\n' "$sha" >"$CHECKSUM_PATH"
   write_readiness_summary "$sha"
   echo "Private beta packet created: $PACKET_DIR"
 }
@@ -559,7 +559,7 @@ check_packet() {
 
   local expected_sha actual_sha
   expected_sha="$(archive_sha)"
-  actual_sha="$(awk '/AutocompleteLab.zip/ {print $2; exit}' "$CHECKSUM_PATH")"
+  actual_sha="$(awk '/SteadyType.zip/ {print $2; exit}' "$CHECKSUM_PATH")"
 
   if [[ "$expected_sha" != "$actual_sha" ]]; then
     echo "beta packet checksum is stale" >&2

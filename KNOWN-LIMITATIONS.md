@@ -1,4 +1,4 @@
-# Autocomplete Lab Known Limitations
+# SteadyType Known Limitations
 
 This is a lab app, not a broad system-wide promise.
 

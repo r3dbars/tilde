@@ -16,12 +16,12 @@ require_contains() {
   fi
 }
 
-require_contains "$HELP_OUTPUT" "dist/AutocompleteLab.zip plus preferred dist/AutocompleteLab.dmg"
+require_contains "$HELP_OUTPUT" "dist/SteadyType.zip plus preferred dist/SteadyType.dmg"
 require_contains "$HELP_OUTPUT" "--print-proof-template"
 require_contains "$HELP_OUTPUT" "Submit the DMG to Apple notarytool"
 
-require_contains "$PROOF_TEMPLATE" "Preferred artifact: dist/AutocompleteLab.dmg"
-require_contains "$PROOF_TEMPLATE" "Secondary artifact: dist/AutocompleteLab.zip"
+require_contains "$PROOF_TEMPLATE" "Preferred artifact: dist/SteadyType.dmg"
+require_contains "$PROOF_TEMPLATE" "Secondary artifact: dist/SteadyType.zip"
 require_contains "$PROOF_TEMPLATE" "Notarization status:"
 require_contains "$PROOF_TEMPLATE" "Stapler status:"
 require_contains "$PROOF_TEMPLATE" "Gatekeeper status:"

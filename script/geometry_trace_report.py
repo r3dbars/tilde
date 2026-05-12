@@ -9,7 +9,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 
-DEFAULT_TRACE_PATH = Path.home() / "Library/Logs/AutocompleteLab/traces.jsonl"
+DEFAULT_TRACE_PATH = Path.home() / "Library/Logs/SteadyType/traces.jsonl"
 ANCHOR_SOURCES = ("caret", "synthetic-caret", "line", "field", "element", "window", "none")
 ANCHOR_QUALITIES = ("trusted", "usableFallback", "diagnosticsOnly", "invalid")
 REQUIRED_LAYOUT_LANES = (
@@ -25,7 +25,7 @@ REQUIRED_LAYOUT_LANES = (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Summarize Autocomplete Lab geometry and anchor trace proof."
+        description="Summarize SteadyType geometry and anchor trace proof."
     )
     parser.add_argument(
         "--trace",

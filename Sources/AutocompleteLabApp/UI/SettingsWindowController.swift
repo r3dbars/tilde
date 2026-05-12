@@ -301,10 +301,10 @@ struct SettingsPermissionState: Equatable {
 
     var detailText: String {
         if isTrusted {
-            return "Autocomplete Lab can see the focused text field, place suggestions at the cursor, and insert text only when you accept. Text stays on this Mac."
+            return "SteadyType can see the focused text field, place suggestions at the cursor, and insert text only when you accept. Text stays on this Mac."
         }
 
-        return "Allow Accessibility in System Settings so Autocomplete Lab can see the focused text field, find the cursor, and insert text only when you accept. If you denied it, use Open Privacy Settings and turn Autocomplete Lab back on. Text stays on this Mac."
+        return "Allow Accessibility in System Settings so SteadyType can see the focused text field, find the cursor, and insert text only when you accept. If you denied it, use Open Privacy Settings and turn SteadyType back on. Text stays on this Mac."
     }
 }
 
@@ -850,7 +850,7 @@ final class SettingsWindowController: NSObject {
             backing: .buffered,
             defer: false
         )
-        window.title = "Autocomplete Lab"
+        window.title = "SteadyType"
         window.contentView = contentView
         window.isReleasedWhenClosed = false
         window.contentMinSize = NSSize(width: 540, height: 820)
@@ -1061,7 +1061,7 @@ final class SettingsWindowController: NSObject {
         stack.spacing = layoutStyle.sectionSpacing
         stack.translatesAutoresizingMaskIntoConstraints = false
 
-        let title = NSTextField(labelWithString: "Autocomplete Lab")
+        let title = NSTextField(labelWithString: "SteadyType")
         title.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
         permissionLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(permissionDetailLabel)

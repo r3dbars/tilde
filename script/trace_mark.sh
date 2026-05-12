@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
-MARK_PATH="${AUTOCOMPLETE_LAB_TRACE_MARK_PATH:-$HOME/Library/Logs/AutocompleteLab/trace-start-line.txt}"
+TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/SteadyType/traces.jsonl}"
+MARK_PATH="${AUTOCOMPLETE_LAB_TRACE_MARK_PATH:-$HOME/Library/Logs/SteadyType/trace-start-line.txt}"
 MODE="${1:-}"
 APP_BUNDLE_ID="${2:-}"
 

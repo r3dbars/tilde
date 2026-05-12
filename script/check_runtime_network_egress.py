@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_PROCESS_NAME = "AutocompleteLab"
+DEFAULT_PROCESS_NAME = "SteadyType"
 DEFAULT_PROOF_DIR = ROOT_DIR / "docs" / "diagnostics" / "runs"
 MODEL_SETUP_PHASES = {"model-setup", "model-download", "model-update"}
 
@@ -46,7 +46,7 @@ class Endpoint:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Observe Autocomplete Lab network sockets and prove local-only "
+            "Observe SteadyType network sockets and prove local-only "
             "autocomplete has no unexpected runtime egress."
         )
     )
@@ -263,7 +263,7 @@ def process_details(pids: list[int]) -> list[dict[str, object]]:
 
 def observe_live(pids: list[int], duration: float, interval: float) -> list[str]:
     if not pids:
-        raise RuntimeError("no AutocompleteLab process found; launch the app or pass --pid")
+        raise RuntimeError("no SteadyType process found; launch the app or pass --pid")
 
     samples: list[str] = []
     deadline = time.monotonic() + max(0.1, duration)

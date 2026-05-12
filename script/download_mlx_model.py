@@ -82,7 +82,7 @@ ALLOW_PATTERNS = [
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Download an Autocomplete Lab MLX model.")
+    parser = argparse.ArgumentParser(description="Download an SteadyType MLX model.")
     parser.add_argument(
         "--model",
         choices=sorted(MODELS),
@@ -113,7 +113,7 @@ def main() -> int:
     repo_id = model["repo_id"]
     target = (
         Path.home()
-        / "Library/Application Support/AutocompleteLab"
+        / "Library/Application Support/SteadyType"
         / model["target"]
     )
 
