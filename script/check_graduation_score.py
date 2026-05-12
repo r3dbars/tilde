@@ -308,9 +308,11 @@ def profile_checks() -> list[Check]:
     compatibility = text("Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift")
     app_profiles = text("Sources/AutocompleteLabCore/Compatibility/AppCompatibilityProfile.swift")
     browser_policy = text("Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift")
+    proof_mode_policy = text("Sources/AutocompleteLabCore/Configuration/ProofModeScopePolicy.swift")
     compatibility_tests = text("Tests/AutocompleteLabCoreTests/CompatibilityProfileTests.swift")
     app_profile_tests = text("Tests/AutocompleteLabCoreTests/AppCompatibilityProfileTests.swift")
     browser_policy_tests = text("Tests/AutocompleteLabCoreTests/BrowserHostedSurfacePolicyTests.swift")
+    proof_mode_policy_tests = text("Tests/AutocompleteLabCoreTests/ProofModeScopePolicyTests.swift")
     checks = [
         Check(
             4,
@@ -356,9 +358,14 @@ def profile_checks() -> list[Check]:
         ),
         Check(
             4,
-            "High-risk browser and collaboration surfaces stay blocked and redacted",
+            "High-risk browser and collaboration surfaces stay blocked, redacted, and proof scoped",
             contains_all(
-                app_profiles + app_profile_tests + browser_policy + browser_policy_tests,
+                app_profiles
+                + app_profile_tests
+                + browser_policy
+                + browser_policy_tests
+                + proof_mode_policy
+                + proof_mode_policy_tests,
                 (
                     "notion-blocked",
                     "slack-blocked",
@@ -368,6 +375,9 @@ def profile_checks() -> list[Check]:
                     "redactedTraceMetadata",
                     "blockedSurfaceTextRedacted",
                     "Chrome sensitive pages outrank service fingerprints",
+                    "ProofModeScopePolicy",
+                    "Active proof mode blocks apps outside the requested proof target",
+                    "Active proof mode can allow a virtual proof profile through its suggestion bundle",
                 ),
             ),
         ),

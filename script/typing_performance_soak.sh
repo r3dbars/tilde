@@ -207,7 +207,7 @@ wait_for_required_focused_text_poll_summary_after_line() {
     sleep 0.25
   done
 
-  echo "Timed out waiting for a post-typing focused-text poll summary." >&2
+  echo "Timed out waiting for a focused-text poll summary in the typing proof window." >&2
   echo "Log: $LOG_PATH" >&2
   echo "Start line: $start_line" >&2
   return 1
@@ -770,8 +770,8 @@ type_textedit_fixture() {
   SOAK_TARGET_DOCUMENT_NAME="$(prepare_textedit_document "$SOAK_TARGET_TEXT_FILE")"
   focus_textedit_document "$SOAK_TARGET_DOCUMENT_NAME"
   sleep 1
-  wait_for_focused_text_poll_summary_after_line "$(line_count "$LOG_PATH")" 15
   SOAK_TYPING_START_LINE="$(line_count "$LOG_PATH")"
+  wait_for_focused_text_poll_summary_after_line "$SOAK_TYPING_START_LINE" 15
   SOAK_TRACE_START_LINE="$(line_count "$TRACE_PATH")"
   type_text_with_cgevents "$text_file"
   sleep 2
