@@ -365,6 +365,14 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         }
 
         let currentText = input.textBeforeCursor + input.textAfterCursor
+        if let cappedWindowRepair = obsidianCodeMirrorCappedEndOfDocumentGrowthRepair(
+            input: input,
+            previousTextBeforeCursor: previousTextBeforeCursor,
+            currentText: currentText
+        ) {
+            return cappedWindowRepair
+        }
+
         guard currentText.hasPrefix(previousTextBeforeCursor),
               currentText.count > previousTextBeforeCursor.count,
               currentText.count <= previousTextBeforeCursor.count + 160,
@@ -373,6 +381,44 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         }
 
         guard isPlausibleActiveTypingLine(currentLine(in: currentText)) else {
+            return nil
+        }
+
+        return TextContextRepairResult(
+            textBeforeCursor: currentText,
+            textAfterCursor: "",
+            reason: .obsidianCodeMirrorEndOfDocumentGrowth
+        )
+    }
+
+    private func obsidianCodeMirrorCappedEndOfDocumentGrowthRepair(
+        input: TextContextRepairInput,
+        previousTextBeforeCursor: String,
+        currentText: String
+    ) -> TextContextRepairResult? {
+        guard currentText.count >= 120,
+              currentText.count <= 640,
+              !previousTextBeforeCursor.hasSuffix(currentText),
+              input.textBeforeCursor.count <= 32,
+              input.textBeforeCursor.count < previousTextBeforeCursor.count,
+              currentText.count < previousTextBeforeCursor.count else {
+            return nil
+        }
+
+        let minimumOverlap = 120
+        guard let overlap = suffixPrefixOverlap(
+            previousTextBeforeCursor,
+            currentText,
+            minimumLength: minimumOverlap
+        ) else {
+            return nil
+        }
+
+        let appendedText = String(currentText.dropFirst(overlap))
+        guard !appendedText.isEmpty,
+              appendedText.count <= 160,
+              appendedText.contains(where: \.isLetter),
+              isPlausibleActiveTypingLine(currentLine(in: currentText)) else {
             return nil
         }
 
@@ -665,6 +711,25 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         }
 
         return consumed + word
+    }
+
+    private func suffixPrefixOverlap(
+        _ previousText: String,
+        _ currentText: String,
+        minimumLength: Int
+    ) -> Int? {
+        let maximumLength = min(previousText.count, currentText.count - 1)
+        guard maximumLength >= minimumLength else {
+            return nil
+        }
+
+        for length in stride(from: maximumLength, through: minimumLength, by: -1) {
+            if previousText.suffix(length) == currentText.prefix(length) {
+                return length
+            }
+        }
+
+        return nil
     }
 }
 
