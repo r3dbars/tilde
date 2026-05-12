@@ -89,7 +89,7 @@ if script/select_latency_window.py \
   exit 1
 fi
 
-if ! grep -F "no sampled default runtime launch meets sample requirements" "$TMP_DIR/token-only-model.err" >/dev/null; then
+if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/token-only-model.err" >/dev/null; then
   echo "latency window self-test did not keep partial latest launch proof red" >&2
   cat "$TMP_DIR/token-only-model.err" >&2
   exit 1
@@ -186,7 +186,7 @@ if script/select_latency_window.py \
   exit 1
 fi
 
-if ! grep -F "no sampled default runtime launch meets sample requirements" "$TMP_DIR/partial-only.err" >/dev/null; then
+if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/partial-only.err" >/dev/null; then
   echo "latency window self-test did not keep unproved partial-only launches red" >&2
   cat "$TMP_DIR/partial-only.err" >&2
   exit 1
