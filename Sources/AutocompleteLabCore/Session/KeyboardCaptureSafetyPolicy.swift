@@ -29,6 +29,9 @@ public enum KeyboardCaptureDropReason: String, Equatable, Sendable {
     case acceptanceProofFailed = "acceptance-proof-failed"
     case insertionFailed = "insertion-failed"
     case unsafeAcceptedText = "unsafe-accepted-text"
+    case secureFieldBeforeAccept = "secure-field-before-accept"
+    case suppressedFieldBeforeAccept = "suppressed-field-before-accept"
+    case promptTargetChangedBeforeAccept = "prompt-target-changed-before-accept"
 }
 
 public struct KeyboardCaptureSafetyPolicy: Equatable, Sendable {
@@ -45,11 +48,14 @@ public struct KeyboardCaptureSafetyPolicy: Equatable, Sendable {
              .textAfterCursorChanged,
              .missingShownSnapshot,
              .missingCurrentSnapshot,
-             .currentBecameSecure,
-             .currentBecameSuppressedField,
-             .promptTargetChanged,
              .targetFingerprintChanged:
             .replayOriginalKey(.acceptanceTargetChanged)
+        case .currentBecameSecure:
+            .dropOriginalKey(.secureFieldBeforeAccept)
+        case .currentBecameSuppressedField:
+            .dropOriginalKey(.suppressedFieldBeforeAccept)
+        case .promptTargetChanged:
+            .dropOriginalKey(.promptTargetChangedBeforeAccept)
         }
     }
 
