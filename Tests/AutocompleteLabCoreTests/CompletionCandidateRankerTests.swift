@@ -114,6 +114,43 @@ struct CompletionCandidateRankerTests {
         #expect(ranked.first?.suggestion.visibleText == " a clean migration step")
     }
 
+    @Test("Common phrase prior allows anchored one-word predictions")
+    func commonPhrasePriorAllowsAnchoredOneWordPredictions() {
+        let ranker = CompletionCandidateRanker()
+
+        let anchoredSelection = ranker.selection(
+            [CompletionSuggestion(text: " small", maxVisibleWords: 8)],
+            mode: .phraseContinuation,
+            textBeforeCursor: "We should keep this",
+            behaviorProfileID: .docsProse
+        )
+        let unanchoredSelection = ranker.selection(
+            [CompletionSuggestion(text: " small", maxVisibleWords: 8)],
+            mode: .phraseContinuation,
+            textBeforeCursor: "A random unrelated sentence",
+            behaviorProfileID: .docsProse
+        )
+        let promptAppSelection = ranker.selection(
+            [CompletionSuggestion(text: " small", maxVisibleWords: 8)],
+            mode: .phraseContinuation,
+            textBeforeCursor: "We should keep this",
+            behaviorProfileID: .aiChat
+        )
+        let prefixedSelection = ranker.selection(
+            [CompletionSuggestion(text: " small", maxVisibleWords: 8)],
+            mode: .phraseContinuation,
+            textBeforeCursor: "quick note: We should keep this",
+            behaviorProfileID: .docsProse
+        )
+
+        #expect(anchoredSelection.suggestion?.visibleText == " small")
+        #expect(prefixedSelection.suggestion?.visibleText == " small")
+        #expect(unanchoredSelection.suggestion == nil)
+        #expect(unanchoredSelection.suppressionReason == .lowTopScore)
+        #expect(promptAppSelection.suggestion == nil)
+        #expect(promptAppSelection.suppressionReason == .lowTopScore)
+    }
+
     @Test("Email profile penalizes invented commitments")
     func emailProfilePenalizesInventedCommitments() {
         let ranker = CompletionCandidateRanker()

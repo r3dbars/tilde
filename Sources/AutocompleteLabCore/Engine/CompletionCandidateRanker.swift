@@ -175,6 +175,11 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         }
 
         if mode.isContinuation {
+            score += commonPhrasePriorScore(
+                visibleText,
+                textBeforeCursor: textBeforeCursor,
+                behaviorProfileID: behaviorProfileID
+            )
             score += localContextAlignmentScore(visibleText, textBeforeCursor: textBeforeCursor)
             score -= unsupportedCommitmentPenalty(visibleText, textBeforeCursor: textBeforeCursor)
             score -= genericFillerPenalty(visibleText)
@@ -190,6 +195,44 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         }
 
         return score
+    }
+
+    private func commonPhrasePriorScore(
+        _ text: String,
+        textBeforeCursor: String?,
+        behaviorProfileID: AutocompleteBehaviorProfileID?
+    ) -> Double {
+        guard let textBeforeCursor,
+              !textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              allowsCommonPhrasePrior(for: behaviorProfileID)
+        else {
+            return 0
+        }
+
+        let context = normalizedPhrase(textBeforeCursor)
+        let candidateWords = allWords(in: text)
+        guard !candidateWords.isEmpty else {
+            return 0
+        }
+
+        for prior in CommonPhraseContinuationPrior.defaultPriors where context.hasSuffix(prior.contextSuffix) {
+            guard candidateWords.starts(with: prior.continuationWords) else {
+                continue
+            }
+
+            return prior.score
+        }
+
+        return 0
+    }
+
+    private func allowsCommonPhrasePrior(for behaviorProfileID: AutocompleteBehaviorProfileID?) -> Bool {
+        switch behaviorProfileID {
+        case .some(.aiChat), .some(.coding), .some(.forms), .some(.search):
+            return false
+        case .some, .none:
+            return true
+        }
     }
 
     private func phraseLengthScore(_ wordCount: Int) -> Double {
@@ -502,6 +545,12 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+    }
+
+    private func allWords(in text: String) -> [String] {
+        normalizedPhrase(text)
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
     }
 
     private static let promptCommandPrefixes = [

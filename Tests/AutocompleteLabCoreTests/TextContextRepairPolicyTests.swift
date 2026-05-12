@@ -166,6 +166,70 @@ struct TextContextRepairPolicyTests {
         #expect(result.reason == .obsidianCodeMirrorLineDrift)
     }
 
+    @Test("Repairs Obsidian CodeMirror active line reported after the AX cursor")
+    func repairsObsidianCodeMirrorTextAfterActiveLine() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "AL scroll 45\nAutocomplete Lab Obsidian proof",
+            textAfterCursor: "Smoke proof feels",
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == "AL scroll 45\nAutocomplete Lab Obsidian proof\nSmoke proof feels")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorTextAfterActiveLine)
+    }
+
+    @Test("Does not repair Obsidian after-cursor active line when later content is on another line")
+    func doesNotRepairObsidianTextAfterActiveLineWithMoreDocumentContent() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "AL scroll 45\nAutocomplete Lab Obsidian proof",
+            textAfterCursor: "Smoke proof feels\nExisting note content",
+            selectedTextLength: 0
+        ))
+
+        #expect(!result.wasRepaired)
+    }
+
+    @Test("Repairs Obsidian CodeMirror leading word drift in a long note")
+    func repairsObsidianCodeMirrorLeadingWordDrift() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "AL scroll 44\nSmoke proof",
+            textAfterCursor: " stays\nAutocomplete Lab Obsidian proof",
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == "AL scroll 44\nSmoke proof stays")
+        #expect(result.textAfterCursor == "\nAutocomplete Lab Obsidian proof")
+        #expect(result.reason == .obsidianCodeMirrorLeadingWordDrift)
+    }
+
+    @Test("Does not repair Obsidian leading word drift when more same-line text remains")
+    func doesNotRepairObsidianLeadingWordInRealMiddleOfLine() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof",
+            textAfterCursor: " stays in the middle",
+            selectedTextLength: 0
+        ))
+
+        #expect(!result.wasRepaired)
+    }
+
     @Test("Repairs Obsidian CodeMirror line drift after the first typed character")
     func repairsObsidianCodeMirrorLineDriftAfterFirstCharacter() {
         let policy = TextContextRepairPolicy()
@@ -281,6 +345,69 @@ struct TextContextRepairPolicyTests {
         #expect(result.textBeforeCursor == "Smoke proof feels instan")
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorTrailingScaffolding)
+    }
+
+    @Test("Repairs official Chrome CodeMirror trailing scaffold drift")
+    func repairsChromeCodeMirrorTrailingScaffolding() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof feels inst",
+            textAfterCursor: "\u{200B}\n",
+            selectedTextLength: 0,
+            windowTitle: "Try CodeMirror"
+        ))
+
+        #expect(result.textBeforeCursor == "Smoke proof feels inst")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .chromeCodeMirrorTrailingScaffolding)
+    }
+
+    @Test("Repairs official Chrome CodeMirror soft-wrap cursor offset")
+    func repairsChromeCodeMirrorSoftWrapCursorOffset() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke \n\nproof feels in",
+            textAfterCursor: "st",
+            selectedTextLength: 0,
+            windowTitle: "Try CodeMirror"
+        ))
+
+        #expect(result.textBeforeCursor == "Smoke proof feels inst")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .chromeCodeMirrorSoftWrapCursor)
+    }
+
+    @Test("Does not repair Chrome CodeMirror scaffolding outside the official CodeMirror page")
+    func doesNotRepairChromeCodeMirrorScaffoldingWithoutTitleProof() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof feels inst",
+            textAfterCursor: "\u{200B}\n",
+            selectedTextLength: 0,
+            windowTitle: "Untitled form"
+        ))
+
+        #expect(!result.wasRepaired)
+
+        let softWrap = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke \n\nproof feels in",
+            textAfterCursor: "st",
+            selectedTextLength: 0,
+            windowTitle: "Untitled form"
+        ))
+
+        #expect(!softWrap.wasRepaired)
     }
 
     @Test("Does not repair broad Obsidian middle-of-line text")

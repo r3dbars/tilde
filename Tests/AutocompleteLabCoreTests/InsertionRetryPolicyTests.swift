@@ -28,6 +28,14 @@ struct InsertionRetryPolicyTests {
         #expect(!policy.shouldRetry(result: .unchanged, insertionMode: .axThenKeyEvents, retryCount: 2))
     }
 
+    @Test("Default policy retries unchanged hybrid insertion once")
+    func defaultPolicyRetriesUnchangedHybridInsertionOnce() {
+        let policy = InsertionRetryPolicy()
+
+        #expect(policy.shouldRetry(result: .unchanged, insertionMode: .axThenKeyEvents, retryCount: 0))
+        #expect(!policy.shouldRetry(result: .unchanged, insertionMode: .axThenKeyEvents, retryCount: 1))
+    }
+
     @Test("Does not retry risky or already changed results")
     func doesNotRetryRiskyOrAlreadyChangedResults() {
         let policy = InsertionRetryPolicy(maxRetryCount: 1)

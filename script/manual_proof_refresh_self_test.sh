@@ -83,6 +83,67 @@ if ! grep -F "stale commit fingerprint" "$OUTPUT" >/dev/null; then
   exit 1
 fi
 
+SOURCE_COMPATIBLE_COMMIT="$(git rev-parse --short=12 HEAD~1 2>/dev/null || true)"
+if [[ -n "$SOURCE_COMPATIBLE_COMMIT" ]]; then
+  write_report_header "$STALE_REPORT"
+  cat >>"$STALE_REPORT" <<EOF
+| 2026-05-09T00:00:00Z | TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-2 in \`/tmp/diagnostics.log\` | lines 1-2 in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; build \`commit:$SOURCE_COMPATIBLE_COMMIT\` |
+EOF
+
+  if ! AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS="__manual_proof_refresh_self_test_no_source_path__" \
+    AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$STALE_REPORT" \
+    script/manual_proof_refresh.sh --verify-target textedit >"$OUTPUT" 2>&1; then
+    echo "manual proof refresh self-test should accept source-compatible commit proof" >&2
+    exit 1
+  fi
+
+  AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS="__manual_proof_refresh_self_test_no_source_path__" \
+    AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$STALE_REPORT" \
+    script/manual_proof_refresh.sh --print --target textedit >"$OUTPUT"
+
+  if ! grep -F -- "- TextEdit: current (source-compatible commit fingerprint)" "$OUTPUT" >/dev/null; then
+    echo "manual proof refresh self-test did not summarize source-compatible commit proof" >&2
+    cat "$OUTPUT" >&2
+    exit 1
+  fi
+fi
+
+CLAUDE_POLICY_ONLY_COMMIT=""
+CURRENT_HEAD="$(git rev-parse --verify HEAD)"
+while IFS= read -r candidate; do
+  [[ "$candidate" != "$CURRENT_HEAD" ]] || continue
+  changed_paths="$(git diff --name-only "$candidate".."$CURRENT_HEAD" -- Package.swift Package.resolved Sources | tr '\n' ' ')"
+  if [[ "$changed_paths" == "Sources/AutocompleteLabCore/Configuration/ClaudeCodeTerminalHostProofPolicy.swift " ]]; then
+    CLAUDE_POLICY_ONLY_COMMIT="$(git rev-parse --short=12 "$candidate")"
+    break
+  fi
+done < <(git rev-list --max-count=120 HEAD)
+
+if [[ -n "$CLAUDE_POLICY_ONLY_COMMIT" ]]; then
+  write_report_header "$STALE_REPORT"
+  cat >>"$STALE_REPORT" <<EOF
+| 2026-05-09T00:00:00Z | TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-2 in \`/tmp/diagnostics.log\` | lines 1-2 in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; build \`commit:$CLAUDE_POLICY_ONLY_COMMIT,app-sha256:stale-app-binary\` |
+| 2026-05-09T00:01:00Z | Claude Code | \`com.anthropic.claude-code\` | \`default\` | 1 | \`inlineAdjacent|floatingMirror\` | lines 3-4 in \`/tmp/diagnostics.log\` | lines 3-4 in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; prompt no-submit confirmed; build \`commit:$CLAUDE_POLICY_ONLY_COMMIT,app-sha256:stale-app-binary\` |
+EOF
+
+  if ! AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$STALE_REPORT" \
+    script/manual_proof_refresh.sh --verify-target textedit >"$OUTPUT" 2>&1; then
+    echo "manual proof refresh self-test should accept TextEdit proof through Claude Code-only source changes" >&2
+    exit 1
+  fi
+
+  if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$STALE_REPORT" \
+    script/manual_proof_refresh.sh --verify-target claude-code >"$OUTPUT" 2>&1; then
+    echo "manual proof refresh self-test should stale Claude Code proof after Claude Code policy changes" >&2
+    exit 1
+  fi
+
+  if ! grep -F "stale commit fingerprint" "$OUTPUT" >/dev/null; then
+    echo "manual proof refresh self-test did not explain Claude Code policy staleness" >&2
+    exit 1
+  fi
+fi
+
 printf 'same app binary\n' >"$APP_BINARY"
 APP_SHA="$(shasum -a 256 "$APP_BINARY" | awk '{print $1}')"
 write_report_header "$STALE_REPORT"
@@ -112,12 +173,31 @@ EOF
 if AUTOCOMPLETE_LAB_ARCHIVE_PATH="$ARCHIVE_PATH" \
   AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$STALE_REPORT" \
   script/manual_proof_refresh.sh --verify-target textedit >"$OUTPUT" 2>&1; then
-  echo "manual proof refresh self-test expected stale archive proof to fail" >&2
+  :
+else
+  echo "manual proof refresh self-test should accept current commit proof even when a rebuild changed the archive hash" >&2
+  exit 1
+fi
+
+if ! grep -F "TextEdit: current proof recorded" "$OUTPUT" >/dev/null; then
+  echo "manual proof refresh self-test did not accept current commit proof with stale archive hash" >&2
+  exit 1
+fi
+
+write_report_header "$STALE_REPORT"
+cat >>"$STALE_REPORT" <<'EOF'
+| 2026-05-09T00:00:00Z | TextEdit | `com.apple.TextEdit` | `default` | 2 | `inlineAdjacent|floatingMirror` | lines 1-2 in `/tmp/diagnostics.log` | lines 1-2 in `/tmp/traces.jsonl`; visual `strict-complete`; build `archive-sha256:deadbeef` |
+EOF
+
+if AUTOCOMPLETE_LAB_ARCHIVE_PATH="$ARCHIVE_PATH" \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$STALE_REPORT" \
+  script/manual_proof_refresh.sh --verify-target textedit >"$OUTPUT" 2>&1; then
+  echo "manual proof refresh self-test expected archive-only stale proof to fail" >&2
   exit 1
 fi
 
 if ! grep -F "stale archive fingerprint" "$OUTPUT" >/dev/null; then
-  echo "manual proof refresh self-test did not explain stale archive proof" >&2
+  echo "manual proof refresh self-test did not explain archive-only stale proof" >&2
   exit 1
 fi
 
@@ -146,7 +226,7 @@ if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$NO_FINGERPRINT_REPORT" \
   exit 1
 fi
 
-if ! grep -F "missing current commit/archive fingerprint" "$OUTPUT" >/dev/null; then
+if ! grep -F "missing current app/source proof fingerprint" "$OUTPUT" >/dev/null; then
   echo "manual proof refresh self-test did not explain missing proof fingerprint" >&2
   exit 1
 fi

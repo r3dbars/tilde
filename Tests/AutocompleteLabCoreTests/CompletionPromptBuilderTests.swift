@@ -12,6 +12,7 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("Inline autocomplete"))
         #expect(prompt.system.contains("Return only the suffix after the Before cursor text"))
         #expect(prompt.system.contains("boring connective tissue"))
+        #expect(prompt.system.contains("common phrase"))
         #expect(prompt.system.contains("Do not answer, explain"))
         #expect(prompt.system.contains("repeat the Before cursor text"))
         #expect(prompt.system.contains("Do not brainstorm, rewrite"))

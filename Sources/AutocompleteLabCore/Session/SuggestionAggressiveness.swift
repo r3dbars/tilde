@@ -296,6 +296,26 @@ public struct SuggestionTuning: Equatable, Sendable {
         return Self.predictiveFallbackWritingApps.contains(appBundleIdentifier)
     }
 
+    public func allowsPredictivePhraseFallback(
+        appBundleIdentifier: String,
+        behaviorProfileID: AutocompleteBehaviorProfileID?,
+        visiblePageContextAvailable: Bool
+    ) -> Bool {
+        switch behaviorProfileID {
+        case .some(.aiChat), .some(.coding), .some(.forms), .some(.search):
+            return false
+        case .some, .none:
+            break
+        }
+
+        if visiblePageContextAvailable || aggressivenessLevel >= 3 {
+            return true
+        }
+
+        return Self.predictiveFallbackWritingApps.contains(appBundleIdentifier)
+            || appBundleIdentifier == "com.google.Chrome"
+    }
+
     public var traceMetadata: [String: String] {
         [
             "suggestionAggressiveness": legacyAggressiveness.rawValue,
