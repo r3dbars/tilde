@@ -76,6 +76,24 @@ struct DiagnosticValueRedactorTests {
                 value: "/tmp/private-screenshot.png"
             ) == "String(27 chars)"
         )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "contextPreview",
+                value: "private phrase preview"
+            ) == "String(22 chars)"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "neighborText",
+                value: "nearby private phrase"
+            ) == "String(21 chars)"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "innocentNote",
+                value: "surprising private note"
+            ) == "String(23 chars)"
+        )
     }
 
     @Test("Diagnostics metadata keeps shape keys and flattens whitespace")
