@@ -46,7 +46,7 @@ Write-test only in these apps:
 - TextEdit
 - Notes
 - Obsidian
-- Chrome local text fields
+- Chrome included local practice pages
 
 Do not write-test these as normal beta apps. Use them only as proof targets:
 

@@ -74,6 +74,7 @@ check_clipboard_fallback_disabled() {
 check_notarized_install_proof() {
   local proof_dir="$ROOT_DIR/dist/release-proof"
   local blocker_path="$proof_dir/notarization-blocker.txt"
+  local checksum_path="$proof_dir/checksums.txt"
   local failed=0
 
   if [[ -s "$blocker_path" ]]; then
@@ -86,12 +87,36 @@ check_notarized_install_proof() {
     "$proof_dir/stapler-validate.txt" \
     "$proof_dir/spctl-dmg.txt" \
     "$proof_dir/spctl-installed-app.txt" \
+    "$checksum_path" \
     "$proof_dir/fresh-install-gatekeeper-proof.md"; do
     if [[ ! -s "$path" ]]; then
       echo "missing release proof: $path"
       failed=1
     fi
   done
+
+  if [[ -s "$checksum_path" ]]; then
+    for artifact_name in SteadyType.dmg SteadyType.zip; do
+      local artifact_path="$ROOT_DIR/dist/$artifact_name"
+      if [[ ! -f "$artifact_path" ]]; then
+        continue
+      fi
+
+      local expected_sha actual_sha
+      expected_sha="$(shasum -a 256 "$artifact_path" | awk '{print $1}')"
+      actual_sha="$(awk -v artifact="$artifact_name" '$1 == artifact {print $2; exit}' "$checksum_path")"
+
+      if [[ -z "$actual_sha" ]]; then
+        echo "release proof checksum is missing $artifact_name"
+        failed=1
+      elif [[ "$expected_sha" != "$actual_sha" ]]; then
+        echo "release proof checksum is stale for $artifact_name"
+        echo "expected: $expected_sha"
+        echo "actual:   $actual_sha"
+        failed=1
+      fi
+    done
+  fi
 
   if ((failed > 0)); then
     return 1
