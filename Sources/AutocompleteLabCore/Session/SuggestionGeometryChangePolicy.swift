@@ -95,7 +95,8 @@ public struct SuggestionGeometryChangePolicy: Equatable, Sendable {
         hasPendingSuggestionRequest: Bool,
         previousSnapshot: SuggestionGeometrySnapshot?,
         currentSnapshot: SuggestionGeometrySnapshot?,
-        allowsCaretRectChange: Bool = false
+        allowsCaretRectChange: Bool = false,
+        allowsTextLineRectChange: Bool = false
     ) -> SuggestionGeometryInvalidationDecision {
         guard hasVisibleSuggestion || hasPendingSuggestionRequest else {
             return .keep
@@ -123,7 +124,8 @@ public struct SuggestionGeometryChangePolicy: Equatable, Sendable {
             return .invalidate(.caretChanged)
         }
 
-        if normalizedRect(previousSnapshot.textLineRect) != normalizedRect(currentSnapshot.textLineRect) {
+        if !allowsTextLineRectChange,
+           normalizedRect(previousSnapshot.textLineRect) != normalizedRect(currentSnapshot.textLineRect) {
             return .invalidate(.textLineChanged)
         }
 

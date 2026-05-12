@@ -6532,15 +6532,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: currentFieldIdentity,
             placement: placement
         )
+        let allowsStableChromeEditorGeometryChurn = allowsStableChromeEditorGeometryChurn(
+            context: context,
+            profile: profile
+        )
         let invalidation = suggestionGeometryChangePolicy.invalidationDecision(
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
             hasPendingSuggestionRequest: suggestionOrchestrator.currentRequest != nil,
             previousSnapshot: lastVisibleSuggestionGeometrySnapshot,
             currentSnapshot: currentGeometrySnapshot,
-            allowsCaretRectChange: allowsStableCodeMirrorCaretChurn(
-                context: context,
-                profile: profile
-            )
+            allowsCaretRectChange: allowsStableChromeEditorGeometryChurn,
+            allowsTextLineRectChange: allowsStableChromeEditorGeometryChurn
         )
         if invalidation.shouldInvalidate {
             let reason = invalidation.reason?.rawValue ?? "unknown"
@@ -6564,15 +6566,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshVisibleSuggestion()
     }
 
-    private func allowsStableCodeMirrorCaretChurn(
+    private func allowsStableChromeEditorGeometryChurn(
         context: FocusedTextContext,
         profile: CompatibilityProfile
     ) -> Bool {
+        let searchableText = context.fingerprint.searchableText
         guard profile.bundleIdentifier == "com.google.Chrome",
               context.role == "AXTextArea",
               context.caretIsSynthetic,
               context.selectedTextLength == 0,
-              context.fingerprint.searchableText.contains("codemirror"),
+              (searchableText.contains("codemirror") || searchableText.contains("monaco")),
               let lastTextSnapshot,
               lastTextSnapshot.textBeforeCursor == context.textBeforeCursor,
               lastTextSnapshot.textAfterCursor == context.textAfterCursor else {
