@@ -5801,6 +5801,17 @@ print("Obsidian smoke target confirmed")
 SWIFT
 }
 
+assert_obsidian_initial_smoke_target() {
+  case "$1" in
+    obsidian-long-note)
+      AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="Autocomplete Lab Obsidian" assert_obsidian_smoke_target
+      ;;
+    *)
+      assert_obsidian_smoke_target
+      ;;
+  esac
+}
+
 ensure_notes_title_smoke_note() {
   open -a Notes
   wait_for_frontmost_app "Notes" 8
@@ -6066,7 +6077,7 @@ run_obsidian() {
   seed_obsidian_proof_vault_note "$obsidian_reset_text"
   open_obsidian_smoke_note_if_configured
   wait_for_frontmost_app "Obsidian" 8
-  assert_obsidian_smoke_target
+  assert_obsidian_initial_smoke_target "$manual_app"
   AUTOCOMPLETE_LAB_OBSIDIAN_RESET_TEXT="$obsidian_reset_text" reset_obsidian_smoke_note
 
   start_line="$(line_count "$LOG_PATH")"
