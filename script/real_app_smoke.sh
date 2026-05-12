@@ -2053,6 +2053,21 @@ chrome_fixture_uses_default_browser_accessibility() {
   return 0
 }
 
+chrome_fixture_prefers_script_focus_only() {
+  if [[ "$CHROME_ACCESSIBILITY_MODE" != "default" ]]; then
+    return 1
+  fi
+
+  case "$1" in
+    monaco-real|prosemirror-real)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 chrome_default_accessibility_exposes_web_content() {
   osascript -l JavaScript <<'JXA' 2>/dev/null
 const se = Application('System Events');
@@ -2630,6 +2645,20 @@ APPLESCRIPT
 
   if [[ -n "$expected_url" ]]; then
     focus_default_chrome_smoke_tab "$fixture" "$expected_url" >/dev/null
+  fi
+
+  if chrome_fixture_prefers_script_focus_only "$fixture"; then
+    osascript >/dev/null <<'APPLESCRIPT'
+tell application "Google Chrome"
+  activate
+  try
+    tell active tab of front window to execute javascript "window.focusSmokeEditor && window.focusSmokeEditor();"
+  end try
+end tell
+delay 0.2
+APPLESCRIPT
+    wait_for_frontmost_app "Google Chrome" 5
+    return 0
   fi
 
   osascript >/dev/null <<APPLESCRIPT
@@ -7006,7 +7035,25 @@ run_chrome_fixture() {
       focus_chrome_smoke_editor "$fixture" "$chrome_pid"
     fi
   else
-    osascript >/dev/null <<APPLESCRIPT
+    # Default-Chrome proof must not reuse the isolated browser DevTools port.
+    CHROME_REMOTE_DEBUGGING_PORT=""
+    if chrome_fixture_prefers_script_focus_only "$fixture"; then
+      osascript >/dev/null <<APPLESCRIPT
+tell application "Google Chrome"
+  activate
+  if not (exists window 1) then make new window
+  set URL of active tab of front window to "$chrome_url"
+end tell
+delay 1.2
+tell application "Google Chrome"
+  try
+    tell active tab of front window to execute javascript "window.focusSmokeEditor && window.focusSmokeEditor();"
+  end try
+end tell
+delay 0.2
+APPLESCRIPT
+    else
+      osascript >/dev/null <<APPLESCRIPT
 tell application "Google Chrome"
   activate
   if not (exists window 1) then make new window
@@ -7027,6 +7074,7 @@ tell application "System Events"
   end tell
 end tell
 APPLESCRIPT
+    fi
     focus_default_chrome_smoke_tab "$fixture" "$chrome_url" >/dev/null
   fi
 
