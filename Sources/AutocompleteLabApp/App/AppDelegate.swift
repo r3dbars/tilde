@@ -1939,7 +1939,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textAfterCursor: context.textAfterCursor,
             selectedTextLength: context.selectedTextLength,
             previousTextBeforeCursor: previousSnapshot?.textBeforeCursor,
-            previousTextAfterCursor: previousSnapshot?.textAfterCursor
+            previousTextAfterCursor: previousSnapshot?.textAfterCursor,
+            windowTitle: context.fingerprint.windowTitle
         ))
         var context = repair.wasRepaired
             ? contextReplacingText(
