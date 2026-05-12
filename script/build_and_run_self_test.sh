@@ -25,9 +25,13 @@ reject_contains() {
 require_contains "stop_running_apps()"
 require_contains "open_app()"
 require_contains "current_bundle_is_running()"
+require_contains "current_bundle_pid()"
+require_contains "pid_is_current_bundle()"
 require_contains "quarantine_stale_app_bundles"
 require_contains "AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN"
-require_contains "exited during the verification stability window"
+require_contains 'current_pid="$(current_bundle_pid || true)"'
+require_contains 'pid_is_current_bundle "$current_pid"'
+require_contains "exited or restarted during the verification stability window"
 reject_contains "kill_running_app_instances"
 reject_contains "is_target_app_running"
 
