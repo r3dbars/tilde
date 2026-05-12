@@ -39,4 +39,15 @@ fi
 
 require_contains "$(cat /tmp/autocomplete-package-check.txt)" "Apple notary credentials: blocked - NOTARYTOOL_PROFILE is missing"
 
+if SIGN_IDENTITY=not-a-real-developer-id \
+  NOTARYTOOL_PROFILE=not-a-real-profile \
+  ./script/package_release.sh --check --require-developer-id --require-notary-profile >/tmp/autocomplete-package-fake-check.txt 2>&1; then
+  echo "package release check should fail with fake signing and notary env values" >&2
+  cat /tmp/autocomplete-package-fake-check.txt >&2
+  exit 1
+fi
+
+require_contains "$(cat /tmp/autocomplete-package-fake-check.txt)" "Developer ID signing identity: blocked - missing Developer ID Application identity"
+require_contains "$(cat /tmp/autocomplete-package-fake-check.txt)" "Apple notary credentials: blocked - NOTARYTOOL_PROFILE is not usable"
+
 echo "Package release self-test passed."

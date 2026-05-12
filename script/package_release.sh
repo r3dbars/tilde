@@ -61,8 +61,20 @@ done
 
 developer_id_identity() {
   if [[ -n "${SIGN_IDENTITY:-}" ]]; then
-    echo "$SIGN_IDENTITY"
-    return 0
+    security find-identity -p codesigning -v 2>/dev/null \
+      | awk -v wanted="$SIGN_IDENTITY" '
+          /Developer ID Application/ {
+            hash = $2
+            name = $0
+            sub(/^[^"]*"/, "", name)
+            sub(/".*$/, "", name)
+            if (hash == wanted || name == wanted || index($0, wanted) > 0) {
+              print hash
+              exit
+            }
+          }
+        '
+    return
   fi
 
   security find-identity -p codesigning -v 2>/dev/null \
@@ -70,6 +82,20 @@ developer_id_identity() {
 }
 
 developer_id="$(developer_id_identity)"
+
+validate_notary_profile() {
+  local profile="$1"
+  local output_path="/tmp/autocomplete-notary-profile-check.txt"
+
+  if xcrun notarytool history \
+    --keychain-profile "$profile" \
+    --limit 1 >"$output_path" 2>&1; then
+    return 0
+  fi
+
+  cat "$output_path" >&2 2>/dev/null || true
+  return 1
+}
 
 artifact_sha() {
   local artifact_path="$1"
@@ -274,7 +300,16 @@ case "$MODE" in
     fi
 
     if [[ -n "${NOTARYTOOL_PROFILE:-}" ]]; then
-      echo "Apple notary credentials: OK - NOTARYTOOL_PROFILE=$NOTARYTOOL_PROFILE"
+      if [[ "$REQUIRE_NOTARY_PROFILE" == "1" ]]; then
+        if validate_notary_profile "$NOTARYTOOL_PROFILE"; then
+          echo "Apple notary credentials: OK - NOTARYTOOL_PROFILE=$NOTARYTOOL_PROFILE"
+        else
+          echo "Apple notary credentials: blocked - NOTARYTOOL_PROFILE is not usable"
+          check_failed=1
+        fi
+      else
+        echo "Apple notary credentials: present - NOTARYTOOL_PROFILE=$NOTARYTOOL_PROFILE (not verified without --require-notary-profile)"
+      fi
     else
       echo "Apple notary credentials: blocked - NOTARYTOOL_PROFILE is missing (set it before notarization)"
       if [[ "$REQUIRE_NOTARY_PROFILE" == "1" ]]; then
